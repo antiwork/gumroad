@@ -5,7 +5,11 @@ class LinksController < ApplicationController
           ActionView::Helpers::AssetUrlHelper, CustomDomainConfig, AffiliateCookie,
           CreateDiscoverSearch, DiscoverCuratedProducts, FetchProductByUniquePermalink
 
+  include PageMeta::Favicon, PageMeta::Product
+
   DEFAULT_PRICE = 500
+
+  prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
   skip_before_action :check_suspended, only: %i[index show edit destroy increment_views track_user_action]
 
@@ -25,17 +29,16 @@ class LinksController < ApplicationController
   before_action :ensure_seller_is_not_deleted, only: [:show]
   before_action :check_if_needs_redirect, only: [:show]
   before_action :prepare_product_page, only: %i[show]
-  before_action :set_frontend_performance_sensitive, only: %i[show]
   before_action :ensure_domain_belongs_to_seller, only: [:show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new]
+  layout "inertia", only: [:index, :new, :cart_items_count]
 
   def index
     authorize Link
 
-    @title = "Products"
+    set_meta_tag(title: "Products")
 
     render inertia: "Products/Index", props: {
       archived_products_count: -> { products_page_presenter.page_props[:archived_products_count] },
@@ -60,10 +63,8 @@ class LinksController < ApplicationController
   def new
     authorize Link
 
-    props = ProductPresenter.new_page_props(current_seller:)
-    @title = "What are you creating?"
-
-    render inertia: "Products/New", props:
+    set_meta_tag(title: "What are you creating?")
+    render inertia: "Products/New", props: ProductPresenter.new_page_props(current_seller:)
   end
 
   def create
@@ -90,32 +91,23 @@ class LinksController < ApplicationController
     @product.is_bundle = @product.native_type == Link::NATIVE_TYPE_BUNDLE
     @product.json_data[:custom_button_text_option] = "donate_prompt" if @product.native_type == Link::NATIVE_TYPE_COFFEE
 
+    ai_generated = params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
+
     begin
       @product.save!
 
-      if params[:link][:ai_prompt].present? && Feature.active?(:ai_product_generation, current_seller)
+      if ai_generated
         generate_product_details_using_ai
       end
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid
-      @error_message = if @product&.errors&.any?
-        @product.errors.full_messages.first
-      elsif @preorder_link&.errors&.any?
-        @preorder_link.errors.full_messages[0]
-      else
-        "Sorry, something went wrong."
-      end
-      return respond_to do |format|
-        response = { success: false, error_message: @error_message }
-        format.json { render json: response }
-        format.html { render html: "<textarea>#{response.to_json}</textarea>" }
-      end
+      return redirect_to new_product_path, alert: @product.errors.to_hash.transform_values(&:to_sentence).first, inertia: inertia_errors(@product)
     end
 
     create_user_event("add_product")
-    respond_to do |format|
-      response = { success: true, redirect_to: edit_link_path(@product) }
-      format.html { render plain: response.to_json.to_s }
-      format.json { render json: response }
+    if ai_generated
+      redirect_to edit_link_path(@product, ai_generated: true), status: :see_other
+    else
+      redirect_to edit_link_path(@product), status: :see_other
     end
   end
 
@@ -124,7 +116,7 @@ class LinksController < ApplicationController
     ActiveRecord::Base.connection.stick_to_primary!
     # Force a preload of all association data used in rendering
     preload_product
-    @show_user_favicon = true
+    set_favicon_meta_tags(@product.user)
 
     if params[:wanted] == "true"
       params[:option] ||= params[:variant] && @product.options.find { |o| o[:name] == params[:variant] }&.[](:id)
@@ -177,16 +169,17 @@ class LinksController < ApplicationController
   end
 
   def cart_items_count
-    @hide_layouts = true
-    @disable_third_party_analytics = true
+    render inertia: "Products/CartItemsCount", props: {
+      cart: CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid]).cart_props
+    }
   end
 
   def search
     search_params = params
-    on_profile = search_params[:user_id].present?
-    if on_profile
+    in_section = search_params[:user_id].present?
+    if in_section
       user = User.find_by_external_id(search_params[:user_id])
-      section = user && user.seller_profile_products_sections.on_profile.find_by_external_id(search_params[:section_id])
+      section = user && user.seller_profile_products_sections.find_by_external_id(search_params[:section_id])
       return render json: { total: 0, filetypes_data: [], tags_data: [], products: [] } if section.nil?
       search_params[:section] = section
       search_params[:is_alive_on_profile] = true
@@ -205,7 +198,7 @@ class LinksController < ApplicationController
       search_params[:include_taxonomy_descendants] = true
     end
 
-    if on_profile
+    if in_section
       recommended_by = search_params[:recommended_by]
     else
       recommended_by = RecommendationType::GUMROAD_SEARCH_RECOMMENDATION
@@ -218,10 +211,10 @@ class LinksController < ApplicationController
         product:,
         request:,
         recommended_by:,
-        target: on_profile ? Product::Layout::PROFILE : Product::Layout::DISCOVER,
-        show_seller: !on_profile,
-        query: (search_params[:query] unless on_profile),
-        offer_code: (search_params[:offer_code] unless on_profile)
+        target: in_section ? Product::Layout::PROFILE : Product::Layout::DISCOVER,
+        show_seller: !in_section,
+        query: (search_params[:query] unless in_section),
+        offer_code: (search_params[:offer_code] unless in_section)
       )
     end
     render json: results
@@ -286,11 +279,12 @@ class LinksController < ApplicationController
     fetch_product_by_unique_permalink
     authorize @product
 
-    redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+    redirect_to edit_bundle_product_path(@product.external_id) if @product.is_bundle?
 
-    @title = @product.name
+    set_meta_tag(title: @product.name)
 
-    @presenter = ProductPresenter.new(product: @product, pundit_user:)
+    ai_generated = params[:ai_generated] == "true"
+    @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
   end
 
   def update
@@ -321,7 +315,8 @@ class LinksController < ApplicationController
           :shipping_destinations,
           :call_limitation_info,
           :installment_plan,
-          :community_chat_enabled
+          :community_chat_enabled,
+          :default_offer_code_id
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -374,6 +369,7 @@ class LinksController < ApplicationController
         update_availabilities
         update_call_limitation_info
         update_installment_plan
+        update_default_offer_code
 
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
 
@@ -507,6 +503,18 @@ class LinksController < ApplicationController
       @product = product_by_custom_domain
     end
 
+    def product_by_custom_domain
+      @_product_by_custom_domain ||= begin
+        product = CustomDomain.find_by_host(request.host)&.product
+        general_permalink = product&.general_permalink
+        if general_permalink.blank?
+          nil
+        else
+          Link.fetch_leniently(general_permalink, user: product.user)
+        end
+      end
+    end
+
     # *** DO NOT USE THIS METHOD for actions that respond to non-subdomain URLs ***
     #
     # Used for actions where a product's general (custom or unique) permalink is used to identify the product.
@@ -553,7 +561,8 @@ class LinksController < ApplicationController
 
     def prepare_product_page
       @user                  = @product.user
-      @title                 = @product.name
+      set_meta_tag(title: @product.name)
+      set_product_page_meta(@product)
       @body_id               = "product_page"
       @is_on_product_page    = true
       @debug                 = params[:debug] && !Rails.env.production?
@@ -693,6 +702,25 @@ class LinksController < ApplicationController
       if product_permitted_params[:installment_plan].present?
         @product.create_installment_plan!(product_permitted_params[:installment_plan])
       end
+    end
+
+    def update_default_offer_code
+      default_offer_code_id = product_permitted_params[:default_offer_code_id]
+
+      return @product.default_offer_code = nil if default_offer_code_id.blank?
+
+      offer_code = @product.user.offer_codes.alive.find_by_external_id!(default_offer_code_id)
+
+      raise Link::LinkInvalid, "Offer code cannot be expired" if offer_code.inactive?
+      raise Link::LinkInvalid, "Offer code must be associated with this product or be universal" unless valid_for_product?(offer_code)
+
+      @product.default_offer_code = offer_code
+    rescue ActiveRecord::RecordNotFound
+      raise Link::LinkInvalid, "Invalid offer code"
+    end
+
+    def valid_for_product?(offer_code)
+      offer_code.universal? || @product.offer_codes.where(id: offer_code.id).exists?
     end
 
     def toggle_community_chat!(enabled)

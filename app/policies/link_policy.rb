@@ -56,6 +56,10 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
+  def update_purchases_content?
+    update?
+  end
+
   def product_permitted_attributes
     attributes = [
       :name,
@@ -93,6 +97,7 @@ class LinkPolicy < ApplicationPolicy
       :require_shipping,
       :is_multiseat_license,
       :community_chat_enabled,
+      :default_offer_code_id,
       refund_policy: [
         :max_refund_period_in_days,
         :title,

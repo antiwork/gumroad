@@ -22,7 +22,7 @@ export const brandNames = [
 export type BrandName = (typeof brandNames)[number];
 
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded bg-transparent text-current font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none",
+  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none",
   {
     variants: {
       variant: {
@@ -36,6 +36,7 @@ export const buttonVariants = cva(
         sm: "p-2 text-sm leading-[1.3]",
       },
       color: {
+        default: "bg-transparent",
         primary: "bg-primary text-primary-foreground hover:bg-accent hover:text-accent-foreground",
         black: "bg-black text-white",
         accent: "bg-accent text-accent-foreground",
@@ -49,8 +50,8 @@ export const buttonVariants = cva(
         stripe: "bg-[#625bf6] text-white border-[#625bf6]",
         facebook: "bg-[#4267b2] text-white border-[#4267b2]",
         twitter: "bg-black text-white border-black",
-        apple: "bg-black text-white border-black",
-        android: "bg-[#142f40] text-white border-[#142f40]",
+        apple: "bg-black text-white",
+        android: "bg-[#142f40] text-white",
         kindle: "bg-[#f3a642] text-black border-[#f3a642]",
         zoom: "bg-[#4087fc] text-white border-[#4087fc]",
         google: "bg-[#5383ec] text-white border-[#5383ec]",
@@ -101,6 +102,7 @@ export const buttonVariants = cva(
     defaultVariants: {
       variant: "default",
       size: "default",
+      color: "default",
     },
   },
 );

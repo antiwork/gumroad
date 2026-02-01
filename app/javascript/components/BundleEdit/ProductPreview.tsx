@@ -1,24 +1,72 @@
 import * as React from "react";
 
-import { useProductUrl } from "$app/components/BundleEdit/Layout";
-import { computeStandalonePrice, useBundleEditContext } from "$app/components/BundleEdit/state";
-import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Product } from "$app/components/Product";
-import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
+import { AssetPreview, CustomButtonTextOption, RatingsWithPercentages } from "$app/parsers/product";
+import { CurrencyCode } from "$app/utils/currency";
 
-export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
+import { useProductUrl } from "$app/components/BundleEdit/Layout";
+import { BundleProduct } from "$app/components/BundleEdit/types";
+import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { Product, Seller } from "$app/components/Product";
+import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
+import { RefundPolicy, RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
+import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
+
+const computeStandalonePrice = (bundleProduct: BundleProduct) =>
+  (bundleProduct.price_cents +
+    (bundleProduct.variants?.list.find(({ id }) => id === bundleProduct.variants?.selected_id)?.price_difference ??
+      0)) *
+  bundleProduct.quantity;
+
+type ProductPreviewBundle = {
+  name: string;
+  description: string;
+  covers: AssetPreview[];
+  collaborating_user: Seller | null;
+  customizable_price: boolean;
+  price_cents: number;
+  suggested_price_cents: number | null;
+  max_purchase_count: number | null;
+  allow_installment_plan: boolean;
+  installment_plan: { number_of_installments: number } | null;
+  display_product_reviews: boolean;
+  quantity_enabled: boolean;
+  should_show_sales_count: boolean;
+  custom_button_text_option: CustomButtonTextOption | null;
+  custom_summary: string | null;
+  custom_attributes: Attribute[];
+  refund_policy: RefundPolicy;
+  public_files: PublicFileWithStatus[];
+  audio_previews_enabled: boolean;
+  is_published: boolean;
+  custom_permalink?: string | null;
+  products: BundleProduct[];
+};
+
+type ProductPreviewProps = {
+  bundle: ProductPreviewBundle;
+  id: string;
+  uniquePermalink: string;
+  currencyType: CurrencyCode;
+  salesCountForInventory: number;
+  ratings: RatingsWithPercentages;
+  sellerRefundPolicyEnabled: boolean;
+  sellerRefundPolicy: Pick<RefundPolicy, "title" | "fine_print">;
+  showRefundPolicyModal?: boolean;
+};
+
+export const ProductPreview = ({
+  bundle,
+  id,
+  uniquePermalink,
+  currencyType,
+  salesCountForInventory,
+  ratings,
+  sellerRefundPolicyEnabled,
+  sellerRefundPolicy,
+  showRefundPolicyModal,
+}: ProductPreviewProps) => {
   const currentSeller = useCurrentSeller();
-  const {
-    bundle,
-    id,
-    uniquePermalink,
-    currencyType,
-    salesCountForInventory,
-    ratings,
-    seller_refund_policy_enabled,
-    seller_refund_policy,
-  } = useBundleEditContext();
-  const url = useProductUrl();
+  const url = useProductUrl(uniquePermalink, bundle.custom_permalink);
 
   if (!currentSeller) return null;
 
@@ -50,6 +98,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           ratings: bundle.display_product_reviews ? ratings : null,
           is_legacy_subscription: false,
           is_tiered_membership: false,
+          is_recurring_billing: false,
           is_physical: false,
           custom_view_content_button_text: null,
           permalink: uniquePermalink,
@@ -79,10 +128,10 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           has_third_party_analytics: false,
           ppp_details: null,
           can_edit: false,
-          refund_policy: seller_refund_policy_enabled
+          refund_policy: sellerRefundPolicyEnabled
             ? {
-                title: seller_refund_policy.title,
-                fine_print: seller_refund_policy.fine_print ?? "",
+                title: sellerRefundPolicy.title,
+                fine_print: sellerRefundPolicy.fine_print ?? "",
                 updated_at: "",
               }
             : {

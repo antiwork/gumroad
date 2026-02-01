@@ -6,7 +6,6 @@ class Settings::MainController < Settings::BaseController
   before_action :authorize
 
   def show
-    @title = "Settings"
     render inertia: "Settings/Main/Show", props: settings_presenter.main_props
   end
 

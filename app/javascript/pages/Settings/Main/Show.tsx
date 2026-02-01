@@ -14,16 +14,16 @@ import { ToggleSettingRow } from "$app/components/SettingRow";
 import { ProductLevelSupportEmailsForm } from "$app/components/Settings/AdvancedPage/ProductLevelSupportEmailsForm";
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
-import { Toggle } from "$app/components/Toggle";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
-import { Section } from "$app/components/ui/Section";
 import { Select } from "$app/components/ui/Select";
 import { Textarea } from "$app/components/ui/Textarea";
 import { Pill } from "$app/components/ui/Pill";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type ProductLevelSupportEmail = {
@@ -121,11 +121,11 @@ export default function MainPage() {
   return (
     <Layout currentPage="main" pages={props.settings_pages} onSave={onSave} canUpdate={!isFormDisabled}>
       <form ref={formRef}>
-        <Section className="p-4! md:p-8!" header={<h2>User details</h2>}>
+        <FormSection className="p-4! md:p-8!" header={<h2>User details</h2>}>
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-email`}>Email</Label>
-            </Legend>
+            </FieldsetTitle>
             <Input
               type="email"
               id={`${uid}-email`}
@@ -151,8 +151,8 @@ export default function MainPage() {
               </small>
             ) : null}
           </Fieldset>
-        </Section>
-        <Section
+        </FormSection>
+        <FormSection
           className="p-4! md:p-8!"
           header={
             <>
@@ -185,16 +185,16 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Purchases</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_payment_email}
-                      onChange={(value) => updateUserSettings({ enable_payment_email: value })}
+                    <Switch
+                      checked={form.data.user.enable_payment_email}
+                      onChange={(e) => updateUserSettings({ enable_payment_email: e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_payment_push_notification}
-                      onChange={(value) => updateUserSettings({ enable_payment_push_notification: value })}
+                    <Switch
+                      checked={form.data.user.enable_payment_push_notification}
+                      onChange={(e) => updateUserSettings({ enable_payment_push_notification: e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
@@ -202,18 +202,20 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Recurring payments</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_recurring_subscription_charge_email}
-                      onChange={(value) => updateUserSettings({ enable_recurring_subscription_charge_email: value })}
+                    <Switch
+                      checked={form.data.user.enable_recurring_subscription_charge_email}
+                      onChange={(e) =>
+                        updateUserSettings({ enable_recurring_subscription_charge_email: e.target.checked })
+                      }
                       disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_recurring_subscription_charge_push_notification}
-                      onChange={(value) =>
+                    <Switch
+                      checked={form.data.user.enable_recurring_subscription_charge_push_notification}
+                      onChange={(e) =>
                         updateUserSettings({
-                          enable_recurring_subscription_charge_push_notification: value,
+                          enable_recurring_subscription_charge_push_notification: e.target.checked,
                         })
                       }
                       disabled={isFormDisabled}
@@ -223,16 +225,18 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Free downloads</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_free_downloads_email}
-                      onChange={(value) => updateUserSettings({ enable_free_downloads_email: value })}
+                    <Switch
+                      checked={form.data.user.enable_free_downloads_email}
+                      onChange={(e) => updateUserSettings({ enable_free_downloads_email: e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_free_downloads_push_notification}
-                      onChange={(value) => updateUserSettings({ enable_free_downloads_push_notification: value })}
+                    <Switch
+                      checked={form.data.user.enable_free_downloads_push_notification}
+                      onChange={(e) =>
+                        updateUserSettings({ enable_free_downloads_push_notification: e.target.checked })
+                      }
                       disabled={isFormDisabled}
                     />
                   </TableCell>
@@ -240,9 +244,9 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Personalized product announcements</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.announcement_notification_enabled}
-                      onChange={(value) => updateUserSettings({ announcement_notification_enabled: value })}
+                    <Switch
+                      checked={form.data.user.announcement_notification_enabled}
+                      onChange={(e) => updateUserSettings({ announcement_notification_enabled: e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
@@ -251,9 +255,9 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Comments</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={!form.data.user.disable_comments_email}
-                      onChange={(value) => updateUserSettings({ disable_comments_email: !value })}
+                    <Switch
+                      checked={!form.data.user.disable_comments_email}
+                      onChange={(e) => updateUserSettings({ disable_comments_email: !e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
@@ -262,11 +266,11 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Reviews</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={!form.data.user.disable_reviews_email}
-                      onChange={(value) => updateUserSettings({ disable_reviews_email: !value })}
+                    <Switch
+                      checked={!form.data.user.disable_reviews_email}
+                      onChange={(e) => updateUserSettings({ disable_reviews_email: !e.target.checked })}
                       disabled={isFormDisabled}
-                      ariaLabel="Reviews"
+                      aria-label="Reviews"
                     />
                   </TableCell>
                   <TableCell></TableCell>
@@ -274,12 +278,12 @@ export default function MainPage() {
               </TableBody>
             </Table>
           </Fieldset>
-        </Section>
-        <Section className="p-4! md:p-8!" header={<h2>Support</h2>}>
+        </FormSection>
+        <FormSection className="p-4! md:p-8!" header={<h2>Support</h2>}>
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-support-email`}>Email</Label>
-            </Legend>
+            </FieldsetTitle>
             <Input
               type="email"
               id={`${uid}-support-email`}
@@ -298,9 +302,9 @@ export default function MainPage() {
               onChange={handleProductLevelSupportEmailsChange}
             />
           )}
-        </Section>
+        </FormSection>
         {props.user.seller_refund_policy.enabled ? (
-          <Section
+          <FormSection
             className="p-4! md:p-8!"
             header={
               <>
@@ -310,9 +314,9 @@ export default function MainPage() {
             }
           >
             <Fieldset>
-              <Legend>
+              <FieldsetTitle>
                 <Label htmlFor="max-refund-period-in-days">Refund period</Label>
-              </Legend>
+              </FieldsetTitle>
               <Select
                 id="max-refund-period-in-days"
                 value={form.data.user.seller_refund_policy.max_refund_period_in_days}
@@ -352,9 +356,9 @@ export default function MainPage() {
                 label="Add a fine print to your refund policy"
                 dropdown={
                   <Fieldset>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor="seller-refund-policy-fine-print">Fine print</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <Textarea
                       id="seller-refund-policy-fine-print"
                       maxLength={3000}
@@ -375,13 +379,13 @@ export default function MainPage() {
                 }
               />
             </Fieldset>
-          </Section>
+          </FormSection>
         ) : null}
-        <Section className="p-4! md:p-8!" header={<h2>Local</h2>}>
+        <FormSection className="p-4! md:p-8!" header={<h2>Local</h2>}>
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-timezone`}>Time zone</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-timezone`}
               disabled={isFormDisabled}
@@ -396,9 +400,9 @@ export default function MainPage() {
             </Select>
           </Fieldset>
           <Fieldset>
-            <Legend>
+            <FieldsetTitle>
               <Label htmlFor={`${uid}-local-currency`}>Sell in...</Label>
-            </Legend>
+            </FieldsetTitle>
             <Select
               id={`${uid}-local-currency`}
               disabled={isFormDisabled}
@@ -426,9 +430,9 @@ export default function MainPage() {
               dropdown={
                 <div className="flex flex-col gap-4">
                   <Fieldset>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-ppp-discount-percentage`}>Maximum PPP discount</Label>
-                    </Legend>
+                    </FieldsetTitle>
                     <InputGroup disabled={props.is_form_disabled}>
                       <NumberInput
                         value={form.data.user.purchasing_power_parity_limit}
@@ -440,7 +444,6 @@ export default function MainPage() {
                       >
                         {(inputProps) => (
                           <Input
-                            asChild
                             id={`${uid}-ppp-discount-percentage`}
                             type="text"
                             placeholder="60"
@@ -453,19 +456,18 @@ export default function MainPage() {
                       <Pill className="-mr-2 shrink-0">%</Pill>
                     </InputGroup>
                   </Fieldset>
-                  <Toggle
-                    value={!form.data.user.purchasing_power_parity_payment_verification_disabled}
+                  <Switch
+                    checked={!form.data.user.purchasing_power_parity_payment_verification_disabled}
                     disabled={isFormDisabled}
-                    onChange={(newValue) =>
-                      updateUserSettings({ purchasing_power_parity_payment_verification_disabled: !newValue })
+                    onChange={(e) =>
+                      updateUserSettings({ purchasing_power_parity_payment_verification_disabled: !e.target.checked })
                     }
-                  >
-                    Apply only if the customer is currently located in the country of their payment method
-                  </Toggle>
+                    label="Apply only if the customer is currently located in the country of their payment method"
+                  />
                   <Fieldset>
-                    <Legend>
+                    <FieldsetTitle>
                       <Label htmlFor={`${uid}-ppp-exclude-products`}>Products to exclude</Label>
-                    </Legend>
+                    </FieldsetTitle>
 
                     <TagInput
                       inputId={`${uid}-ppp-exclude-products`}
@@ -505,8 +507,8 @@ export default function MainPage() {
               </a>
             </small>
           </Fieldset>
-        </Section>
-        <Section className="p-4! md:p-8!" header={<h2>Adult content</h2>}>
+        </FormSection>
+        <FormSection className="p-4! md:p-8!" header={<h2>Adult content</h2>}>
           <Fieldset>
             <ToggleSettingRow
               value={form.data.user.show_nsfw_products}
@@ -515,8 +517,8 @@ export default function MainPage() {
               label="Show adult content in recommendations and search results"
             />
           </Fieldset>
-        </Section>
-        <Section className="p-4! md:p-8!" header={<h2>Affiliates</h2>}>
+        </FormSection>
+        <FormSection className="p-4! md:p-8!" header={<h2>Affiliates</h2>}>
           <Fieldset>
             <ToggleSettingRow
               value={form.data.user.disable_affiliate_requests}
@@ -528,7 +530,7 @@ export default function MainPage() {
               When enabled, other users cannot add you as an affiliate or request to become your affiliate.
             </small>
           </Fieldset>
-        </Section>
+        </FormSection>
         {props.invalidate_active_sessions ? <InvalidateActiveSessionsSection /> : null}
       </form>
     </Layout>
@@ -556,7 +558,7 @@ const InvalidateActiveSessionsSection = () => {
   });
 
   return (
-    <Section className="p-4! md:p-8!">
+    <FormSection className="p-4! md:p-8!">
       <Fieldset>
         <button
           className="cursor-pointer underline all-unset"
@@ -587,6 +589,6 @@ const InvalidateActiveSessionsSection = () => {
           session as well.
         </Modal>
       ) : null}
-    </Section>
+    </FormSection>
   );
 };

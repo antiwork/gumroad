@@ -345,8 +345,10 @@ Rails.application.routes.draw do
       scope "/users" do
         get "/check_twitter_link", to: "users/oauth#check_twitter_link"
         get "/unsubscribe/:id", to: "users#email_unsubscribe", as: :user_unsubscribe
-        get "/unsubscribe_review_reminders", to: "users#unsubscribe_review_reminders", as: :user_unsubscribe_review_reminders
-        get "/subscribe_review_reminders", to: "users#subscribe_review_reminders", as: :user_subscribe_review_reminders
+        scope module: :users do
+          get "subscribe_review_reminders", to: "review_reminders#subscribe", as: :user_subscribe_review_reminders
+          get "unsubscribe_review_reminders", to: "review_reminders#unsubscribe", as: :user_unsubscribe_review_reminders
+        end
       end
     end
 
@@ -600,15 +602,26 @@ Rails.application.routes.draw do
       get :compute_discount
     end
 
-    resources :bundles, only: [:show, :update] do
-      member do
-        get "*other", to: "bundles#show"
-        post :update_purchases_content
+    resources :bundles, only: [:show] do
+      collection do
+        get :create_from_email
+      end
+    end
+
+    resources :bundles, only: [] do
+      scope module: :bundles do
+        resource :product, only: [:edit, :update], controller: "product"
+        resource :content, only: [:edit, :update], controller: "content" do
+          post :update_purchases_content
+        end
+        resource :share, only: [:edit, :update], controller: "share"
       end
 
-      collection do
-        get :products
-        get :create_from_email
+      # Backward compatibility redirects for old bundle edit URLs
+      member do
+        get :edit, to: redirect("/bundles/%{id}/product/edit")
+        get "edit/content", to: redirect("/bundles/%{id}/content/edit")
+        get "edit/share", to: redirect("/bundles/%{id}/share/edit")
       end
     end
 
@@ -665,6 +678,7 @@ Rails.application.routes.draw do
       scope module: :products, format: true, constraints: { format: :json } do
         resources :other_refund_policies, only: :index
         resources :remaining_call_availabilities, only: :index
+        resources :available_offer_codes, only: :index
       end
     end
 
@@ -866,6 +880,7 @@ Rails.application.routes.draw do
     post "/confirm-redirect", to: "url_redirects#confirm"
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :url_redirect_change_purchaser
+    post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :url_redirect_save_last_content_page
 
     get "crossdomain", to: "public#crossdomain"
 
@@ -1052,6 +1067,7 @@ Rails.application.routes.draw do
     post "/confirm-redirect", to: "url_redirects#confirm"
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :custom_domain_send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :custom_domain_url_redirect_change_purchaser
+    post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :custom_domain_url_redirect_save_last_content_page
 
     get "/library", to: "library#index"
     patch "/library/purchase/:id/archive", to: "library#archive"

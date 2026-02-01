@@ -29,12 +29,12 @@ import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSec
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
-import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
-import { Section } from "$app/components/ui/Section";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Switch } from "$app/components/ui/Switch";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -270,7 +270,10 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "TrinidadAndTobagoBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
     }
-    if (form.data.bank_account.type === "UkBankAccount" && !form.data.bank_account.sort_code) {
+    if (
+      (form.data.bank_account.type === "UkBankAccount" || form.data.bank_account.type === "GibraltarBankAccount") &&
+      !form.data.bank_account.sort_code
+    ) {
       markFieldInvalid("sort_code");
     }
     if (form.data.bank_account.type === "IndianBankAccount" && !form.data.bank_account.ifsc) {
@@ -633,7 +636,9 @@ export default function PaymentsPage() {
       markFieldInvalid("paypal_email_address");
     }
 
-    validateComplianceInfoFields();
+    if (selectedPayoutMethod !== "stripe") {
+      validateComplianceInfoFields();
+    }
 
     return errorFieldNames.size === 0;
   };
@@ -727,14 +732,13 @@ export default function PaymentsPage() {
 
   const payoutsPausedToggle = (
     <Fieldset>
-      <Toggle
-        value={form.data.payouts_paused_by_user || props.payouts_paused_internally}
-        onChange={(value) => form.setData("payouts_paused_by_user", value)}
-        ariaLabel="Pause payouts"
+      <Switch
+        checked={form.data.payouts_paused_by_user || props.payouts_paused_internally}
+        onChange={(e) => form.setData("payouts_paused_by_user", e.target.checked)}
+        aria-label="Pause payouts"
         disabled={props.is_form_disabled || props.payouts_paused_internally}
-      >
-        Pause payouts
-      </Toggle>
+        label="Pause payouts"
+      />
       <small className="text-muted">
         By pausing payouts, they won't be processed until you decide to resume them, and your balance will remain in
         your account until then.
@@ -793,7 +797,7 @@ export default function PaymentsPage() {
           </Alert>
         ) : null}
 
-        <Section className="p-4! md:p-8!" header={<h2>Verification</h2>}>
+        <FormSection className="p-4! md:p-8!" header={<h2>Verification</h2>}>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
           ) : (
@@ -814,7 +818,7 @@ export default function PaymentsPage() {
               </div>
             </div>
           )}
-        </Section>
+        </FormSection>
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
           <AusBackTaxesSection
@@ -844,7 +848,7 @@ export default function PaymentsPage() {
             </Alert>
           </div>
         ) : null}
-        <Section className="p-4! md:p-8!" header={<h2>Payout schedule</h2>}>
+        <FormSection className="p-4! md:p-8!" header={<h2>Payout schedule</h2>}>
           <section className="flex flex-col gap-4">
             <Fieldset>
               <Label htmlFor="payout_frequency">Schedule</Label>
@@ -921,9 +925,9 @@ export default function PaymentsPage() {
               payoutsPausedToggle
             )}
           </section>
-        </Section>
+        </FormSection>
 
-        <Section
+        <FormSection
           className="p-4! md:p-8!"
           header={
             <>
@@ -1080,7 +1084,7 @@ export default function PaymentsPage() {
               />
             )}
           </section>
-        </Section>
+        </FormSection>
         {props.paypal_connect.show_paypal_connect ? (
           <PayPalConnectSection
             paypalConnect={props.paypal_connect}

@@ -16,7 +16,7 @@ import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
@@ -108,22 +108,22 @@ export const Card = ({
           ) : null}
         </div>
         <div className="p-4">
-          <Popover
-            aria-label="Open product action menu"
-            trigger={<Icon name="three-dots" />}
-            open={isPopoverOpen}
-            onToggle={setIsPopoverOpen}
-          >
-            <div role="menu">
-              <div role="menuitem" onClick={toggleArchived}>
-                <Icon name="archive" />
-                &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
+          <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+            <PopoverTrigger aria-label="Open product action menu">
+              <Icon name="three-dots" />
+            </PopoverTrigger>
+            <PopoverContent className="border-0 p-0 shadow-none" usePortal>
+              <div role="menu">
+                <div role="menuitem" onClick={toggleArchived}>
+                  <Icon name="archive" />
+                  &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
+                </div>
+                <div className="danger" role="menuitem" onClick={() => onDelete()}>
+                  <Icon name="trash2" />
+                  &ensp;Delete permanently
+                </div>
               </div>
-              <div className="danger" role="menuitem" onClick={() => onDelete()}>
-                <Icon name="trash2" />
-                &ensp;Delete permanently
-              </div>
-            </div>
+            </PopoverContent>
           </Popover>
         </div>
       </ProductCardFooter>
@@ -172,7 +172,7 @@ export const DeleteProductModal = ({
 
 type Props = {
   results: Result[];
-  creators: { id: string; name: string; count: number }[];
+  creators: { id: string; name: string }[];
   bundles: { id: string; label: string }[];
   reviews_page_enabled: boolean;
   following_wishlists_enabled: boolean;
@@ -275,6 +275,24 @@ export default function LibraryPage() {
       filtered.sort((a, b) => b.product.updated_at.localeCompare(a.product.updated_at));
     return filtered;
   }, [state.results, state.search]);
+
+  const creatorsWithProductCounts = React.useMemo(() => {
+    const productCountByCreatorId = state.results.reduce((counts, result) => {
+      if (result.purchase.is_archived === state.search.showArchivedOnly && !result.purchase.is_bundle_purchase) {
+        const creatorId = result.product.creator_id;
+        counts.set(creatorId, (counts.get(creatorId) ?? 0) + 1);
+      }
+      return counts;
+    }, new Map<string, number>());
+
+    return creators
+      .map((creator) => ({
+        ...creator,
+        count: productCountByCreatorId.get(creator.id) ?? 0,
+      }))
+      .filter((creator) => creator.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [creators, state.results, state.search.showArchivedOnly]);
 
   const [resultsLimit, setResultsLimit] = React.useState(15);
   React.useEffect(() => setResultsLimit(15), [filteredResults]);
@@ -487,29 +505,31 @@ export default function LibraryPage() {
                           readOnly
                         />
                       </label>
-                      {(showingAllCreators ? creators : creators.slice(0, 5)).map((creator) => (
-                        <label key={creator.id}>
-                          {creator.name}
-                          <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
-                          <input
-                            type="checkbox"
-                            checked={state.search.creators.includes(creator.id)}
-                            onClick={() =>
-                              dispatch({
-                                type: "update-search",
-                                search: {
-                                  creators: state.search.creators.includes(creator.id)
-                                    ? state.search.creators.filter((id) => id !== creator.id)
-                                    : [...state.search.creators, creator.id],
-                                },
-                              })
-                            }
-                            readOnly
-                          />
-                        </label>
-                      ))}
+                      {(showingAllCreators ? creatorsWithProductCounts : creatorsWithProductCounts.slice(0, 5)).map(
+                        (creator) => (
+                          <label key={creator.id}>
+                            {creator.name}
+                            <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
+                            <input
+                              type="checkbox"
+                              checked={state.search.creators.includes(creator.id)}
+                              onClick={() =>
+                                dispatch({
+                                  type: "update-search",
+                                  search: {
+                                    creators: state.search.creators.includes(creator.id)
+                                      ? state.search.creators.filter((id) => id !== creator.id)
+                                      : [...state.search.creators, creator.id],
+                                  },
+                                })
+                              }
+                              readOnly
+                            />
+                          </label>
+                        ),
+                      )}
                       <div>
-                        {creators.length > 5 && !showingAllCreators ? (
+                        {creatorsWithProductCounts.length > 5 && !showingAllCreators ? (
                           <button
                             className="cursor-pointer underline all-unset"
                             onClick={() => setShowingAllCreators(true)}

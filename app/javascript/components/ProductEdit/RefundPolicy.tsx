@@ -5,10 +5,11 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
-import { Toggle } from "$app/components/Toggle";
+import { Switch } from "$app/components/ui/Switch";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 export type RefundPolicy = {
@@ -34,7 +35,6 @@ export const RefundPolicySelector = ({
   setIsEnabled: (isEnabled: boolean) => void;
   setShowPreview: (showingPreview: boolean) => void;
 }) => {
-  const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const [selectedRefundPolicyId, setSelectedRefundPolicyId] = React.useState<string | null>(null);
 
   const uid = React.useId();
@@ -44,56 +44,56 @@ export const RefundPolicySelector = ({
       className="toggle"
       open={isEnabled}
       summary={
-        <Toggle value={isEnabled} onChange={setIsEnabled}>
-          Specify a refund policy for this product{" "}
-          <a href="/help/article/335-custom-refund-policy" target="_blank" rel="noreferrer">
-            Learn more
-          </a>
-        </Toggle>
+        <Switch
+          checked={isEnabled}
+          onChange={(e) => setIsEnabled(e.target.checked)}
+          label={
+            <>
+              Specify a refund policy for this product{" "}
+              <a href="/help/article/335-custom-refund-policy" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </>
+          }
+        />
       }
     >
-      <div className="dropdown flex flex-col gap-4">
+      <Dropdown className="flex flex-col gap-4">
         <fieldset>
-          <legend>
+          <legend className="flex justify-between">
             <label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</label>
             {refundPolicies.length > 0 ? (
-              <Popover
-                trigger={<div className="link">Copy from other products</div>}
-                open={isPopoverOpen}
-                onToggle={setIsPopoverOpen}
-              >
-                <div
-                  className="flex flex-col gap-4 font-normal"
-                  style={{
-                    width: "20rem",
-                    maxWidth: "100%",
-                  }}
-                >
-                  <Select
-                    options={refundPolicies.map(({ id, product_name: label }) => ({ id, label }))}
-                    isMulti={false}
-                    placeholder="Select a product"
-                    onChange={(option) => setSelectedRefundPolicyId(option?.id ?? null)}
-                  />
-                  <Button
-                    color="primary"
-                    disabled={selectedRefundPolicyId === null}
-                    onClick={() => {
-                      const otherRefundPolicy = refundPolicies.find(({ id }) => id === selectedRefundPolicyId);
-                      if (otherRefundPolicy) {
-                        setRefundPolicy({
-                          ...refundPolicy,
-                          title: otherRefundPolicy.title,
-                          fine_print: otherRefundPolicy.fine_print,
-                          max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days,
-                        });
-                        setIsPopoverOpen(false);
-                      }
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
+              <Popover>
+                <PopoverTrigger className="underline">Copy from other products</PopoverTrigger>
+                <PopoverContent>
+                  <div className="flex w-80 max-w-full flex-col gap-4 font-normal">
+                    <Select
+                      options={refundPolicies.map(({ id, product_name: label }) => ({ id, label }))}
+                      isMulti={false}
+                      placeholder="Select a product"
+                      onChange={(option) => setSelectedRefundPolicyId(option?.id ?? null)}
+                    />
+                    <PopoverClose asChild>
+                      <Button
+                        color="primary"
+                        disabled={selectedRefundPolicyId === null}
+                        onClick={() => {
+                          const otherRefundPolicy = refundPolicies.find(({ id }) => id === selectedRefundPolicyId);
+                          if (otherRefundPolicy) {
+                            setRefundPolicy({
+                              ...refundPolicy,
+                              title: otherRefundPolicy.title,
+                              fine_print: otherRefundPolicy.fine_print,
+                              max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days,
+                            });
+                          }
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    </PopoverClose>
+                  </div>
+                </PopoverContent>
               </Popover>
             ) : null}
           </legend>
@@ -133,7 +133,7 @@ export const RefundPolicySelector = ({
             onMouseLeave={() => setShowPreview(false)}
           />
         </fieldset>
-      </div>
+      </Dropdown>
     </Details>
   );
 };

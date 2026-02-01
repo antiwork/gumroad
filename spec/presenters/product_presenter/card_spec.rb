@@ -97,6 +97,28 @@ describe ProductPresenter::Card do
         expect(data[:price_cents]).to eq 19_99
       end
     end
+
+    context "with default offer code" do
+      let(:product_with_offer_code) { create(:product, unique_permalink: "test_offer", name: "hello with offer", user: creator, price_cents: 10_00) }
+      let(:offer_code) { create(:offer_code, user: creator, products: [product_with_offer_code], amount_percentage: 10, amount_cents: nil) }
+
+      before do
+        product_with_offer_code.update!(default_offer_code: offer_code)
+      end
+
+      it "applies the discount to the price_cents" do
+        data = described_class.new(product: product_with_offer_code).for_web
+        expect(data[:price_cents]).to eq 9_00 # 1000 - 10% discount = 900
+        expect(data[:original_price_cents]).to eq 10_00
+      end
+
+      it "does not show original price for zero discount" do
+        offer_code.update!(amount_percentage: 0)
+        data = described_class.new(product: product_with_offer_code).for_web
+        expect(data[:price_cents]).to eq 10_00
+        expect(data).not_to have_key(:original_price_cents)
+      end
+    end
   end
 
   describe "#for_email" do

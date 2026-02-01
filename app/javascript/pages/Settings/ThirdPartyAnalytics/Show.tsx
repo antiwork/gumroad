@@ -7,15 +7,16 @@ import { SettingPage } from "$app/parsers/settings";
 
 import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
-import { Section } from "$app/components/ui/Section";
+import { FormSection } from "$app/components/ui/FormSection";
 import { Switch } from "$app/components/ui/Switch";
-import { Fieldset, Legend } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Input } from "$app/components/ui/Input";
 import { Checkbox } from "$app/components/ui/Checkbox";
@@ -86,7 +87,7 @@ export default function ThirdPartyAnalyticsPage() {
       canUpdate={Boolean(loggedInUser?.policies.settings_third_party_analytics_user.update) && !form.processing}
     >
       <form>
-        <Section
+        <FormSection
           className="p-4! md:p-8!"
           header={
             <>
@@ -111,14 +112,14 @@ export default function ThirdPartyAnalyticsPage() {
               />
             }
           >
-            <div className="dropdown flex flex-col gap-4">
+            <Dropdown className="flex flex-col gap-4">
               <Fieldset>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}googleAnalyticsId`}>Google Analytics Property ID</Label>
                   <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
                     Learn more
                   </a>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}googleAnalyticsId`}
                   type="text"
@@ -128,12 +129,12 @@ export default function ThirdPartyAnalyticsPage() {
                 />
               </Fieldset>
               <Fieldset>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}facebookPixel`}>Facebook Pixel</Label>
                   <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
                     Learn more
                   </a>
-                </Legend>
+                </FieldsetTitle>
                 <Input
                   id={`${uid}facebookPixel`}
                   type="text"
@@ -149,10 +150,10 @@ export default function ThirdPartyAnalyticsPage() {
                 />
                 Send 'Purchase' events for free ($0) sales
               </Label>
-            </div>
+            </Dropdown>
           </Details>
-        </Section>
-        <Section className="p-4! md:p-8!" header={<h2>Domain verification</h2>}>
+        </FormSection>
+        <FormSection className="p-4! md:p-8!" header={<h2>Domain verification</h2>}>
           <Details
             className="toggle"
             open={thirdPartyAnalytics.enable_verify_domain_third_party_services}
@@ -166,14 +167,14 @@ export default function ThirdPartyAnalyticsPage() {
               />
             }
           >
-            <div className="dropdown flex flex-col gap-4">
+            <Dropdown className="flex flex-col gap-4">
               <Fieldset>
-                <Legend>
+                <FieldsetTitle>
                   <Label htmlFor={`${uid}facebookMetaTag`}>Facebook Business</Label>
                   <a href="/help/article/290-facebook-domain-verification" target="_blank" rel="noreferrer">
                     Learn more
                   </a>
-                </Legend>
+                </FieldsetTitle>
                 <Textarea
                   id={`${uid}facebookMetaTag`}
                   placeholder='<meta name="facebook-domain-verification" content="me2vv6lgwoh" />'
@@ -182,10 +183,10 @@ export default function ThirdPartyAnalyticsPage() {
                 />
                 <small className="text-muted">Enter meta tag containing the Facebook domain verification code.</small>
               </Fieldset>
-            </div>
+            </Dropdown>
           </Details>
-        </Section>
-        <Section
+        </FormSection>
+        <FormSection
           className="p-4! md:p-8!"
           header={
             <>
@@ -215,7 +216,7 @@ export default function ThirdPartyAnalyticsPage() {
           ) : (
             <Placeholder>{addSnippetButton}</Placeholder>
           )}
-        </Section>
+        </FormSection>
       </form>
     </SettingsLayout>
   );

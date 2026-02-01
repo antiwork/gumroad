@@ -37,6 +37,19 @@ describe SendYearInReviewEmailJob do
         )
       end
 
+      before do
+        buy_list_response = {
+          "choices" => [
+            {
+              "message" => {
+                "content" => "1. A nice desk lamp\n2. A hardcover notebook\n3. A cozy throw blanket\n4. A set of headphones\n5. A gourmet coffee kit"
+              }
+            }
+          ]
+        }
+        allow(OpenAI::Client).to receive(:new).and_return(double("OpenAI::Client", chat: buy_list_response))
+      end
+
       context "when seller made only affiliate sales" do
         before do
           create(:payment_completed, user: seller, amount_cents: 100_00, payout_period_end_date: date, created_at: date)
@@ -52,6 +65,7 @@ describe SendYearInReviewEmailJob do
       context "when seller sold only one product" do
         before do
           recreate_model_index(ProductPageView)
+          allow_any_instance_of(User).to receive(:rank).and_return(2)
 
           travel_to(date) do
             product = create(:product, user: seller, name: "Product 1")
@@ -81,6 +95,7 @@ describe SendYearInReviewEmailJob do
           expect(mail.body.sanitized).to include("Sales 1")
           expect(mail.body.sanitized).to include("Unique customers 1")
           expect(mail.body.sanitized).to include("Products sold 1")
+          expect(mail.body.sanitized).to include("You ranked #2 among all creators")
           expect(mail.body.sanitized).to include("Your top product")
           expect(mail.body.sanitized).to match(/Product 1 \( \S+ \) -+ Views 2 Sales 1 Total 1K/)
           expect(mail.body.sanitized).to include("You earned a total of $1,000")
@@ -88,6 +103,20 @@ describe SendYearInReviewEmailJob do
           expect(mail.body.sanitized).to_not include("Elsewhere")
           expect(mail.body.sanitized).to include("United States 2 1 $1K")
           expect(mail.body.sanitized).to include(seller.financial_annual_report_url_for(year: date.year))
+        end
+
+        it "renders the AI text list section" do
+          expect do
+            described_class.new.perform(seller.id, date.year)
+          end.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+          mail = ActionMailer::Base.deliveries.last
+          expect(mail.body.sanitized).to include("Hey, can you suggest some things I could buy with my Gumroad earnings")
+          expect(mail.body.sanitized).to include("A nice desk lamp")
+          expect(mail.body.sanitized).to include("A hardcover notebook")
+          expect(mail.body.sanitized).to include("A cozy throw blanket")
+          expect(mail.body.sanitized).to include("A set of headphones")
+          expect(mail.body.sanitized).to include("A gourmet coffee kit")
         end
       end
 
@@ -119,7 +148,7 @@ describe SendYearInReviewEmailJob do
             expect(mail.body.sanitized).to include("You sold products in 1 country")
             expect(mail.body.sanitized).to_not include("United States")
             expect(mail.body.sanitized).to include("Elsewhere 24 12 $1.2K")
-            expect(mail.body.sanitized).to include("You'll be receiving a 1099 from us in the next few weeks.")
+            expect(mail.body.sanitized).to include("Your 1099 form is available for download")
             expect(mail.body.sanitized).to include(seller.financial_annual_report_url_for(year: date.year))
           end
 
@@ -143,7 +172,7 @@ describe SendYearInReviewEmailJob do
               expect(mail.body.sanitized).to include("You sold products in 1 country")
               expect(mail.body.sanitized).to_not include("United States")
               expect(mail.body.sanitized).to include("Elsewhere 24 12 $1.2K")
-              expect(mail.body.sanitized).to include("You'll be receiving a 1099 from us in the next few weeks.")
+              expect(mail.body.sanitized).to include("Your 1099 form is available for download")
               expect(mail.body.sanitized).to include(seller.financial_annual_report_url_for(year: date.year))
             end
           end
@@ -224,7 +253,7 @@ describe SendYearInReviewEmailJob do
           expect(mail.body.sanitized).to include("Elsewhere 0 12 $1.2K")
           expect(mail.body.sanitized).to include(seller.financial_annual_report_url_for(year: date.year))
           expect(mail.body.sanitized).to_not include("You do not qualify for a 1099 this year.")
-          expect(mail.body.sanitized).to_not include("You'll be receiving a 1099 from us in the next few weeks.")
+          expect(mail.body.sanitized).to_not include("Your 1099 form is available for download")
         end
       end
     end
