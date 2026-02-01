@@ -386,26 +386,6 @@ textarea {
   resize: vertical;
 }
 
-.color-picker {
-  position: relative;
-  overflow: hidden;
-  padding: spacer(4);
-  border: $border;
-  border-radius: border-radius(3);
-  max-width: fit-content;
-
-  > input[type="color"] {
-    position: absolute;
-    width: 200%;
-    height: 200%;
-    max-width: unset;
-    left: -50%;
-    top: -50%;
-    border: none;
-    cursor: pointer;
-  }
-}
-
 [role="radio"],
 [role="checkbox"] {
   cursor: pointer;

@@ -31,7 +31,7 @@ import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmai
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
@@ -739,10 +739,10 @@ export default function PaymentsPage() {
         disabled={props.is_form_disabled || props.payouts_paused_internally}
         label="Pause payouts"
       />
-      <small className="text-muted">
+      <FieldsetDescription>
         By pausing payouts, they won't be processed until you decide to resume them, and your balance will remain in
         your account until then.
-      </small>
+      </FieldsetDescription>
     </Fieldset>
   );
 
@@ -863,10 +863,10 @@ export default function PaymentsPage() {
                   disabled: frequency === "daily" && !props.payout_frequency_daily_supported,
                 }))}
               />
-              <small className="text-muted">
+              <FieldsetDescription>
                 Daily payouts are only available for US users with eligible bank accounts and more than 4 previous
                 payouts.
-              </small>
+              </FieldsetDescription>
             </Fieldset>
             {form.data.payout_frequency === "daily" && props.payout_frequency_daily_supported ? (
               <Alert variant="info" role="status">
@@ -896,15 +896,17 @@ export default function PaymentsPage() {
                 hasError={!!payoutThresholdError}
               />
               {payoutThresholdError ? (
-                <small className="text-muted">
+                <FieldsetDescription>
                   Your payout threshold must be at least{" "}
                   {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
                     symbolFormat: "long",
                   })}
                   .
-                </small>
+                </FieldsetDescription>
               ) : (
-                <small className="text-muted">Payouts will only be issued once your balance reaches this amount.</small>
+                <FieldsetDescription>
+                  Payouts will only be issued once your balance reaches this amount.
+                </FieldsetDescription>
               )}
             </Fieldset>
             {props.payouts_paused_internally ? (

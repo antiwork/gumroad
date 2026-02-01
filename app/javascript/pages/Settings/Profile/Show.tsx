@@ -22,7 +22,7 @@ import { Profile, Props as ProfileProps } from "$app/components/server-component
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { ColorPicker } from "$app/components/ui/ColorPicker";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Textarea } from "$app/components/ui/Textarea";
@@ -107,7 +107,7 @@ export default function SettingsPage() {
       </Head>
       <WithPreviewSidebar>
         <form>
-          <section className="grid gap-8 p-4 md:p-8">
+          <section className="grid gap-8 p-4! md:p-8!">
             <header className="grid content-start gap-3">
               <h2>Profile</h2>
             </header>
@@ -124,9 +124,9 @@ export default function SettingsPage() {
                   updateProfileSettings({ username: evt.target.value.replace(/[^a-z0-9]/giu, "").toLowerCase() })
                 }
               />
-              <small className="text-muted">
+              <FieldsetDescription>
                 View your profile at: <a href={`${scheme}://${subdomain}`}>{subdomain}</a>
-              </small>
+              </FieldsetDescription>
             </Fieldset>
             <Fieldset>
               <FieldsetTitle>

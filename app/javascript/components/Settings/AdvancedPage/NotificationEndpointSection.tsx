@@ -6,7 +6,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -84,7 +84,7 @@ const NotificationEndpointSection = ({
             </Pill>
           </WithTooltip>
         </InputGroup>
-        <small className="text-muted">For external services, your `seller_id` is {userId}</small>
+        <FieldsetDescription>For external services, your `seller_id` is {userId}</FieldsetDescription>
       </Fieldset>
     </FormSection>
   );

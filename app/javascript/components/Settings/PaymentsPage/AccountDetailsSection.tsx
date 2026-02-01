@@ -8,7 +8,7 @@ import { classNames } from "$app/utils/classNames";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Select } from "$app/components/ui/Select";
@@ -667,7 +667,7 @@ const AccountDetailsSection = ({
               required
               onChange={(evt) => updateComplianceInfo({ first_name: evt.target.value })}
             />
-            <small className="text-muted">Include your middle name if it appears on your ID.</small>
+            <FieldsetDescription>Include your middle name if it appears on your ID.</FieldsetDescription>
           </Fieldset>
           <Fieldset state={errorFieldNames.has("last_name") ? "danger" : undefined}>
             <FieldsetTitle>

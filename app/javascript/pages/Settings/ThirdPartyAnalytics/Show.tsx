@@ -13,7 +13,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -181,7 +181,9 @@ export default function ThirdPartyAnalyticsPage() {
                   value={thirdPartyAnalytics.facebook_meta_tag}
                   onChange={(evt) => updateThirdPartyAnalytics({ facebook_meta_tag: evt.target.value })}
                 />
-                <small className="text-muted">Enter meta tag containing the Facebook domain verification code.</small>
+                <FieldsetDescription>
+                  Enter meta tag containing the Facebook domain verification code.
+                </FieldsetDescription>
               </Fieldset>
             </Dropdown>
           </Details>

@@ -5,7 +5,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
@@ -115,7 +115,7 @@ const CustomDomain = ({
           </Pill>
         ) : null}
       </InputGroup>
-      <small className="text-muted">{verificationInfo.message}</small>
+      <FieldsetDescription>{verificationInfo.message}</FieldsetDescription>
     </Fieldset>
   );
 };

@@ -15,7 +15,7 @@ import { ProductLevelSupportEmailsForm } from "$app/components/Settings/Advanced
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -135,7 +135,7 @@ export default function MainPage() {
               onChange={(e) => updateUserSettings({ email: e.target.value })}
             />
             {props.user.has_unconfirmed_email && !props.is_form_disabled ? (
-              <small className="text-muted">
+              <FieldsetDescription>
                 This email address has not been confirmed yet.{" "}
                 {resentConfirmationEmail ? null : (
                   <button
@@ -148,7 +148,7 @@ export default function MainPage() {
                     {resendConfirmationEmailForm.processing ? "Resending..." : "Resend confirmation?"}
                   </button>
                 )}
-              </small>
+              </FieldsetDescription>
             ) : null}
           </Fieldset>
         </FormSection>
@@ -292,7 +292,7 @@ export default function MainPage() {
               disabled={isFormDisabled}
               onChange={(e) => updateUserSettings({ support_email: e.target.value })}
             />
-            <small className="text-muted">This email is listed on the receipt of every sale.</small>
+            <FieldsetDescription>This email is listed on the receipt of every sale.</FieldsetDescription>
           </Fieldset>
           {props.user.product_level_support_emails !== null && (
             <ProductLevelSupportEmailsForm
@@ -415,11 +415,11 @@ export default function MainPage() {
                 </option>
               ))}
             </Select>
-            <small className="text-muted">Applies only to new products.</small>
-            <small className="text-muted">
+            <FieldsetDescription>Applies only to new products.</FieldsetDescription>
+            <FieldsetDescription>
               Charges will happen in USD, using an up-to-date exchange rate. Customers may incur an additional foreign
               transaction fee according to their cardmember agreement.
-            </small>
+            </FieldsetDescription>
           </Fieldset>
           <Fieldset>
             <ToggleSettingRow
@@ -500,12 +500,12 @@ export default function MainPage() {
                 </div>
               }
             />
-            <small className="text-muted">
+            <FieldsetDescription>
               Charge customers different amounts depending on the cost of living in their country.{" "}
               <a href="/help/article/327-purchasing-power-parity" target="_blank" rel="noreferrer">
                 Learn more
               </a>
-            </small>
+            </FieldsetDescription>
           </Fieldset>
         </FormSection>
         <FormSection className="p-4! md:p-8!" header={<h2>Adult content</h2>}>
@@ -526,9 +526,9 @@ export default function MainPage() {
               disabled={isFormDisabled}
               label="Prevent others from adding me as an affiliate"
             />
-            <small className="text-muted">
+            <FieldsetDescription>
               When enabled, other users cannot add you as an affiliate or request to become your affiliate.
-            </small>
+            </FieldsetDescription>
           </Fieldset>
         </FormSection>
         {props.invalidate_active_sessions ? <InvalidateActiveSessionsSection /> : null}

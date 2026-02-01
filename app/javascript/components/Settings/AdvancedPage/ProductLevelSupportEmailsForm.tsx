@@ -3,7 +3,7 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { TagInput } from "$app/components/TagInput";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -89,7 +89,9 @@ const ProductLevelSupportEmailRow = React.memo(
                 required={supportEmail.product_ids.length > 0}
                 onChange={handleEmailChange}
               />
-              <small className="text-muted">This reply-to email will appear on receipts for selected products.</small>
+              <FieldsetDescription>
+                This reply-to email will appear on receipts for selected products.
+              </FieldsetDescription>
             </Fieldset>
             <Fieldset>
               <FieldsetTitle>
