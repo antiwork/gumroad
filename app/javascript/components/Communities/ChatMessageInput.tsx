@@ -4,7 +4,7 @@ import * as React from "react";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 
-import { MAX_MESSAGE_LENGTH } from "./CommunityView";
+import { MAX_MESSAGE_LENGTH } from "$app/pages/Communities/Index";
 import { CommunityDraft } from "./useCommunities";
 
 export const ChatMessageInput = React.forwardRef<

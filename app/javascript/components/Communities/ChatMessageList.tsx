@@ -4,7 +4,7 @@ import React from "react";
 import { Community, CommunityChatMessage } from "$app/data/communities";
 
 import { ChatMessage } from "./ChatMessage";
-import { scrollTo } from "./CommunityView";
+import { scrollTo } from "$app/pages/Communities/Index";
 import { DateSeparator, UnreadSeparator } from "./Separator";
 import { CommunityChat } from "./useCommunities";
 

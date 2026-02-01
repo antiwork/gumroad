@@ -37,21 +37,6 @@ export type CommunityChatMessage = {
   };
 };
 
-export async function getCommunities({ abortSignal }: { abortSignal: AbortSignal }) {
-  const response = await request({
-    method: "GET",
-    accept: "json",
-    url: Routes.internal_communities_path(),
-    abortSignal,
-  });
-  if (!response.ok) throw new ResponseError();
-  return cast<{
-    has_products: boolean;
-    communities: Community[];
-    notification_settings: CommunityNotificationSettings;
-  }>(await response.json());
-}
-
 export function getCommunityChatMessages({
   communityId,
   timestamp,
@@ -65,7 +50,7 @@ export function getCommunityChatMessages({
   const response = request({
     method: "GET",
     accept: "json",
-    url: Routes.internal_community_chat_messages_path(communityId, { timestamp, fetch_type: fetchType }),
+    url: Routes.community_chat_messages_path(communityId, { timestamp, fetch_type: fetchType }),
     abortSignal: abort.signal,
   })
     .then((res) => {
@@ -86,62 +71,6 @@ export function getCommunityChatMessages({
   };
 }
 
-export function createCommunityChatMessage({ communityId, content }: { communityId: string; content: string }) {
-  const abort = new AbortController();
-  const response = request({
-    method: "POST",
-    accept: "json",
-    url: Routes.internal_community_chat_messages_path(communityId),
-    abortSignal: abort.signal,
-    data: { community_chat_message: { content } },
-  })
-    .then((res) => {
-      if (!res.ok) throw new ResponseError();
-      return res.json();
-    })
-    .then((json) => cast<{ message: CommunityChatMessage }>(json));
-
-  return {
-    response,
-    cancel: () => abort.abort(),
-  };
-}
-
-export async function updateCommunityChatMessage({
-  communityId,
-  messageId,
-  content,
-}: {
-  communityId: string;
-  messageId: string;
-  content: string;
-}) {
-  const response = await request({
-    method: "PUT",
-    accept: "json",
-    url: Routes.internal_community_chat_message_path(communityId, messageId),
-    data: { community_chat_message: { content } },
-  });
-  const json: unknown = await response.json();
-  if (!response.ok) throw new ResponseError(cast<{ error: string }>(json).error);
-  return cast<{ message: CommunityChatMessage }>(json);
-}
-
-export async function deleteCommunityChatMessage({
-  communityId,
-  messageId,
-}: {
-  communityId: string;
-  messageId: string;
-}) {
-  const response = await request({
-    method: "DELETE",
-    accept: "json",
-    url: Routes.internal_community_chat_message_path(communityId, messageId),
-  });
-  if (!response.ok) throw new ResponseError();
-}
-
 export function markCommunityChatMessagesAsRead({
   communityId,
   messageId,
@@ -153,7 +82,7 @@ export function markCommunityChatMessagesAsRead({
   const response = request({
     method: "POST",
     accept: "json",
-    url: Routes.internal_community_last_read_chat_message_path(communityId, { message_id: messageId }),
+    url: Routes.community_last_read_chat_message_path(communityId, { message_id: messageId }),
     abortSignal: abort.signal,
   })
     .then((res) => {
@@ -168,19 +97,3 @@ export function markCommunityChatMessagesAsRead({
   };
 }
 
-export async function updateCommunityNotificationSettings({
-  communityId,
-  settings,
-}: {
-  communityId: string;
-  settings: Partial<NotificationSettings>;
-}) {
-  const response = await request({
-    method: "PUT",
-    accept: "json",
-    url: Routes.internal_community_notification_setting_path(communityId),
-    data: { settings },
-  });
-  if (!response.ok) throw new ResponseError();
-  return cast<{ settings: NotificationSettings }>(await response.json());
-}

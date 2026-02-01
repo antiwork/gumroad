@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe Api::Internal::Communities::LastReadChatMessagesController do
+describe Communities::LastReadChatMessagesController do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, community_chat_enabled: true) }
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }

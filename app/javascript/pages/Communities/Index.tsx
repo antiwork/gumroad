@@ -1,25 +1,20 @@
 import { Channel } from "@anycable/web";
+import { router, useForm } from "@inertiajs/react";
 import cx from "classnames";
 import { debounce } from "lodash-es";
 import * as React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
 import { is } from "ts-safe-cast";
 
 import cable from "$app/channels/consumer";
 import {
   Community,
   CommunityChatMessage,
-  createCommunityChatMessage,
   getCommunityChatMessages,
   Seller,
   markCommunityChatMessagesAsRead,
-  updateCommunityChatMessage,
-  deleteCommunityChatMessage,
   NotificationSettings,
-  updateCommunityNotificationSettings,
 } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
-import { asyncVoid } from "$app/utils/promise";
 import { AbortError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -34,13 +29,13 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-import { ChatMessageInput } from "./ChatMessageInput";
-import { ChatMessageList } from "./ChatMessageList";
-import { CommunityList } from "./CommunityList";
-import { ScrollToBottomButton } from "./ScrollToBottomButton";
-import { DateSeparator } from "./Separator";
-import { useCommunities } from "./useCommunities";
-import { UserAvatar } from "./UserAvatar";
+import { ChatMessageInput } from "$app/components/Communities/ChatMessageInput";
+import { ChatMessageList } from "$app/components/Communities/ChatMessageList";
+import { CommunityList } from "$app/components/Communities/CommunityList";
+import { ScrollToBottomButton } from "$app/components/Communities/ScrollToBottomButton";
+import { DateSeparator } from "$app/components/Communities/Separator";
+import { useCommunities } from "$app/components/Communities/useCommunities";
+import { UserAvatar } from "$app/components/Communities/UserAvatar";
 
 import placeholderImage from "$assets/images/placeholders/community.png";
 
@@ -111,11 +106,9 @@ const getComparedTimestamp = (
   return assertDefined(timestampToISOString.get(resultTime));
 };
 
-export const CommunityView = () => {
+function CommunitiesIndex() {
   const currentSeller = useCurrentSeller();
   const isAboveBreakpoint = useIsAboveBreakpoint("lg");
-  const navigate = useNavigate();
-  const location = useLocation();
   const {
     hasProducts,
     communities,
@@ -123,8 +116,6 @@ export const CommunityView = () => {
     selectedCommunity,
     selectedCommunityDraft,
     selectedCommunityChat,
-    setSelectedCommunityId,
-    setNotificationSettings,
     updateCommunity,
     updateCommunityDraft,
     updateCommunityChat,
@@ -143,20 +134,22 @@ export const CommunityView = () => {
   const [showScrollToBottomButton, setShowScrollToBottomButton] = React.useState(false);
   const communityChannelsRef = React.useRef<Record<string, Channel>>({});
   const userChannelRef = React.useRef<Channel | null>(null);
+  const selectedCommunityRef = React.useRef(selectedCommunity);
+  selectedCommunityRef.current = selectedCommunity;
   const [chatMessageInputHeight, setChatMessageInputHeight] = React.useState(0);
   const [showNotificationsSettings, setShowNotificationsSettings] = React.useState(false);
 
   React.useEffect(() => {
     if (selectedCommunity) {
-      const searchParams = new URLSearchParams(location.search);
+      const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.has("notifications")) {
-        searchParams.delete("notifications");
-        const newSearch = searchParams.toString() ? `?${searchParams.toString()}` : "";
-        navigate(`${location.pathname}${newSearch}${location.hash}`, { replace: true });
+        const url = new URL(window.location.href);
+        url.searchParams.delete("notifications");
+        router.get(url.pathname + url.search, {}, { replace: true, preserveState: true, preserveScroll: true });
         setShowNotificationsSettings(true);
       }
     }
-  }, [selectedCommunity, location, navigate]);
+  }, [selectedCommunity]);
 
   const debouncedMarkAsRead = React.useMemo(
     () =>
@@ -296,12 +289,10 @@ export const CommunityView = () => {
 
     if (!selectedCommunityChat) return;
 
-    // Check if we should show the scroll to bottom button
     const scrollPosition = scrollTop + clientHeight;
     const isNearBottom = scrollHeight - scrollPosition < 50;
     setShowScrollToBottomButton(!isNearBottom);
 
-    // When scrolling near the top, load older messages
     if (scrollTop < 100) {
       if (selectedCommunityChat.nextOlderTimestamp && !selectedCommunityChat.isLoading) {
         fetchMessages(selectedCommunity.id, {
@@ -313,7 +304,6 @@ export const CommunityView = () => {
       }
     }
 
-    // When scrolling near the bottom, load newer messages
     if (scrollHeight - scrollTop - clientHeight < 100) {
       if (selectedCommunityChat.nextNewerTimestamp && !selectedCommunityChat.isLoading) {
         fetchMessages(selectedCommunity.id, {
@@ -364,7 +354,7 @@ export const CommunityView = () => {
     );
   };
 
-  const sendMessage = async () => {
+  const sendMessage = () => {
     if (!selectedCommunity) return;
     if (!selectedCommunityDraft) return;
     if (selectedCommunityDraft.isSending) return;
@@ -372,17 +362,52 @@ export const CommunityView = () => {
 
     updateCommunityDraft(selectedCommunity.id, { isSending: true });
 
-    const request = createCommunityChatMessage({
-      communityId: selectedCommunity.id,
-      content: selectedCommunityDraft.content,
-    });
-    try {
-      const data = await request.response;
-      updateCommunityDraft(selectedCommunity.id, { content: "", isSending: false });
-      insertOrUpdateMessage(data.message);
-    } catch (_error: unknown) {
-      updateCommunityDraft(selectedCommunity.id, { isSending: false });
-    }
+    router.post(
+      Routes.community_chat_messages_path(selectedCommunity.id),
+      { community_chat_message: { content: selectedCommunityDraft.content } },
+      {
+        preserveState: true,
+        preserveScroll: true,
+        only: [],
+        onSuccess: (page) => {
+          // Check for validation errors in page props
+          const errors = (page.props as { errors?: Record<string, string> }).errors;
+          if (errors && Object.keys(errors).length > 0) {
+            const errorMessage = Object.values(errors)[0];
+            showAlert(errorMessage || "Failed to send message.", "error");
+            updateCommunityDraft(selectedCommunity.id, { isSending: false });
+            return;
+          }
+          updateCommunityDraft(selectedCommunity.id, { content: "", isSending: false });
+          const latestMessage = selectedCommunityChat?.messages[selectedCommunityChat.messages.length - 1];
+          const { response } = getCommunityChatMessages({
+            communityId: selectedCommunity.id,
+            timestamp: latestMessage?.created_at ?? new Date().toISOString(),
+            fetchType: "newer",
+          });
+          response
+            .then((data) => {
+              if (data.messages.length > 0) {
+                updateCommunityChat(
+                  selectedCommunity.id,
+                  { messages: data.messages, nextNewerTimestamp: data.next_newer_timestamp },
+                  { messagesUpdateStrategy: "merge" },
+                );
+                const lastNewMessage = data.messages[data.messages.length - 1];
+                if (lastNewMessage) {
+                  setScrollToMessage({ id: lastNewMessage.id, position: "start" });
+                  markMessageAsRead(lastNewMessage);
+                }
+              }
+            })
+            .catch(() => {});
+        },
+        onError: () => {
+          updateCommunityDraft(selectedCommunity.id, { isSending: false });
+          showAlert("Failed to send message.", "error");
+        },
+      },
+    );
   };
 
   const loggedInUser = assertDefined(useCurrentSeller());
@@ -412,11 +437,21 @@ export const CommunityView = () => {
     const userChannelState = userChannelRef.current?.state;
     if (userChannelState === "connected" || userChannelState === "idle") {
       userChannelRef.current?.send(msg).catch((e: unknown) => {
-        // eslint-disable-next-line no-console
         console.error(e);
       });
     }
   }, 100);
+
+
+  React.useEffect(() => {
+    return () => {
+      Object.values(communityChannelsRef.current).forEach((channel) => {
+        if (channel.state !== "disconnected" && channel.state !== "closed") {
+          channel.disconnect();
+        }
+      });
+    };
+  }, []);
 
   React.useEffect(() => {
     communities.forEach((community) => {
@@ -430,10 +465,9 @@ export const CommunityView = () => {
         if (is<IncomingCommunityChannelMessage>(msg)) {
           if (msg.type === "create_chat_message") {
             if (msg.message.community_id === community.id) {
-              if (community.id === selectedCommunity?.id) {
+              if (community.id === selectedCommunityRef.current?.id) {
                 insertOrUpdateMessage(msg.message);
               } else {
-                // Reset the community chat to force a reload of the messages when switching to a non-selected community with unread messages
                 updateCommunityChat(
                   community.id,
                   { messages: [], nextOlderTimestamp: null, nextNewerTimestamp: null },
@@ -444,11 +478,11 @@ export const CommunityView = () => {
 
             sendMessageToUserChannel({ type: "latest_community_info", community_id: community.id });
           } else if (msg.type === "update_chat_message") {
-            if (msg.message.community_id === community.id && community.id === selectedCommunity?.id) {
+            if (msg.message.community_id === community.id && community.id === selectedCommunityRef.current?.id) {
               insertOrUpdateMessage(msg.message, true);
             }
           } else if (msg.message.community_id === community.id) {
-            if (community.id === selectedCommunity?.id) {
+            if (community.id === selectedCommunityRef.current?.id) {
               removeMessage(msg.message.id, community.id);
             }
             sendMessageToUserChannel({ type: "latest_community_info", community_id: community.id });
@@ -456,15 +490,7 @@ export const CommunityView = () => {
         }
       });
     });
-
-    return () => {
-      Object.values(communityChannelsRef.current).forEach((channel) => {
-        if (channel.state !== "disconnected" && channel.state !== "closed") {
-          channel.disconnect();
-        }
-      });
-    };
-  }, [cable, selectedCommunity]);
+  }, [cable, communities]);
 
   React.useEffect(() => {
     if (selectedCommunity) {
@@ -491,8 +517,7 @@ export const CommunityView = () => {
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
-      setSelectedCommunityId(community.id);
-      navigate(`/communities/${community.seller.id}/${community.id}`);
+      router.get( Routes.community_path(community.seller.id, community.id), {}, { preserveScroll: true });
       setSwitcherOpen(false);
     }
   };
@@ -517,7 +542,8 @@ export const CommunityView = () => {
 
     const community = communities.find((community) => community.id === communityId);
     if (!community) return;
-    window.location.replace(`/communities/${community.seller.id}/${community.id}`);
+
+    router.get(Routes.community_path(community.seller.id, community.id), {}, { replace: true });
   });
 
   const sellers = React.useMemo(() => {
@@ -542,30 +568,51 @@ export const CommunityView = () => {
   );
 
   const updateMessage = async (messageId: string, communityId: string, content: string) => {
-    const response = await updateCommunityChatMessage({
-      communityId,
-      messageId,
-      content,
+    return new Promise<{ message: CommunityChatMessage }>((resolve, reject) => {
+      router.put(
+        Routes.community_chat_message_path(communityId, messageId),
+        { community_chat_message: { content } },
+        {
+          preserveState: true,
+          preserveScroll: true,
+          only: [],
+          onSuccess: (page) => {
+            const errors = (page.props as { errors?: Record<string, string> }).errors;
+            if (errors && Object.keys(errors).length > 0) {
+              const errorMessage = Object.values(errors)[0];
+              showAlert(errorMessage || "Failed to update message.", "error");
+              reject(new Error(errorMessage));
+              return;
+            }
+            resolve({ message: {} as CommunityChatMessage });
+          },
+          onError: () => {
+            showAlert("Failed to update message.", "error");
+            reject(new Error("Failed to update message."));
+          },
+        },
+      );
     });
-    insertOrUpdateMessage(response.message, true);
-    return response;
   };
 
   const deleteMessage = async (messageId: string, communityId: string) => {
-    const response = await deleteCommunityChatMessage({ communityId, messageId });
-    removeMessage(messageId, communityId);
-    return response;
-  };
-
-  const saveNotificationsSettings = async (community: Community, settings: NotificationSettings) => {
-    const response = await updateCommunityNotificationSettings({
-      communityId: community.id,
-      settings,
+    return new Promise<void>((resolve, reject) => {
+      router.delete(
+        Routes.community_chat_message_path(communityId, messageId),
+        {
+          preserveState: true,
+          preserveScroll: true,
+          only: [],
+          onSuccess: () => {
+            resolve();
+          },
+          onError: () => {
+            showAlert("Failed to delete message.", "error");
+            reject(new Error("Failed to delete message."));
+          },
+        },
+      );
     });
-    setNotificationSettings((prev) => ({ ...prev, [community.seller.id]: response.settings }));
-    showAlert("Changes saved!", "success");
-    setShowNotificationsSettings(false);
-    return response;
   };
 
   const contextValue = React.useMemo(
@@ -713,7 +760,7 @@ export const CommunityView = () => {
                 <ChatMessageInput
                   draft={selectedCommunityDraft ?? null}
                   updateDraftMessage={(content) => updateCommunityDraft(selectedCommunity.id, { content })}
-                  onSend={asyncVoid(sendMessage)}
+                  onSend={sendMessage}
                   ref={chatMessageInputRef}
                   onHeightChange={setChatMessageInputHeight}
                 />
@@ -725,28 +772,41 @@ export const CommunityView = () => {
       {showNotificationsSettings && selectedCommunity ? (
         <NotificationsSettingsModal
           communityName={selectedCommunity.seller.name}
+          community={selectedCommunity}
           settings={notificationSettings[selectedCommunity.seller.id] ?? { recap_frequency: null }}
           onClose={() => setShowNotificationsSettings(false)}
-          onSave={(settings) => saveNotificationsSettings(selectedCommunity, settings)}
         />
       ) : null}
     </CommunityViewContext.Provider>
   );
-};
+}
 
 const NotificationsSettingsModal = ({
   communityName,
+  community,
   settings,
   onClose,
-  onSave,
 }: {
   communityName: string;
+  community: Community;
   settings: NotificationSettings;
   onClose: () => void;
-  onSave: (settings: NotificationSettings) => Promise<{ settings: NotificationSettings }>;
 }) => {
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [updatedSettings, setUpdatedSettings] = React.useState<NotificationSettings>(settings);
+  const form = useForm({
+    recap_frequency: settings.recap_frequency,
+  });
+
+  const saveNotificationSettings = () => {
+    form.put(Routes.community_notification_settings_path(community.seller.id, community.id), {
+      preserveScroll: true,
+      onSuccess: () => {
+        onClose();
+      },
+      onError: () => {
+        showAlert("Failed to save changes. Please try again later.", "error");
+      },
+    });
+  };
 
   return (
     <Modal
@@ -756,23 +816,11 @@ const NotificationsSettingsModal = ({
       title="Notifications"
       footer={
         <>
-          <Button disabled={isSaving} onClick={onClose}>
+          <Button disabled={form.processing} onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            color="primary"
-            onClick={asyncVoid(async () => {
-              setIsSaving(true);
-              try {
-                await onSave(updatedSettings);
-              } catch (_error: unknown) {
-                showAlert("Failed to save changes. Please try again later.", "error");
-              } finally {
-                setIsSaving(false);
-              }
-            })}
-          >
-            {isSaving ? "Saving..." : "Save"}
+          <Button color="primary" onClick={saveNotificationSettings} disabled={form.processing}>
+            {form.processing ? "Saving..." : "Save"}
           </Button>
         </>
       }
@@ -780,14 +828,14 @@ const NotificationsSettingsModal = ({
       <p>Receive email recaps of what's happening in "{communityName}" community.</p>
       <ToggleSettingRow
         label="Community recap"
-        value={updatedSettings.recap_frequency !== null}
-        onChange={(newValue) => setUpdatedSettings({ ...updatedSettings, recap_frequency: newValue ? "weekly" : null })}
+        value={form.data.recap_frequency !== null}
+        onChange={(newValue) => form.setData("recap_frequency", newValue ? "weekly" : null)}
         dropdown={
           <div className="radio-buttons flex! flex-col!" role="radiogroup">
             <Button
               role="radio"
-              aria-checked={updatedSettings.recap_frequency === "daily"}
-              onClick={() => setUpdatedSettings({ ...updatedSettings, recap_frequency: "daily" })}
+              aria-checked={form.data.recap_frequency === "daily"}
+              onClick={() => form.setData("recap_frequency", "daily")}
             >
               <div>
                 <h4>Daily</h4>
@@ -796,8 +844,8 @@ const NotificationsSettingsModal = ({
             </Button>
             <Button
               role="radio"
-              aria-checked={updatedSettings.recap_frequency === "weekly"}
-              onClick={() => setUpdatedSettings({ ...updatedSettings, recap_frequency: "weekly" })}
+              aria-checked={form.data.recap_frequency === "weekly"}
+              onClick={() => form.setData("recap_frequency", "weekly")}
             >
               <div>
                 <h4>Weekly</h4>
@@ -838,10 +886,14 @@ const CommunityChatHeader = ({
 const GoBackHeader = () => {
   const handleGoBack = (e: React.MouseEvent) => {
     e.preventDefault();
-    const referrerUrl = new URL(document.referrer.trim() !== "" ? document.referrer : Routes.dashboard_url());
-    window.location.href = referrerUrl.pathname.startsWith("/communities")
-      ? Routes.dashboard_path()
-      : referrerUrl.toString();
+    const storedReferrer = sessionStorage.getItem("communities:referrer");
+    if (storedReferrer) {
+      sessionStorage.removeItem("communities:referrer");
+      const url = new URL(storedReferrer, window.location.origin);
+      router.get(url.pathname + url.search + url.hash);
+      return;
+    }
+    router.get(Routes.dashboard_path());
   };
 
   return (
@@ -881,3 +933,7 @@ const EmptyCommunitiesPlaceholder = ({ hasProducts }: { hasProducts: boolean }) 
     </section>
   </div>
 );
+
+CommunitiesIndex.loggedInUserLayout = true;
+
+export default CommunitiesIndex;

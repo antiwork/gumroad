@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Api::Internal::Communities::LastReadChatMessagesController < Api::Internal::BaseController
+class Communities::LastReadChatMessagesController < ApplicationController
   before_action :authenticate_user!
   before_action :set_community
   after_action :verify_authorized
@@ -16,10 +16,11 @@ class Api::Internal::Communities::LastReadChatMessagesController < Api::Internal
   end
 
   private
-    def set_community
-      @community = Community.find_by_external_id(params[:community_id])
-      return e404_json unless @community
 
-      authorize @community, :show?
-    end
+  def set_community
+    @community = Community.find_by_external_id(params[:community_id])
+    return e404_json unless @community
+
+    authorize @community, :show?
+  end
 end
