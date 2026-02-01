@@ -146,7 +146,7 @@ describe "Affiliated Products", type: :system, js: true do
       visit products_affiliated_index_path
       new_product = create(:product, user: creator, name: "A very unique product name")
       create(:product_affiliate, affiliate: direct_affiliate, product: new_product, affiliate_basis_points: 25_00)
-      select_disclosure "Search" do
+      select_disclosure "Toggle Search" do
         fill_in "Search", with: new_product.name
       end
 

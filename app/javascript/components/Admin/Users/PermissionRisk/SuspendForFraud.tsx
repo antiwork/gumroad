@@ -4,6 +4,8 @@ import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type SuspendForFraudProps = {
   user: User;
@@ -27,9 +29,9 @@ const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
             onSuccess={() => showAlert("Suspended.", "success")}
           >
             {(isLoading) => (
-              <fieldset>
+              <Fieldset>
                 <div className="flex items-start gap-2">
-                  <textarea
+                  <Textarea
                     name="suspend_for_fraud[suspension_note]"
                     rows={3}
                     className="flex-1"
@@ -39,7 +41,7 @@ const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
                     {isLoading ? "Submitting..." : "Submit"}
                   </Button>
                 </div>
-              </fieldset>
+              </Fieldset>
             )}
           </Form>
         </details>
