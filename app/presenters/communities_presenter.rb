@@ -31,6 +31,7 @@ class CommunitiesPresenter
         .select("community_chat_messages.community_id, COUNT(*) as unread_count")
         .joins(join_clause)
         .where("community_chat_messages.created_at > t1.last_read_community_chat_message_created_at")
+        .where.not(user_id: current_user.id)
         .group(:community_id)
         .to_a
         .each_with_object({}) do |message, hash|

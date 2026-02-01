@@ -111,26 +111,33 @@ function CommunitiesIndex() {
   const [chatMessageInputHeight, setChatMessageInputHeight] = React.useState(0);
   const [showNotificationsSettings, setShowNotificationsSettings] = React.useState(false);
   const [localMessages, setLocalMessages] = React.useState<Record<string, CommunityChatMessage[]>>({});
+  const [deletedMessageIds, setDeletedMessageIds] = React.useState<Set<string>>(new Set());
 
   // Get messages from Inertia page props
   const pageProps = usePage().props as PageProps;
   const pageMessages = pageProps.messages ?? [];
   const localMsgs = localMessages[selectedCommunity?.id ?? ""] ?? [];
 
-  // Merge page messages with local (ActionCable) messages
+  // Merge page messages with local (ActionCable) messages, excluding deleted ones
   const allMessages = React.useMemo(() => {
     const map = new Map<string, CommunityChatMessage>();
-    pageMessages.forEach((m) => map.set(m.id, m));
-    localMsgs.forEach((m) => {
-      const existing = map.get(m.id);
-      if (!existing || new Date(existing.updated_at) < new Date(m.updated_at)) {
+    pageMessages.forEach((m) => {
+      if (!deletedMessageIds.has(m.id)) {
         map.set(m.id, m);
+      }
+    });
+    localMsgs.forEach((m) => {
+      if (!deletedMessageIds.has(m.id)) {
+        const existing = map.get(m.id);
+        if (!existing || new Date(existing.updated_at) < new Date(m.updated_at)) {
+          map.set(m.id, m);
+        }
       }
     });
     return [...map.values()].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
-  }, [pageMessages, localMsgs]);
+  }, [pageMessages, localMsgs, deletedMessageIds]);
 
   // Get scroll metadata from Inertia
   const scrollMeta = (usePage() as { scrollProps?: { messages?: ScrollMeta } }).scrollProps?.messages;
@@ -171,8 +178,15 @@ function CommunitiesIndex() {
           },
         );
       }, 500),
-    [],
+    [updateCommunity],
   );
+
+  // Cleanup debounced function on unmount
+  React.useEffect(() => {
+    return () => {
+      debouncedMarkAsRead.cancel();
+    };
+  }, [debouncedMarkAsRead]);
 
   const markMessageAsRead = React.useCallback(
     (message: CommunityChatMessage) => {
@@ -184,7 +198,7 @@ function CommunitiesIndex() {
 
       debouncedMarkAsRead(selectedCommunity.id, message.id, message.created_at);
     },
-    [selectedCommunity, debouncedMarkAsRead],
+    [selectedCommunity?.id, debouncedMarkAsRead],
   );
 
   React.useEffect(() => {
@@ -211,7 +225,7 @@ function CommunitiesIndex() {
     setShowScrollToBottomButton(!isNearBottom);
   }, 100);
 
-  const insertOrUpdateMessage = (message: CommunityChatMessage, isUpdate = false) => {
+  const insertOrUpdateMessage = React.useCallback((message: CommunityChatMessage, isUpdate = false) => {
     setLocalMessages((prev) => {
       const communityMsgs = [...(prev[message.community_id] ?? [])];
       const idx = communityMsgs.findIndex((m) => m.id === message.id);
@@ -232,14 +246,15 @@ function CommunitiesIndex() {
         setScrollToMessage({ id: message.id, position: "start" });
       }
     }
-  };
+  }, []);
 
-  const removeMessage = (messageId: string, communityId: string) => {
+  const removeMessage = React.useCallback((messageId: string, communityId: string) => {
+    setDeletedMessageIds((prev) => new Set(prev).add(messageId));
     setLocalMessages((prev) => ({
       ...prev,
       [communityId]: (prev[communityId] ?? []).filter((m) => m.id !== messageId),
     }));
-  };
+  }, []);
 
   const sendMessage = () => {
     if (!selectedCommunity) return;
@@ -345,9 +360,13 @@ function CommunitiesIndex() {
         }
       });
     });
-  }, [cable, communities]);
+  }, [cable, communities, insertOrUpdateMessage, removeMessage, sendMessageToUserChannel]);
 
-  React.useEffect(() => chatMessageInputRef.current?.focus(), [selectedCommunity?.id]);
+  React.useEffect(() => {
+    chatMessageInputRef.current?.focus();
+    // Clear deleted message IDs when switching communities to prevent memory leak
+    setDeletedMessageIds(new Set());
+  }, [selectedCommunity?.id]);
 
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
@@ -402,7 +421,7 @@ function CommunitiesIndex() {
     [communities, selectedCommunity],
   );
 
-  const updateMessage = async (messageId: string, communityId: string, content: string) => {
+  const updateMessage = React.useCallback(async (messageId: string, communityId: string, content: string) => {
     return new Promise<void>((resolve, reject) => {
       router.put(
         Routes.community_chat_message_path(communityId, messageId),
@@ -428,9 +447,9 @@ function CommunitiesIndex() {
         },
       );
     });
-  };
+  }, []);
 
-  const deleteMessage = async (messageId: string, communityId: string) => {
+  const deleteMessage = React.useCallback(async (messageId: string, communityId: string) => {
     return new Promise<void>((resolve, reject) => {
       router.delete(
         Routes.community_chat_message_path(communityId, messageId),
@@ -448,7 +467,7 @@ function CommunitiesIndex() {
         },
       );
     });
-  };
+  }, []);
 
   const contextValue = React.useMemo(
     () => ({ markMessageAsRead, updateMessage, deleteMessage }),
@@ -553,8 +572,8 @@ function CommunitiesIndex() {
                 isAboveBreakpoint={isAboveBreakpoint}
               />
 
-              <div className="flex flex-1 overflow-auto" onScroll={handleScroll}>
-                <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto">
+              <div className="flex flex-1 overflow-auto">
+                <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto" onScroll={handleScroll}>
                   <div
                     className={cx("sticky top-0 z-20 flex justify-center transition-opacity duration-300", {
                       "opacity-100": stickyDate,
@@ -571,7 +590,11 @@ function CommunitiesIndex() {
                       reverse
                       preserveUrl
                       as="div"
-                      loading={<div className="flex justify-center py-4 text-muted">Loading messages...</div>}
+                      loading={
+                        <div className="flex justify-center py-4">
+                          <div className="text-sm text-muted">Loading messages...</div>
+                        </div>
+                      }
                     >
                       <ChatMessageList
                         community={selectedCommunity}
