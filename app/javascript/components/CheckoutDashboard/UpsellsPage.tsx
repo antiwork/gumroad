@@ -22,6 +22,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { ProductToAdd, CartItem } from "$app/components/Checkout/cartState";
+import { CrossSellModal, UpsellModal } from "$app/components/Checkout/modals";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
@@ -36,7 +37,6 @@ import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Search } from "$app/components/Search";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { CrossSellModal, UpsellModal } from "$app/components/Checkout/modals";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";

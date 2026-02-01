@@ -181,7 +181,7 @@ export function newCartState(): CartState {
 export async function saveCartState(cart: CartState) {
   const response = await request({
     method: "PUT",
-    url: Routes.checkout_cart_path(),
+    url: Routes.internal_cart_path(),
     accept: "json",
     data: { cart },
   });

@@ -1,20 +1,14 @@
 import * as React from "react";
 
+import { LineItemResult } from "$app/data/purchase";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 
 import { Button } from "$app/components/Button";
-import {
-  CartItem,
-  CartState,
-  CrossSell,
-  Upsell,
-  getDiscountedPrice,
-} from "$app/components/Checkout/cartState";
+import { CartItem, CartState, CrossSell, Upsell, getDiscountedPrice } from "$app/components/Checkout/cartState";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { computeOptionPrice, OptionRadioButton, Option } from "$app/components/Product/ConfigurationSelector";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
-import { LineItemResult } from "$app/data/purchase";
 
 export type Result = { item: CartItem; result: LineItemResult };
 

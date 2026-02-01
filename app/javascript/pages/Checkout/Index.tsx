@@ -150,7 +150,7 @@ const CheckoutPage = () => {
     tip_options,
     default_tip_option,
     ...props
-  } = usePage<Props>().props;
+  } = cast<Props>(usePage().props);
 
   const user = useLoggedInUser();
   const email = props.cart?.email ?? user?.email ?? "";

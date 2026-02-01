@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Checkout::CartsController < ApplicationController
+class Api::Internal::CartsController < Api::Internal::BaseController
   def update
     if permitted_cart_params[:items].length > Cart::MAX_ALLOWED_CART_PRODUCTS
       return render json: { error: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart." }, status: :unprocessable_entity
