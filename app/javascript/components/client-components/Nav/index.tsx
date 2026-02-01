@@ -145,7 +145,14 @@ export const Nav = (props: Props) => {
           <ClientNavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
-          <ClientNavLink text="Community" icon="solid-chat-alt" href={Routes.communities_path()} onClick={() => { sessionStorage.setItem("communities:referrer", window.location.pathname + window.location.search);}} />
+          <ClientNavLink
+            text="Community"
+            icon="solid-chat-alt"
+            href={Routes.communities_path()}
+            onClick={() => {
+              sessionStorage.setItem("communities:referrer", window.location.pathname + window.location.search);
+            }}
+          />
         ) : null}
       </NavSection>
       <NavSection>

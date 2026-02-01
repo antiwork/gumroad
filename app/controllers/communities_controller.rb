@@ -29,7 +29,8 @@ class CommunitiesController < ApplicationController
       has_products: -> { presenter.props[:has_products] },
       communities: -> { presenter.props[:communities] },
       notification_settings: -> { presenter.props[:notification_settings] },
-      selectedCommunityId: @community.external_id
+      selectedCommunityId: @community.external_id,
+      messages: messages_scroll_prop
     }
   end
 
@@ -59,5 +60,44 @@ class CommunitiesController < ApplicationController
 
   def permitted_notification_params
     params.permit(:recap_frequency)
+  end
+
+  def messages_scroll_prop
+    InertiaRails.scroll(messages_metadata) { paginated_messages_data[:messages] }
+  end
+
+  def messages_metadata
+    data = paginated_messages_data
+    {
+      page_name: "cursor",
+      previous_page: data[:next_newer_timestamp],
+      next_page: data[:next_older_timestamp],
+      current_page: message_cursor
+    }
+  end
+
+  def paginated_messages_data
+    @_paginated_messages_data ||= PaginatedCommunityChatMessagesPresenter.new(
+      community: @community,
+      timestamp: message_cursor,
+      fetch_type: message_fetch_type
+    ).props
+  end
+
+  def message_cursor
+    @_message_cursor ||= params[:cursor].presence || last_read_timestamp || Time.current.iso8601
+  end
+
+  def last_read_timestamp
+    last_read = LastReadCommunityChatMessage.find_by(user: current_seller, community: @community)
+    last_read&.community_chat_message&.created_at&.iso8601
+  end
+
+  def message_fetch_type
+    case request.headers["X-Inertia-Infinite-Scroll-Merge-Intent"]
+    when "append" then "older"
+    when "prepend" then "newer"
+    else "around"
+    end
   end
 end

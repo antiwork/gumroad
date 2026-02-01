@@ -37,29 +37,27 @@ describe Communities::LastReadChatMessagesController do
         expect(flash[:alert]).to eq("You are not allowed to perform this action.")
       end
 
-      it "returns 404 when community is not found" do
-        post :create, params: { community_id: "nonexistent", message_id: "message123" }
-
-        expect(response).to have_http_status(:not_found)
-        expect(response.parsed_body).to eq({ "success" => false, "error" => "Not found" })
+      it "raises error when community is not found" do
+        expect {
+          post :create, params: { community_id: "nonexistent", message_id: "message123" }
+        }.to raise_error(ActiveRecord::RecordNotFound)
       end
 
-      it "returns 404 when message is not found" do
-        post :create, params: { community_id: community.external_id, message_id: "nonexistent" }
-
-        expect(response).to have_http_status(:not_found)
-        expect(response.parsed_body).to eq({ "success" => false, "error" => "Not found" })
+      it "raises error when message is not found" do
+        expect {
+          post :create, params: { community_id: community.external_id, message_id: "nonexistent" }
+        }.to raise_error(ActiveRecord::RecordNotFound)
       end
 
-      it "marks a message as read and returns unread count" do
+      it "marks a message as read and redirects" do
         create(:community_chat_message, community:, user: seller, created_at: 3.minutes.ago)
         message2 = create(:community_chat_message, community:, user: seller, created_at: 2.minutes.ago)
         create(:community_chat_message, community:, user: seller, created_at: 1.minute.ago)
 
         post :create, params: { community_id: community.external_id, message_id: message2.external_id }
 
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq({ "unread_count" => 1 })
+        expect(response).to redirect_to(community_path(seller.external_id, community.external_id))
+        expect(response).to have_http_status(:see_other)
       end
 
       it "creates a new last read record" do
@@ -98,8 +96,8 @@ describe Communities::LastReadChatMessagesController do
           end.not_to change { last_read.reload.community_chat_message }
         end.not_to change { LastReadCommunityChatMessage.count }
 
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq({ "unread_count" => 0 })
+        expect(response).to redirect_to(community_path(seller.external_id, community.external_id))
+        expect(response).to have_http_status(:see_other)
       end
     end
 
@@ -111,15 +109,15 @@ describe Communities::LastReadChatMessagesController do
         sign_in buyer
       end
 
-      it "marks a message as read and returns unread count" do
+      it "marks a message as read and redirects" do
         create(:community_chat_message, community:, user: seller, created_at: 3.minutes.ago)
         message2 = create(:community_chat_message, community:, user: seller, created_at: 2.minutes.ago)
         create(:community_chat_message, community:, user: seller, created_at: 1.minute.ago)
 
         post :create, params: { community_id: community.external_id, message_id: message2.external_id }
 
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq({ "unread_count" => 1 })
+        expect(response).to redirect_to(community_path(seller.external_id, community.external_id))
+        expect(response).to have_http_status(:see_other)
       end
 
       it "creates a new last read record" do
@@ -158,8 +156,8 @@ describe Communities::LastReadChatMessagesController do
           end.not_to change { last_read.reload.community_chat_message }
         end.not_to change { LastReadCommunityChatMessage.count }
 
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq({ "unread_count" => 0 })
+        expect(response).to redirect_to(community_path(seller.external_id, community.external_id))
+        expect(response).to have_http_status(:see_other)
       end
     end
   end

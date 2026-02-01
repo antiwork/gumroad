@@ -90,6 +90,46 @@ describe CommunitiesController, inertia: true do
         expect(inertia.props[:selectedCommunityId]).to eq(community.external_id)
       end
 
+      it "includes messages prop with scroll metadata" do
+        message = create(:community_chat_message, community:, user: seller)
+
+        get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
+
+        expect(inertia.props[:messages]).to be_an(Array)
+        expect(inertia.props[:messages].length).to eq(1)
+        expect(inertia.props[:messages].first[:id]).to eq(message.external_id)
+      end
+
+      it "returns paginated messages with cursor param" do
+        old_message = create(:community_chat_message, community:, user: seller, created_at: 30.minutes.ago)
+        new_message = create(:community_chat_message, community:, user: seller, created_at: 10.minutes.ago)
+
+        get :show, params: {
+          seller_id: seller.external_id,
+          community_id: community.external_id,
+          cursor: 20.minutes.ago.iso8601
+        }
+
+        expect(inertia.props[:messages]).to be_an(Array)
+        expect(inertia.props[:messages].map { |m| m[:id] }).to include(old_message.external_id)
+      end
+
+      it "returns older messages with X-Inertia-Infinite-Scroll-Merge-Intent: append header" do
+        old_message = create(:community_chat_message, community:, user: seller, created_at: 30.minutes.ago)
+        new_message = create(:community_chat_message, community:, user: seller, created_at: 10.minutes.ago)
+
+        request.headers["X-Inertia-Infinite-Scroll-Merge-Intent"] = "append"
+        get :show, params: {
+          seller_id: seller.external_id,
+          community_id: community.external_id,
+          cursor: 20.minutes.ago.iso8601
+        }
+
+        expect(inertia.props[:messages]).to be_an(Array)
+        expect(inertia.props[:messages].map { |m| m[:id] }).to include(old_message.external_id)
+        expect(inertia.props[:messages].map { |m| m[:id] }).not_to include(new_message.external_id)
+      end
+
       it "raises error when community does not exist" do
         expect {
           get :show, params: { seller_id: seller.external_id, community_id: "non-existent" }

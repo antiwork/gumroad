@@ -1,21 +1,13 @@
 import { Channel } from "@anycable/web";
-import { router, useForm } from "@inertiajs/react";
+import { InfiniteScroll, router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { debounce } from "lodash-es";
 import * as React from "react";
 import { is } from "ts-safe-cast";
 
 import cable from "$app/channels/consumer";
-import {
-  Community,
-  CommunityChatMessage,
-  getCommunityChatMessages,
-  Seller,
-  markCommunityChatMessagesAsRead,
-  NotificationSettings,
-} from "$app/data/communities";
+import { Community, CommunityChatMessage, Seller, NotificationSettings } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
-import { AbortError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -54,11 +46,7 @@ type OutgoingUserChannelMessage = { type: "latest_community_info"; community_id:
 
 export const CommunityViewContext = React.createContext<{
   markMessageAsRead: (message: CommunityChatMessage) => void;
-  updateMessage: (
-    messageId: string,
-    communityId: string,
-    message: string,
-  ) => Promise<{ message: CommunityChatMessage }>;
+  updateMessage: (messageId: string, communityId: string, message: string) => Promise<void>;
   deleteMessage: (messageId: string, communityId: string) => Promise<void>;
 }>({
   markMessageAsRead: () => {},
@@ -86,25 +74,13 @@ export const scrollTo = (
   el?.scrollIntoView({ behavior: "auto", block: position });
 };
 
-const getComparedTimestamp = (
-  prevTimestamp: string | null,
-  newTimestamp: string | null,
-  comparisonFn: (a: number, b: number) => number,
-): string | null => {
-  if (!prevTimestamp || !newTimestamp) {
-    return newTimestamp === null ? null : newTimestamp;
-  }
+interface PageProps {
+  messages?: CommunityChatMessage[];
+}
 
-  const timestampToISOString = new Map<number, string>();
-  const prevTime = new Date(prevTimestamp).getTime();
-  const newTime = new Date(newTimestamp).getTime();
-
-  timestampToISOString.set(prevTime, prevTimestamp);
-  timestampToISOString.set(newTime, newTimestamp);
-
-  const resultTime = comparisonFn(prevTime, newTime);
-  return assertDefined(timestampToISOString.get(resultTime));
-};
+interface ScrollMeta {
+  nextPage: string | null;
+}
 
 function CommunitiesIndex() {
   const currentSeller = useCurrentSeller();
@@ -115,21 +91,17 @@ function CommunitiesIndex() {
     notificationSettings,
     selectedCommunity,
     selectedCommunityDraft,
-    selectedCommunityChat,
     updateCommunity,
     updateCommunityDraft,
-    updateCommunityChat,
   } = useCommunities();
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
-  const activeFetchMessageRequest = React.useRef<{ cancel: () => void } | null>(null);
   const chatContainerRef = React.useRef<HTMLDivElement>(null);
   const [scrollToMessage, setScrollToMessage] = React.useState<{
     id: string;
     position?: ScrollLogicalPosition;
   } | null>(null);
   const [stickyDate, setStickyDate] = React.useState<string | null>(null);
-  const activeMarkAsReadRequest = React.useRef<{ cancel: () => void } | null>(null);
   const chatMessageInputRef = React.useRef<HTMLTextAreaElement>(null);
   const [showScrollToBottomButton, setShowScrollToBottomButton] = React.useState(false);
   const communityChannelsRef = React.useRef<Record<string, Channel>>({});
@@ -138,6 +110,31 @@ function CommunitiesIndex() {
   selectedCommunityRef.current = selectedCommunity;
   const [chatMessageInputHeight, setChatMessageInputHeight] = React.useState(0);
   const [showNotificationsSettings, setShowNotificationsSettings] = React.useState(false);
+  const [localMessages, setLocalMessages] = React.useState<Record<string, CommunityChatMessage[]>>({});
+
+  // Get messages from Inertia page props
+  const pageProps = usePage().props as PageProps;
+  const pageMessages = pageProps.messages ?? [];
+  const localMsgs = localMessages[selectedCommunity?.id ?? ""] ?? [];
+
+  // Merge page messages with local (ActionCable) messages
+  const allMessages = React.useMemo(() => {
+    const map = new Map<string, CommunityChatMessage>();
+    pageMessages.forEach((m) => map.set(m.id, m));
+    localMsgs.forEach((m) => {
+      const existing = map.get(m.id);
+      if (!existing || new Date(existing.updated_at) < new Date(m.updated_at)) {
+        map.set(m.id, m);
+      }
+    });
+    return [...map.values()].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+  }, [pageMessages, localMsgs]);
+
+  // Get scroll metadata from Inertia
+  const scrollMeta = (usePage() as { scrollProps?: { messages?: ScrollMeta } }).scrollProps?.messages;
+  const hasOlderMessages = scrollMeta ? scrollMeta.nextPage != null : true;
 
   React.useEffect(() => {
     if (selectedCommunity) {
@@ -155,20 +152,24 @@ function CommunitiesIndex() {
     () =>
       debounce((communityId: string, messageId: string, messageCreatedAt: string) => {
         if (!communityId || !messageId) return;
-        activeMarkAsReadRequest.current?.cancel();
-        const request = markCommunityChatMessagesAsRead({ communityId, messageId });
-        activeMarkAsReadRequest.current = request;
-        request.response
-          .then((response) => {
-            updateCommunity(communityId, {
-              unread_count: response.unread_count,
-              last_read_community_chat_message_created_at: messageCreatedAt,
-            });
-          })
-          .catch((e: unknown) => {
-            if (!(e instanceof AbortError))
+        router.post(
+          Routes.community_last_read_chat_message_path(communityId),
+          { message_id: messageId },
+          {
+            preserveState: true,
+            preserveScroll: true,
+            only: [],
+            onSuccess: () => {
+              updateCommunity(communityId, {
+                last_read_community_chat_message_created_at: messageCreatedAt,
+              });
+              sendMessageToUserChannel({ type: "latest_community_info", community_id: communityId });
+            },
+            onError: () => {
               showAlert("Failed to mark the message as read. Please try again later.", "error");
-          });
+            },
+          },
+        );
       }, 500),
     [],
   );
@@ -187,8 +188,8 @@ function CommunitiesIndex() {
   );
 
   React.useEffect(() => {
-    if (!selectedCommunityChat || !scrollToMessage) return;
-    const exists = selectedCommunityChat.messages.findIndex((message) => message.id === scrollToMessage.id) !== -1;
+    if (!scrollToMessage) return;
+    const exists = allMessages.findIndex((message) => message.id === scrollToMessage.id) !== -1;
     if (exists && chatContainerRef.current) {
       scrollTo({
         target: "message",
@@ -197,161 +198,47 @@ function CommunitiesIndex() {
       });
       setScrollToMessage(null);
     }
-  }, [scrollToMessage, selectedCommunityChat]);
+  }, [scrollToMessage, allMessages]);
 
   React.useEffect(() => {
     if (!sidebarOpen) setSidebarOpen(true);
   }, [isAboveBreakpoint]);
 
-  const fetchMessages = async (
-    communityId: string,
-    { timestamp, fetchType }: { timestamp: string; fetchType: "older" | "newer" | "around" },
-    replace = false,
-  ) => {
-    activeFetchMessageRequest.current?.cancel();
-    if (selectedCommunityChat?.isLoading) return;
-    updateCommunityChat(communityId, { isLoading: true }, { messagesUpdateStrategy: "merge" });
-
-    try {
-      const request = getCommunityChatMessages({ communityId, timestamp, fetchType });
-      activeFetchMessageRequest.current = request;
-      const data = await request.response;
-
-      if (replace) {
-        updateCommunityChat(
-          communityId,
-          {
-            messages: data.messages,
-            nextOlderTimestamp: data.next_older_timestamp,
-            nextNewerTimestamp: data.next_newer_timestamp,
-            isLoading: false,
-          },
-          { messagesUpdateStrategy: "replace" },
-        );
-      } else {
-        updateCommunityChat(
-          communityId,
-          (prev) => {
-            let nextOlderTimestamp = prev.nextOlderTimestamp;
-            let nextNewerTimestamp = prev.nextNewerTimestamp;
-            if (fetchType === "older" || fetchType === "around") {
-              nextOlderTimestamp = getComparedTimestamp(nextOlderTimestamp, data.next_older_timestamp, Math.min);
-            }
-            if (fetchType === "newer" || fetchType === "around") {
-              nextNewerTimestamp = getComparedTimestamp(nextNewerTimestamp, data.next_newer_timestamp, Math.max);
-            }
-
-            return {
-              messages: data.messages,
-              nextOlderTimestamp,
-              nextNewerTimestamp,
-              isLoading: false,
-            };
-          },
-          { messagesUpdateStrategy: "merge" },
-        );
-      }
-
-      if (data.messages.length > 0 && (fetchType === "older" || fetchType === "newer")) {
-        if (selectedCommunityChat) {
-          const messages = (replace ? data.messages : selectedCommunityChat.messages).sort(
-            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-          );
-          let id;
-          let position: ScrollLogicalPosition = "nearest";
-          if (fetchType === "older") {
-            if (replace) {
-              id = messages[messages.length - 1]?.id;
-              position = "end";
-            } else {
-              id = messages[0]?.id;
-              position = "start";
-            }
-          } else {
-            id = messages[messages.length - 1]?.id;
-            position = "end";
-          }
-          setScrollToMessage(id ? { id, position } : null);
-        }
-      }
-
-      return data;
-    } catch (_error: unknown) {
-      updateCommunityChat(communityId, { isLoading: false }, { messagesUpdateStrategy: "merge" });
-    }
-  };
-
   const handleScroll = useDebouncedCallback(() => {
     if (!chatContainerRef.current || !selectedCommunity) return;
-
-    const container = chatContainerRef.current;
-    const { scrollTop, scrollHeight, clientHeight } = container;
-
-    if (!selectedCommunityChat) return;
-
-    const scrollPosition = scrollTop + clientHeight;
-    const isNearBottom = scrollHeight - scrollPosition < 50;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
     setShowScrollToBottomButton(!isNearBottom);
-
-    if (scrollTop < 100) {
-      if (selectedCommunityChat.nextOlderTimestamp && !selectedCommunityChat.isLoading) {
-        fetchMessages(selectedCommunity.id, {
-          timestamp: selectedCommunityChat.nextOlderTimestamp,
-          fetchType: "older",
-        }).catch((e: unknown) => {
-          if (!(e instanceof AbortError)) showAlert("Failed to load older messages. Please try again later.", "error");
-        });
-      }
-    }
-
-    if (scrollHeight - scrollTop - clientHeight < 100) {
-      if (selectedCommunityChat.nextNewerTimestamp && !selectedCommunityChat.isLoading) {
-        fetchMessages(selectedCommunity.id, {
-          timestamp: selectedCommunityChat.nextNewerTimestamp,
-          fetchType: "newer",
-        }).catch((e: unknown) => {
-          if (!(e instanceof AbortError)) showAlert("Failed to load newer messages. Please try again later.", "error");
-        });
-      }
-    }
   }, 100);
 
-  React.useEffect(() => {
-    const chatContainer = chatContainerRef.current;
-    if (chatContainer) {
-      chatContainer.addEventListener("scroll", handleScroll);
-      return () => {
-        chatContainer.removeEventListener("scroll", handleScroll);
-      };
-    }
-  }, [handleScroll]);
-
   const insertOrUpdateMessage = (message: CommunityChatMessage, isUpdate = false) => {
-    updateCommunityChat(message.community_id, { messages: [message] }, { messagesUpdateStrategy: "merge" });
+    setLocalMessages((prev) => {
+      const communityMsgs = [...(prev[message.community_id] ?? [])];
+      const idx = communityMsgs.findIndex((m) => m.id === message.id);
+      if (idx !== -1) {
+        communityMsgs[idx] = message;
+      } else {
+        communityMsgs.push(message);
+      }
+      return { ...prev, [message.community_id]: communityMsgs };
+    });
 
-    if (selectedCommunity?.id !== message.community_id || isUpdate) return;
+    if (selectedCommunityRef.current?.id !== message.community_id || isUpdate) return;
 
-    // Scroll to the message if user is near bottom
+    // Scroll to new message if user is near bottom
     if (chatContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-      const scrollPosition = scrollTop + clientHeight;
-      const isNearBottom = scrollHeight - scrollPosition < 200;
-
-      if (isNearBottom) {
+      if (scrollHeight - scrollTop - clientHeight < 200) {
         setScrollToMessage({ id: message.id, position: "start" });
       }
     }
   };
 
   const removeMessage = (messageId: string, communityId: string) => {
-    updateCommunityChat(
-      communityId,
-      (prev) => ({
-        ...prev,
-        messages: prev.messages.filter((message) => message.id !== messageId),
-      }),
-      { messagesUpdateStrategy: "replace" },
-    );
+    setLocalMessages((prev) => ({
+      ...prev,
+      [communityId]: (prev[communityId] ?? []).filter((m) => m.id !== messageId),
+    }));
   };
 
   const sendMessage = () => {
@@ -379,28 +266,7 @@ function CommunitiesIndex() {
             return;
           }
           updateCommunityDraft(selectedCommunity.id, { content: "", isSending: false });
-          const latestMessage = selectedCommunityChat?.messages[selectedCommunityChat.messages.length - 1];
-          const { response } = getCommunityChatMessages({
-            communityId: selectedCommunity.id,
-            timestamp: latestMessage?.created_at ?? new Date().toISOString(),
-            fetchType: "newer",
-          });
-          response
-            .then((data) => {
-              if (data.messages.length > 0) {
-                updateCommunityChat(
-                  selectedCommunity.id,
-                  { messages: data.messages, nextNewerTimestamp: data.next_newer_timestamp },
-                  { messagesUpdateStrategy: "merge" },
-                );
-                const lastNewMessage = data.messages[data.messages.length - 1];
-                if (lastNewMessage) {
-                  setScrollToMessage({ id: lastNewMessage.id, position: "start" });
-                  markMessageAsRead(lastNewMessage);
-                }
-              }
-            })
-            .catch(() => {});
+          // Message arrives via ActionCable broadcast — no JSON fetch needed
         },
         onError: () => {
           updateCommunityDraft(selectedCommunity.id, { isSending: false });
@@ -465,26 +331,15 @@ function CommunitiesIndex() {
         if (is<IncomingCommunityChannelMessage>(msg)) {
           if (msg.type === "create_chat_message") {
             if (msg.message.community_id === community.id) {
-              if (community.id === selectedCommunityRef.current?.id) {
-                insertOrUpdateMessage(msg.message);
-              } else {
-                updateCommunityChat(
-                  community.id,
-                  { messages: [], nextOlderTimestamp: null, nextNewerTimestamp: null },
-                  { messagesUpdateStrategy: "replace" },
-                );
-              }
+              insertOrUpdateMessage(msg.message);
             }
-
             sendMessageToUserChannel({ type: "latest_community_info", community_id: community.id });
           } else if (msg.type === "update_chat_message") {
-            if (msg.message.community_id === community.id && community.id === selectedCommunityRef.current?.id) {
+            if (msg.message.community_id === community.id) {
               insertOrUpdateMessage(msg.message, true);
             }
           } else if (msg.message.community_id === community.id) {
-            if (community.id === selectedCommunityRef.current?.id) {
-              removeMessage(msg.message.id, community.id);
-            }
+            removeMessage(msg.message.id, community.id);
             sendMessageToUserChannel({ type: "latest_community_info", community_id: community.id });
           }
         }
@@ -492,32 +347,12 @@ function CommunitiesIndex() {
     });
   }, [cable, communities]);
 
-  React.useEffect(() => {
-    if (selectedCommunity) {
-      const communityMessages = selectedCommunityChat?.messages || [];
-      const lastReadMessageCreatedAt = selectedCommunity.last_read_community_chat_message_created_at;
-      const shouldFetchMessages =
-        communityMessages.length === 0 ||
-        (communityMessages.length > 0 &&
-          lastReadMessageCreatedAt &&
-          communityMessages.findIndex((message) => message.created_at === lastReadMessageCreatedAt) === -1);
-      if (shouldFetchMessages) {
-        fetchMessages(selectedCommunity.id, {
-          fetchType: "around",
-          timestamp: lastReadMessageCreatedAt ?? new Date(0).toISOString(),
-        }).catch((e: unknown) => {
-          if (!(e instanceof AbortError)) showAlert("Failed to load messages. Please try again later.", "error");
-        });
-      }
-    }
-  }, [selectedCommunity]);
-
   React.useEffect(() => chatMessageInputRef.current?.focus(), [selectedCommunity?.id]);
 
   const switchSeller = (sellerId: string) => {
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
-      router.get( Routes.community_path(community.seller.id, community.id), {}, { preserveScroll: true });
+      router.get(Routes.community_path(community.seller.id, community.id), {}, { preserveScroll: true });
       setSwitcherOpen(false);
     }
   };
@@ -568,7 +403,7 @@ function CommunitiesIndex() {
   );
 
   const updateMessage = async (messageId: string, communityId: string, content: string) => {
-    return new Promise<{ message: CommunityChatMessage }>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       router.put(
         Routes.community_chat_message_path(communityId, messageId),
         { community_chat_message: { content } },
@@ -584,7 +419,7 @@ function CommunitiesIndex() {
               reject(new Error(errorMessage));
               return;
             }
-            resolve({ message: {} as CommunityChatMessage });
+            resolve();
           },
           onError: () => {
             showAlert("Failed to update message.", "error");
@@ -621,15 +456,7 @@ function CommunitiesIndex() {
   );
 
   const scrollToBottom = () => {
-    if (selectedCommunity && selectedCommunity.unread_count > 0) {
-      fetchMessages(selectedCommunity.id, { fetchType: "older", timestamp: new Date().toISOString() }, true).catch(
-        (e: unknown) => {
-          if (!(e instanceof AbortError)) showAlert("Failed to load messages. Please try again later.", "error");
-        },
-      );
-    } else {
-      scrollTo({ target: "bottom" });
-    }
+    scrollTo({ target: "bottom" });
     setShowScrollToBottomButton(false);
   };
 
@@ -726,7 +553,7 @@ function CommunitiesIndex() {
                 isAboveBreakpoint={isAboveBreakpoint}
               />
 
-              <div className="flex flex-1 overflow-auto">
+              <div className="flex flex-1 overflow-auto" onScroll={handleScroll}>
                 <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto">
                   <div
                     className={cx("sticky top-0 z-20 flex justify-center transition-opacity duration-300", {
@@ -737,14 +564,23 @@ function CommunitiesIndex() {
                     {stickyDate ? <DateSeparator date={stickyDate} showDividerLine={false} /> : null}
                   </div>
 
-                  {selectedCommunityChat ? (
-                    <ChatMessageList
+                  {selectedCommunity && pageMessages ? (
+                    <InfiniteScroll
                       key={selectedCommunity.id}
-                      community={selectedCommunity}
-                      data={selectedCommunityChat}
-                      setStickyDate={setStickyDate}
-                      unreadSeparatorVisibility={showScrollToBottomButton}
-                    />
+                      data="messages"
+                      reverse
+                      preserveUrl
+                      as="div"
+                      loading={<div className="flex justify-center py-4 text-muted">Loading messages...</div>}
+                    >
+                      <ChatMessageList
+                        community={selectedCommunity}
+                        messages={allMessages}
+                        hasOlderMessages={hasOlderMessages}
+                        setStickyDate={setStickyDate}
+                        unreadSeparatorVisibility={showScrollToBottomButton}
+                      />
+                    </InfiniteScroll>
                   ) : null}
                   {showScrollToBottomButton ? (
                     <ScrollToBottomButton
