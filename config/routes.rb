@@ -682,8 +682,22 @@ Rails.application.routes.draw do
       end
     end
 
-    get "/products/:id/edit", to: "links#edit", as: :edit_link
-    get "/products/:id/edit/*other", to: "links#edit"
+    # New Inertia-based product edit routes (decoupled tabs)
+    resources :products, only: [] do
+      scope module: :products do
+        resource :product, only: [:edit, :update], controller: "product"
+        resource :content, only: [:edit, :update], controller: "content"
+        resource :share, only: [:edit, :update], controller: "share"
+        resource :receipt, only: [:edit, :update], controller: "receipt"
+      end
+    end
+
+    # Backward compatibility redirects for old product edit URLs
+    get "/products/:id/edit", to: redirect { |params, _| "/products/#{params[:id]}/product/edit" }
+    get "/products/:id/edit/content", to: redirect { |params, _| "/products/#{params[:id]}/content/edit" }
+    get "/products/:id/edit/share", to: redirect { |params, _| "/products/#{params[:id]}/share/edit" }
+    get "/products/:id/edit/receipt", to: redirect { |params, _| "/products/#{params[:id]}/receipt/edit" }
+
     get "/products/:id/card", to: "links#card", as: :product_card
     get "/products/search", to: "links#search"
 

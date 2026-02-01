@@ -252,6 +252,170 @@ class ProductPresenter
     }
   end
 
+  # Inertia-specific tab props methods
+  def edit_product_props(ai_generated: false)
+    refund_policy = product.find_or_initialize_product_refund_policy
+    {
+      product: {
+        name: product.name,
+        custom_permalink: product.custom_permalink,
+        description: product.description || "",
+        price_cents: product.price_cents,
+        customizable_price: !!product.customizable_price,
+        suggested_price_cents: product.suggested_price_cents,
+        **ProductPresenter::InstallmentPlanProps.new(product:).props,
+        custom_button_text_option: product.custom_button_text_option.presence,
+        custom_summary: product.custom_summary,
+        custom_attributes: product.custom_attributes,
+        max_purchase_count: product.max_purchase_count,
+        quantity_enabled: product.quantity_enabled,
+        can_enable_quantity: product.can_enable_quantity?,
+        should_show_sales_count: product.should_show_sales_count,
+        hide_sold_out_variants: product.hide_sold_out_variants?,
+        is_epublication: product.is_epublication?,
+        product_refund_policy_enabled: product.product_refund_policy_enabled?,
+        refund_policy: {
+          allowed_refund_periods_in_days: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.map do
+            { key: _1, value: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[_1] }
+          end,
+          max_refund_period_in_days: refund_policy.max_refund_period_in_days,
+          fine_print: refund_policy.fine_print,
+          fine_print_enabled: refund_policy.fine_print.present?,
+          title: refund_policy.title,
+        },
+        covers: product.display_asset_previews.as_json,
+        is_published: !product.draft && product.alive?,
+        require_shipping: product.require_shipping?,
+        integrations: Integration::ALL_NAMES.index_with { |name| @product.find_integration_by_name(name).as_json },
+        shipping_destinations: product.shipping_destinations.alive.map do |shipping_destination|
+          {
+            country_code: shipping_destination.country_code,
+            one_item_rate_cents: shipping_destination.one_item_rate_cents,
+            multiple_items_rate_cents: shipping_destination.multiple_items_rate_cents,
+          }
+        end,
+        free_trial_enabled: product.free_trial_enabled,
+        free_trial_duration_amount: product.free_trial_duration_amount,
+        free_trial_duration_unit: product.free_trial_duration_unit,
+        should_include_last_post: product.should_include_last_post,
+        should_show_all_posts: product.should_show_all_posts,
+        block_access_after_membership_cancellation: product.block_access_after_membership_cancellation,
+        duration_in_months: product.duration_in_months,
+        subscription_duration: product.subscription_duration,
+        native_type: product.native_type,
+        default_offer_code: product.default_offer_code ? {
+          id: product.default_offer_code.external_id,
+          code: product.default_offer_code.code,
+          name: product.default_offer_code.name.presence || "",
+          discount: product.default_offer_code.discount,
+        } : nil,
+        call_limitation_info: product.native_type == Link::NATIVE_TYPE_CALL && product.call_limitation_info.present? ?
+          {
+            minimum_notice_in_minutes: product.call_limitation_info.minimum_notice_in_minutes,
+            maximum_calls_per_day: product.call_limitation_info.maximum_calls_per_day,
+          } : nil,
+      },
+      id: product.external_id,
+      unique_permalink: product.unique_permalink,
+      thumbnail: product.thumbnail&.alive&.as_json,
+      refund_policies: product.user
+        .product_refund_policies
+        .for_visible_and_not_archived_products
+        .where.not(product_id: product.id)
+        .order(updated_at: :desc)
+        .select("refund_policies.*", "links.name")
+        .as_json,
+      currency_type: product.price_currency_type,
+      is_physical: product.is_physical,
+      sales_count_for_inventory: product.max_purchase_count? ? product.sales_count_for_inventory : 0,
+      ratings: product.rating_stats,
+      seller: UserPresenter.new(user:).author_byline_props,
+      available_countries: ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } },
+      seller_refund_policy_enabled: product.user.account_level_refund_policy_enabled?,
+      seller_refund_policy: {
+        title: product.user.refund_policy.title,
+        fine_print: product.user.refund_policy.fine_print,
+      },
+      cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      google_calendar_enabled: Feature.active?(:google_calendar_link, product.user),
+      ai_generated:,
+    }
+  end
+
+  def edit_content_props
+    {
+      product: {
+        name: product.name,
+        variants: product.alive_variants.in_order.map do |variant|
+          props = {
+            id: variant.external_id,
+            name: variant.name || "",
+            integrations: Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? },
+            rich_content: variant.rich_content_json,
+          }
+          props[:duration_in_minutes] = variant.duration_in_minutes if product.native_type == Link::NATIVE_TYPE_CALL
+          props
+        end,
+        rich_content: product.rich_content_json,
+        files: files_data(product),
+        has_same_rich_content_for_all_variants: @product.has_same_rich_content_for_all_variants?,
+        native_type: product.native_type,
+      },
+      id: product.external_id,
+      unique_permalink: product.unique_permalink,
+      seller: UserPresenter.new(user:).author_byline_props,
+      existing_files:,
+      s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
+      aws_key: AWS_ACCESS_KEY,
+      successful_sales_count: product.successful_sales_count,
+    }
+  end
+
+  def edit_share_props
+    profile_sections = product.user.seller_profile_products_sections
+    {
+      product: {
+        name: product.name,
+        section_ids: profile_sections.filter_map { |section| section.external_id if section.shown_products.include?(product.id) },
+        taxonomy_id: product.taxonomy_id&.to_s,
+        tags: product.tags.pluck(:name),
+        display_product_reviews: product.display_product_reviews,
+        is_adult: product.is_adult,
+        custom_domain: product.custom_domain&.domain || "",
+      },
+      id: product.external_id,
+      unique_permalink: product.unique_permalink,
+      profile_sections: profile_sections.map do |section|
+        {
+          id: section.external_id,
+          header: section.header || "",
+          product_names: section.product_names,
+          default: section.add_new_products,
+        }
+      end,
+      taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_nav,
+      is_listed_on_discover: product.recommendable?,
+      custom_domain_verification_status:,
+      ratings: product.rating_stats,
+      seller: UserPresenter.new(user:).author_byline_props,
+    }
+  end
+
+  def edit_receipt_props
+    {
+      product: {
+        name: product.name,
+        custom_view_content_button_text: product.custom_view_content_button_text,
+        custom_view_content_button_text_max_length: Product::Validations::MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH,
+        custom_receipt_text: product.custom_receipt_text,
+        custom_receipt_text_max_length: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH,
+      },
+      id: product.external_id,
+      unique_permalink: product.unique_permalink,
+      seller: UserPresenter.new(user:).author_byline_props,
+    }
+  end
+
   def admin_info
     {
       custom_summary: product.custom_summary.presence,
