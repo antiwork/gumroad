@@ -33,7 +33,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new]
+  layout "inertia", only: [:index, :new, :cart_items_count]
 
   def index
     authorize Link
@@ -169,7 +169,9 @@ class LinksController < ApplicationController
   end
 
   def cart_items_count
-    @hide_layouts = true
+    render inertia: "Products/CartItemsCount", props: {
+      cart: CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid]).cart_props
+    }
   end
 
   def search
@@ -277,7 +279,7 @@ class LinksController < ApplicationController
     fetch_product_by_unique_permalink
     authorize @product
 
-    redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+    redirect_to edit_bundle_product_path(@product.external_id) if @product.is_bundle?
 
     set_meta_tag(title: @product.name)
 

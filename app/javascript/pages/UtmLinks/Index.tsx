@@ -5,14 +5,15 @@ import { SavedUtmLink, SortKey, UtmLinkStats, UtmLinksStats } from "$app/types/u
 import { classNames } from "$app/utils/classNames";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -160,7 +161,7 @@ export default function UtmLinksIndex() {
       selectedTab="utm_links"
       actions={
         <>
-          <SearchBoxPopover initialQuery={query} onSearch={onSearch} />
+          <Search value={query} onSearch={onSearch} />
           <NavigationButtonInertia href={Routes.new_dashboard_utm_link_path()} color="accent">
             Create link
           </NavigationButtonInertia>
@@ -323,77 +324,36 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
           <Icon name="link" />
         </Button>
       </CopyToClipboard>
-
-      <Popover
-        open={open}
-        onToggle={setOpen}
-        aria-label="Open action menu"
-        trigger={
-          <Button>
-            <Icon name="three-dots" />
-          </Button>
-        }
-      >
-        <div role="menu">
-          <Link href={Routes.edit_dashboard_utm_link_path(link.id)} role="menuitem" className="no-underline">
-            <Icon name="pencil" />
-            &ensp;Edit
-          </Link>
-          <Link
-            href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })}
-            role="menuitem"
-            className="no-underline"
-          >
-            <Icon name="outline-duplicate" />
-            &ensp;Duplicate
-          </Link>
-          <div className="danger" role="menuitem" onClick={onDelete}>
-            <Icon name="trash2" />
-            &ensp;Delete
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverAnchor>
+          <PopoverTrigger aria-label="Open action menu" asChild>
+            <Button>
+              <Icon name="three-dots" />
+            </Button>
+          </PopoverTrigger>
+        </PopoverAnchor>
+        <PopoverContent className="w-48 border-none p-0 shadow-none">
+          <div role="menu" className="grid gap-1">
+            <Link href={Routes.edit_dashboard_utm_link_path(link.id)} role="menuitem" className="no-underline">
+              <Icon name="pencil" />
+              &ensp;Edit
+            </Link>
+            <Link
+              href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })}
+              role="menuitem"
+              className="no-underline"
+            >
+              <Icon name="outline-duplicate" />
+              &ensp;Duplicate
+            </Link>
+            <div className="danger" role="menuitem" onClick={onDelete}>
+              <Icon name="trash2" />
+              &ensp;Delete
+            </div>
           </div>
-        </div>
+        </PopoverContent>
       </Popover>
     </div>
-  );
-};
-
-const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; onSearch: (query: string) => void }) => {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-  const [query, setQuery] = React.useState(initialQuery);
-
-  React.useEffect(() => {
-    if (isOpen) searchInputRef.current?.focus();
-  }, [isOpen]);
-
-  return (
-    <Popover
-      open={isOpen}
-      onToggle={setIsOpen}
-      aria-label="Toggle Search"
-      trigger={
-        <WithTooltip tip="Search" position="bottom">
-          <div className={buttonVariants({ size: "default" })}>
-            <Icon name="solid-search" />
-          </div>
-        </WithTooltip>
-      }
-    >
-      <div className="input">
-        <Icon name="solid-search" />
-        <input
-          ref={searchInputRef}
-          type="text"
-          placeholder="Search"
-          value={query}
-          onChange={(evt) => {
-            const newQuery = evt.target.value;
-            setQuery(newQuery);
-            onSearch(newQuery);
-          }}
-        />
-      </div>
-    </Popover>
   );
 };
 

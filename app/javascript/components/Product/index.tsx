@@ -110,6 +110,7 @@ export type Product = {
   ratings: RatingsWithPercentages | null;
   is_legacy_subscription: boolean;
   is_tiered_membership: boolean;
+  is_recurring_billing: boolean;
   is_physical: boolean;
   custom_view_content_button_text: string | null;
   custom_button_text_option: "" | CustomButtonTextOption | null;
@@ -488,7 +489,7 @@ export const Product = ({
                         : `${formatPriceCentsWithCurrencySymbol(product.currency_code, discountCode.discount.cents, {
                             symbolFormat: "long",
                           })} off will be applied at checkout (Code ${discountCode.code.toUpperCase()})`}
-                    {discountCode.discount.duration_in_billing_cycles && product.is_tiered_membership ? (
+                    {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
                       <div>This discount will only apply to the first payment of your subscription.</div>
                     ) : null}
                     {discountCode.discount.minimum_amount_cents ? (

@@ -8,9 +8,9 @@ import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
-import { Toggle } from "$app/components/Toggle";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newVersionId = 0;
@@ -200,15 +200,16 @@ const VersionEditor = ({
               <fieldset>
                 <legend>Integrations</legend>
                 {integrations.map((integration) => (
-                  <Toggle
-                    value={version.integrations[integration]}
-                    onChange={(enabled) =>
-                      updateVersion({ integrations: { ...version.integrations, [integration]: enabled } })
+                  <Switch
+                    checked={version.integrations[integration]}
+                    onChange={(e) =>
+                      updateVersion({ integrations: { ...version.integrations, [integration]: e.target.checked } })
                     }
                     key={integration}
-                  >
-                    {integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"}
-                  </Toggle>
+                    label={
+                      integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"
+                    }
+                  />
                 ))}
               </fieldset>
             ) : null}

@@ -4,13 +4,13 @@ import * as React from "react";
 import { createCast } from "ts-safe-cast";
 
 import { incrementPostViews } from "$app/data/view_event";
+import { formatPostDate } from "$app/utils/date";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
-import { formatPostDate } from "$app/components/server-components/Profile/PostPage";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 
