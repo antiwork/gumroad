@@ -1,7 +1,7 @@
 import cx from "classnames";
 import * as React from "react";
 
-import { getAutocompleteSearchResults, AutocompleteSearchResults, deleteAutocompleteSearch } from "$app/data/discover";
+import { AutocompleteSearchResults, deleteAutocompleteSearch, getAutocompleteSearchResults } from "$app/data/discover";
 import { escapeRegExp } from "$app/utils";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -94,7 +94,9 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
       option={(item, props, index) => (
         <>
           {index === results?.recent_searches.length ? (
-            <h3>{enteredQuery ? "Products" : results.viewed ? "Keep shopping for" : "Trending"}</h3>
+            <h3 className="px-4 py-2">
+              {enteredQuery ? "Products" : results.viewed ? "Keep shopping for" : "Trending"}
+            </h3>
           ) : null}
           {typeof item === "string" ? (
             <div {...props}>
