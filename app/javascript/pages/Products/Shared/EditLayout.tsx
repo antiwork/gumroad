@@ -55,7 +55,7 @@ export const EditLayout: React.FC<EditLayoutProps> = ({
   children,
   preview,
   headerActions,
-  previewScaleFactor = 0.4,
+  previewScaleFactor = 0.7, // Default scale factor
   showBorder = true,
   showNavigationButton = true,
   productId,
@@ -72,6 +72,22 @@ export const EditLayout: React.FC<EditLayoutProps> = ({
     wanted: true,
   });
 
+  // Dynamic scale factor based on current tab
+  const dynamicScaleFactor = (() => {
+    switch (currentTab) {
+      case "receipt":
+        return 0.9; // Larger for receipt page
+      case "product":
+        return 0.6; // Medium for product page
+      case "content":
+        return 0.5; // Smaller for content page
+      case "share":
+        return 0.7; // Default for share page
+      default:
+        return previewScaleFactor;
+    }
+  })();
+
   const isCoffee = product.native_type === "coffee";
   const isPublished = product.is_published ?? false;
 
@@ -84,6 +100,30 @@ export const EditLayout: React.FC<EditLayoutProps> = ({
       router.get(Routes.edit_product_share_path(productId));
     } else if (tab === "receipt") {
       router.get(Routes.edit_product_receipt_path(productId));
+    }
+  };
+
+  const getNextTab = () => {
+    if (!currentTab) return null;
+    const tabOrder: TabType[] = isCoffee ? ["product", "receipt", "share"] : ["product", "content", "receipt", "share"];
+    const currentIndex = tabOrder.indexOf(currentTab as TabType);
+    if (currentIndex >= 0 && currentIndex < tabOrder.length - 1) {
+      return tabOrder[currentIndex + 1] as TabType;
+    }
+    return null;
+  };
+
+  const handleSaveAndContinue = () => {
+    const nextTab = getNextTab();
+    if (nextTab) {
+      // Save first, then navigate on success
+      if (onSave) {
+        onSave();
+        // Navigate after a brief delay to allow save to process
+        setTimeout(() => navigateToTab(nextTab), 500);
+      }
+    } else {
+      onSave();
     }
   };
 
@@ -116,25 +156,34 @@ export const EditLayout: React.FC<EditLayoutProps> = ({
                 </Button>
               </CopyToClipboard>
             </>
-          ) : currentTab === "product" && !isCoffee ? (
+          ) : currentTab === "product" ? (
+            // Product tab: Show "Save and continue" button in white with pink hover
             <Button
               color="primary"
               disabled={saveDisabled || isSaving}
-              onClick={() => {
-                onSave();
-                // Navigate to content after save (will happen on next page load after redirect)
-              }}
+              onClick={handleSaveAndContinue}
+              title={saveTooltip}
             >
               {isSaving ? "Saving changes..." : "Save and continue"}
             </Button>
           ) : (
+            // All other tabs: Show "Publish and continue" and "Save changes" only
             <>
               {saveButton}
               <Button
                 color="accent"
                 disabled={saveDisabled || isSaving}
                 onClick={() => {
-                  router.patch(Routes.product_product_path(productId), { publish: true });
+                  const nextTab = getNextTab();
+                  if (nextTab) {
+                    router.patch(Routes.product_product_path(productId), { publish: true }, {
+                      onSuccess: () => {
+                        navigateToTab(nextTab);
+                      }
+                    });
+                  } else {
+                    router.patch(Routes.product_product_path(productId), { publish: true });
+                  }
                 }}
               >
                 Publish and continue
@@ -151,25 +200,24 @@ export const EditLayout: React.FC<EditLayoutProps> = ({
         >
           <Tabs style={{ gridColumn: 1 }}>
             <Tab asChild isSelected={currentTab === "product"}>
-              <button type="button" onClick={() => navigateToTab("product")}>
+              <span onClick={() => navigateToTab("product")} className="no-underline cursor-pointer">
                 Product
-              </button>
+              </span>
             </Tab>
             {!isCoffee ? (
               <Tab asChild isSelected={currentTab === "content"}>
-                <button type="button" onClick={() => navigateToTab("content")}>
+                <span onClick={() => navigateToTab("content")} className="no-underline cursor-pointer">
                   Content
-                </button>
+                </span>
               </Tab>
             ) : null}
             <Tab asChild isSelected={currentTab === "receipt"}>
-              <button type="button" onClick={() => navigateToTab("receipt")}>
+              <span onClick={() => navigateToTab("receipt")} className="no-underline cursor-pointer">
                 Receipt
-              </button>
+              </span>
             </Tab>
             <Tab asChild isSelected={currentTab === "share"}>
-              <button
-                type="button"
+              <span
                 onClick={() => {
                   if (!isPublished) {
                     alert(
@@ -179,9 +227,10 @@ export const EditLayout: React.FC<EditLayoutProps> = ({
                   }
                   navigateToTab("share");
                 }}
+                className="no-underline cursor-pointer"
               >
                 Share
-              </button>
+              </span>
             </Tab>
           </Tabs>
           {headerActions}
@@ -207,7 +256,7 @@ export const EditLayout: React.FC<EditLayoutProps> = ({
             })}
           >
             <Preview
-              scaleFactor={previewScaleFactor}
+              scaleFactor={dynamicScaleFactor}
               style={
                 showBorder
                   ? {
