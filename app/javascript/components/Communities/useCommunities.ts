@@ -8,11 +8,11 @@ export type CommunityDraft = {
   isSending: boolean;
 };
 
-export type CommunityChat = {
+export type MessagesData = {
   messages: CommunityChatMessage[];
-  nextOlderTimestamp: string | null;
-  nextNewerTimestamp: string | null;
-  isLoading: boolean;
+  next_older_timestamp: string | null;
+  next_newer_timestamp: string | null;
+  current_cursor: string;
 };
 
 export interface InitialCommunitiesData {
@@ -20,10 +20,8 @@ export interface InitialCommunitiesData {
   communities: Community[];
   notificationSettings: CommunityNotificationSettings;
   selectedCommunityId: string | null;
+  messages: MessagesData | null;
 }
-
-const sortByCreatedAt = <T extends { created_at: string }>(items: readonly T[]) =>
-  [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
 const sortByName = <T extends { name: string }>(items: readonly T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
@@ -33,10 +31,11 @@ export const useCommunities = ({
   communities: initialCommunities,
   notificationSettings,
   selectedCommunityId,
+  messages: initialMessages,
 }: InitialCommunitiesData) => {
   const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialCommunities));
   const [communityDrafts, setCommunityDrafts] = React.useState<Record<string, CommunityDraft>>({});
-  const [communityChats, setCommunityChats] = React.useState<Record<string, CommunityChat>>({});
+  const [messages, setMessages] = React.useState<MessagesData | null>(initialMessages);
 
   const updateCommunity = React.useCallback(
     (communityId: string, value: Partial<Omit<Community, "id" | "seller">>) =>
@@ -62,61 +61,20 @@ export const useCommunities = ({
     [],
   );
 
-  const updateCommunityChat = React.useCallback(
-    (
-      communityId: string,
-      value: Partial<CommunityChat> | ((prev: CommunityChat) => Partial<CommunityChat>),
-      { messagesUpdateStrategy }: { messagesUpdateStrategy: "replace" | "merge" },
-    ) =>
-      setCommunityChats((prev) => {
-        const obj = { ...prev };
-        const prevChat = obj[communityId] ?? {
-          messages: [],
-          nextOlderTimestamp: null,
-          nextNewerTimestamp: null,
-          isLoading: false,
-        };
-        const { messages: newChatMessages = [], ...newChatExceptMessages } =
-          typeof value === "function" ? value(prevChat) : value;
-
-        if (messagesUpdateStrategy === "merge") {
-          let messages: CommunityChatMessage[] = [];
-          const { messages: prevChatMessages, ...prevChatExceptMessages } = prevChat;
-
-          if (prevChatMessages.length > 0 && newChatMessages.length > 0) {
-            const map = new Map<string, CommunityChatMessage>(prevChatMessages.map((message) => [message.id, message]));
-            prevChatMessages.forEach((newMessage) => map.set(newMessage.id, newMessage));
-            newChatMessages.forEach((newMessage) => {
-              const prevMessage = map.get(newMessage.id);
-              if (!prevMessage || new Date(prevMessage.updated_at) < new Date(newMessage.updated_at)) {
-                map.set(newMessage.id, newMessage);
-              }
-            });
-            messages = [...map.values()];
-          } else {
-            messages = [...prevChatMessages, ...newChatMessages];
-          }
-
-          obj[communityId] = {
-            ...prevChatExceptMessages,
-            ...newChatExceptMessages,
-            messages: sortByCreatedAt(messages),
-          };
-        } else {
-          obj[communityId] = {
-            ...prevChat,
-            ...newChatExceptMessages,
-            messages: sortByCreatedAt(newChatMessages),
-          };
-        }
-        return obj;
-      }),
+  const updateMessages = React.useCallback(
+    (updater: (prev: MessagesData | null) => MessagesData | null) => {
+      setMessages(updater);
+    },
     [],
   );
 
   React.useEffect(() => {
     setCommunities(sortByName(initialCommunities));
   }, [initialCommunities]);
+
+  React.useEffect(() => {
+    setMessages(initialMessages);
+  }, [initialMessages]);
 
   const selectedCommunity = React.useMemo(
     () => communities.find((community) => community.id === selectedCommunityId),
@@ -128,20 +86,15 @@ export const useCommunities = ({
     [communityDrafts, selectedCommunity],
   );
 
-  const selectedCommunityChat = React.useMemo(
-    () => (selectedCommunity ? communityChats[selectedCommunity.id] : null),
-    [communityChats, selectedCommunity],
-  );
-
   return {
     hasProducts,
     communities,
     notificationSettings,
+    messages,
     selectedCommunity,
     selectedCommunityDraft,
-    selectedCommunityChat,
     updateCommunity,
     updateCommunityDraft,
-    updateCommunityChat,
+    updateMessages,
   };
 };

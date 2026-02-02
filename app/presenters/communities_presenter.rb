@@ -9,12 +9,13 @@ class CommunitiesPresenter
     communities.first
   end
 
-  def props(selected_community_id: nil)
+  def props(selected_community_id: nil, messages: nil)
     {
       has_products: current_user.products.visible_and_not_archived.exists?,
       communities: communities_props,
       notification_settings: notification_settings_props,
       selected_community_id:,
+      messages:,
     }
   end
 

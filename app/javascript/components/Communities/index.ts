@@ -7,4 +7,4 @@ export { ScrollToBottomButton, DEFAULT_FORM_ELEMENT_HEIGHT_IN_PX } from "./Scrol
 export { Separator, DateSeparator, UnreadSeparator } from "./Separator";
 export { UserAvatar } from "./UserAvatar";
 export { useCommunities } from "./useCommunities";
-export type { CommunityDraft, CommunityChat, InitialCommunitiesData } from "./useCommunities";
+export type { CommunityDraft, MessagesData, InitialCommunitiesData } from "./useCommunities";

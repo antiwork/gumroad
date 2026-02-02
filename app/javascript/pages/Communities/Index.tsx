@@ -1,16 +1,24 @@
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { Community, CommunityNotificationSettings } from "$app/data/communities";
+import { Community, CommunityChatMessage, CommunityNotificationSettings } from "$app/data/communities";
 
 import { CommunityView } from "$app/components/Communities";
 import { LoggedInUserLayout } from "$app/inertia/layout";
+
+type MessagesProps = {
+  messages: CommunityChatMessage[];
+  next_older_timestamp: string | null;
+  next_newer_timestamp: string | null;
+  current_cursor: string;
+} | null;
 
 type Props = {
   has_products: boolean;
   communities: Community[];
   notification_settings: CommunityNotificationSettings;
   selected_community_id: string | null;
+  messages: MessagesProps;
 }
 
 function CommunitiesPage() {
@@ -23,6 +31,7 @@ function CommunitiesPage() {
         communities: props.communities,
         notificationSettings: props.notification_settings,
         selectedCommunityId: props.selected_community_id,
+        messages: props.messages,
       }}
     />
   );

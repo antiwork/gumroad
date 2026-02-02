@@ -56,6 +56,7 @@ RSpec.describe CommunitiesPresenter do
           communities: [],
           notification_settings: {},
           selected_community_id: nil,
+          messages: nil,
         )
       end
     end
@@ -80,6 +81,7 @@ RSpec.describe CommunitiesPresenter do
             seller.external_id => { recap_frequency: "daily" }
           },
           selected_community_id: nil,
+          messages: nil,
         )
       end
 
