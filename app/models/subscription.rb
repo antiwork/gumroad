@@ -859,6 +859,44 @@ class Subscription < ApplicationRecord
     !ended? && !cancelled_by_seller?
   end
 
+  def self.restartable_for_user_and_product(user_or_email:, product:)
+    return nil unless product.is_recurring_billing
+
+    query = where(link_id: product.id).where(ended_at: nil)
+
+    if user_or_email.is_a?(User)
+      query = query.where(user_id: user_or_email.id)
+    else
+      query = query.joins(:original_purchase)
+                   .where(purchases: { email: user_or_email.to_s.downcase.strip })
+    end
+
+    query.where.not(deactivated_at: nil)
+      .not_cancelled_by_admin
+      .order(created_at: :desc)
+      .first
+  end
+
+  def self.active_for_user_and_product(user_or_email:, product:, with_lock: false)
+    return nil unless product.is_recurring_billing
+
+    query = where(link_id: product.id)
+              .where(ended_at: nil)
+              .where(failed_at: nil)
+              .where("cancelled_at IS NULL OR cancelled_at > ?", Time.current)
+
+    if user_or_email.is_a?(User)
+      query = query.where(user_id: user_or_email.id)
+    else
+      query = query.joins(:original_purchase)
+                   .where(purchases: { email: user_or_email.to_s.downcase.strip })
+    end
+
+    query = query.lock if with_lock
+
+    query.first
+  end
+
   def discount_applies_to_next_charge?
     return true if is_installment_plan
 
