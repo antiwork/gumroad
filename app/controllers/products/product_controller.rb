@@ -8,11 +8,18 @@ class Products::ProductController < Products::BaseController
 
     ai_generated = params[:ai_generated] == "true"
 
-    render inertia: "Products/Product/Edit", props: presenter.edit_product_props(ai_generated:)
+    props = presenter.edit_product_props(ai_generated:)
+    Rails.logger.info "=" * 80
+    Rails.logger.info "PRODUCT EDIT PROPS:"
+    Rails.logger.info JSON.pretty_generate(props)
+    Rails.logger.info "=" * 80
+
+    render inertia: "Products/Product/Edit", props: props
   end
 
   def update
     should_unpublish = params[:unpublish].present? && @product.published?
+    should_publish = params[:publish].present? && !@product.published?
 
     ActiveRecord::Base.transaction do
       @product.assign_attributes(product_permitted_params.except(
@@ -52,10 +59,13 @@ class Products::ProductController < Products::BaseController
 
       @product.save!
       @product.unpublish! if should_unpublish
+      @product.publish! if should_publish
     end
 
     if should_unpublish
       redirect_back fallback_location: edit_product_product_path(@product.external_id), notice: "Unpublished!", status: :see_other
+    elsif should_publish
+      redirect_back fallback_location: edit_product_product_path(@product.external_id), notice: "Published!", status: :see_other
     elsif params[:redirect_to].present?
       redirect_to params[:redirect_to], notice: "Changes saved!", status: :see_other
     else

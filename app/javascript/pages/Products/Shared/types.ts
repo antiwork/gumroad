@@ -1,16 +1,11 @@
 // Shared types for Product Edit Inertia pages
-import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
-import { Thumbnail } from "$app/data/thumbnails";
 import { Discount } from "$app/parsers/checkout";
 import {
   AssetPreview,
   CustomButtonTextOption,
   FreeTrialDurationUnit,
   ProductNativeType,
-  RatingsWithPercentages,
 } from "$app/parsers/product";
-import { CurrencyCode } from "$app/utils/currency";
-import { Taxonomy } from "$app/utils/discover";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 
 import { PublicFile, Seller } from "$app/components/Product";
@@ -46,13 +41,6 @@ export type Availability = {
   id: string;
   start_time: string;
   end_time: string;
-};
-
-export type ProfileSection = {
-  id: string;
-  header: string;
-  product_names: string[];
-  default: boolean;
 };
 
 export type RecurrencePriceValue =

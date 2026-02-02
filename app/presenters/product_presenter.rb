@@ -123,7 +123,7 @@ class ProductPresenter
         covers: product.display_asset_previews.as_json,
         is_published: !product.draft && product.alive?,
         require_shipping: product.require_shipping?,
-        integrations: Integration::ALL_NAMES.index_with { |name| @product.find_integration_by_name(name).as_json },
+        integrations: Integration::ALL_NAMES.index_with { |name| @product.find_integration_by_name(name)&.as_json },
         variants: product.alive_variants.in_order.map do |variant|
           props = {
             id: variant.external_id,
@@ -267,6 +267,7 @@ class ProductPresenter
         custom_button_text_option: product.custom_button_text_option.presence,
         custom_summary: product.custom_summary,
         custom_attributes: product.custom_attributes,
+        file_attributes: product.file_info_for_product_page.map { { name: _1.to_s, value: _2 } },
         max_purchase_count: product.max_purchase_count,
         quantity_enabled: product.quantity_enabled,
         can_enable_quantity: product.can_enable_quantity?,
@@ -286,7 +287,40 @@ class ProductPresenter
         covers: product.display_asset_previews.as_json,
         is_published: !product.draft && product.alive?,
         require_shipping: product.require_shipping?,
-        integrations: Integration::ALL_NAMES.index_with { |name| @product.find_integration_by_name(name).as_json },
+        integrations: Integration::ALL_NAMES.index_with { |name| @product.find_integration_by_name(name)&.as_json },
+        variants: product.alive_variants.in_order.map do |variant|
+          props = {
+            id: variant.external_id,
+            name: variant.name || "",
+            description: variant.description || "",
+            max_purchase_count: variant.max_purchase_count,
+            integrations: Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? },
+            rich_content: variant.rich_content_json,
+            sales_count_for_inventory: variant.max_purchase_count? ? variant.sales_count_for_inventory : 0,
+            active_subscribers_count: variant.active_subscribers_count,
+          }
+          props[:duration_in_minutes] = variant.duration_in_minutes if product.native_type == Link::NATIVE_TYPE_CALL
+          if product.native_type == Link::NATIVE_TYPE_MEMBERSHIP
+            props.merge!(
+              customizable_price: !!variant.customizable_price,
+              recurrence_price_values: variant.recurrence_price_values(for_edit: true),
+              apply_price_changes_to_existing_memberships: variant.apply_price_changes_to_existing_memberships?,
+              subscription_price_change_effective_date: variant.subscription_price_change_effective_date,
+              subscription_price_change_message: variant.subscription_price_change_message,
+            )
+          else
+            props[:price_difference_cents] = variant.price_difference_cents
+          end
+          props
+        end,
+        availabilities: product.native_type == Link::NATIVE_TYPE_CALL ?
+          product.call_availabilities.map do |availability|
+            {
+              id: availability.external_id,
+              start_time: availability.start_time.iso8601,
+              end_time: availability.end_time.iso8601,
+            }
+          end : [],
         shipping_destinations: product.shipping_destinations.alive.map do |shipping_destination|
           {
             country_code: shipping_destination.country_code,
@@ -303,6 +337,10 @@ class ProductPresenter
         duration_in_months: product.duration_in_months,
         subscription_duration: product.subscription_duration,
         native_type: product.native_type,
+        custom_domain: product.custom_domain&.domain || "",
+        public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
+        audio_previews_enabled: Feature.active?(:audio_previews, product.user),
+        community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,
         default_offer_code: product.default_offer_code ? {
           id: product.default_offer_code.external_id,
           code: product.default_offer_code.code,
@@ -314,6 +352,16 @@ class ProductPresenter
             minimum_notice_in_minutes: product.call_limitation_info.minimum_notice_in_minutes,
             maximum_calls_per_day: product.call_limitation_info.maximum_calls_per_day,
           } : nil,
+        cancellation_discount: begin
+          cancellation_offer_code = product.cancellation_discount_offer_code
+          cancellation_offer_code.present? ? {
+            discount:
+              cancellation_offer_code.is_cents? ?
+              { type: "fixed", cents: cancellation_offer_code.amount_cents } :
+              { type: "percent", percents: cancellation_offer_code.amount_percentage },
+            duration_in_billing_cycles: cancellation_offer_code.duration_in_billing_cycles,
+          } : nil
+        end,
       },
       id: product.external_id,
       unique_permalink: product.unique_permalink,
@@ -360,6 +408,7 @@ class ProductPresenter
         files: files_data(product),
         has_same_rich_content_for_all_variants: @product.has_same_rich_content_for_all_variants?,
         native_type: product.native_type,
+        is_published: !product.draft && product.alive?,
       },
       id: product.external_id,
       unique_permalink: product.unique_permalink,
@@ -373,6 +422,7 @@ class ProductPresenter
 
   def edit_share_props
     profile_sections = product.user.seller_profile_products_sections
+    refund_policy = product.find_or_initialize_product_refund_policy
     {
       product: {
         name: product.name,
@@ -382,6 +432,52 @@ class ProductPresenter
         display_product_reviews: product.display_product_reviews,
         is_adult: product.is_adult,
         custom_domain: product.custom_domain&.domain || "",
+        # Add properties needed by ProductPreview
+        custom_permalink: product.custom_permalink,
+        description: product.description || "",
+        price_cents: product.price_cents,
+        customizable_price: !!product.customizable_price,
+        suggested_price_cents: product.suggested_price_cents,
+        **ProductPresenter::InstallmentPlanProps.new(product:).props,
+        custom_button_text_option: product.custom_button_text_option.presence,
+        custom_summary: product.custom_summary,
+        custom_attributes: product.custom_attributes,
+        max_purchase_count: product.max_purchase_count,
+        quantity_enabled: product.quantity_enabled,
+        should_show_sales_count: product.should_show_sales_count,
+        hide_sold_out_variants: product.hide_sold_out_variants?,
+        refund_policy: {
+          allowed_refund_periods_in_days: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.map do
+            { key: _1, value: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[_1] }
+          end,
+          max_refund_period_in_days: refund_policy.max_refund_period_in_days,
+          fine_print: refund_policy.fine_print,
+        },
+        covers: product.display_asset_previews.as_json,
+        is_published: !product.draft && product.alive?,
+        native_type: product.native_type,
+        subscription_duration: product.subscription_duration,
+        free_trial_enabled: product.free_trial_enabled,
+        free_trial_duration_amount: product.free_trial_duration_amount,
+        free_trial_duration_unit: product.free_trial_duration_unit,
+        variants: product.alive_variants.in_order.map do |variant|
+          props = {
+            id: variant.external_id,
+            name: variant.name || "",
+            max_purchase_count: variant.max_purchase_count,
+            sales_count_for_inventory: variant.max_purchase_count? ? variant.sales_count_for_inventory : 0,
+          }
+          if product.native_type == Link::NATIVE_TYPE_MEMBERSHIP
+            props[:recurrence_price_values] = variant.recurrence_price_values(for_edit: true)
+          else
+            props[:price_difference_cents] = variant.price_difference_cents
+          end
+          props
+        end,
+        files: [],
+        public_files: product.public_files.map(&:as_json),
+        default_offer_code: product.default_offer_code&.as_json,
+        collaborating_user: product.collaborator_for_display&.as_json,
       },
       id: product.external_id,
       unique_permalink: product.unique_permalink,
@@ -402,6 +498,7 @@ class ProductPresenter
   end
 
   def edit_receipt_props
+    refund_policy = product.find_or_initialize_product_refund_policy
     {
       product: {
         name: product.name,
@@ -409,6 +506,53 @@ class ProductPresenter
         custom_view_content_button_text_max_length: Product::Validations::MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH,
         custom_receipt_text: product.custom_receipt_text,
         custom_receipt_text_max_length: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH,
+        # Add properties needed by ProductPreview
+        custom_permalink: product.custom_permalink,
+        description: product.description || "",
+        price_cents: product.price_cents,
+        customizable_price: !!product.customizable_price,
+        suggested_price_cents: product.suggested_price_cents,
+        **ProductPresenter::InstallmentPlanProps.new(product:).props,
+        custom_button_text_option: product.custom_button_text_option.presence,
+        custom_summary: product.custom_summary,
+        custom_attributes: product.custom_attributes,
+        max_purchase_count: product.max_purchase_count,
+        quantity_enabled: product.quantity_enabled,
+        should_show_sales_count: product.should_show_sales_count,
+        hide_sold_out_variants: product.hide_sold_out_variants?,
+        refund_policy: {
+          allowed_refund_periods_in_days: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS.keys.map do
+            { key: _1, value: RefundPolicy::ALLOWED_REFUND_PERIODS_IN_DAYS[_1] }
+          end,
+          max_refund_period_in_days: refund_policy.max_refund_period_in_days,
+          fine_print: refund_policy.fine_print,
+        },
+        covers: product.display_asset_previews.as_json,
+        is_published: !product.draft && product.alive?,
+        native_type: product.native_type,
+        subscription_duration: product.subscription_duration,
+        free_trial_enabled: product.free_trial_enabled,
+        free_trial_duration_amount: product.free_trial_duration_amount,
+        free_trial_duration_unit: product.free_trial_duration_unit,
+        variants: product.alive_variants.in_order.map do |variant|
+          props = {
+            id: variant.external_id,
+            name: variant.name || "",
+            max_purchase_count: variant.max_purchase_count,
+            sales_count_for_inventory: variant.max_purchase_count? ? variant.sales_count_for_inventory : 0,
+          }
+          if product.native_type == Link::NATIVE_TYPE_MEMBERSHIP
+            props[:recurrence_price_values] = variant.recurrence_price_values(for_edit: true)
+          else
+            props[:price_difference_cents] = variant.price_difference_cents
+          end
+          props
+        end,
+        files: [],
+        public_files: product.public_files.map(&:as_json),
+        default_offer_code: product.default_offer_code&.as_json,
+        collaborating_user: product.collaborator_for_display&.as_json,
+        display_product_reviews: product.display_product_reviews,
       },
       id: product.external_id,
       unique_permalink: product.unique_permalink,

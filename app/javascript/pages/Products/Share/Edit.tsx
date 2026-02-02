@@ -1,7 +1,6 @@
 import { useForm, usePage } from "@inertiajs/react";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { RatingsWithPercentages } from "$app/parsers/product";
 import { Taxonomy } from "$app/utils/discover";
@@ -14,6 +13,7 @@ import { FacebookShareButton } from "$app/components/FacebookShareButton";
 import { Icon } from "$app/components/Icons";
 import { Seller } from "$app/components/Product";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
+import { ProductEditContext } from "$app/components/ProductEdit/state";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
@@ -56,8 +56,8 @@ type ShareFormData = {
 };
 
 export default function ProductsShareEdit() {
-  const page = usePage();
-  const props = cast<SharePageProps>(page.props);
+  const page = usePage<SharePageProps>();
+  const props = page.props;
   const {
     product: initialProduct,
     id,
@@ -65,7 +65,6 @@ export default function ProductsShareEdit() {
     profile_sections,
     taxonomies,
     is_listed_on_discover,
-    seller,
   } = props;
 
   const currentSeller = useCurrentSeller();
@@ -80,7 +79,7 @@ export default function ProductsShareEdit() {
     custom_domain: initialProduct.custom_domain,
   });
 
-  const submitForm = (additionalData: Record<string, unknown> = {}, options?: { onSuccess?: () => void }) => {
+  const submitForm = (options?: { onSuccess?: () => void }) => {
     if (form.processing) return;
     form.put(Routes.product_share_path(id), {
       preserveScroll: true,
@@ -88,7 +87,9 @@ export default function ProductsShareEdit() {
     });
   };
 
-  const handleSave = () => submitForm();
+  const handleSave = async () => {
+    submitForm();
+  };
 
   // Build preview product from form data
   const previewProduct = {
@@ -98,6 +99,47 @@ export default function ProductsShareEdit() {
 
   if (!currentSeller) return null;
 
+  // Create minimal context for ProductPreview
+  const contextValue = React.useMemo(
+    () => ({
+      id,
+      product: { ...initialProduct, ...form.data } as any,
+      updateProduct: () => {},
+      uniquePermalink: unique_permalink,
+      seller: props.seller,
+      existingFiles: [],
+      setExistingFiles: () => {},
+      awsKey: "",
+      s3Url: "",
+      save: handleSave,
+      saving: form.processing,
+      filesById: new Map(),
+      thumbnail: null,
+      refundPolicies: [],
+      currencyType: "usd" as any,
+      setCurrencyType: () => {},
+      isListedOnDiscover: is_listed_on_discover,
+      isPhysical: false,
+      profileSections: profile_sections,
+      taxonomies,
+      earliestMembershipPriceChangeDate: new Date(),
+      customDomainVerificationStatus: props.custom_domain_verification_status as any,
+      salesCountForInventory: 0,
+      successfulSalesCount: 0,
+      ratings: props.ratings,
+      availableCountries: [],
+      googleClientId: "",
+      googleCalendarEnabled: false,
+      seller_refund_policy_enabled: false,
+      seller_refund_policy: { title: "", fine_print: "" },
+      cancellationDiscountsEnabled: false,
+      contentUpdates: null,
+      setContentUpdates: () => {},
+      aiGenerated: false,
+    }),
+    [id, initialProduct, form.data, form.processing, unique_permalink, is_listed_on_discover, profile_sections, taxonomies, props],
+  );
+
   const url = initialProduct.custom_permalink
     ? Routes.short_link_url(initialProduct.custom_permalink, { host: currentSeller.subdomain })
     : Routes.short_link_url(unique_permalink, { host: currentSeller.subdomain });
@@ -106,15 +148,16 @@ export default function ProductsShareEdit() {
   discoverLink.searchParams.set("query", initialProduct.name);
 
   return (
-    <EditLayout
-      productId={id}
-      uniquePermalink={unique_permalink}
-      currentTab="share"
-      onSave={handleSave}
-      isSaving={form.processing}
-      product={previewProduct}
-      preview={<ProductPreview />}
-    >
+    <ProductEditContext.Provider value={contextValue}>
+      <EditLayout
+        productId={id}
+        uniquePermalink={unique_permalink}
+        currentTab="share"
+        onSave={handleSave}
+        isSaving={form.processing}
+        product={previewProduct}
+        preview={<ProductPreview />}
+      >
       <div className="squished">
         <form>
           <section className="p-4! md:p-8!">
@@ -199,6 +242,7 @@ export default function ProductsShareEdit() {
         </form>
       </div>
     </EditLayout>
+    </ProductEditContext.Provider>
   );
 }
 

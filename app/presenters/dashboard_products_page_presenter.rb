@@ -124,7 +124,7 @@ class DashboardProductsPagePresenter
     def product_base_data(product, pundit_user:)
       {
         "id" => product.id,
-        "edit_url" => edit_link_path(product),
+        "edit_url" => edit_product_product_path(product.external_id),
         "is_duplicating" => product.is_duplicating?,
         "is_unpublished" => product.draft? || product.purchase_disabled_at?,
         "name" => product.name,

@@ -29,7 +29,6 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
-import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
 import { ReviewForm } from "$app/components/ReviewForm";
 import {
@@ -1058,12 +1057,11 @@ export const ContentTab = () => {
       <LicenseProvider value={licenseInfo}>
         <EvaporateUploaderProvider value={evaporateUploader}>
           <S3UploadConfigProvider value={s3UploadConfig}>
-            <Layout
-              headerActions={
-                product.variants.length > 0 ? (
-                  <>
-                    <hr className="relative left-1/2 my-2 w-screen max-w-none -translate-x-1/2 border-border lg:hidden" />
-                    <ComboBox<Variant>
+            <div className="squished">
+              {product.variants.length > 0 && (
+                <div className="flex items-center gap-4 border-b border-border p-4">
+                  <hr className="relative left-1/2 my-2 w-screen max-w-none -translate-x-1/2 border-border lg:hidden" />
+                  <ComboBox<Variant>
                       // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
                       multiple
                       input={(props) => (
@@ -1129,12 +1127,10 @@ export const ContentTab = () => {
                         </>
                       )}
                     />
-                  </>
-                ) : null
-              }
-            >
+                  </div>
+                )}
               <ContentTabContent selectedVariantId={selectedVariantId} />
-            </Layout>
+            </div>
             <Modal
               open={confirmingDiscardVariantContent}
               onClose={() => setConfirmingDiscardVariantContent(false)}

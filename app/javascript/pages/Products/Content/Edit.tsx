@@ -1,6 +1,5 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { Seller } from "$app/components/Product";
 
@@ -48,8 +47,8 @@ type ContentFormData = {
 };
 
 export default function ProductsContentEdit() {
-  const page = usePage();
-  const props = cast<ContentPageProps>(page.props);
+  const page = usePage<ContentPageProps>();
+  const props = page.props;
   const {
     product: initialProduct,
     id,
@@ -127,6 +126,7 @@ export default function ProductsContentEdit() {
   const previewProduct = {
     ...product,
     name: initialProduct.name,
+    is_published: initialProduct.is_published,
   } as any;
 
   // Create a filesById map for the context

@@ -117,7 +117,7 @@ class CollabProductsPagePresenter
     def product_base_data(product)
       {
         "id" => product.id,
-        "edit_url" => edit_link_path(product),
+        "edit_url" => edit_product_product_path(product.external_id),
         "name" => product.name,
         "permalink" => product.unique_permalink,
         "price_formatted" => product.price_formatted_including_rental_verbose,

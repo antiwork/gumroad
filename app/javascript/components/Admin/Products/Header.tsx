@@ -55,7 +55,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
 
     <div className="flex flex-wrap gap-2">
       <a
-        href={Routes.edit_link_path(product.unique_permalink)}
+        href={Routes.edit_product_product_path(product.external_id)}
         className={buttonVariants({ size: "sm" })}
         target="_blank"
         rel="noreferrer"

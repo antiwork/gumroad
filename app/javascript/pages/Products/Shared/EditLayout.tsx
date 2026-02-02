@@ -1,5 +1,4 @@
 import { router } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
@@ -11,7 +10,6 @@ import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
-import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
@@ -136,8 +134,7 @@ export const EditLayout: React.FC<EditLayoutProps> = ({
                 color="accent"
                 disabled={saveDisabled || isSaving}
                 onClick={() => {
-                  // TODO: Implement publish functionality
-                  onSave();
+                  router.patch(Routes.product_product_path(productId), { publish: true });
                 }}
               >
                 Publish and continue

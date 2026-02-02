@@ -1,8 +1,8 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { Seller } from "$app/components/Product";
+import { ProductEditContext } from "$app/components/ProductEdit/state";
 
 import { BaseProductEditPageProps } from "../Shared/types";
 import { EditLayout } from "../Shared/EditLayout";
@@ -29,8 +29,8 @@ type ReceiptFormData = {
 };
 
 export default function ProductsReceiptEdit() {
-  const page = usePage();
-  const props = cast<ReceiptPageProps>(page.props);
+  const page = usePage<ReceiptPageProps>();
+  const props = page.props;
   const { product: initialProduct, id, unique_permalink } = props;
 
   const form = useForm<ReceiptFormData>({
@@ -38,7 +38,7 @@ export default function ProductsReceiptEdit() {
     custom_receipt_text: initialProduct.custom_receipt_text,
   });
 
-  const submitForm = (additionalData: Record<string, unknown> = {}, options?: { onSuccess?: () => void }) => {
+  const submitForm = (options?: { onSuccess?: () => void }) => {
     if (form.processing) return;
     form.put(Routes.product_receipt_path(id), {
       preserveScroll: true,
@@ -46,7 +46,9 @@ export default function ProductsReceiptEdit() {
     });
   };
 
-  const handleSave = () => submitForm();
+  const handleSave = async () => {
+    submitForm();
+  };
 
   // Build preview product from form data
   const previewProduct = {
@@ -54,16 +56,58 @@ export default function ProductsReceiptEdit() {
     ...form.data,
   } as any;
 
+  // Create minimal context for ProductPreview
+  const contextValue = React.useMemo(
+    () => ({
+      id,
+      product: { ...initialProduct, ...form.data } as any,
+      updateProduct: () => {},
+      uniquePermalink: unique_permalink,
+      seller: props.seller,
+      existingFiles: [],
+      setExistingFiles: () => {},
+      awsKey: "",
+      s3Url: "",
+      save: handleSave,
+      saving: form.processing,
+      filesById: new Map(),
+      thumbnail: null,
+      refundPolicies: [],
+      currencyType: "usd" as any,
+      setCurrencyType: () => {},
+      isListedOnDiscover: false,
+      isPhysical: false,
+      profileSections: [],
+      taxonomies: [],
+      earliestMembershipPriceChangeDate: new Date(),
+      customDomainVerificationStatus: null as any,
+      salesCountForInventory: 0,
+      successfulSalesCount: 0,
+      ratings: { count: 0, average: 0 } as any,
+      availableCountries: [],
+      googleClientId: "",
+      googleCalendarEnabled: false,
+      seller_refund_policy_enabled: false,
+      seller_refund_policy: { title: "", fine_print: "" },
+      cancellationDiscountsEnabled: false,
+      contentUpdates: null,
+      setContentUpdates: () => {},
+      aiGenerated: false,
+    }),
+    [id, initialProduct, form.data, form.processing, unique_permalink, props],
+  );
+
   return (
-    <EditLayout
-      productId={id}
-      uniquePermalink={unique_permalink}
-      currentTab="receipt"
-      onSave={handleSave}
-      isSaving={form.processing}
-      product={previewProduct}
-      preview={<ReceiptPreview />}
-    >
+    <ProductEditContext.Provider value={contextValue}>
+      <EditLayout
+        productId={id}
+        uniquePermalink={unique_permalink}
+        currentTab="receipt"
+        onSave={handleSave}
+        isSaving={form.processing}
+        product={previewProduct}
+        preview={<ReceiptPreview />}
+      >
       <div className="squished">
         <form>
           <section className="p-4! md:p-8!">
@@ -81,5 +125,6 @@ export default function ProductsReceiptEdit() {
         </form>
       </div>
     </EditLayout>
+    </ProductEditContext.Provider>
   );
 }

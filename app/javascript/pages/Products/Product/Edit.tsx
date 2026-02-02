@@ -1,6 +1,5 @@
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import {
   AssetPreview,
@@ -18,6 +17,7 @@ import { Icon } from "$app/components/Icons";
 import { Seller } from "$app/components/Product";
 import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
+import { ProductEditContext } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
 
 import {
@@ -157,14 +157,18 @@ type ProductFormData = {
   availabilities: Availability[];
   call_limitation_info: CallLimitationInfo | null;
   custom_domain: string | null;
+  files: any[];
+  display_product_reviews: boolean;
+  collaborating_user: Seller | null;
+  native_type: string;
   price_currency_type?: CurrencyCode;
   unpublish?: boolean;
   redirect_to?: string;
 };
 
 export default function ProductsProductEdit() {
-  const page = usePage();
-  const props = cast<ProductPageProps>(page.props);
+  const page = usePage<ProductPageProps>();
+  const props = page.props;
   const {
     product: initialProduct,
     id,
@@ -232,6 +236,10 @@ export default function ProductsProductEdit() {
     availabilities: initialProduct.availabilities,
     call_limitation_info: initialProduct.call_limitation_info,
     custom_domain: initialProduct.custom_domain,
+    files: [],
+    display_product_reviews: initialProduct.display_product_reviews,
+    collaborating_user: initialProduct.collaborating_user,
+    native_type: initialProduct.native_type,
   });
 
   if (!currentSeller) return null;
@@ -295,7 +303,9 @@ export default function ProductsProductEdit() {
     });
   };
 
-  const handleSave = () => submitForm();
+  const handleSave = async () => {
+    submitForm();
+  };
 
   // Build preview product from form data
   const previewProduct = {
@@ -304,17 +314,83 @@ export default function ProductsProductEdit() {
     public_files: publicFiles,
   } as any;
 
+  // Update product helper for components that need to update product state
+  const updateProduct = (updater: any) => {
+    const updates = typeof updater === "function" ? updater(form.data) : updater;
+    form.setData((prev) => ({ ...prev, ...updates }));
+  };
+
+  // Create filesById map (dummy for now since we don't have files on this tab)
+  const filesById = React.useMemo(() => new Map(), []);
+
+  // Create the context value for components that use useProductEditContext
+  const contextValue = React.useMemo(
+    () => ({
+      id,
+      product: form.data as any,
+      updateProduct,
+      uniquePermalink: unique_permalink,
+      seller: currentSeller as any,
+      existingFiles: [],
+      setExistingFiles: () => {},
+      awsKey: "",
+      s3Url: "",
+      save: handleSave,
+      saving: form.processing,
+      filesById,
+      thumbnail,
+      refundPolicies: refund_policies,
+      currencyType,
+      setCurrencyType,
+      isListedOnDiscover: false,
+      isPhysical: is_physical,
+      profileSections: [],
+      taxonomies: [],
+      earliestMembershipPriceChangeDate: new Date(),
+      customDomainVerificationStatus: custom_domain_verification_status as any,
+      salesCountForInventory: 0,
+      successfulSalesCount: 0,
+      ratings: {} as any,
+      availableCountries: [],
+      googleClientId: "",
+      googleCalendarEnabled: google_calendar_enabled,
+      seller_refund_policy_enabled,
+      seller_refund_policy: { title: "", fine_print: "" },
+      cancellationDiscountsEnabled: cancellation_discounts_enabled,
+      contentUpdates: null,
+      setContentUpdates: () => {},
+      aiGenerated: ai_generated,
+    }),
+    [
+      id,
+      form.data,
+      form.processing,
+      unique_permalink,
+      currentSeller,
+      thumbnail,
+      refund_policies,
+      currencyType,
+      is_physical,
+      custom_domain_verification_status,
+      google_calendar_enabled,
+      seller_refund_policy_enabled,
+      cancellation_discounts_enabled,
+      ai_generated,
+    ],
+  );
+
   return (
-    <EditLayout
-      productId={id}
-      uniquePermalink={unique_permalink}
-      currentTab="product"
-      onSave={handleSave}
-      isSaving={form.processing}
-      preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />}
-      product={previewProduct}
-    >
-      <div className="squished">
+    <ProductEditContext.Provider value={contextValue}>
+      <EditLayout
+        productId={id}
+        uniquePermalink={unique_permalink}
+        currentTab="product"
+        onSave={handleSave}
+        isSaving={form.processing}
+        preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />}
+        product={previewProduct}
+      >
+        <div className="squished">
         <form>
           <section className="p-4! md:p-8!">
             {showAiNotification ? (
@@ -713,6 +789,7 @@ export default function ProductsProductEdit() {
           )}
         </form>
       </div>
-    </EditLayout>
+      </EditLayout>
+    </ProductEditContext.Provider>
   );
 }
