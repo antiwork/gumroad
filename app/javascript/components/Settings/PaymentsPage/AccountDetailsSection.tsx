@@ -63,11 +63,7 @@ const AccountDetailsSection = ({
               <a href="/help/article/260-your-payout-settings-page">What type of account should I choose?</a>
             </FieldsetTitle>
           </Fieldset>
-          <div
-            className="grid gap-4"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
-            role="radiogroup"
-          >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" role="radiogroup">
             <Button
               role="radio"
               key="individual"
