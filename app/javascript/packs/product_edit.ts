@@ -1,9 +1,5 @@
-import ReactOnRails from "react-on-rails";
-
 import BasePage from "$app/utils/base_page";
 
-import ProductEditPage from "$app/components/server-components/ProductEditPage";
-
+// Product edit pages migrated to Inertia.js
+// See: app/javascript/pages/Products/*/Edit.tsx
 BasePage.initialize();
-
-ReactOnRails.register({ ProductEditPage });
