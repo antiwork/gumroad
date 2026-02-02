@@ -60,11 +60,11 @@ export const PriceTag = ({
   const borderClasses = "border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1";
 
   return (
-    <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
+    <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex flex-shrink-0 items-center">
       <WithTooltip position={tooltipPosition} tip={priceTag}>
-        <div className="relative grid grid-flow-col border border-r-0 border-border">
+        <div className="relative grid grid-flow-col border border-r-0 border-border whitespace-nowrap">
           <div
-            className="bg-accent px-2 py-1 text-accent-foreground"
+            className="bg-accent px-2 py-1 text-sm text-accent-foreground lg:text-base"
             itemProp="price"
             content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
           >

@@ -276,54 +276,58 @@ const CtaBar = ({
     >
       <div
         ref={ref}
-        className="mx-auto flex max-w-product-page items-center justify-between gap-4 p-4 lg:px-8"
+        className="mx-auto flex max-w-product-page flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-8 lg:py-0"
         style={{
           transition: "var(--transition-duration)",
           marginTop: visible || !isDesktop ? undefined : -height,
         }}
       >
-        <PriceTag
-          currencyCode={product.currency_code}
-          oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
-          price={discountedPriceCents}
-          url={product.long_url}
-          recurrence={
-            product.recurrences
-              ? {
-                  id: selection.recurrence ?? product.recurrences.default,
-                  duration_in_months: product.duration_in_months,
-                }
-              : undefined
-          }
-          isPayWhatYouWant={isPWYW}
-          isSalesLimited={product.is_sales_limited}
-          creatorName={product.seller?.name}
-        />
-        <h3 className="hidden flex-1 lg:block">{product.name}</h3>
-        {product.ratings != null && product.ratings.count > 0 ? (
-          <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
-        ) : null}
-        <CtaButton
-          product={product}
-          purchase={purchase}
-          discountCode={discountCode ?? null}
-          selection={selection}
-          label={ctaLabel}
-          onClick={(evt) => {
-            if (
-              isPWYW ||
-              product.options.length > 1 ||
-              hasRentOption ||
-              hasMultipleRecurrences ||
-              hasConfigurableQuantity
-            ) {
-              evt.preventDefault();
-              ctaButtonRef.current?.scrollIntoView(false);
-              configurationSelectorRef.current?.focusRequiredInput();
-              if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
+        <div className="flex flex-shrink-0 items-center gap-3 lg:gap-4">
+          <PriceTag
+            currencyCode={product.currency_code}
+            oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
+            price={discountedPriceCents}
+            url={product.long_url}
+            recurrence={
+              product.recurrences
+                ? {
+                    id: selection.recurrence ?? product.recurrences.default,
+                    duration_in_months: product.duration_in_months,
+                  }
+                : undefined
             }
-          }}
-        />
+            isPayWhatYouWant={isPWYW}
+            isSalesLimited={product.is_sales_limited}
+            creatorName={product.seller?.name}
+          />
+          <h3 className="hidden flex-1 lg:block">{product.name}</h3>
+          {product.ratings != null && product.ratings.count > 0 ? (
+            <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
+          ) : null}
+        </div>
+        <div className="lg:min-w-fit lg:flex-shrink-0">
+          <CtaButton
+            product={product}
+            purchase={purchase}
+            discountCode={discountCode ?? null}
+            selection={selection}
+            label={ctaLabel}
+            onClick={(evt) => {
+              if (
+                isPWYW ||
+                product.options.length > 1 ||
+                hasRentOption ||
+                hasMultipleRecurrences ||
+                hasConfigurableQuantity
+              ) {
+                evt.preventDefault();
+                ctaButtonRef.current?.scrollIntoView(false);
+                configurationSelectorRef.current?.focusRequiredInput();
+                if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
+              }
+            }}
+          />
+        </div>
       </div>
     </section>
   );
