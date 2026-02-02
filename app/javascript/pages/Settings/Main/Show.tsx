@@ -15,8 +15,8 @@ import { ToggleSettingRow } from "$app/components/SettingRow";
 import { ProductLevelSupportEmailsForm } from "$app/components/Settings/AdvancedPage/ProductLevelSupportEmailsForm";
 import { Layout } from "$app/components/Settings/Layout";
 import { TagInput } from "$app/components/TagInput";
-import { Toggle } from "$app/components/Toggle";
 import { Pill } from "$app/components/ui/Pill";
+import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type ProductLevelSupportEmail = {
@@ -177,16 +177,16 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Purchases</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_payment_email}
-                      onChange={(value) => updateUserSettings({ enable_payment_email: value })}
+                    <Switch
+                      checked={form.data.user.enable_payment_email}
+                      onChange={(e) => updateUserSettings({ enable_payment_email: e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_payment_push_notification}
-                      onChange={(value) => updateUserSettings({ enable_payment_push_notification: value })}
+                    <Switch
+                      checked={form.data.user.enable_payment_push_notification}
+                      onChange={(e) => updateUserSettings({ enable_payment_push_notification: e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
@@ -194,18 +194,20 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Recurring payments</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_recurring_subscription_charge_email}
-                      onChange={(value) => updateUserSettings({ enable_recurring_subscription_charge_email: value })}
+                    <Switch
+                      checked={form.data.user.enable_recurring_subscription_charge_email}
+                      onChange={(e) =>
+                        updateUserSettings({ enable_recurring_subscription_charge_email: e.target.checked })
+                      }
                       disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_recurring_subscription_charge_push_notification}
-                      onChange={(value) =>
+                    <Switch
+                      checked={form.data.user.enable_recurring_subscription_charge_push_notification}
+                      onChange={(e) =>
                         updateUserSettings({
-                          enable_recurring_subscription_charge_push_notification: value,
+                          enable_recurring_subscription_charge_push_notification: e.target.checked,
                         })
                       }
                       disabled={isFormDisabled}
@@ -215,16 +217,18 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Free downloads</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_free_downloads_email}
-                      onChange={(value) => updateUserSettings({ enable_free_downloads_email: value })}
+                    <Switch
+                      checked={form.data.user.enable_free_downloads_email}
+                      onChange={(e) => updateUserSettings({ enable_free_downloads_email: e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.enable_free_downloads_push_notification}
-                      onChange={(value) => updateUserSettings({ enable_free_downloads_push_notification: value })}
+                    <Switch
+                      checked={form.data.user.enable_free_downloads_push_notification}
+                      onChange={(e) =>
+                        updateUserSettings({ enable_free_downloads_push_notification: e.target.checked })
+                      }
                       disabled={isFormDisabled}
                     />
                   </TableCell>
@@ -232,9 +236,9 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Personalized product announcements</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={form.data.user.announcement_notification_enabled}
-                      onChange={(value) => updateUserSettings({ announcement_notification_enabled: value })}
+                    <Switch
+                      checked={form.data.user.announcement_notification_enabled}
+                      onChange={(e) => updateUserSettings({ announcement_notification_enabled: e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
@@ -243,9 +247,9 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Comments</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={!form.data.user.disable_comments_email}
-                      onChange={(value) => updateUserSettings({ disable_comments_email: !value })}
+                    <Switch
+                      checked={!form.data.user.disable_comments_email}
+                      onChange={(e) => updateUserSettings({ disable_comments_email: !e.target.checked })}
                       disabled={isFormDisabled}
                     />
                   </TableCell>
@@ -254,11 +258,11 @@ export default function MainPage() {
                 <TableRow>
                   <TableHead scope="row">Reviews</TableHead>
                   <TableCell>
-                    <Toggle
-                      value={!form.data.user.disable_reviews_email}
-                      onChange={(value) => updateUserSettings({ disable_reviews_email: !value })}
+                    <Switch
+                      checked={!form.data.user.disable_reviews_email}
+                      onChange={(e) => updateUserSettings({ disable_reviews_email: !e.target.checked })}
                       disabled={isFormDisabled}
-                      ariaLabel="Reviews"
+                      aria-label="Reviews"
                     />
                   </TableCell>
                   <TableCell></TableCell>
@@ -446,15 +450,14 @@ export default function MainPage() {
                       <Pill className="-mr-2 shrink-0">%</Pill>
                     </div>
                   </fieldset>
-                  <Toggle
-                    value={!form.data.user.purchasing_power_parity_payment_verification_disabled}
+                  <Switch
+                    checked={!form.data.user.purchasing_power_parity_payment_verification_disabled}
                     disabled={isFormDisabled}
-                    onChange={(newValue) =>
-                      updateUserSettings({ purchasing_power_parity_payment_verification_disabled: !newValue })
+                    onChange={(e) =>
+                      updateUserSettings({ purchasing_power_parity_payment_verification_disabled: !e.target.checked })
                     }
-                  >
-                    Apply only if the customer is currently located in the country of their payment method
-                  </Toggle>
+                    label="Apply only if the customer is currently located in the country of their payment method"
+                  />
                   <fieldset>
                     <legend>
                       <label htmlFor={`${uid}-ppp-exclude-products`}>Products to exclude</label>
