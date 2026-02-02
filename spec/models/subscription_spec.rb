@@ -3485,6 +3485,9 @@ describe Subscription, :vcr do
     end
   end
 
+  # NOTE: Tests for .restartable_for_user_and_product and .active_for_user_and_product
+  # are in spec/models/subscription/finder_methods_spec.rb
+
   describe "#alive_at?" do
     let(:purchase) { create(:membership_purchase, created_at: 2.days.ago) }
     let(:subscription) { purchase.subscription }

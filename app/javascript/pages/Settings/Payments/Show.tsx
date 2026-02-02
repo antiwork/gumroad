@@ -29,9 +29,9 @@ import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSec
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
-import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Switch } from "$app/components/ui/Switch";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -729,14 +729,13 @@ export default function PaymentsPage() {
 
   const payoutsPausedToggle = (
     <fieldset>
-      <Toggle
-        value={form.data.payouts_paused_by_user || props.payouts_paused_internally}
-        onChange={(value) => form.setData("payouts_paused_by_user", value)}
-        ariaLabel="Pause payouts"
+      <Switch
+        checked={form.data.payouts_paused_by_user || props.payouts_paused_internally}
+        onChange={(e) => form.setData("payouts_paused_by_user", e.target.checked)}
+        aria-label="Pause payouts"
         disabled={props.is_form_disabled || props.payouts_paused_internally}
-      >
-        Pause payouts
-      </Toggle>
+        label="Pause payouts"
+      />
       <small>
         By pausing payouts, they won't be processed until you decide to resume them, and your balance will remain in
         your account until then.
