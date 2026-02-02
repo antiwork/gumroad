@@ -105,9 +105,9 @@ class LinksController < ApplicationController
 
     create_user_event("add_product")
     if ai_generated
-      redirect_to edit_link_path(@product, ai_generated: true), status: :see_other
+      redirect_to edit_product_product_path(@product.external_id, ai_generated: true), status: :see_other
     else
-      redirect_to edit_link_path(@product), status: :see_other
+      redirect_to edit_product_product_path(@product.external_id), status: :see_other
     end
   end
 
