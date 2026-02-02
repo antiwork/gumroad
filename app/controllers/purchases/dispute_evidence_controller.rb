@@ -3,12 +3,15 @@
 class Purchases::DisputeEvidenceController < ApplicationController
   before_action :set_purchase, :set_dispute_evidence, :check_if_needs_redirect
 
-  def show
-    @dispute_evidence_page_presenter = DisputeEvidencePagePresenter.new(@dispute_evidence)
-    set_meta_tag(title: "Submit additional information")
+  layout "inertia", only: [:show]
 
+  def show
+    set_meta_tag(title: "Submit additional information")
     @hide_layouts = true
     set_noindex_header
+
+    dispute_evidence_presenter = DisputeEvidencePagePresenter.new(@dispute_evidence)
+    render inertia: "Purchases/DisputeEvidence/Show", props: dispute_evidence_presenter.react_props
   end
 
   def update

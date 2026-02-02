@@ -56,8 +56,6 @@ describe Purchases::DisputeEvidenceController do
 
         expect(assigns[:dispute_evidence]).to eq(dispute_evidence)
         expect(assigns[:purchase]).to eq(purchase)
-        dispute_evidence_page_presenter = assigns(:dispute_evidence_page_presenter)
-        expect(dispute_evidence_page_presenter.send(:purchase)).to eq(purchase)
       end
     end
 
