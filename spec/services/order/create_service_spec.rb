@@ -180,5 +180,156 @@ describe Order::CreateService, :vcr do
         end.not_to change { Charge.count }
       end.to change { Purchase.count }.by 5
     end
+
+    describe "existing active subscription check" do
+      # See: https://github.com/antiwork/gumroad/issues/173
+      let(:membership_product) { create(:membership_product, user: seller_1) }
+      let(:buyer) { create(:user, email: "buyer@gumroad.com") }
+
+      # Helper to create subscription without triggering card charge
+      def create_subscription_for_product(product:, purchaser:, email:, **subscription_attrs)
+        subscription = create(:subscription, link: product, user: purchaser)
+        create(:purchase,
+               link: product,
+               purchaser: purchaser,
+               email: email,
+               subscription: subscription,
+               is_original_subscription_purchase: true,
+               price_cents: product.price_cents,
+               variant_attributes: product.tiers.to_a
+        )
+        subscription.update!(subscription_attrs) if subscription_attrs.present?
+        subscription
+      end
+
+      let(:membership_line_item) do
+        tier = membership_product.tiers.first
+        {
+          uid: "membership-uid",
+          permalink: membership_product.unique_permalink,
+          perceived_price_cents: tier.prices.alive.first.price_cents,
+          quantity: 1,
+          price_id: membership_product.prices.alive.first.external_id,
+          variants: [tier.external_id]
+        }
+      end
+
+      let(:membership_params) do
+        common_order_params_without_payment.merge(
+          line_items: [membership_line_item]
+        )
+      end
+
+      context "when signed-in buyer has an active subscription" do
+        let!(:existing_subscription) do
+          create_subscription_for_product(
+            product: membership_product,
+            purchaser: buyer,
+            email: buyer.email
+          )
+        end
+
+        it "returns helpful error for signed-in user and sends notification email" do
+          expect(CustomerLowPriorityMailer).to receive(:already_subscribed_checkout_attempt)
+            .with(existing_subscription.id)
+            .and_return(double(deliver_later: true))
+
+          _order, purchase_responses, _ = Order::CreateService.new(params: membership_params, buyer: buyer).perform
+
+          expect(purchase_responses["membership-uid"]).to include(
+            success: false,
+            error_message: "You already have an active subscription to this membership. Visit your Library to manage it."
+          )
+        end
+
+        it "does not create a purchase for the membership" do
+          allow(CustomerLowPriorityMailer).to receive(:already_subscribed_checkout_attempt)
+            .and_return(double(deliver_later: true))
+
+          expect do
+            Order::CreateService.new(params: membership_params, buyer: buyer).perform
+          end.not_to change { Purchase.count }
+        end
+      end
+
+      context "when signed-out user tries to purchase with email that has active subscription" do
+        let!(:existing_subscription) do
+          create_subscription_for_product(
+            product: membership_product,
+            purchaser: create(:user),
+            email: "buyer@gumroad.com"
+          )
+        end
+
+        it "returns generic error for signed-out user (privacy)" do
+          allow(CustomerLowPriorityMailer).to receive(:already_subscribed_checkout_attempt)
+            .and_return(double(deliver_later: true))
+          allow(Bugsnag).to receive(:notify)
+
+          _order, purchase_responses, _ = Order::CreateService.new(params: membership_params, buyer: nil).perform
+
+          expect(purchase_responses["membership-uid"]).to include(
+            success: false,
+            error_message: "Sorry, something went wrong. Please try again."
+          )
+        end
+
+        it "notifies Bugsnag for monitoring" do
+          allow(CustomerLowPriorityMailer).to receive(:already_subscribed_checkout_attempt)
+            .and_return(double(deliver_later: true))
+
+          expect(Bugsnag).to receive(:notify).with(an_instance_of(StandardError)) do |error, &block|
+            expect(error.message).to eq("Existing subscription checkout attempt")
+          end
+
+          Order::CreateService.new(params: membership_params, buyer: nil).perform
+        end
+
+        it "sends notification email to subscriber" do
+          allow(Bugsnag).to receive(:notify)
+
+          expect(CustomerLowPriorityMailer).to receive(:already_subscribed_checkout_attempt)
+            .with(existing_subscription.id)
+            .and_return(double(deliver_later: true))
+
+          Order::CreateService.new(params: membership_params, buyer: nil).perform
+        end
+      end
+
+      context "when user has no active subscription" do
+        it "proceeds to create the purchase normally" do
+          expect(Purchase::CreateService).to receive(:new).and_call_original
+
+          order, purchase_responses, _ = Order::CreateService.new(params: membership_params, buyer: buyer).perform
+
+          expect(purchase_responses["membership-uid"]).to be_nil
+          expect(order.purchases.count).to eq(1)
+        end
+      end
+
+      context "when purchase is a gift" do
+        let(:gift_membership_params) do
+          membership_params.tap do |p|
+            p[:line_items][0][:is_gift] = true
+            p[:is_gift] = true
+            p[:giftee_email] = "giftee@example.com"
+          end
+        end
+
+        let!(:giftee_subscription) do
+          create_subscription_for_product(
+            product: membership_product,
+            purchaser: create(:user),
+            email: "giftee@example.com"
+          )
+        end
+
+        it "skips the active subscription check for gifts" do
+          expect(Subscription).not_to receive(:active_for_user_and_product)
+
+          Order::CreateService.new(params: gift_membership_params, buyer: buyer).perform
+        end
+      end
+    end
   end
 end
