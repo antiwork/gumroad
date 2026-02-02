@@ -48,6 +48,13 @@ export type Availability = {
   end_time: string;
 };
 
+export type ProfileSection = {
+  id: string;
+  header: string;
+  product_names: string[];
+  default: boolean;
+};
+
 export type RecurrencePriceValue =
   | { enabled: false; price_cents?: number | null }
   | { enabled: true; price_cents: number | null; suggested_price_cents: number | null };
