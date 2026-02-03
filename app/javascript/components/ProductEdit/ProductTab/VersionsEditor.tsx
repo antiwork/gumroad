@@ -124,7 +124,7 @@ const VersionEditor = ({
 
   const url = useProductUrl({ option: version.id });
 
-  const integrations = Object.entries(product.integrations)
+  const integrations = Object.entries(product.integrations ?? {})
     .filter(([_, enabled]) => enabled)
     .map(([name]) => name);
 

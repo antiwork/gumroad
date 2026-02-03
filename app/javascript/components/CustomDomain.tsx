@@ -86,13 +86,13 @@ const CustomDomain = ({
           id={uid}
           placeholder="yourdomain.com"
           type="text"
-          value={customDomain}
+          value={customDomain ?? ""}
           onChange={(e) => {
             setCustomDomain(e.target.value);
             setVerificationInfo({ buttonState: "initial", state: "initial", message: "" });
           }}
         />
-        {customDomain.trim() !== "" ? (
+        {(customDomain ?? "").trim() !== "" ? (
           <Pill asChild>
             <Button
               className="rounded-full! px-3! py-2!"

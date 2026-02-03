@@ -13,8 +13,9 @@ const MIN_TAG_LENGTH = 2;
 const MAX_TAG_LENGTH = 20;
 const clean = (tag: string) => tag.toLowerCase().replace(/^[#\s]+|,/gu, "");
 
-export const TagSelector = ({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) => {
+export const TagSelector = ({ tags, onChange }: { tags?: string[]; onChange: (tags: string[]) => void }) => {
   const uid = React.useId();
+  const safeTags = tags ?? [];
 
   const [query, setQuery] = React.useState("");
   const cleanedQuery = clean(query).trim();
@@ -32,9 +33,9 @@ export const TagSelector = ({ tags, onChange }: { tags: string[]; onChange: (tag
   const validatedTag = cleanedQuery.length >= MIN_TAG_LENGTH ? cleanedQuery : null;
 
   const handleKeyDown = (evt: React.KeyboardEvent) => {
-    if (validatedTag && tags.length < MAX_ALLOWED_TAGS && evt.key === ",") {
+    if (validatedTag && safeTags.length < MAX_ALLOWED_TAGS && evt.key === ",") {
       evt.preventDefault();
-      onChange([...tags, validatedTag]);
+      onChange([...safeTags, validatedTag]);
       setQuery("");
     }
   };
@@ -46,13 +47,13 @@ export const TagSelector = ({ tags, onChange }: { tags: string[]; onChange: (tag
       </legend>
       <TagInput
         inputId={uid}
-        tagIds={tags}
+        tagIds={safeTags}
         onChangeTagIds={(newTags) => {
           // Some existing products have more than the maximum number of tags
-          if (newTags.length <= MAX_ALLOWED_TAGS || newTags.length < tags.length) onChange(newTags);
+          if (newTags.length <= MAX_ALLOWED_TAGS || newTags.length < safeTags.length) onChange(newTags);
         }}
         tagList={[
-          ...tags.map((tag) => ({ id: tag, label: tag })),
+          ...safeTags.map((tag) => ({ id: tag, label: tag })),
           ...suggestions.map((suggestion) => ({
             id: suggestion.name,
             label: `${suggestion.name} (${suggestion.uses})`,

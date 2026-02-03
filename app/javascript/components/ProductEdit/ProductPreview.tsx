@@ -40,6 +40,9 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     };
   }, [product.default_offer_code]);
 
+  const covers = product.covers ?? [];
+  const variants = product.variants ?? [];
+
   const serializedProduct: Product = {
     id,
     name: product.name,
@@ -50,8 +53,8 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       profile_url: Routes.root_url({ host: currentSeller.subdomain }),
     },
     collaborating_user: product.collaborating_user,
-    covers: product.covers,
-    main_cover_id: product.covers[0]?.id ?? null,
+    covers,
+    main_cover_id: covers[0]?.id ?? null,
     quantity_remaining:
       product.max_purchase_count !== null ? Math.max(product.max_purchase_count - salesCountForInventory, 0) : null,
     currency_code: currencyType,
@@ -73,14 +76,14 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     is_compliance_blocked: false,
     is_published: product.is_published,
     is_stream_only: false,
-    streamable: product.files.some((file) => file.is_streamable),
+    streamable: (product.files ?? []).some((file) => file.is_streamable),
     is_quantity_enabled: product.quantity_enabled,
     is_multiseat_license: false,
     hide_sold_out_variants: product.hide_sold_out_variants,
     sales_count: product.should_show_sales_count ? successfulSalesCount : null,
     custom_button_text_option: product.custom_button_text_option,
     summary: product.custom_summary,
-    attributes: product.custom_attributes,
+    attributes: product.custom_attributes ?? [],
     native_type: product.native_type,
     free_trial: product.free_trial_enabled
       ? {
@@ -92,10 +95,10 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       : null,
     rental: null,
     recurrences:
-      defaultRecurrence && product.variants[0] && "recurrence_price_values" in product.variants[0]
+      defaultRecurrence && variants[0] && "recurrence_price_values" in variants[0]
         ? {
             default: defaultRecurrence,
-            enabled: Object.entries(product.variants[0].recurrence_price_values).flatMap(([recurrence, value], idx) =>
+            enabled: Object.entries(variants[0].recurrence_price_values).flatMap(([recurrence, value], idx) =>
               value.enabled
                 ? {
                     recurrence,
@@ -106,7 +109,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
             ),
           }
         : null,
-    options: product.variants.map((variant) => ({
+    options: variants.map((variant) => ({
       ...variant,
       price_difference_cents: "price_difference_cents" in variant ? variant.price_difference_cents : 0,
       is_pwyw: "customizable_price" in variant ? variant.customizable_price : product.customizable_price,
@@ -140,14 +143,14 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         }
       : {
           title:
-            product.refund_policy.allowed_refund_periods_in_days.find(
-              ({ key }) => key === product.refund_policy.max_refund_period_in_days,
+            (product.refund_policy?.allowed_refund_periods_in_days ?? []).find(
+              ({ key }) => key === product.refund_policy?.max_refund_period_in_days,
             )?.value ?? "",
-          fine_print: product.refund_policy.fine_print ?? "",
+          fine_print: product.refund_policy?.fine_print ?? "",
           updated_at: "",
         },
     bundle_products: [],
-    public_files: product.public_files,
+    public_files: product.public_files ?? [],
     audio_previews_enabled: product.audio_previews_enabled,
   };
 
@@ -158,6 +161,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         is_published: true,
         pwyw: {
           suggested_price_cents: Math.max(
+            0,
             ...serializedProduct.options.map(({ price_difference_cents }) => price_difference_cents ?? 0),
           ),
         },
@@ -188,7 +192,9 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     />
   ) : (
     <>
-      <RefundPolicyModalPreview open={showRefundPolicyModal ?? false} refundPolicy={product.refund_policy} />
+      {product.refund_policy != null && (
+        <RefundPolicyModalPreview open={showRefundPolicyModal ?? false} refundPolicy={product.refund_policy} />
+      )}
       <Product
         product={serializedProduct}
         purchase={null}

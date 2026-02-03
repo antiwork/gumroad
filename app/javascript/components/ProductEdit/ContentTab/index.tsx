@@ -98,10 +98,13 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   const isDesktop = useIsAboveBreakpoint("lg");
   const imageSettings = useImageUploadSettings();
 
+  const variants = product.variants ?? [];
   const selectedVariant = product.has_same_rich_content_for_all_variants
     ? null
-    : product.variants.find((variant) => variant.id === selectedVariantId);
-  const pages: (Page & { chosen?: boolean })[] = selectedVariant ? selectedVariant.rich_content : product.rich_content;
+    : variants.find((variant) => variant.id === selectedVariantId);
+  const pages: (Page & { chosen?: boolean })[] = selectedVariant
+    ? (selectedVariant.rich_content ?? [])
+    : (product.rich_content ?? []);
   const pagesRef = useRefToLatest(pages);
   const updatePages = (pages: Page[]) =>
     updateProduct((product) => {
@@ -122,9 +125,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     setSelectedPageId(page.id);
     return page;
   };
-  const [selectedPageId, setSelectedPageId] = React.useState(pages[0]?.id);
+  const [selectedPageId, setSelectedPageId] = React.useState(pages[0]?.id ?? null);
   const selectedPage = pages.find((page) => page.id === selectedPageId);
-  if ((selectedPageId || pages.length) && !selectedPage) setSelectedPageId(pages[0]?.id);
+  if ((selectedPageId || pages.length) && !selectedPage) setSelectedPageId(pages[0]?.id ?? null);
   const [renamingPageId, setRenamingPageId] = React.useState<string | null>(null);
   const [confirmingDeletePage, setConfirmingDeletePage] = React.useState<Page | null>(null);
   const [pagesExpanded, setPagesExpanded] = React.useState(false);
@@ -315,7 +318,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       showAlert(
         pages.length > 1
           ? `The license key has already been added to "${titleWithFallback(pageWithLicense.title)}"`
-          : product.variants.length > 1
+          : variants.length > 1
             ? `You can't insert more than one license key per ${product.native_type === "membership" ? "tier" : "version"}`
             : "You can't insert more than one license key",
         "error",
@@ -974,23 +977,28 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 //TODO inline this once all the crazy providers are gone
 export const ContentTab = ({ selectedVariantId: parentSelectedVariantId }: { selectedVariantId?: string | null }) => {
   const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink } = useProductEditContext();
-  const [internalSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
+  const variants = product.variants ?? [];
+  const [internalSelectedVariantId] = React.useState(variants[0]?.id ?? null);
   const selectedVariantId = parentSelectedVariantId !== undefined ? parentSelectedVariantId : internalSelectedVariantId;
   const [confirmingDiscardVariantContent, setConfirmingDiscardVariantContent] = React.useState(false);
-  const selectedVariant = product.variants.find((variant) => variant.id === selectedVariantId);
+  const selectedVariant = variants.find((variant) => variant.id === selectedVariantId);
 
   const setHasSameRichContent = (value: boolean) => {
     if (value) {
       updateProduct((product) => {
+        const productVariants = product.variants ?? [];
         product.has_same_rich_content_for_all_variants = true;
-        if (!product.rich_content.length) product.rich_content = selectedVariant?.rich_content ?? [];
-        for (const variant of product.variants) variant.rich_content = [];
+        const richContent = product.rich_content ?? [];
+        if (!richContent.length) product.rich_content = selectedVariant?.rich_content ?? [];
+        for (const variant of productVariants) variant.rich_content = [];
       });
     } else {
       updateProduct((product) => {
+        const productVariants = product.variants ?? [];
+        const richContent = product.rich_content ?? [];
         product.has_same_rich_content_for_all_variants = false;
-        if (product.rich_content.length > 0) {
-          for (const variant of product.variants) variant.rich_content = product.rich_content;
+        if (richContent.length > 0) {
+          for (const variant of productVariants) variant.rich_content = richContent;
           product.rich_content = [];
         }
       });
@@ -1098,8 +1106,9 @@ export const ContentTabHeaderActions = ({
 }) => {
   const { product, updateProduct } = useProductEditContext();
   const [confirmingDiscardVariantContent, setConfirmingDiscardVariantContent] = React.useState(false);
+  const variants = product.variants ?? [];
 
-  const selectedVariant = product.variants.find((v) => v.id === selectedVariantId);
+  const selectedVariant = variants.find((v) => v.id === selectedVariantId);
 
   const setHasSameRichContent = (value: boolean) => {
     updateProduct({ has_same_rich_content_for_all_variants: value });
@@ -1120,7 +1129,7 @@ export const ContentTabHeaderActions = ({
             <Icon name="outline-cheveron-down" />
           </div>
         )}
-        options={product.variants}
+        options={variants}
         option={(item, props, index) => (
           <>
             <div
@@ -1136,13 +1145,13 @@ export const ContentTabHeaderActions = ({
                 <h4>{item.name || "Untitled"}</h4>
                 {item.id === selectedVariant?.id ? (
                   <small>Editing</small>
-                ) : product.has_same_rich_content_for_all_variants || item.rich_content.length ? (
+                ) : product.has_same_rich_content_for_all_variants || (item.rich_content ?? []).length ? (
                   <small>
                     Last edited on{" "}
                     {formatDate(
                       (product.has_same_rich_content_for_all_variants
-                        ? product.rich_content
-                        : item.rich_content
+                        ? (product.rich_content ?? [])
+                        : (item.rich_content ?? [])
                       ).reduce<Date | null>((acc, item) => {
                         const date = parseISO(item.updated_at);
                         return acc && acc > date ? acc : date;
@@ -1154,14 +1163,14 @@ export const ContentTabHeaderActions = ({
                 )}
               </div>
             </div>
-            {index === product.variants.length - 1 ? (
+            {index === variants.length - 1 ? (
               <div className="option">
                 <label style={{ alignItems: "center" }}>
                   <input
                     type="checkbox"
                     checked={product.has_same_rich_content_for_all_variants}
                     onChange={() => {
-                      if (!product.has_same_rich_content_for_all_variants && product.variants.length > 1)
+                      if (!product.has_same_rich_content_for_all_variants && variants.length > 1)
                         return setConfirmingDiscardVariantContent(true);
                       setHasSameRichContent(!product.has_same_rich_content_for_all_variants);
                     }}

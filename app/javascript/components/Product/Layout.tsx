@@ -248,7 +248,7 @@ const CtaBar = ({
 
   const height = ref.current?.getBoundingClientRect().height ?? 0;
 
-  if (product.bundle_products.length) priceCents = getStandalonePrice(product);
+  if ((product.bundle_products ?? []).length) priceCents = getStandalonePrice(product);
 
   return (
     <section
@@ -312,7 +312,7 @@ const CtaBar = ({
           onClick={(evt) => {
             if (
               isPWYW ||
-              product.options.length > 1 ||
+              (product.options ?? []).length > 1 ||
               hasRentOption ||
               hasMultipleRecurrences ||
               hasConfigurableQuantity

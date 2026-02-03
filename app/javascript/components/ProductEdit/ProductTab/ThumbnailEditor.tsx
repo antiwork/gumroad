@@ -35,8 +35,8 @@ const validateFile = async (file: File) => {
   if (dimensions.height < MIN_SIDE_DIMENSION) throw new ValidationError("Image must be at least 600x600px.");
 };
 
-export const coverUrlForThumbnail = (covers: AssetPreview[]) =>
-  covers.find((cover) => cover.type === "image" || cover.type === "unsplash")?.url ?? null;
+export const coverUrlForThumbnail = (covers: AssetPreview[] | undefined) =>
+  (covers ?? []).find((cover) => cover.type === "image" || cover.type === "unsplash")?.url ?? null;
 
 export const ThumbnailEditor = ({
   covers,

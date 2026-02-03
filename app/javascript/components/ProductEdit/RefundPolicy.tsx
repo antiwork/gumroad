@@ -20,6 +20,14 @@ export type RefundPolicy = {
   title: string;
 };
 
+const defaultRefundPolicy: RefundPolicy = {
+  title: "",
+  fine_print: null,
+  fine_print_enabled: false,
+  max_refund_period_in_days: 0,
+  allowed_refund_periods_in_days: [],
+};
+
 export const RefundPolicySelector = ({
   refundPolicy,
   setRefundPolicy,
@@ -28,7 +36,7 @@ export const RefundPolicySelector = ({
   setIsEnabled,
   setShowPreview,
 }: {
-  refundPolicy: RefundPolicy;
+  refundPolicy?: RefundPolicy | null;
   setRefundPolicy: (refundPolicy: RefundPolicy) => void;
   refundPolicies: OtherRefundPolicy[];
   isEnabled: boolean;
@@ -36,6 +44,7 @@ export const RefundPolicySelector = ({
   setShowPreview: (showingPreview: boolean) => void;
 }) => {
   const [selectedRefundPolicyId, setSelectedRefundPolicyId] = React.useState<string | null>(null);
+  const safeRefundPolicy = refundPolicy ?? defaultRefundPolicy;
 
   const uid = React.useId();
 
@@ -81,7 +90,7 @@ export const RefundPolicySelector = ({
                           const otherRefundPolicy = refundPolicies.find(({ id }) => id === selectedRefundPolicyId);
                           if (otherRefundPolicy) {
                             setRefundPolicy({
-                              ...refundPolicy,
+                              ...safeRefundPolicy,
                               title: otherRefundPolicy.title,
                               fine_print: otherRefundPolicy.fine_print,
                               max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days,
@@ -99,20 +108,20 @@ export const RefundPolicySelector = ({
           </legend>
           <select
             id={`${uid}-max-refund-period-in-days`}
-            value={refundPolicy.max_refund_period_in_days}
+            value={safeRefundPolicy.max_refund_period_in_days}
             onChange={(evt) => {
               const maxRefundPeriodInDays = Number(evt.target.value);
-              const title = refundPolicy.allowed_refund_periods_in_days.find(
+              const title = safeRefundPolicy.allowed_refund_periods_in_days.find(
                 ({ key }) => key === maxRefundPeriodInDays,
               )?.value;
               setRefundPolicy({
-                ...refundPolicy,
+                ...safeRefundPolicy,
                 max_refund_period_in_days: maxRefundPeriodInDays,
                 title: assertDefined(title),
               });
             }}
           >
-            {refundPolicy.allowed_refund_periods_in_days.map(({ key, value }) => (
+            {safeRefundPolicy.allowed_refund_periods_in_days.map(({ key, value }) => (
               <option key={key} value={key}>
                 {value}
               </option>
@@ -127,8 +136,8 @@ export const RefundPolicySelector = ({
             id={`${uid}-refund-policy-fine-print`}
             maxLength={3000}
             rows={10}
-            value={refundPolicy.fine_print || ""}
-            onChange={(evt) => setRefundPolicy({ ...refundPolicy, fine_print: evt.target.value })}
+            value={safeRefundPolicy.fine_print || ""}
+            onChange={(evt) => setRefundPolicy({ ...safeRefundPolicy, fine_print: evt.target.value })}
             onMouseEnter={() => setShowPreview(true)}
             onMouseLeave={() => setShowPreview(false)}
           />

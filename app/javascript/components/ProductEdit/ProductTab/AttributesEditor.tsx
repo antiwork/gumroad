@@ -17,18 +17,19 @@ export const AttributesEditor = ({
   fileAttributes?: Attribute[];
   setFileAttributes?: (newFileAttributes: Attribute[]) => void;
 }) => {
+  const safeCustomAttributes = customAttributes ?? [];
   const updateCustomAttribute = (idx: number, update: Partial<Attribute>) => {
-    const customAttribute = customAttributes[idx];
+    const customAttribute = safeCustomAttributes[idx];
     if (!customAttribute) return;
     setCustomAttributes([
-      ...customAttributes.slice(0, idx),
+      ...safeCustomAttributes.slice(0, idx),
       { ...customAttribute, ...update },
-      ...customAttributes.slice(idx + 1),
+      ...safeCustomAttributes.slice(idx + 1),
     ]);
   };
 
   const addButton = (
-    <Button color="primary" onClick={() => setCustomAttributes([...customAttributes, { name: "", value: "" }])}>
+    <Button color="primary" onClick={() => setCustomAttributes([...safeCustomAttributes, { name: "", value: "" }])}>
       <Icon name="plus" />
       Add detail
     </Button>
@@ -37,7 +38,7 @@ export const AttributesEditor = ({
   return (
     <fieldset>
       <legend>Additional details</legend>
-      {(fileAttributes?.length ?? 0) > 0 || customAttributes.length > 0 ? (
+      {(fileAttributes?.length ?? 0) > 0 || safeCustomAttributes.length > 0 ? (
         <>
           {fileAttributes?.map((attribute, idx) => (
             <AttributeEditor
@@ -46,11 +47,11 @@ export const AttributesEditor = ({
               key={idx}
             />
           ))}
-          {customAttributes.map((attribute, idx) => (
+          {safeCustomAttributes.map((attribute, idx) => (
             <AttributeEditor
               attribute={attribute}
               onUpdate={(update) => updateCustomAttribute(idx, update)}
-              onDelete={() => setCustomAttributes(customAttributes.filter((_, index) => idx !== index))}
+              onDelete={() => setCustomAttributes(safeCustomAttributes.filter((_, index) => idx !== index))}
               key={idx}
             />
           ))}

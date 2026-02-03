@@ -34,11 +34,12 @@ export const CoverEditor = ({
   setCovers: (covers: AssetPreview[]) => void;
   permalink: string;
 }) => {
-  const [activeCoverId, setActiveCoverId] = React.useState(covers[0]?.id ?? null);
+  const safeCovers = covers ?? [];
+  const [activeCoverId, setActiveCoverId] = React.useState(safeCovers[0]?.id ?? null);
   const [isUploaderOpen, setIsUploaderOpen] = React.useState(false);
   const [isUploading, setIsUploading] = React.useState(false);
 
-  const canAddPreview = covers.length < MAX_PREVIEW_COUNT;
+  const canAddPreview = safeCovers.length < MAX_PREVIEW_COUNT;
 
   const removeCover = async (id: string) => {
     try {
@@ -60,7 +61,7 @@ export const CoverEditor = ({
           </a>
         </div>
       </header>
-      {covers.length === 0 ? (
+      {safeCovers.length === 0 ? (
         <Placeholder>
           <CoverUploader
             permalink={permalink}
@@ -74,8 +75,8 @@ export const CoverEditor = ({
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "start", gap: "var(--spacer-4)" }}
           >
-            <Sortable animation={150} tag={CoversTabList} list={covers} setList={setCovers}>
-              {covers.map((cover) => (
+            <Sortable animation={150} tag={CoversTabList} list={safeCovers} setList={setCovers}>
+              {safeCovers.map((cover) => (
                 <CoverTab
                   key={cover.id}
                   cover={cover}
@@ -116,7 +117,7 @@ export const CoverEditor = ({
               </PopoverContent>
             </Popover>
           </div>
-          <Covers covers={covers} activeCoverId={activeCoverId} setActiveCoverId={setActiveCoverId} />
+          <Covers covers={safeCovers} activeCoverId={activeCoverId} setActiveCoverId={setActiveCoverId} />
         </div>
       )}
     </section>

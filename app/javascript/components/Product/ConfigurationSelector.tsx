@@ -183,9 +183,9 @@ export const applySelection = (product: Product, discount: Discount | null, sele
     pppDiscounted: discountedPrice.ppp,
     isPWYW: product.is_tiered_membership ? (selectedOption?.is_pwyw ?? false) : !!product.pwyw,
     maxQuantity,
-    hasOptions: product.options.length > 0,
+    hasOptions: (product.options ?? []).length > 0,
     hasRentOption: product.rental && !product.rental.rent_only,
-    hasMultipleRecurrences: product.recurrences && product.recurrences.enabled.length > 1,
+    hasMultipleRecurrences: product.recurrences && (product.recurrences.enabled ?? []).length > 1,
     hasConfigurableQuantity:
       product.is_multiseat_license || (product.is_quantity_enabled && (maxQuantity === null || maxQuantity > 1)),
   };
@@ -397,7 +397,7 @@ const CallDateAndTimeSelector = ({
   if (firstAvailableStartTime === null && !isLoading) {
     return (
       <Alert role="status" variant="warning">
-        {product.options.length > 1 ? "There are no available times for this option." : "There are no available times."}
+        {(product.options ?? []).length > 1 ? "There are no available times for this option." : "There are no available times."}
       </Alert>
     );
   }
@@ -586,7 +586,7 @@ export const ConfigurationSelector = React.forwardRef<
   );
 
   if (product.native_type === "coffee") {
-    if (product.options.length === 1) return pwywInput;
+    if ((product.options ?? []).length === 1) return pwywInput;
     return (
       <>
         <div
@@ -634,7 +634,7 @@ export const ConfigurationSelector = React.forwardRef<
           aria-label="Recurrence"
           value={selection.recurrence ?? ""}
           onChange={(recurrence) => update({ recurrence: recurrence || null, price: { value: null, error: false } })}
-          options={product.recurrences.enabled.map(({ recurrence }) => ({
+          options={(product.recurrences?.enabled ?? []).map(({ recurrence }) => ({
             id: recurrence,
             label: recurrenceNames[recurrence],
           }))}
@@ -683,7 +683,7 @@ export const ConfigurationSelector = React.forwardRef<
           itemType="https://schema.org/AggregateOffer"
           itemScope
         >
-          {product.options
+          {(product.options ?? [])
             .filter((option) => !(product.hide_sold_out_variants && option.quantity_left === 0))
             .map((option) => (
               <OptionRadioButton
@@ -713,13 +713,13 @@ export const ConfigurationSelector = React.forwardRef<
               />
             ))}
           <div itemProp="offerCount" hidden>
-            {product.options.length}
+            {(product.options ?? []).length}
           </div>
           <div itemProp="lowPrice" hidden>
             {formatPriceCentsWithoutCurrencySymbol(
               product.currency_code,
               Math.min(
-                ...product.options.map((option) => basePriceCents + computeOptionPrice(option, selection.recurrence)),
+                ...(product.options ?? []).map((option) => basePriceCents + computeOptionPrice(option, selection.recurrence)),
               ),
             )}
           </div>

@@ -206,9 +206,9 @@ export const CircleIntegrationEditor = ({
                     Do not remove Circle access when membership ends
                   </label>
                 ) : null}
-                {product.variants.length > 0 ? (
+                {(product.variants ?? []).length > 0 ? (
                   <>
-                    {product.variants.every(({ integrations }) => !integrations.circle) ? (
+                    {(product.variants ?? []).every(({ integrations }) => !integrations?.circle) ? (
                       <Alert role="status" variant="warning">
                         {product.native_type === "membership"
                           ? "Your integration is not assigned to any tier. Check your tiers' settings."
@@ -216,7 +216,7 @@ export const CircleIntegrationEditor = ({
                       </Alert>
                     ) : null}
                     <Switch
-                      checked={product.variants.every(({ integrations }) => integrations.circle)}
+                      checked={(product.variants ?? []).every(({ integrations }) => !!integrations?.circle)}
                       onChange={(e) => setEnabledForOptions(e.target.checked)}
                       label={product.native_type === "membership" ? "Enable for all tiers" : "Enable for all versions"}
                     />

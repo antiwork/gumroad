@@ -60,6 +60,7 @@ export const ProductTab = () => {
     aiGenerated,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
+  const integrations = product.integrations ?? {};
 
   const [thumbnail, setThumbnail] = React.useState(initialThumbnail);
   const [showAiNotification, setShowAiNotification] = React.useState(aiGenerated);
@@ -215,22 +216,22 @@ export const ProductTab = () => {
                     />
                   )}
                   <CircleIntegrationEditor
-                    integration={product.integrations.circle}
+                    integration={integrations.circle}
                     onChange={(newIntegration) =>
                       updateProduct({
                         integrations: {
-                          ...product.integrations,
+                          ...integrations,
                           circle: newIntegration,
                         },
                       })
                     }
                   />
                   <DiscordIntegrationEditor
-                    integration={product.integrations.discord}
+                    integration={integrations.discord}
                     onChange={(newIntegration) =>
                       updateProduct({
                         integrations: {
-                          ...product.integrations,
+                          ...integrations,
                           discord: newIntegration,
                         },
                       })
@@ -238,11 +239,11 @@ export const ProductTab = () => {
                   />
                   {product.native_type === "call" && googleCalendarEnabled ? (
                     <GoogleCalendarIntegrationEditor
-                      integration={product.integrations.google_calendar}
+                      integration={integrations.google_calendar}
                       onChange={(newIntegration) =>
                         updateProduct({
                           integrations: {
-                            ...product.integrations,
+                            ...integrations,
                             google_calendar: newIntegration,
                           },
                         })

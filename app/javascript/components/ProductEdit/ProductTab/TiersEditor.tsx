@@ -183,7 +183,7 @@ const TierEditor = ({
     }
   }, [defaultRecurrencePriceValue?.price_cents]);
 
-  const integrations = Object.entries(product.integrations)
+  const integrations = Object.entries(product.integrations ?? {})
     .filter(([_, enabled]) => enabled)
     .map(([name]) => name);
 

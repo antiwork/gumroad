@@ -184,7 +184,7 @@ export type WishlistForProduct = Wishlist & {
 };
 
 export const getStandalonePrice = (product: Product) =>
-  product.bundle_products.reduce(
+  (product.bundle_products ?? []).reduce(
     (totalStandalonePrice, bundleProduct) => totalStandalonePrice + bundleProduct.price,
     0,
   );
@@ -199,7 +199,8 @@ export const useSelectionFromUrl = (product: Product) => {
       )?.recurrence ??
       product.recurrences?.default ??
       null;
-    const parsedOption = product.options.find(
+    const options = product.options ?? [];
+    const parsedOption = options.find(
       // support legacy variant=name parameter
       ({ id, name }) => id === searchParams.get("option") || name === searchParams.get("variant"),
     );
@@ -207,7 +208,7 @@ export const useSelectionFromUrl = (product: Product) => {
     const optionId =
       parsedOption && parsedOption.quantity_left !== 0
         ? parsedOption.id
-        : (product.options.find(({ quantity_left }) => quantity_left !== 0)?.id ?? null);
+        : (options.find(({ quantity_left }) => quantity_left !== 0)?.id ?? null);
     const parsedPrice = Number(searchParams.get("price") ?? undefined);
     const parsedCallStartTime = new Date(searchParams.get("call_start_time") ?? "");
     const parsedPayInInstallments = searchParams.get("pay_in_installments") === "true" && !!product.installment_plan;
@@ -306,7 +307,7 @@ export const Product = ({
       addThirdPartyAnalytics({ permalink: product.permalink, location: "product" });
   });
 
-  const isBundle = product.bundle_products.length > 0;
+  const isBundle = (product.bundle_products ?? []).length > 0;
   if (isBundle) basePriceCents = getStandalonePrice(product);
 
   const validate = () => {
@@ -341,13 +342,13 @@ export const Product = ({
 
   const showPrice =
     !product.recurrences &&
-    product.options.length === 0 &&
+    (product.options ?? []).length === 0 &&
     !product.rental?.rent_only &&
     (basePriceCents !== 0 || product.pwyw);
 
   return (
     <article className="relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]">
-      <Covers covers={product.covers} mainCoverId={product.main_cover_id} />
+      <Covers covers={product.covers ?? []} mainCoverId={product.main_cover_id} />
       {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
       <section className="lg:border-r">
         <header className="grid gap-4 p-6 not-first:border-t">
@@ -408,7 +409,7 @@ export const Product = ({
           <section className="grid gap-4 border-t border-border p-6">
             <h2>This bundle contains...</h2>
             <CartItemList>
-              {product.bundle_products.map((bundleProduct) => {
+              {(product.bundle_products ?? []).map((bundleProduct) => {
                 const price = formatPriceCentsWithCurrencySymbol(bundleProduct.currency_code, bundleProduct.price, {
                   symbolFormat: "long",
                 });
@@ -589,7 +590,7 @@ export const Product = ({
                 ? "member"
                 : product.preorder
                   ? "pre-order"
-                  : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
+                  : product.price_cents > 0 || (product.options ?? []).some((option) => option.price_difference_cents)
                     ? "sale"
                     : "download"}
               {product.sales_count === 1 ? "" : "s"}
@@ -605,14 +606,14 @@ export const Product = ({
               Watch link provided after purchase
             </Alert>
           ) : null}
-          {product.summary || product.attributes.length > 0 ? (
+          {product.summary || (product.attributes ?? []).length > 0 ? (
             <Card>
               {product.summary ? (
                 <CardContent asChild>
                   <p>{product.summary}</p>
                 </CardContent>
               ) : null}
-              {product.attributes.map(({ name, value }, idx) => (
+              {(product.attributes ?? []).map(({ name, value }, idx) => (
                 <CardContent key={idx}>
                   <h5 className="grow font-bold">{name}</h5>
                   <div>{value}</div>
