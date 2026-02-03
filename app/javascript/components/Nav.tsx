@@ -10,6 +10,7 @@ import { Icon } from "$app/components/Icons";
 import { TeamMembership } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+import { Link } from "@inertiajs/react";
 
 type NavContextValue = {
   open: boolean;
@@ -105,6 +106,21 @@ export const NavLinkDropdownItem = ({
     <Icon name={icon} className="mr-3 ml-1" />
     {text}
   </a>
+);
+
+export const ClientNavLinkDropdownItem = ({
+  text,
+  icon,
+  href,
+}: {
+  text: string;
+  icon: IconName;
+  href: string;
+}) => (
+  <Link role="menuitem" href={href}  className="flex items-center truncate border-0 px-6 py-4 no-underline">
+    <Icon name={icon} className="mr-4" />
+    {text}
+  </Link>
 );
 
 type Props = {

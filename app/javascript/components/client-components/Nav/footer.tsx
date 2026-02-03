@@ -6,7 +6,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem } from "$app/components/Nav";
+import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem , ClientNavLinkDropdownItem} from "$app/components/Nav";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 
 function NavbarFooter() {
@@ -37,7 +37,7 @@ function NavbarFooter() {
             icon="shop-window-fill"
             href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
           />
-          <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
+          <ClientNavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
           <Link role="menuitem" href={Routes.logout_url(routeParams)} method="delete" className="all-unset">
             <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
             Logout
