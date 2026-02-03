@@ -33,8 +33,8 @@ class Products::ContentController < Products::BaseController
 
     if should_publish
       redirect_to edit_product_share_path(@product.unique_permalink), notice: "Published!", status: :see_other
-    elsif params[:redirect_to].present?
-      redirect_to params[:redirect_to], notice: "Changes saved!", status: :see_other
+    elsif (path = safe_redirect_path(params[:redirect_to])).present?
+      redirect_to path, notice: "Changes saved!", status: :see_other
     else
       redirect_back fallback_location: edit_product_content_path(@product.unique_permalink), notice: "Changes saved!", status: :see_other
     end
