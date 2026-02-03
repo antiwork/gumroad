@@ -6,9 +6,7 @@ class CheckoutController < ApplicationController
   layout "inertia"
 
   def index
-    checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip)
-
-    render inertia: "Checkout/Index", props: checkout_presenter.checkout_props(
+    render inertia: "Checkout/Index", props: CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip).checkout_props(
       params:,
       browser_guid: cookies[:_gumroad_guid]
     )
