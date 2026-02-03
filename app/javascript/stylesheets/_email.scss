@@ -194,8 +194,6 @@ $accent-color: map-get($colors, "pink"); // [1]
         & > tbody > tr > td {
           width: 100%;
           padding: spacer(4);
-          box-sizing: border-box;
-          text-align: left;
 
           .attribute-label {
             font-weight: bold;
