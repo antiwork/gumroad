@@ -30,24 +30,6 @@
         { "name": "Frontend", "tech": "JavaScript / React." },
         { "name": "Data", "tech": "Postgres / Redis." },
         { "name": "Infrastructure", "tech": "AWS, Docker." }
-      ],
-      "offer": [
-        {
-          "title": "Competitive salary",
-          "description": "$189k annual compensation."
-        },
-        {
-          "title": "Stock ownership",
-          "description": "Opportunity to purchase Gumroad stock at the latest FMV price at least once a year."
-        },
-        {
-          "title": "New York office",
-          "description": "Work from our office in New York City."
-        },
-        {
-          "title": "Work authorization",
-          "description": "Applicants must be legally authorized to work in the United States. We may sponsor O-1 visas for exceptional candidates."
-        }
       ]
     },
     {
@@ -79,24 +61,6 @@
         { "name": "Design", "tech": "Figma." },
         { "name": "Prototyping", "tech": "Figma, Framer." },
         { "name": "Frontend", "tech": "HTML/CSS knowledge helpful." }
-      ],
-      "offer": [
-        {
-          "title": "Competitive salary",
-          "description": "$189k annual compensation."
-        },
-        {
-          "title": "Stock ownership",
-          "description": "Opportunity to purchase Gumroad stock at the latest FMV price at least once a year."
-        },
-        {
-          "title": "New York office",
-          "description": "Work from our office in New York City."
-        },
-        {
-          "title": "Work authorization",
-          "description": "Applicants must be legally authorized to work in the United States. We may sponsor O-1 visas for exceptional candidates."
-        }
       ]
     },
     {
@@ -124,25 +88,7 @@
           "description": "Channel creator feedback to the product team to help improve the platform."
         }
       ],
-      "stack": [],
-      "offer": [
-        {
-          "title": "Competitive salary",
-          "description": "$90k annual compensation."
-        },
-        {
-          "title": "Stock ownership",
-          "description": "Opportunity to purchase Gumroad stock at the latest FMV price at least once a year."
-        },
-        {
-          "title": "New York office",
-          "description": "Work from our office in New York City."
-        },
-        {
-          "title": "Work authorization",
-          "description": "Applicants must be legally authorized to work in the United States. We may sponsor O-1 visas for exceptional candidates."
-        }
-      ]
+      "stack": []
     }
   ]
 }
