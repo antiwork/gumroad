@@ -43,19 +43,20 @@ const areAllEnabledPricesZero = (recurrencePriceValues: Record<string, Recurrenc
 };
 
 export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tiers: Tier[]) => void }) => {
+  const safeTiers = tiers ?? [];
   const updateVersion = (id: string, update: Partial<Tier>) => {
-    onChange(tiers.map((version) => (version.id === id ? { ...version, ...update } : version)));
+    onChange(safeTiers.map((version) => (version.id === id ? { ...version, ...update } : version)));
   };
 
   const [deletionModalVersionId, setDeletionModalVersionId] = React.useState<string | null>(null);
-  const deletionModalVersion = tiers.find(({ id }) => id === deletionModalVersionId);
+  const deletionModalVersion = safeTiers.find(({ id }) => id === deletionModalVersionId);
 
   const addButton = (
     <Button
       color="primary"
       onClick={() => {
         onChange([
-          ...tiers,
+          ...safeTiers,
           {
             id: (newTierId++).toString(),
             name: "Untitled",
@@ -84,7 +85,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
     </Button>
   );
 
-  return tiers.length === 0 ? (
+  return safeTiers.length === 0 ? (
     <Placeholder>
       <h2>Offer different tiers of this membership</h2>
       Sweeten the deal for your customers with different levels of access. Every membership needs at least one tier.
@@ -100,7 +101,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
           footer={
             <>
               <Button onClick={() => setDeletionModalVersionId(null)}>No, cancel</Button>
-              <Button color="accent" onClick={() => onChange(tiers.filter(({ id }) => id !== deletionModalVersion.id))}>
+              <Button color="accent" onClick={() => onChange(safeTiers.filter(({ id }) => id !== deletionModalVersion.id))}>
                 Yes, remove
               </Button>
             </>
@@ -112,11 +113,11 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
         </Modal>
       ) : null}
       <SortableList
-        currentOrder={tiers.map(({ id }) => id)}
-        onReorder={(newOrder) => onChange(newOrder.flatMap((id) => tiers.find((version) => version.id === id) ?? []))}
+        currentOrder={safeTiers.map(({ id }) => id)}
+        onReorder={(newOrder) => onChange(newOrder.flatMap((id) => safeTiers.find((version) => version.id === id) ?? []))}
         tag={SortableTierEditors}
       >
-        {tiers.map((version) => (
+        {safeTiers.map((version) => (
           <TierEditor
             key={version.id}
             tier={version}

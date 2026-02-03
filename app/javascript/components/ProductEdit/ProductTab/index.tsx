@@ -405,7 +405,7 @@ export const ProductTab = () => {
                       />
                     </>
                   ) : null}
-                  {product.variants.length > 0 ? (
+                  {(product.variants ?? []).length > 0 ? (
                     <Switch
                       checked={product.hide_sold_out_variants}
                       onChange={(e) => updateProduct({ hide_sold_out_variants: e.target.checked })}
