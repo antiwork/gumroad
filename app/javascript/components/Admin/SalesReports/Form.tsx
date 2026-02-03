@@ -7,6 +7,10 @@ import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import Errors from "$app/components/Form/Errors";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Select } from "$app/components/ui/Select";
 
 type Props = {
   countries: [string, string][];
@@ -62,15 +66,15 @@ const AdminSalesReportsForm = ({
     <form onSubmit={handleSubmit}>
       {wrapper(
         <>
-          <fieldset
+          <Fieldset
             className={classNames("grid grid-rows-[auto_1fr] gap-3", {
               danger: !!errors["sales_report.country_code"]?.length,
             })}
           >
-            <legend>
-              <label htmlFor="country_code">Country</label>
-            </legend>
-            <select
+            <FieldsetTitle>
+              <Label htmlFor="country_code">Country</Label>
+            </FieldsetTitle>
+            <Select
               name="sales_report[country_code]"
               id="country_code"
               onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
@@ -86,20 +90,20 @@ const AdminSalesReportsForm = ({
                   {name}
                 </option>
               ))}
-            </select>
+            </Select>
             <Errors errors={errors["sales_report.country_code"]} label="Country code" />
-          </fieldset>
+          </Fieldset>
 
           <div className="grid grid-cols-2 gap-3">
-            <fieldset
+            <Fieldset
               className={classNames("grid grid-rows-[auto_1fr] gap-3", {
                 danger: !!errors["sales_report.start_date"]?.length,
               })}
             >
-              <legend>
-                <label htmlFor="start_date">Start date</label>
-              </legend>
-              <input
+              <FieldsetTitle>
+                <Label htmlFor="start_date">Start date</Label>
+              </FieldsetTitle>
+              <Input
                 name="sales_report[start_date]"
                 id="start_date"
                 type="date"
@@ -111,17 +115,17 @@ const AdminSalesReportsForm = ({
                 aria-invalid={!!errors["sales_report.start_date"]?.length}
               />
               <Errors errors={errors["sales_report.start_date"]} label="Start date" />
-            </fieldset>
+            </Fieldset>
 
-            <fieldset
+            <Fieldset
               className={classNames("grid grid-rows-[auto_1fr] gap-3", {
                 danger: !!errors["sales_report.end_date"]?.length,
               })}
             >
-              <legend>
-                <label htmlFor="end_date">End date</label>
-              </legend>
-              <input
+              <FieldsetTitle>
+                <Label htmlFor="end_date">End date</Label>
+              </FieldsetTitle>
+              <Input
                 name="sales_report[end_date]"
                 id="end_date"
                 type="date"
@@ -133,18 +137,18 @@ const AdminSalesReportsForm = ({
                 aria-invalid={!!errors["sales_report.end_date"]?.length}
               />
               <Errors errors={errors["sales_report.end_date"]} label="End date" />
-            </fieldset>
+            </Fieldset>
           </div>
 
-          <fieldset
+          <Fieldset
             className={classNames("grid grid-rows-[auto_1fr] gap-3", {
               danger: !!errors["sales_report.sales_type"]?.length,
             })}
           >
-            <legend>
-              <label htmlFor="sales_type">Type of sales</label>
-            </legend>
-            <select
+            <FieldsetTitle>
+              <Label htmlFor="sales_type">Type of sales</Label>
+            </FieldsetTitle>
+            <Select
               name="sales_report[sales_type]"
               id="sales_type"
               onChange={(event: React.ChangeEvent<HTMLSelectElement>) =>
@@ -159,9 +163,9 @@ const AdminSalesReportsForm = ({
                   {name}
                 </option>
               ))}
-            </select>
+            </Select>
             <Errors errors={errors["sales_report.sales_type"]} label="Type of sales" />
-          </fieldset>
+          </Fieldset>
 
           <Button type="submit" color="primary" disabled={form.processing}>
             {form.processing ? "Generating..." : "Generate report"}

@@ -1,0 +1,7 @@
+<%= header_section("You're already subscribed") %>
+<div>
+  <p>Someone just tried to subscribe to <%= @subscription.link.name %> using your email address, but you already have an active subscription.</p>
+  <p>If this was you, you can manage your existing subscription using the link below:</p>
+  <p><a href="<%= @edit_card_url %>">Manage your subscription</a></p>
+  <p>If this wasn't you, you can safely ignore this email. Your subscription remains active and unchanged.</p>
+</div>
