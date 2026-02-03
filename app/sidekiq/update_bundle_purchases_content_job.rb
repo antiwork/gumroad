@@ -6,9 +6,6 @@ class UpdateBundlePurchasesContentJob
 
   def perform(bundle_id)
     bundle = Link.is_bundle.find(bundle_id)
-    return if !bundle.has_outdated_purchases?
-
-    bundle.update!(has_outdated_purchases: false)
 
     content_updated_at = bundle.bundle_products.alive.maximum(:updated_at)
 

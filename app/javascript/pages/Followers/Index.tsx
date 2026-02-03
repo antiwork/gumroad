@@ -2,20 +2,21 @@ import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -83,14 +84,8 @@ export default function FollowersPage() {
 
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [selectedFollowerId, setSelectedFollowerId] = React.useState<string | null>(null);
-  const [searchBoxOpen, setSearchBoxOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState(email);
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const selectedFollower = followers.find((follower) => follower.id === selectedFollowerId);
-
-  React.useEffect(() => {
-    if (searchBoxOpen) searchInputRef.current?.focus();
-  }, [searchBoxOpen]);
 
   const updateSearch = useDebouncedCallback((email: string) => {
     router.reload({
@@ -134,39 +129,21 @@ export default function FollowersPage() {
       actions={
         <>
           {(followers.length > 0 || searchQuery.length > 0) && (
-            <Popover
-              open={searchBoxOpen}
-              onToggle={setSearchBoxOpen}
-              aria-label="Search"
-              trigger={
-                <WithTooltip tip="Search" position="bottom">
-                  <div className={buttonVariants({ size: "default" })}>
-                    <Icon name="solid-search" />
-                  </div>
-                </WithTooltip>
-              }
-            >
-              <input
-                ref={searchInputRef}
-                value={searchQuery}
-                autoFocus
-                type="text"
-                placeholder="Search followers"
-                onChange={(evt) => setSearchQuery(evt.target.value)}
-              />
-            </Popover>
+            <Search onSearch={setSearchQuery} value={searchQuery} placeholder="Search followers" />
           )}
-          <Popover
-            aria-label="Export"
-            trigger={
+          <Popover>
+            <PopoverAnchor>
               <WithTooltip tip="Export" position="bottom">
-                <Button aria-label="Export">
-                  <Icon aria-label="Download" name="download" />
-                </Button>
+                <PopoverTrigger aria-label="Export" asChild>
+                  <Button>
+                    <Icon aria-label="Download" name="download" />
+                  </Button>
+                </PopoverTrigger>
               </WithTooltip>
-            }
-          >
-            {(close) => <ExportSubscribersPopover closePopover={close} />}
+            </PopoverAnchor>
+            <PopoverContent sideOffset={4}>
+              <ExportSubscribersPopover />
+            </PopoverContent>
           </Popover>
 
           {currentSeller ? (

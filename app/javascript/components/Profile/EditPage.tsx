@@ -274,14 +274,14 @@ export const EditProfile = (props: Props) => {
             <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
               <EditSection section={section} />
             </ImageUploadSettingsContext.Provider>
-            {i === visibleSections.length - 1 ? <AddSectionButton index={i + 1} position="top" /> : null}
+            {i === visibleSections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
           </SectionLayout>
         ))
       ) : (
         <SectionLayout className="grid flex-1">
           <AddSectionButton index={0} />
           <FollowFormBlock creatorProfile={props.creator_profile} />
-          <AddSectionButton index={0} position="top" />
+          <AddSectionButton index={0} side="top" />
         </SectionLayout>
       )}
     </SectionReducerContext.Provider>
