@@ -326,20 +326,6 @@ class LinksController < ApplicationController
   end
 
   private
-    def product_edit_redirect_url
-      referer = request.referer.to_s
-      permalink = @product.unique_permalink
-      if referer.include?("/share/edit") || referer.include?("/edit/share")
-        @product.native_type == Link::NATIVE_TYPE_COFFEE ? edit_product_product_path(permalink) : edit_product_content_path(permalink)
-      elsif referer.include?("/content/edit") || referer.include?("/edit/content")
-        edit_product_content_path(permalink)
-      elsif referer.include?("/receipt/edit") || referer.include?("/edit/receipt")
-        edit_product_receipt_path(permalink)
-      else
-        edit_product_product_path(permalink)
-      end
-    end
-
     def fetch_product_for_show
       fetch_product_by_custom_domain || fetch_product_by_general_permalink
     end

@@ -74,9 +74,9 @@ class Products::ContentController < Products::BaseController
 
     def rich_content_params
       rich_content = product_permitted_params[:rich_content] || []
-      rich_content_params = [*rich_content]
-      product_permitted_params[:variants]&.each { rich_content_params.push(*_1[:rich_content]) }
-      rich_content_params.flat_map { _1[:description] = _1.dig(:description, :content) }
+      list = [*rich_content]
+      product_permitted_params[:variants]&.each { list.push(*_1[:rich_content]) }
+      list.map { _1.dig(:description, :content) }
     end
 
     def product_permitted_params

@@ -142,7 +142,7 @@ class Products::ProductController < Products::BaseController
       existing_availabilities = @product.call_availabilities
       availabilities_to_keep = []
       (product_permitted_params[:availabilities] || []).each do |availability_params|
-        availability = existing_availabilities.find { _1.id == availability_params[:id] } || @product.call_availabilities.build
+        availability = existing_availabilities.find { _1.external_id == availability_params[:id] } || @product.call_availabilities.build
         availability.update!(availability_params.except(:id))
         availabilities_to_keep << availability
       end
