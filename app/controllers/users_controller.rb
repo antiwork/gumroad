@@ -18,7 +18,7 @@ class UsersController < ApplicationController
   before_action :check_if_needs_redirect, only: %i[show]
   before_action :set_affiliate_cookie, only: %i[show]
 
-  layout "inertia", only: [:subscribe_preview]
+  layout "inertia", only: [:subscribe_preview, :coffee]
 
   def show
     format_search_params!
@@ -44,7 +44,19 @@ class UsersController < ApplicationController
     e404 if @product.nil?
 
     set_meta_tag(title: @product.name)
-    @product_props = ProductPresenter.new(pundit_user:, product: @product, request:).product_props(seller_custom_domain_url:, recommended_by: params[:recommended_by])
+    
+    # Set flash message server-side if purchase_email param is present
+    if params[:purchase_email].present?
+      flash[:notice] = "Your purchase was successful! We sent a receipt to #{params[:purchase_email]}."
+    end
+
+    product_props = ProductPresenter.new(pundit_user:, product: @product, request:).product_props(seller_custom_domain_url:, recommended_by: params[:recommended_by])
+    profile_presenter = ProfilePresenter.new(pundit_user:, seller: @user)
+    
+    render inertia: "Users/Coffee", props: {
+      **product_props,
+      creator_profile: profile_presenter.creator_profile,
+    }
   end
 
   def subscribe
