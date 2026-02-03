@@ -11,6 +11,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import {
   type PayoutsProps,
   type CurrentPayoutsDataAndPaymentMethodWithUserPayable,
@@ -31,7 +32,6 @@ import useRouteLoading from "$app/components/useRouteLoading";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 
 const INSTANT_PAYOUT_FEE_PERCENTAGE = 0.03;
 const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 1000;
