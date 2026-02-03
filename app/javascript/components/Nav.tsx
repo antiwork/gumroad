@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -10,7 +11,6 @@ import { Icon } from "$app/components/Icons";
 import { TeamMembership } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { Link } from "@inertiajs/react";
 
 type NavContextValue = {
   open: boolean;
@@ -108,16 +108,8 @@ export const NavLinkDropdownItem = ({
   </a>
 );
 
-export const ClientNavLinkDropdownItem = ({
-  text,
-  icon,
-  href,
-}: {
-  text: string;
-  icon: IconName;
-  href: string;
-}) => (
-  <Link role="menuitem" href={href}  className="flex items-center truncate border-0 px-6 py-4 no-underline">
+export const ClientNavLinkDropdownItem = ({ text, icon, href }: { text: string; icon: IconName; href: string }) => (
+  <Link role="menuitem" href={href} className="flex items-center truncate border-0 px-6 py-4 no-underline">
     <Icon name={icon} className="mr-4" />
     {text}
   </Link>

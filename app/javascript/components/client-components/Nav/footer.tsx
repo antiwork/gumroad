@@ -6,7 +6,13 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem , ClientNavLinkDropdownItem} from "$app/components/Nav";
+import {
+  NavLink,
+  NavLinkDropdownItem,
+  UnbecomeDropdownItem,
+  NavLinkDropdownMembershipItem,
+  ClientNavLinkDropdownItem,
+} from "$app/components/Nav";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 
 function NavbarFooter() {
