@@ -1,132 +1,148 @@
 {
   "jobs": [
     {
-      "slug": "ai-engineer-team-lead",
-      "title": "AI Engineer and Team Lead",
-      "salary": "$250k+",
+      "slug": "senior-fullstack-engineer",
+      "title": "Senior Full Stack Engineer",
+      "salary": "$189k",
       "type": "Full-time",
-      "location": "DUMBO | New York",
+      "location": "New York",
       "category": "Engineering",
       "responsibilities": [
-        { "title": "Velocity", "description": "Optimize global checkout latency (aiming for <100ms)." },
         {
-          "title": "Infrastructure",
-          "description": "Scale our payout rails across Stripe, PayPal, and local bank networks."
+          "title": "Full Stack development",
+          "description": "Build and maintain features across our entire stack, from database to user interface."
         },
         {
-          "title": "Complexity",
-          "description": "Solve the \"hard math\" of global sales tax, VAT, and fraud prevention."
+          "title": "Product ownership",
+          "description": "Take ownership of significant features and see them through from concept to production."
         },
         {
-          "title": "Independence",
-          "description": "Build the generative AI tools that help creators automate their commerce."
-        }
-      ],
-      "stack": [
-        { "name": "Backend", "tech": "Ruby on Rails." },
-        { "name": "Frontend", "tech": "JavaScript / React." },
-        { "name": "Data", "tech": "Postgres / Redis." },
-        { "name": "Payments", "tech": "Stripe, PayPal, and TaxCloud APIs." }
-      ]
-    },
-    {
-      "slug": "senior-fullstack-engineer-checkout-payouts",
-      "title": "Senior Full-stack Engineer (Checkout & Payouts)",
-      "salary": "$200k+",
-      "type": "Full-time",
-      "location": "DUMBO | New York",
-      "category": "Engineering",
-      "responsibilities": [
-        { "title": "Velocity", "description": "Optimize global checkout latency (aiming for <100ms)." },
-        {
-          "title": "Infrastructure",
-          "description": "Scale our payout rails across Stripe, PayPal, and local bank networks."
+          "title": "Code quality",
+          "description": "Write clean, maintainable code and contribute to our engineering best practices."
         },
-        {
-          "title": "Complexity",
-          "description": "Solve the \"hard math\" of global sales tax, VAT, and fraud prevention."
-        },
-        {
-          "title": "Independence",
-          "description": "Build the generative AI tools that help creators automate their commerce."
-        }
-      ],
-      "stack": [
-        { "name": "Backend", "tech": "Ruby on Rails." },
-        { "name": "Frontend", "tech": "JavaScript / React." },
-        { "name": "Data", "tech": "Postgres / Redis." },
-        { "name": "Payments", "tech": "Stripe, PayPal, and TaxCloud APIs." }
-      ]
-    },
-    {
-      "slug": "senior-product-designer-creator-tools",
-      "title": "Senior Product Designer (Creator Tools)",
-      "salary": "$230k+",
-      "type": "Full-time",
-      "location": "DUMBO | New York",
-      "category": "Design",
-      "responsibilities": [
-        { "title": "Product vision", "description": "Shape the future of creator tools through thoughtful design." },
-        {
-          "title": "User research",
-          "description": "Understand creator needs and translate them into intuitive interfaces."
-        },
-        { "title": "Design systems", "description": "Maintain and evolve our design system for consistency." },
         {
           "title": "Collaboration",
-          "description": "Work closely with engineers to ship beautiful, functional features."
+          "description": "Work closely with designers, product managers, and other engineers to ship great products."
+        }
+      ],
+      "stack": [
+        { "name": "Backend", "tech": "Ruby on Rails." },
+        { "name": "Frontend", "tech": "JavaScript / React." },
+        { "name": "Data", "tech": "Postgres / Redis." },
+        { "name": "Infrastructure", "tech": "AWS, Docker." }
+      ],
+      "offer": [
+        {
+          "title": "Competitive salary",
+          "description": "$189k annual compensation."
+        },
+        {
+          "title": "Stock ownership",
+          "description": "Opportunity to purchase Gumroad stock at the latest FMV price at least once a year."
+        },
+        {
+          "title": "New York office",
+          "description": "Work from our office in New York City."
+        },
+        {
+          "title": "Work authorization",
+          "description": "Applicants must be legally authorized to work in the United States. We may sponsor O-1 visas for exceptional candidates."
+        }
+      ]
+    },
+    {
+      "slug": "senior-designer",
+      "title": "Senior Designer",
+      "salary": "$189k",
+      "type": "Full-time",
+      "location": "New York",
+      "category": "Design",
+      "responsibilities": [
+        {
+          "title": "Product design",
+          "description": "Design beautiful, intuitive interfaces that empower creators to sell their work."
+        },
+        {
+          "title": "User experience",
+          "description": "Create delightful user experiences through research, prototyping, and testing."
+        },
+        {
+          "title": "Design systems",
+          "description": "Contribute to and evolve our design system for consistency across the platform."
+        },
+        {
+          "title": "Cross-functional collaboration",
+          "description": "Partner with engineers and product managers to bring your designs to life."
         }
       ],
       "stack": [
         { "name": "Design", "tech": "Figma." },
-        { "name": "Prototyping", "tech": "Framer, Principle." },
-        { "name": "Frontend", "tech": "HTML/CSS/Tailwind basics." }
+        { "name": "Prototyping", "tech": "Figma, Framer." },
+        { "name": "Frontend", "tech": "HTML/CSS knowledge helpful." }
+      ],
+      "offer": [
+        {
+          "title": "Competitive salary",
+          "description": "$189k annual compensation."
+        },
+        {
+          "title": "Stock ownership",
+          "description": "Opportunity to purchase Gumroad stock at the latest FMV price at least once a year."
+        },
+        {
+          "title": "New York office",
+          "description": "Work from our office in New York City."
+        },
+        {
+          "title": "Work authorization",
+          "description": "Applicants must be legally authorized to work in the United States. We may sponsor O-1 visas for exceptional candidates."
+        }
       ]
     },
     {
-      "slug": "growth-community-manager",
-      "title": "Growth & Community Manager",
-      "salary": "$190k+",
+      "slug": "customer-support-specialist",
+      "title": "Customer Support Specialist",
+      "salary": "$90k",
       "type": "Full-time",
-      "location": "DUMBO | New York",
+      "location": "New York",
       "category": "Support",
       "responsibilities": [
-        { "title": "Community", "description": "Build and nurture our creator community." },
-        { "title": "Growth", "description": "Identify and execute growth opportunities." },
-        { "title": "Content", "description": "Create content that helps creators succeed." },
-        { "title": "Feedback", "description": "Channel creator feedback to the product team." }
+        {
+          "title": "Creator support",
+          "description": "Help creators succeed by providing excellent support and guidance on using Gumroad."
+        },
+        {
+          "title": "Problem solving",
+          "description": "Troubleshoot issues and find creative solutions to help creators achieve their goals."
+        },
+        {
+          "title": "Relationship building",
+          "description": "Build strong relationships with creators and become their trusted advisor."
+        },
+        {
+          "title": "Product feedback",
+          "description": "Channel creator feedback to the product team to help improve the platform."
+        }
       ],
-      "stack": []
-    },
-    {
-      "slug": "creator-success-lead-nyc-hub",
-      "title": "Creator Success Lead (NYC Hub)",
-      "salary": "$210k+",
-      "type": "Full-time",
-      "location": "DUMBO | New York",
-      "category": "Support",
-      "responsibilities": [
-        { "title": "Success", "description": "Help creators achieve their goals on Gumroad." },
-        { "title": "Support", "description": "Provide world-class support to our top creators." },
-        { "title": "Education", "description": "Create resources and guides for creator success." },
-        { "title": "Relationships", "description": "Build lasting relationships with key creators." }
-      ],
-      "stack": []
-    },
-    {
-      "slug": "technical-support-intern",
-      "title": "Technical Support Intern",
-      "salary": "$180k+",
-      "type": "Full-time",
-      "location": "DUMBO | New York",
-      "category": "Support",
-      "responsibilities": [
-        { "title": "Support", "description": "Help creators with technical questions and issues." },
-        { "title": "Documentation", "description": "Improve our help center and documentation." },
-        { "title": "Bugs", "description": "Identify and report bugs to the engineering team." },
-        { "title": "Learning", "description": "Learn the Gumroad platform inside and out." }
-      ],
-      "stack": []
+      "stack": [],
+      "offer": [
+        {
+          "title": "Competitive salary",
+          "description": "$90k annual compensation."
+        },
+        {
+          "title": "Stock ownership",
+          "description": "Opportunity to purchase Gumroad stock at the latest FMV price at least once a year."
+        },
+        {
+          "title": "New York office",
+          "description": "Work from our office in New York City."
+        },
+        {
+          "title": "Work authorization",
+          "description": "Applicants must be legally authorized to work in the United States. We may sponsor O-1 visas for exceptional candidates."
+        }
+      ]
     }
   ]
 }
