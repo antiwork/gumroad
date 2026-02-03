@@ -52,7 +52,7 @@ const Layout = ({
             </>
           ) : null}
           <Tab asChild isSelected>
-            <Link href={Routes.followers_path()} >Subscribers</Link>
+            <Link href={Routes.followers_path()}>Subscribers</Link>
           </Tab>
         </Tabs>
       </PageHeader>
