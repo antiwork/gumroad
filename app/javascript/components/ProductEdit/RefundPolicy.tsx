@@ -9,7 +9,7 @@ import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
-import { Toggle } from "$app/components/Toggle";
+import { Switch } from "$app/components/ui/Switch";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 export type RefundPolicy = {
@@ -44,12 +44,18 @@ export const RefundPolicySelector = ({
       className="toggle"
       open={isEnabled}
       summary={
-        <Toggle value={isEnabled} onChange={setIsEnabled}>
-          Specify a refund policy for this product{" "}
-          <a href="/help/article/335-custom-refund-policy" target="_blank" rel="noreferrer">
-            Learn more
-          </a>
-        </Toggle>
+        <Switch
+          checked={isEnabled}
+          onChange={(e) => setIsEnabled(e.target.checked)}
+          label={
+            <>
+              Specify a refund policy for this product{" "}
+              <a href="/help/article/335-custom-refund-policy" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </>
+          }
+        />
       }
     >
       <Dropdown className="flex flex-col gap-4">
