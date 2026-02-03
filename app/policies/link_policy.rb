@@ -110,7 +110,8 @@ class LinkPolicy < ApplicationPolicy
       covers: [],
       custom_attributes: [
         :name,
-        :value
+        :value,
+        :description
       ],
       file_attributes: [
         :name,
@@ -183,6 +184,10 @@ class LinkPolicy < ApplicationPolicy
     ]
   end
 
+  def permitted_attributes
+    product_permitted_attributes
+  end
+
   def product_permitted_attributes
     (product_tab_permitted_attributes +
      content_tab_permitted_attributes +
@@ -216,7 +221,7 @@ class LinkPolicy < ApplicationPolicy
       section_ids: [],
       tags: [],
       covers: [],
-      custom_attributes: [:name, :value],
+      custom_attributes: [:name, :value, :description],
       products: [:product_id, :variant_id, :quantity, :position],
       installment_plan: [:number_of_installments]
     ]
