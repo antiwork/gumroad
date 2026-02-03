@@ -3769,7 +3769,7 @@ describe Purchase, :vcr do
       product = create(:subscription_product)
       subscription = create(:subscription, link: product, business_vat_id: nil)
       purchase = build(:free_purchase, link: product, subscription:, is_original_subscription_purchase: true,
-                                        country: "Ireland", business_vat_id: "IE6388047V")
+                                       country: "Ireland", business_vat_id: "IE6388047V")
 
       allow(VatValidationService).to receive_message_chain(:new, :process).and_return(true)
 
