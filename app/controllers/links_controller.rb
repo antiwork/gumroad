@@ -31,7 +31,7 @@ class LinksController < ApplicationController
   before_action :prepare_product_page, only: %i[show]
   before_action :ensure_domain_belongs_to_seller, only: [:show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
-  before_action :fetch_product_and_enforce_access, only: %i[publish unpublish release_preorder update_sections]
+  before_action :fetch_product_and_enforce_access, only: %i[release_preorder update_sections]
 
   layout "inertia", only: [:index, :new, :cart_items_count]
 

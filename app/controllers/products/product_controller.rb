@@ -20,6 +20,13 @@ class Products::ProductController < Products::BaseController
       return redirect_back fallback_location: edit_product_product_path(@product.unique_permalink), notice: "Unpublished!", status: :see_other
     end
 
+    # Publish-only request (e.g. after "Save" then "Publish and continue" from frontend)
+    if should_publish && params[:product].blank?
+      @product.publish!
+      check_offer_codes_validity
+      return redirect_to edit_product_share_path(@product.unique_permalink), notice: "Published!", status: :see_other
+    end
+
     ActiveRecord::Base.transaction do
       update_product_attributes
       @product.publish! if should_publish

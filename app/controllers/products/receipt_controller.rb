@@ -6,7 +6,10 @@ class Products::ReceiptController < Products::BaseController
   end
 
   def update
-    if params[:unpublish].present? && @product.published?
+    should_publish = params[:publish].present? && !@product.published?
+    should_unpublish = params[:unpublish].present? && @product.published?
+
+    if should_unpublish
       @product.unpublish!
       check_offer_codes_validity
       return redirect_back fallback_location: edit_product_receipt_path(@product.unique_permalink), notice: "Unpublished!", status: :see_other
@@ -15,6 +18,7 @@ class Products::ReceiptController < Products::BaseController
     begin
       ActiveRecord::Base.transaction do
         update_receipt_attributes
+        @product.publish! if should_publish
       end
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       error_message = @product.errors.full_messages.first || e.message
@@ -23,7 +27,11 @@ class Products::ReceiptController < Products::BaseController
 
     check_offer_codes_validity
 
-    redirect_to edit_product_receipt_path(@product.unique_permalink), notice: "Changes saved!", status: :see_other
+    if should_publish
+      redirect_to edit_product_share_path(@product.unique_permalink), notice: "Published!", status: :see_other
+    else
+      redirect_to edit_product_receipt_path(@product.unique_permalink), notice: "Changes saved!", status: :see_other
+    end
   end
 
   private

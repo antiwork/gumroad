@@ -200,7 +200,7 @@ export const ProductEditContext = React.createContext<{
   s3Url: string;
   availableCountries: ShippingCountry[];
   saving: boolean;
-  save: () => Promise<void>;
+  save: (options?: { publish?: boolean }) => Promise<void>;
   registerSaveConfig: (config: ProductEditSaveConfig) => void;
   googleClientId: string;
   googleCalendarEnabled: boolean;

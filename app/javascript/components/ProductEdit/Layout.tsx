@@ -168,18 +168,20 @@ export const Layout = ({
     setIsPublishing(true);
     if (published) {
       try {
-        await save();
-      } catch {
+        await save({ publish: true });
+      } catch (e) {
         setIsPublishing(false);
+        showAlert(e instanceof Error ? e.message : "Failed to save and publish", "error");
         return;
       }
+      setIsPublishing(false);
+      return;
     }
 
-    const data = published ? { publish: true } : { unpublish: true };
-    const onSuccess = () => updateProduct({ is_published: published });
+    const onSuccess = () => updateProduct({ is_published: false });
     router.visit(updateUrlForTab, {
       method: "patch",
-      data,
+      data: { unpublish: true },
       preserveScroll: true,
       onSuccess,
       onFinish: () => setIsPublishing(false),
@@ -189,8 +191,8 @@ export const Layout = ({
   const isUploadingFile = (file: FileEntry | SubtitleFile) =>
     file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading";
   const isUploadingFiles =
-    product.public_files.some((f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading") ||
-    product.files.some((file) => isUploadingFile(file) || file.subtitle_files.some(isUploadingFile));
+    (product.public_files ?? []).some((f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading") ||
+    (product.files ?? []).some((file) => isUploadingFile(file) || (file.subtitle_files ?? []).some(isUploadingFile));
   const imageSettings = useImageUploadSettings();
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
   const isBusy = isUploadingFilesOrImages || saving || isPublishing;

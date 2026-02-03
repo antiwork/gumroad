@@ -61,7 +61,8 @@ export type EditProps = {
 };
 
 export default function ProductEditLayout({ children }: { children: React.ReactNode }) {
-  const props = usePage<EditProps>().props;
+  const page = usePage<EditProps>();
+  const { component: pageComponent, props } = page;
   const {
     id,
     product: initialProduct,
@@ -75,6 +76,18 @@ export default function ProductEditLayout({ children }: { children: React.ReactN
     product: initialProduct,
     currencyType: initialCurrencyType,
   });
+
+  // Sync form with server state when navigating between tabs (e.g. after publish redirect to Share)
+  const prevPageComponentRef = React.useRef(pageComponent);
+  React.useEffect(() => {
+    if (prevPageComponentRef.current !== pageComponent) {
+      prevPageComponentRef.current = pageComponent;
+      form.setData({
+        product: props.product,
+        currencyType: props.currency_type,
+      });
+    }
+  }, [pageComponent]);
 
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [existingFiles, setExistingFiles] = React.useState<ExistingFileEntry[]>(initialExistingFiles);
@@ -97,7 +110,7 @@ export default function ProductEditLayout({ children }: { children: React.ReactN
     });
   };
 
-  const save = (): Promise<void> => {
+  const save = (options?: { publish?: boolean }): Promise<void> => {
     return new Promise((resolve, reject) => {
       const config = saveConfigRef.current;
       if (!config?.updateUrl) {
@@ -105,30 +118,32 @@ export default function ProductEditLayout({ children }: { children: React.ReactN
         return;
       }
 
-      const applyTransform = (productToSave: typeof form.data.product) =>
+      const applyTransform = (productToSave: typeof form.data.product, publish?: boolean) =>
         form.transform((data) => ({
           product: {
             ...productToSave,
             price_currency_type: data.currencyType,
             covers: productToSave.covers?.map(({ id }) => id) || [],
-            variants: productToSave.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
-            availabilities: productToSave.availabilities.map(({ newlyAdded, ...availability }) =>
+            variants: (productToSave.variants ?? []).map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
+            availabilities: (productToSave.availabilities ?? []).map(({ newlyAdded, ...availability }) =>
               newlyAdded ? { ...availability, id: null } : availability,
             ),
             installment_plan: productToSave.allow_installment_plan ? productToSave.installment_plan : null,
           },
           currencyType: data.currencyType,
+          ...(publish ? { publish: true } : {}),
         }));
 
       if (config.isContentTab) {
         const editor = new Editor(baseEditorOptions(extensions(id)));
+        const variants = form.data.product.variants ?? [];
         const richContents =
-          form.data.product.has_same_rich_content_for_all_variants || !form.data.product.variants.length
-            ? form.data.product.rich_content
-            : form.data.product.variants.flatMap((variant) => variant.rich_content);
+          form.data.product.has_same_rich_content_for_all_variants || !variants.length
+            ? (form.data.product.rich_content ?? [])
+            : variants.flatMap((variant) => variant.rich_content ?? []);
 
         const fileIds = new Set(
-          richContents.flatMap((content) =>
+          (richContents ?? []).flatMap((content) =>
             findChildren(
               editor.schema.nodeFromJSON(content.description),
               (node) => node.type.name === FileEmbed.name,
@@ -139,11 +154,11 @@ export default function ProductEditLayout({ children }: { children: React.ReactN
 
         const productToSave = {
           ...form.data.product,
-          files: form.data.product.files.filter((file) => fileIds.has(file.id)),
+          files: (form.data.product.files ?? []).filter((file) => fileIds.has(file.id)),
         };
-        applyTransform(productToSave);
+        applyTransform(productToSave, options?.publish);
       } else {
-        applyTransform(form.data.product);
+        applyTransform(form.data.product, options?.publish);
       }
 
       form.patch(config.updateUrl, {
@@ -199,7 +214,7 @@ export default function ProductEditLayout({ children }: { children: React.ReactN
       contentUpdates,
       setContentUpdates,
       aiGenerated,
-      filesById: new Map(form.data.product.files.map((f) => [f.id, f])),
+      filesById: new Map((form.data.product.files ?? []).map((f) => [f.id, f])),
     }),
     [form.data.product, form.data.currencyType, form.processing, existingFiles, contentUpdates, registerSaveConfig]
   );
