@@ -1,0 +1,587 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/acct_1SO1bwI533JwXS4r
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin25","engine":"ruby","publisher":"stripe","uname":"Darwin
+        hsc-m4-air.local 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:42:08
+        PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8132 arm64","hostname":"hsc-m4-air.local"}'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 03 Feb 2026 12:49:55 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '6669'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=PLbNQpq4Izmdk6wf0njE2733U9i_3AwAmbBN2nYYnISV3clZnNZlS6yyvnZG1UAhxz6Wngrn6SceW0wg
+      Request-Id:
+      - req_wN2vdR9pX2HAnz
+      Stripe-Account:
+      - acct_1SO1bwI533JwXS4r
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - ABGHIJ
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "acct_1SO1bwI533JwXS4r",
+          "object": "account",
+          "business_profile": {
+            "annual_revenue": null,
+            "estimated_worker_count": null,
+            "mcc": "5045",
+            "minority_owned_business_designation": null,
+            "name": "Test account",
+            "product_description": "Test account",
+            "specified_commercial_transactions_act_url": null,
+            "support_address": null,
+            "support_email": null,
+            "support_phone": "0000000000",
+            "support_url": null,
+            "url": "https://accessible.stripe.com"
+          },
+          "business_type": "individual",
+          "capabilities": {
+            "affirm_payments": "active",
+            "bancontact_payments": "active",
+            "card_payments": "active",
+            "cashapp_payments": "active",
+            "eps_payments": "active",
+            "giropay_payments": "inactive",
+            "ideal_payments": "active",
+            "klarna_payments": "active",
+            "link_payments": "active",
+            "transfers": "active"
+          },
+          "charges_enabled": true,
+          "company": {
+            "address": {
+              "city": "Schenectady",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "<STRONGBOX_GENERAL_PASSWORD>5",
+              "state": "NY"
+            },
+            "directors_provided": true,
+            "executives_provided": true,
+            "name": "match_name_relationships",
+            "owners_provided": true,
+            "phone": "0000000000",
+            "tax_id_provided": true,
+            "verification": {
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1SO1bxIBOqvOFDrfbsJ1Yjnn"
+              }
+            }
+          },
+          "controller": {
+            "fees": {
+              "payer": "application"
+            },
+            "is_controller": true,
+            "losses": {
+              "payments": "application"
+            },
+            "requirement_collection": "stripe",
+            "stripe_dashboard": {
+              "type": "express"
+            },
+            "type": "application"
+          },
+          "country": "US",
+          "created": 1761852859,
+          "default_currency": "usd",
+          "details_submitted": true,
+          "email": null,
+          "external_accounts": {
+            "object": "list",
+            "data": [
+              {
+                "id": "ba_1SO1bxI533JwXS4rbuHRTH2I",
+                "object": "bank_account",
+                "account": "acct_1SO1bwI533JwXS4r",
+                "account_holder_name": "Jenny Rosen",
+                "account_holder_type": "individual",
+                "account_type": null,
+                "available_payout_methods": [
+                  "standard",
+                  "instant"
+                ],
+                "bank_name": "STRIPE TEST BANK",
+                "country": "US",
+                "currency": "usd",
+                "default_for_currency": true,
+                "fingerprint": "l0OxwqZbI4t8wVSU",
+                "future_requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "last4": "6789",
+                "metadata": {},
+                "requirements": {
+                  "currently_due": [],
+                  "errors": [],
+                  "past_due": [],
+                  "pending_verification": []
+                },
+                "routing_number": "110000000",
+                "status": "verified"
+              }
+            ],
+            "has_more": false,
+            "total_count": 1,
+            "url": "/v1/accounts/acct_1SO1bwI533JwXS4r/external_accounts"
+          },
+          "future_requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "individual": {
+            "id": "person_1SO1byI533JwXS4rRWP3riCb",
+            "object": "person",
+            "account": "acct_1SO1bwI533JwXS4r",
+            "address": {
+              "city": "Schenectady",
+              "country": "US",
+              "line1": "address_full_match",
+              "line2": null,
+              "postal_code": "<STRONGBOX_GENERAL_PASSWORD>5",
+              "state": "NY"
+            },
+            "created": 1761852858,
+            "dob": {
+              "day": 1,
+              "month": 1,
+              "year": 1902
+            },
+            "email": "testaccount@example.com",
+            "first_name": "Test",
+            "future_requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "id_number_provided": true,
+            "last_name": "account",
+            "metadata": {},
+            "phone": "+10000000000",
+            "relationship": {
+              "authorizer": false,
+              "director": false,
+              "executive": true,
+              "legal_guardian": false,
+              "owner": false,
+              "percent_ownership": null,
+              "representative": true,
+              "title": null
+            },
+            "requirements": {
+              "alternatives": [],
+              "currently_due": [],
+              "errors": [],
+              "eventually_due": [],
+              "past_due": [],
+              "pending_verification": []
+            },
+            "ssn_last_4_provided": true,
+            "verification": {
+              "additional_document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": null
+              },
+              "details": null,
+              "details_code": null,
+              "document": {
+                "back": null,
+                "details": null,
+                "details_code": null,
+                "front": "file_1SO1bxIBOqvOFDrfm6QA6lti"
+              },
+              "status": "verified"
+            }
+          },
+          "login_links": {
+            "object": "list",
+            "data": [],
+            "has_more": false,
+            "total_count": 0,
+            "url": "/v1/accounts/acct_1SO1bwI533JwXS4r/login_links"
+          },
+          "metadata": {},
+          "payouts_enabled": true,
+          "requirements": {
+            "alternatives": [],
+            "current_deadline": null,
+            "currently_due": [],
+            "disabled_reason": null,
+            "errors": [],
+            "eventually_due": [],
+            "past_due": [],
+            "pending_verification": []
+          },
+          "settings": {
+            "bacs_debit_payments": {
+              "display_name": null,
+              "service_user_number": null
+            },
+            "branding": {
+              "icon": null,
+              "logo": null,
+              "primary_color": null,
+              "secondary_color": null
+            },
+            "card_issuing": {
+              "tos_acceptance": {
+                "date": null,
+                "ip": null
+              }
+            },
+            "card_payments": {
+              "decline_on": {
+                "avs_failure": false,
+                "cvc_failure": false
+              },
+              "statement_descriptor_prefix": null,
+              "statement_descriptor_prefix_kana": null,
+              "statement_descriptor_prefix_kanji": null
+            },
+            "dashboard": {
+              "display_name": "Test account",
+              "timezone": "Etc/UTC"
+            },
+            "invoices": {
+              "default_account_tax_ids": null,
+              "hosted_payment_method_save": "offer"
+            },
+            "payments": {
+              "statement_descriptor": "ACCESSIBLE.STRIPE.COM",
+              "statement_descriptor_kana": null,
+              "statement_descriptor_kanji": null
+            },
+            "payouts": {
+              "debit_negative_balances": true,
+              "schedule": {
+                "delay_days": 2,
+                "interval": "daily"
+              },
+              "statement_descriptor": null
+            },
+            "paypay_payments": {},
+            "sepa_debit_payments": {}
+          },
+          "tos_acceptance": {
+            "date": 1761852844081,
+            "ip": "172.0.0.0",
+            "user_agent": null
+          },
+          "type": "none"
+        }
+  recorded_at: Tue, 03 Feb 2026 12:49:55 GMT
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/balance
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_wN2vdR9pX2HAnz","request_duration_ms":826}}'
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin25","engine":"ruby","publisher":"stripe","uname":"Darwin
+        hsc-m4-air.local 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:42:08
+        PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8132 arm64","hostname":"hsc-m4-air.local"}'
+      Stripe-Account:
+      - acct_1SO1bwI533JwXS4r
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 03 Feb 2026 12:49:56 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '673'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=6dMVZ_YmRnxChaWQ7eCxIQd-RLgU_HAqg3wDuZfizSRJRh_UC0m3LtxF0kZhqUWl_esUrcwUdUCleLj7
+      Request-Id:
+      - req_aFMYoK951bguC4
+      Stripe-Account:
+      - acct_1SO1bwI533JwXS4r
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - ABGHIJ
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "object": "balance",
+          "available": [
+            {
+              "amount": 100000,
+              "currency": "usd",
+              "source_types": {
+                "card": 100000
+              }
+            }
+          ],
+          "instant_available": [
+            {
+              "amount": 100000,
+              "currency": "usd",
+              "source_types": {
+                "card": 100000
+              }
+            }
+          ],
+          "livemode": false,
+          "pending": [
+            {
+              "amount": 0,
+              "currency": "usd",
+              "source_types": {
+                "card": 0
+              }
+            }
+          ],
+          "refund_and_dispute_prefunding": {
+            "available": [
+              {
+                "amount": 0,
+                "currency": "usd"
+              }
+            ],
+            "pending": [
+              {
+                "amount": 0,
+                "currency": "usd"
+              }
+            ]
+          }
+        }
+  recorded_at: Tue, 03 Feb 2026 12:49:56 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/transfers
+    body:
+      encoding: UTF-8
+      string: amount=100000&currency=usd&description=Collect+unclaimed+balance+of+inactive+account&destination=<STRIPE_PLATFORM_ACCOUNT_ID>
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      X-Stripe-Client-Telemetry:
+      - '{"last_request_metrics":{"request_id":"req_aFMYoK951bguC4","request_duration_ms":643}}'
+      Idempotency-Key:
+      - 692d9e23-ac52-4032-8d0c-4238ba70ef5c
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin25","engine":"ruby","publisher":"stripe","uname":"Darwin
+        hsc-m4-air.local 25.0.0 Darwin Kernel Version 25.0.0: Wed Sep 17 21:42:08
+        PDT 2025; root:xnu-12377.1.9~141/RELEASE_ARM64_T8132 arm64","hostname":"hsc-m4-air.local"}'
+      Stripe-Account:
+      - acct_1SO1bwI533JwXS4r
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 03 Feb 2026 12:49:57 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '687'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
+        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
+        https://q.stripe.com/csp-violation?q=6dMVZ_YmRnxChaWQ7eCxIQd-RLgU_HAqg3wDuZfizSRJRh_UC0m3LtxF0kZhqUWl_esUrcwUdUCleLj7
+      Idempotency-Key:
+      - 692d9e23-ac52-4032-8d0c-4238ba70ef5c
+      Original-Request:
+      - req_z1vriWBeOFW3Pq
+      Request-Id:
+      - req_z1vriWBeOFW3Pq
+      Stripe-Account:
+      - acct_1SO1bwI533JwXS4r
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - ABGHIJ
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "tr_1Swj3II533JwXS4rklcInCnr",
+          "object": "transfer",
+          "amount": 100000,
+          "amount_reversed": 0,
+          "balance_transaction": "txn_1Swj3II533JwXS4rdZ0ALVpK",
+          "created": 1770122996,
+          "currency": "usd",
+          "description": "Collect unclaimed balance of inactive account",
+          "destination": "<STRIPE_PLATFORM_ACCOUNT_ID>",
+          "destination_payment": "py_1Swj3IIBOqvOFDrfDsn2Wt4H",
+          "livemode": false,
+          "metadata": {},
+          "reversals": {
+            "object": "list",
+            "data": [],
+            "has_more": false,
+            "total_count": 0,
+            "url": "/v1/transfers/tr_1Swj3II533JwXS4rklcInCnr/reversals"
+          },
+          "reversed": false,
+          "source_transaction": null,
+          "source_type": "card",
+          "transfer_group": null
+        }
+  recorded_at: Tue, 03 Feb 2026 12:49:57 GMT
+recorded_with: VCR 6.2.0
