@@ -9,6 +9,8 @@ import { PurchaseStates } from "$app/components/Admin/Purchases/States";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
+import { Input } from "$app/components/ui/Input";
+import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
@@ -54,24 +56,24 @@ export default function Purchases() {
             }}
             className="flex gap-2"
           >
-            <input
+            <Input
               name="product_title_query"
               placeholder="Filter by product title"
               type="text"
               value={data.product_title_query}
               onChange={(e) => setData("product_title_query", e.target.value)}
             />
-            <select
+            <Select
               name="purchase_status"
               value={data.purchase_status}
-              className="w-auto"
+              wrapperClassName="w-auto shrink-0"
               onChange={(e) => setData("purchase_status", e.target.value)}
             >
               <option value="">Any status</option>
               <option value="chargeback">Chargeback</option>
               <option value="refunded">Refunded</option>
               <option value="failed">Failed</option>
-            </select>
+            </Select>
             <Button type="submit" color="primary">
               <Icon name="solid-search" />
             </Button>

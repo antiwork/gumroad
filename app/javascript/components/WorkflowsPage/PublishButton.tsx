@@ -5,7 +5,7 @@ import { type SaveActionName } from "$app/types/workflow";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { Toggle } from "$app/components/Toggle";
+import { Switch } from "$app/components/ui/Switch";
 
 type PublishButtonProps = {
   isPublished: boolean;
@@ -49,9 +49,11 @@ export const PublishButton = ({
           <Button color="accent" onClick={() => onClick("save_and_publish")} disabled={isDisabled}>
             Publish now
           </Button>
-          <Toggle value={sendToPastCustomers.enabled} onChange={sendToPastCustomers.toggle}>
-            {sendToPastCustomers.label}
-          </Toggle>
+          <Switch
+            checked={sendToPastCustomers.enabled}
+            onChange={(e) => sendToPastCustomers.toggle(e.target.checked)}
+            label={sendToPastCustomers.label}
+          />
         </fieldset>
       </PopoverContent>
     </Popover>

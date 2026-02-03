@@ -77,7 +77,6 @@ import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { Search } from "$app/components/Search";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Toggle } from "$app/components/Toggle";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -85,6 +84,7 @@ import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
@@ -380,10 +380,10 @@ const CustomersPage = ({
                     <h4 className="font-bold">
                       <label htmlFor={`${uid}-active-customers-only`}>Show active customers only</label>
                     </h4>
-                    <Toggle
+                    <Switch
                       id={`${uid}-active-customers-only`}
-                      value={activeCustomersOnly}
-                      onChange={(activeCustomersOnly) => updateQuery({ activeCustomersOnly })}
+                      checked={activeCustomersOnly}
+                      onChange={(e) => updateQuery({ activeCustomersOnly: e.target.checked })}
                     />
                   </CardContent>
                 </Card>
