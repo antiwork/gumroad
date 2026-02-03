@@ -853,6 +853,13 @@ describe SettingsPresenter do
 
         expect(presenter.payments_props[:bank_account_details][:show_paypal]).to eq(true)
       end
+
+      it "returns true for show_paypal if user country is Kazakhstan" do
+        create(:user_compliance_info, user: seller, country: "Kazakhstan")
+        seller.update!(payment_address: nil)
+
+        expect(presenter.payments_props[:bank_account_details][:show_paypal]).to eq(true)
+      end
     end
 
     context "when seller's payouts are paused" do
