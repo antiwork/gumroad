@@ -1,0 +1,3 @@
+<%= load_pack("url_redirect_download") %>
+
+<%= react_component "DownloadPageWithoutContent", props: @react_component_props.merge(authenticity_token: form_authenticity_token), prerender: true %>

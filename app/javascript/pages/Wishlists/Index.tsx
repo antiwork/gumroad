@@ -7,8 +7,8 @@ import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Toggle } from "$app/components/Toggle";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -94,10 +94,10 @@ export default function WishlistsPage() {
                   </TableCell>
                   <TableCell>{wishlist.product_count}</TableCell>
                   <TableCell>
-                    <Toggle
-                      value={!wishlist.discover_opted_out}
-                      onChange={(checked) => updateDiscoverOptOut(wishlist.id, !checked)}
-                      ariaLabel="Discoverable"
+                    <Switch
+                      checked={!wishlist.discover_opted_out}
+                      onChange={(e) => updateDiscoverOptOut(wishlist.id, !e.target.checked)}
+                      aria-label="Discoverable"
                     />
                   </TableCell>
                   <TableCell>

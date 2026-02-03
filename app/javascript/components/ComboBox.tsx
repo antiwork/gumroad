@@ -1,5 +1,6 @@
-import cx from "classnames";
 import * as React from "react";
+
+import { classNames } from "$app/utils/classNames";
 
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
@@ -95,7 +96,7 @@ export const ComboBox = <Option extends unknown>({
   });
 
   return (
-    <div ref={selfRef} className={cx("combobox", className)} {...rest}>
+    <div ref={selfRef} className={classNames("relative", className)} {...rest}>
       {input({
         role: "combobox",
         "aria-expanded": open,
@@ -120,6 +121,9 @@ export const ComboBox = <Option extends unknown>({
           onMouseOut={() => setFocusedOptionIndex(null)}
           aria-multiselectable={multiple}
           style={maxHeight ? { maxHeight } : undefined}
+          className={classNames(
+            "absolute top-full left-0 z-10 block w-full overflow-auto rounded-b border border-t-0 border-border bg-background py-2 shadow",
+          )}
         >
           {options.map((item, index) => (
             <React.Fragment key={index}>
@@ -129,7 +133,10 @@ export const ComboBox = <Option extends unknown>({
                   ref: (node) => (itemRefs[index] = node),
                   role: "option",
                   id: `${uid}-${index}`,
-                  className: cx({ focused: focusedOptionIndex === index }),
+                  className: classNames(
+                    "px-4 py-2 cursor-pointer flex items-center",
+                    focusedOptionIndex === index && "bg-primary text-primary-foreground [&_*]:text-inherit",
+                  ),
                   onMouseOver: () => setFocusedOptionIndex(index),
                   onClick: () => {
                     setFocusedOptionIndex(null);
