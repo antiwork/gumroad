@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 require "inertia_rails/rspec"
 
-describe Products::Edit::ShareController, inertia: true do
+describe Products::ShareController, inertia: true do
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller) }
 
@@ -19,11 +19,11 @@ describe Products::Edit::ShareController, inertia: true do
     context "when product is published" do
       before { product.publish! }
 
-      it "renders the Products/Edit/Share component with expected props" do
+      it "renders the Products/Share/Edit component with expected props" do
         get :edit, params: { product_id: product.unique_permalink }
 
         expect(response).to be_successful
-        expect(inertia.component).to eq("Products/Edit/Share")
+        expect(inertia.component).to eq("Products/Share/Edit")
         expect(inertia.props.keys).to include(:id, :unique_permalink, :product, :seller)
         expect(inertia.props[:id]).to eq(product.external_id)
         expect(inertia.props[:unique_permalink]).to eq(product.unique_permalink)

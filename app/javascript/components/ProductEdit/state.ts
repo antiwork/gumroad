@@ -170,6 +170,11 @@ export type ContentUpdates = {
   uniquePermalinkOrVariantIds: string[];
 } | null;
 
+export type ProductEditSaveConfig = {
+  updateUrl: string;
+  isContentTab?: boolean;
+} | null;
+
 export const ProductEditContext = React.createContext<{
   id: string;
   product: Product;
@@ -196,6 +201,7 @@ export const ProductEditContext = React.createContext<{
   availableCountries: ShippingCountry[];
   saving: boolean;
   save: () => Promise<void>;
+  registerSaveConfig: (config: ProductEditSaveConfig) => void;
   googleClientId: string;
   googleCalendarEnabled: boolean;
   seller_refund_policy_enabled: boolean;

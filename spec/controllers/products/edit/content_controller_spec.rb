@@ -5,7 +5,7 @@ require "shared_examples/authorize_called"
 require "shared_examples/collaborator_access"
 require "inertia_rails/rspec"
 
-describe Products::Edit::ContentController, inertia: true do
+describe Products::ContentController, inertia: true do
   let(:seller) { create(:named_seller) }
   let(:product) { create(:product, user: seller) }
 
@@ -17,11 +17,11 @@ describe Products::Edit::ContentController, inertia: true do
       let(:request_params) { { product_id: product.unique_permalink } }
     end
 
-    it "renders the Products/Edit/Content component with expected props" do
+    it "renders the Products/Content/Edit component with expected props" do
       get :edit, params: { product_id: product.unique_permalink }
 
       expect(response).to be_successful
-      expect(inertia.component).to eq("Products/Edit/Content")
+      expect(inertia.component).to eq("Products/Content/Edit")
       expect(inertia.props.keys).to include(:id, :unique_permalink, :product, :seller)
       expect(inertia.props[:id]).to eq(product.external_id)
       expect(inertia.props[:unique_permalink]).to eq(product.unique_permalink)

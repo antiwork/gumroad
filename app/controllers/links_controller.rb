@@ -275,61 +275,6 @@ class LinksController < ApplicationController
     render json: { success: true }
   end
 
-  def unpublish
-    authorize @product
-
-    @product.unpublish!
-
-    if request.inertia?
-      flash[:notice] = "Unpublished!"
-      redirect_to product_edit_redirect_url
-    else
-      render json: { success: true }
-    end
-  end
-
-  def publish
-    authorize @product
-
-    if @product.user.email.blank?
-      error_message = "<span>To publish a product, we need you to have an email. <a href=\"#{settings_main_url}\">Set an email</a> to continue.</span>"
-      if request.inertia?
-        flash[:alert] = error_message.html_safe
-        return redirect_back fallback_location: edit_product_product_path(@product.unique_permalink)
-      else
-        return render json: { success: false, error_message: }
-      end
-    end
-
-    begin
-      @product.publish!
-    rescue Link::LinkInvalid, ActiveRecord::RecordInvalid
-      error_message = @product.errors.full_messages[0]
-      if request.inertia?
-        flash[:alert] = error_message
-        return redirect_back fallback_location: edit_product_product_path(@product.unique_permalink)
-      else
-        return render json: { success: false, error_message: }
-      end
-    rescue => e
-      Bugsnag.notify(e)
-      error_message = "Something broke. We're looking into what happened. Sorry about this!"
-      if request.inertia?
-        flash[:alert] = error_message
-        return redirect_back fallback_location: edit_product_product_path(@product.unique_permalink)
-      else
-        return render json: { success: false, error_message: }
-      end
-    end
-
-    if request.inertia?
-      flash[:notice] = "Published!"
-      redirect_to edit_product_share_path(@product.unique_permalink)
-    else
-      render json: { success: true }
-    end
-  end
-
   def destroy
     authorize @product
 

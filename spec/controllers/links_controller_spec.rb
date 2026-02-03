@@ -42,153 +42,9 @@ describe LinksController, :vcr, inertia: true do
       end
     end
 
-    %w[unpublish publish destroy].each do |action|
+    %w[destroy].each do |action|
       describe "##{action}" do
         e404_test(action.to_sym)
-      end
-    end
-
-    describe "POST publish" do
-      before do
-        @disabled_link = create(:physical_product, purchase_disabled_at: Time.current, user: seller)
-      end
-
-      it_behaves_like "authorize called for action", :post, :publish do
-        let(:record) { @disabled_link }
-        let(:request_params) { { id: @disabled_link.unique_permalink } }
-      end
-
-      it_behaves_like "collaborator can access", :post, :publish do
-        let(:product) { @disabled_link }
-        let(:request_params) { { id: @disabled_link.unique_permalink } }
-        let(:response_attributes) { { "success" => true } }
-      end
-
-      it "enables a disabled link" do
-        post :publish, params: { id: @disabled_link.unique_permalink }
-
-        expect(response.parsed_body["success"]).to eq(true)
-        expect(@disabled_link.reload.purchase_disabled_at).to be_nil
-      end
-
-      context "with Inertia request" do
-        before do
-          request.headers["X-Inertia"] = "true"
-        end
-
-        it "publishes and redirects with flash notice" do
-          post :publish, params: { id: @disabled_link.unique_permalink }
-
-          expect(response).to redirect_to(edit_product_share_path(@disabled_link.unique_permalink))
-          expect(flash[:notice]).to eq("Published!")
-          expect(@disabled_link.reload.purchase_disabled_at).to be_nil
-        end
-
-        it "sets flash alert when publish fails" do
-          allow_any_instance_of(Link).to receive(:publishable?) { false }
-
-          post :publish, params: { id: @disabled_link.unique_permalink }
-
-          expect(response).to redirect_to(edit_product_product_path(@disabled_link.unique_permalink))
-          expect(flash[:alert]).to be_present
-          expect(@disabled_link.reload.purchase_disabled_at).to be_present
-        end
-      end
-
-      context "when link is not publishable" do
-        before do
-          allow_any_instance_of(Link).to receive(:publishable?) { false }
-        end
-
-        it "returns an error message" do
-          post :publish, params: { id: @disabled_link.unique_permalink }
-
-          expect(response.parsed_body["error_message"]).to eq("You must connect at least one payment method before you can publish this product for sale.")
-        end
-
-        it "does not publish the link" do
-          post :publish, params: { id: @disabled_link.unique_permalink }
-
-          expect(response.parsed_body["success"]).to eq(false)
-          expect(@disabled_link.reload.purchase_disabled_at).to be_present
-        end
-      end
-
-      context "when user email is not confirmed" do
-        before do
-          seller.update!(confirmed_at: nil)
-          @unpublished_product = create(:physical_product, purchase_disabled_at: Time.current, user: seller)
-        end
-
-        it "returns an error message" do
-          post :publish, params: { id: @unpublished_product.unique_permalink }
-          expect(response.parsed_body["error_message"]).to eq("You have to confirm your email address before you can do that.")
-        end
-
-        it "does not publish the link" do
-          post :publish, params: { id: @unpublished_product.unique_permalink }
-
-          expect(response.parsed_body["success"]).to eq(false)
-          expect(@unpublished_product.reload.purchase_disabled_at).to be_present
-        end
-      end
-
-      context "when an unknown exception is raised" do
-        before do
-          allow_any_instance_of(Link).to receive(:publish!).and_raise("error")
-        end
-
-        it "sends a Bugsnag notification" do
-          expect(Bugsnag).to receive(:notify).once
-
-          post :publish, params: { id: @disabled_link.unique_permalink }
-        end
-
-        it "returns an error message" do
-          post :publish, params: { id: @disabled_link.unique_permalink }
-
-          expect(response.parsed_body["error_message"]).to eq("Something broke. We're looking into what happened. Sorry about this!")
-        end
-
-        it "does not publish the link" do
-          post :publish, params: { id: @disabled_link.unique_permalink }
-
-          expect(response.parsed_body["success"]).to eq(false)
-          expect(@disabled_link.reload.purchase_disabled_at).to be_present
-        end
-      end
-    end
-
-    describe "POST unpublish" do
-      it_behaves_like "collaborator can access", :post, :unpublish do
-        let(:product) { create(:product, user: seller) }
-        let(:request_params) { { id: product.unique_permalink } }
-        let(:response_attributes) { { "success" => true } }
-      end
-
-      it "unpublishes a published link" do
-        product = create(:product, user: seller)
-
-        post :unpublish, params: { id: product.unique_permalink }
-
-        expect(response.parsed_body["success"]).to eq(true)
-        expect(product.reload.purchase_disabled_at).to be_present
-      end
-
-      context "with Inertia request" do
-        before do
-          request.headers["X-Inertia"] = "true"
-        end
-
-        it "unpublishes and redirects with flash notice" do
-          product = create(:product, user: seller)
-
-          post :unpublish, params: { id: product.unique_permalink }
-
-          expect(response).to redirect_to(edit_product_product_path(product.unique_permalink))
-          expect(flash[:notice]).to eq("Unpublished!")
-          expect(product.reload.purchase_disabled_at).to be_present
-        end
       end
     end
 
@@ -634,16 +490,13 @@ describe LinksController, :vcr, inertia: true do
       end
     end
 
-    it "allows updating and publishing a product without files" do
+    it "allows updating a product without files" do
       product = create(:product, user: seller, purchase_disabled_at: Time.current)
 
       expect do
         post :update, params: { id: product.unique_permalink, name: "Test" }, format: :json
       end.to change { product.reload.name }.from(product.name).to("Test")
 
-      expect do
-        post :publish, params: { id: product.unique_permalink }
-      end.to change { product.reload.purchase_disabled_at }.to(nil)
       expect(response.parsed_body["success"]).to eq(true)
       expect(product.alive_product_files.count).to eq(0)
     end

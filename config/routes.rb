@@ -278,12 +278,12 @@ Rails.application.routes.draw do
   get "/s3_utility/generate_multipart_signature", to: "s3_utility#generate_multipart_signature"
 
   constraints GumroadDomainConstraint do
-    resources :products, only: [], param: :id do
+    resources :products, only: [] do
       scope module: "products" do
-        resource :product, only: [:edit, :update], controller: "edit/product"
-        resource :content, only: [:edit, :update], controller: "edit/content"
-        resource :receipt, only: [:edit, :update], controller: "edit/receipt"
-        resource :share, only: [:edit, :update], controller: "edit/share"
+        resource :product, only: [:edit, :update], controller: "product"
+        resource :content, only: [:edit, :update], controller: "content"
+        resource :receipt, only: [:edit, :update], controller: "receipt"
+        resource :share, only: [:edit, :update], controller: "share"
       end
 
       # Backward compatibility redirects for old product edit URLs
@@ -651,8 +651,6 @@ Rails.application.routes.draw do
       resources :variants, only: [:index], controller: "products/variants"
       resource :mobile_tracking, only: [:show], path: "in_app", controller: "products/mobile_tracking"
       member do
-        post :publish
-        post :unpublish
         post :increment_views
         post :track_user_action
         put :sections, action: :update_sections

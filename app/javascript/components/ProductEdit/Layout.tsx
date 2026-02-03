@@ -141,15 +141,27 @@ export const Layout = ({
 
   const pageComponent = usePage().component;
   const tab = React.useMemo(() => {
-    if (pageComponent === "Products/Edit/Content") return "content";
-    if (pageComponent === "Products/Edit/Receipt") return "receipt";
-    if (pageComponent === "Products/Edit/Share") return "share";
+    if (pageComponent === "Products/Content/Edit") return "content";
+    if (pageComponent === "Products/Receipt/Edit") return "receipt";
+    if (pageComponent === "Products/Share/Edit") return "share";
     return "product";
   }, [pageComponent]);
 
   const navigate = useRefToLatest((url: string) => {
     router.get(url);
   });
+
+  const updateUrlForTab = React.useMemo(
+    () =>
+      tab === "product"
+        ? Routes.product_product_path(uniquePermalink)
+        : tab === "content"
+          ? Routes.product_content_path(uniquePermalink)
+          : tab === "receipt"
+            ? Routes.product_receipt_path(uniquePermalink)
+            : Routes.product_share_path(uniquePermalink),
+    [tab, uniquePermalink],
+  );
 
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
@@ -163,36 +175,15 @@ export const Layout = ({
       }
     }
 
-    if (published) {
-      router.post(Routes.publish_link_path(uniquePermalink), {}, {
-        preserveScroll: true,
-        onSuccess: () => updateProduct({ is_published: true }),
-        onFinish: () => setIsPublishing(false),
-      });
-    } else {
-      // Unpublish: use current tab's update URL with unpublish (like bundles)
-      if (tab === "product" || tab === "content" || tab === "share") {
-        const unpublishUrl =
-          tab === "product"
-            ? Routes.product_product_path(uniquePermalink)
-            : tab === "content"
-              ? Routes.product_content_path(uniquePermalink)
-              : Routes.product_share_path(uniquePermalink);
-        router.visit(unpublishUrl, {
-          method: "patch",
-          data: { unpublish: true },
-          preserveScroll: true,
-          onSuccess: () => updateProduct({ is_published: false }),
-          onFinish: () => setIsPublishing(false),
-        });
-      } else {
-        router.post(Routes.unpublish_link_path(uniquePermalink), {}, {
-          preserveScroll: true,
-          onSuccess: () => updateProduct({ is_published: false }),
-          onFinish: () => setIsPublishing(false),
-        });
-      }
-    }
+    const data = published ? { publish: true } : { unpublish: true };
+    const onSuccess = () => updateProduct({ is_published: published });
+    router.visit(updateUrlForTab, {
+      method: "patch",
+      data,
+      preserveScroll: true,
+      onSuccess,
+      onFinish: () => setIsPublishing(false),
+    });
   };
 
   const isUploadingFile = (file: FileEntry | SubtitleFile) =>

@@ -21,6 +21,7 @@ import { assertResponseError, request } from "$app/utils/request";
 import {
   ProductEditContext,
   Product,
+  ProductEditSaveConfig,
   ContentUpdates,
   ExistingFileEntry,
   ProfileSection,
@@ -80,6 +81,11 @@ export default function ProductEditLayout({ children }: { children: React.ReactN
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
 
   const lastSavedProductRef = React.useRef<Product>(structuredClone(initialProduct));
+  const saveConfigRef = React.useRef<ProductEditSaveConfig>(null);
+
+  const registerSaveConfig = React.useCallback((config: ProductEditSaveConfig) => {
+    saveConfigRef.current = config;
+  }, []);
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) => {
     form.setData((prev) => {
@@ -93,49 +99,54 @@ export default function ProductEditLayout({ children }: { children: React.ReactN
 
   const save = (): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const editor = new Editor(baseEditorOptions(extensions(id)));
-      const richContents =
-        form.data.product.has_same_rich_content_for_all_variants || !form.data.product.variants.length
-          ? form.data.product.rich_content
-          : form.data.product.variants.flatMap((variant) => variant.rich_content);
+      const config = saveConfigRef.current;
+      if (!config?.updateUrl) {
+        reject(new Error("Save config not registered"));
+        return;
+      }
 
-      const fileIds = new Set(
-        richContents.flatMap((content) =>
-          findChildren(
-            editor.schema.nodeFromJSON(content.description),
-            (node) => node.type.name === FileEmbed.name,
-          ).map<unknown>((child) => child.node.attrs.id),
-        ),
-      );
-      editor.destroy();
+      const applyTransform = (productToSave: typeof form.data.product) =>
+        form.transform((data) => ({
+          product: {
+            ...productToSave,
+            price_currency_type: data.currencyType,
+            covers: productToSave.covers?.map(({ id }) => id) || [],
+            variants: productToSave.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
+            availabilities: productToSave.availabilities.map(({ newlyAdded, ...availability }) =>
+              newlyAdded ? { ...availability, id: null } : availability,
+            ),
+            installment_plan: productToSave.allow_installment_plan ? productToSave.installment_plan : null,
+          },
+          currencyType: data.currencyType,
+        }));
 
-      const productToSave = {
-        ...form.data.product,
-        files: form.data.product.files.filter((file) => fileIds.has(file.id)),
-      };
+      if (config.isContentTab) {
+        const editor = new Editor(baseEditorOptions(extensions(id)));
+        const richContents =
+          form.data.product.has_same_rich_content_for_all_variants || !form.data.product.variants.length
+            ? form.data.product.rich_content
+            : form.data.product.variants.flatMap((variant) => variant.rich_content);
 
-      form.transform((data) => ({
-        product: {
-          ...productToSave,
-          price_currency_type: data.currencyType,
-          covers: productToSave.covers?.map(({ id }) => id) || [],
-          variants: productToSave.variants.map(({ newlyAdded, ...variant }) => (newlyAdded ? { ...variant, id: null } : variant)),
-          availabilities: productToSave.availabilities.map(({ newlyAdded, ...availability }) =>
-            newlyAdded ? { ...availability, id: null } : availability,
+        const fileIds = new Set(
+          richContents.flatMap((content) =>
+            findChildren(
+              editor.schema.nodeFromJSON(content.description),
+              (node) => node.type.name === FileEmbed.name,
+            ).map<unknown>((child) => child.node.attrs.id),
           ),
-          installment_plan: productToSave.allow_installment_plan ? productToSave.installment_plan : null,
-        },
-        currencyType: data.currencyType,
-      }));
+        );
+        editor.destroy();
 
-      const pathname = window.location.pathname;
-      let updateUrl: string;
-      if (pathname.includes("/content/edit")) updateUrl = Routes.product_content_path(uniquePermalink);
-      else if (pathname.includes("/receipt/edit")) updateUrl = Routes.product_receipt_path(uniquePermalink);
-      else if (pathname.includes("/share/edit")) updateUrl = Routes.product_share_path(uniquePermalink);
-      else updateUrl = Routes.product_product_path(uniquePermalink);
+        const productToSave = {
+          ...form.data.product,
+          files: form.data.product.files.filter((file) => fileIds.has(file.id)),
+        };
+        applyTransform(productToSave);
+      } else {
+        applyTransform(form.data.product);
+      }
 
-      form.patch(updateUrl, {
+      form.patch(config.updateUrl, {
         preserveScroll: true,
         onSuccess: () => {
           lastSavedProductRef.current = structuredClone(form.data.product);
@@ -179,6 +190,7 @@ export default function ProductEditLayout({ children }: { children: React.ReactN
       availableCountries: props.available_countries,
       saving: form.processing,
       save,
+      registerSaveConfig,
       googleClientId: props.google_client_id,
       googleCalendarEnabled: props.google_calendar_enabled,
       seller_refund_policy_enabled: props.seller_refund_policy_enabled,
@@ -189,7 +201,7 @@ export default function ProductEditLayout({ children }: { children: React.ReactN
       aiGenerated,
       filesById: new Map(form.data.product.files.map((f) => [f.id, f])),
     }),
-    [form.data.product, form.data.currencyType, form.processing, existingFiles, contentUpdates]
+    [form.data.product, form.data.currencyType, form.processing, existingFiles, contentUpdates, registerSaveConfig]
   );
 
   const imageSettings = React.useMemo(
