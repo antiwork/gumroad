@@ -108,6 +108,25 @@ describe Products::ShareController, inertia: true do
         expect(response).to redirect_to(edit_product_share_path(product.unique_permalink))
       end
 
+      it "saves tags (permitted by LinkPolicy share_tab_permitted_attributes)" do
+        put :update, params: {
+          product_id: product.unique_permalink,
+          product: { name: product.name, tags: ["design", "tutorial"] }
+        }
+        expect(response).to redirect_to(edit_product_share_path(product.unique_permalink))
+        expect(product.reload.tags.pluck(:name)).to contain_exactly("design", "tutorial")
+      end
+
+      it "saves discover_fee_per_thousand (permitted by LinkPolicy share_tab_permitted_attributes)" do
+        product.update!(discover_fee_per_thousand: 100)
+        put :update, params: {
+          product_id: product.unique_permalink,
+          product: { name: product.name, discover_fee_per_thousand: 500 }
+        }
+        expect(response).to redirect_to(edit_product_share_path(product.unique_permalink))
+        expect(product.reload.discover_fee_per_thousand).to eq(500)
+      end
+
       context "when unpublishing" do
         before { product.publish! }
 

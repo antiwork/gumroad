@@ -232,5 +232,132 @@ describe Products::ProductController, inertia: true do
         expect(coffee_product.reload.suggested_price_cents).to eq(300)
       end
     end
+
+    # LinkPolicy permitted params: verify params we added are not stripped and are applied
+    context "when custom_attributes include :description (permitted by LinkPolicy)" do
+      before { request.headers["X-Inertia"] = "true" }
+
+      it "saves custom attributes with description key (not stripped by strong params)" do
+        put :update, params: {
+          product_id: product.unique_permalink,
+          product: {
+            name: product.name,
+            custom_attributes: [
+              { name: "Label", description: "Detail value" }
+            ]
+          }
+        }
+        expect(response).to redirect_to(edit_product_product_path(product.unique_permalink))
+        saved = product.reload.custom_attributes
+        expect(saved.size).to eq(1)
+        expect(saved.first["name"]).to eq("Label")
+        expect(saved.first["description"]).to eq("Detail value")
+      end
+    end
+
+    context "when custom_button_text_option and custom_summary are sent (permitted by LinkPolicy)" do
+      before { request.headers["X-Inertia"] = "true" }
+
+      it "saves custom_button_text_option and custom_summary" do
+        put :update, params: {
+          product_id: product.unique_permalink,
+          product: {
+            name: product.name,
+            custom_button_text_option: "donate_prompt",
+            custom_summary: "A short summary of the product."
+          }
+        }
+        expect(response).to redirect_to(edit_product_product_path(product.unique_permalink))
+        product.reload
+        expect(product.custom_button_text_option).to eq("donate_prompt")
+        expect(product.custom_summary).to eq("A short summary of the product.")
+      end
+    end
+
+    context "when cancellation_discount is sent (permitted by LinkPolicy)" do
+      let(:membership) { create(:membership_product_with_preset_tiered_pricing, user: seller) }
+
+      before do
+        request.headers["X-Inertia"] = "true"
+        Feature.activate_user(:cancellation_discounts, seller)
+      end
+
+      it "saves cancellation_discount via SaveCancellationDiscountService" do
+        tier_category = membership.variant_categories_alive.first
+        variants_param = tier_category.variants.map { |v| { "id" => v.external_id, "name" => v.name } }
+
+        put :update, params: {
+          product_id: membership.unique_permalink,
+          product: {
+            name: membership.name,
+            "variants" => variants_param,
+            "cancellation_discount" => {
+              "duration_in_billing_cycles" => 2,
+              "discount" => { "type" => "percent", "percents" => 10 }
+            }
+          }
+        }
+        expect(response).to redirect_to(edit_product_product_path(membership.unique_permalink))
+        expect(flash[:notice]).to eq("Changes saved!")
+        membership.reload
+        expect(membership.cancellation_discount_offer_code).to be_present
+        expect(membership.cancellation_discount_offer_code.amount_percentage).to eq(10)
+        expect(membership.cancellation_discount_offer_code.duration_in_billing_cycles).to eq(2)
+      end
+    end
+
+    context "when call_limitation_info is sent (permitted by LinkPolicy)" do
+      let(:seller) { create(:named_seller, :eligible_for_service_products) }
+      let(:call_product) { create(:call_product, user: seller) }
+
+      before { request.headers["X-Inertia"] = "true" }
+
+      it "updates call_limitation_info" do
+        expect(call_product.call_limitation_info.minimum_notice_in_minutes).to eq(CallLimitationInfo::DEFAULT_MINIMUM_NOTICE_IN_MINUTES)
+
+        duration_category = call_product.variant_categories_alive.first
+        variants_param = duration_category.variants.map { |v| { id: v.external_id, name: v.name, duration_in_minutes: v.duration_in_minutes } }
+
+        put :update, params: {
+          product_id: call_product.unique_permalink,
+          product: {
+            name: call_product.name,
+            variants: variants_param,
+            call_limitation_info: {
+              minimum_notice_in_minutes: 60,
+              maximum_calls_per_day: 3
+            }
+          }
+        }
+
+        expect(response).to redirect_to(edit_product_product_path(call_product.unique_permalink))
+        expect(flash[:notice]).to eq("Changes saved!")
+        call_product.reload
+        expect(call_product.call_limitation_info.minimum_notice_in_minutes).to eq(60)
+        expect(call_product.call_limitation_info.maximum_calls_per_day).to eq(3)
+      end
+    end
+
+    context "when installment_plan is sent (permitted by LinkPolicy)" do
+      let(:digital_product) { create(:product, user: seller, native_type: Link::NATIVE_TYPE_DIGITAL, price_cents: 3000) }
+
+      before { request.headers["X-Inertia"] = "true" }
+
+      it "creates or updates installment_plan" do
+        expect(digital_product.installment_plan).to be_nil
+
+        put :update, params: {
+          product_id: digital_product.unique_permalink,
+          product: {
+            name: digital_product.name,
+            installment_plan: { number_of_installments: 4 }
+          }
+        }
+        expect(response).to redirect_to(edit_product_product_path(digital_product.unique_permalink))
+        digital_product.reload
+        expect(digital_product.installment_plan).to be_present
+        expect(digital_product.installment_plan.number_of_installments).to eq(4)
+      end
+    end
   end
 end

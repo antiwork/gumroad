@@ -146,4 +146,42 @@ describe LinkPolicy do
       end
     end
   end
+
+  describe "product_tab_permitted_attributes" do
+    let(:product) { create(:product, user: seller) }
+    let(:policy) { described_class.new(SellerContext.new(user: seller, seller:), product) }
+
+    it "permits cancellation_discount nested params" do
+      params = ActionController::Parameters.new(
+        product: {
+          name: "Product",
+          cancellation_discount: {
+            duration_in_billing_cycles: 2,
+            discount: { type: "fixed", cents: 500 }
+          }
+        }
+      )
+      permitted = params.require(:product).permit(policy.product_tab_permitted_attributes)
+      expect(permitted[:cancellation_discount]).to be_present
+      expect(permitted[:cancellation_discount][:duration_in_billing_cycles]).to eq(2)
+      expect(permitted[:cancellation_discount][:discount][:type]).to eq("fixed")
+      expect(permitted[:cancellation_discount][:discount][:cents]).to eq(500)
+    end
+
+    it "permits call_limitation_info params" do
+      params = ActionController::Parameters.new(
+        product: {
+          name: "Product",
+          call_limitation_info: {
+            minimum_notice_in_minutes: 60,
+            maximum_calls_per_day: 3
+          }
+        }
+      )
+      permitted = params.require(:product).permit(policy.product_tab_permitted_attributes)
+      expect(permitted[:call_limitation_info]).to be_present
+      expect(permitted[:call_limitation_info][:minimum_notice_in_minutes]).to eq(60)
+      expect(permitted[:call_limitation_info][:maximum_calls_per_day]).to eq(3)
+    end
+  end
 end

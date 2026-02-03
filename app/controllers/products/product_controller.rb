@@ -95,7 +95,7 @@ class Products::ProductController < Products::BaseController
       @product.save_shipping_destinations!(product_permitted_params[:shipping_destinations] || []) if @product.is_physical
 
       if Feature.active?(:cancellation_discounts, @product.user) && (product_permitted_params[:cancellation_discount].present? || @product.cancellation_discount_offer_code.present?)
-        Product::SaveCancellationDiscountService.new(@product, product_permitted_params[:cancellation_discount]).perform
+        Product::SaveCancellationDiscountService.new(@product, product_permitted_params[:cancellation_discount].to_h.symbolize_keys.deep_symbolize_keys).perform
       end
 
       Product::SaveIntegrationsService.perform(@product, product_permitted_params[:integrations])
@@ -151,7 +151,11 @@ class Products::ProductController < Products::BaseController
 
     def update_call_limitation_info
       return unless @product.native_type == ::Link::NATIVE_TYPE_CALL
-      @product.call_limitation_info.update!(product_permitted_params[:call_limitation_info]) if product_permitted_params[:call_limitation_info].present?
+      call_limitation_params = product_permitted_params[:call_limitation_info].presence ||
+        params[:product]&.permit(call_limitation_info: [:minimum_notice_in_minutes, :maximum_calls_per_day])[:call_limitation_info]
+      if call_limitation_params.present?
+        @product.call_limitation_info.update!(call_limitation_params.to_h.symbolize_keys)
+      end
     end
 
     def update_installment_plan
