@@ -14,7 +14,7 @@
     <div class="mx-auto max-w-2xl px-8">
       <div class="prose prose-lg max-w-none">
         <p class="text-lg md:text-xl leading-relaxed">
-          Gumroad is a profitable, independent, and venture-debt-free tool for creators. We've paid out over $600M. Now, we're growing a high-density team in Dumbo to reclaim our spot as the #1 creator economy tool. To get there, our core engine the path from a customer's "Buy" button to a creator's bank account must be the most reliable and frictionless infrastructure on the internet.
+          Gumroad is a profitable, independent, and venture-debt-free tool for creators. We've paid out over $1 billion. Now, we're growing a high-density team in Dumbo to reclaim our spot as the #1 creator economy tool. To get there, our core engine the path from a customer's "Buy" button to a creator's bank account must be the most reliable and frictionless infrastructure on the internet.
         </p>
 
         <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">What you'll do</h2>
@@ -45,21 +45,17 @@
           <li class="text-lg"><strong>35-Hour week:</strong> We expect 35 hours of deep focus. The other 133 hours of your week are yours.</li>
           <li class="text-lg"><strong>Dumbo HQ:</strong> We work from 20 Jay St. We sync in person when things are hard because it's faster to turn a chair than to send a Slack.</li>
           <li class="text-lg"><strong>Lunch and coffee:</strong> We cover your food and coffee on the days you're in the office.</li>
-          <li class="text-lg"><strong>The setup:</strong> A stipend for your home office plus whatever gear you need at the Dumbo node to ship your best work.</li>
           <li class="text-lg"><strong>Full coverage:</strong> Premium health, dental, and vision insurance (US).</li>
-          <li class="text-lg"><strong>4 weeks vacation:</strong> We want you to actually take 4 weeks off every year to recharge.</li>
-          <li class="text-lg"><strong>New parents:</strong> 4 months of fully paid parental leave for new additions to your family.</li>
+          <li class="text-lg"><strong>20 days paid vacation:</strong> Take time off to recharge throughout the year.</li>
           <li class="text-lg"><strong>Retreats:</strong> Regular team events and offsites to sync on the road ahead.</li>
-          <li class="text-lg"><strong>No Deadlines:</strong> We don't ship to satisfy a calendar; we ship to satisfy our creators.</li>
           <li class="text-lg"><strong>Open Source:</strong> Our code is public. You can read the <a href="https://github.com/antiwork/gumroad" class="underline hover:text-pink">repo</a> before you even apply.</li>
         </ul>
 
         <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">How to apply</h2>
         <ol class="space-y-4 list-decimal list-inside">
-          <li class="text-lg"><strong>Email us.</strong> Send a few sentences about your origin story to <a href="mailto:jobs@antiwork.com" class="underline hover:text-pink">jobs@antiwork.com</a>.</li>
-          <li class="text-lg"><strong>Proof of work.</strong> Include a list of things you've built (with URLs). If you want to skip the line, find an open issue in our <a href="https://github.com/antiwork/gumroad" class="underline hover:text-pink">GitHub repo</a>, fix it, and send the PR.</li>
-          <li class="text-lg"><strong>The Sync.</strong> If the work is good, we'll do a quick call to see if our Dumbo node is a fit.</li>
-          <li class="text-lg"><strong>The Trial.</strong> 4–6 week-long paid work trial. You ship real code to real creators. If you're a builder, you stay.</li>
+          <% job[:how_to_apply]&.each do |item| %>
+            <li class="text-lg"><strong><%= item[:step] %></strong> <%= item[:description].gsub('jobs@antiwork.com', '<a href="mailto:jobs@antiwork.com" class="underline hover:text-pink">jobs@antiwork.com</a>').gsub('GitHub repo', '<a href="https://github.com/antiwork/gumroad" class="underline hover:text-pink">GitHub repo</a>').html_safe %></li>
+          <% end %>
         </ol>
         <p class="text-lg mt-6 text-gray-600">
           <strong>Work authorization:</strong> Applicants must be legally authorized to work in the United States. We may sponsor O-1 visas for exceptional candidates.
