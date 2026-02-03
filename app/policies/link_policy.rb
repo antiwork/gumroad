@@ -95,11 +95,18 @@ class LinkPolicy < ApplicationPolicy
       :is_multiseat_license,
       :community_chat_enabled,
       :default_offer_code_id,
+      :custom_button_text_option,
+      :custom_summary,
       refund_policy: [
         :max_refund_period_in_days,
         :title,
         :fine_print
       ],
+      cancellation_discount: [
+        :duration_in_billing_cycles,
+        { discount: [:type, :cents, :percents] },
+      ],
+      call_limitation_info: [:minimum_notice_in_minutes, :maximum_calls_per_day],
       covers: [],
       custom_attributes: [
         :name,
@@ -109,6 +116,7 @@ class LinkPolicy < ApplicationPolicy
         :name,
         :value
       ],
+      public_files: [:id, :name, { status: [:type] }],
       integrations: ::Integration::ALL_NAMES.index_with do |name|
         integration_class = ::Integration.class_for(name)
         [*integration_class.connection_settings, { integration_details: integration_class::INTEGRATION_DETAILS }]
