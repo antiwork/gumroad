@@ -31,6 +31,7 @@ import useRouteLoading from "$app/components/useRouteLoading";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 
 const INSTANT_PAYOUT_FEE_PERCENTAGE = 0.03;
 const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 1000;
@@ -494,10 +495,10 @@ export default function PayoutsIndex() {
   if (!loggedInUser) return null;
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
-    <NavigationButton href={Routes.settings_payments_path()}>
+    <NavigationButtonInertia href={Routes.settings_payments_path()}>
       <Icon name="gear-fill" />
       Settings
-    </NavigationButton>
+    </NavigationButtonInertia>
   ) : null;
 
   const bulkExportAction = loggedInUser.policies.balance.export ? <ExportPayoutsPopover /> : null;
