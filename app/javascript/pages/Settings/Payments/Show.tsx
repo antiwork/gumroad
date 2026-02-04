@@ -15,7 +15,6 @@ import { Button } from "$app/components/Button";
 import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
 import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
 import { Icon } from "$app/components/Icons";
-import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { PriceInput } from "$app/components/PriceInput";
 import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
 import { Layout } from "$app/components/Settings/Layout";
@@ -799,7 +798,19 @@ export default function PaymentsPage() {
             <h2>Verification</h2>
           </header>
           {props.show_verification_section ? (
-            <StripeConnectEmbeddedNotificationBanner />
+            <>
+              <Alert role="status" variant="warning">
+                We need more information to continue processing your payouts. Please update your account details.
+              </Alert>
+              <div className="mt-2">
+                <Button
+                  asChild
+                  color="black"
+                >
+                  <a href={Routes.remediation_settings_payments_path()}>Update</a>
+                </Button>
+              </div>
+            </>
           ) : (
             <div className="flex flex-col">
               <Alert role="status" variant="success">
