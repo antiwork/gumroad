@@ -540,7 +540,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.active_bank_account.account_holder_full_name).to eq("Gumhead Moneybags")
       end
 
-      it "displays the Stripe Connect embedded verification banner" do
+      it "shows the verification alert and Update button when verification is required (individual)" do
         user = create(:user, username: nil, payment_address: nil)
         create(:user_compliance_info, user:, birthday: Date.new(1901, 1, 2))
         create(:ach_account_stripe_succeed, user:)
@@ -554,7 +554,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+
+        expect(page).to have_section("Verification")
+        expect(page).to have_content("We need more information to continue processing your payouts.")
+        expect(page).to have_content("Please update your account details.")
+        expect(page).to have_button("Update")
+        expect(page).not_to have_selector("iframe[src*='connect-js.stripe.com']")
       end
 
       it "always shows the verification section with success message when verification is not needed" do
@@ -615,6 +620,17 @@ describe("Payments Settings Scenario", type: :system, js: true) do
               where(field_needed: UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID).count).to eq(1)
 
           login_as user
+        end
+
+        it "shows the verification alert and Update button when verification is required (business)" do
+          visit settings_payments_path
+
+          expect(page).to have_section("Verification")
+          expect(page).to have_content("Action required to continue processing payouts.")
+          expect(page).to have_content("Update your business information.")
+          expect(page).to have_content("We're missing valid information about your business.")
+          expect(page).to have_button("Update")
+          expect(page).not_to have_selector("iframe[src*='connect-js.stripe.com']")
         end
 
         it "renders the account selector" do

@@ -816,7 +816,7 @@ export default function PaymentsPage() {
               </Alert>
               <Button
                 className="w-fit"
-                color="accent"
+                color="primary"
                 onClick={handleSave}
                 disabled={props.is_form_disabled || form.processing || !!payoutThresholdError}
               >
