@@ -462,7 +462,7 @@ class Subscription < ApplicationRecord
       new_purchase.is_original_subscription_purchase = true
       new_purchase.perceived_price_cents = perceived_price_cents
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
-      new_purchase.business_vat_id = business_vat_id
+      new_purchase.business_vat_id = business_vat_id.presence || original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
 
