@@ -803,10 +803,7 @@ export default function PaymentsPage() {
                 We need more information to continue processing your payouts. Please update your account details.
               </Alert>
               <div className="mt-2">
-                <Button
-                  asChild
-                  color="black"
-                >
+                <Button asChild color="primary">
                   <a href={Routes.remediation_settings_payments_path()}>Update</a>
                 </Button>
               </div>
