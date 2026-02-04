@@ -1,12 +1,6 @@
+import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { Link, useMatches, useNavigate } from "react-router-dom";
 
-import { saveBundle } from "$app/data/bundle";
-import { setProductPublished } from "$app/data/publish_product";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
-
-import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -14,75 +8,79 @@ import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-export const useProductUrl = (params = {}) => {
-  const { bundle, uniquePermalink } = useBundleEditContext();
+export const useProductUrl = (uniquePermalink: string, customPermalink?: string | null) => {
   const currentSeller = useCurrentSeller();
-  const { appDomain } = useDomains();
-  return Routes.short_link_url(bundle.custom_permalink ?? uniquePermalink, {
+  const { appDomain, scheme } = useDomains();
+  return Routes.short_link_url(customPermalink ?? uniquePermalink, {
     host: currentSeller?.subdomain ?? appDomain,
-    ...params,
+    protocol: scheme,
   });
 };
 
-export const Layout = ({
+const useCurrentTab = (): "product" | "content" | "share" => {
+  const componentToTab: Record<string, "product" | "content" | "share"> = {
+    "Bundles/Product/Edit": "product",
+    "Bundles/Content/Edit": "content",
+    "Bundles/Share/Edit": "share",
+  };
+  return componentToTab[usePage().component] ?? "product";
+};
+
+type BundleEditLayoutProps = {
+  children: React.ReactNode;
+  id: string;
+  name?: string;
+  customPermalink?: string | null;
+  uniquePermalink?: string;
+  isPublished: boolean;
+  publicFiles?: PublicFileWithStatus[];
+  preview?: React.ReactNode;
+  isLoading?: boolean;
+  isProcessing?: boolean;
+  onSave?: () => void;
+  onPublish?: () => void;
+  onUnpublish?: () => void;
+  onSaveAndContinue?: () => void;
+  onPreview?: () => void;
+  onBeforeNavigate?: (targetPath: string) => boolean;
+};
+
+export const BundleEditLayout = ({
   children,
+  id,
+  name = "Untitled",
+  customPermalink,
+  uniquePermalink = "",
+  isPublished,
+  publicFiles = [],
   preview,
   isLoading = false,
-}: {
-  children: React.ReactNode;
-  preview: React.ReactNode;
-  isLoading?: boolean;
-}) => {
-  const { bundle, updateBundle, id, uniquePermalink } = useBundleEditContext();
+  isProcessing = false,
+  onSave,
+  onPublish,
+  onUnpublish,
+  onSaveAndContinue,
+  onPreview,
+  onBeforeNavigate,
+}: BundleEditLayoutProps) => {
+  const tab = useCurrentTab();
 
-  const url = useProductUrl();
-
-  const [match] = useMatches();
-  const tab = match?.handle ?? "product";
+  const url = useProductUrl(uniquePermalink, customPermalink);
 
   const isDesktop = useIsAboveBreakpoint("lg");
 
-  const [isSaving, setIsSaving] = React.useState(false);
-  const handleSave = async () => {
-    try {
-      setIsSaving(true);
-      await saveBundle(id, bundle);
-      showAlert("Changes saved!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsSaving(false);
-  };
-
-  const [isPublishing, setIsPublishing] = React.useState(false);
-  const setPublished = async (published: boolean) => {
-    try {
-      setIsPublishing(true);
-      await saveBundle(id, bundle);
-      await setProductPublished(uniquePermalink, published);
-      updateBundle({ is_published: published });
-      showAlert(published ? "Published!" : "Unpublished!", "success");
-      if (tab === "share") navigate(`/bundles/${id}/content`);
-      else if (published) navigate(`/bundles/${id}/share`);
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsPublishing(false);
-  };
-
-  const isUploadingFiles = bundle.public_files.some(
+  const isUploadingFiles = publicFiles.some(
     (f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading",
   );
   const isUploadingFilesOrImages = isLoading || isUploadingFiles;
-  const isBusy = isUploadingFilesOrImages || isSaving || isPublishing;
+  const isBusy = isUploadingFilesOrImages || isProcessing;
   const saveButtonTooltip = isUploadingFiles
     ? "Files are still uploading..."
     : isUploadingFilesOrImages
@@ -91,17 +89,15 @@ export const Layout = ({
         ? "Please wait..."
         : undefined;
 
-  const navigate = useNavigate();
-
-  const saveButton = (
+  const saveButton = onSave ? (
     <WithTooltip tip={saveButtonTooltip}>
-      <Button color="primary" disabled={isBusy} onClick={asyncVoid(handleSave)}>
-        {isSaving ? "Saving changes..." : "Save changes"}
+      <Button color="primary" disabled={isBusy} onClick={onSave}>
+        {isProcessing ? "Saving changes..." : "Save changes"}
       </Button>
     </WithTooltip>
-  );
+  ) : null;
 
-  const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
+  const handleTabClick = (e: React.MouseEvent, targetPath: string) => {
     const message = isUploadingFiles
       ? "Some files are still uploading, please wait..."
       : isUploadingFilesOrImages
@@ -114,20 +110,24 @@ export const Layout = ({
       return;
     }
 
-    callback?.();
+    if (onBeforeNavigate?.(targetPath)) {
+      e.preventDefault();
+    }
   };
 
   return (
     <>
       <PageHeader
         className="sticky-top"
-        title={bundle.name || "Untitled"}
+        title={name || "Untitled"}
         actions={
-          bundle.is_published ? (
+          isPublished ? (
             <>
-              <Button disabled={isBusy} onClick={() => void setPublished(false)}>
-                {isPublishing ? "Unpublishing..." : "Unpublish"}
-              </Button>
+              {onUnpublish ? (
+                <Button disabled={isBusy} onClick={onUnpublish}>
+                  {isProcessing ? "Unpublishing..." : "Unpublish"}
+                </Button>
+              ) : null}
               {saveButton}
               <CopyToClipboard
                 text={url}
@@ -140,50 +140,46 @@ export const Layout = ({
               </CopyToClipboard>
             </>
           ) : tab === "product" ? (
-            <Button
-              color="primary"
-              disabled={isBusy}
-              onClick={() => void handleSave().then(() => navigate(`/bundles/${id}/content`))}
-            >
-              {isSaving ? "Saving changes..." : "Save and continue"}
-            </Button>
+            onSaveAndContinue ? (
+              <Button color="primary" disabled={isBusy} onClick={onSaveAndContinue}>
+                {isProcessing ? "Saving changes..." : "Save and continue"}
+              </Button>
+            ) : null
           ) : (
             <>
               {saveButton}
-              <WithTooltip tip={saveButtonTooltip}>
-                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
-                  {isPublishing ? "Publishing..." : "Publish and continue"}
-                </Button>
-              </WithTooltip>
+              {onPublish ? (
+                <WithTooltip tip={saveButtonTooltip}>
+                  <Button color="accent" disabled={isBusy} onClick={onPublish}>
+                    {isProcessing ? "Publishing..." : "Publish and continue"}
+                  </Button>
+                </WithTooltip>
+              ) : null}
             </>
           )
         }
       >
         <Tabs style={{ gridColumn: 1 }}>
           <Tab asChild isSelected={tab === "product"}>
-            <Link to={`/bundles/${id}`} onClick={onTabClick}>
+            <Link
+              href={Routes.edit_bundle_product_path(id)}
+              onClick={(e) => handleTabClick(e, Routes.edit_bundle_product_path(id))}
+            >
               Product
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "content"}>
-            <Link to={`/bundles/${id}/content`} onClick={onTabClick}>
+            <Link
+              href={Routes.edit_bundle_content_path(id)}
+              onClick={(e) => handleTabClick(e, Routes.edit_bundle_content_path(id))}
+            >
               Content
             </Link>
           </Tab>
           <Tab asChild isSelected={tab === "share"}>
             <Link
-              to={`/bundles/${id}/share`}
-              onClick={(evt: React.MouseEvent<HTMLAnchorElement>) => {
-                onTabClick(evt, () => {
-                  if (!bundle.is_published) {
-                    evt.preventDefault();
-                    showAlert(
-                      "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-                      "warning",
-                    );
-                  }
-                });
-              }}
+              href={Routes.edit_bundle_share_path(id)}
+              onClick={(e) => handleTabClick(e, Routes.edit_bundle_share_path(id))}
             >
               Share
             </Link>
@@ -193,11 +189,7 @@ export const Layout = ({
       {preview ? (
         <WithPreviewSidebar className="flex-1">
           {children}
-          <PreviewSidebar
-            previewLink={(props) => (
-              <Button {...props} onClick={() => void handleSave().then(() => window.open(url))} disabled={isBusy} />
-            )}
-          >
+          <PreviewSidebar previewLink={(props) => <Button {...props} onClick={onPreview} disabled={isBusy} />}>
             <Preview
               scaleFactor={0.4}
               style={{

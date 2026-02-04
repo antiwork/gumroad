@@ -3966,7 +3966,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     end
   end
 
-  describe "Canada Tax", taxjar: true, force_vcr_on: true do
+  describe "Canada Tax", taxjar: true do
     let (:product) { create(:product, price_cents: 100_00) }
 
     it "detects the province for Canada" do
