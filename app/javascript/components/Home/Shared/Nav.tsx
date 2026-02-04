@@ -3,14 +3,16 @@ import * as React from "react";
 
 import { request } from "$app/utils/request";
 
+import { useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 
 import arrowDiagonalUpRight from "$assets/images/icons/arrow-diagonal-up-right.svg";
 import solidStar from "$assets/images/icons/solid-star.svg";
 import logo from "$assets/images/logo.svg";
 
-export const GumroadBlogNav = () => {
+export const HomeSharedNav = () => {
   const loggedInUser = useLoggedInUser();
+  const { appDomain } = useDomains();
   const { url } = usePage();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [githubStars, setGithubStars] = React.useState<string | null>(null);
@@ -23,19 +25,22 @@ export const GumroadBlogNav = () => {
           setGithubStars(new Intl.NumberFormat("en-US", { notation: "compact" }).format(data.stars));
         }
       })
-      .catch(() => {});
+      .catch((error) => {
+        console.error("Error fetching GitHub stars:", error);
+      });
   }, []);
 
   const currentPath = url.split("?")[0];
   const isBlogPage = currentPath.startsWith(Routes.gumroad_blog_root_path());
+  const dashboardUrl = Routes.dashboard_url({ host: appDomain });
 
   return (
     <>
       <div className="sticky top-0 right-0 left-0 z-50 flex h-20 justify-between border-b border-black bg-white pr-4 pl-4 lg:pr-0 lg:pl-8 dark:border-b-white/35 dark:bg-black">
         <div className="flex items-center gap-2">
-          <Link href={Routes.root_path()} className="flex items-center">
+          <a href={Routes.root_path()} className="flex items-center">
             <img src={logo} alt="" loading="lazy" className="h-7 lg:h-8 dark:invert" />
-          </Link>
+          </a>
 
           <a
             href="https://github.com/antiwork/gumroad"
@@ -68,47 +73,48 @@ export const GumroadBlogNav = () => {
 
         <div className="override hidden lg:flex lg:items-center">
           <div className="flex flex-col items-center justify-center lg:flex-row lg:gap-1 lg:px-6">
-            <NavLink href={Routes.discover_path()} current={currentPath === Routes.discover_path()}>
+            <NavLink href={Routes.discover_path()} current={currentPath === Routes.discover_path()} inertia={false}>
               Discover
             </NavLink>
-            <NavLink href={Routes.gumroad_blog_root_path()} current={isBlogPage}>
+            <NavLink href={Routes.gumroad_blog_root_path()} current={isBlogPage} inertia>
               Blog
             </NavLink>
-            <NavLink href={Routes.pricing_path()} current={currentPath === Routes.pricing_path()}>
+            <NavLink href={Routes.pricing_path()} current={currentPath === Routes.pricing_path()} inertia={false}>
               Pricing
             </NavLink>
-            <NavLink href={Routes.features_path()} current={currentPath === Routes.features_path()}>
+            <NavLink href={Routes.features_path()} current={currentPath === Routes.features_path()} inertia={false}>
               Features
             </NavLink>
             <NavLink
               href={Routes.about_path()}
               current={currentPath === Routes.root_path() || currentPath === Routes.about_path()}
+              inertia={false}
             >
               About
             </NavLink>
           </div>
           <div className="flex flex-col lg:h-full lg:flex-row">
             {loggedInUser ? (
-              <Link
-                href={Routes.dashboard_path()}
+              <a
+                href={dashboardUrl}
                 className="flex h-full w-full items-center justify-center border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:bg-black lg:px-6 lg:py-2 lg:text-white lg:hover:bg-pink dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white"
               >
                 Dashboard
-              </Link>
+              </a>
             ) : (
               <>
-                <Link
+                <a
                   href={Routes.login_path()}
                   className="flex h-full w-full items-center justify-center border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:bg-white lg:px-6 lg:py-2 lg:text-black lg:hover:bg-pink dark:lg:border-l-white/35 dark:lg:bg-black dark:lg:text-white dark:lg:hover:bg-white dark:lg:hover:text-black"
                 >
                   Log in
-                </Link>
-                <Link
+                </a>
+                <a
                   href={Routes.signup_path()}
                   className="flex h-full w-full items-center justify-center border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black lg:w-auto lg:border-l lg:bg-black lg:px-6 lg:py-2 lg:text-white lg:hover:bg-pink dark:lg:bg-pink dark:lg:text-black dark:lg:hover:bg-white"
                 >
                   Start selling
-                </Link>
+                </a>
               </>
             )}
           </div>
@@ -137,33 +143,35 @@ export const GumroadBlogNav = () => {
         <div className="override fixed top-20 right-0 left-0 z-50 flex flex-col justify-between border-b border-black bg-black lg:hidden dark:border-white/35">
           <div className="flex flex-col items-center justify-center">
             <MobileNavLink href={Routes.discover_path()}>Discover</MobileNavLink>
-            <MobileNavLink href={Routes.gumroad_blog_root_path()}>Blog</MobileNavLink>
+            <MobileNavLink href={Routes.gumroad_blog_root_path()} inertia>
+              Blog
+            </MobileNavLink>
             <MobileNavLink href={Routes.pricing_path()}>Pricing</MobileNavLink>
             <MobileNavLink href={Routes.features_path()}>Features</MobileNavLink>
             <MobileNavLink href={Routes.about_path()}>About</MobileNavLink>
           </div>
           <div className="flex flex-col">
             {loggedInUser ? (
-              <Link
-                href={Routes.dashboard_path()}
+              <a
+                href={dashboardUrl}
                 className="flex w-full items-center justify-center border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black"
               >
                 Dashboard
-              </Link>
+              </a>
             ) : (
               <>
-                <Link
+                <a
                   href={Routes.login_path()}
                   className="flex w-full items-center justify-center border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black"
                 >
                   Log in
-                </Link>
-                <Link
+                </a>
+                <a
                   href={Routes.signup_path()}
                   className="flex w-full items-center justify-center border-black bg-black p-4 text-lg text-white no-underline transition-colors duration-200 hover:bg-pink hover:text-black"
                 >
                   Start selling
-                </Link>
+                </a>
               </>
             )}
           </div>
@@ -173,34 +181,57 @@ export const GumroadBlogNav = () => {
   );
 };
 
+const navLinkClasses = (current: boolean) =>
+  `flex w-full items-center justify-center border whitespace-nowrap ${
+    current ? "border-black" : "border-transparent"
+  } ${
+    current
+      ? "lg:bg-black lg:text-white dark:lg:bg-white dark:lg:text-black"
+      : "lg:bg-transparent lg:text-black dark:lg:text-white"
+  } bg-black p-4 text-lg text-white no-underline transition-all duration-200 hover:border-black lg:w-auto lg:rounded-full lg:px-4 lg:py-2 dark:text-white lg:dark:hover:border-white/35`;
+
 const NavLink = ({
   href,
   children,
   current = false,
+  inertia = false,
 }: {
   href: string;
   children: React.ReactNode;
   current?: boolean;
-}) => (
-  <Link
-    href={href}
-    className={`flex w-full items-center justify-center border whitespace-nowrap ${
-      current ? "border-black" : "border-transparent"
-    } ${
-      current
-        ? "lg:bg-black lg:text-white dark:lg:bg-white dark:lg:text-black"
-        : "lg:bg-transparent lg:text-black dark:lg:text-white"
-    } bg-black p-4 text-lg text-white no-underline transition-all duration-200 hover:border-black lg:w-auto lg:rounded-full lg:px-4 lg:py-2 dark:text-white lg:dark:hover:border-white/35`}
-  >
-    {children}
-  </Link>
-);
+  inertia?: boolean;
+}) =>
+  inertia ? (
+    <Link href={href} className={navLinkClasses(current)}>
+      {children}
+    </Link>
+  ) : (
+    <a href={href} className={navLinkClasses(current)}>
+      {children}
+    </a>
+  );
 
-const MobileNavLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
-  <Link
-    href={href}
-    className="flex w-full items-center justify-center border border-transparent bg-black p-4 text-lg text-white no-underline transition-all duration-200"
-  >
-    {children}
-  </Link>
-);
+const MobileNavLink = ({
+  href,
+  children,
+  inertia = false,
+}: {
+  href: string;
+  children: React.ReactNode;
+  inertia?: boolean;
+}) =>
+  inertia ? (
+    <Link
+      href={href}
+      className="flex w-full items-center justify-center border border-transparent bg-black p-4 text-lg text-white no-underline transition-colors duration-200"
+    >
+      {children}
+    </Link>
+  ) : (
+    <a
+      href={href}
+      className="flex w-full items-center justify-center border border-transparent bg-black p-4 text-lg text-white no-underline transition-colors duration-200"
+    >
+      {children}
+    </a>
+  );
