@@ -576,7 +576,6 @@ Rails.application.routes.draw do
     get "/purchases/search", to: "purchases#search"
 
     resources :checkout, only: [:index]
-    resource :checkout_cart, only: [:update], controller: "checkout/carts", path: "checkout/cart"
 
     resources :licenses, only: [:update]
 
@@ -928,6 +927,8 @@ Rails.application.routes.draw do
         end
 
         resources :ai_product_details_generations, only: [:create]
+
+        resource :cart, only: [:update]
       end
     end
 
