@@ -11,7 +11,6 @@ export const PageListLayout = ({
   pageList: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-  downloadPage?: boolean;
 }) => (
   <div
     className={classNames(
@@ -19,11 +18,7 @@ export const PageListLayout = ({
       className,
     )}
   >
-    <div
-      className={classNames(
-        "flex flex-col gap-4 [scrollbar-gutter:stable] lg:sticky lg:top-0 lg:h-full lg:max-h-[70vh] lg:w-80 lg:overflow-y-auto lg:pb-8",
-      )}
-    >
+    <div className="flex flex-col gap-4 [scrollbar-gutter:stable] lg:sticky lg:top-0 lg:h-full lg:max-h-[70vh] lg:w-80 lg:overflow-y-auto lg:pb-8">
       {pageList}
     </div>
     <div className="h-0 flex-1">{children}</div>
