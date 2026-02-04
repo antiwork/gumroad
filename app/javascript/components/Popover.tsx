@@ -10,11 +10,8 @@ export const PopoverAnchor = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Anchor>,
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Anchor>
 >(({ className, ...props }, ref) => (
-  <PopoverPrimitive.Anchor
-    ref={ref}
-    className={classNames("grid", className)}
-    {...props}
-  />
+  // Grid layout ensures children match the parent width by default
+  <PopoverPrimitive.Anchor ref={ref} className={classNames("grid", className)} {...props} />
 ));
 PopoverAnchor.displayName = PopoverPrimitive.Anchor.displayName;
 
