@@ -9,8 +9,8 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import { Toggle } from "$app/components/Toggle";
 import { Alert } from "$app/components/ui/Alert";
+import { Switch } from "$app/components/ui/Switch";
 
 export type DiscordIntegration = {
   keep_inactive_members: boolean;
@@ -130,12 +130,11 @@ export const DiscordIntegrationEditor = ({
                         : "Your integration is not assigned to any version. Check your versions' settings."}
                     </Alert>
                   ) : null}
-                  <Toggle
-                    value={product.variants.every(({ integrations }) => integrations.discord)}
-                    onChange={setEnabledForOptions}
-                  >
-                    {product.native_type === "membership" ? "Enable for all tiers" : "Enable for all versions"}
-                  </Toggle>
+                  <Switch
+                    checked={product.variants.every(({ integrations }) => integrations.discord)}
+                    onChange={(e) => setEnabledForOptions(e.target.checked)}
+                    label={product.native_type === "membership" ? "Enable for all tiers" : "Enable for all versions"}
+                  />
                 </>
               ) : null}
               {product.native_type === "membership" ? (

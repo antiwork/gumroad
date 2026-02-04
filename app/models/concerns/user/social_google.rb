@@ -12,12 +12,18 @@ module User::SocialGoogle
     pic_url = URI(URI::DEFAULT_PARSER.escape(pic_url))
 
     URI.open(pic_url) do |remote_file|
+      content_type = remote_file.content_type
+      return nil unless valid_avatar_content_type?(content_type)
+
       tempfile = Tempfile.new(binmode: true)
       tempfile.write(remote_file.read)
       tempfile.rewind
+
+      return nil if tempfile.size > User::Validations::MAXIMUM_AVATAR_FILE_SIZE
+
       self.avatar.attach(io: tempfile,
                          filename: File.basename(pic_url.to_s),
-                         content_type: remote_file.content_type)
+                         content_type: content_type)
       self.avatar.blob.save!
     end
 
@@ -26,6 +32,11 @@ module User::SocialGoogle
     self.avatar_url
   rescue StandardError
     nil
+  end
+
+  def valid_avatar_content_type?(content_type)
+    return false if content_type.blank?
+    User::Validations::ALLOWED_AVATAR_EXTENSIONS.any? { |ext| content_type.include?(ext) }
   end
 
   class_methods do
@@ -73,7 +84,11 @@ module User::SocialGoogle
 
       # Don't set user properties if they already have values
       user.google_uid ||= data["uid"]
-      user.name ||= data["info"]["name"]
+
+      if user.name.blank? && data["info"]["name"].present?
+        sanitized_name = data["info"]["name"].gsub(User::INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX, "")
+        user.name = sanitized_name
+      end
 
       # Always update user's email upon log in as it may have changed
       # on google's side

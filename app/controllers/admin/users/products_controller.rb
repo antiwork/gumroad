@@ -6,7 +6,7 @@ class Admin::Users::ProductsController < Admin::Users::BaseController
   before_action :fetch_user
 
   def index
-    @title = "#{@user.display_name} products on Gumroad"
+    set_meta_tag(title: "#{@user.display_name} products on Gumroad")
 
     list_paginated_products user: @user,
                             products: @user.products,

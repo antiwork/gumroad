@@ -159,8 +159,8 @@ describe("Library Scenario", type: :system, js: true) do
     find_product_card(purchase.link).hover
     within find_product_card(purchase.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Archive"
     end
+    click_on "Archive"
 
     expect(page).to_not have_product_card(purchase.link)
   end
@@ -176,8 +176,8 @@ describe("Library Scenario", type: :system, js: true) do
     find_product_card(purchase.link).hover
     within find_product_card(purchase.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Unarchive"
     end
+    click_on "Unarchive"
 
     expect(page).to have_current_path("/library?sort=recently_updated")
 
@@ -205,8 +205,8 @@ describe("Library Scenario", type: :system, js: true) do
 
     within find_product_card(purchase1.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Archive"
     end
+    click_on "Archive"
 
     expect(page).to have_status(text: "You have 2 archived purchases. Click here to view")
 
@@ -221,8 +221,8 @@ describe("Library Scenario", type: :system, js: true) do
 
     within find_product_card(purchase1.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Unarchive"
     end
+    click_on "Unarchive"
 
     expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
     expect(page).to have_product_card(purchase3.link)
@@ -236,14 +236,14 @@ describe("Library Scenario", type: :system, js: true) do
     find_product_card(purchase2.link).hover
     within find_product_card(purchase2.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Archive"
     end
+    click_on "Archive"
 
     find_product_card(purchase1.link).hover
     within find_product_card(purchase1.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Archive"
     end
+    click_on "Archive"
 
     expect(page).to_not have_status(text: "You have 3 archived purchases. Click here to view")
 
@@ -252,8 +252,8 @@ describe("Library Scenario", type: :system, js: true) do
     find_product_card(purchase3.link).hover
     within find_product_card(purchase3.link) do
       find_and_click('[aria-label="Open product action menu"]')
-      click_on "Unarchive"
     end
+    click_on "Unarchive"
     wait_for_ajax
 
     expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
@@ -444,6 +444,36 @@ describe("Library Scenario", type: :system, js: true) do
       expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(4)", text: creator_with_3_products.name, visible: false)
       expect(page).to have_selector("label:has(input[type=checkbox]):nth-of-type(5)", text: creator_with_1_product.name, visible: false)
     end
+
+    it "updates creator counts when toggling archived filter" do
+      another_creator = create(:named_user, name: "Another Creator")
+      @a.update!(is_archived: true)
+      @b.update!(is_archived: true)
+      @c.update!(is_archived: true)
+
+      create(:purchase, link: create(:product, user: another_creator, name: "Another Product 1"), purchaser: @user)
+      create(:purchase, link: create(:product, user: another_creator, name: "Another Product 2"), purchaser: @user)
+      create(:purchase, link: create(:product, user: another_creator, name: "Another Product 3"), purchaser: @user, is_archived: true)
+
+      Link.import(refresh: true, force: true)
+      visit "/library"
+
+      expect(page).to have_text("Showing 1-9 of 9")
+      expect(find("label", text: @creator.name)).to have_text("(7)")
+      expect(find("label", text: another_creator.name)).to have_text("(2)")
+
+      find_and_click("label", text: "Show archived only")
+
+      expect(page).to have_text("Showing 1-4 of 4")
+      expect(find("label", text: @creator.name)).to have_text("(3)")
+      expect(find("label", text: another_creator.name)).to have_text("(1)")
+
+      find_and_click("label", text: "Show archived only")
+
+      expect(page).to have_text("Showing 1-9 of 9")
+      expect(find("label", text: @creator.name)).to have_text("(7)")
+      expect(find("label", text: another_creator.name)).to have_text("(2)")
+    end
   end
 
   it "allow marking deleted by the buyer" do
@@ -455,8 +485,8 @@ describe("Library Scenario", type: :system, js: true) do
 
     within find_product_card(purchase.link).hover do
       find_and_click "[aria-label='Open product action menu']"
-      click_on "Delete"
     end
+    click_on "Delete permanently"
     expect(page).to have_text("Are you sure you want to delete #{purchase.link_name}?")
     click_on "Confirm"
 
