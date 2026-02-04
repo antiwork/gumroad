@@ -15,7 +15,6 @@ import { Button } from "$app/components/Button";
 import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
 import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
 import { Icon } from "$app/components/Icons";
-import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { PriceInput } from "$app/components/PriceInput";
 import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
 import { Layout } from "$app/components/Settings/Layout";
@@ -800,7 +799,30 @@ export default function PaymentsPage() {
             <h2>Verification</h2>
           </header>
           {props.show_verification_section ? (
-            <StripeConnectEmbeddedNotificationBanner />
+            <div className="flex flex-col gap-4">
+              <Alert role="status" variant="warning">
+                {props.compliance_info.is_business ? (
+                  <>
+                    <strong>Action required to continue processing payouts.</strong> Update your business information.
+                    <span className="block mt-1 text-muted">
+                      We're missing valid information about your business.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    We need more information to continue processing your payouts. Please update your account details.
+                  </>
+                )}
+              </Alert>
+              <Button
+                className="w-fit"
+                color="accent"
+                onClick={handleSave}
+                disabled={props.is_form_disabled || form.processing || !!payoutThresholdError}
+              >
+                Update
+              </Button>
+            </div>
           ) : (
             <div className="flex flex-col">
               <Alert role="status" variant="success">
