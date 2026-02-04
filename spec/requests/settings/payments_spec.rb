@@ -6255,7 +6255,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         field.fill_in(with: "15")
         expect(field["aria-invalid"]).to eq("false")
-        expect(page).to_not have_text("The minimum payout threshold for United States is $10.")
+        expect(page).to have_text("The minimum payout threshold for United States is $10.")
 
         click_on "Update settings"
 
@@ -6283,7 +6283,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
           field.fill_in(with: "40")
           expect(field["aria-invalid"]).to eq("false")
-          expect(page).to_not have_text("The minimum payout threshold for South Korea is $34.74.")
+          expect(page).to have_text("The minimum payout threshold for South Korea is $34.74.")
 
           click_on "Update settings"
 
