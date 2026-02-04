@@ -36,9 +36,9 @@ import { VersionsEditor } from "$app/components/ProductEdit/ProductTab/VersionsE
 import { RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Switch } from "$app/components/ui/Switch";
 
 export const ProductTab = () => {
   const uid = React.useId();
@@ -373,26 +373,23 @@ export const ProductTab = () => {
                     <>
                       <FreeTrialSelector />
                       {cancellationDiscountsEnabled ? <CancellationDiscountSelector /> : null}
-                      <Toggle
-                        value={product.should_include_last_post}
-                        onChange={(should_include_last_post) => updateProduct({ should_include_last_post })}
-                      >
-                        New members will be emailed this product's last published post
-                      </Toggle>
-                      <Toggle
-                        value={product.should_show_all_posts}
-                        onChange={(should_show_all_posts) => updateProduct({ should_show_all_posts })}
-                      >
-                        New members will get access to all posts you have published
-                      </Toggle>
-                      <Toggle
-                        value={product.block_access_after_membership_cancellation}
-                        onChange={(block_access_after_membership_cancellation) =>
-                          updateProduct({ block_access_after_membership_cancellation })
+                      <Switch
+                        checked={product.should_include_last_post}
+                        onChange={(e) => updateProduct({ should_include_last_post: e.target.checked })}
+                        label="New members will be emailed this product's last published post"
+                      />
+                      <Switch
+                        checked={product.should_show_all_posts}
+                        onChange={(e) => updateProduct({ should_show_all_posts: e.target.checked })}
+                        label="New members will get access to all posts you have published"
+                      />
+                      <Switch
+                        checked={product.block_access_after_membership_cancellation}
+                        onChange={(e) =>
+                          updateProduct({ block_access_after_membership_cancellation: e.target.checked })
                         }
-                      >
-                        Members will lose access when their memberships end
-                      </Toggle>
+                        label="Members will lose access when their memberships end"
+                      />
                       <DurationEditor />
                     </>
                   ) : null}
@@ -402,40 +399,42 @@ export const ProductTab = () => {
                         maxPurchaseCount={product.max_purchase_count}
                         setMaxPurchaseCount={(value) => updateProduct({ max_purchase_count: value })}
                       />
-                      <Toggle
-                        value={product.quantity_enabled}
-                        onChange={(newValue) => updateProduct({ quantity_enabled: newValue })}
-                      >
-                        Allow customers to choose a quantity
-                      </Toggle>
+                      <Switch
+                        checked={product.quantity_enabled}
+                        onChange={(e) => updateProduct({ quantity_enabled: e.target.checked })}
+                        label="Allow customers to choose a quantity"
+                      />
                     </>
                   ) : null}
                   {product.variants.length > 0 ? (
-                    <Toggle
-                      value={product.hide_sold_out_variants}
-                      onChange={(newValue) => updateProduct({ hide_sold_out_variants: newValue })}
-                    >
-                      Hide sold out versions
-                    </Toggle>
+                    <Switch
+                      checked={product.hide_sold_out_variants}
+                      onChange={(e) => updateProduct({ hide_sold_out_variants: e.target.checked })}
+                      label="Hide sold out versions"
+                    />
                   ) : null}
-                  <Toggle
-                    value={product.should_show_sales_count}
-                    onChange={(newValue) => updateProduct({ should_show_sales_count: newValue })}
-                  >
-                    {product.native_type === "membership"
-                      ? "Publicly show the number of members on your product page"
-                      : "Publicly show the number of sales on your product page"}
-                  </Toggle>
+                  <Switch
+                    checked={product.should_show_sales_count}
+                    onChange={(e) => updateProduct({ should_show_sales_count: e.target.checked })}
+                    label={
+                      product.native_type === "membership"
+                        ? "Publicly show the number of members on your product page"
+                        : "Publicly show the number of sales on your product page"
+                    }
+                  />
                   {product.native_type !== "physical" ? (
-                    <Toggle
-                      value={product.is_epublication}
-                      onChange={(newValue) => updateProduct({ is_epublication: newValue })}
-                    >
-                      Mark product as e-publication for VAT purposes{" "}
-                      <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
-                        Learn more
-                      </a>
-                    </Toggle>
+                    <Switch
+                      checked={product.is_epublication}
+                      onChange={(e) => updateProduct({ is_epublication: e.target.checked })}
+                      label={
+                        <>
+                          Mark product as e-publication for VAT purposes{" "}
+                          <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
+                            Learn more
+                          </a>
+                        </>
+                      }
+                    />
                   ) : null}
                   {!seller_refund_policy_enabled ? (
                     <RefundPolicySelector
@@ -447,12 +446,11 @@ export const ProductTab = () => {
                       setShowPreview={setShowRefundPolicyPreview}
                     />
                   ) : null}
-                  <Toggle
-                    value={product.require_shipping}
-                    onChange={(newValue) => updateProduct({ require_shipping: newValue })}
-                  >
-                    Require shipping information
-                  </Toggle>
+                  <Switch
+                    checked={product.require_shipping}
+                    onChange={(e) => updateProduct({ require_shipping: e.target.checked })}
+                    label="Require shipping information"
+                  />
                 </fieldset>
                 {product.native_type === "membership" ? (
                   <fieldset>

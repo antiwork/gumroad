@@ -23,7 +23,7 @@ export const PreviewSidebar = ({
   return (
     <aside
       className={cx(
-        "bg-filled sticky top-0 hidden h-screen flex-col gap-4 self-start overflow-auto p-6 lg:flex lg:border-l lg:border-border",
+        "bg-filled sticky top-0 hidden min-h-screen flex-col gap-4 self-start p-6 lg:flex lg:border-l lg:border-border",
         className,
       )}
       aria-labelledby={`${uid}-title`}

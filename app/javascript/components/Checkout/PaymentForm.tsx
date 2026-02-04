@@ -1104,7 +1104,12 @@ export const PaymentForm = ({
   className,
   notice,
   showCustomFields = true,
-}: React.HTMLAttributes<HTMLDivElement> & { notice?: string | null; showCustomFields?: boolean }) => {
+  borderless = false,
+}: React.HTMLAttributes<HTMLDivElement> & {
+  notice?: string | null;
+  showCustomFields?: boolean;
+  borderless?: boolean;
+}) => {
   const [state, dispatch] = useState();
   const loggedInUser = useLoggedInUser();
   const isTestPurchase = loggedInUser && state.products.find((product) => product.testPurchase);
@@ -1141,7 +1146,7 @@ export const PaymentForm = ({
   }, [state.status.type]);
 
   return (
-    <Card ref={paymentFormRef} className={className} aria-label="Payment form">
+    <Card ref={paymentFormRef} className={className} borderless={borderless} aria-label="Payment form">
       {isTestPurchase ? (
         <CardContent>
           <Alert variant="info" className="grow">

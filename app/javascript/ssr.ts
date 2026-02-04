@@ -10,7 +10,6 @@ import CustomersDownloadPopover from "$app/components/server-components/Customer
 import CustomersFilterPopover from "$app/components/server-components/CustomersPage/FilterPopover";
 import Discover from "$app/components/server-components/Discover";
 import DiscoverProductPage from "$app/components/server-components/Discover/ProductPage";
-import DiscoverWishlistPage from "$app/components/server-components/Discover/WishlistPage";
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import DownloadPageWithoutContent from "$app/components/server-components/DownloadPage/WithoutContent";
 import GenerateInvoiceConfirmationPage from "$app/components/server-components/GenerateInvoiceConfirmationPage";
@@ -23,9 +22,7 @@ import ProductEditPage from "$app/components/server-components/ProductEditPage";
 import Profile from "$app/components/server-components/Profile";
 import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeePage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
-import ProfileWishlistPage from "$app/components/server-components/Profile/WishlistPage";
 import DisputeEvidencePage from "$app/components/server-components/Purchase/DisputeEvidencePage";
-import PurchaseProductPage from "$app/components/server-components/Purchase/ProductPage";
 import SecureRedirectPage from "$app/components/server-components/SecureRedirectPage";
 import SubscribePage from "$app/components/server-components/SubscribePage";
 import SubscriptionManager from "$app/components/server-components/SubscriptionManager";
@@ -33,7 +30,6 @@ import SubscriptionManagerMagicLink from "$app/components/server-components/Subs
 import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
-import WishlistPage from "$app/components/server-components/WishlistPage";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Pill } from "$app/components/ui/Pill";
 
@@ -47,7 +43,6 @@ ReactOnRails.register({
   CustomersFilterPopover,
   Discover,
   DiscoverProductPage,
-  DiscoverWishlistPage,
   DisputeEvidencePage,
   DownloadPageWithContent,
   DownloadPageWithoutContent,
@@ -58,17 +53,14 @@ ReactOnRails.register({
   Pill,
   ProductEditPage,
   ProductIframePage,
-  PurchaseProductPage,
   ProductPage,
   Profile,
   ProfileCoffeePage,
   ProfileProductPage,
-  ProfileWishlistPage,
   SecureRedirectPage,
   SubscribePage,
   SubscriptionManager,
   SubscriptionManagerMagicLink,
   TaxesCollectionModal,
   VideoStreamPlayer,
-  WishlistPage,
 });
