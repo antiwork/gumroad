@@ -298,6 +298,8 @@ module StripeMerchantAccountManager
     bank_account.stripe_external_account_id = stripe_external_account.id
     bank_account.stripe_fingerprint = stripe_external_account.fingerprint
     bank_account.save!
+
+    CheckPaymentAddressWorker.perform_async(bank_account.user_id)
   end
 
   private_class_method

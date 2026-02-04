@@ -5,6 +5,8 @@ require "shared_examples/authorize_called"
 require "inertia_rails/rspec"
 
 describe WishlistsController, type: :controller, inertia: true do
+  render_views
+
   let(:user) { create(:user) }
   let(:wishlist) { create(:wishlist, user:) }
 
@@ -83,7 +85,7 @@ describe WishlistsController, type: :controller, inertia: true do
   end
 
   describe "GET show" do
-    it "renders Wishlists/Show with Inertia and public props" do
+    it "renders Wishlists/Show with Inertia, public props, and favicon meta tags" do
       request.host = URI.parse(user.subdomain_with_protocol).host
       get :show, params: { id: wishlist.url_slug }
 
@@ -92,6 +94,10 @@ describe WishlistsController, type: :controller, inertia: true do
       expect(inertia.props[:id]).to eq(wishlist.external_id)
       expect(inertia.props[:name]).to eq(wishlist.name)
       expect(inertia.props[:layout]).to be_nil
+
+      html = Nokogiri::HTML.parse(response.body)
+      expect(html.xpath("//link[@rel='shortcut icon']/@href").text).to include(user.avatar_url)
+      expect(html.xpath("//link[@rel='apple-touch-icon']/@href").text).to be_blank
     end
 
     context "when layout is profile" do
