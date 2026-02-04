@@ -3698,6 +3698,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("First name (Kana)", with: "ニホンゴ")
         fill_in("Last name (Kana)", with: "ソウゾウシャ")
         fill_in("Block / Building number", with: "1-1")
+        fill_in("Block / Building number (Kana)", with: "イチノイチ")
         fill_in("Town/Cho-me (Kanji)", with: "日本語")
         fill_in("Town/Cho-me (Kana)", with: "ニホンゴ")
         select("東京都", from: "Prefecture")
