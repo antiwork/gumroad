@@ -43,6 +43,7 @@ class ProductPresenter::ProductProps
         **ProductPresenter::InstallmentPlanProps.new(product:).props,
         is_legacy_subscription: product.is_legacy_subscription?,
         is_tiered_membership: product.is_tiered_membership,
+        is_recurring_billing: product.is_recurring_billing,
         is_physical: product.is_physical,
         custom_view_content_button_text: product.custom_view_content_button_text.presence,
         is_multiseat_license: product.is_tiered_membership && product.is_multiseat_license,

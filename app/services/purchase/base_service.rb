@@ -44,7 +44,8 @@ class Purchase::BaseService
         is_test_subscription: purchase.is_test_purchase?,
         is_installment_plan: purchase.is_installment_payment,
         charge_occurrence_count:,
-        free_trial_ends_at: purchase.is_free_trial_purchase? ? purchase.created_at + purchase.link.free_trial_duration : nil
+        free_trial_ends_at: purchase.is_free_trial_purchase? ? purchase.created_at + purchase.link.free_trial_duration : nil,
+        business_vat_id: purchase.purchase_sales_tax_info&.business_vat_id
       )
       payment_option = PaymentOption.new(
         price: purchase.price,

@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Toggle } from "$app/components/Toggle";
+import { Switch } from "$app/components/ui/Switch";
 
 type ToggleProps = {
   label: string;
@@ -14,17 +14,30 @@ type ToggleProps = {
 };
 export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disabled }: ToggleProps) => {
   const toggle = (
-    <Toggle value={value} onChange={onChange} disabled={Boolean(disabled)}>
-      {label}
-      {help?.url ? (
+    <Switch
+      checked={value}
+      onChange={(e) => onChange?.(e.target.checked)}
+      disabled={Boolean(disabled)}
+      label={
         <>
-          {" "}
-          <a href={help.url} target="_blank" rel="noopener noreferrer" className="learn-more" style={{ flexShrink: 0 }}>
-            {help.label}
-          </a>
+          {label}
+          {help?.url ? (
+            <>
+              {" "}
+              <a
+                href={help.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="learn-more"
+                style={{ flexShrink: 0 }}
+              >
+                {help.label}
+              </a>
+            </>
+          ) : null}
         </>
-      ) : null}
-    </Toggle>
+      }
+    />
   );
   return dropdown ? (
     <Details summary={toggle} className="toggle" open={value}>
