@@ -1300,7 +1300,6 @@ describe StripeMerchantAccountManager, :vcr do
             address_kanji: {
               line1: "1-1",
               town: "神宮前",
-              city: "渋谷区",
               state: "東京都",
               country: "JP",
               postal_code: "100-0000",
@@ -1308,7 +1307,6 @@ describe StripeMerchantAccountManager, :vcr do
             address_kana: {
               line1: "1-1",
               town: "ジングウマエ",
-              city: "シブヤク",
               state: "トウキョウト",
               country: "JP",
               postal_code: "100-0000",

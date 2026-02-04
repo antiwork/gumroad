@@ -957,36 +957,6 @@ const AccountDetailsSection = ({
             gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
           }}
         >
-          <fieldset className={cx({ danger: errorFieldNames.has("city") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-city`}>City (Kanji)</label>
-            </legend>
-            <input
-              id={`${uid}-creator-city`}
-              type="text"
-              placeholder="渋谷区"
-              value={complianceInfo.city || ""}
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("city")}
-              required
-              onChange={(evt) => updateComplianceInfo({ city: evt.target.value })}
-            />
-          </fieldset>
-          <fieldset className={cx({ danger: errorFieldNames.has("city_kana") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-city-kana`}>City (Kana)</label>
-            </legend>
-            <input
-              id={`${uid}-creator-city-kana`}
-              type="text"
-              placeholder="シブヤク"
-              value={complianceInfo.city_kana || ""}
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("city_kana")}
-              required
-              onChange={(evt) => updateComplianceInfo({ city_kana: evt.target.value })}
-            />
-          </fieldset>
           <fieldset className={cx({ danger: errorFieldNames.has("state") })}>
             <legend>
               <label htmlFor={`${uid}-creator-prefecture`}>Prefecture</label>
