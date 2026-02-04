@@ -44,7 +44,8 @@ describe SecureRedirectController, type: :controller do
           message: message,
           field_name: field_name,
           error_message: error_message,
-          encrypted_payload: encrypted_payload
+          encrypted_payload: encrypted_payload,
+          authenticity_token: kind_of(String)
         )
       end
 
@@ -56,8 +57,27 @@ describe SecureRedirectController, type: :controller do
         expect(inertia.props).to include(
           message: "Please enter the confirmation text to continue to your destination.",
           field_name: "Confirmation text",
-          error_message: "Confirmation text does not match"
+          error_message: "Confirmation text does not match",
+          authenticity_token: kind_of(String)
         )
+      end
+
+      it "includes flash in props when present" do
+        request.session["flash"] = { "flashes" => { "alert" => "Test error message" }, "discard" => [] }
+
+        get :new, params: {
+          encrypted_payload: encrypted_payload
+        }
+
+        expect(inertia.props[:flash]).to include(message: "Test error message", status: "danger")
+      end
+
+      it "does not include flash in props when not present" do
+        get :new, params: {
+          encrypted_payload: encrypted_payload
+        }
+
+        expect(inertia.props[:flash]).to be_nil
       end
     end
 
@@ -199,27 +219,27 @@ describe SecureRedirectController, type: :controller do
     end
 
     context "with blank confirmation text" do
-      it "returns unprocessable entity with error message" do
+      it "redirects back with error message" do
         post :create, params: valid_params.merge(confirmation_text: "")
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(secure_url_redirect_path(encrypted_payload: encrypted_payload))
         expect(flash[:alert]).to eq("Please enter the confirmation text")
       end
 
-      it "returns unprocessable entity when confirmation text is nil" do
+      it "redirects back when confirmation text is nil" do
         post :create, params: valid_params.except(:confirmation_text)
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(secure_url_redirect_path(encrypted_payload: encrypted_payload))
         expect(flash[:alert]).to eq("Please enter the confirmation text")
       end
 
-      it "returns unprocessable entity when confirmation text is whitespace only" do
+      it "redirects back when confirmation text is whitespace only" do
         post :create, params: valid_params.merge(confirmation_text: "   ")
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(inertia.component).to eq("SecureRedirect/NewPage")
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(secure_url_redirect_path(encrypted_payload: encrypted_payload))
         expect(flash[:alert]).to eq("Please enter the confirmation text")
       end
     end

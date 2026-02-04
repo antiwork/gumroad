@@ -14,7 +14,10 @@ class SecureRedirectController < ApplicationController
     confirmation_text = params[:confirmation_text]
 
     if confirmation_text.blank?
-      return render_error("Please enter the confirmation text")
+      return redirect_to(
+        secure_url_redirect_path(encrypted_payload: @encrypted_payload),
+        alert: "Please enter the confirmation text"
+      )
     end
 
     # Decrypt and parse the bundled payload
@@ -81,7 +84,8 @@ class SecureRedirectController < ApplicationController
         message: @message,
         field_name: @field_name,
         error_message: @error_message,
-        encrypted_payload: @encrypted_payload
+        encrypted_payload: @encrypted_payload,
+        authenticity_token: form_authenticity_token
       }
     end
 

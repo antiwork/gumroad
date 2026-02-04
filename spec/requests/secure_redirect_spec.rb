@@ -75,7 +75,6 @@ describe("Secure Redirect", js: true, type: :system) do
       it "shows an error message" do
         fill_in field_name, with: "wrong text"
         click_button "Continue"
-        wait_for_ajax
 
         expect(page).to have_content(error_message)
         expect(page).to have_current_path(secure_url_redirect_path, ignore_query: true)
@@ -86,7 +85,6 @@ describe("Secure Redirect", js: true, type: :system) do
       it "shows an error message" do
         fill_in field_name, with: ""
         click_button "Continue"
-        wait_for_ajax
 
         expect(page).to have_content(message)
         expect(page).to have_content("Please enter the confirmation text")
@@ -116,7 +114,6 @@ describe("Secure Redirect", js: true, type: :system) do
       it "shows an error message" do
         fill_in field_name, with: confirmation_text_2
         click_button "Continue"
-        wait_for_ajax
 
         expect(page).to have_content("Invalid destination")
         expect(page).to have_current_path(secure_url_redirect_path, ignore_query: true)
@@ -138,7 +135,6 @@ describe("Secure Redirect", js: true, type: :system) do
       it "shows an error message" do
         fill_in field_name, with: confirmation_text_2
         click_button "Continue"
-        wait_for_ajax
 
         expect(page).to have_content("Invalid request")
         expect(page).to have_current_path(secure_url_redirect_path, ignore_query: true)

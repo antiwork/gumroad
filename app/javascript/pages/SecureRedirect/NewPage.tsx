@@ -13,22 +13,24 @@ type PageProps = {
   field_name: string;
   error_message: string;
   encrypted_payload: string;
+  authenticity_token: string;
   flash?: AlertPayload | null;
 };
 
 function NewPage() {
-  const { props } = usePage();
-  const pageProps = cast<PageProps>(props);
-  useFlashMessage(pageProps.flash);
+  const { message, field_name, encrypted_payload, authenticity_token, flash } =
+    cast<PageProps>(usePage().props);
+  useFlashMessage(flash);
 
   const uid = React.useId();
 
   const form = useForm({
     confirmation_text: "",
-    encrypted_payload: pageProps.encrypted_payload,
+    encrypted_payload,
+    authenticity_token,
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const submitForm = (e: React.FormEvent) => {
     e.preventDefault();
     form.post(`${Routes.secure_url_redirect_path()}${window.location.search}`, { preserveScroll: true });
   };
@@ -39,19 +41,22 @@ function NewPage() {
         <CardContent asChild>
           <header>
             <h2 className="grow">Confirm access</h2>
-            <p>{pageProps.message}</p>
+            <p>{message}</p>
           </header>
         </CardContent>
         <CardContent className="mini-rule legacy-only"></CardContent>
         <CardContent asChild>
-          <form onSubmit={handleSubmit}>
+          <form method="post" onSubmit={submitForm}>
+            <input type="hidden" name="authenticity_token" value={authenticity_token} />
+            <input type="hidden" name="encrypted_payload" value={encrypted_payload} />
             <label htmlFor={`${uid}-confirmation-text`} className="form-label grow">
-              {pageProps.field_name}
+              {field_name}
             </label>
             <input
               id={`${uid}-confirmation-text`}
+              name="confirmation_text"
               type="text"
-              placeholder={pageProps.field_name}
+              placeholder={field_name}
               value={form.data.confirmation_text}
               onChange={(e) => form.setData("confirmation_text", e.target.value)}
               autoFocus
