@@ -517,7 +517,7 @@ export default function PaymentsPage() {
         });
       }
     }
-    if (!form.data.user.city) {
+    if (form.data.user.country !== "JP" && !form.data.user.city) {
       markFieldInvalid("city");
     }
     if (
