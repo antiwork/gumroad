@@ -462,7 +462,7 @@ class Subscription < ApplicationRecord
       new_purchase.is_original_subscription_purchase = true
       new_purchase.perceived_price_cents = perceived_price_cents
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
-      new_purchase.business_vat_id = resolve_vat_id
+      new_purchase.business_vat_id = business_vat_id.presence || original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
 
@@ -698,25 +698,6 @@ class Subscription < ApplicationRecord
 
   def update_business_vat_id!(vat_id)
     update!(business_vat_id: vat_id) if vat_id.present? && business_vat_id.blank?
-  end
-
-  # TODO: Remove fallback logic after running Onetime::BackfillSubscriptionVatIds
-  def resolve_vat_id
-    business_vat_id.presence ||
-      original_purchase&.purchase_sales_tax_info&.business_vat_id.presence ||
-      vat_id_from_original_purchase_refund ||
-      vat_id_from_any_subscription_purchase_refund
-  end
-
-  def vat_id_from_any_subscription_purchase_refund
-    Refund.joins(:purchase)
-          .where(purchases: { subscription_id: id })
-          .where("refunds.gumroad_tax_cents > 0")
-          .where("refunds.amount_cents = 0")
-          .order("refunds.created_at DESC")
-          .limit(10)
-          .find { |refund| refund.business_vat_id.present? }
-          &.business_vat_id
   end
 
   def last_resubscribed_at
@@ -997,17 +978,7 @@ class Subscription < ApplicationRecord
     end
 
     def set_vat_id_for_purchase(purchase)
-      vat_id = resolve_vat_id
-      purchase.business_vat_id = vat_id if vat_id.present?
-    end
-
-    def vat_id_from_original_purchase_refund
-      original_purchase.refunds
-                       .where("gumroad_tax_cents > 0")
-                       .where("amount_cents = 0")
-                       .order(created_at: :desc)
-                       .find { |refund| refund.business_vat_id.present? }
-                       &.business_vat_id
+      purchase.business_vat_id = business_vat_id if business_vat_id.present?
     end
 
     def schedule_member_cancellation_workflow_jobs
