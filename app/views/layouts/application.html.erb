@@ -17,7 +17,7 @@
         </div>
       <% end %>
       <main class="flex-1 flex flex-col lg:h-screen overflow-y-auto">
-        <div class="flex-1 flex flex-col <%= 'h-full' if @no_scroll %>">
+        <div class="flex-1 flex flex-col">
           <%= content_for?(:content) ? yield(:content) : yield %>
         </div>
         <% if content_for? :footer %>
