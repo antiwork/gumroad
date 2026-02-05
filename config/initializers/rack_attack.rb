@@ -250,7 +250,7 @@ class Rack::Attack
 
   # Throttle community chat messages
   # 60 requests per 60 seconds (per community, per IP)
-  throttle_by_ip_for_period path: /\A\/internal\/communities\/.*\/chat_messages\z/,
+  throttle_by_ip_for_period path: /\A\/communities\/[^\/]+\/chat_messages\z/,
                             method: :post,
                             requests: 60,
                             period: 60.seconds

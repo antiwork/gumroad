@@ -14,13 +14,13 @@ import { formatDate } from "$app/utils/date";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { UserAvatar } from "$app/components/Communities/UserAvatar";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
-import { UserAvatar } from "$app/components/server-components/CommunitiesPage/UserAvatar";
 import { Pill } from "$app/components/ui/Pill";
 
 import defaultUserAvatar from "$assets/images/user-avatar.png";
