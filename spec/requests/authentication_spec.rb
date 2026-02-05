@@ -91,7 +91,7 @@ describe("Authentication Scenario", type: :system, js: true) do
     end
 
     it("logs me out") do
-      expect(page).to have_disclosure @user.reload.display_name
+      expect(page).to have_disclosure_button @user.reload.display_name
       toggle_disclosure @user.display_name
       click_on "Logout"
       expect(page).to(have_content("Log in"))

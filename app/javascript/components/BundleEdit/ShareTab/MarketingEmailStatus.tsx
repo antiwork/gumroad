@@ -1,27 +1,65 @@
 import * as React from "react";
 
-import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { CardProduct } from "$app/parsers/product";
+import { formatPriceCentsWithCurrencySymbol, CurrencyCode } from "$app/utils/currency";
 
-import { computeStandalonePrice, useBundleEditContext } from "$app/components/BundleEdit/state";
 import { NavigationButton } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
 
-export const MarketingEmailStatus = () => {
-  const { bundle, uniquePermalink, currencyType } = useBundleEditContext();
+type BundleProduct = CardProduct & {
+  is_quantity_enabled: boolean;
+  quantity: number;
+  variants: {
+    selected_id: string;
+    list: {
+      id: string;
+      name: string;
+      description: string;
+      price_difference: number;
+    }[];
+  } | null;
+};
+
+const computeStandalonePrice = (bundleProduct: BundleProduct) =>
+  (bundleProduct.price_cents +
+    (bundleProduct.variants?.list.find(({ id }) => id === bundleProduct.variants?.selected_id)?.price_difference ??
+      0)) *
+  bundleProduct.quantity;
+
+type MarketingEmailStatusProps = {
+  id: string;
+  isPublished: boolean;
+  bundleName?: string;
+  bundlePermalink?: string;
+  bundlePriceCents?: number;
+  products?: BundleProduct[];
+  currencyType?: CurrencyCode;
+};
+
+export const MarketingEmailStatus = ({
+  isPublished,
+  bundleName = "",
+  bundlePermalink = "",
+  bundlePriceCents = 0,
+  products = [],
+  currencyType = "usd",
+}: MarketingEmailStatusProps) => {
+  // Only show for published bundles with products
+  if (!isPublished || products.length === 0) return null;
 
   const [sendToAllCustomers, setSendToAllCustomers] = React.useState(false);
   const queryParams = {
     template: "bundle_marketing",
-    bundle_product_permalinks: sendToAllCustomers ? undefined : bundle.products.map(({ permalink }) => permalink),
-    bundle_product_names: bundle.products.map(({ name }) => name),
-    bundle_permalink: uniquePermalink,
-    bundle_name: bundle.name,
-    bundle_price: formatPriceCentsWithCurrencySymbol(currencyType, bundle.price_cents, {
+    bundle_product_permalinks: sendToAllCustomers ? undefined : products.map(({ permalink }) => permalink),
+    bundle_product_names: products.map(({ name }) => name),
+    bundle_permalink: bundlePermalink,
+    bundle_name: bundleName,
+    bundle_price: formatPriceCentsWithCurrencySymbol(currencyType, bundlePriceCents, {
       symbolFormat: "short",
     }),
     standalone_price: formatPriceCentsWithCurrencySymbol(
       currencyType,
-      bundle.products.reduce((total, bundleProduct) => total + computeStandalonePrice(bundleProduct), 0),
+      products.reduce((total, bundleProduct) => total + computeStandalonePrice(bundleProduct), 0),
       { symbolFormat: "short" },
     ),
   };

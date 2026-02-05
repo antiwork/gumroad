@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
 describe UrlRedirectsController do
   render_views
@@ -664,6 +665,21 @@ describe UrlRedirectsController do
           expect(response).to be_successful
         end
 
+        context "when impersonating the purchaser" do
+          let(:admin_user) { create(:admin_user) }
+          let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: admin_user.id, scopes: "mobile_api") }
+
+          before do
+            $redis.set(RedisKey.impersonated_user(admin_user.id), purchaser.id)
+          end
+
+          it "grants access when the token owner is the impersonated user and mobile_token is present" do
+            get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+            expect(response).to be_successful
+          end
+        end
+
         it "requires mobile_token to match the expected value" do
           @url_redirect.update!(has_been_seen: true)
 
@@ -1307,7 +1323,7 @@ describe UrlRedirectsController do
     end
   end
 
-  describe "GET 'confirm_page'" do
+  describe "GET 'confirm_page'", inertia: true do
     before do
       @url_redirect = create(:url_redirect)
     end
@@ -1321,18 +1337,18 @@ describe UrlRedirectsController do
     it "renders the confirm page correctly" do
       get :confirm_page, params: { id: @url_redirect.token }
       expect(response).to be_successful
-      expect(assigns(:hide_layouts)).to eq(true)
-      expect(assigns(:react_component_props)).to eq(UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user: nil).download_page_without_content_props(content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]).merge(
-        is_mobile_app_web_view: false,
-        content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required],
-        add_to_library_option: "none",
-        confirmation_info: {
-          id: @url_redirect.token,
-          destination: nil,
-          display: nil,
-          email: nil,
-        }
-      ))
+      expect(inertia.component).to eq("UrlRedirects/ConfirmPage")
+      expect(inertia.props[:token]).to eq(@url_redirect.token)
+      expect(inertia.props[:redirect_id]).to eq(@url_redirect.external_id)
+      expect(inertia.props[:content_unavailability_reason_code]).to eq(UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required])
+      expect(inertia.props[:is_mobile_app_web_view]).to eq(false)
+      expect(inertia.props[:add_to_library_option]).to eq("none")
+      expect(inertia.props[:confirmation_info]).to eq({
+                                                        id: @url_redirect.token,
+                                                        destination: nil,
+                                                        display: nil,
+                                                        email: nil,
+                                                      })
     end
 
     it "assigns the url_redirect correctly" do
@@ -1344,7 +1360,7 @@ describe UrlRedirectsController do
       it "assigns @destination with params[:destination]" do
         get :confirm_page, params: { id: @url_redirect.token, destination: "stream" }
 
-        expect(assigns(:react_component_props)[:confirmation_info][:destination]).to eq "stream"
+        expect(inertia.props[:confirmation_info][:destination]).to eq "stream"
       end
     end
 
@@ -1358,7 +1374,7 @@ describe UrlRedirectsController do
         it "assigns @destination with 'download_page'" do
           get :confirm_page, params: { id: @url_redirect.token }
 
-          expect(assigns(:react_component_props)[:confirmation_info][:destination]).to eq "download_page"
+          expect(inertia.props[:confirmation_info][:destination]).to eq "download_page"
         end
       end
 
@@ -1369,7 +1385,7 @@ describe UrlRedirectsController do
 
         get :confirm_page, params: { id: url_redirect.token }
 
-        expect(assigns(:react_component_props)[:confirmation_info][:destination]).to be_nil
+        expect(inertia.props[:confirmation_info][:destination]).to be_nil
       end
     end
   end

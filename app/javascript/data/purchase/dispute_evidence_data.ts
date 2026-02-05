@@ -1,7 +1,3 @@
-import { cast } from "ts-safe-cast";
-
-import { request, ResponseError } from "$app/utils/request";
-
 export const cancellationRebuttalOptions = {
   customer_did_not_request: "The customer did not request cancellation",
   customer_reactivated: "The customer reactivated their subscription",
@@ -118,52 +114,3 @@ export const disputeReasons = {
   { message: string; refusalRequiresExplanation?: true; reasonsForWinning: ReasonForWinningOption[] }
 >;
 export type DisputeReason = keyof typeof disputeReasons;
-
-export type SellerDisputeEvidence = {
-  reasonForWinning: string;
-  reasonForWinningOption: ReasonForWinningOption | null;
-  cancellationRebuttal: string;
-  cancellationRebuttalOption: CancellationRebuttalOption | null;
-  refundRefusalExplanation: string;
-  customerCommunicationFileSignedBlobId: string | null;
-};
-
-export const submitForm = async (
-  purchaseId: string,
-  {
-    reasonForWinning,
-    reasonForWinningOption,
-    cancellationRebuttal,
-    cancellationRebuttalOption,
-    refundRefusalExplanation,
-    customerCommunicationFileSignedBlobId,
-  }: SellerDisputeEvidence,
-) => {
-  const response = await request({
-    method: "PUT",
-    accept: "json",
-    url: Routes.purchase_dispute_evidence_path(purchaseId),
-    data: {
-      dispute_evidence: {
-        reason_for_winning:
-          reasonForWinningOption === "other"
-            ? reasonForWinning
-            : reasonForWinningOption !== null
-              ? reasonForWinningOptions[reasonForWinningOption]
-              : null,
-        cancellation_rebuttal:
-          cancellationRebuttalOption === "other"
-            ? cancellationRebuttal
-            : cancellationRebuttalOption !== null
-              ? cancellationRebuttalOptions[cancellationRebuttalOption]
-              : null,
-        refund_refusal_explanation: refundRefusalExplanation,
-        customer_communication_file_signed_blob_id: customerCommunicationFileSignedBlobId,
-      },
-    },
-  });
-  const responseData = cast<{ success: true } | { success: false; error: string }>(await response.json());
-  if (!responseData.success) throw new ResponseError(responseData.error);
-
-  return responseData;
-};

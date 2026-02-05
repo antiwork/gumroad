@@ -579,7 +579,7 @@ describe("Discover", js: true, type: :system) do
         visit discover_url(host: discover_host)
 
         find("[role=menuitem]", text: "More").hover
-        click_on "Writing & Publishing"
+        click_on "Other"
 
         within "[role=menubar]" do
           expect(page).to have_selector("[aria-current=true]", text: "More")
