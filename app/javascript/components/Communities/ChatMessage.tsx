@@ -2,8 +2,6 @@ import { router } from "@inertiajs/react";
 import cx from "classnames";
 import React from "react";
 
-import { asyncVoid } from "$app/utils/promise";
-
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Icon } from "$app/components/Icons";
@@ -85,7 +83,7 @@ export const ChatMessage = ({
     setIsEditing(false);
   };
 
-  const handleSaveEdit = async (editedMessage: string) => {
+  const handleSaveEdit = (editedMessage: string) => {
     if (editedMessage.length < MIN_MESSAGE_LENGTH) {
       showAlert(`Message must be at least ${MIN_MESSAGE_LENGTH} characters long.`, "error");
       return;
@@ -238,7 +236,7 @@ type MessageEditorProps = {
   content: string;
   isSaving: boolean;
   onCancel: () => void;
-  onSave: (content: string) => Promise<void>;
+  onSave: (content: string) => void;
 };
 const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: MessageEditorProps) => {
   const [editedContent, setEditedContent] = React.useState(initialContent);
@@ -285,12 +283,12 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
     }
   };
 
-  const handleKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") {
       onCancel();
     } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      await onSave(editedContent.trim());
+      onSave(editedContent.trim());
     }
   };
 
@@ -314,7 +312,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
             determineIfMoreTextIndicatorShouldBeShown();
           });
         }}
-        onKeyDown={asyncVoid(handleKeyDown)}
+        onKeyDown={handleKeyDown}
         onScroll={determineIfMoreTextIndicatorShouldBeShown}
       />
       <div
@@ -330,12 +328,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
         <Button small onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button
-          small
-          color="accent"
-          onClick={asyncVoid(async () => await onSave(editedContent.trim()))}
-          disabled={isSaving}
-        >
+        <Button small color="accent" onClick={() => onSave(editedContent.trim())} disabled={isSaving}>
           {isSaving ? "Saving..." : "Save"}
         </Button>
       </div>

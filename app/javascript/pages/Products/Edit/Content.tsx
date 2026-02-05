@@ -1374,4 +1374,4 @@ export default function ContentPage() {
       </LicenseProvider>
     </PostsProvider>
   );
-};
+}

@@ -7,7 +7,6 @@ import { is } from "ts-safe-cast";
 
 import cable from "$app/channels/consumer";
 import { assertDefined } from "$app/utils/assert";
-import { asyncVoid } from "$app/utils/promise";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -614,16 +613,11 @@ const NotificationsSettingsModal = ({
           </Button>
           <Button
             color="primary"
-            onClick={asyncVoid(async () => {
+            onClick={() => {
               setIsSaving(true);
-              try {
-                await onSave(updatedSettings);
-              } catch (_error: unknown) {
-                showAlert("Failed to save changes. Please try again later.", "error");
-              } finally {
-                setIsSaving(false);
-              }
-            })}
+              onSave(updatedSettings);
+              setIsSaving(false);
+            }}
           >
             {isSaving ? "Saving..." : "Save"}
           </Button>

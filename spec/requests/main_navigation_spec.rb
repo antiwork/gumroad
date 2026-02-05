@@ -45,12 +45,12 @@ describe "Main Navigation", type: :system, js: true do
         Feature.activate_user(:communities, user)
 
         product = create(:product, user:, community_chat_enabled: true)
-        create(:community, seller: user, resource: product)
+        community = create(:community, seller: user, resource: product)
 
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Community", href: community_path)
+          expect(page).to have_link("Community", href: community_path(user.external_id, community.external_id))
         end
       end
 
@@ -58,14 +58,14 @@ describe "Main Navigation", type: :system, js: true do
         seller = create(:user)
         Feature.activate_user(:communities, seller)
 
-        product = create(:product, user: seller, community_chat_enabled: true)
-        create(:community, resource: product, seller:)
-        create(:purchase, seller:, link: product, purchaser: user)
+        product = create(:product, user: seller, community_chat_enabled: true, price_cents: 0)
+        community = create(:community, resource: product, seller:)
+        create(:free_purchase, seller:, link: product, purchaser: user)
 
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Community", href: community_path)
+          expect(page).to have_link("Community", href: community_path(seller.external_id, community.external_id))
         end
       end
 
@@ -76,7 +76,7 @@ describe "Main Navigation", type: :system, js: true do
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).not_to have_link("Community", href: community_path)
+          expect(page).not_to have_link("Community")
         end
       end
     end
