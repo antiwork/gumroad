@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-class Api::Internal::CartsController < Api::Internal::BaseController
+class Checkout::CartsController < ApplicationController
   def update
     if permitted_cart_params[:items].length > Cart::MAX_ALLOWED_CART_PRODUCTS
-      return render json: { error: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart." }, status: :unprocessable_entity
+      return redirect_to checkout_path, alert: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart."
     end
 
     ActiveRecord::Base.transaction do
@@ -48,11 +48,11 @@ class Api::Internal::CartsController < Api::Internal::BaseController
       cart.alive_cart_products.where.not(id: updated_cart_products.map(&:id)).find_each(&:mark_deleted!)
     end
 
-    head :no_content
+    redirect_to checkout_path
   rescue ActiveRecord::RecordInvalid => e
     Bugsnag.notify(e)
     Rails.logger.error(e.full_message) if Rails.env.development?
-    render json: { error: "Sorry, something went wrong. Please try again." }, status: :unprocessable_entity
+    redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
   end
 
   private

@@ -575,7 +575,10 @@ Rails.application.routes.draw do
     get "/purchases" => redirect("/library")
     get "/purchases/search", to: "purchases#search"
 
-    resources :checkout, only: [:index]
+    namespace :checkout do
+      resource :cart, only: [:update], controller: "/checkout/carts"
+    end
+    resource :checkout, only: [:show], controller: "checkout"
 
     resources :licenses, only: [:update]
 
@@ -927,8 +930,6 @@ Rails.application.routes.draw do
         end
 
         resources :ai_product_details_generations, only: [:create]
-
-        resource :cart, only: [:update]
       end
     end
 

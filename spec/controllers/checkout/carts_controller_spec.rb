@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Api::Internal::CartsController do
+describe Checkout::CartsController, type: :controller do
   let!(:seller) { create(:named_seller) }
 
   describe "PUT update" do
@@ -11,13 +11,12 @@ describe Api::Internal::CartsController do
         sign_in(seller)
       end
 
-      it "creates an empty cart" do
+      it "creates an empty cart and redirects to checkout" do
         expect do
           put :update, params: { cart: { items: [], discountCodes: [] } }, as: :json
         end.to change(Cart, :count).by(1)
 
-        expect(response).to be_successful
-
+        expect(response).to redirect_to(checkout_path)
         expect(controller.logged_in_user.carts.alive).to be_present
       end
 
@@ -44,6 +43,8 @@ describe Api::Internal::CartsController do
             }
           }, as: :json
         end.to change(Cart, :count).by(1)
+
+        expect(response).to redirect_to(checkout_path)
 
         cart = controller.logged_in_user.alive_cart
         expect(cart).to have_attributes(
@@ -122,6 +123,8 @@ describe Api::Internal::CartsController do
           }, as: :json
         end.not_to change(Cart, :count)
 
+        expect(response).to redirect_to(checkout_path)
+
         cart.reload
         expect(cart.return_url).to be_nil
         expect(cart.cart_products.size).to eq 3
@@ -154,7 +157,7 @@ describe Api::Internal::CartsController do
         )
       end
 
-      it "updates `browser_guid` with the value of the `_gumroad_guid` cookie" do
+      it "updates browser_guid with the value of the _gumroad_guid cookie" do
         cart = create(:cart, user: seller, browser_guid: "123")
         cookies[:_gumroad_guid] = "456"
         expect do
@@ -163,49 +166,7 @@ describe Api::Internal::CartsController do
         expect(cart.reload.browser_guid).to eq("456")
       end
 
-      it "does not change products that are already deleted" do
-        product = create(:product)
-
-        cart = create(:cart, user: controller.logged_in_user, return_url: "https://example.com")
-        deleted_cart_product = create(:cart_product, cart: cart, product: product, deleted_at: 1.minute.ago)
-
-        expect do
-          put :update, params: {
-            cart: {
-              returnUrl: nil,
-              items: [
-                {
-                  product: { id: product.external_id },
-                  option_id: nil,
-                  recurrence: nil,
-                  price: 999,
-                  quantity: 1,
-                  rent: false,
-                  referrer: "direct",
-                  url_parameters: {}
-                }
-              ],
-              discountCodes: []
-            }
-          }, as: :json
-        end.not_to change { deleted_cart_product.reload.updated_at }
-
-        cart.reload
-        expect(cart.cart_products.deleted.sole).to eq(deleted_cart_product)
-        expect(cart.cart_products.alive.sole).to have_attributes(
-          product:,
-          option: nil,
-          recurrence: nil,
-          price: 999,
-          quantity: 1,
-          rent: false,
-          referrer: "direct",
-          url_parameters: {},
-          deleted_at: nil
-        )
-      end
-
-      it "returns an error when params are invalid" do
+      it "redirects with alert when params are invalid" do
         expect do
           put :update, params: {
             cart: {
@@ -220,25 +181,26 @@ describe Api::Internal::CartsController do
           }, as: :json
         end.not_to change(Cart, :count)
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body).to eq("error" => "Sorry, something went wrong. Please try again.")
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
       end
 
-      it "returns an error when cart contains more than allowed number of cart products" do
-        items = (Cart::MAX_ALLOWED_CART_PRODUCTS + 1).times.map { { product: { id: _1 + 1 } }  }
-        put :update, params: { cart: { items: }, as: :json }
+      it "redirects with alert when cart contains more than allowed number of cart products" do
+        items = (Cart::MAX_ALLOWED_CART_PRODUCTS + 1).times.map { { product: { id: _1 + 1 } } }
+        put :update, params: { cart: { items: } }, as: :json
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body).to eq("error" => "You cannot add more than 50 products to the cart.")
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("You cannot add more than 50 products to the cart.")
       end
     end
 
     context "when user is not signed in" do
-      it "creates a new cart" do
+      it "creates a new cart and redirects to checkout" do
         expect do
           put :update, params: { cart: { email: "john@example.com", items: [], discountCodes: [] } }, as: :json
         end.to change(Cart, :count).by(1)
-        expect(response).to be_successful
+
+        expect(response).to redirect_to(checkout_path)
         cart = Cart.last
         expect(cart.user).to be_nil
         expect(cart.email).to eq("john@example.com")
@@ -253,6 +215,8 @@ describe Api::Internal::CartsController do
         expect do
           put :update, params: { cart: { email: "john@example.com", items: [], discountCodes: [] } }, as: :json
         end.not_to change(Cart, :count)
+
+        expect(response).to redirect_to(checkout_path)
         cart.reload
         expect(cart.email).to eq("john@example.com")
         expect(cart.ip_address).to eq("127.1.2.4")

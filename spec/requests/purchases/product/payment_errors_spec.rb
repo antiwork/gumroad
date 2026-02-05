@@ -85,7 +85,7 @@ describe("Purchase from a product page", type: :system, js: true) do
       add_to_cart(@product)
       @product.price_cents += 100
       check_out(@product, error: "The price just changed! Refresh the page for the updated price.")
-      visit checkout_index_path
+      visit checkout_path
       check_out(@product)
 
       expect(Purchase.last.price_cents).to eq(200)

@@ -1,11 +1,10 @@
-import { cast } from "ts-safe-cast";
+import { router } from "@inertiajs/react";
 
 import { Discount } from "$app/parsers/checkout";
 import { AnalyticsData, CustomFieldDescriptor, FreeTrial, ProductNativeType } from "$app/parsers/product";
 import { CurrencyCode } from "$app/utils/currency";
 import { applyOfferCodeToCents } from "$app/utils/offer-code";
 import { RecurrenceId } from "$app/utils/recurringPricing";
-import { ResponseError, request } from "$app/utils/request";
 
 import {
   Rental,
@@ -178,16 +177,6 @@ export function newCartState(): CartState {
   return { items: [], discountCodes: [] };
 }
 
-export async function saveCartState(cart: CartState) {
-  const response = await request({
-    method: "PUT",
-    url: Routes.internal_cart_path(),
-    accept: "json",
-    data: { cart },
-  });
-
-  if (!response.ok) {
-    const data = cast<{ error?: string }>(await response.json());
-    throw new ResponseError(data.error);
-  }
+export function saveCartState(cart: CartState) {
+  router.put(Routes.checkout_cart_path(), { cart }, { preserveScroll: true });
 }
