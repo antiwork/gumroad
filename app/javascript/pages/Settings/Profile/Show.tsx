@@ -108,7 +108,7 @@ export default function SettingsPage() {
       <WithPreviewSidebar>
         <form>
           <section className="grid gap-8 p-4! md:p-8!">
-            <header className="grid content-start gap-3">
+            <header>
               <h2>Profile</h2>
             </header>
             <Fieldset>

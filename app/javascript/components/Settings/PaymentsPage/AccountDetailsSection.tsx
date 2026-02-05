@@ -3,7 +3,6 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
-import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -12,6 +11,7 @@ import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Select } from "$app/components/ui/Select";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 const AccountDetailsSection = ({
   user,
@@ -63,49 +63,43 @@ const AccountDetailsSection = ({
               <a href="/help/article/260-your-payout-settings-page">What type of account should I choose?</a>
             </FieldsetTitle>
           </Fieldset>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" role="radiogroup">
-            <Button
-              role="radio"
-              key="individual"
-              aria-checked={!complianceInfo.is_business}
-              onClick={() => updateComplianceInfo({ is_business: false })}
-              disabled={isFormDisabled}
-              className={classNames(
-                "items-start! justify-start! gap-3! text-left transition-transform!",
-                "hover:translate-x-0! hover:translate-y-0!",
-                !complianceInfo.is_business && "-translate-x-1! -translate-y-1! bg-background! shadow!",
-              )}
-            >
-              <Icon name="person" />
-              <div>
-                <h4>Individual</h4>
-                When you are selling as yourself
-              </div>
-            </Button>
-            <Button
-              role="radio"
-              key="business"
-              aria-checked={complianceInfo.is_business}
-              onClick={() =>
-                updateComplianceInfo({
-                  is_business: true,
-                  business_country: complianceInfo.business_country ?? complianceInfo.country,
-                })
-              }
-              disabled={isFormDisabled}
-              className={classNames(
-                "items-start! justify-start! gap-3! text-left transition-transform!",
-                "hover:translate-x-0! hover:translate-y-0!",
-                complianceInfo.is_business && "-translate-x-1! -translate-y-1! bg-background! shadow!",
-              )}
-            >
-              <Icon name="shop-window" />
-              <div>
-                <h4>Business</h4>
-                When you are selling as a business
-              </div>
-            </Button>
-          </div>
+          <Tabs variant="buttons" className="grid-cols-1 gap-4 sm:grid-cols-2" role="radiogroup">
+            <Tab key="individual" isSelected={!complianceInfo.is_business} asChild>
+              <Button
+                role="radio"
+                aria-checked={!complianceInfo.is_business}
+                onClick={() => updateComplianceInfo({ is_business: false })}
+                disabled={isFormDisabled}
+                className="items-start justify-start text-left"
+              >
+                <Icon name="person" />
+                <div>
+                  <h4 className="font-bold">Individual</h4>
+                  When you are selling as yourself
+                </div>
+              </Button>
+            </Tab>
+            <Tab key="business" isSelected={complianceInfo.is_business} asChild>
+              <Button
+                role="radio"
+                aria-checked={complianceInfo.is_business}
+                onClick={() =>
+                  updateComplianceInfo({
+                    is_business: true,
+                    business_country: complianceInfo.business_country ?? complianceInfo.country,
+                  })
+                }
+                disabled={isFormDisabled}
+                className="items-start justify-start text-left"
+              >
+                <Icon name="shop-window" />
+                <div>
+                  <h4 className="font-bold">Business</h4>
+                  When you are selling as a business
+                </div>
+              </Button>
+            </Tab>
+          </Tabs>
         </section>
       ) : null}
       {complianceInfo.is_business ? (

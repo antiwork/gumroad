@@ -7,7 +7,6 @@ import { CardPayoutError, prepareCardTokenForPayouts, type CardPayoutToken } fro
 import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCardData } from "$app/types/payments";
-import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 
@@ -35,6 +34,7 @@ import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -943,92 +943,76 @@ export default function PaymentsPage() {
           }
         >
           <section className="grid gap-8">
-            <div
-              className="grid gap-4"
-              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
-              role="radiogroup"
-            >
+            <Tabs variant="buttons" className="gap-4" role="radiogroup">
               {props.bank_account_details.show_bank_account ? (
                 <>
-                  <Button
-                    role="radio"
-                    key="bank"
-                    aria-checked={selectedPayoutMethod === "bank"}
-                    onClick={() => updatePayoutMethod("bank")}
-                    disabled={props.is_form_disabled}
-                    className={classNames(
-                      "items-start! justify-start! gap-3! text-left transition-transform!",
-                      "hover:translate-x-0! hover:translate-y-0!",
-                      selectedPayoutMethod === "bank" && "-translate-x-1! -translate-y-1! bg-background! shadow!",
-                    )}
-                  >
-                    <Icon name="bank" />
-                    <div>
-                      <h4>Bank Account</h4>
-                    </div>
-                  </Button>
-                  {props.user.country_code === "US" ? (
+                  <Tab key="bank" isSelected={selectedPayoutMethod === "bank"} asChild>
                     <Button
                       role="radio"
-                      key="card"
-                      aria-checked={selectedPayoutMethod === "card"}
-                      onClick={() => updatePayoutMethod("card")}
+                      aria-checked={selectedPayoutMethod === "bank"}
+                      onClick={() => updatePayoutMethod("bank")}
                       disabled={props.is_form_disabled}
-                      className={classNames(
-                        "items-start! justify-start! gap-3! text-left transition-transform!",
-                        "hover:translate-x-0! hover:translate-y-0!",
-                        selectedPayoutMethod === "card" && "-translate-x-1! -translate-y-1! bg-background! shadow!",
-                      )}
+                      className="items-start justify-start text-left"
                     >
-                      <Icon name="card" />
+                      <Icon name="bank" />
                       <div>
-                        <h4>Debit Card</h4>
+                        <h4 className="font-bold">Bank Account</h4>
                       </div>
                     </Button>
+                  </Tab>
+                  {props.user.country_code === "US" ? (
+                    <Tab key="card" isSelected={selectedPayoutMethod === "card"} asChild>
+                      <Button
+                        role="radio"
+                        aria-checked={selectedPayoutMethod === "card"}
+                        onClick={() => updatePayoutMethod("card")}
+                        disabled={props.is_form_disabled}
+                        className="items-start justify-start text-left"
+                      >
+                        <Icon name="card" />
+                        <div>
+                          <h4 className="font-bold">Debit Card</h4>
+                        </div>
+                      </Button>
+                    </Tab>
                   ) : null}
                 </>
               ) : null}
               {props.bank_account_details.show_paypal ? (
-                <Button
-                  role="radio"
-                  key="paypal"
-                  aria-checked={selectedPayoutMethod === "paypal"}
-                  onClick={() => updatePayoutMethod("paypal")}
-                  disabled={props.is_form_disabled}
-                  className={classNames(
-                    "items-start! justify-start! gap-3! text-left transition-transform!",
-                    "hover:translate-x-0! hover:translate-y-0!",
-                    selectedPayoutMethod === "paypal" && "-translate-x-1! -translate-y-1! bg-background! shadow!",
-                  )}
-                >
-                  <Icon name="shop-window" />
-                  <div>
-                    <h4>PayPal</h4>
-                  </div>
-                </Button>
+                <Tab key="paypal" isSelected={selectedPayoutMethod === "paypal"} asChild>
+                  <Button
+                    role="radio"
+                    aria-checked={selectedPayoutMethod === "paypal"}
+                    onClick={() => updatePayoutMethod("paypal")}
+                    disabled={props.is_form_disabled}
+                    className="items-start justify-start text-left"
+                  >
+                    <Icon name="shop-window" />
+                    <div>
+                      <h4 className="font-bold">PayPal</h4>
+                    </div>
+                  </Button>
+                </Tab>
               ) : null}
               {props.user.country_code === "BR" ||
               props.user.can_connect_stripe ||
               props.stripe_connect.has_connected_stripe ? (
-                <Button
-                  role="radio"
-                  key="stripe"
-                  aria-checked={selectedPayoutMethod === "stripe"}
-                  onClick={() => updatePayoutMethod("stripe")}
-                  disabled={props.is_form_disabled}
-                  className={classNames(
-                    "items-start! justify-start! gap-3! text-left transition-transform!",
-                    "hover:translate-x-0! hover:translate-y-0!",
-                    selectedPayoutMethod === "stripe" && "-translate-x-1! -translate-y-1! bg-background! shadow!",
-                  )}
-                >
-                  <Icon name="stripe" />
-                  <div>
-                    <h4>Connect to Stripe</h4>
-                  </div>
-                </Button>
+                <Tab key="stripe" isSelected={selectedPayoutMethod === "stripe"} asChild>
+                  <Button
+                    role="radio"
+                    aria-checked={selectedPayoutMethod === "stripe"}
+                    onClick={() => updatePayoutMethod("stripe")}
+                    disabled={props.is_form_disabled}
+                    className="items-start justify-start text-left"
+                  >
+                    <Icon name="stripe" />
+                    <div>
+                      <h4 className="font-bold">Connect to Stripe</h4>
+                    </div>
+                  </Button>
+                </Tab>
               ) : null}
-            </div>
+            </Tabs>
             {selectedPayoutMethod === "bank" ? (
               <BankAccountSection
                 bankAccountDetails={props.bank_account_details}

@@ -59,6 +59,7 @@ import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
@@ -1067,18 +1068,14 @@ export const ContentTab = () => {
                     <hr className="relative left-1/2 my-2 w-screen max-w-none -translate-x-1/2 border-border lg:hidden" />
                     <ComboBox<Variant>
                       input={(props) => (
-                        <div
-                          {...props}
-                          className="inline-flex h-full min-h-auto cursor-pointer items-center gap-2 rounded border border-border bg-background px-4 py-3"
-                          aria-label="Select a version"
-                        >
+                        <InputGroup {...props} className="cursor-pointer py-3" aria-label="Select a version">
                           <span className="text-singleline flex-1">
                             {selectedVariant && !product.has_same_rich_content_for_all_variants
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}
                           </span>
-                          <Icon name="outline-cheveron-down" className="text-muted" />
-                        </div>
+                          <Icon name="outline-cheveron-down" />
+                        </InputGroup>
                       )}
                       options={product.variants}
                       option={(item, props, index) => (
