@@ -268,51 +268,6 @@ input[type="file"] {
   display: none;
 }
 
-input[type="range"] {
-  $track-height: size(0.3125);
-  $thumb-size: 1em;
-  --progress: 0%;
-  appearance: none;
-  background: none;
-  height: $track-height;
-
-  @mixin track {
-    background: linear-gradient(to right, currentColor var(--progress), gray(2) var(--progress));
-    border-radius: border-radius(1);
-    width: 100%;
-    height: $track-height;
-    cursor: pointer;
-  }
-
-  // Chrome/Safari ignore these styles if specified alongside -moz-range-track, so defining them separately
-  &::-webkit-slider-runnable-track {
-    @include track();
-  }
-
-  &::-moz-range-track {
-    @include track();
-  }
-
-  @mixin thumb {
-    margin-top: calc(0.5 * (#{$track-height} - #{$thumb-size}));
-    appearance: none;
-    border: none;
-    width: $thumb-size;
-    height: $thumb-size;
-    background: full-color(color);
-    border-radius: border-radius(3);
-    cursor: pointer;
-  }
-
-  &::-webkit-slider-thumb {
-    @include thumb();
-  }
-
-  &::-moz-range-thumb {
-    @include thumb();
-  }
-}
-
 input[type="search"] {
   appearance: none;
 }
