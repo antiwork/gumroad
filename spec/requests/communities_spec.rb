@@ -281,10 +281,10 @@ describe "Communities", :js, type: :system do
   end
 
   context "when a customer accesses the community" do
-    let(:product) { create(:product, name: "Mastering Rails", user: seller, community_chat_enabled: true, price_cents: 0) }
+    let(:product) { create(:product, name: "Mastering Rails", user: seller, community_chat_enabled: true) }
     let!(:community) { create(:community, resource: product, seller:) }
     let(:buyer) { create(:user, name: "John Buyer") }
-    let!(:purchase) { create(:free_purchase, seller:, purchaser: buyer, link: product) }
+    let!(:purchase) { create(:purchase, seller:, purchaser: buyer, link: product) }
     let!(:seller_message) { create(:community_chat_message, community:, user: seller, content: "Hello from seller!") }
     let!(:another_customer_message) { create(:community_chat_message, community:, user: create(:user, name: "Jane"), content: "Hello from Jane!") }
 
@@ -450,9 +450,9 @@ describe "Communities", :js, type: :system do
     end
 
     it "allows buyer to switch between communities from the same seller" do
-      product2 = create(:product, name: "Scaling web apps", user: seller, community_chat_enabled: true, price_cents: 0)
+      product2 = create(:product, name: "Scaling web apps", user: seller, community_chat_enabled: true)
       community2 = create(:community, resource: product2, seller:)
-      create(:free_purchase, seller:, purchaser: buyer, link: product2)
+      create(:purchase, seller:, purchaser: buyer, link: product2)
       create(:community_chat_message, community: community2, user: seller, content: "Are you ready to scale your web app?")
 
       visit communities_path
@@ -564,9 +564,9 @@ describe "Communities", :js, type: :system do
     it "allows buyer to switch between communities from different sellers" do
       other_seller = create(:user, name: "Alice")
       Feature.activate_user(:communities, other_seller)
-      other_product = create(:product, name: "The ultimate guide to design systems", user: other_seller, community_chat_enabled: true, price_cents: 0)
+      other_product = create(:product, name: "The ultimate guide to design systems", user: other_seller, community_chat_enabled: true)
       other_community = create(:community, resource: other_product, seller: other_seller)
-      create(:free_purchase, seller: other_seller, purchaser: buyer, link: other_product)
+      create(:purchase, seller: other_seller, purchaser: buyer, link: other_product)
       create(:community_chat_message, community: other_community, user: other_seller, content: "Get excited!")
 
       visit communities_path
