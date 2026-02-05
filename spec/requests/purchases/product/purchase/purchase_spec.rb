@@ -138,6 +138,7 @@ describe("Purchases from the product page", type: :system, js: true) do
     visit "/l/#{@product.unique_permalink}"
 
     add_to_cart(@product)
+    fill_in "Full name", with: "Gumhead Moneybags"
     check_out(@product)
 
     expect(Purchase.last.full_name).to eq "Gumhead Moneybags"
