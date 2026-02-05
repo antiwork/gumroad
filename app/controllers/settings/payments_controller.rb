@@ -81,6 +81,11 @@ class Settings::PaymentsController < Settings::BaseController
     if current_seller.active_bank_account && current_seller.merchant_accounts.stripe.alive.empty? && current_seller.native_payouts_supported?
       begin
         StripeMerchantAccountManager.create_account(current_seller, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+      rescue Stripe::InvalidRequestError => e
+        if e.code == "postal_code_invalid"
+          return redirect_with_error("The postal code you entered is not recognized. Please double-check your postal code and try again.")
+        end
+        return redirect_with_error(e.try(:message) || "Something went wrong.")
       rescue => e
         return redirect_with_error(e.try(:message) || "Something went wrong.")
       end
