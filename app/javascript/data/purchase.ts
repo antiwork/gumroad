@@ -68,6 +68,7 @@ export type PurchaseLineItemPayload = {
 export type StartCartPurchaseRequestPayload = {
   paymentMethod: PurchasePaymentMethod;
   email: string;
+  fullName: string;
   zipCode: string | null;
   state: string | null;
   shippingInfo: {
@@ -245,6 +246,9 @@ export const createPurchasesRequestData = (
       custom_fields: lineItem.customFields,
     })),
   };
+  if (payload.fullName) {
+    purchase.full_name = payload.fullName;
+  }
   if (payload.shippingInfo) {
     data.save_shipping_address = payload.shippingInfo.save;
     purchase.full_name = payload.shippingInfo.fullName;
