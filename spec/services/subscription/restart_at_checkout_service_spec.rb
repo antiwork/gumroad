@@ -191,5 +191,104 @@ describe Subscription::RestartAtCheckoutService do
         expect(result[:error_message]).to eq("This subscription cannot be restarted.")
       end
     end
+
+    context "with a tiered membership and recurrence change" do
+      let(:recurrence_price_values) do
+        [
+          { "monthly" => { enabled: true, price: 3 }, "yearly" => { enabled: true, price: 30 } },
+          { "monthly" => { enabled: true, price: 5 }, "yearly" => { enabled: true, price: 50 } }
+        ]
+      end
+      let(:tiered_product) do
+        create(:membership_product_with_preset_tiered_pricing,
+               user: seller,
+               subscription_duration: :monthly,
+               recurrence_price_values: recurrence_price_values)
+      end
+      let(:tier) { tiered_product.tiers.first }
+      let(:monthly_price) { tiered_product.prices.alive.find_by(recurrence: BasePrice::Recurrence::MONTHLY) }
+      let(:yearly_price) { tiered_product.prices.alive.find_by(recurrence: BasePrice::Recurrence::YEARLY) }
+      let(:tier_monthly_price_cents) { tier.prices.find_by(recurrence: "monthly").price_cents }
+      let(:tier_yearly_price_cents) { tier.prices.find_by(recurrence: "yearly").price_cents }
+
+      let!(:subscription) do
+        create_subscription_for_product(
+          product: tiered_product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      before do
+        allow_any_instance_of(Subscription).to receive(:end_time_of_last_paid_period).and_return(1.week.from_now)
+      end
+
+      context "when changing from monthly to yearly recurrence" do
+        let(:params_with_yearly_price) do
+          {
+            purchase: {
+              email: email,
+              perceived_price_cents: tier_yearly_price_cents,
+              browser_guid: browser_guid
+            },
+            price_id: yearly_price.external_id,
+            variants: [tier.external_id]
+          }
+        end
+
+        it "updates the subscription price to yearly and restarts successfully" do
+          expect(subscription.price.recurrence).to eq("monthly")
+
+          service = described_class.new(
+            subscription: subscription,
+            product: tiered_product,
+            params: params_with_yearly_price,
+            buyer: buyer
+          )
+
+          result = service.perform
+
+          expect(result[:success]).to be(true), "Expected success but got: #{result[:error_message]}"
+          expect(result[:restarted_subscription]).to be true
+
+          subscription.reload
+          expect(subscription.price.recurrence).to eq("yearly")
+          expect(subscription.cancelled_at).to be_nil
+          expect(subscription.deactivated_at).to be_nil
+        end
+      end
+
+      context "when keeping the same recurrence" do
+        let(:params_with_same_price) do
+          {
+            purchase: {
+              email: email,
+              perceived_price_cents: tier_monthly_price_cents,
+              browser_guid: browser_guid
+            },
+            price_id: monthly_price.external_id
+          }
+        end
+
+        it "restarts without triggering plan change" do
+          expect(subscription.price.recurrence).to eq("monthly")
+
+          service = described_class.new(
+            subscription: subscription,
+            product: tiered_product,
+            params: params_with_same_price,
+            buyer: buyer
+          )
+
+          result = service.perform
+
+          expect(result[:success]).to be true
+          expect(subscription.reload.price.recurrence).to eq("monthly")
+        end
+      end
+    end
   end
 end

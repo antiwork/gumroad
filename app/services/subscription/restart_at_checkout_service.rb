@@ -28,7 +28,7 @@ class Subscription::RestartAtCheckoutService
     return error_result(error) if error.present?
 
     ActiveRecord::Base.transaction do
-      handle_tier_change if tier_changed?
+      handle_plan_change if plan_changed?
       update_payment_method if should_update_payment_method?
       subscription.resubscribe!
 
@@ -60,30 +60,44 @@ class Subscription::RestartAtCheckoutService
       nil
     end
 
-    def tier_changed?
-      return false unless product.is_tiered_membership?
-      return false unless params[:variants].present?
+    def plan_changed?
+      tier_changed? || recurrence_changed?
+    end
 
-      selected_tier_ids = params[:variants].map { |id| product.tiers.find_by_external_id(id)&.id }.compact
+    def tier_changed?
+      return false if !product.is_tiered_membership?
+      return false if params[:variants].blank?
+
+      selected_tier_ids = selected_variants.map(&:id)
       current_tier_ids = subscription.original_purchase.variant_attributes.map(&:id)
 
       selected_tier_ids.sort != current_tier_ids.sort
     end
 
-    def handle_tier_change
-      new_variants = params[:variants].map { |id| product.tiers.find_by_external_id(id) }.compact
+    def recurrence_changed?
+      return false if new_price.blank?
+
+      new_price.recurrence != subscription.price.recurrence
+    end
+
+    def handle_plan_change
       perceived_price_cents = params.dig(:purchase, :perceived_price_cents)&.to_i
 
       subscription.update_current_plan!(
-        new_variants: new_variants,
-        new_price: determine_new_price,
-        perceived_price_cents: perceived_price_cents
+        new_variants: selected_variants,
+        new_price: new_price,
+        perceived_price_cents: perceived_price_cents,
+        skip_preparing_for_charge: true
       )
       subscription.reload
     end
 
-    def determine_new_price
-      if params[:price_id].present?
+    def selected_variants
+      @selected_variants ||= params[:variants]&.map { |id| product.tiers.find_by_external_id(id) }&.compact || []
+    end
+
+    def new_price
+      @new_price ||= if params[:price_id].present?
         product.prices.alive.find_by_external_id(params[:price_id])
       else
         product.default_price
@@ -106,13 +120,13 @@ class Subscription::RestartAtCheckoutService
           "There is a temporary problem, please try again (your card was not charged)."
       end
 
-      unless chargeable.present?
+      if chargeable.blank?
         raise Subscription::UpdateFailed, "We couldn't process your card. Try again or use a different card."
       end
 
       credit_card = CreditCard.create(chargeable, card_data_handling_mode, buyer)
 
-      unless credit_card.errors.empty?
+      if credit_card.errors.present?
         raise Subscription::UpdateFailed, credit_card.errors.messages[:base].first
       end
 
