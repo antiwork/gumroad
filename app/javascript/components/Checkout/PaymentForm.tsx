@@ -1203,7 +1203,12 @@ export const PaymentForm = ({
   className,
   notice,
   showCustomFields = true,
-}: React.HTMLAttributes<HTMLDivElement> & { notice?: string | null; showCustomFields?: boolean }) => {
+  borderless = false,
+}: React.HTMLAttributes<HTMLDivElement> & {
+  notice?: string | null;
+  showCustomFields?: boolean;
+  borderless?: boolean;
+}) => {
   const [state, dispatch] = useState();
   const loggedInUser = useLoggedInUser();
   const isTestPurchase = loggedInUser && state.products.find((product) => product.testPurchase);
@@ -1246,7 +1251,7 @@ export const PaymentForm = ({
       {showCustomFields ? <CustomFields className="p-4 sm:p-5" /> : null}
       <CustomerDetails className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5" />
       {!isFreePurchase ? (
-        <Card>
+        <Card borderless={borderless}>
           <CardContent className="sm:p-5">
             <div className="flex grow flex-col gap-4">
               <h4 className="text-base sm:text-lg">Pay with</h4>

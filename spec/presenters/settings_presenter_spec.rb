@@ -568,6 +568,7 @@ describe SettingsPresenter do
         payouts_paused_by_user: false,
         payout_threshold_cents: 1000,
         minimum_payout_threshold_cents: 1000,
+        payout_country_name: nil,
         payout_frequency: User::PayoutSchedule::WEEKLY,
         payout_frequency_daily_supported: false,
       }
@@ -665,6 +666,7 @@ describe SettingsPresenter do
                                              aus_backtax_details: @base_props[:aus_backtax_details].merge({
                                                                                                             legal_entity_name: @user_compliance_info.first_and_last_name,
                                                                                                           }),
+                                             payout_country_name: "United States",
                                            })
       end
 
@@ -849,6 +851,13 @@ describe SettingsPresenter do
 
       it "returns true for show_paypal if user country is Egypt" do
         create(:user_compliance_info, user: seller, country: "Egypt")
+        seller.update!(payment_address: nil)
+
+        expect(presenter.payments_props[:bank_account_details][:show_paypal]).to eq(true)
+      end
+
+      it "returns true for show_paypal if user country is Kazakhstan" do
+        create(:user_compliance_info, user: seller, country: "Kazakhstan")
         seller.update!(payment_address: nil)
 
         expect(presenter.payments_props[:bank_account_details][:show_paypal]).to eq(true)

@@ -13,6 +13,7 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
 import { type PurchaseStatesInfo, PurchaseStates } from "./States";
@@ -503,7 +504,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
         >
           {(isLoading) => (
             <div className="flex gap-2">
-              <input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
+              <Input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
               <Button type="submit" disabled={isLoading}>
                 {isLoading ? "Updating..." : "Update"}
               </Button>
