@@ -4,7 +4,7 @@ require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
-describe CommunitiesController do
+describe Api::Internal::CommunitiesController do
   let(:seller) { create(:user) }
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }
   let(:product) { create(:product, user: seller, community_chat_enabled: true) }
@@ -26,12 +26,6 @@ describe CommunitiesController do
         sign_in seller
       end
 
-      it "renders the page" do
-        get :index
-        expect(response).to be_successful
-        expect(controller.send(:page_title)).to eq("Communities")
-      end
-
       it "returns unauthorized response if the :communities feature flag is disabled" do
         Feature.deactivate_user(:communities, seller)
 
@@ -39,6 +33,13 @@ describe CommunitiesController do
 
         expect(response).to redirect_to dashboard_path
         expect(flash[:alert]).to eq("You are not allowed to perform this action.")
+      end
+
+      it "renders communities data" do
+        get :index
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq(CommunitiesPresenter.new(current_user: seller).props.as_json)
       end
     end
   end

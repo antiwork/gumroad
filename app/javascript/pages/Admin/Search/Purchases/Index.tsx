@@ -100,9 +100,9 @@ export default function Purchases() {
                     </Link>{" "}
                     <Link href={Routes.admin_product_url(purchase.product.external_id)}>{purchase.product.name}</Link>{" "}
                     {purchase.variants_list}{" "}
-                    <a href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
+                    <Link href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
                       <Icon name="arrow-up-right-square" />
-                    </a>{" "}
+                    </Link>{" "}
                     <PurchaseStates purchase={purchase} />
                     <div className="text-sm">
                       <ul className="inline">

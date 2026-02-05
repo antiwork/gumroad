@@ -1,6 +1,8 @@
-import { router } from "@inertiajs/react";
 import cx from "classnames";
 import React from "react";
+
+import { CommunityChatMessage } from "$app/data/communities";
+import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -13,26 +15,23 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { CommunityChatMessage } from "./types";
+import { CommunityViewContext, MAX_MESSAGE_LENGTH, MIN_MESSAGE_LENGTH } from "./CommunityView";
 import { UserAvatar } from "./UserAvatar";
 
-export const MIN_MESSAGE_LENGTH = 1;
-export const MAX_MESSAGE_LENGTH = 20_000;
 const MAX_TEXTAREA_HEIGHT = 300;
 
 export const ChatMessage = ({
   message,
   isLast,
   communitySellerId,
-  markMessageAsRead,
 }: {
   message: CommunityChatMessage;
   isLast: boolean;
   communitySellerId: string;
-  markMessageAsRead: (message: CommunityChatMessage) => void;
 }) => {
   const userAgentInfo = useUserAgentInfo();
   const messageRef = React.useRef<HTMLDivElement>(null);
+  const { markMessageAsRead, updateMessage, deleteMessage } = React.useContext(CommunityViewContext);
   const wasVisibleRef = React.useRef(false);
   const [isHovered, setIsHovered] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(false);
@@ -83,27 +82,24 @@ export const ChatMessage = ({
     setIsEditing(false);
   };
 
-  const handleSaveEdit = (editedMessage: string) => {
-    if (editedMessage.length < MIN_MESSAGE_LENGTH) {
-      showAlert(`Message must be at least ${MIN_MESSAGE_LENGTH} characters long.`, "error");
-      return;
-    }
-    if (editedMessage.length > MAX_MESSAGE_LENGTH) {
-      showAlert(`Message is too long.`, "error");
-      return;
-    }
-
+  const handleSaveEdit = async (editedMessage: string) => {
     setIsSaving(true);
-    router.put(
-      Routes.chat_message_path(message.community_id, message.id),
-      { community_chat_message: { content: editedMessage } },
-      {
-        preserveState: true,
-        preserveScroll: true,
-        onSuccess: () => setIsEditing(false),
-        onFinish: () => setIsSaving(false),
-      },
-    );
+    try {
+      if (editedMessage.length < MIN_MESSAGE_LENGTH) {
+        showAlert(`Message must be at least ${MIN_MESSAGE_LENGTH} characters long.`, "error");
+        return;
+      }
+      if (editedMessage.length > MAX_MESSAGE_LENGTH) {
+        showAlert(`Message is too long.`, "error");
+        return;
+      }
+      await updateMessage(message.id, message.community_id, editedMessage);
+      setIsEditing(false);
+    } catch (_e: unknown) {
+      showAlert("Failed to update message.", "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -208,17 +204,15 @@ export const ChatMessage = ({
               </Button>
               <Button
                 color="danger"
-                onClick={() => {
+                onClick={asyncVoid(async () => {
                   setDeleteConfirmation({ deleting: true });
-                  router.delete(Routes.chat_message_path(message.community_id, message.id), {
-                    preserveState: true,
-                    preserveScroll: true,
-                    onSuccess: () => setDeleteConfirmation(null),
-                    onError: () => {
-                      setDeleteConfirmation({ deleting: false });
-                    },
-                  });
-                }}
+                  try {
+                    await deleteMessage(message.id, message.community_id);
+                    setDeleteConfirmation(null);
+                  } catch (_e: unknown) {
+                    setDeleteConfirmation({ deleting: false });
+                  }
+                })}
               >
                 {deleteConfirmation.deleting ? "Deleting..." : "Delete"}
               </Button>

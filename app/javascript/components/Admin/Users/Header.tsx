@@ -39,9 +39,9 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
             </li>
             {user.username ? (
               <li>
-                <a href={user.subdomain_with_protocol} target="_blank" rel="noopener noreferrer nofollow">
+                <Link href={user.subdomain_with_protocol} target="_blank" rel="noopener noreferrer nofollow">
                   {user.username}
-                </a>
+                </Link>
               </li>
             ) : null}
             {user.form_email ? (

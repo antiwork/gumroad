@@ -4,9 +4,8 @@ import * as React from "react";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 
-import { CommunityDraft } from "./types";
-
-export const MAX_MESSAGE_LENGTH = 20_000;
+import { MAX_MESSAGE_LENGTH } from "./CommunityView";
+import { CommunityDraft } from "./useCommunities";
 
 export const ChatMessageInput = React.forwardRef<
   HTMLTextAreaElement,
