@@ -38,7 +38,7 @@
         },
         {
           "step": "Show your work.",
-          "description": "Include a list of things you've built (with URLs). To skip the line, find an open issue in our GitHub repo, fix it, and send the PR."
+          "description": "Include a list of things you've built (with URLs). To skip the line, find an open issue in our GitHub repo, fix it, and get the PR merged."
         },
         {
           "step": "Initial conversation.",
