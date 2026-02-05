@@ -665,6 +665,21 @@ describe UrlRedirectsController do
           expect(response).to be_successful
         end
 
+        context "when impersonating the purchaser" do
+          let(:admin_user) { create(:admin_user) }
+          let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: admin_user.id, scopes: "mobile_api") }
+
+          before do
+            $redis.set(RedisKey.impersonated_user(admin_user.id), purchaser.id)
+          end
+
+          it "grants access when the token owner is the impersonated user and mobile_token is present" do
+            get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+            expect(response).to be_successful
+          end
+        end
+
         it "requires mobile_token to match the expected value" do
           @url_redirect.update!(has_been_seen: true)
 
