@@ -2,8 +2,10 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe CommunitiesController do
+describe CommunitiesController, inertia: true do
+  render_views
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, community_chat_enabled: true) }
   let!(:community) { create(:community, seller:, resource: product) }
@@ -69,9 +71,9 @@ describe CommunitiesController do
       end
 
       it "returns 404" do
-        get :show, params: { seller_id: seller.external_id, community_id: "nonexistent" }
-
-        expect(response).to have_http_status(:not_found)
+        expect do
+          get :show, params: { seller_id: seller.external_id, community_id: "nonexistent" }
+        end.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
 
@@ -83,19 +85,21 @@ describe CommunitiesController do
       it "returns success" do
         get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
 
-        expect(response).to have_http_status(:ok)
+        expect(response).to be_successful
+        expect(inertia).to render_component("Communities/Index")
       end
 
       it "loads community data" do
         get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
 
-        expect(assigns(:community)).to eq(community)
+        expect(inertia).to render_component("Communities/Index")
+        expect(inertia.props[:selected_community_id]).to eq(community.external_id)
       end
     end
 
     context "when logged in as a buyer with purchase" do
       let(:buyer) { create(:user) }
-      let!(:purchase) { create(:purchase, seller: seller, purchaser: buyer, link: product) }
+      let!(:purchase) { create(:free_purchase, seller: seller, purchaser: buyer, link: product) }
 
       before do
         sign_in buyer
@@ -104,7 +108,8 @@ describe CommunitiesController do
       it "returns success" do
         get :show, params: { seller_id: seller.external_id, community_id: community.external_id }
 
-        expect(response).to have_http_status(:ok)
+        expect(response).to be_successful
+        expect(inertia).to render_component("Communities/Index")
       end
     end
 

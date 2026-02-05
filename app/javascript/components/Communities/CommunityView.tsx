@@ -108,6 +108,7 @@ export function CommunityView({
   const [switcherOpen, setSwitcherOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const chatContainerRef = React.useRef<HTMLDivElement>(null);
+  const notificationsHandledRef = React.useRef(false);
   const [scrollToMessage, setScrollToMessage] = React.useState<{
     id: string;
     position?: ScrollLogicalPosition;
@@ -148,12 +149,13 @@ export function CommunityView({
 
   // Check for notifications query param
   React.useEffect(() => {
-    if (selectedCommunity) {
+    if (selectedCommunity && !notificationsHandledRef.current) {
       const url = new URL(window.location.href);
       if (url.searchParams.has("notifications")) {
-        url.searchParams.delete("notifications");
-        router.visit(url, { replace: true });
+        notificationsHandledRef.current = true;
         setShowNotificationsSettings(true);
+        url.searchParams.delete("notifications");
+        router.visit(url.toString(), { replace: true, preserveState: true, preserveScroll: true });
       }
     }
   }, [selectedCommunity]);

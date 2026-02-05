@@ -5,6 +5,14 @@ class CommunitiesPresenter
     @current_user = current_user
   end
 
+  def props
+    {
+      has_products: has_products?,
+      communities: communities_props,
+      notification_settings: notification_settings_props,
+    }
+  end
+
   def has_products?
     current_user.products.visible_and_not_archived.exists?
   end
