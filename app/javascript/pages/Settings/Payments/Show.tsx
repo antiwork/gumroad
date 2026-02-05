@@ -84,6 +84,7 @@ type PaymentsPageProps = {
   payouts_paused_by_user: boolean;
   payout_threshold_cents: number;
   minimum_payout_threshold_cents: number;
+  payout_country_name: string | null;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
   errors?: {
@@ -110,7 +111,14 @@ export default function PaymentsPage() {
   const [isUpdateCountryConfirmed, setIsUpdateCountryConfirmed] = React.useState(false);
   const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
 
-  const form = useForm({
+  const form = useForm<{
+    user: ComplianceInfo;
+    payouts_paused_by_user: boolean;
+    payout_threshold_cents: number | null;
+    payout_frequency: PayoutFrequency;
+    bank_account: Partial<BankAccount> | null;
+    payment_address: string | null;
+  }>({
     user: props.compliance_info,
     payouts_paused_by_user: props.payouts_paused_by_user,
     payout_threshold_cents: props.payout_threshold_cents,
@@ -725,7 +733,14 @@ export default function PaymentsPage() {
     }
   }, [isPayoutMethodChangeConfirmed]);
 
-  const payoutThresholdError = form.data.payout_threshold_cents < props.minimum_payout_threshold_cents;
+  const payoutThresholdError =
+    form.data.payout_threshold_cents != null && form.data.payout_threshold_cents < props.minimum_payout_threshold_cents;
+
+  const handlePayoutThresholdBlur = () => {
+    if (!form.data.payout_threshold_cents) {
+      form.setData("payout_threshold_cents", props.minimum_payout_threshold_cents);
+    }
+  };
 
   const payoutsPausedToggle = (
     <fieldset>
@@ -851,6 +866,13 @@ export default function PaymentsPage() {
         <section className="p-4! md:p-8!">
           <header>
             <h2>Payout schedule</h2>
+            <p>
+              Payouts will only happen on your chosen schedule once the minimum balance of{" "}
+              {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
+                symbolFormat: "long",
+              })}{" "}
+              is reached.
+            </p>
           </header>
           <section className="flex flex-col gap-4">
             <fieldset>
@@ -891,24 +913,19 @@ export default function PaymentsPage() {
                 currencyCode="usd"
                 cents={form.data.payout_threshold_cents}
                 disabled={props.is_form_disabled}
-                onChange={(value) => {
-                  form.setData("payout_threshold_cents", value !== null ? value : props.minimum_payout_threshold_cents);
-                }}
+                onChange={(value) => form.setData("payout_threshold_cents", value)}
+                onBlur={handlePayoutThresholdBlur}
                 placeholder={formatPriceCentsWithoutCurrencySymbol("usd", props.minimum_payout_threshold_cents)}
                 ariaLabel="Minimum payout threshold"
                 hasError={!!payoutThresholdError}
               />
-              {payoutThresholdError ? (
-                <small>
-                  Your payout threshold must be at least{" "}
-                  {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
-                    symbolFormat: "long",
-                  })}
-                  .
-                </small>
-              ) : (
-                <small>Payouts will only be issued once your balance reaches this amount.</small>
-              )}
+              <small>
+                The minimum payout threshold for {props.payout_country_name ?? "your country"} is{" "}
+                {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
+                  symbolFormat: "long",
+                })}
+                .
+              </small>
             </fieldset>
             {props.payouts_paused_internally ? (
               <WithTooltip
