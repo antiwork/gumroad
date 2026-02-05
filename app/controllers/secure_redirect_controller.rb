@@ -1,11 +1,21 @@
 # frozen_string_literal: true
 
 class SecureRedirectController < ApplicationController
+  layout "inertia", only: :new
+
   before_action :validate_params, only: [:new, :create]
   before_action :set_encrypted_params, only: [:new, :create]
-  before_action :set_react_component_props, only: [:new, :create]
 
   def new
+    render inertia: "SecureRedirect/Index",
+           props: {
+             message: @message,
+             field_name: @field_name,
+             error_message: @error_message,
+             encrypted_payload: @encrypted_payload,
+             form_action: secure_url_redirect_path,
+             flash_error: flash[:error].presence
+           }
   end
 
   def create
@@ -72,20 +82,5 @@ class SecureRedirectController < ApplicationController
       @message = params[:message].presence || "Please enter the confirmation text to continue to your destination."
       @field_name = params[:field_name].presence || "Confirmation text"
       @error_message = params[:error_message].presence || "Confirmation text does not match"
-    end
-
-    def set_react_component_props
-      props = {
-        message: @message,
-        field_name: @field_name,
-        error_message: @error_message,
-        encrypted_payload: @encrypted_payload,
-        form_action: secure_url_redirect_path,
-        authenticity_token: form_authenticity_token
-      }
-
-      props[:flash_error] = flash[:error] if flash[:error].present?
-
-      @react_component_props = props
     end
 end

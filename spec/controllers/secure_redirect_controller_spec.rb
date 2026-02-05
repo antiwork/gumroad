@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe SecureRedirectController, type: :controller do
+describe SecureRedirectController, type: :controller, inertia: true do
   let(:destination_url) { user_unsubscribe_url(id: "sample-id", email_type: "notify") }
   let(:confirmation_text) { "user@example.com" }
   let(:secure_payload) do
@@ -19,7 +20,7 @@ describe SecureRedirectController, type: :controller do
 
   describe "GET #new" do
     context "with valid params" do
-      it "renders the new template" do
+      it "renders successfully with Inertia" do
         get :new, params: {
           encrypted_payload: encrypted_payload,
           message: message,
@@ -28,10 +29,10 @@ describe SecureRedirectController, type: :controller do
         }
 
         expect(response).to have_http_status(:success)
-        expect(response).to render_template(:new)
+        expect(response.content_type).to include("text/html")
       end
 
-      it "sets react component props" do
+      it "renders Inertia component with correct props" do
         get :new, params: {
           encrypted_payload: encrypted_payload,
           message: message,
@@ -39,14 +40,12 @@ describe SecureRedirectController, type: :controller do
           error_message: error_message
         }
 
-        expect(assigns(:react_component_props)).to include(
-          message: message,
-          field_name: field_name,
-          error_message: error_message,
-          encrypted_payload: encrypted_payload,
-          form_action: secure_url_redirect_path
-        )
-        expect(assigns(:react_component_props)[:authenticity_token]).to be_present
+        expect(inertia).to render_component("SecureRedirect/Index")
+        expect(inertia.props[:message]).to eq(message)
+        expect(inertia.props[:field_name]).to eq(field_name)
+        expect(inertia.props[:error_message]).to eq(error_message)
+        expect(inertia.props[:encrypted_payload]).to eq(encrypted_payload)
+        expect(inertia.props[:form_action]).to eq(secure_url_redirect_path)
       end
 
       it "uses default values when optional params are missing" do
@@ -54,11 +53,10 @@ describe SecureRedirectController, type: :controller do
           encrypted_payload: encrypted_payload
         }
 
-        expect(assigns(:react_component_props)).to include(
-          message: "Please enter the confirmation text to continue to your destination.",
-          field_name: "Confirmation text",
-          error_message: "Confirmation text does not match"
-        )
+        expect(inertia).to render_component("SecureRedirect/Index")
+        expect(inertia.props[:message]).to eq("Please enter the confirmation text to continue to your destination.")
+        expect(inertia.props[:field_name]).to eq("Confirmation text")
+        expect(inertia.props[:error_message]).to eq("Confirmation text does not match")
       end
 
       it "includes flash error in props when present" do
@@ -70,7 +68,8 @@ describe SecureRedirectController, type: :controller do
           encrypted_payload: encrypted_payload
         }
 
-        expect(assigns(:react_component_props)[:flash_error]).to eq("Test error message")
+        expect(inertia).to render_component("SecureRedirect/Index")
+        expect(inertia.props[:flash_error]).to eq("Test error message")
       end
 
       it "does not include flash_error in props when not present" do
@@ -78,7 +77,8 @@ describe SecureRedirectController, type: :controller do
           encrypted_payload: encrypted_payload
         }
 
-        expect(assigns(:react_component_props)).not_to have_key(:flash_error)
+        expect(inertia).to render_component("SecureRedirect/Index")
+        expect(inertia.props[:flash_error]).to be_nil
       end
     end
 
