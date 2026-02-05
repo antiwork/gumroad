@@ -696,7 +696,6 @@ const CreditCardContent = () => {
             ),
             zipCode: state.zipCode,
             keepOnFile,
-            fullName: state.fullName,
             email: state.email,
           };
 

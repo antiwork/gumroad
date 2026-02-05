@@ -315,14 +315,9 @@ export const createPurchasesRequestData = (
         data.save_card = cardParamsResult.keepOnFile;
       }
     }
-    if (cardParamsResult.type === "cc") {
-      if (cardParamsResult.fullName && payload.shippingInfo == null) {
-        purchase.full_name = cardParamsResult.fullName;
-      }
-      if (cardParamsResult.zipCode != null) {
-        data.cc_zipcode_required = true;
-        data.cc_zipcode = cardParamsResult.zipCode;
-      }
+    if (cardParamsResult.type === "cc" && cardParamsResult.zipCode != null) {
+      data.cc_zipcode_required = true;
+      data.cc_zipcode = cardParamsResult.zipCode;
     }
   }
   return data;
