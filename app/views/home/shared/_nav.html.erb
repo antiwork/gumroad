@@ -59,7 +59,7 @@
       nav_link("Pricing", pricing_path) +
       nav_link("Features", features_path) +
       nav_link("About", about_path, {current_page_predicate: -> { current_page?(root_path) }}) +
-      nav_link("Careers", careers_path, {current_page_predicate: -> { request.path.start_with?(careers_path) }})
+      (Feature.active?(:career_pages) ? nav_link("Careers", careers_path, {current_page_predicate: -> { request.path.start_with?(careers_path) }}) : "".html_safe)
     end
   end
 
