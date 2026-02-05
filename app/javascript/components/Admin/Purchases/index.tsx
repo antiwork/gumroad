@@ -239,9 +239,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {purchase.stripe_transaction ? (
           purchase.stripe_transaction.search_url ? (
-            <Link href={purchase.stripe_transaction.search_url} target="_blank">
+            <a href={purchase.stripe_transaction.search_url} target="_blank" rel="noreferrer noopener">
               {purchase.stripe_transaction.id}
-            </Link>
+            </a>
           ) : (
             purchase.stripe_transaction.id
           )
@@ -308,9 +308,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
             {purchase.card.fingerprint_search_url ? (
               <>
                 {" | "}
-                <Link href={purchase.card.fingerprint_search_url} target="_blank">
+                <a href={purchase.card.fingerprint_search_url} target="_blank" rel="noreferrer noopener">
                   {purchase.stripe_fingerprint}
-                </Link>
+                </a>
               </>
             ) : null}
           </dd>
@@ -350,9 +350,13 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Manage Membership URL</dt>
           <dd>
-            <Link href={Routes.manage_subscription_url(purchase.subscription.external_id)} target="_blank">
+            <a
+              href={Routes.manage_subscription_url(purchase.subscription.external_id)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               {Routes.manage_subscription_url(purchase.subscription.external_id)}
-            </Link>
+            </a>
           </dd>
         </>
       ) : null}
@@ -636,9 +640,9 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     ) : null}
     {purchase.successful ? (
       <Button asChild small>
-        <Link href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank">
+        <a href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" rel="noopener noreferrer">
           Go to Receipt
-        </Link>
+        </a>
       </Button>
     ) : null}
   </div>
@@ -654,9 +658,9 @@ const PurchaseUrlRedirect = ({
   <>
     <dt>{label}</dt>
     <dd>
-      <Link href={url_redirect.download_page_url} target="_blank">
+      <a href={url_redirect.download_page_url} target="_blank" rel="noreferrer noopener">
         {url_redirect.download_page_url}
-      </Link>{" "}
+      </a>{" "}
       ({url_redirect.uses} uses)
     </dd>
   </>

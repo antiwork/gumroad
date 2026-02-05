@@ -2378,7 +2378,7 @@ const ChargeRow = ({
 
   return (
     <section className={className}>
-      <section key={purchase.id}>
+      <div className="grow">
         <section style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center" }}>
           <h5>
             {formatPrice(purchase.amount_refundable, purchase.currency_type)} on{" "}
@@ -2416,8 +2416,8 @@ const ChargeRow = ({
             Refund Options
           </button>
         ) : null}
-        {canPing ? <PingButton purchaseId={purchase.id} /> : null}
-      </section>
+      </div>
+      {canPing ? <PingButton purchaseId={purchase.id} /> : null}
       {isRefunding ? (
         <RefundForm
           purchaseId={purchase.id}

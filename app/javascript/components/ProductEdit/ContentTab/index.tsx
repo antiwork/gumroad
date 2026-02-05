@@ -250,7 +250,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         node.remove();
       }
     });
-    updateProduct({ files: [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles] });
+    if (newFiles.length > 0) {
+      updateProduct({ files: [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles] });
+    }
     const description = generateJSON(
       new XMLSerializer().serializeToString(fragment),
       baseEditorOptions(contentEditorExtensions).extensions,
