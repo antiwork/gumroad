@@ -25,7 +25,7 @@ RSpec.describe CommunitiesPresenter do
 
     context "when user has accessible communities" do
       let(:current_user) { buyer }
-      let!(:purchase) { create(:free_purchase, purchaser: buyer, link: product) }
+      let!(:purchase) { create(:purchase, purchaser: buyer, link: product) }
       let!(:notification_setting) { create(:community_notification_setting, user: buyer, seller:) }
 
       before do
@@ -84,7 +84,7 @@ RSpec.describe CommunitiesPresenter do
         let(:other_seller) { create(:user, username: "otherseller123", email: "other_seller@example.com") }
         let(:other_product) { create(:product, user: other_seller, community_chat_enabled: true) }
         let!(:other_community) { create(:community, seller: other_seller, resource: other_product) }
-        let!(:other_purchase) { create(:free_purchase, purchaser: buyer, link: other_product) }
+        let!(:other_purchase) { create(:purchase, purchaser: buyer, link: other_product) }
         let!(:other_notification_setting) { create(:community_notification_setting, user: buyer, seller: other_seller) }
 
         before do
