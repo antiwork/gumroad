@@ -1165,4 +1165,4 @@ export const ContentTab = () => {
       </LicenseProvider>
     </PostsProvider>
   );
-}
+};
