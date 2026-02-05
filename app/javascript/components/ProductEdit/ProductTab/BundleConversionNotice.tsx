@@ -2,14 +2,17 @@ import * as React from "react";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
-import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { type Product } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
 
 const BUNDLE_WORDS = ["bundle", "pack"];
 
-export const BundleConversionNotice = () => {
-  const { product, id } = useProductEditContext();
+type BundleConversionNoticeProps = {
+  product: Product;
+  id: string;
+};
 
+export const BundleConversionNotice = ({ product, id }: BundleConversionNoticeProps) => {
   const showNotice = BUNDLE_WORDS.some((word) => product.name.toLowerCase().includes(word.toLowerCase()));
 
   const [isModalOpen, setIsModalOpen] = React.useState(false);

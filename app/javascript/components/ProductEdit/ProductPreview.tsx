@@ -1,27 +1,44 @@
 import * as React from "react";
 
+import { RatingsWithPercentages } from "$app/parsers/product";
+import { CurrencyCode } from "$app/utils/currency";
 import { recurrenceIds } from "$app/utils/recurringPricing";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Product, ProductDiscount } from "$app/components/Product";
-import { useProductUrl } from "$app/components/ProductEdit/Layout";
-import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
-import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { RefundPolicyModalPreview, RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
+import { type Product as ProductState } from "$app/components/ProductEdit/state";
 import { CoffeePage } from "$app/components/server-components/Profile/CoffeePage";
 
-export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
+import { useProductUrl } from "./Layout";
+
+type ProductPreviewProps = {
+  product: ProductState;
+  id: string;
+  uniquePermalink: string;
+  currencyType: CurrencyCode;
+  salesCountForInventory?: number;
+  successfulSalesCount?: number;
+  ratings: RatingsWithPercentages;
+  seller_refund_policy_enabled: boolean;
+  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
+  showRefundPolicyModal?: boolean;
+  url?: string;
+};
+
+export const ProductPreview = ({
+  product,
+  id,
+  uniquePermalink,
+  currencyType,
+  salesCountForInventory = 0,
+  successfulSalesCount = 0,
+  ratings,
+  seller_refund_policy_enabled,
+  seller_refund_policy,
+  showRefundPolicyModal,
+}: ProductPreviewProps) => {
   const currentSeller = useCurrentSeller();
-  const {
-    product,
-    id,
-    uniquePermalink,
-    currencyType,
-    salesCountForInventory,
-    successfulSalesCount,
-    ratings,
-    seller_refund_policy_enabled,
-    seller_refund_policy,
-  } = useProductEditContext();
 
   const url = useProductUrl();
 

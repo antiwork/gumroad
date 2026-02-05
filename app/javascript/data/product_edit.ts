@@ -1,13 +1,39 @@
-import { Editor, findChildren } from "@tiptap/core";
+import { Editor, findChildren, Node as TiptapNode } from "@tiptap/core";
 import { cast } from "ts-safe-cast";
 
 import { CurrencyCode } from "$app/utils/currency";
 import { ResponseError, request } from "$app/utils/request";
 
-import { extensions } from "$app/components/ProductEdit/ContentTab";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
+import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { Product } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
+import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
+import { LicenseKey } from "$app/components/TiptapExtensions/LicenseKey";
+import { LongAnswer } from "$app/components/TiptapExtensions/LongAnswer";
+import { ExternalMediaFileEmbed } from "$app/components/TiptapExtensions/MediaEmbed";
+import { MoreLikeThis } from "$app/components/TiptapExtensions/MoreLikeThis";
+import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
+import { Posts } from "$app/components/TiptapExtensions/Posts";
+import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
+import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+
+export const extensions = (productId: string, extraExtensions: TiptapNode[] = []) => [
+  ...extraExtensions,
+  ...[
+    FileEmbed,
+    FileEmbedGroup,
+    ExternalMediaFileEmbed,
+    Posts,
+    LicenseKey,
+    ShortAnswer,
+    LongAnswer,
+    FileUpload,
+    MoveNode,
+    UpsellCard,
+    MoreLikeThis.configure({ productId }),
+  ].filter((ext) => !extraExtensions.some((existing) => existing.name === ext.name)),
+];
 
 export const saveProduct = async (permalink: string, id: string, product: Product, currencyType: CurrencyCode) => {
   // TODO remove this once we have a better content uploader

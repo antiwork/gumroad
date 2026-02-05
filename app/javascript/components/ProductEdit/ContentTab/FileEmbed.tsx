@@ -28,7 +28,7 @@ import {
   titleWithFallback,
   useFilesInGroup,
 } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
-import { FileEntry, useProductEditContext } from "$app/components/ProductEdit/state";
+import { FileEntry, Product } from "$app/components/ProductEdit/state";
 import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -52,10 +52,21 @@ export const getDraggedFileEmbed = (editor: Editor) => {
   return draggedNode?.type.name === FileEmbed.name ? draggedNode : null;
 };
 
-const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
+const FileEmbedNodeView = ({
+  node,
+  editor,
+  getPos,
+  updateAttributes,
+  id,
+  updateProduct,
+  filesById,
+}: NodeViewProps & {
+  id: string;
+  updateProduct: (updater: (product: Product) => void) => void;
+  filesById: Map<string, FileEntry>;
+}) => {
   if (!node.attrs.id) return;
 
-  const { id, updateProduct, filesById } = useProductEditContext();
   const uid = React.useId();
   const ref = React.useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = React.useState(false);
@@ -171,8 +182,8 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
   if (!fileExists) return;
   const updateFile = (data: Partial<FileEntry>) =>
-    updateProduct((product) => {
-      const existing = product.files.find((existing) => existing.id === file.id);
+    updateProduct((product: Product) => {
+      const existing: FileEntry | undefined = product.files.find((existing) => existing.id === file.id);
       if (existing) Object.assign(existing, data);
     });
   const isComplete = !(

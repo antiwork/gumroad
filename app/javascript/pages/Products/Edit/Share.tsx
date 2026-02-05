@@ -1,5 +1,9 @@
+import { useForm, usePage } from "@inertiajs/react";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
+
+import { type CurrencyCode } from "$app/utils/currency";
+import { Taxonomy } from "$app/utils/discover";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -12,26 +16,102 @@ import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
-import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { type Product } from "$app/components/ProductEdit/state";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
 import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-export const ShareTab = () => {
+type ProfileSection = {
+  id: string;
+  header: string;
+  product_names: string[];
+  default: boolean;
+};
+
+type SharePageProps = {
+  product: Product;
+  id: string;
+  unique_permalink: string;
+  profile_sections: ProfileSection[];
+  taxonomies: Taxonomy[];
+  is_listed_on_discover: boolean;
+  currency_type: CurrencyCode;
+  ratings: {
+    count: number;
+    average: number;
+    percentages: [number, number, number, number, number];
+  };
+  seller_refund_policy_enabled: boolean;
+  seller_refund_policy: {
+    title: string;
+    fine_print: string;
+  };
+};
+
+export default function SharePage() {
+  const props = usePage<SharePageProps>().props;
+  const { product } = props;
   const currentSeller = useCurrentSeller();
-
-  const { id, product, updateProduct, profileSections, taxonomies, isListedOnDiscover } = useProductEditContext();
-
-  const url = useProductUrl();
   const discoverUrl = useDiscoverUrl();
+  const productUrl = useProductUrl();
 
-  if (!currentSeller) return;
+  const form = useForm({
+    section_ids: product.section_ids,
+    taxonomy_id: product.taxonomy_id,
+    tags: product.tags,
+    display_product_reviews: product.display_product_reviews,
+    is_adult: product.is_adult,
+  });
+
+  const [contentUpdates, setContentUpdates] = React.useState<{ uniquePermalinkOrVariantIds: string[] } | null>(null);
+
+  const handleSave = () => {
+    form.patch(Routes.products_edit_share_path(props.unique_permalink), {
+      preserveScroll: true,
+      onSuccess: () => {
+        setContentUpdates({
+          uniquePermalinkOrVariantIds: [props.unique_permalink],
+        });
+      },
+    });
+  };
+
+  const handleSaveBeforeNavigate = (targetUrl: string) => {
+    if (!form.isDirty) return false;
+    form.transform((data) => ({
+      ...data,
+      redirect_to: targetUrl,
+    }));
+    form.patch(Routes.products_edit_share_path(props.unique_permalink), { preserveScroll: true });
+    return true;
+  };
+
+  if (!currentSeller) return null;
+
   const discoverLink = new URL(discoverUrl);
   discoverLink.searchParams.set("query", product.name);
 
   return (
-    <Layout preview={<ProductPreview />}>
+    <Layout
+      preview={
+        <ProductPreview
+          product={product}
+          id={props.id}
+          uniquePermalink={props.unique_permalink}
+          currencyType={props.currency_type}
+          ratings={props.ratings}
+          seller_refund_policy_enabled={props.seller_refund_policy_enabled}
+          seller_refund_policy={props.seller_refund_policy}
+        />
+      }
+      currentTab="share"
+      onSave={handleSave}
+      isSaving={form.processing}
+      contentUpdates={contentUpdates}
+      setContentUpdates={setContentUpdates}
+      onBeforeNavigate={handleSaveBeforeNavigate}
+    >
       <div className="squished">
         <form>
           <section className="p-4! md:p-8!">
@@ -40,16 +120,16 @@ export const ShareTab = () => {
               <h2>Share</h2>
             </header>
             <div className="flex flex-wrap gap-2">
-              <TwitterShareButton url={url} text={`Buy ${product.name} on @Gumroad`} />
-              <FacebookShareButton url={url} text={product.name} />
-              <CopyToClipboard text={url} tooltipPosition="top">
+              <TwitterShareButton url={productUrl} text={`Buy ${product.name} on @Gumroad`} />
+              <FacebookShareButton url={productUrl} text={product.name} />
+              <CopyToClipboard text={productUrl} tooltipPosition="top">
                 <Button color="primary">
                   <Icon name="link" />
                   Copy URL
                 </Button>
               </CopyToClipboard>
               <NavigationButton
-                href={`https://gum.new?productId=${id}`}
+                href={`https://gum.new?productId=${props.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 color="accent"
@@ -60,9 +140,9 @@ export const ShareTab = () => {
             </div>
           </section>
           <ProfileSectionsEditor
-            sectionIds={product.section_ids}
-            onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}
-            profileSections={profileSections}
+            sectionIds={form.data.section_ids}
+            onChange={(sectionIds) => form.setData("section_ids", sectionIds)}
+            profileSections={props.profile_sections}
           />
           <section className="p-8!">
             <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -71,7 +151,7 @@ export const ShareTab = () => {
                 Learn more
               </a>
             </header>
-            {isListedOnDiscover ? (
+            {props.is_listed_on_discover ? (
               <Alert role="status" variant="success">
                 <div className="flex flex-col justify-between sm:flex-row">
                   {product.name} is listed on Gumroad Discover.
@@ -87,20 +167,20 @@ export const ShareTab = () => {
               <p>When enabled, the product will also become part of the Gumroad affiliate program.</p>
             </div>
             <TaxonomyEditor
-              taxonomyId={product.taxonomy_id}
-              onChange={(taxonomy_id) => updateProduct({ taxonomy_id })}
-              taxonomies={taxonomies}
+              taxonomyId={form.data.taxonomy_id}
+              onChange={(taxonomy_id) => form.setData("taxonomy_id", taxonomy_id)}
+              taxonomies={props.taxonomies}
             />
-            <TagSelector tags={product.tags} onChange={(tags) => updateProduct({ tags })} />
+            <TagSelector tags={form.data.tags} onChange={(tags) => form.setData("tags", tags)} />
             <fieldset>
               <Switch
-                checked={product.display_product_reviews}
-                onChange={(e) => updateProduct({ display_product_reviews: e.target.checked })}
+                checked={form.data.display_product_reviews}
+                onChange={(newValue) => form.setData("display_product_reviews", !newValue)}
                 label="Display your product's 1-5 star rating to prospective customers"
               />
               <Switch
-                checked={product.is_adult}
-                onChange={(e) => updateProduct({ is_adult: e.target.checked })}
+                checked={form.data.is_adult}
+                onChange={(newValue) => form.setData("is_adult", !newValue)}
                 label={
                   <>
                     This product contains content meant{" "}
@@ -117,7 +197,7 @@ export const ShareTab = () => {
       </div>
     </Layout>
   );
-};
+}
 
 const DiscoverEligibilityPromo = () => {
   const [show, setShow] = React.useState(false);

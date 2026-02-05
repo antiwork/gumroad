@@ -1,11 +1,13 @@
 import * as React from "react";
 
+import { CurrencyCode } from "$app/utils/currency";
+
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
-import { Duration, useProductEditContext } from "$app/components/ProductEdit/state";
+import { type Duration } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -17,9 +19,11 @@ let newDurationId = 0;
 export const DurationsEditor = ({
   durations,
   onChange,
+  currencyType,
 }: {
   durations: Duration[];
   onChange: (durations: Duration[]) => void;
+  currencyType: CurrencyCode;
 }) => {
   const updateDuration = (id: string, update: Partial<Duration>) => {
     onChange(durations.map((duration) => (duration.id === id ? { ...duration, ...update } : duration)));
@@ -100,6 +104,7 @@ export const DurationsEditor = ({
             duration={duration}
             updateDuration={(update) => updateDuration(duration.id, update)}
             onDelete={() => setDeletionModalDurationId(duration.id)}
+            currencyType={currencyType}
           />
         ))}
       </SortableList>
@@ -112,13 +117,14 @@ const DurationEditor = ({
   duration,
   updateDuration,
   onDelete,
+  currencyType,
 }: {
   duration: Duration;
   updateDuration: (update: Partial<Duration>) => void;
   onDelete: () => void;
+  currencyType: CurrencyCode;
 }) => {
   const uid = React.useId();
-  const { currencyType } = useProductEditContext();
 
   const [isOpen, setIsOpen] = React.useState(true);
 

@@ -60,11 +60,16 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
-  def product_permitted_attributes
-    attributes = [
+  def shared_tab_permitted_attributes
+    [
       :name,
+      :custom_permalink
+    ]
+  end
+
+  def product_tab_permitted_attributes
+    shared_tab_permitted_attributes + [
       :description,
-      :custom_permalink,
       :price_currency_type,
       :price_cents,
       :customizable_price,
@@ -73,15 +78,7 @@ class LinkPolicy < ApplicationPolicy
       :quantity_enabled,
       :should_show_sales_count,
       :hide_sold_out_variants,
-      :custom_button_text_option,
-      :custom_summary,
-      :custom_view_content_button_text,
-      :custom_receipt_text,
       :is_epublication,
-      :display_product_reviews,
-      :is_adult,
-      :discover_fee_per_thousand,
-      :taxonomy_id,
       :product_refund_policy_enabled,
       :seller_refund_policy_enabled,
       :custom_domain,
@@ -93,25 +90,33 @@ class LinkPolicy < ApplicationPolicy
       :block_access_after_membership_cancellation,
       :duration_in_months,
       :subscription_duration,
-      :has_same_rich_content_for_all_variants,
       :require_shipping,
       :is_multiseat_license,
       :community_chat_enabled,
       :default_offer_code_id,
+      :custom_button_text_option,
+      :custom_summary,
       refund_policy: [
         :max_refund_period_in_days,
         :title,
         :fine_print
       ],
+      cancellation_discount: [
+        :duration_in_billing_cycles,
+        { discount: [:type, :cents, :percents] },
+      ],
+      call_limitation_info: [:minimum_notice_in_minutes, :maximum_calls_per_day],
       covers: [],
       custom_attributes: [
         :name,
-        :value
+        :value,
+        :description
       ],
       file_attributes: [
         :name,
         :value
       ],
+      public_files: [:id, :name, { status: [:type] }],
       integrations: Integration::ALL_NAMES.index_with do |name|
         integration_class = Integration.class_for(name)
         [*integration_class.connection_settings, { integration_details: integration_class::INTEGRATION_DETAILS }]
@@ -122,7 +127,6 @@ class LinkPolicy < ApplicationPolicy
         :description,
         :price_difference_cents,
         :max_purchase_count,
-        :price_difference_cents,
         :duration_in_minutes,
         :customizable_price,
         :apply_price_changes_to_existing_memberships,
@@ -142,23 +146,53 @@ class LinkPolicy < ApplicationPolicy
         :one_item_rate_cents,
         :multiple_items_rate_cents,
       ],
-      section_ids: [],
-      tags: [],
-      rich_content:,
-      files: [:id, :display_name, :description, :folder_id, :size, :position, :url, :isbn,
-              :extension, :stream_only, :pdf_stamp_enabled, :modified, subtitle_files: [:url, :language], thumbnail: [:signed_id]],
-      call_limitation_info: [:minimum_notice_in_minutes, :maximum_calls_per_day],
-      public_files: [:id, :name, status: [:type]],
-      cancellation_discount: [
-        { discount: [:type, :cents, :percents] },
-        :duration_in_billing_cycles
-      ],
       installment_plan: [
         :number_of_installments,
       ]
     ]
+  end
 
-    attributes
+  def content_tab_permitted_attributes
+    shared_tab_permitted_attributes + [
+      :has_same_rich_content_for_all_variants,
+      rich_content:,
+      files: [:id, :display_name, :description, :folder_id, :size, :position, :url, :isbn,
+              :extension, :stream_only, :pdf_stamp_enabled, :modified, subtitle_files: [:url, :language], thumbnail: [:signed_id]],
+      variants: [
+        :id,
+        rich_content:,
+      ],
+    ]
+  end
+
+  def receipt_tab_permitted_attributes
+    shared_tab_permitted_attributes + [
+      :custom_receipt_text,
+      :custom_view_content_button_text,
+    ]
+  end
+
+  def share_tab_permitted_attributes
+    shared_tab_permitted_attributes + [
+      :is_adult,
+      :display_product_reviews,
+      :discover_fee_per_thousand,
+      :taxonomy_id,
+      :custom_domain,
+      section_ids: [],
+      tags: [],
+    ]
+  end
+
+  def permitted_attributes
+    product_permitted_attributes
+  end
+
+  def product_permitted_attributes
+    (product_tab_permitted_attributes +
+     content_tab_permitted_attributes +
+     receipt_tab_permitted_attributes +
+     share_tab_permitted_attributes).uniq
   end
 
   def bundle_permitted_attributes

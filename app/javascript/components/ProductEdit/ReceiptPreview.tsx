@@ -2,16 +2,19 @@ import * as React from "react";
 
 import { request, assertResponseError } from "$app/utils/request";
 
-import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-export const ReceiptPreview = () => {
-  const {
-    uniquePermalink,
-    product: { custom_receipt_text, custom_view_content_button_text },
-  } = useProductEditContext();
+export const ReceiptPreview = ({
+  uniquePermalink,
+  custom_receipt_text,
+  custom_view_content_button_text,
+}: {
+  uniquePermalink: string;
+  custom_receipt_text: string | null;
+  custom_view_content_button_text: string | null;
+}) => {
   const [receiptHtml, setReceiptHtml] = React.useState<string>("");
 
   const fetchReceiptPreview = React.useCallback(async () => {

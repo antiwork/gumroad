@@ -7,7 +7,7 @@ import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
 import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeSelector";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
-import { ProductEditContext } from "$app/components/ProductEdit/state";
+import { type Product } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
 import { Switch } from "$app/components/ui/Switch";
 
@@ -25,6 +25,10 @@ export const PriceEditor = ({
   onAllowInstallmentPlanChange,
   onNumberOfInstallmentsChange,
   currencyCodeSelector,
+  showDefaultDiscountCodeSelector,
+  product,
+  updateProduct,
+  uniquePermalink,
 }: {
   priceCents: number;
   suggestedPriceCents: number | null;
@@ -39,10 +43,13 @@ export const PriceEditor = ({
   onAllowInstallmentPlanChange: (allowed: boolean) => void;
   onNumberOfInstallmentsChange: (numberOfInstallments: number) => void;
   currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void };
+  showDefaultDiscountCodeSelector?: boolean;
+  product?: Product;
+  updateProduct?: (data: Partial<Product>) => void;
+  uniquePermalink?: string;
 }) => {
   const uid = React.useId();
   const isFreeProduct = priceCents === 0;
-  const productEditContext = React.useContext(ProductEditContext);
 
   return (
     <fieldset>
@@ -98,7 +105,13 @@ export const PriceEditor = ({
           onNumberOfInstallmentsChange={onNumberOfInstallmentsChange}
         />
       ) : null}
-      {productEditContext ? <DefaultDiscountCodeSelector /> : null}
+      {showDefaultDiscountCodeSelector && product && updateProduct && uniquePermalink ? (
+        <DefaultDiscountCodeSelector
+          product={product}
+          updateProduct={updateProduct}
+          uniquePermalink={uniquePermalink}
+        />
+      ) : null}
     </fieldset>
   );
 };

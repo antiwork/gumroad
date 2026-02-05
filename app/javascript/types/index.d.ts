@@ -19,6 +19,7 @@ declare namespace NodeJS {
       DOMAIN: string;
       PROTOCOL: string;
       NODE_ENV: string;
+      DROPBOX_PICKER_API_KEY?: string;
     };
   }
 }

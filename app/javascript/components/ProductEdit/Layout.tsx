@@ -1,11 +1,8 @@
+import { Link, usePage, router } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useMatches, useNavigate } from "react-router-dom";
 
-import { saveProduct } from "$app/data/product_edit";
-import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -14,22 +11,50 @@ import { useDomains } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { type Product } from "$app/components/ProductEdit/state";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
-import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { FileEntry, useProductEditContext } from "./state";
+import { type FileEntry } from "./state";
+
+type ContentUpdate = {
+  uniquePermalinkOrVariantIds: string[];
+};
+
+type InertiaLayoutProps = {
+  children: React.ReactNode;
+  preview?: React.ReactNode;
+  isLoading?: boolean;
+  headerActions?: React.ReactNode;
+  previewScaleFactor?: number;
+  showBorder?: boolean;
+  showNavigationButton?: boolean;
+  currentTab: "product" | "content" | "receipt" | "share";
+  onSave: () => void;
+  isSaving?: boolean;
+  contentUpdates?: ContentUpdate | null | undefined;
+  setContentUpdates?: ((updates: ContentUpdate | null) => void) | undefined;
+  onBeforeNavigate?: ((targetUrl: string) => boolean) | undefined;
+};
+
+type Props = {
+  product: Product;
+  unique_permalink: string;
+};
 
 export const useProductUrl = (params = {}) => {
-  const { product, uniquePermalink } = useProductEditContext();
+  const { product, unique_permalink: uniquePermalink } = usePage<Props>().props;
   const currentSeller = useCurrentSeller();
   const { appDomain } = useDomains();
-  return product.native_type === "coffee" && currentSeller
+
+  const isCoffee = product.native_type === "coffee";
+
+  return isCoffee && currentSeller
     ? Routes.custom_domain_coffee_url({ host: currentSeller.subdomain, ...params })
     : Routes.short_link_url(product.custom_permalink ?? uniquePermalink, {
         host: currentSeller?.subdomain ?? appDomain,
@@ -37,8 +62,15 @@ export const useProductUrl = (params = {}) => {
       });
 };
 
-const NotifyAboutProductUpdatesAlert = () => {
-  const { uniquePermalink, contentUpdates, setContentUpdates } = useProductEditContext();
+const NotifyAboutProductUpdatesAlert = ({
+  contentUpdates,
+  setContentUpdates,
+  uniquePermalink,
+}: {
+  contentUpdates: ContentUpdate | null;
+  setContentUpdates: (updates: ContentUpdate | null) => void;
+  uniquePermalink: string;
+}) => {
   const timerRef = React.useRef<number | null>(null);
   const isVisible = !!contentUpdates;
 
@@ -128,45 +160,42 @@ export const Layout = ({
   previewScaleFactor = 0.4,
   showBorder = true,
   showNavigationButton = true,
-}: {
-  children: React.ReactNode;
-  preview?: React.ReactNode;
-  isLoading?: boolean;
-  headerActions?: React.ReactNode;
-  previewScaleFactor?: number;
-  showBorder?: boolean;
-  showNavigationButton?: boolean;
-}) => {
-  const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
-  const rootPath = `/products/${uniquePermalink}/edit`;
+  currentTab,
+  onSave,
+  isSaving = false,
+  contentUpdates = null,
+  setContentUpdates = (_: ContentUpdate | null) => {},
+  onBeforeNavigate,
+}: InertiaLayoutProps) => {
+  const { product, unique_permalink: uniquePermalink } = usePage<Props>().props;
+  const currentSeller = useCurrentSeller();
+  const { appDomain } = useDomains();
 
-  const url = useProductUrl();
-  const checkoutUrl = useProductUrl({ wanted: true });
+  const productUrl = useProductUrl();
 
-  const [match] = useMatches();
-  const tab = match?.handle ?? "product";
-
-  const navigate = useRefToLatest(useNavigate());
+  const isCoffee = product.native_type === "coffee";
+  const checkoutUrl =
+    isCoffee && currentSeller
+      ? Routes.custom_domain_coffee_url({ host: currentSeller.subdomain, wanted: true })
+      : Routes.short_link_url(product.custom_permalink ?? uniquePermalink, {
+          host: currentSeller?.subdomain ?? appDomain,
+          wanted: true,
+        });
 
   const [isPublishing, setIsPublishing] = React.useState(false);
-  const setPublished = async (published: boolean) => {
-    try {
-      setIsPublishing(true);
-      await saveProduct(uniquePermalink, id, product, currencyType);
-      await setProductPublished(uniquePermalink, published);
-      updateProduct({ is_published: published });
-      showAlert(published ? "Published!" : "Unpublished!", "success");
-      if (tab === "share") {
-        if (product.native_type === "coffee") navigate.current(rootPath);
-        else navigate.current(`${rootPath}/content`);
-      } else if (published) {
-        navigate.current(`${rootPath}/share`);
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error", { html: true });
-    }
-    setIsPublishing(false);
+
+  const setPublished = (published: boolean) => {
+    setIsPublishing(true);
+
+    router.post(
+      published ? Routes.publish_link_path(uniquePermalink) : Routes.unpublish_link_path(uniquePermalink),
+      { current_tab: currentTab },
+      {
+        onFinish: () => {
+          setIsPublishing(false);
+        },
+      },
+    );
   };
 
   const isUploadingFile = (file: FileEntry | SubtitleFile) =>
@@ -176,7 +205,7 @@ export const Layout = ({
     product.files.some((file) => isUploadingFile(file) || file.subtitle_files.some(isUploadingFile));
   const imageSettings = useImageUploadSettings();
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
-  const isBusy = isUploadingFilesOrImages || saving || isPublishing;
+  const isBusy = isUploadingFilesOrImages || isSaving || isPublishing;
   const saveButtonTooltip = isUploadingFiles
     ? "Files are still uploading..."
     : isUploadingFilesOrImages
@@ -197,13 +226,13 @@ export const Layout = ({
 
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
-      <Button color="primary" disabled={isBusy} onClick={() => void save()}>
-        {saving ? "Saving changes..." : "Save changes"}
+      <Button color="primary" disabled={isBusy} onClick={onSave}>
+        {isSaving ? "Saving changes..." : "Save changes"}
       </Button>
     </WithTooltip>
   );
 
-  const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
+  const handleTabClick = (e: React.MouseEvent, targetUrl: string) => {
     const message = isUploadingFiles
       ? "Some files are still uploading, please wait..."
       : isUploadingFilesOrImages
@@ -216,27 +245,29 @@ export const Layout = ({
       return;
     }
 
-    callback?.();
+    if (onBeforeNavigate?.(targetUrl)) {
+      e.preventDefault();
+    }
   };
-
-  const isCoffee = product.native_type === "coffee";
 
   return (
     <>
-      <NotifyAboutProductUpdatesAlert />
-      {/* TODO: remove this legacy uploader stuff */}
-      <form hidden data-id={uniquePermalink} id="edit-link-basic-form" />
+      <NotifyAboutProductUpdatesAlert
+        contentUpdates={contentUpdates}
+        setContentUpdates={setContentUpdates}
+        uniquePermalink={uniquePermalink}
+      />
       <PageHeader
         className="sticky-top"
         title={product.name || "Untitled"}
         actions={
           product.is_published ? (
             <>
-              <Button disabled={isBusy} onClick={() => void setPublished(false)}>
+              <Button disabled={isBusy} onClick={() => setPublished(false)}>
                 {isPublishing ? "Unpublishing..." : "Unpublish"}
               </Button>
               {saveButton}
-              <CopyToClipboard text={url} copyTooltip="Copy product URL">
+              <CopyToClipboard text={productUrl} copyTooltip="Copy product URL">
                 <Button>
                   <Icon name="link" />
                 </Button>
@@ -247,19 +278,22 @@ export const Layout = ({
                 </Button>
               </CopyToClipboard>
             </>
-          ) : tab === "product" && !isCoffee ? (
+          ) : currentTab === "product" && !isCoffee ? (
             <Button
               color="primary"
               disabled={isBusy}
-              onClick={() => void save().then(() => navigate.current(`${rootPath}/content`))}
+              onClick={() => {
+                onSave();
+                setTimeout(() => router.visit(Routes.products_edit_content_path(uniquePermalink)), 0);
+              }}
             >
-              {saving ? "Saving changes..." : "Save and continue"}
+              {isSaving ? "Saving changes..." : "Save and continue"}
             </Button>
           ) : (
             <>
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
-                <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
+                <Button color="accent" disabled={isBusy} onClick={() => setPublished(true)}>
                   {isPublishing ? "Publishing..." : "Publish and continue"}
                 </Button>
               </WithTooltip>
@@ -274,37 +308,36 @@ export const Layout = ({
           )}
         >
           <Tabs style={{ gridColumn: 1 }}>
-            <Tab asChild isSelected={tab === "product"}>
-              <Link to={rootPath} onClick={onTabClick}>
+            <Tab asChild isSelected={currentTab === "product"}>
+              <Link
+                href={Routes.products_edit_product_path(uniquePermalink)}
+                onClick={(e) => handleTabClick(e, Routes.products_edit_product_path(uniquePermalink))}
+              >
                 Product
               </Link>
             </Tab>
-            {!isCoffee ? (
-              <Tab asChild isSelected={tab === "content"}>
-                <Link to={`${rootPath}/content`} onClick={onTabClick}>
+            {!isCoffee && (
+              <Tab asChild isSelected={currentTab === "content"}>
+                <Link
+                  href={Routes.products_edit_content_path(uniquePermalink)}
+                  onClick={(e) => handleTabClick(e, Routes.products_edit_content_path(uniquePermalink))}
+                >
                   Content
                 </Link>
               </Tab>
-            ) : null}
-            <Tab asChild isSelected={tab === "receipt"}>
-              <Link to={`${rootPath}/receipt`} onClick={onTabClick}>
+            )}
+            <Tab asChild isSelected={currentTab === "receipt"}>
+              <Link
+                href={Routes.products_edit_receipt_path(uniquePermalink)}
+                onClick={(e) => handleTabClick(e, Routes.products_edit_receipt_path(uniquePermalink))}
+              >
                 Receipt
               </Link>
             </Tab>
-            <Tab asChild isSelected={tab === "share"}>
+            <Tab asChild isSelected={currentTab === "share"}>
               <Link
-                to={`${rootPath}/share`}
-                onClick={(evt) => {
-                  onTabClick(evt, () => {
-                    if (!product.is_published) {
-                      evt.preventDefault();
-                      showAlert(
-                        "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-                        "warning",
-                      );
-                    }
-                  });
-                }}
+                href={Routes.products_edit_share_path(uniquePermalink)}
+                onClick={(e) => handleTabClick(e, Routes.products_edit_share_path(uniquePermalink))}
               >
                 Share
               </Link>
@@ -322,10 +355,11 @@ export const Layout = ({
                 <NavigationButton
                   {...props}
                   disabled={isBusy}
-                  href={url}
+                  href={productUrl}
                   onClick={(evt) => {
                     evt.preventDefault();
-                    void save().then(() => window.open(url, "_blank"));
+                    onSave();
+                    setTimeout(() => router.visit(productUrl), 100);
                   }}
                 />
               ),

@@ -1,18 +1,22 @@
 import * as React from "react";
 
+import { type CurrencyCode } from "$app/utils/currency";
+
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
-import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
+import { type Version } from "$app/components/ProductEdit/state";
 
 let newVersionId = 0;
 
 export const SuggestedAmountsEditor = ({
   versions,
   onChange,
+  currencyType,
 }: {
   versions: Version[];
   onChange: (versions: Version[]) => void;
+  currencyType: CurrencyCode;
 }) => {
   const updateVersion = (id: string, update: Partial<Version>) => {
     onChange(versions.map((version) => (version.id === id ? { ...version, ...update } : version)));
@@ -60,6 +64,7 @@ export const SuggestedAmountsEditor = ({
           onBlur={() =>
             onChange(versions.sort((a, b) => (a.price_difference_cents ?? 0) - (b.price_difference_cents ?? 0)))
           }
+          currencyType={currencyType}
         />
       ))}
       {addButton}
@@ -73,28 +78,26 @@ const SuggestedAmountEditor = ({
   onDelete,
   label,
   onBlur,
+  currencyType,
 }: {
   version: Version;
   updateVersion: (update: Partial<Version>) => void;
   onDelete: (() => void) | null;
   label: string;
   onBlur: () => void;
-}) => {
-  const { currencyType } = useProductEditContext();
-
-  return (
-    <section className="flex gap-2">
-      <PriceInput
-        currencyCode={currencyType}
-        cents={version.price_difference_cents}
-        onChange={(price_difference_cents) => updateVersion({ price_difference_cents })}
-        placeholder="0"
-        ariaLabel={label}
-        onBlur={onBlur}
-      />
-      <Button aria-label="Delete" onClick={onDelete ?? undefined} disabled={!onDelete}>
-        <Icon name="trash2" />
-      </Button>
-    </section>
-  );
-};
+  currencyType: CurrencyCode;
+}) => (
+  <section className="flex gap-2">
+    <PriceInput
+      currencyCode={currencyType}
+      cents={version.price_difference_cents}
+      onChange={(price_difference_cents) => updateVersion({ price_difference_cents })}
+      placeholder="0"
+      ariaLabel={label}
+      onBlur={onBlur}
+    />
+    <Button aria-label="Delete" onClick={onDelete ?? undefined} disabled={!onDelete}>
+      <Icon name="trash2" />
+    </Button>
+  </section>
+);

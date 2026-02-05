@@ -1,18 +1,5 @@
-import * as React from "react";
-
-import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
-import { Thumbnail } from "$app/data/thumbnails";
 import { Discount } from "$app/parsers/checkout";
-import {
-  AssetPreview,
-  CustomButtonTextOption,
-  FreeTrialDurationUnit,
-  ProductNativeType,
-  RatingsWithPercentages,
-} from "$app/parsers/product";
-import { assertDefined } from "$app/utils/assert";
-import { CurrencyCode } from "$app/utils/currency";
-import { Taxonomy } from "$app/utils/discover";
+import { AssetPreview, CustomButtonTextOption, FreeTrialDurationUnit, ProductNativeType } from "$app/parsers/product";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 
 import { PublicFile, Seller } from "$app/components/Product";
@@ -56,6 +43,7 @@ export type Availability = {
 export type RecurrencePriceValue =
   | { enabled: false; price_cents?: number | null }
   | { enabled: true; price_cents: number | null; suggested_price_cents: number | null };
+
 export type Tier = Variant & {
   customizable_price: boolean;
   apply_price_changes_to_existing_memberships: boolean;
@@ -170,44 +158,6 @@ export type ContentUpdates = {
   uniquePermalinkOrVariantIds: string[];
 } | null;
 
-export const ProductEditContext = React.createContext<{
-  id: string;
-  product: Product;
-  uniquePermalink: string;
-  updateProduct: (update: Partial<Product> | ((product: Product) => void)) => void;
-  thumbnail: Thumbnail | null;
-  refundPolicies: OtherRefundPolicy[];
-  currencyType: CurrencyCode;
-  setCurrencyType: (newCurrencyCode: CurrencyCode) => void;
-  isListedOnDiscover: boolean;
-  isPhysical: boolean;
-  profileSections: ProfileSection[];
-  taxonomies: Taxonomy[];
-  earliestMembershipPriceChangeDate: Date;
-  customDomainVerificationStatus: { success: boolean; message: string } | null;
-  salesCountForInventory: number;
-  successfulSalesCount: number;
-  ratings: RatingsWithPercentages;
-  seller: Seller;
-  existingFiles: ExistingFileEntry[];
-  setExistingFiles: React.Dispatch<React.SetStateAction<ExistingFileEntry[]>>;
-  awsKey: string;
-  s3Url: string;
-  availableCountries: ShippingCountry[];
-  saving: boolean;
-  save: () => Promise<void>;
-  googleClientId: string;
-  googleCalendarEnabled: boolean;
-  seller_refund_policy_enabled: boolean;
-  seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
-  cancellationDiscountsEnabled: boolean;
-  contentUpdates: ContentUpdates;
-  setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
-  filesById: Map<string, FileEntry>;
-  aiGenerated: boolean;
-} | null>(null);
-export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
-
 //TODO: clean up this legacy file state
 type UploadProgress = { percent: number; bitrate: number };
 
@@ -247,4 +197,10 @@ export type ThumbnailFile = {
   url: string;
   signed_id: string;
   status: { type: "saved" } | { type: "existing" } | { type: "unsaved" };
+};
+
+export type Integration = {
+  discord: DiscordIntegration;
+  circle: CircleIntegration;
+  google_calendar: GoogleCalendarIntegration;
 };

@@ -5,7 +5,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { type Product } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Alert } from "$app/components/ui/Alert";
@@ -24,14 +24,15 @@ type FetchState<T> = null | { status: "fetching" } | { status: "error" } | { sta
 export const CircleIntegrationEditor = ({
   integration,
   onChange,
+  product,
+  updateProduct,
 }: {
   integration: CircleIntegration;
   onChange: (integration: CircleIntegration) => void;
+  product: Product;
+  updateProduct: (updater: (product: Product) => void) => void;
 }) => {
   const uid = React.useId();
-
-  const { product, updateProduct } = useProductEditContext();
-
   const [isEnabled, setIsEnabled] = React.useState(!!integration);
 
   const [apiKey, setApiKey] = React.useState(integration?.api_key ?? "");
