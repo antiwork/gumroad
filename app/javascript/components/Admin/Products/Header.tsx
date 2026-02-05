@@ -34,9 +34,9 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
           ) : (
             <Link href={Routes.admin_product_path(product.external_id)}>{product.name}</Link>
           )}
-          <Link href={product.long_url} target="_blank" rel="noreferrer noopener">
+          <a href={product.long_url} target="_blank" rel="noreferrer noopener">
             <Icon name="arrow-up-right-square" />
-          </Link>
+          </a>
         </h2>
 
         <div>
