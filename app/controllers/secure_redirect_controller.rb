@@ -14,17 +14,14 @@ class SecureRedirectController < ApplicationController
     confirmation_text = params[:confirmation_text]
 
     if confirmation_text.blank?
-      return redirect_to(
-        secure_url_redirect_path(encrypted_payload: @encrypted_payload),
-        alert: "Please enter the confirmation text"
-      )
+      return redirect_with_alert("Please enter the confirmation text")
     end
 
     # Decrypt and parse the bundled payload
     begin
       payload_json = SecureEncryptService.decrypt(@encrypted_payload)
       if payload_json.nil?
-        return render_error("Invalid request")
+        return redirect_with_alert("Invalid request")
       end
 
       payload = JSON.parse(payload_json)
@@ -34,11 +31,11 @@ class SecureRedirectController < ApplicationController
 
       # Verify the payload is recent (within 24 hours)
       if payload["created_at"] && Time.current.to_i - payload["created_at"] > 24.hours
-        return render_error("This link has expired")
+        return redirect_with_alert("This link has expired")
       end
 
     rescue JSON::ParserError, NoMethodError
-      return render_error("Invalid request")
+      return redirect_with_alert("Invalid request")
     end
 
     # Check if confirmation text matches any of the allowed texts
@@ -56,12 +53,12 @@ class SecureRedirectController < ApplicationController
       end
 
       if destination.blank?
-        return render_error("Invalid destination")
+        return redirect_with_alert("Invalid destination")
       end
 
       redirect_to destination, allow_other_host: true, status: :see_other
     else
-      render_error(@error_message)
+      redirect_with_alert(@error_message)
     end
   end
 
@@ -89,8 +86,12 @@ class SecureRedirectController < ApplicationController
       }
     end
 
-    def render_error(message)
-      flash.now[:alert] = message
-      render inertia: "SecureRedirect/NewPage", props: secure_redirect_props, status: :unprocessable_entity
+    def redirect_with_alert(alert_message)
+      redirect_to secure_url_redirect_path(
+        encrypted_payload: @encrypted_payload,
+        message: @message,
+        field_name: @field_name,
+        error_message: @error_message
+      ), alert: alert_message
     end
 end
