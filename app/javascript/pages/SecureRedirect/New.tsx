@@ -17,20 +17,32 @@ type PageProps = {
 type FormData = {
   confirmation_text: string;
   encrypted_payload: string;
+  message: string;
+  field_name: string;
+  error_message: string;
 };
 
 function SecureRedirectNew() {
-  const { message, field_name, encrypted_payload } = cast<PageProps>(usePage().props);
+  const {
+    message,
+    field_name,
+    error_message,
+    encrypted_payload,
+    authenticity_token: _authenticity_token,
+  } = cast<PageProps>(usePage().props);
   const uid = React.useId();
 
   const form = useForm<FormData>({
     confirmation_text: "",
     encrypted_payload,
+    message,
+    field_name,
+    error_message,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    form.post(`${Routes.secure_url_redirect_path()}${window.location.search}`, { preserveScroll: true });
+    form.post(`${Routes.secure_url_redirect_path()}${window.location.search}`);
   };
 
   return (

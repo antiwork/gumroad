@@ -14,16 +14,14 @@ class SecureRedirectController < ApplicationController
     confirmation_text = params[:confirmation_text]
 
     if confirmation_text.blank?
-      flash.now[:alert] = "Please enter the confirmation text"
-      return render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
+      return redirect_to secure_url_redirect_path(redirect_query_params), alert: "Please enter the confirmation text"
     end
 
     # Decrypt and parse the bundled payload
     begin
       payload_json = SecureEncryptService.decrypt(@encrypted_payload)
       if payload_json.nil?
-        flash.now[:alert] = "Invalid request"
-        return render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
+        return redirect_to secure_url_redirect_path(redirect_query_params), alert: "Invalid request"
       end
 
       payload = JSON.parse(payload_json)
@@ -33,13 +31,11 @@ class SecureRedirectController < ApplicationController
 
       # Verify the payload is recent (within 24 hours)
       if payload["created_at"] && Time.current.to_i - payload["created_at"] > 24.hours
-        flash.now[:alert] = "This link has expired"
-        return render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
+        return redirect_to secure_url_redirect_path(redirect_query_params), alert: "This link has expired"
       end
 
     rescue JSON::ParserError, NoMethodError
-      flash.now[:alert] = "Invalid request"
-      return render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
+      return redirect_to secure_url_redirect_path(redirect_query_params), alert: "Invalid request"
     end
 
     # Check if confirmation text matches any of the allowed texts
@@ -59,12 +55,10 @@ class SecureRedirectController < ApplicationController
       if destination.present?
         redirect_to destination, allow_other_host: true, status: :see_other
       else
-        flash.now[:alert] = "Invalid destination"
-        render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
+        redirect_to secure_url_redirect_path(redirect_query_params), alert: "Invalid destination"
       end
     else
-      flash.now[:alert] = @error_message
-      render inertia: "SecureRedirect/New", props: secure_redirect_props, status: :unprocessable_entity
+      redirect_to secure_url_redirect_path(redirect_query_params), alert: @error_message
     end
   end
 
@@ -90,5 +84,14 @@ class SecureRedirectController < ApplicationController
         encrypted_payload: @encrypted_payload,
         authenticity_token: form_authenticity_token
       }
+    end
+
+    def redirect_query_params
+      {
+        encrypted_payload: @encrypted_payload,
+        message: params[:message],
+        field_name: params[:field_name],
+        error_message: params[:error_message]
+      }.compact
     end
 end
