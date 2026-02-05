@@ -18,12 +18,12 @@ describe CareersController do
 
   describe "GET show" do
     it "renders successfully for a valid job slug" do
-      get :show, params: { slug: "ai-engineer-team-lead" }
+      get :show, params: { slug: "senior-fullstack-engineer" }
 
       expect(response).to be_successful
-      expect(assigns(:job)[:slug]).to eq("ai-engineer-team-lead")
-      expect(assigns(:job)[:title]).to eq("AI Engineer and Team Lead")
-      expect(assigns(:title)).to eq("AI Engineer and Team Lead - Gumroad Careers")
+      expect(assigns(:job)[:slug]).to eq("senior-fullstack-engineer")
+      expect(assigns(:job)[:title]).to eq("Senior Full Stack Engineer")
+      expect(assigns(:title)).to eq("Senior Full Stack Engineer - Gumroad Careers")
       expect(assigns(:hide_layouts)).to be(true)
     end
 
