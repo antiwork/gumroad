@@ -353,7 +353,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
             <a
               href={Routes.manage_subscription_url(purchase.subscription.external_id)}
               target="_blank"
-              rel="noopener"
+              rel="noopener noreferrer"
             >
               {Routes.manage_subscription_url(purchase.subscription.external_id)}
             </a>
@@ -640,7 +640,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     ) : null}
     {purchase.successful ? (
       <Button asChild small>
-        <a href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" rel="noopener">
+        <a href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" rel="noopener noreferrer">
           Go to Receipt
         </a>
       </Button>
