@@ -256,14 +256,11 @@ const ProductsTable = ({ sales }: TableProps) => {
       <TableBody>
         {items.map(({ id, name, thumbnail, today, last_7, last_30, sales, visits, revenue }) => (
           <TableRow key={id}>
-            <ProductIconCell
-              href={Routes.products_edit_product_path({ id }, { host: appDomain })}
-              thumbnail={thumbnail}
-            />
+            <ProductIconCell href={Routes.edit_link_url({ id }, { host: appDomain })} thumbnail={thumbnail} />
             <TableCell label="Products">
-              <Link href={Routes.edit_link_path({ id }, { host: appDomain })} className="line-clamp-2" title={name}>
+              <a href={Routes.edit_link_url({ id }, { host: appDomain })} className="line-clamp-2" title={name}>
                 {name}
-              </Link>
+              </a>
             </TableCell>
             <TableCell label="Sales" title={sales.toLocaleString(locale)} className="whitespace-nowrap">
               {sales.toLocaleString(locale, { notation: "compact" })}

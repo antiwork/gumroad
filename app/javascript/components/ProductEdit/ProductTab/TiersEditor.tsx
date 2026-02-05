@@ -1,10 +1,10 @@
-import { type Editor } from "@tiptap/core";
+import { Editor } from "@tiptap/core";
 import cx from "classnames";
 import { format } from "date-fns";
 import * as React from "react";
 
 import { sendSamplePriceChangeEmail } from "$app/data/membership_tiers";
-import { getIsSingleUnitCurrency, CurrencyCode } from "$app/utils/currency";
+import { getIsSingleUnitCurrency } from "$app/utils/currency";
 import { priceCentsToUnit } from "$app/utils/price";
 import {
   numberOfMonthsInRecurrence,
@@ -23,7 +23,7 @@ import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
-import { RecurrencePriceValue, Tier, type Product } from "$app/components/ProductEdit/state";
+import { RecurrencePriceValue, Tier, useProductEditContext } from "$app/components/ProductEdit/state";
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
@@ -42,19 +42,7 @@ const areAllEnabledPricesZero = (recurrencePriceValues: Record<string, Recurrenc
   return enabledPrices.length > 0 && enabledPrices.every((value) => !value.price_cents || value.price_cents === 0);
 };
 
-export const TiersEditor = ({
-  tiers,
-  onChange,
-  product,
-  currencyType,
-  unique_permalink,
-}: {
-  tiers: Tier[];
-  onChange: (tiers: Tier[]) => void;
-  product: Product;
-  currencyType: CurrencyCode;
-  unique_permalink: string;
-}) => {
+export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tiers: Tier[]) => void }) => {
   const updateVersion = (id: string, update: Partial<Tier>) => {
     onChange(tiers.map((version) => (version.id === id ? { ...version, ...update } : version)));
   };
@@ -134,9 +122,6 @@ export const TiersEditor = ({
             tier={version}
             updateTier={(update) => updateVersion(version.id, update)}
             onDelete={() => setDeletionModalVersionId(version.id)}
-            product={product}
-            currencyType={currencyType}
-            unique_permalink={unique_permalink}
           />
         ))}
       </SortableList>
@@ -151,18 +136,13 @@ const TierEditor = ({
   tier,
   updateTier,
   onDelete,
-  product,
-  currencyType,
-  unique_permalink,
 }: {
   tier: Tier;
   updateTier: (update: Partial<Tier>) => void;
   onDelete: () => void;
-  product: Product;
-  currencyType: CurrencyCode;
-  unique_permalink: string;
 }) => {
   const uid = React.useId();
+  const { product, currencyType } = useProductEditContext();
 
   const [isOpen, setIsOpen] = React.useState(true);
 
@@ -368,23 +348,17 @@ const TierEditor = ({
                 </div>
               </Dropdown>
             </Details>
-            <PriceChangeSettings
-              unique_permalink={unique_permalink}
-              tier={tier}
-              updateTier={updateTier}
-              product={product}
-              currencyType={currencyType}
-            />
+            <PriceChangeSettings tier={tier} updateTier={updateTier} />
             {integrations.length > 0 ? (
               <fieldset>
                 <legend>Integrations</legend>
-                {integrations.map((integration, idx) => (
+                {integrations.map((integration) => (
                   <Switch
                     checked={tier.integrations[integration]}
                     onChange={(e) =>
                       updateTier({ integrations: { ...tier.integrations, [integration]: e.target.checked } })
                     }
-                    key={idx}
+                    key={integration}
                     label={
                       integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"
                     }
@@ -400,26 +374,13 @@ const TierEditor = ({
 };
 
 const getDateWithUTCOffset = (date: Date): Date => new Date(date.getTime() + date.getTimezoneOffset() * 60 * 1000);
-const PriceChangeSettings = ({
-  tier,
-  updateTier,
-  product,
-  currencyType,
-  unique_permalink,
-}: {
-  tier: Tier;
-  updateTier: (update: Partial<Tier>) => void;
-  product: Product;
-  currencyType: CurrencyCode;
-  unique_permalink: string;
-}) => {
+const PriceChangeSettings = ({ tier, updateTier }: { tier: Tier; updateTier: (update: Partial<Tier>) => void }) => {
   const uid = React.useId();
 
   const [isMounted, setIsMounted] = React.useState(false);
   useRunOnce(() => setIsMounted(true));
 
-  const uniquePermalink = unique_permalink;
-  const earliestMembershipPriceChangeDate = new Date();
+  const { product, uniquePermalink, currencyType, earliestMembershipPriceChangeDate } = useProductEditContext();
 
   const [effectiveDate, setEffectiveDate] = React.useState<{ value: Date; error?: boolean }>({
     value: tier.subscription_price_change_effective_date

@@ -1,4 +1,3 @@
-import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { Icon } from "$app/components/Icons";
@@ -14,7 +13,7 @@ export const ProductIconCell = ({
   placeholder?: React.ReactNode;
 }) => (
   <TableCell hideLabel className="relative text-center text-xl lg:w-20 lg:min-w-20 lg:border-r lg:border-border">
-    <Link href={href}>
+    <a href={href}>
       {thumbnail ? (
         <img
           className="max-w-20 lg:absolute lg:inset-0 lg:h-full lg:w-full lg:object-cover"
@@ -24,6 +23,6 @@ export const ProductIconCell = ({
       ) : (
         placeholder
       )}
-    </Link>
+    </a>
   </TableCell>
 );

@@ -1,18 +1,13 @@
 import * as React from "react";
 
 import { NumberInput } from "$app/components/NumberInput";
-import { type Product } from "$app/components/ProductEdit/state";
+import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-export const DurationEditor = ({
-  product,
-  updateProduct,
-}: {
-  product: Product;
-  updateProduct: (data: Partial<Product>) => void;
-}) => {
+export const DurationEditor = () => {
   const uid = React.useId();
+  const { product, updateProduct } = useProductEditContext();
   const [isOpen, setIsOpen] = React.useState(product.duration_in_months != null);
 
   return (

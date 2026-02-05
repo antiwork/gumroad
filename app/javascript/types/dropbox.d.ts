@@ -6,13 +6,7 @@ type DropboxFile = {
 };
 
 declare const Dropbox: {
-  choose: (params: {
-    linkType: "direct";
-    multiselect: boolean;
-    success: (files: DropboxFile[]) => void;
-    cancel?: () => void;
-    extensions?: string[][];
-  }) => void;
+  choose: (params: { linkType: "direct"; multiselect: boolean; success: (files: DropboxFile[]) => void }) => void;
   save: (options: {
     files: { url: string; filename: string | null }[];
     success?: () => void;
@@ -22,5 +16,5 @@ declare const Dropbox: {
   }) => void;
 };
 interface Window {
-  Dropbox?: typeof Dropbox;
+  Dropbox: typeof Dropbox;
 }

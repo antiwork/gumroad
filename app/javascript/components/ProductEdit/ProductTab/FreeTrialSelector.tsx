@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { type Product } from "$app/components/ProductEdit/state";
+import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 
@@ -8,14 +8,10 @@ const PERMITTED_DURATIONS = ["week", "month"] as const;
 const DEFAULT_DURATION = 1;
 const DEFAULT_DURATION_UNIT = "week";
 
-export const FreeTrialSelector = ({
-  product,
-  updateProduct,
-}: {
-  product: Product;
-  updateProduct: (data: Partial<Product>) => void;
-}) => {
+export const FreeTrialSelector = () => {
   const uid = React.useId();
+
+  const { product, updateProduct } = useProductEditContext();
 
   return (
     <ToggleSettingRow

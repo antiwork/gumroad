@@ -1,15 +1,12 @@
 import * as React from "react";
 
-import { CurrencyCode } from "$app/utils/currency";
-
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
-import { Version } from "$app/components/ProductEdit/state";
-import { type Integration } from "$app/components/ProductEdit/state";
+import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
@@ -21,13 +18,9 @@ let newVersionId = 0;
 export const VersionsEditor = ({
   versions,
   onChange,
-  integrations,
-  currencyType,
 }: {
   versions: Version[];
   onChange: (versions: Version[]) => void;
-  integrations: Integration;
-  currencyType: CurrencyCode;
 }) => {
   const updateVersion = (id: string, update: Partial<Version>) => {
     onChange(versions.map((version) => (version.id === id ? { ...version, ...update } : version)));
@@ -107,8 +100,6 @@ export const VersionsEditor = ({
             version={version}
             updateVersion={(update) => updateVersion(version.id, update)}
             onDelete={() => setDeletionModalVersionId(version.id)}
-            integrations={integrations}
-            currencyType={currencyType}
           />
         ))}
       </SortableList>
@@ -121,22 +112,19 @@ const VersionEditor = ({
   version,
   updateVersion,
   onDelete,
-  integrations,
-  currencyType,
 }: {
   version: Version;
   updateVersion: (update: Partial<Version>) => void;
   onDelete: () => void;
-  integrations: Integration;
-  currencyType: CurrencyCode;
 }) => {
   const uid = React.useId();
+  const { product, currencyType } = useProductEditContext();
 
   const [isOpen, setIsOpen] = React.useState(true);
 
   const url = useProductUrl({ option: version.id });
 
-  const availableIntegrations = Object.entries(integrations)
+  const integrations = Object.entries(product.integrations)
     .filter(([_, enabled]) => enabled)
     .map(([name]) => name);
 
@@ -208,10 +196,10 @@ const VersionEditor = ({
                 </NumberInput>
               </fieldset>
             </section>
-            {availableIntegrations.length > 0 ? (
+            {integrations.length > 0 ? (
               <fieldset>
                 <legend>Integrations</legend>
-                {availableIntegrations.map((integration) => (
+                {integrations.map((integration) => (
                   <Switch
                     checked={version.integrations[integration]}
                     onChange={(e) =>

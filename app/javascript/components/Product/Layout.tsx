@@ -4,6 +4,7 @@ import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
+import { NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import {
@@ -37,8 +38,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
-
-import { NavigationButtonInertia } from "../NavigationButton";
 
 export type Props = ProductProps & { main_section_index: number } & (SectionsProps | EditSectionsProps);
 
@@ -348,13 +347,13 @@ const EditButton = ({ product }: { product: Product }) => {
       }}
     >
       <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
-        <NavigationButtonInertia
+        <NavigationButton
           color="filled"
-          href={Routes.edit_link_path({ id: product.permalink }, { host: appDomain })}
+          href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
           aria-label="Edit product"
         >
           <Icon name="pencil" />
-        </NavigationButtonInertia>
+        </NavigationButton>
       </WithTooltip>
     </div>
   );
