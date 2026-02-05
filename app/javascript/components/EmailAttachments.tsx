@@ -14,8 +14,8 @@ import { Drawer } from "$app/components/SortableList";
 import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
-import { Toggle } from "$app/components/Toggle";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -220,12 +220,18 @@ export const EmailAttachments = ({
         </label>
       </Button>
       {hasStreamableFiles ? (
-        <Toggle value={isStreamOnly} onChange={setIsStreamOnly}>
-          Disable file downloads (stream only)
-          <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
-            Learn more
-          </a>
-        </Toggle>
+        <Switch
+          checked={isStreamOnly}
+          onChange={(e) => setIsStreamOnly(e.target.checked)}
+          label={
+            <>
+              Disable file downloads (stream only)
+              <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </>
+          }
+        />
       ) : null}
     </>
   );

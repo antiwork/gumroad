@@ -2,6 +2,8 @@ import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
 import { Button } from "$app/components/Button";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Textarea } from "$app/components/ui/Textarea";
 
 const AdminPausePayoutsForm = ({
   user_external_id,
@@ -27,9 +29,9 @@ const AdminPausePayoutsForm = ({
       onSuccess={onPauseSuccess}
     >
       {(isLoading) => (
-        <fieldset>
+        <Fieldset>
           <div className="flex flex-col gap-2 md:flex-row md:items-end">
-            <textarea
+            <Textarea
               name="pause_payouts[reason]"
               rows={2}
               className="flex-1"
@@ -41,7 +43,7 @@ const AdminPausePayoutsForm = ({
               {isLoading ? "Pausing Payouts" : "Pause Payouts"}
             </Button>
           </div>
-        </fieldset>
+        </Fieldset>
       )}
     </Form>
   );

@@ -8,11 +8,12 @@ describe DisputeEvidencePagePresenter do
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
   let(:purchase_product_presenter) { PurchaseProductPresenter.new(purchase) }
 
-  describe "#react_props" do
+  describe "#props" do
     it "returns correct props" do
       receipt_image = dispute_evidence.receipt_image
       policy_image = dispute_evidence.policy_image
-      expect(presenter.react_props[:dispute_evidence]).to eq(
+
+      expect(presenter.props[:dispute_evidence]).to eq(
         {
           dispute_reason: Dispute::REASON_FRAUDULENT,
           customer_email: dispute_evidence.customer_email,
@@ -39,14 +40,14 @@ describe DisputeEvidencePagePresenter do
         }
       )
 
-      expect(presenter.react_props[:products]).to eq(
+      expect(presenter.props[:products]).to eq(
         [{
           name: purchase_product_presenter.product_props[:product][:name],
           url: purchase_product_presenter.product_props[:product][:long_url],
         }]
       )
 
-      expect(presenter.react_props[:disputable]).to eq(
+      expect(presenter.props[:disputable]).to eq(
         {
           purchase_for_dispute_evidence_id: purchase.external_id,
           formatted_display_price: purchase.formatted_disputed_amount,

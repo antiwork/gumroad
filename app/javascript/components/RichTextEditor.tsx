@@ -394,11 +394,11 @@ export const RichTextEditorToolbar = ({
           <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
             {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
           </PopoverTrigger>
-          <PopoverContent className="border-0 p-0 shadow-none">
-            <ul role="menu" className="flex flex-col">
+          <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+            <div role="menu">
               {textFormatOptions.map((option) => (
-                <PopoverClose key={option.name}>
-                  <li
+                <PopoverClose key={option.name} asChild>
+                  <div
                     role="menuitemradio"
                     aria-checked={option === activeFormatOption}
                     onClick={() => {
@@ -411,10 +411,10 @@ export const RichTextEditorToolbar = ({
                   >
                     <Icon name={option.icon} />
                     <span>{option.name}</span>
-                  </li>
+                  </div>
                 </PopoverClose>
               ))}
-            </ul>
+            </div>
           </PopoverContent>
         </Popover>
         <Separator aria-orientation="vertical" />
