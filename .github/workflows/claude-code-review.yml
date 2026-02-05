@@ -1,22 +1,16 @@
 name: Claude Code Review
 
 on:
-  pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+  workflow_run:
+    workflows: ["Tests"]
+    types: [completed]
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Only run for PRs where ci_gate was approved (success/failure, not cancelled)
+    if: >
+      github.event.workflow_run.event == 'pull_request_target' &&
+      (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
 
     runs-on: ubuntu-latest
     permissions:
@@ -26,19 +20,46 @@ jobs:
       id-token: write
 
     steps:
+      - name: Get PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          BASE_REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+        run: |
+          # Fork PRs need "owner:branch" format, internal PRs need just "branch"
+          if [ "$HEAD_REPO" = "$BASE_REPO" ]; then
+            branch_ref="$HEAD_BRANCH"
+          else
+            branch_ref="$HEAD_OWNER:$HEAD_BRANCH"
+          fi
+
+          pr_number=$(gh pr view --repo "$BASE_REPO" "$branch_ref" --json number --jq '.number' 2>/dev/null || echo "")
+
+          if [ -n "$pr_number" ]; then
+            echo "Found PR #$pr_number"
+            echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+          else
+            echo "Could not find PR for branch $branch_ref"
+            echo "number=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
+        if: steps.pr.outputs.number != ''
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
 
       - name: Run Claude Code Review
+        if: steps.pr.outputs.number != ''
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-
+          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ steps.pr.outputs.number }}'
+          allowed_bots: 'autofix-ci[bot]'

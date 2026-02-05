@@ -518,7 +518,9 @@ Rails.application.routes.draw do
       resources :pings, controller: "purchases/pings", only: [:create]
       resource :product, controller: "purchases/product", only: [:show]
       resources :variants, controller: "purchases/variants", param: :variant_id, only: [:update]
-      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update]
+      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update] do
+        get :success
+      end
     end
 
     resources :orders, only: [:create] do
