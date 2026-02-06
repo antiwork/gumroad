@@ -442,6 +442,29 @@ const AccountDetailsSection = ({
                   ))}
                 </select>
               </fieldset>
+            ) : complianceInfo.business_country === "BR" ? (
+              <fieldset className={cx({ danger: errorFieldNames.has("business_state") })}>
+                <legend>
+                  <label htmlFor={`${uid}-business-state`}>State</label>
+                </legend>
+                <select
+                  id={`${uid}-business-state`}
+                  required={complianceInfo.is_business}
+                  disabled={isFormDisabled}
+                  aria-invalid={errorFieldNames.has("business_state")}
+                  value={complianceInfo.business_state || ""}
+                  onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
+                >
+                  <option value="" disabled>
+                    State
+                  </option>
+                  {states.br.map((state) => (
+                    <option key={state.code} value={state.code}>
+                      {state.name}
+                    </option>
+                  ))}
+                </select>
+              </fieldset>
             ) : null}
             <fieldset className={cx({ danger: errorFieldNames.has("business_zip_code") })}>
               <legend>

@@ -5,6 +5,9 @@ class UrlRedirectsController < ApplicationController
   include ProductsHelper
   include PageMeta::Favicon
 
+  layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page]
+  layout "inertia", only: [:confirm_page]
+
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file read download_archive latest_media_locations download_product_files
     audio_durations
@@ -17,7 +20,7 @@ class UrlRedirectsController < ApplicationController
                                              download_archive latest_media_locations download_product_files audio_durations
                                              save_last_content_page]
   before_action :hide_layouts, only: %i[
-    confirm_page membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
+    show download_page download_product_files stream smil hls_playlist download_subtitle_file read
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
@@ -162,22 +165,24 @@ class UrlRedirectsController < ApplicationController
         email: params[:email],
       },
     )
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
+    props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
+
+    render inertia: "UrlRedirects/ConfirmPage", props: props
   end
 
   def expired
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:access_expired]
-    render_unavailable_page(title_suffix: "Access expired")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Access expired")
+    render inertia: "UrlRedirects/Expired", props: unavailable_page_props(:access_expired)
   end
 
   def rental_expired_page
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:rental_expired]
-    render_unavailable_page(title_suffix: "Your rental has expired")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your rental has expired")
+    render inertia: "UrlRedirects/RentalExpired", props: unavailable_page_props(:rental_expired)
   end
 
   def membership_inactive_page
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:inactive_membership]
-    render_unavailable_page(title_suffix: "Your membership is inactive")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your membership is inactive")
+    render inertia: "UrlRedirects/MembershipInactive", props: unavailable_page_props(:inactive_membership)
   end
 
   def change_purchaser
@@ -367,7 +372,10 @@ class UrlRedirectsController < ApplicationController
 
       if params[:access_token].present? && params[:mobile_token] == Api::Mobile::BaseController::MOBILE_TOKEN
         doorkeeper_authorize! :mobile_api
-        return if purchase && purchase.purchaser && purchase.purchaser == current_api_user
+        if current_api_user.present?
+          sign_in current_api_user
+          return if purchase && purchase.purchaser && purchase.purchaser == logged_in_user
+        end
       end
 
       if cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
@@ -403,11 +411,10 @@ class UrlRedirectsController < ApplicationController
       }
     end
 
-    def render_unavailable_page(title_suffix:)
-      set_meta_tag(title: "#{@url_redirect.referenced_link.name} - #{title_suffix}")
-      @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(common_props)
-
-      render :unavailable
+    def unavailable_page_props(reason_code)
+      content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[reason_code]
+      extra_props = common_props.merge(content_unavailability_reason_code:)
+      UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
     end
 
     def common_props
