@@ -150,6 +150,9 @@ describe UrlRedirectPresenter do
           avatar_url: @user.avatar_url,
         },
         product_has_third_party_analytics: false,
+        is_mobile_app_web_view: false,
+        add_to_library_option: "add_to_library_button",
+        content_unavailability_reason_code: nil,
         installment: nil,
         purchase: {
           id: @purchase.external_id,
@@ -587,6 +590,8 @@ describe UrlRedirectPresenter do
         terms_page_url: HomePageLinkService.terms,
         token: @url_redirect.token,
         redirect_id: @url_redirect.external_id,
+        is_mobile_app_web_view: false,
+        add_to_library_option: "add_to_library_button",
         installment: nil,
         purchase: {
           id: @purchase.external_id,

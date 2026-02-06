@@ -12,11 +12,18 @@ class UrlRedirectPresenter
     email_confirmation_required: "email_confirmation_required",
   }.freeze
 
-  attr_reader :url_redirect, :logged_in_user, :product, :purchase, :installment
+  module AddToLibraryOption
+    NONE = "none"
+    ADD_TO_LIBRARY_BUTTON = "add_to_library_button"
+    SIGNUP_FORM = "signup_form"
+  end
 
-  def initialize(url_redirect:, logged_in_user: nil)
+  attr_reader :url_redirect, :logged_in_user, :product, :purchase, :installment, :is_mobile_app_web_view
+
+  def initialize(url_redirect:, logged_in_user: nil, is_mobile_app_web_view: false)
     @url_redirect = url_redirect
     @logged_in_user = logged_in_user
+    @is_mobile_app_web_view = is_mobile_app_web_view
     @product = url_redirect.referenced_link
     @purchase = url_redirect.purchase
     @installment = url_redirect.installment
@@ -46,11 +53,33 @@ class UrlRedirectPresenter
     {
       content: content_props,
       product_has_third_party_analytics: purchase&.link&.has_third_party_analytics?("receipt"),
-    }.merge(download_page_layout_props).merge(extra_props)
+      content_unavailability_reason_code: nil,
+    }.merge(download_page_layout_props).merge(common_props).merge(extra_props)
   end
 
   def download_page_without_content_props(extra_props = {})
-    download_page_layout_props(email_confirmation_required: extra_props[:content_unavailability_reason_code] == CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]).merge(extra_props)
+    download_page_layout_props(email_confirmation_required: extra_props[:content_unavailability_reason_code] == CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required])
+      .merge(common_props)
+      .merge(extra_props)
+  end
+
+  def unavailable_page_props
+    download_page_layout_props.merge(common_props)
+  end
+
+  def common_props
+    {
+      is_mobile_app_web_view:,
+      add_to_library_option:,
+    }
+  end
+
+  def add_to_library_option
+    if purchase && purchase.purchaser.nil?
+      logged_in_user.present? ? AddToLibraryOption::ADD_TO_LIBRARY_BUTTON : AddToLibraryOption::SIGNUP_FORM
+    else
+      AddToLibraryOption::NONE
+    end
   end
 
   private

@@ -5,7 +5,7 @@ class UrlRedirectsController < ApplicationController
   include ProductsHelper
   include PageMeta::Favicon
 
-  layout "inertia", only: [:confirm_page]
+  layout "inertia", only: %i[confirm_page expired rental_expired_page membership_inactive_page]
 
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file read download_archive latest_media_locations download_product_files
@@ -19,7 +19,7 @@ class UrlRedirectsController < ApplicationController
                                              download_archive latest_media_locations download_product_files audio_durations
                                              save_last_content_page]
   before_action :hide_layouts, only: %i[
-    membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
+    show download_page download_product_files stream smil hls_playlist download_subtitle_file read
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
@@ -38,12 +38,6 @@ class UrlRedirectsController < ApplicationController
     else
       raise exception
     end
-  end
-
-  module AddToLibraryOption
-    NONE = "none"
-    ADD_TO_LIBRARY_BUTTON = "add_to_library_button"
-    SIGNUP_FORM = "signup_form"
   end
 
   def show
@@ -78,7 +72,7 @@ class UrlRedirectsController < ApplicationController
     @body_class = "download-page responsive responsive-nav"
     set_favicon_meta_tags(@url_redirect.seller)
     set_meta_tag(title: @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name)
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_with_content_props(common_props)
+    @react_component_props = url_redirect_presenter.download_page_with_content_props
     trigger_files_lifecycle_events
   end
 
@@ -154,34 +148,34 @@ class UrlRedirectsController < ApplicationController
   end
 
   def confirm_page
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]
     set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Confirm email")
-    extra_props = common_props.merge(
+    extra_props = {
+      content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required],
       confirmation_info: {
         id: @url_redirect.token,
         destination: params[:destination].presence || (@url_redirect.rich_content_json.present? ? "download_page" : nil),
         display: params[:display],
         email: params[:email],
       },
-    )
+    }
     props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
 
     render inertia: "UrlRedirects/ConfirmPage", props: props
   end
 
   def expired
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:access_expired]
-    render_unavailable_page(title_suffix: "Access expired")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Access expired")
+    render inertia: "UrlRedirects/Expired", props: url_redirect_presenter.unavailable_page_props
   end
 
   def rental_expired_page
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:rental_expired]
-    render_unavailable_page(title_suffix: "Your rental has expired")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your rental has expired")
+    render inertia: "UrlRedirects/RentalExpired", props: url_redirect_presenter.unavailable_page_props
   end
 
   def membership_inactive_page
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:inactive_membership]
-    render_unavailable_page(title_suffix: "Your membership is inactive")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your membership is inactive")
+    render inertia: "UrlRedirects/MembershipInactive", props: url_redirect_presenter.unavailable_page_props
   end
 
   def change_purchaser
@@ -410,24 +404,11 @@ class UrlRedirectsController < ApplicationController
       }
     end
 
-    def render_unavailable_page(title_suffix:)
-      set_meta_tag(title: "#{@url_redirect.referenced_link.name} - #{title_suffix}")
-      @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(common_props)
-
-      render :unavailable
-    end
-
-    def common_props
-      add_to_library_option = if @url_redirect.purchase && @url_redirect.purchase.purchaser.nil?
-        logged_in_user.present? ? AddToLibraryOption::ADD_TO_LIBRARY_BUTTON : AddToLibraryOption::SIGNUP_FORM
-      else
-        AddToLibraryOption::NONE
-      end
-
-      {
-        is_mobile_app_web_view: params[:display] == "mobile_app",
-        content_unavailability_reason_code: @content_unavailability_reason_code,
-        add_to_library_option:,
-      }
+    def url_redirect_presenter
+      UrlRedirectPresenter.new(
+        url_redirect: @url_redirect,
+        logged_in_user:,
+        is_mobile_app_web_view: params[:display] == "mobile_app"
+      )
     end
 end
