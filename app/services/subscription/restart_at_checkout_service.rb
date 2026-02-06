@@ -1,90 +1,176 @@
 # frozen_string_literal: true
 
-# Adapter service that transforms checkout params and delegates to UpdaterService
-# for restarting cancelled/failed subscriptions during checkout.
-#
-# This reuses the battle-tested UpdaterService logic for charging, tier changes,
-# payment method updates, proration, SCA, webhooks, etc.
 class Subscription::RestartAtCheckoutService
-  CARD_PARAM_KEYS = %i[
-    card_data_handling_mode stripe_payment_method_id stripe_customer_id
-    stripe_setup_intent_id stripe_error paypal_order_id paymentToken
-    billing_agreement_id braintree_device_data braintree_transient_customer_store_key
-    visual card_country card_country_source
-  ].freeze
+  include CurrencyHelper
+
+  class ChargeFailed < StandardError
+    attr_reader :purchase
+
+    def initialize(message, purchase: nil)
+      super(message)
+      @purchase = purchase
+    end
+  end
 
   attr_reader :subscription, :product, :params, :buyer
+  attr_accessor :new_purchase
 
   def initialize(subscription:, product:, params:, buyer: nil)
     @subscription = subscription
     @product = product
     @params = params
     @buyer = buyer
+    @new_purchase = nil
   end
 
   def perform
-    result = Subscription::UpdaterService.new(
-      subscription: subscription,
-      params: build_updater_params,
-      logged_in_user: buyer,
-      gumroad_guid: params.dig(:purchase, :browser_guid),
-      remote_ip: params[:remote_ip]
-    ).perform
+    error = validate_restart
+    return error_result(error) if error.present?
 
-    adapt_result(result)
+    ActiveRecord::Base.transaction do
+      handle_tier_change if tier_changed?
+      update_payment_method if should_update_payment_method?
+      subscription.resubscribe!
+
+      if should_charge?
+        charge_result = charge_subscription
+        self.new_purchase = charge_result[:purchase]
+      end
+
+      subscription.send_restart_notifications!
+      success_result
+    end
+  rescue ChargeFailed => e
+    subscription.reload
+    subscription.unsubscribe_and_fail!
+    error_result(e.message)
+  rescue ActiveRecord::RecordInvalid, Subscription::UpdateFailed => e
+    error_result(e.message)
+  rescue StandardError => e
+    Rails.logger.error("Subscription::RestartAtCheckoutService error: #{e.message}")
+    Bugsnag.notify(e)
+    error_result("Sorry, something went wrong. Please try again.")
   end
 
   private
-    def build_updater_params
-      updater_params = {
-        variants: params[:variants] || default_variant_ids,
-        price_id: params[:price_id] || subscription.price&.external_id,
-        quantity: subscription.original_purchase.quantity,
-        perceived_price_cents: perceived_price,
-        perceived_upgrade_price_cents: perceived_price,
-      }
+    def validate_restart
+      return "This subscription cannot be restarted." if subscription.cancelled_by_seller?
+      return "This subscription cannot be restarted." if product.deleted?
+      return "This installment plan has already been completed and cannot be restarted." if subscription.is_installment_plan? && subscription.charges_completed?
+      nil
+    end
 
-      card_mode = CardParamsHelper.get_card_data_handling_mode(merged_card_params)
-      if card_mode.present? && card_mode != :reuse
-        updater_params.merge!(merged_card_params.slice(*CARD_PARAM_KEYS))
+    def tier_changed?
+      return false unless product.is_tiered_membership?
+      return false unless params[:variants].present?
+
+      selected_tier_ids = params[:variants].map { |id| product.tiers.find_by_external_id(id)&.id }.compact
+      current_tier_ids = subscription.original_purchase.variant_attributes.map(&:id)
+
+      selected_tier_ids.sort != current_tier_ids.sort
+    end
+
+    def handle_tier_change
+      new_variants = params[:variants].map { |id| product.tiers.find_by_external_id(id) }.compact
+      perceived_price_cents = params.dig(:purchase, :perceived_price_cents)&.to_i
+
+      subscription.update_current_plan!(
+        new_variants: new_variants,
+        new_price: determine_new_price,
+        perceived_price_cents: perceived_price_cents
+      )
+      subscription.reload
+    end
+
+    def determine_new_price
+      if params[:price_id].present?
+        product.prices.alive.find_by_external_id(params[:price_id])
       else
-        updater_params[:use_existing_card] = true
+        product.default_price
+      end
+    end
+
+    def should_update_payment_method?
+      card_data_handling_mode = CardParamsHelper.get_card_data_handling_mode(params)
+      card_data_handling_mode.present? && card_data_handling_mode != :reuse
+    end
+
+    def update_payment_method
+      card_data_handling_mode = CardParamsHelper.get_card_data_handling_mode(params)
+      card_data_handling_error = CardParamsHelper.check_for_errors(params)
+      chargeable = CardParamsHelper.build_chargeable(params.merge(product_permalink: product.unique_permalink))
+
+      if card_data_handling_error.present?
+        raise Subscription::UpdateFailed, card_data_handling_error.is_card_error? ?
+          PurchaseErrorCode.customer_error_message(card_data_handling_error.error_message) :
+          "There is a temporary problem, please try again (your card was not charged)."
       end
 
-      updater_params
+      unless chargeable.present?
+        raise Subscription::UpdateFailed, "We couldn't process your card. Try again or use a different card."
+      end
+
+      credit_card = CreditCard.create(chargeable, card_data_handling_mode, buyer)
+
+      unless credit_card.errors.empty?
+        raise Subscription::UpdateFailed, credit_card.errors.messages[:base].first
+      end
+
+      subscription.credit_card = credit_card
+      subscription.save!
     end
 
-    def perceived_price
-      params.dig(:purchase, :perceived_price_cents)&.to_i ||
-        subscription.current_subscription_price_cents
+    def should_charge?
+      !within_billing_period? && !subscription.in_free_trial?
     end
 
-    def default_variant_ids
-      subscription.original_purchase.variant_attributes.map(&:external_id)
+    def within_billing_period?
+      subscription.end_time_of_last_paid_period&.future? ||
+        subscription.free_trial_ends_at&.future?
     end
 
-    def merged_card_params
-      @merged_card_params ||= params.slice(*CARD_PARAM_KEYS)
-        .merge((params[:purchase] || {}).slice(*CARD_PARAM_KEYS))
-    end
+    def charge_subscription
+      perceived_price_cents = params.dig(:purchase, :perceived_price_cents)&.to_i ||
+                              subscription.current_subscription_price_cents
 
-    def adapt_result(result)
-      if result[:success]
-        adapted = {
+      purchase = subscription.charge!(
+        override_params: {
+          perceived_price_cents: perceived_price_cents,
+          browser_guid: params.dig(:purchase, :browser_guid)
+        },
+        off_session: false
+      )
+
+      if purchase.successful? || purchase.test_successful?
+        { success: true, purchase: purchase }
+      elsif purchase.in_progress? && purchase.charge_intent&.requires_action?
+        {
           success: true,
-          restarted_subscription: true,
-          subscription: subscription,
-          message: result[:success_message] || "Your membership has been restarted!"
+          requires_card_action: true,
+          purchase: purchase,
+          client_secret: purchase.charge_intent.client_secret,
+          stripe_connect_account_id: purchase.merchant_account.is_a_stripe_connect_account? ?
+            purchase.merchant_account.charge_processor_merchant_id : nil
         }
-
-        if result[:requires_card_action]
-          adapted[:requires_card_action] = true
-          adapted[:client_secret] = result[:client_secret]
-        end
-
-        adapted
       else
-        { success: false, error_message: result[:error_message] }
+        # Raise exception to trigger transaction rollback before marking subscription as failed
+        # This ensures tier changes, payment method updates, and resubscribe! are all rolled back
+        error_message = purchase.errors.full_messages.first || purchase.error_code || "Payment failed. Please try again."
+        raise ChargeFailed.new(error_message, purchase: purchase)
       end
+    end
+
+    def success_result
+      {
+        success: true,
+        restarted_subscription: true,
+        subscription: subscription,
+        purchase: new_purchase,
+        message: "Your membership has been restarted!"
+      }
+    end
+
+    def error_result(message)
+      { success: false, error_message: message }
     end
 end
