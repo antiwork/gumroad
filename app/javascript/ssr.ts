@@ -14,7 +14,6 @@ import DownloadPageWithContent from "$app/components/server-components/DownloadP
 import GenerateInvoiceConfirmationPage from "$app/components/server-components/GenerateInvoiceConfirmationPage";
 import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
 import Nav from "$app/components/server-components/Nav";
-import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
 import ProductPage from "$app/components/server-components/Product";
 import ProductIframePage from "$app/components/server-components/Product/IframePage";
 import ProductEditPage from "$app/components/server-components/ProductEditPage";
@@ -43,7 +42,6 @@ ReactOnRails.register({
   GenerateInvoiceConfirmationPage,
   GenerateInvoicePage,
   Nav,
-  PdfReaderPage,
   Pill,
   ProductEditPage,
   ProductIframePage,

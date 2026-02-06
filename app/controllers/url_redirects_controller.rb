@@ -6,7 +6,7 @@ class UrlRedirectsController < ApplicationController
   include PageMeta::Favicon
 
   layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page]
-  layout "inertia", only: [:confirm_page]
+  layout "inertia", only: [:confirm_page, :read]
 
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file read download_archive latest_media_locations download_product_files
@@ -20,7 +20,7 @@ class UrlRedirectsController < ApplicationController
                                              download_archive latest_media_locations download_product_files audio_durations
                                              save_last_content_page]
   before_action :hide_layouts, only: %i[
-    show download_page download_product_files stream smil hls_playlist download_subtitle_file read
+    show download_page download_product_files stream smil hls_playlist download_subtitle_file
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
@@ -59,16 +59,17 @@ class UrlRedirectsController < ApplicationController
     e404 unless @product_file&.readable?
 
     s3_retrievable = @product_file
-    set_meta_tag(title: @product_file.with_product_files_owner.name)
-    @read_id = @product_file.external_id
-    @read_url = signed_download_url_for_s3_key_and_filename(s3_retrievable.s3_key, s3_retrievable.s3_filename, cache_group: "read")
+    title = @product_file.with_product_files_owner.name
+    set_meta_tag(title:)
+    read_url = signed_download_url_for_s3_key_and_filename(s3_retrievable.s3_key, s3_retrievable.s3_filename, cache_group: "read")
 
-    # Used for tracking page turns:
-    @url_redirect_id = @url_redirect.external_id
-    @purchase_id = @url_redirect.purchase.try(:external_id)
-    @product_file_id = @product_file.try(:external_id)
-    @latest_media_location = @product_file.latest_media_location_for(@url_redirect.purchase)
     trigger_files_lifecycle_events
+
+    render inertia: "UrlRedirects/Read", props: UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).read_page_props(
+      product_file: @product_file,
+      read_url:,
+      title:,
+    )
   rescue ArgumentError
     redirect_to(library_path)
   end
