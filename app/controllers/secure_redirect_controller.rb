@@ -12,7 +12,6 @@ class SecureRedirectController < ApplicationController
       field_name: @field_name,
       error_message: @error_message,
       encrypted_payload: @encrypted_payload,
-      authenticity_token: form_authenticity_token
     }
   end
 
