@@ -14,8 +14,7 @@ describe Settings::RefundFundingController do
       card_type: CardType::VISA,
       expiry_month: 12,
       expiry_year: 2030,
-      charge_processor_id: StripeChargeProcessor.charge_processor_id,
-      holder_name: "Test User"
+      charge_processor_id: StripeChargeProcessor.charge_processor_id
     ).tap(&:save!)
   end
 
@@ -45,7 +44,6 @@ describe Settings::RefundFundingController do
         expect(response).to be_successful
         json = JSON.parse(response.body)
         expect(json["enabled"]).to be true
-        expect(json["name_on_card"]).to eq("Test User")
         expect(json["credit_card"]["visual"]).to eq("**** **** **** 4242")
         expect(json["show_banner"]).to be false
       end

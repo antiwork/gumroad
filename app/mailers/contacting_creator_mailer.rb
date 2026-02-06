@@ -535,10 +535,7 @@ class ContactingCreatorMailer < ApplicationMailer
   def refund_funding_charge_confirmation(credit_id:)
     @credit = Credit.find(credit_id)
     @seller = @credit.user
-    @amount = Money.new(@credit.amount_cents, :usd).format(no_cents_if_whole: true, symbol: true)
-    @card_visual = @credit.credit_card&.visual || "****"
-    @product_name = @credit.refund_funding_purchase&.link&.name
-    @subject = "Your backup card was charged #{@amount}"
+    @subject = "Your backup card was charged #{Money.new(@credit.amount_cents, :usd).format(no_cents_if_whole: true, symbol: true)}"
   end
 
   private

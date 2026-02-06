@@ -225,7 +225,6 @@ class SettingsPresenter
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
       refund_payment_method: {
         enabled: funding_card.present?,
-        name_on_card: funding_card&.holder_name,
         credit_card: funding_card.present? ? {
           visual: funding_card.visual,
           card_type: funding_card.card_type,

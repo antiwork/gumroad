@@ -9,10 +9,6 @@ class Settings::RefundFunding::UserPolicy < ApplicationPolicy
     user.role_owner_for?(seller) && record == seller
   end
 
-  def update?
-    create?
-  end
-
   def destroy?
     create?
   end

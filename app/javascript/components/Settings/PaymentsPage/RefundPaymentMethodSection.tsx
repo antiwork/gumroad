@@ -1,20 +1,20 @@
-import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { Stripe, StripeElementStyleVariant } from "@stripe/stripe-js";
+import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
-import { getStripeInstance } from "$app/utils/stripe_loader";
-import { getCssVariable } from "$app/utils/styles";
 
 import { Button } from "$app/components/Button";
+import { StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
 
-export type RefundPaymentMethodProps = {
+export type RefundPaymentMethod = {
   enabled: boolean;
-  name_on_card: string | null;
   credit_card: {
     visual: string;
     card_type: string;
@@ -23,24 +23,19 @@ export type RefundPaymentMethodProps = {
   } | null;
 };
 
-type Props = {
-  refundPaymentMethod: RefundPaymentMethodProps;
-  isFormDisabled: boolean;
-};
-
 const RefundPaymentMethodForm = ({
   refundPaymentMethod,
   isFormDisabled,
-  onSuccess,
-}: Props & { onSuccess: () => void }) => {
+}: {
+  refundPaymentMethod: RefundPaymentMethod;
+  isFormDisabled: boolean;
+}) => {
   const stripe = useStripe();
   const elements = useElements();
-  const [nameOnCard, setNameOnCard] = React.useState(refundPaymentMethod.name_on_card || "");
   const [zipCode, setZipCode] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [savedCard, setSavedCard] = React.useState(refundPaymentMethod.credit_card);
   const [isEditing, setIsEditing] = React.useState(!refundPaymentMethod.enabled);
-  const [stripeStyle, setStripeStyle] = React.useState<null | StripeElementStyleVariant>(null);
 
   const handleSubmit = asyncVoid(async () => {
     if (!stripe || !elements) return;
@@ -55,7 +50,6 @@ const RefundPaymentMethodForm = ({
         type: "card",
         card: cardElement,
         billing_details: {
-          name: nameOnCard,
           address: {
             postal_code: zipCode,
           },
@@ -74,12 +68,11 @@ const RefundPaymentMethodForm = ({
         accept: "json",
         data: {
           stripe_payment_method_id: paymentMethod.id,
-          name_on_card: nameOnCard,
           card_data_handling_mode: "stripejs.0",
         },
       });
 
-      const result = cast<{ success: boolean; error?: string; credit_card?: RefundPaymentMethodProps["credit_card"] }>(
+      const result = cast<{ success: boolean; error?: string; credit_card?: RefundPaymentMethod["credit_card"] }>(
         await response.json(),
       );
 
@@ -87,7 +80,6 @@ const RefundPaymentMethodForm = ({
         showAlert("Refund payment method saved successfully!", "success");
         setSavedCard(result.credit_card);
         setIsEditing(false);
-        onSuccess();
       } else {
         showAlert(result.error || "Failed to save card", "error");
       }
@@ -114,9 +106,7 @@ const RefundPaymentMethodForm = ({
       if (result.success) {
         showAlert("Refund payment method removed", "success");
         setSavedCard(null);
-        setNameOnCard("");
         setIsEditing(true);
-        onSuccess();
       } else {
         showAlert(result.error || "Failed to remove card", "error");
       }
@@ -127,8 +117,6 @@ const RefundPaymentMethodForm = ({
 
     setIsSubmitting(false);
   });
-
-  const formatExpiryYear = (year: number) => year.toString().slice(-2);
 
   return (
     <section id="refund-payment-method" className="p-4! md:p-8!">
@@ -145,110 +133,54 @@ const RefundPaymentMethodForm = ({
 
       <div className="flex flex-col gap-5">
         {savedCard && !isEditing ? (
-          <div>
-            <div className="saved-card-display flex flex-col gap-4">
-              <div>
-                <label className="mb-2 block" htmlFor="saved_name_on_card">
-                  Name on card
-                </label>
-                <div className="input read-only" id="saved_name_on_card">
-                  {nameOnCard}
-                </div>
+          <div className="flex flex-col gap-4">
+            <Fieldset>
+              <FieldsetTitle>Card information</FieldsetTitle>
+              <InputGroup readOnly>
+                <Icon name="outline-credit-card" />
+                <Input
+                  readOnly
+                  value={`•••• •••• •••• ${savedCard.visual}`}
+                />
+                <span className="text-muted">
+                  {savedCard.expiry_month.toString().padStart(2, "0")}/{savedCard.expiry_year.toString().slice(-2)}
+                </span>
+              </InputGroup>
+            </Fieldset>
+            {!isFormDisabled ? (
+              <div className="flex gap-4">
+                <Button outline onClick={() => setIsEditing(true)} disabled={isSubmitting}>
+                  Change card
+                </Button>
+                <Button outline color="danger" onClick={handleRemove} disabled={isSubmitting}>
+                  Remove card
+                </Button>
               </div>
-              <div>
-                <label className="mb-2 block" htmlFor="saved_card_number">
-                  Card information
-                </label>
-                <div className="input read-only" aria-label="Saved credit card">
-                  <Icon name="outline-credit-card" />
-                  <span>•••• •••• •••• {savedCard.visual}</span>
-                  <span style={{ marginLeft: "auto" }}>
-                    {savedCard.expiry_month.toString().padStart(2, "0")}/{formatExpiryYear(savedCard.expiry_year)}
-                  </span>
-                </div>
-              </div>
-              {!isFormDisabled ? (
-                <div className="flex gap-4">
-                  <Button outline onClick={() => setIsEditing(true)} disabled={isSubmitting}>
-                    Change card
-                  </Button>
-                  <Button outline color="danger" onClick={handleRemove} disabled={isSubmitting}>
-                    Remove card
-                  </Button>
-                </div>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <fieldset>
-                <legend>
-                  <label htmlFor="refund_name_on_card">Name on card</label>
-                </legend>
-                <input
-                  type="text"
-                  id="refund_name_on_card"
-                  placeholder="John Doe"
-                  value={nameOnCard}
-                  onChange={(e) => setNameOnCard(e.target.value)}
-                  disabled={isFormDisabled || isSubmitting}
-                />
-              </fieldset>
-              <fieldset>
-                <legend>
-                  <label htmlFor="refund_zip_code">ZIP / Postal code</label>
-                </legend>
-                <input
-                  type="text"
-                  id="refund_zip_code"
-                  placeholder="12345"
-                  value={zipCode}
-                  onChange={(e) => setZipCode(e.target.value)}
-                  disabled={isFormDisabled || isSubmitting}
-                />
-              </fieldset>
-            </div>
-            <fieldset>
-              <legend>
-                <label htmlFor="refund_card_info">Card information</label>
-              </legend>
-              <div
-                className="stripe-card-element-wrapper input"
-                style={{
-                  height: "auto",
-                  padding: "0.75rem",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                }}
-              >
-                {stripeStyle === null ? (
-                  <input
-                    type="text"
-                    style={{ position: "absolute", visibility: "hidden" }}
-                    ref={(el) => {
-                      if (el == null) return;
-                      const inputStyle = window.getComputedStyle(el);
-                      const color = getCssVariable("color").split(" ").join(",");
-                      const placeholderColor = `rgb(${color}, ${getCssVariable("gray-3")})`;
-                      setStripeStyle({
-                        fontFamily: inputStyle.fontFamily,
-                        color: inputStyle.color,
-                        iconColor: placeholderColor,
-                        "::placeholder": { color: placeholderColor },
-                      });
-                    }}
-                  />
-                ) : null}
-                <Icon name="outline-credit-card" className="text-muted" />
+            <Fieldset>
+              <FieldsetTitle>ZIP / Postal code</FieldsetTitle>
+              <Input
+                type="text"
+                id="refund_zip_code"
+                placeholder="12345"
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+                disabled={isFormDisabled || isSubmitting}
+              />
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>Card information</FieldsetTitle>
+              <InputGroup disabled={isFormDisabled || isSubmitting}>
+                <Icon name="outline-credit-card" />
                 <div style={{ flex: 1 }}>
                   <CardElement
                     options={{
                       style: {
                         base: {
                           fontSize: "16px",
-                          ...(stripeStyle || {}),
                         },
                       },
                       hideIcon: true,
@@ -257,28 +189,17 @@ const RefundPaymentMethodForm = ({
                     }}
                   />
                 </div>
-              </div>
-            </fieldset>
+              </InputGroup>
+            </Fieldset>
             {!isFormDisabled ? (
-              <div className="actions">
-                <button
-                  type="button"
-                  className="button primary"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting || !nameOnCard || !zipCode}
-                >
+              <div className="flex gap-4">
+                <Button onClick={handleSubmit} disabled={isSubmitting || !zipCode}>
                   {isSubmitting ? "Saving..." : savedCard ? "Update card" : "Save card"}
-                </button>
+                </Button>
                 {savedCard ? (
-                  <button
-                    type="button"
-                    className="button"
-                    onClick={() => setIsEditing(false)}
-                    disabled={isSubmitting}
-                    style={{ marginLeft: "0.5rem" }}
-                  >
+                  <Button outline onClick={() => setIsEditing(false)} disabled={isSubmitting}>
                     Cancel
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             ) : null}
@@ -289,26 +210,16 @@ const RefundPaymentMethodForm = ({
   );
 };
 
-export const RefundPaymentMethodSection = ({ refundPaymentMethod, isFormDisabled }: Props) => {
-  const [stripePromise, setStripePromise] = React.useState<Promise<Stripe | null> | null>(null);
-
-  React.useEffect(() => {
-    setStripePromise(getStripeInstance());
-  }, []);
-
-  if (!stripePromise) {
-    return <div>Loading...</div>;
-  }
-
-  return (
-    <Elements stripe={stripePromise}>
-      <RefundPaymentMethodForm
-        refundPaymentMethod={refundPaymentMethod}
-        isFormDisabled={isFormDisabled}
-        onSuccess={() => {}}
-      />
-    </Elements>
-  );
-};
+export const RefundPaymentMethodSection = ({
+  refundPaymentMethod,
+  isFormDisabled,
+}: {
+  refundPaymentMethod: RefundPaymentMethod;
+  isFormDisabled: boolean;
+}) => (
+  <StripeElementsProvider>
+    <RefundPaymentMethodForm refundPaymentMethod={refundPaymentMethod} isFormDisabled={isFormDisabled} />
+  </StripeElementsProvider>
+);
 
 export default RefundPaymentMethodSection;

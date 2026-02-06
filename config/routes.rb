@@ -472,7 +472,7 @@ Rails.application.routes.draw do
         end
       end
       resource :dismiss_ai_product_generation_promo, only: [:create]
-      resource :refund_funding, only: %i[show create update destroy], controller: "refund_funding" do
+      resource :refund_funding, only: %i[show create destroy], controller: "refund_funding" do
         post :dismiss_banner
       end
     end

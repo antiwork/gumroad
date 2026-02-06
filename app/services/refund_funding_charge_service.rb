@@ -28,8 +28,8 @@ class RefundFundingChargeService
 
     Result.new(success?: true, credit: credit)
   rescue StandardError => e
+    Bugsnag.notify(e)
     Rails.logger.error("RefundFundingChargeService error: #{e.message}")
-    Rails.logger.error(e.backtrace.join("\n"))
     error("An unexpected error occurred while processing your backup card charge.")
   end
 
@@ -67,10 +67,10 @@ class RefundFundingChargeService
   rescue Stripe::CardError => e
     { success: false, error: e.message }
   rescue Stripe::InvalidRequestError => e
-    Rails.logger.error("RefundFundingChargeService invalid request: #{e.message}")
+    Bugsnag.notify(e)
     { success: false, error: "Invalid payment request." }
   rescue Stripe::StripeError => e
-    Rails.logger.error("RefundFundingChargeService Stripe error: #{e.message}")
+    Bugsnag.notify(e)
     { success: false, error: "Payment processor error. Please try again." }
   end
 

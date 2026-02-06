@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Settings::RefundFundingController < Sellers::BaseController
+class Settings::RefundFundingController < Settings::BaseController
   before_action :authorize
 
   def show
@@ -8,7 +8,6 @@ class Settings::RefundFundingController < Sellers::BaseController
 
     render json: {
       enabled: funding_card.present?,
-      name_on_card: funding_card&.holder_name,
       credit_card: funding_card.present? ? {
         id: funding_card.id,
         visual: funding_card.visual,
@@ -36,11 +35,10 @@ class Settings::RefundFundingController < Sellers::BaseController
 
     credit_card = CreditCard.create(chargeable, card_data_handling_mode, current_seller)
 
-    if credit_card.errors.any?
+    if !credit_card.persisted?
       return render json: { success: false, error: credit_card.errors.full_messages.join(", ") }, status: :unprocessable_entity
     end
 
-    credit_card.update!(holder_name: params[:name_on_card])
     current_seller.update!(refund_funding_credit_card: credit_card)
 
     render json: {
@@ -53,16 +51,6 @@ class Settings::RefundFundingController < Sellers::BaseController
         expiry_year: credit_card.expiry_year
       }
     }
-  end
-
-  def update
-    funding_card = current_seller.refund_funding_credit_card
-
-    if funding_card.present? && params[:name_on_card].present?
-      funding_card.update!(holder_name: params[:name_on_card])
-    end
-
-    render json: { success: true }
   end
 
   def destroy
