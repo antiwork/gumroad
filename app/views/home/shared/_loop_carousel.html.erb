@@ -1,0 +1,54 @@
+<%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request) do %>
+  document.addEventListener('DOMContentLoaded', function() {
+    const slidesContainer = document.querySelector('[data-office-carousel-slides]');
+    const prevBtn = document.querySelector('[data-office-carousel-prev]');
+    const nextBtn = document.querySelector('[data-office-carousel-next]');
+    const captionEl = document.querySelector('[data-office-carousel-caption]');
+    const captionsContainer = document.querySelector('[data-office-carousel-captions]');
+    if (!slidesContainer || !prevBtn || !nextBtn) return;
+
+    const slides = Array.from(slidesContainer.children);
+    const count = slides.length - 2;
+    const captions = captionsContainer ? Array.from(captionsContainer.querySelectorAll('span')).map(s => s.textContent) : [];
+    let index = 1, transitioning = false;
+
+    function updateCaption(i) {
+      if (captionEl && captions.length) {
+        captionEl.textContent = captions[((i - 1) % count + count) % count];
+      }
+    }
+
+    function show(i, instant) {
+      const width = slidesContainer.parentElement.offsetWidth;
+      const gap = parseFloat(getComputedStyle(slidesContainer).gap) || (window.innerWidth >= 768 ? 64 : 24);
+      slides.forEach(slide => slide.style.width = `${width}px`);
+      slidesContainer.style.transition = instant ? 'none' : 'transform 0.5s ease-in-out';
+      slidesContainer.style.transform = `translateX(-${i * (width + gap)}px)`;
+      updateCaption(i);
+    }
+
+    function move(dir) {
+      if (transitioning) return;
+      transitioning = true;
+
+      if (dir === 1 && index === count) {
+        index = count + 1;
+        show(index);
+        setTimeout(() => { index = 1; show(index, true); transitioning = false; }, 500);
+      } else if (dir === -1 && index === 1) {
+        index = 0;
+        show(index);
+        setTimeout(() => { index = count; show(index, true); transitioning = false; }, 500);
+      } else {
+        index += dir;
+        show(index);
+        setTimeout(() => { transitioning = false; }, 500);
+      }
+    }
+
+    window.addEventListener('resize', () => show(index, true));
+    prevBtn.addEventListener('click', () => move(-1));
+    nextBtn.addEventListener('click', () => move(1));
+    show(1, true);
+  });
+<% end %>
