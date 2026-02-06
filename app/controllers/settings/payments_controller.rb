@@ -87,6 +87,10 @@ class Settings::PaymentsController < Settings::BaseController
         end
         return redirect_with_error(e.try(:message) || "Something went wrong.")
       rescue => e
+        if e.try(:code) == "postal_code_invalid"
+          country = current_seller.fetch_or_build_user_compliance_info.legal_entity_country
+          return redirect_with_error("The postal code you entered is not valid for #{country}.")
+        end
         return redirect_with_error(e.try(:message) || "Something went wrong.")
       end
     end

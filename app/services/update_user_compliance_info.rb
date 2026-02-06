@@ -58,7 +58,8 @@ class UpdateUserComplianceInfo
         StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info)
       rescue Stripe::InvalidRequestError => e
         if e.code == "postal_code_invalid"
-          return { success: false, error_message: "The postal code you entered is not recognized. Please double-check your postal code and try again." }
+          country = new_compliance_info.legal_entity_country
+          return { success: false, error_message: "The postal code you entered is not valid for #{country}." }
         end
         return { success: false, error_message: e.message.split("Please contact us").first.strip, error_code: "stripe_error" }
       end
