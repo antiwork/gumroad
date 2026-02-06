@@ -676,6 +676,51 @@ describe Subscription, :vcr do
       expect(charge_purchase.gumroad_tax_cents).to eq 0
     end
 
+    it "transfers VAT ID from subscription's stored business_vat_id to recurring charge" do
+      create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
+
+      subscription = create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: @product, business_vat_id: "IE6388047V")
+      original_purchase = create(:purchase, is_original_subscription_purchase: true, link: @product,
+                                            subscription:, chargeable: build(:chargeable), purchase_state: "in_progress",
+                                            full_name: "gum stein", ip_address: "2.47.255.255", country: "Italy", created_at: 2.days.ago)
+      original_purchase.process!(off_session: false)
+      expect(original_purchase.gumroad_tax_cents).to eq 22
+
+      subscription.charge!
+      charge_purchase = subscription.reload.purchases.last
+      expect(charge_purchase.purchase_state).to eq "successful"
+      expect(charge_purchase.purchase_sales_tax_info.business_vat_id).to eq "IE6388047V"
+      expect(charge_purchase.gumroad_tax_cents).to eq 0
+    end
+
+    it "transfers VAT ID from a recurring charge's VAT refund to subsequent recurring charges" do
+      create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
+
+      subscription = create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: @product)
+      original_purchase = create(:purchase, is_original_subscription_purchase: true, link: @product,
+                                            subscription:, chargeable: build(:chargeable), purchase_state: "in_progress",
+                                            full_name: "gum stein", ip_address: "2.47.255.255", country: "Italy", created_at: 2.months.ago)
+
+      travel_to(2.months.ago) do
+        original_purchase.process!(off_session: false)
+        expect(original_purchase.gumroad_tax_cents).to eq 22
+      end
+
+      travel_to(1.month.ago) do
+        first_recurring_purchase = subscription.charge!
+        expect(first_recurring_purchase.purchase_state).to eq "successful"
+        expect(first_recurring_purchase.gumroad_tax_cents).to eq 22
+
+        first_recurring_purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "Sample Note", business_vat_id: "IE6388047V")
+        expect(subscription.reload.business_vat_id).to eq "IE6388047V"
+      end
+
+      second_recurring_purchase = subscription.charge!
+      expect(second_recurring_purchase.purchase_state).to eq "successful"
+      expect(second_recurring_purchase.purchase_sales_tax_info.business_vat_id).to eq "IE6388047V"
+      expect(second_recurring_purchase.gumroad_tax_cents).to eq 0
+    end
+
     describe "handling of unexpected errors", :vcr do
       context "when a rate limit error occurs" do
         it "does not leave the purchase in in_progress state" do
@@ -3763,6 +3808,38 @@ describe Subscription, :vcr do
         subscription.link.update!(block_access_after_membership_cancellation: true)
         expect(subscription.grant_access_to_product?).to be(false)
       end
+    end
+  end
+
+  describe "#update_business_vat_id!" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:subscription_product, user: seller) }
+    let(:subscription) { create(:subscription, link: product, business_vat_id: nil) }
+
+    it "updates subscription's business_vat_id when not already set" do
+      subscription.update_business_vat_id!("IE6388047V")
+
+      expect(subscription.reload.business_vat_id).to eq "IE6388047V"
+    end
+
+    it "does not update subscription's business_vat_id when already set" do
+      subscription.update!(business_vat_id: "DE123456789")
+
+      subscription.update_business_vat_id!("IE6388047V")
+
+      expect(subscription.reload.business_vat_id).to eq "DE123456789"
+    end
+
+    it "does not update subscription's business_vat_id when nil is provided" do
+      subscription.update_business_vat_id!(nil)
+
+      expect(subscription.reload.business_vat_id).to be_nil
+    end
+
+    it "does not update subscription's business_vat_id when empty string is provided" do
+      subscription.update_business_vat_id!("")
+
+      expect(subscription.reload.business_vat_id).to be_nil
     end
   end
 end

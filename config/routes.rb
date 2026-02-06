@@ -298,6 +298,8 @@ Rails.application.routes.draw do
     get "/products/:id/edit", to: redirect("/products/%{id}/product/edit"), as: :edit_link
 
     get "/about", to: "home#about"
+    get "/careers", to: "careers#index"
+    get "/careers/:slug", to: "careers#show", as: :career
     get "/features", to: "home#features"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
@@ -537,7 +539,9 @@ Rails.application.routes.draw do
       resources :pings, controller: "purchases/pings", only: [:create]
       resource :product, controller: "purchases/product", only: [:show]
       resources :variants, controller: "purchases/variants", param: :variant_id, only: [:update]
-      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update]
+      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update] do
+        get :success
+      end
     end
 
     resources :orders, only: [:create] do

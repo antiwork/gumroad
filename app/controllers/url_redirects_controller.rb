@@ -5,6 +5,8 @@ class UrlRedirectsController < ApplicationController
   include ProductsHelper
   include PageMeta::Favicon
 
+  layout "inertia", only: [:confirm_page]
+
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file read download_archive latest_media_locations download_product_files
     audio_durations
@@ -17,7 +19,7 @@ class UrlRedirectsController < ApplicationController
                                              download_archive latest_media_locations download_product_files audio_durations
                                              save_last_content_page]
   before_action :hide_layouts, only: %i[
-    confirm_page membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
+    membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
@@ -162,7 +164,9 @@ class UrlRedirectsController < ApplicationController
         email: params[:email],
       },
     )
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
+    props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
+
+    render inertia: "UrlRedirects/ConfirmPage", props: props
   end
 
   def expired
@@ -367,7 +371,10 @@ class UrlRedirectsController < ApplicationController
 
       if params[:access_token].present? && params[:mobile_token] == Api::Mobile::BaseController::MOBILE_TOKEN
         doorkeeper_authorize! :mobile_api
-        return if purchase && purchase.purchaser && purchase.purchaser == current_api_user
+        if current_api_user.present?
+          sign_in current_api_user
+          return if purchase && purchase.purchaser && purchase.purchaser == logged_in_user
+        end
       end
 
       if cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||

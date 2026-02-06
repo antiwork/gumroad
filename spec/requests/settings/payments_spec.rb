@@ -1241,6 +1241,74 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(page).to have_alert(text: "Thanks! You're all set.")
         end.to change { @user.alive_user_compliance_info.reload.street_address }.to("P.O. Box 123, Tokyo central hall")
       end
+
+      describe "BR business" do
+        before do
+          old_user_compliance_info = @user.alive_user_compliance_info
+          new_user_compliance_info = old_user_compliance_info.dup
+          new_user_compliance_info.country = "Brazil"
+          ActiveRecord::Base.transaction do
+            old_user_compliance_info.mark_deleted!
+            new_user_compliance_info.save!
+          end
+          expect(@user.active_bank_account).to be nil
+          expect(@user.stripe_account).to be nil
+        end
+
+        it "allows to enter PayPal address" do
+          visit settings_payments_path
+
+          choose "Business"
+
+          fill_in("Legal business name", with: "BR LLC")
+          select("Sole Proprietorship", from: "Type")
+          find_field("Address", match: :first).set("address_full_match")
+          find_field("City", match: :first).set("Curitiba")
+          all('select[id$="business-state"]').last.select("Paraná")
+          find_field("Postal code", match: :first).set("81010-250")
+          fill_in("Business phone number", with: "5022541982")
+
+          fill_in("First name", with: "Brazilian")
+          fill_in("Last name", with: "Creator")
+          all('select[id$="creator-country"]').last.select("Brazil")
+          all('input[id$="creator-street-address"]').last.set("address_full_match")
+          all('input[id$="creator-city"]').last.set("Curitiba")
+          all('select[id$="creator-state"]').last.select("Paraná")
+          all('input[id$="creator-zip-code"]').last.set("81010-250")
+          fill_in("Phone number", with: "5022541982")
+
+          select("1", from: "Day")
+          select("January", from: "Month")
+          select("1980", from: "Year")
+
+          fill_in("PayPal Email", with: "br@example.com")
+
+          click_on("Update settings")
+
+          expect(page).to have_alert(text: "Thanks! You're all set.")
+
+          compliance_info = @user.alive_user_compliance_info
+          expect(compliance_info.is_business).to be true
+          expect(compliance_info.business_name).to eq("BR LLC")
+          expect(compliance_info.business_street_address).to eq("address_full_match")
+          expect(compliance_info.business_city).to eq("Curitiba")
+          expect(compliance_info.business_state).to eq("PR")
+          expect(compliance_info.business_country).to eq("Brazil")
+          expect(compliance_info.business_zip_code).to eq("81010-250")
+          expect(compliance_info.business_phone).to eq("+555022541982")
+          expect(compliance_info.business_type).to eq("sole_proprietorship")
+          expect(compliance_info.first_name).to eq("Brazilian")
+          expect(compliance_info.last_name).to eq("Creator")
+          expect(compliance_info.street_address).to eq("address_full_match")
+          expect(compliance_info.city).to eq("Curitiba")
+          expect(compliance_info.state).to eq("PR")
+          expect(compliance_info.country).to eq("Brazil")
+          expect(compliance_info.zip_code).to eq("81010-250")
+          expect(compliance_info.phone).to eq("+555022541982")
+          expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
+          expect(@user.reload.payment_address).to eq("br@example.com")
+        end
+      end
     end
 
     describe "EU creator" do
@@ -6250,12 +6318,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         field.fill_in(with: "5")
 
         expect(field["aria-invalid"]).to eq("true")
-        expect(page).to have_text("Your payout threshold must be at least $10.")
+        expect(page).to have_text("The minimum payout threshold for United States is $10.")
         expect(page).to have_button("Update settings", disabled: true)
 
         field.fill_in(with: "15")
         expect(field["aria-invalid"]).to eq("false")
-        expect(page).to_not have_text("Your payout threshold must be at least $10.")
+        expect(page).to have_text("The minimum payout threshold for United States is $10.")
 
         click_on "Update settings"
 
@@ -6278,12 +6346,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           field.fill_in(with: "30")
 
           expect(field["aria-invalid"]).to eq("true")
-          expect(page).to have_text("Your payout threshold must be at least $34.74.")
+          expect(page).to have_text("The minimum payout threshold for South Korea is $34.74.")
           expect(page).to have_button("Update settings", disabled: true)
 
           field.fill_in(with: "40")
           expect(field["aria-invalid"]).to eq("false")
-          expect(page).to_not have_text("Your payout threshold must be at least $34.74.")
+          expect(page).to have_text("The minimum payout threshold for South Korea is $34.74.")
 
           click_on "Update settings"
 

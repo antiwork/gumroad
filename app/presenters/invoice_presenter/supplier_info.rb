@@ -81,22 +81,49 @@ class InvoicePresenter::SupplierInfo
       }
     end
 
+    TAX_REGISTRATIONS_BY_COUNTRY = {
+      Compliance::Countries::GBR.alpha2 => [["UK VAT Registration", GUMROAD_UK_VAT_REGISTRATION]],
+      Compliance::Countries::AUS.alpha2 => [["Australian Business Number", GUMROAD_AUSTRALIAN_BUSINESS_NUMBER]],
+      Compliance::Countries::NOR.alpha2 => [["Norway VAT Registration", GUMROAD_NORWAY_VAT_REGISTRATION]],
+      Compliance::Countries::IND.alpha2 => [["GSTIN", GUMROAD_INDIA_GSTIN]],
+      Compliance::Countries::JPN.alpha2 => [["JCT Registration Number", GUMROAD_JAPAN_JCT]],
+      Compliance::Countries::NZL.alpha2 => [["New Zealand GST", GUMROAD_NEW_ZEALAND_GST]],
+      Compliance::Countries::NGA.alpha2 => [["FIRS TIN", GUMROAD_NIGERIA_TIN]],
+      Compliance::Countries::SGP.alpha2 => [["Singapore GST", GUMROAD_SINGAPORE_GST]],
+      Compliance::Countries::KOR.alpha2 => [["South Korea VAT", GUMROAD_SOUTH_KOREA_VAT]],
+      Compliance::Countries::CHE.alpha2 => [["Switzerland VAT", GUMROAD_SWITZERLAND_VAT]],
+      Compliance::Countries::THA.alpha2 => [["Thailand VAT", GUMROAD_THAILAND_VAT]],
+    }.freeze
+
     def determine_gumroad_tax_labels_and_numbers
       country_name = chargeable.country_or_ip_country
       country_code = Compliance::Countries.find_by_name(country_name)&.alpha2
 
-      if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country_code)
+      # Check UK first since it has its own VAT number (not the EU OSS number)
+      if country_code == Compliance::Countries::GBR.alpha2
+        TAX_REGISTRATIONS_BY_COUNTRY[country_code]
+      elsif Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country_code)
         [["VAT Registration Number", GUMROAD_VAT_REGISTRATION_NUMBER]]
-      elsif Compliance::Countries::AUS.common_name == country_name
-        [["Australian Business Number", GUMROAD_AUSTRALIAN_BUSINESS_NUMBER]]
-      elsif Compliance::Countries::CAN.alpha2 == country_code
-        [["Canada GST Registration Number", GUMROAD_CANADA_GST_REGISTRATION_NUMBER],
-         ["QST Registration Number", GUMROAD_QST_REGISTRATION_NUMBER]]
-      elsif Compliance::Countries::NOR.alpha2 == country_code
-        [["Norway VAT Registration", GUMROAD_NORWAY_VAT_REGISTRATION]]
-      elsif Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(country_code) ||
-            Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(country_code)
-        [["VAT Registration Number", GUMROAD_OTHER_TAX_REGISTRATION]]
+      elsif country_code == Compliance::Countries::CAN.alpha2
+        canada_tax_labels_and_numbers
+      else
+        TAX_REGISTRATIONS_BY_COUNTRY[country_code]
       end
+    end
+
+    def canada_tax_labels_and_numbers
+      state_code = chargeable.purchase_sales_tax_info&.state_code
+      result = [["Canada GST Registration Number", GUMROAD_CANADA_GST_REGISTRATION_NUMBER]]
+      case state_code
+      when QUEBEC
+        result << ["QST Registration Number", GUMROAD_QST_REGISTRATION_NUMBER]
+      when "BC"
+        result << ["BC PST Registration Number", GUMROAD_CANADA_BC_PST]
+      when "SK"
+        result << ["SK PST Registration Number", GUMROAD_CANADA_SK_PST]
+      when "MB"
+        result << ["MB RST Registration Number", GUMROAD_CANADA_MB_RST]
+      end
+      result
     end
 end
