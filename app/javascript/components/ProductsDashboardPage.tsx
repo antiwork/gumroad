@@ -45,7 +45,9 @@ export const ProductsDashboardPage = ({
       archivedTabVisible={enableArchiveTab}
       ctaButton={
         <>
-          {hadInitialItems.current ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
+          {hadInitialItems.current || !!query ? (
+            <Search value={query} onSearch={setQuery} placeholder="Search products" />
+          ) : null}
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
           </NavigationButtonInertia>
