@@ -14,7 +14,8 @@ describe Subscription::RestartAtCheckoutService do
         perceived_price_cents: product.price_cents,
         browser_guid: browser_guid
       },
-      price_id: product.prices.alive.first.external_id
+      price_id: product.prices.alive.first.external_id,
+      variants: product.tiers.map(&:external_id)
     }
   end
 
@@ -34,6 +35,12 @@ describe Subscription::RestartAtCheckoutService do
   end
 
   describe "#perform" do
+    let(:updater_service) { instance_double(Subscription::UpdaterService) }
+
+    before do
+      allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+    end
+
     context "with a cancelled subscription that can be restarted" do
       let!(:subscription) do
         create_subscription_for_product(
@@ -46,7 +53,9 @@ describe Subscription::RestartAtCheckoutService do
         )
       end
 
-      it "restarts the subscription" do
+      it "delegates to UpdaterService with correct params" do
+        allow(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
+
         service = described_class.new(
           subscription: subscription,
           product: product,
@@ -58,49 +67,22 @@ describe Subscription::RestartAtCheckoutService do
 
         expect(result[:success]).to be true
         expect(result[:restarted_subscription]).to be true
+        expect(result[:message]).to eq("Membership restarted")
 
-        subscription.reload
-        expect(subscription.cancelled_at).to be_nil
-        expect(subscription.deactivated_at).to be_nil
-        expect(subscription.cancelled_by_buyer).to be false
-      end
-
-      it "sends restart notifications" do
-        expect_any_instance_of(Subscription).to receive(:send_restart_notifications!)
-
-        service = described_class.new(
+        expect(Subscription::UpdaterService).to have_received(:new).with(
           subscription: subscription,
-          product: product,
-          params: base_params,
-          buyer: buyer
+          params: hash_including(
+            variants: product.tiers.map(&:external_id),
+            price_id: product.prices.alive.first.external_id,
+            quantity: 1,
+            perceived_price_cents: product.price_cents,
+            perceived_upgrade_price_cents: product.price_cents,
+            use_existing_card: true
+          ),
+          logged_in_user: buyer,
+          gumroad_guid: browser_guid,
+          remote_ip: nil
         )
-
-        service.perform
-      end
-
-      context "when subscription is within billing period (pending cancellation)" do
-        before do
-          subscription.update!(
-            cancelled_at: 1.month.from_now,
-            deactivated_at: nil
-          )
-          allow_any_instance_of(Subscription).to receive(:end_time_of_last_paid_period).and_return(1.week.from_now)
-        end
-
-        it "does not charge the user" do
-          expect_any_instance_of(Subscription).not_to receive(:charge!)
-
-          service = described_class.new(
-            subscription: subscription,
-            product: product,
-            params: base_params,
-            buyer: buyer
-          )
-
-          result = service.perform
-          expect(result[:success]).to be true
-          expect(result[:purchase]).to be_nil
-        end
       end
     end
 
@@ -115,7 +97,9 @@ describe Subscription::RestartAtCheckoutService do
         )
       end
 
-      it "restarts the subscription and clears the failed status" do
+      it "delegates to UpdaterService and returns success" do
+        allow(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
+
         service = described_class.new(
           subscription: subscription,
           product: product,
@@ -126,10 +110,36 @@ describe Subscription::RestartAtCheckoutService do
         result = service.perform
 
         expect(result[:success]).to be true
+        expect(result[:restarted_subscription]).to be true
+      end
+    end
 
-        subscription.reload
-        expect(subscription.failed_at).to be_nil
-        expect(subscription.deactivated_at).to be_nil
+    context "when UpdaterService returns an error" do
+      let!(:subscription) do
+        create_subscription_for_product(
+          product: product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "passes through the error" do
+        allow(updater_service).to receive(:perform).and_return({ success: false, error_message: "This subscription cannot be restarted." })
+
+        service = described_class.new(
+          subscription: subscription,
+          product: product,
+          params: base_params,
+          buyer: buyer
+        )
+
+        result = service.perform
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("This subscription cannot be restarted.")
       end
     end
 
@@ -146,7 +156,9 @@ describe Subscription::RestartAtCheckoutService do
         )
       end
 
-      it "returns an error" do
+      it "returns an error from UpdaterService" do
+        allow(updater_service).to receive(:perform).and_return({ success: false, error_message: "This subscription cannot be restarted." })
+
         service = described_class.new(
           subscription: subscription,
           product: product,
@@ -173,11 +185,11 @@ describe Subscription::RestartAtCheckoutService do
         )
       end
 
-      before do
-        product.update!(deleted_at: 1.hour.ago)
-      end
+      before { product.update!(deleted_at: 1.hour.ago) }
 
-      it "returns an error" do
+      it "returns an error from UpdaterService" do
+        allow(updater_service).to receive(:perform).and_return({ success: false, error_message: "This subscription cannot be restarted." })
+
         service = described_class.new(
           subscription: subscription,
           product: product,
@@ -189,6 +201,112 @@ describe Subscription::RestartAtCheckoutService do
 
         expect(result[:success]).to be false
         expect(result[:error_message]).to eq("This subscription cannot be restarted.")
+      end
+    end
+
+    context "when UpdaterService requires card action (SCA)" do
+      let!(:subscription) do
+        create_subscription_for_product(
+          product: product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "passes through SCA details" do
+        allow(updater_service).to receive(:perform).and_return({
+          success: true,
+          requires_card_action: true,
+          client_secret: "pi_secret_123"
+        })
+
+        service = described_class.new(
+          subscription: subscription,
+          product: product,
+          params: base_params,
+          buyer: buyer
+        )
+
+        result = service.perform
+
+        expect(result[:success]).to be true
+        expect(result[:requires_card_action]).to be true
+        expect(result[:client_secret]).to eq("pi_secret_123")
+      end
+    end
+
+    context "param transformation" do
+      let!(:subscription) do
+        create_subscription_for_product(
+          product: product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "defaults variants and price_id from subscription when not provided" do
+        allow(updater_service).to receive(:perform).and_return({ success: true })
+
+        params_without_variants = {
+          purchase: {
+            email: email,
+            perceived_price_cents: product.price_cents,
+            browser_guid: browser_guid
+          }
+        }
+
+        described_class.new(
+          subscription: subscription,
+          product: product,
+          params: params_without_variants,
+          buyer: buyer
+        ).perform
+
+        expect(Subscription::UpdaterService).to have_received(:new).with(
+          subscription: subscription,
+          params: hash_including(
+            variants: subscription.original_purchase.variant_attributes.map(&:external_id),
+            price_id: subscription.price&.external_id,
+            use_existing_card: true
+          ),
+          logged_in_user: buyer,
+          gumroad_guid: browser_guid,
+          remote_ip: nil
+        )
+      end
+
+      it "falls back to subscription price when perceived_price_cents not provided" do
+        allow(updater_service).to receive(:perform).and_return({ success: true })
+
+        params_without_price = {
+          purchase: { email: email, browser_guid: browser_guid },
+          variants: product.tiers.map(&:external_id),
+          price_id: product.prices.alive.first.external_id
+        }
+
+        described_class.new(
+          subscription: subscription,
+          product: product,
+          params: params_without_price,
+          buyer: buyer
+        ).perform
+
+        expect(Subscription::UpdaterService).to have_received(:new).with(
+          subscription: subscription,
+          params: hash_including(
+            perceived_price_cents: subscription.current_subscription_price_cents,
+            perceived_upgrade_price_cents: subscription.current_subscription_price_cents
+          ),
+          logged_in_user: buyer,
+          gumroad_guid: browser_guid,
+          remote_ip: nil
+        )
       end
     end
   end
