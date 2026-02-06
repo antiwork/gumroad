@@ -50,7 +50,7 @@ export const ChurnChart = ({ data }: { data: DataPoint[] }) => {
       tooltipPosition={tooltip?.position ?? null}
       data={data}
       maxBarSize={40}
-      margin={{ top: 32, right: 0, bottom: 16, left: 16 }}
+      margin={{ top: 32, right: 24, bottom: 16, left: 16 }}
       {...events}
     >
       <XAxis {...xAxisProps} dataKey="label" />
