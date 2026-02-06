@@ -56,8 +56,6 @@ class UserComplianceInfo < ApplicationRecord
   attr_json_data_accessor :business_building_number_kana
   attr_json_data_accessor :business_street_address_kanji
   attr_json_data_accessor :business_street_address_kana
-  attr_json_data_accessor :city_kana
-
   def is_individual?
     !is_business?
   end

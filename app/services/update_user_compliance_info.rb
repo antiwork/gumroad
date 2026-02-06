@@ -25,7 +25,6 @@ class UpdateUserComplianceInfo
         new_compliance_info.street_address_kanji =    compliance_params[:street_address_kanji]    if compliance_params[:street_address_kanji].present?
         new_compliance_info.street_address_kana =     compliance_params[:street_address_kana]     if compliance_params[:street_address_kana].present?
         new_compliance_info.city =                    compliance_params[:city]                    if compliance_params[:city].present?
-        new_compliance_info.city_kana =               compliance_params[:city_kana]               if compliance_params[:city_kana].present?
         new_compliance_info.state =                   compliance_params[:state]                   if compliance_params[:state].present?
         new_compliance_info.country =                 Compliance::Countries.mapping[compliance_params[:country]] if compliance_params[:country].present? && compliance_params[:is_business]
         new_compliance_info.zip_code =                compliance_params[:zip_code]                if compliance_params[:zip_code].present?

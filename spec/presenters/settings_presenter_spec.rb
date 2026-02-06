@@ -539,7 +539,6 @@ describe SettingsPresenter do
           street_address_kanji: nil,
           street_address_kana: nil,
           city: nil,
-          city_kana: nil,
           state: nil,
           country: nil,
           zip_code: nil,
