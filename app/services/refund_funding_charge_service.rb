@@ -88,6 +88,7 @@ class RefundFundingChargeService
   def send_confirmation_email(credit)
     ContactingCreatorMailer.refund_funding_charge_confirmation(credit_id: credit.id).deliver_later(queue: "critical")
   rescue StandardError => e
+    Bugsnag.notify(e)
     Rails.logger.error("RefundFundingChargeService email error: #{e.message}")
   end
 
