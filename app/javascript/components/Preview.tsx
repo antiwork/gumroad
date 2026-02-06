@@ -14,7 +14,7 @@ export const Preview = ({
   const ref = React.useRef<HTMLDivElement>(null);
   const height = useElementDimensions(ref)?.height;
   return (
-    <div role="document" className="overflow-hidden" style={{ height: Math.ceil(height ?? 0) }}>
+    <div role="document" className="overflow-hidden" style={{ height: Math.ceil((height ?? 0) * scaleFactor) }}>
       <div
         ref={ref}
         style={{
