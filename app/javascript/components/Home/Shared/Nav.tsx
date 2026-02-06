@@ -185,7 +185,7 @@ export const HomeNav = () => {
             href="https://github.com/antiwork/gumroad"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex gap-1.5 rounded-full p-1.5 border border-black no-underline dark:border-white/35 hover:bg-gray-100 dark:hover:bg-gray-700 text-black dark:text-white hover:-translate-x-[2px] hover:-translate-y-[2px] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.35)] transition-all duration-100"
+            className="flex gap-1.5 rounded-full border border-black p-1.5 text-black no-underline transition-all duration-100 hover:-translate-x-[2px] hover:-translate-y-[2px] hover:bg-gray-100 hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:border-white/35 dark:text-white dark:hover:bg-gray-700 dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.35)]"
             aria-label="Visit Gumroad on GitHub"
             data-github-stars
           >
@@ -255,7 +255,13 @@ export const HomeNav = () => {
         >
           <div className="flex flex-col items-center justify-center lg:flex-row lg:gap-1 lg:px-6">
             {LINKS.map(({ href, label, isInertia }) => (
-              <NavLink key={href} href={href} onClick={closeMobileMenu} isActive={isCurrentPage(href)} isInertia={!!isInertia}>
+              <NavLink
+                key={href}
+                href={href}
+                onClick={closeMobileMenu}
+                isActive={isCurrentPage(href)}
+                isInertia={!!isInertia}
+              >
                 {label}
               </NavLink>
             ))}

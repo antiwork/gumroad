@@ -5,10 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cast } from "ts-safe-cast";
 
 import { formatPostDate } from "$app/utils/date";
-
-import { Tabs, Tab } from "$app/components/ui/Tabs";
-import { BlogLayout } from "$app/components/GumroadBlog/Layout";
 import { gumroad_blog_post_path } from "$app/utils/routes";
+
+import { BlogLayout } from "$app/components/GumroadBlog/Layout";
+import { Tabs, Tab } from "$app/components/ui/Tabs";
 
 import placeholderFeatureImage from "../../../../assets/images/blog/post-placeholder.jpg";
 
@@ -18,7 +18,7 @@ type TagProps = {
   showCount?: boolean;
   active?: boolean;
   size?: "sm" | "base";
-}
+};
 
 const Tag = ({ name, count, showCount = false, active = false, size = "sm" }: TagProps) => {
   const sizeClasses = {
@@ -142,7 +142,10 @@ const PostCard = ({
 
 const CompactPostItem = ({ post }: { post: Post }) => (
   <li className="border-gray-300 py-4 first:pt-0">
-    <Link href={gumroad_blog_post_path(post.slug)} className="group flex items-end justify-between text-black no-underline hover:text-pink-600">
+    <Link
+      href={gumroad_blog_post_path(post.slug)}
+      className="group flex items-end justify-between text-black no-underline hover:text-pink-600"
+    >
       <div className="grid grid-cols-1 gap-1">
         <h4 className="mb-0.5 text-2xl font-normal">{post.subject}</h4>
         <p className="pb-0.5 text-base text-gray-500">{formatPostDate(post.published_at, "en-US")}</p>
@@ -284,7 +287,7 @@ const IndexPage = () => {
             </div>
           )}
 
-            {postsForGrid ? <PostsGrid posts={postsForGrid} /> : null}
+          {postsForGrid ? <PostsGrid posts={postsForGrid} /> : null}
         </div>
       </div>
     </BlogLayout>
