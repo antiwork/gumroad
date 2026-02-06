@@ -451,6 +451,29 @@ const AccountDetailsSection = ({
                   ))}
                 </Select>
               </Fieldset>
+            ) : complianceInfo.business_country === "BR" ? (
+              <Fieldset state={errorFieldNames.has("business_state") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-business-state`}>State</Label>
+                </FieldsetTitle>
+                <Select
+                  id={`${uid}-business-state`}
+                  required={complianceInfo.is_business}
+                  disabled={isFormDisabled}
+                  aria-invalid={errorFieldNames.has("business_state")}
+                  value={complianceInfo.business_state || ""}
+                  onChange={(evt) => updateComplianceInfo({ business_state: evt.target.value })}
+                >
+                  <option value="" disabled>
+                    State
+                  </option>
+                  {states.br.map((state) => (
+                    <option key={state.code} value={state.code}>
+                      {state.name}
+                    </option>
+                  ))}
+                </Select>
+              </Fieldset>
             ) : null}
             <Fieldset state={errorFieldNames.has("business_zip_code") ? "danger" : undefined}>
               <FieldsetTitle>
