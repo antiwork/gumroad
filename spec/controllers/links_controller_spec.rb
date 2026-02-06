@@ -3186,6 +3186,33 @@ describe LinksController, :vcr, inertia: true do
           expect(response).to be_successful
           expect(response).not_to be_redirect
         end
+
+        it "applies product's default offer code when no code in URL params" do
+          offer_code = create(:offer_code, user: @user, products: [product], code: "DEFAULT10")
+          product.update!(default_offer_code: offer_code)
+
+          get :show, params: { id: product.to_param, wanted: "true" }
+
+          expect(response).to be_redirect
+
+          redirect_url = URI.parse(response.location)
+          query_params = Rack::Utils.parse_query(redirect_url.query)
+          expect(query_params["code"]).to eq("DEFAULT10")
+        end
+
+        it "prefers URL offer code over product's default offer code" do
+          offer_code = create(:offer_code, user: @user, products: [product], code: "DEFAULT10")
+          url_code = create(:offer_code, user: @user, products: [product], code: "URL20")
+          product.update!(default_offer_code: offer_code)
+
+          get :show, params: { id: product.to_param, wanted: "true", code: "URL20" }
+
+          expect(response).to be_redirect
+
+          redirect_url = URI.parse(response.location)
+          query_params = Rack::Utils.parse_query(redirect_url.query)
+          expect(query_params["code"]).to eq("URL20")
+        end
       end
 
       context "with user signed in" do
