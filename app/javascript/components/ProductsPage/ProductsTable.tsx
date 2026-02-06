@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
+import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -72,13 +73,9 @@ export const ProductsPageProductsTable = (props: {
   };
 
   const debouncedLoadProducts = useDebouncedCallback(() => loadProducts(1), 300);
-  const prevQueryRef = React.useRef(props.query);
 
-  React.useEffect(() => {
-    if (props.query !== null && prevQueryRef.current !== props.query) {
-      debouncedLoadProducts();
-    }
-    prevQueryRef.current = props.query;
+  useOnChange(() => {
+    if (props.query !== null) debouncedLoadProducts();
   }, [props.query]);
 
   const reloadProducts = () => loadProducts(pagination.page);
