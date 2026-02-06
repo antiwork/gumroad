@@ -12,7 +12,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
                                                      subscription_charge_failed subscription_product_deleted subscription_renewal_reminder
                                                      subscription_price_change_notification subscription_ended free_trial_expiring_soon
                                                      credit_card_expiring_membership subscription_early_fraud_warning_notification
-                                                     subscription_giftee_added_card already_subscribed_checkout_attempt]
+                                                     subscription_giftee_added_card]
 
   layout "layouts/email"
 
@@ -387,11 +387,6 @@ class CustomerLowPriorityMailer < ApplicationMailer
       subject: @title,
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @wishlist_follower.wishlist.user)
     )
-  end
-
-  def already_subscribed_checkout_attempt(subscription_id)
-    @subscription = Subscription.find(subscription_id)
-    @subject = "You're already subscribed to #{@subscription.link.name}"
   end
 
   private

@@ -1,8 +1,0 @@
-<%= load_pack("secure_redirect") %>
-
-<%= react_component "Alert", props: { initial: nil }, prerender: true %>
-<%= react_component "SecureRedirectPage", props: @react_component_props, prerender: true %>
-
-<% content_for :footer do %>
-  <%= default_footer_content %>
-<% end %>
