@@ -228,7 +228,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
       pages={props.pages}
       actions={
         <>
-          {upsells.length > 0 && (
+          {(upsells.length > 0 || searchQuery) && (
             <Search
               onSearch={(query) => {
                 setSearchQuery(query);
