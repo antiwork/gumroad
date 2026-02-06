@@ -2,11 +2,13 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-export type Position = "top" | "left" | "bottom" | "right";
+export type Position = "top" | "left" | "bottom" | "right" | "bottom-start" | "bottom-end";
 
 const centerClasses = (position: Position) => ({
   "left-1/2 -translate-x-1/2": position === "top" || position === "bottom",
   "top-1/2 -translate-y-1/2": position === "left" || position === "right",
+  "left-0": position === "bottom-start",
+  "right-0": position === "bottom-end",
 });
 
 type Props = {
@@ -34,7 +36,7 @@ export const WithTooltip = ({ tip, children, position = "bottom", className, too
             {
               "bottom-full -translate-y-2": position === "top",
               "right-full -translate-x-2": position === "left",
-              "top-full translate-y-2": position === "bottom",
+              "top-full translate-y-2": position === "bottom" || position === "bottom-start" || position === "bottom-end",
               "left-full translate-x-2": position === "right",
             },
             tooltipProps?.className,
@@ -44,7 +46,7 @@ export const WithTooltip = ({ tip, children, position = "bottom", className, too
             className={classNames("absolute border-6 border-transparent", centerClasses(position), {
               "top-full border-t-primary": position === "top",
               "left-full border-l-primary": position === "left",
-              "bottom-full border-b-primary": position === "bottom",
+              "bottom-full border-b-primary": position === "bottom" || position === "bottom-start" || position === "bottom-end",
               "right-full border-r-primary": position === "right",
             })}
           ></div>

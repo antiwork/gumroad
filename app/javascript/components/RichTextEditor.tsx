@@ -48,7 +48,15 @@ export const useImageUploadSettings = () => React.useContext(ImageUploadSettings
 
 const TOOLBAR_TOOLTIP_DEFAULT_DELAY = 800; // in milliseconds
 
-const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.ReactNode }) => {
+const MenuItemTooltip = ({
+  tip,
+  children,
+  position = "bottom",
+}: {
+  tip: string;
+  children: React.ReactNode;
+  position?: "bottom" | "bottom-start" | "bottom-end";
+}) => {
   const [showTooltip, setShowTooltip] = assertDefined(React.useContext(ToolbarTooltipContext));
 
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
@@ -65,7 +73,7 @@ const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.React
   };
 
   return (
-    <WithTooltip position="bottom" tip={showTooltip ? tip : null}>
+    <WithTooltip position={position} tip={showTooltip ? tip : null}>
       <span onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         {children}
       </span>
@@ -79,14 +87,16 @@ export const MenuItem = ({
   active,
   disabled,
   onClick,
+  tooltipPosition = "bottom",
 }: {
   name: string;
   icon: IconName;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
+  tooltipPosition?: "bottom" | "bottom-start" | "bottom-end";
 }) => (
-  <MenuItemTooltip tip={name}>
+  <MenuItemTooltip tip={name} position={tooltipPosition}>
     <button
       type="button"
       className="toolbar-item cursor-pointer all-unset"
@@ -525,6 +535,7 @@ export const RichTextEditorToolbar = ({
             active={editor.isActive("redo")}
             disabled={redoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().redo().run()}
+            tooltipPosition="bottom-end"
           />
         </div>
       </div>
