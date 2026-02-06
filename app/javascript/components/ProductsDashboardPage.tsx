@@ -36,6 +36,8 @@ export const ProductsDashboardPage = ({
 }: ProductsDashboardPageProps) => {
   const [enableArchiveTab, setEnableArchiveTab] = React.useState(archivedProductsCount > 0);
   const [query, setQuery] = React.useState("");
+  // Track if products existed on initial load to keep search bar visible during empty search results
+  const hasInitialProducts = React.useRef(products.length > 0 || memberships.length > 0);
 
   return (
     <ProductsLayout
@@ -44,7 +46,7 @@ export const ProductsDashboardPage = ({
       archivedTabVisible={enableArchiveTab}
       ctaButton={
         <>
-          {products.length > 0 ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
+          {hasInitialProducts.current ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
           </NavigationButtonInertia>
