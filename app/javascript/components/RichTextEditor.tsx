@@ -48,7 +48,15 @@ export const useImageUploadSettings = () => React.useContext(ImageUploadSettings
 
 const TOOLBAR_TOOLTIP_DEFAULT_DELAY = 800; // in milliseconds
 
-const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.ReactNode }) => {
+const MenuItemTooltip = ({
+  tip,
+  children,
+  position = "bottom",
+}: {
+  tip: string;
+  children: React.ReactNode;
+  position?: "top" | "left" | "bottom" | "right";
+}) => {
   const [showTooltip, setShowTooltip] = assertDefined(React.useContext(ToolbarTooltipContext));
 
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
@@ -65,7 +73,7 @@ const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.React
   };
 
   return (
-    <WithTooltip position="bottom" tip={showTooltip ? tip : null}>
+    <WithTooltip position={position} tip={showTooltip ? tip : null}>
       <span onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         {children}
       </span>
@@ -79,14 +87,16 @@ export const MenuItem = ({
   active,
   disabled,
   onClick,
+  tooltipPosition,
 }: {
   name: string;
   icon: IconName;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
+  tooltipPosition?: "top" | "left" | "bottom" | "right";
 }) => (
-  <MenuItemTooltip tip={name}>
+  <MenuItemTooltip tip={name} position={tooltipPosition}>
     <button
       type="button"
       className="toolbar-item cursor-pointer all-unset"
@@ -518,6 +528,7 @@ export const RichTextEditorToolbar = ({
             active={editor.isActive("undo")}
             disabled={undoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().undo().run()}
+            tooltipPosition="left"
           />
           <MenuItem
             name="Redo last undone change"
@@ -525,6 +536,7 @@ export const RichTextEditorToolbar = ({
             active={editor.isActive("redo")}
             disabled={redoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().redo().run()}
+            tooltipPosition="left"
           />
         </div>
       </div>
