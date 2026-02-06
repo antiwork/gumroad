@@ -154,7 +154,7 @@ export const HomeNav = () => {
         }
       })
       .catch((error: unknown) => {
-        console.error('Error fetching GitHub stars:', error);
+        console.error('Error fetching GitHub stars:', error); // eslint-disable-line
       });
   }, []);
 
