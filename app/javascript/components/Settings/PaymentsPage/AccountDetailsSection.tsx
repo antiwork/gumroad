@@ -94,6 +94,8 @@ const AccountDetailsSection = ({
         return { states: states.ir, label: "County", idSuffix: "business-county" };
       case "JP":
         return { states: states.jp, label: "Prefecture", idSuffix: "business-prefecture" };
+      case "BR":
+        return { states: states.br, label: "State", idSuffix: "business-state" };
       default:
         return null;
     }

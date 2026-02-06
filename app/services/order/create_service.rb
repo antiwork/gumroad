@@ -40,14 +40,6 @@ class Order::CreateService
         next
       end
 
-      if product.is_recurring_billing && !line_item_params[:is_gift]
-        existing_subscription_error = check_for_existing_active_subscription(product, common_params[:email])
-        if existing_subscription_error
-          purchase_responses[line_item_uid] = error_response(existing_subscription_error)
-          next
-        end
-      end
-
       begin
         purchase_params = build_purchase_params(
           product,
@@ -76,12 +68,8 @@ class Order::CreateService
         end
 
         if purchase&.persisted?
-          if purchase.successful?
-            purchase_responses[line_item_uid] = purchase.purchase_response
-          else
-            order.purchases << purchase
-            order.save!
-          end
+          order.purchases << purchase
+          order.save!
           if buyer.present? && buyer.email.blank? && !User.where(email: purchase.email).or(User.where(unconfirmed_email: purchase.email)).exists?
             buyer.update!(email: purchase.email)
           end
@@ -173,34 +161,5 @@ class Order::CreateService
       return unless valid_product_url_domains.any? { |product_url_domain| params[:referrer].starts_with?(product_url_domain) }
 
       CGI.parse(URI.parse(params[:referrer]).query).transform_values { |values| values.length <= 1 ? values.first : values }.to_json
-    end
-
-    def check_for_existing_active_subscription(product, email)
-      user_or_email = buyer || email
-      return nil unless user_or_email.present?
-
-      active_subscription = Subscription.active_for_user_and_product(
-        user_or_email: user_or_email,
-        product: product,
-        with_lock: true
-      )
-
-      return nil unless active_subscription.present?
-
-      CustomerLowPriorityMailer.already_subscribed_checkout_attempt(active_subscription.id).deliver_later(queue: "low")
-
-      if buyer.present?
-        "You already have an active subscription to this membership. Visit your Library to manage it."
-      else
-        Bugsnag.notify(StandardError.new("Existing subscription checkout attempt")) do |report|
-          report.severity = "info"
-          report.add_metadata(:subscription, {
-                                subscription_id: active_subscription.id,
-                                product_id: product.id,
-                                email: email
-                              })
-        end
-        "Sorry, something went wrong. Please try again."
-      end
     end
 end

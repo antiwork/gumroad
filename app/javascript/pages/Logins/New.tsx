@@ -112,5 +112,5 @@ function LoginPage() {
   );
 }
 
-LoginPage.authenticationLayout = true;
+LoginPage.publicLayout = true;
 export default LoginPage;
