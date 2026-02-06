@@ -40,7 +40,6 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(page).to have_radio_button "Customers only", checked: true
     expect(page).to have_text("Audience 0 / 1", normalize_ws: true)
     expect(page).to have_checked_field("Send email")
-    uncheck "Send email"
     expect(page).to_not have_field("Post to profile")
     within :fieldset, "Bought" do
       expect(page).to have_button("Sample product")
@@ -103,7 +102,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.not_bought_products).to eq([product2.unique_permalink])
     expect(installment.not_bought_variants).to be_nil
     expect(installment.affiliate_products).to be_nil
-    expect(installment.send_emails).to be(false)
+    expect(installment.send_emails).to be(true)
     expect(installment.shown_on_profile).to be(false)
     expect(installment.paid_more_than_cents).to eq(200)
     expect(installment.paid_less_than_cents).to eq(1500)
@@ -149,6 +148,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.ready_to_publish?).to be(false)
 
     # Try scheduling the email with a valid date
+    choose "Everyone"
     check "Post to profile"
     expect(page).to_not have_disclosure("Send")
     select_disclosure "Publish" do
@@ -267,7 +267,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
   end
 
   it "allows editing certain fields of a published email" do
-    published_installment = create(:published_installment, name: "Hello", seller: seller, published_at: "2024-01-01 12:00")
+    published_installment = create(:published_installment, name: "Hello", seller: seller, published_at: "2024-01-01 12:00", installment_type: "audience")
     original_published_at = published_installment.published_at
 
     visit emails_path
@@ -279,18 +279,14 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     expect(page).to have_current_path("#{emails_path}/#{published_installment.external_id}/edit")
     expect(page).to have_text("Edit email")
-    expect(page).to have_radio_button("Customers only", checked: true, disabled: true)
-    expect(page).to have_radio_button("Everyone", checked: false, disabled: true)
+    expect(page).to have_radio_button("Customers only", checked: false, disabled: true)
+    expect(page).to have_radio_button("Everyone", checked: true, disabled: true)
 
     # Until the email is blasted, the "Send email" field is NOT disabled
     expect(page).to have_checked_field("Send email", disabled: false)
     uncheck "Send email"
-    expect(page).to_not have_field("Post to profile")
-    expect(page).to have_field("Paid more than", with: "", disabled: true)
-    expect(page).to have_field("Paid less than", with: "", disabled: true)
-    expect(page).to have_field("After", with: "", disabled: true)
-    expect(page).to have_field("Before", with: "", disabled: true)
-    expect(page).to have_select("From", disabled: true)
+    expect(page).to have_unchecked_field("Post to profile", disabled: false)
+    check "Post to profile"
     expect(page).to have_checked_field("Allow comments", disabled: false)
     uncheck "Allow comments"
     fill_in "Title", with: "Hello - edit 1"
@@ -306,7 +302,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     # It does not modify the publish date if it was unchanged
     expect(published_installment.published_at).to eq original_published_at
     expect(published_installment.send_emails).to be(false)
-    expect(published_installment.shown_on_profile).to be(false)
+    expect(published_installment.shown_on_profile).to be(true)
     expect(published_installment.allow_comments).to be(false)
     check "Send email"
 
@@ -321,7 +317,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(published_installment.published_at).to eq original_published_at
     expect(published_installment.name).to eq "Hello - edit 1"
     expect(published_installment.send_emails).to be(false)
-    expect(published_installment.shown_on_profile).to be(false)
+    expect(published_installment.shown_on_profile).to be(true)
     expect(published_installment.allow_comments).to be(false)
 
     # Try setting the publish date to a valid date
@@ -334,19 +330,19 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(published_installment.published_at.to_date.to_s).to eq "2021-01-01"
     expect(published_installment.name).to eq "Hello - edit 2"
     expect(published_installment.send_emails).to be(true)
-    expect(published_installment.shown_on_profile).to be(false)
+    expect(published_installment.shown_on_profile).to be(true)
     expect(published_installment.has_been_blasted?).to be(false)
     expect(published_installment.allow_comments).to be(false)
     expect(page).to have_checked_field("Send email", disabled: false)
-    expect(page).to_not have_field("Post to profile")
+    expect(page).to have_checked_field("Post to profile", disabled: false)
 
     # Try publishing the already published email
     fill_in "Title", with: "Hello - edit 3"
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Updated message")
     sleep 0.5 # Wait for the message editor to update
-    select_disclosure "Send" do
+    select_disclosure "Publish" do
       expect(page).to have_button("Schedule", disabled: true)
-      click_on "Send now"
+      click_on "Publish now"
     end
     expect(page).to have_alert(text: "Email successfully sent!")
 
@@ -361,7 +357,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     find(:table_row, { "Subject" => "Hello - edit 3" }).click
     click_on "Edit"
     expect(page).to have_checked_field("Send email", disabled: true)
-    expect(page).to_not have_field("Post to profile")
+    expect(page).to have_checked_field("Post to profile", disabled: false)
     expect(page).to have_field("Publish date", with: published_installment.published_at.to_date.to_s)
     expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last!.id)
   end
