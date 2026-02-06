@@ -93,6 +93,7 @@ class Products::ProductController < Products::BaseController
       @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
       @product.show_in_sections!(product_permitted_params[:section_ids] || [])
       @product.save_shipping_destinations!(product_permitted_params[:shipping_destinations] || []) if @product.is_physical
+      update_refund_policy
 
       if Feature.active?(:cancellation_discounts, @product.user) && (product_permitted_params[:cancellation_discount].present? || @product.cancellation_discount_offer_code.present?)
         Product::SaveCancellationDiscountService.new(@product, product_permitted_params[:cancellation_discount].to_h.symbolize_keys.deep_symbolize_keys).perform
@@ -106,6 +107,7 @@ class Products::ProductController < Products::BaseController
       update_default_offer_code
 
       Product::SavePostPurchaseCustomFieldsService.new(@product).perform
+      update_removed_file_attributes
 
       @product.description = SavePublicFilesService.new(
         resource: @product,
@@ -114,7 +116,23 @@ class Products::ProductController < Products::BaseController
       ).process if product_permitted_params[:public_files].present?
 
       toggle_community_chat!(product_permitted_params[:community_chat_enabled])
+      @product.skus_enabled = false
       @product.save!
+    end
+
+    def update_removed_file_attributes
+      current = @product.file_info_for_product_page.keys.map(&:to_s)
+      updated = (product_permitted_params[:file_attributes] || []).map { _1[:name] }
+      @product.add_removed_file_info_attributes(current - updated)
+    end
+
+    def update_refund_policy
+      return if current_seller.account_level_refund_policy_enabled?
+
+      @product.product_refund_policy_enabled = product_permitted_params[:product_refund_policy_enabled]
+      if product_permitted_params[:refund_policy].present? && product_permitted_params[:product_refund_policy_enabled]
+        @product.find_or_initialize_product_refund_policy.update!(product_permitted_params[:refund_policy])
+      end
     end
 
     def update_variants

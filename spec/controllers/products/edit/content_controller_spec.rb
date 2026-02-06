@@ -58,5 +58,37 @@ describe Products::ContentController, inertia: true do
       end
     end
 
+    context "when content contains license key" do
+      before { request.headers["X-Inertia"] = "true" }
+
+      it "sets is_licensed to true when license key is embedded" do
+        put :update, params: {
+          product_id: product.unique_permalink,
+          product: {
+            rich_content: [{
+              title: "Page 1",
+              description: { type: "doc", content: [{ "type" => "licenseKey" }] }
+            }]
+          }
+        }
+        expect(product.reload.is_licensed).to be(true)
+      end
+
+      it "sets is_licensed to false and is_multiseat_license to false when no license key" do
+        product.update!(is_licensed: true, is_multiseat_license: true)
+        put :update, params: {
+          product_id: product.unique_permalink,
+          product: {
+            rich_content: [{
+              title: "Page 1",
+              description: { type: "doc", content: [{ "type" => "paragraph" }] }
+            }]
+          }
+        }
+        product.reload
+        expect(product.is_licensed).to be(false)
+        expect(product.is_multiseat_license).to be(false)
+      end
+    end
   end
 end

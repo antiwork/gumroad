@@ -48,6 +48,10 @@ class Products::ContentController < Products::BaseController
       @product.assign_attributes(product_permitted_params.except(:files, :variants, :custom_domain, :rich_content))
       SaveFilesService.perform(@product, product_permitted_params, rich_content_params)
       update_rich_content
+      @product.is_licensed = @product.has_embedded_license_key?
+      unless @product.is_licensed
+        @product.is_multiseat_license = false
+      end
       @product.save!
       @product.generate_product_files_archives!
     end

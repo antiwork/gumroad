@@ -98,6 +98,12 @@ describe Products::ProductController, inertia: true do
         expect(flash[:notice]).to eq("Changes saved!")
       end
 
+      it "resets skus_enabled to false on every update" do
+        product.update!(skus_enabled: true)
+        put :update, params: { product_id: product.unique_permalink, product: { name: product.name } }
+        expect(product.reload.skus_enabled).to be(false)
+      end
+
       it "marks the product as allowing display of sales count when should_show_sales_count is true" do
         product.update!(should_show_sales_count: false)
         put :update, params: {
@@ -164,6 +170,46 @@ describe Products::ProductController, inertia: true do
         }
         expect(product.reload.product_refund_policy_enabled?).to be(false)
         expect(response).to redirect_to(edit_product_product_path(product.unique_permalink))
+      end
+    end
+
+    context "when updating refund policy" do
+      before { request.headers["X-Inertia"] = "true" }
+
+      it "updates product refund policy when seller does not have account-level policy" do
+        product.user.update!(refund_policy_enabled: false)
+        put :update, params: {
+          product_id: product.unique_permalink,
+          product: {
+            name: product.name,
+            product_refund_policy_enabled: true,
+            refund_policy: {
+              max_refund_period_in_days: 30,
+              fine_print: "Custom policy"
+            }
+          }
+        }
+        expect(product.reload.product_refund_policy_enabled).to be(true)
+        expect(product.product_refund_policy.fine_print).to eq("Custom policy")
+      end
+    end
+
+    context "when updating file attributes" do
+      before do
+        request.headers["X-Inertia"] = "true"
+        allow(Link).to receive(:fetch_leniently).and_return(product)
+      end
+
+      it "tracks removed file attributes" do
+        allow(product).to receive(:file_info_for_product_page).and_return({ "Size" => "10MB", "Length" => "5 pages" })
+        put :update, params: {
+          product_id: product.unique_permalink,
+          product: {
+            name: product.name,
+            file_attributes: [{ name: "Size", value: "10MB" }]
+          }
+        }
+        expect(product.reload.removed_file_info_attributes).to include(:Length)
       end
     end
 
