@@ -79,7 +79,6 @@ const ApplicationRow = ({ application, onRemove }: { application: Application; o
 
 const ApplicationsSection = (props: { applications: Application[] }) => (
   <FormSection
-    className="p-4! md:p-8!"
     header={
       <>
         <h2>Applications</h2>

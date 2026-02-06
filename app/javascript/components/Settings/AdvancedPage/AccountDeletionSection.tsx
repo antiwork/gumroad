@@ -33,7 +33,7 @@ const AccountDeletionSection = (props: Props) => {
   };
 
   return (
-    <FormSection className="p-4! md:p-8!" header={<h2>Danger Zone</h2>}>
+    <FormSection header={<h2>Danger Zone</h2>}>
       <p>
         <a href="/help/article/37-how-to-delete-your-gumroad-account" target="_blank" rel="noreferrer">
           Deleting your account

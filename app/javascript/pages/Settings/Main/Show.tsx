@@ -121,7 +121,7 @@ export default function MainPage() {
   return (
     <Layout currentPage="main" pages={props.settings_pages} onSave={onSave} canUpdate={!isFormDisabled}>
       <form ref={formRef}>
-        <FormSection className="p-4! md:p-8!" header={<h2>User details</h2>}>
+        <FormSection header={<h2>User details</h2>}>
           <Fieldset>
             <FieldsetTitle>
               <Label htmlFor={`${uid}-email`}>Email</Label>
@@ -153,7 +153,6 @@ export default function MainPage() {
           </Fieldset>
         </FormSection>
         <FormSection
-          className="p-4! md:p-8!"
           header={
             <>
               <h2>Notifications</h2>
@@ -279,7 +278,7 @@ export default function MainPage() {
             </Table>
           </Fieldset>
         </FormSection>
-        <FormSection className="p-4! md:p-8!" header={<h2>Support</h2>}>
+        <FormSection header={<h2>Support</h2>}>
           <Fieldset>
             <FieldsetTitle>
               <Label htmlFor={`${uid}-support-email`}>Email</Label>
@@ -305,7 +304,6 @@ export default function MainPage() {
         </FormSection>
         {props.user.seller_refund_policy.enabled ? (
           <FormSection
-            className="p-4! md:p-8!"
             header={
               <>
                 <h2>Refund policy</h2>
@@ -381,7 +379,7 @@ export default function MainPage() {
             </Fieldset>
           </FormSection>
         ) : null}
-        <FormSection className="p-4! md:p-8!" header={<h2>Local</h2>}>
+        <FormSection header={<h2>Local</h2>}>
           <Fieldset>
             <FieldsetTitle>
               <Label htmlFor={`${uid}-timezone`}>Time zone</Label>
@@ -508,7 +506,7 @@ export default function MainPage() {
             </FieldsetDescription>
           </Fieldset>
         </FormSection>
-        <FormSection className="p-4! md:p-8!" header={<h2>Adult content</h2>}>
+        <FormSection header={<h2>Adult content</h2>}>
           <Fieldset>
             <ToggleSettingRow
               value={form.data.user.show_nsfw_products}
@@ -518,7 +516,7 @@ export default function MainPage() {
             />
           </Fieldset>
         </FormSection>
-        <FormSection className="p-4! md:p-8!" header={<h2>Affiliates</h2>}>
+        <FormSection header={<h2>Affiliates</h2>}>
           <Fieldset>
             <ToggleSettingRow
               value={form.data.user.disable_affiliate_requests}
@@ -558,7 +556,7 @@ const InvalidateActiveSessionsSection = () => {
   });
 
   return (
-    <FormSection className="p-4! md:p-8!">
+    <FormSection>
       <Fieldset>
         <button
           className="cursor-pointer underline all-unset"

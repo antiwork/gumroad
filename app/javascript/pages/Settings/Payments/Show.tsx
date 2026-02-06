@@ -812,7 +812,7 @@ export default function PaymentsPage() {
           </Alert>
         ) : null}
 
-        <FormSection className="p-4! md:p-8!" header={<h2>Verification</h2>}>
+        <FormSection header={<h2>Verification</h2>}>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
           ) : (
@@ -864,7 +864,6 @@ export default function PaymentsPage() {
           </div>
         ) : null}
         <FormSection
-          className="p-4! md:p-8!"
           header={
             <>
               <h2>Payout schedule</h2>
@@ -952,7 +951,6 @@ export default function PaymentsPage() {
         </FormSection>
 
         <FormSection
-          className="p-4! md:p-8!"
           header={
             <>
               <h2>Payout method</h2>

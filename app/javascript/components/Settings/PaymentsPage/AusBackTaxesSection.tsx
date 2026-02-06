@@ -25,7 +25,7 @@ const AusBackTaxesSection = ({
   are_au_backtaxes_paid,
   au_backtaxes_paid_date,
 }: AusBacktaxDetails) => (
-  <FormSection className="p-4! md:p-8!" header={<h2>Backtaxes collection</h2>}>
+  <FormSection header={<h2>Backtaxes collection</h2>}>
     {opted_in_to_au_backtax ? (
       <div className="flex flex-col gap-4">
         <Alert variant="success">You've opted in to backtaxes collection.</Alert>

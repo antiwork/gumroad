@@ -45,7 +45,6 @@ const BlockEmailsSection = ({ blockedEmails, setBlockedEmails }: Props) => {
 
   return (
     <FormSection
-      className="p-4! md:p-8!"
       header={
         <>
           <h2>Mass-block emails</h2>

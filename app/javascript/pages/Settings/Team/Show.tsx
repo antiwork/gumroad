@@ -133,7 +133,6 @@ const AddTeamMembersSection = ({
 
   return (
     <FormSection
-      className="p-4! md:p-8!"
       header={
         <>
           <h2>Add team members</h2>
@@ -266,7 +265,7 @@ const TeamMembersSection = ({
   };
 
   return (
-    <FormSection className="p-4! md:p-8!" header={<h2 ref={ref}>Team members</h2>}>
+    <FormSection header={<h2 ref={ref}>Team members</h2>}>
       {deletedMember ? (
         <Alert variant="success">
           <div className="flex flex-col justify-between sm:flex-row">

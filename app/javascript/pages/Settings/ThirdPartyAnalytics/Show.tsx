@@ -88,7 +88,6 @@ export default function ThirdPartyAnalyticsPage() {
     >
       <form>
         <FormSection
-          className="p-4! md:p-8!"
           header={
             <>
               <h2>Third-party analytics</h2>
@@ -153,7 +152,7 @@ export default function ThirdPartyAnalyticsPage() {
             </Dropdown>
           </Details>
         </FormSection>
-        <FormSection className="p-4! md:p-8!" header={<h2>Domain verification</h2>}>
+        <FormSection header={<h2>Domain verification</h2>}>
           <Details
             className="toggle"
             open={thirdPartyAnalytics.enable_verify_domain_third_party_services}
@@ -189,7 +188,6 @@ export default function ThirdPartyAnalyticsPage() {
           </Details>
         </FormSection>
         <FormSection
-          className="p-4! md:p-8!"
           header={
             <>
               <h2>Snippets</h2>

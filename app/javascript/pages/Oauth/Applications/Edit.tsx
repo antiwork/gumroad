@@ -28,7 +28,7 @@ export default function EditApplicationPage() {
   return (
     <Layout currentPage="advanced" pages={props.settings_pages}>
       <form>
-        <FormSection className="p-4! md:p-8!" header={<h2>Edit application</h2>}>
+        <FormSection header={<h2>Edit application</h2>}>
           <ApplicationForm application={props.application} />
         </FormSection>
       </form>

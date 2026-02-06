@@ -54,7 +54,6 @@ const NotificationEndpointSection = ({
 
   return (
     <FormSection
-      className="p-4! md:p-8!"
       header={
         <>
           <h2>Ping</h2>

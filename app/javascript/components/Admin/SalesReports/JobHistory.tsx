@@ -63,9 +63,7 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
         authenticityToken={authenticityToken}
         onSuccess={() => setShowNewSalesReportForm(false)}
         wrapper={(children) => (
-          <FormSection className="p-4 md:p-8" header="Generate sales report with custom date ranges">
-            {children}
-          </FormSection>
+          <FormSection header="Generate sales report with custom date ranges">{children}</FormSection>
         )}
       />
     ) : (

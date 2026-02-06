@@ -57,7 +57,7 @@ export default function PasswordPage() {
   return (
     <SettingsLayout currentPage="password" pages={props.settings_pages}>
       <form onSubmit={handleSubmit}>
-        <FormSection className="p-4! md:p-8!" header={<h2>Change password</h2>}>
+        <FormSection header={<h2>Change password</h2>}>
           {requireOldPassword ? (
             <Fieldset>
               <FieldsetTitle>

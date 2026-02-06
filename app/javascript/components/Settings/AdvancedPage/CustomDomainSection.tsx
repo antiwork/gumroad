@@ -13,7 +13,6 @@ const CustomDomainSection = ({
   setCustomDomain: (val: string) => void;
 }) => (
   <FormSection
-    className="p-4! md:p-8!"
     header={
       <>
         <h2>Custom domain</h2>
