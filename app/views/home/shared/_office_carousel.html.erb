@@ -1,0 +1,127 @@
+<%
+  images = local_assigns[:images] || []
+  variant = local_assigns[:variant] || "default"
+  title = local_assigns[:title]
+  subtitle = local_assigns[:subtitle]
+  captions = local_assigns[:captions] || []
+%>
+
+<% if variant == "gallery" %>
+  <div class="bg-white py-16 sm:py-24 lg:py-32">
+    <div class="mx-auto max-w-7xl px-8">
+      <% if title.present? || subtitle.present? %>
+        <div class="flex flex-col gap-4 sm:gap-6 text-center mb-12 sm:mb-16">
+          <% if title.present? %><h2 class="text-4xl md:text-6xl lg:text-7xl font-medium"><%= title %></h2><% end %>
+          <% if subtitle.present? %><p class="text-lg md:text-2xl text-dark-gray"><%= subtitle %></p><% end %>
+        </div>
+      <% end %>
+
+      <% if images.any? %>
+        <%# Desktop: Static grid (last image first) %>
+        <div class="hidden lg:grid grid-cols-4 gap-6">
+          <% ([images.last] + images[0..-2]).each do |image| %>
+            <div class="rounded-2xl overflow-hidden">
+              <%= image_tag image, alt: "Office", class: "w-full h-full object-cover aspect-[3/4]" %>
+            </div>
+          <% end %>
+        </div>
+
+        <%# Mobile/Tablet: Infinite carousel %>
+        <div class="lg:hidden" data-gallery-carousel>
+          <div class="overflow-hidden relative w-full">
+            <div class="flex gap-4 md:gap-6 transition-transform duration-500 ease-in-out" data-gallery-carousel-slides>
+              <% 3.times do %>
+                <% images.each do |image| %>
+                  <div class="flex-shrink-0 rounded-2xl overflow-hidden" data-gallery-slide>
+                    <%= image_tag image, alt: "Office", class: "w-full h-full object-cover aspect-[3/4]" %>
+                  </div>
+                <% end %>
+              <% end %>
+            </div>
+          </div>
+          <%= render "home/shared/carousel_nav", variant: "dark", data_prefix: "gallery-carousel" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request) do %>
+    document.addEventListener('DOMContentLoaded', function() {
+      const slidesContainer = document.querySelector('[data-gallery-carousel-slides]');
+      const prevBtn = document.querySelector('[data-gallery-carousel-prev]');
+      const nextBtn = document.querySelector('[data-gallery-carousel-next]');
+      if (!slidesContainer || !prevBtn || !nextBtn) return;
+
+      const slides = Array.from(slidesContainer.querySelectorAll('[data-gallery-slide]'));
+      const realCount = slides.length / 3;
+      let index = realCount, transitioning = false;
+
+      const getVisibleCount = () => window.innerWidth >= 768 ? 3 : window.innerWidth >= 640 ? 2 : 1;
+      const getGap = () => window.innerWidth >= 768 ? 24 : 16;
+
+      function show(i, instant) {
+        const gap = getGap(), visibleCount = getVisibleCount();
+        const containerWidth = slidesContainer.parentElement.offsetWidth;
+        const slideWidth = (containerWidth - (gap * (visibleCount - 1))) / visibleCount;
+        slides.forEach(s => s.style.width = `${slideWidth}px`);
+        slidesContainer.style.transition = instant ? 'none' : 'transform 0.5s ease-in-out';
+        slidesContainer.style.transform = `translateX(-${i * (slideWidth + gap)}px)`;
+      }
+
+      function move(dir) {
+        if (transitioning) return;
+        transitioning = true;
+        index += dir;
+        show(index);
+        setTimeout(() => {
+          if (index <= 0 || index >= realCount * 2) { index = realCount; show(index, true); }
+          transitioning = false;
+        }, 500);
+      }
+
+      window.addEventListener('resize', () => show(index, true));
+      prevBtn.addEventListener('click', () => move(-1));
+      nextBtn.addEventListener('click', () => move(1));
+      show(index, true);
+    });
+  <% end %>
+
+<% else %>
+
+  <div data-office-carousel>
+    <div class="rounded-2xl overflow-hidden relative w-full">
+      <div class="flex gap-6 md:gap-16 transition-transform duration-500 ease-in-out" data-office-carousel-slides>
+        <% if images.any? %>
+          <% ([images.last] + images + [images.first]).each do |image| %>
+            <div class="flex-shrink-0 rounded-2xl overflow-hidden min-w-full">
+              <%= image_tag image, alt: "Office", class: "w-full h-full object-cover aspect-video" %>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+
+    <div class="relative flex items-center mt-5">
+      <% if captions.any? %>
+        <p class="text-white text-base" data-office-carousel-caption><%= captions.first %></p>
+        <div class="hidden" data-office-carousel-captions>
+          <% captions.each { |c| %><span><%= c %></span><% } %>
+        </div>
+      <% end %>
+      <div class="absolute right-0 flex gap-6">
+        <button type="button" aria-label="Previous" data-office-carousel-prev class="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100">
+          <svg class="w-5 h-5 text-dark-gray" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+          </svg>
+        </button>
+        <button type="button" aria-label="Next" data-office-carousel-next class="w-10 h-10 rounded-full bg-white flex items-center justify-center hover:bg-gray-100">
+          <svg class="w-5 h-5 text-dark-gray" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <%= render "home/shared/loop_carousel" %>
+
+<% end %>
