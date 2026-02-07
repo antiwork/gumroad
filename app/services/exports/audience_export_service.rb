@@ -33,9 +33,19 @@ class Exports::AudienceExportService
   def perform_sync_export
     @tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
     CsvSafe.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
-      query = build_query(@user, @options)
-      query.order(:min_created_at).find_each do |member|
-        csv << [member.email, member.min_created_at]
+      conditions = []
+      conditions << "follower = true" if @options[:followers]
+      conditions << "customer = true" if @options[:customers]
+      conditions << "affiliate = true" if @options[:affiliates]
+
+      sql = @user.audience_members
+        .select(:email, :min_created_at)
+        .where(conditions.join(" OR "))
+        .order(:id)
+        .to_sql
+
+      ActiveRecord::Base.connection.exec_query(sql).each do |row|
+        csv << [row["email"], row["min_created_at"]]
       end
     end
     @tempfile.rewind
