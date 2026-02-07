@@ -1,4 +1,0 @@
-<%= render("layouts/custom_styles/style") %>
-<%= load_pack("product") %>
-
-<%= react_component "ProfileCoffeePage", props: @product_props.merge({ creator_profile: ProfilePresenter.new(pundit_user: pundit_user, seller: @product.user).creator_profile }), prerender: true %>

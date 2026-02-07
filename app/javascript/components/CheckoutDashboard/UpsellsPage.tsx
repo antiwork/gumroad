@@ -228,7 +228,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
       pages={props.pages}
       actions={
         <>
-          {upsells.length > 0 && (
+          {upsells.length > 0 || searchQuery ? (
             <Search
               onSearch={(query) => {
                 setSearchQuery(query);
@@ -236,7 +236,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
               }}
               value={searchQuery ?? ""}
             />
-          )}
+          ) : null}
           <Button color="accent" onClick={() => setView("create")} disabled={isReadOnly}>
             New upsell
           </Button>

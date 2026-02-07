@@ -74,6 +74,7 @@ type PaymentsPageProps = {
     ae: { code: string; name: string }[];
     ir: { code: string; name: string }[];
     br: { code: string; name: string }[];
+    jp: { value: string; label: string; kana: string }[];
   };
   saved_card: SavedCreditCard | null;
   formatted_balance_to_forfeit_on_country_change: string | null;
@@ -524,7 +525,7 @@ export default function PaymentsPage() {
         });
       }
     }
-    if (!form.data.user.city) {
+    if (form.data.user.country !== "JP" && !form.data.user.city) {
       markFieldInvalid("city");
     }
     if (
