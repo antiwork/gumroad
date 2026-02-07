@@ -3224,6 +3224,53 @@ describe LinksController, :vcr, inertia: true do
           query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
           expect(query_params["code"]).to eq(default_code.code)
         end
+
+        it "does not duplicate code params in the redirect URL" do
+          discountable_product = create(:product, user: @user, price_cents: 10_00)
+          offer_code = create(:offer_code, user: @user, products: [discountable_product], amount_cents: nil, amount_percentage: 25)
+          discountable_product.update!(default_offer_code: offer_code)
+
+          get :show, params: { id: discountable_product.to_param, wanted: "true", code: "someoldcode" }
+
+          query_string = URI.parse(response.location).query
+          code_occurrences = query_string.scan(/(?:^|&)code=/).length
+          expect(code_occurrences).to eq(1)
+        end
+
+        it "works with the offer_code param name" do
+          discountable_product = create(:product, user: @user, price_cents: 10_00)
+          default_code = create(:offer_code, code: "default50", user: @user, products: [discountable_product], amount_cents: nil, amount_percentage: 50)
+          discountable_product.update!(default_offer_code: default_code)
+          url_code = create(:offer_code, code: "url10", user: @user, products: [discountable_product], amount_cents: nil, amount_percentage: 10)
+
+          get :show, params: { id: discountable_product.to_param, wanted: "true", offer_code: url_code.code }
+
+          expect(response).to be_redirect
+          query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+          expect(query_params["code"]).to eq(default_code.code)
+        end
+
+        it "redirects without a code param when no codes exist" do
+          discountable_product = create(:product, user: @user, price_cents: 10_00)
+
+          get :show, params: { id: discountable_product.to_param, wanted: "true" }
+
+          expect(response).to be_redirect
+          query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+          expect(query_params["code"]).to be_nil
+        end
+
+        it "falls back to the default code when an invalid URL code is provided" do
+          discountable_product = create(:product, user: @user, price_cents: 10_00)
+          default_code = create(:offer_code, code: "valid25", user: @user, products: [discountable_product], amount_cents: nil, amount_percentage: 25)
+          discountable_product.update!(default_offer_code: default_code)
+
+          get :show, params: { id: discountable_product.to_param, wanted: "true", code: "nonexistent" }
+
+          expect(response).to be_redirect
+          query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
+          expect(query_params["code"]).to eq(default_code.code)
+        end
       end
 
       context "with user signed in" do

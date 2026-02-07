@@ -4820,12 +4820,46 @@ describe Link, :vcr do
       expect(product.best_offer_code_for(nil)).to be_nil
     end
 
-    it "returns the code with the higher discount" do
+    it "returns nil for empty string URL code when no default exists" do
+      expect(product.best_offer_code_for("")).to be_nil
+    end
+
+    it "returns the default code for empty string URL code" do
+      default_code = create(:offer_code, user: seller, products: [product])
+      product.update!(default_offer_code: default_code)
+      expect(product.best_offer_code_for("")).to eq(default_code.code)
+    end
+
+    it "returns the code with the higher percentage discount" do
       small_discount = create(:offer_code, code: "small10", user: seller, products: [product], amount_cents: nil, amount_percentage: 10)
       big_discount = create(:offer_code, code: "big50", user: seller, products: [product], amount_cents: nil, amount_percentage: 50)
       product.update!(default_offer_code: big_discount)
 
       expect(product.best_offer_code_for(small_discount.code)).to eq(big_discount.code)
+    end
+
+    it "returns the URL code when it has a higher percentage discount" do
+      default_code = create(:offer_code, code: "default10", user: seller, products: [product], amount_cents: nil, amount_percentage: 10)
+      url_code = create(:offer_code, code: "url75", user: seller, products: [product], amount_cents: nil, amount_percentage: 75)
+      product.update!(default_offer_code: default_code)
+
+      expect(product.best_offer_code_for(url_code.code)).to eq(url_code.code)
+    end
+
+    it "compares fixed-amount vs percentage correctly" do
+      fixed_code = create(:offer_code, code: "fixed3", user: seller, products: [product], amount_cents: 3_00, amount_percentage: nil)
+      pct_code = create(:offer_code, code: "pct50", user: seller, products: [product], amount_cents: nil, amount_percentage: 50)
+      product.update!(default_offer_code: pct_code)
+
+      expect(product.best_offer_code_for(fixed_code.code)).to eq(pct_code.code)
+    end
+
+    it "picks fixed-amount code when it gives a bigger discount than percentage" do
+      fixed_code = create(:offer_code, code: "fixed8", user: seller, products: [product], amount_cents: 8_00, amount_percentage: nil)
+      pct_code = create(:offer_code, code: "pct50", user: seller, products: [product], amount_cents: nil, amount_percentage: 50)
+      product.update!(default_offer_code: pct_code)
+
+      expect(product.best_offer_code_for(fixed_code.code)).to eq(fixed_code.code)
     end
 
     it "returns the default code when discounts are equal" do
@@ -4834,6 +4868,32 @@ describe Link, :vcr do
       product.update!(default_offer_code: code_b)
 
       expect(product.best_offer_code_for(code_a.code)).to eq(code_b.code)
+    end
+
+    it "returns the URL code when the default code is deleted" do
+      url_code = create(:offer_code, code: "urlcode", user: seller, products: [product], amount_cents: nil, amount_percentage: 20)
+      deleted_code = create(:offer_code, code: "deleted", user: seller, products: [product], amount_cents: nil, amount_percentage: 50)
+      product.update!(default_offer_code: deleted_code)
+      product.update_column(:default_offer_code_id, deleted_code.id)
+      deleted_code.update_column(:deleted_at, Time.current)
+
+      expect(product.reload.best_offer_code_for(url_code.code)).to eq(url_code.code)
+    end
+
+    it "returns the default code when the URL code is invalid" do
+      default_code = create(:offer_code, code: "valid", user: seller, products: [product], amount_cents: nil, amount_percentage: 20)
+      product.update!(default_offer_code: default_code)
+
+      expect(product.best_offer_code_for("nonexistent")).to eq(default_code.code)
+    end
+
+    it "passes through the URL code when it is invalid and no default exists" do
+      expect(product.best_offer_code_for("nonexistent")).to eq("nonexistent")
+    end
+
+    it "works with the offer_code param name" do
+      url_code = create(:offer_code, code: "fromurl", user: seller, products: [product], amount_cents: nil, amount_percentage: 40)
+      expect(product.best_offer_code_for(url_code.code)).to eq(url_code.code)
     end
   end
 end
