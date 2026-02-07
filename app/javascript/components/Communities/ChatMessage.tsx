@@ -211,7 +211,6 @@ export const ChatMessage = ({
                 onClick={() => {
                   setDeleteConfirmation({ deleting: true });
                   router.delete(Routes.chat_message_path(message.community_id, message.id), {
-                    preserveState: true,
                     preserveScroll: true,
                     onSuccess: () => setDeleteConfirmation(null),
                     onError: () => {
