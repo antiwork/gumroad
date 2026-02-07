@@ -6,8 +6,6 @@ class Settings::PaymentsController < Settings::BaseController
   before_action :authorize
 
   def show
-    @title = "Settings"
-
     render inertia: "Settings/Payments/Show", props: settings_presenter.payments_props(remote_ip: request.remote_ip)
   end
 
@@ -40,19 +38,26 @@ class Settings::PaymentsController < Settings::BaseController
       end
     end
 
-    payout_type = if params[:payment_address].present?
-      "PayPal"
-    elsif params[:card].present?
-      "debit card"
-    else
-      "bank account"
-    end
+    is_changing_payout_method = params[:payment_address].present? ||
+                                 params[:card].present? ||
+                                 (params[:bank_account].present? &&
+                                   (params[:bank_account][:account_number].present? || params[:bank_account][:account_holder_full_name].present?))
 
-    if params.dig(:user, :country) == Compliance::Countries::ARE.alpha2 && !params.dig(:user, :is_business) && payout_type != "PayPal"
-      return redirect_with_error("Individual accounts from the UAE are not supported. Please use a business account.")
-    end
-    if current_seller.has_stripe_account_connected?
-      return redirect_with_error("You cannot change your payout method to #{payout_type} because you have a stripe account connected.")
+    if is_changing_payout_method
+      payout_type = if params[:payment_address].present?
+        "PayPal"
+      elsif params[:card].present?
+        "debit card"
+      else
+        "bank account"
+      end
+
+      if params.dig(:user, :country) == Compliance::Countries::ARE.alpha2 && !params.dig(:user, :is_business) && payout_type != "PayPal"
+        return redirect_with_error("Individual accounts from the UAE are not supported. Please use a business account.")
+      end
+      if current_seller.has_stripe_account_connected?
+        return redirect_with_error("You cannot change your payout method to #{payout_type} because you have a stripe account connected.")
+      end
     end
 
     current_seller.tos_agreements.create!(ip: request.remote_ip)
@@ -76,7 +81,14 @@ class Settings::PaymentsController < Settings::BaseController
     if current_seller.active_bank_account && current_seller.merchant_accounts.stripe.alive.empty? && current_seller.native_payouts_supported?
       begin
         StripeMerchantAccountManager.create_account(current_seller, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
-      rescue => e
+      rescue Stripe::InvalidRequestError => e
+        if e.code == "postal_code_invalid"
+          country = current_seller.fetch_or_build_user_compliance_info.legal_entity_country
+          redirect_with_error("The postal code you entered is not valid for #{country}.")
+        else
+          redirect_with_error(e.try(:message) || "Something went wrong.")
+        end
+        return
         return redirect_with_error(e.try(:message) || "Something went wrong.")
       end
     end

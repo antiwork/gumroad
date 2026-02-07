@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
 describe UrlRedirectsController do
   render_views
@@ -664,6 +665,21 @@ describe UrlRedirectsController do
           expect(response).to be_successful
         end
 
+        context "when impersonating the purchaser" do
+          let(:admin_user) { create(:admin_user) }
+          let(:access_token) { create("doorkeeper/access_token", application: oauth_app, resource_owner_id: admin_user.id, scopes: "mobile_api") }
+
+          before do
+            $redis.set(RedisKey.impersonated_user(admin_user.id), purchaser.id)
+          end
+
+          it "grants access when the token owner is the impersonated user and mobile_token is present" do
+            get :download_page, params: { id: @token, access_token: access_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+            expect(response).to be_successful
+          end
+        end
+
         it "requires mobile_token to match the expected value" do
           @url_redirect.update!(has_been_seen: true)
 
@@ -1307,7 +1323,7 @@ describe UrlRedirectsController do
     end
   end
 
-  describe "GET 'confirm_page'" do
+  describe "GET 'confirm_page'", inertia: true do
     before do
       @url_redirect = create(:url_redirect)
     end
@@ -1321,18 +1337,18 @@ describe UrlRedirectsController do
     it "renders the confirm page correctly" do
       get :confirm_page, params: { id: @url_redirect.token }
       expect(response).to be_successful
-      expect(assigns(:hide_layouts)).to eq(true)
-      expect(assigns(:react_component_props)).to eq(UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user: nil).download_page_without_content_props(content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]).merge(
-        is_mobile_app_web_view: false,
-        content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required],
-        add_to_library_option: "none",
-        confirmation_info: {
-          id: @url_redirect.token,
-          destination: nil,
-          display: nil,
-          email: nil,
-        }
-      ))
+      expect(inertia.component).to eq("UrlRedirects/ConfirmPage")
+      expect(inertia.props[:token]).to eq(@url_redirect.token)
+      expect(inertia.props[:redirect_id]).to eq(@url_redirect.external_id)
+      expect(inertia.props[:content_unavailability_reason_code]).to eq(UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required])
+      expect(inertia.props[:is_mobile_app_web_view]).to eq(false)
+      expect(inertia.props[:add_to_library_option]).to eq("none")
+      expect(inertia.props[:confirmation_info]).to eq({
+                                                        id: @url_redirect.token,
+                                                        destination: nil,
+                                                        display: nil,
+                                                        email: nil,
+                                                      })
     end
 
     it "assigns the url_redirect correctly" do
@@ -1344,7 +1360,7 @@ describe UrlRedirectsController do
       it "assigns @destination with params[:destination]" do
         get :confirm_page, params: { id: @url_redirect.token, destination: "stream" }
 
-        expect(assigns(:react_component_props)[:confirmation_info][:destination]).to eq "stream"
+        expect(inertia.props[:confirmation_info][:destination]).to eq "stream"
       end
     end
 
@@ -1358,7 +1374,7 @@ describe UrlRedirectsController do
         it "assigns @destination with 'download_page'" do
           get :confirm_page, params: { id: @url_redirect.token }
 
-          expect(assigns(:react_component_props)[:confirmation_info][:destination]).to eq "download_page"
+          expect(inertia.props[:confirmation_info][:destination]).to eq "download_page"
         end
       end
 
@@ -1369,7 +1385,7 @@ describe UrlRedirectsController do
 
         get :confirm_page, params: { id: url_redirect.token }
 
-        expect(assigns(:react_component_props)[:confirmation_info][:destination]).to be_nil
+        expect(inertia.props[:confirmation_info][:destination]).to be_nil
       end
     end
   end
@@ -1508,7 +1524,7 @@ describe UrlRedirectsController do
     end
   end
 
-  describe "reading" do
+  describe "reading", inertia: true do
     describe "Product" do
       before do
         @product = create(:product_with_pdf_file)
@@ -1543,10 +1559,15 @@ describe UrlRedirectsController do
         it "can be read with proper file download URL" do
           get :read, params: { id: @token, product_file_id: @product.product_files.first.external_id }
           expect(response).to be_successful
-          expect(assigns(:hide_layouts)).to eq(true)
-          expect(assigns(:read_url)).to include("X-Amz-Signature=")
-          expect(assigns(:read_url)).to include(S3_BUCKET)
-          expect(response.body).to have_selector("h1", text: "The Works of Edgar Gumstein")
+          expect_inertia.to render_component("UrlRedirects/Read")
+          expect(inertia.props[:url]).to include("X-Amz-Signature=")
+          expect(inertia.props[:url]).to include(S3_BUCKET)
+          expect(inertia.props[:title]).to eq("The Works of Edgar Gumstein")
+          expect(inertia.props[:read_id]).to eq(@product.product_files.first.external_id)
+          expect(inertia.props[:url_redirect_id]).to eq(@url_redirect.external_id)
+          expect(inertia.props[:purchase_id]).to eq(@purchase.external_id)
+          expect(inertia.props[:product_file_id]).to eq(@product.product_files.first.external_id)
+          expect(inertia.props[:latest_media_location]).to be_nil
         end
 
         it "creates the proper consumption event" do
@@ -1585,7 +1606,7 @@ describe UrlRedirectsController do
           @product.product_files.each(&:mark_deleted)
           create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/test.pdf", filetype: "pdf")
           get(:read, params: { id: @url_redirect.token })
-          expect(assigns(:read_url)).to include("test.pdf")
+          expect(inertia.props[:url]).to include("test.pdf")
         end
 
         it "recovers from an S3 error" do
@@ -1601,7 +1622,8 @@ describe UrlRedirectsController do
         follower = create(:user)
         creator = create(:follower, follower_user_id: follower.id).user
         @post = create(:follower_installment, seller: creator)
-        @token = create(:installment_url_redirect, installment: @post).token
+        @url_redirect = create(:installment_url_redirect, installment: @post)
+        @token = @url_redirect.token
         sign_in(follower)
         # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
         # @request.host = URI.parse(creator.subdomain_with_protocol).host
@@ -1615,7 +1637,13 @@ describe UrlRedirectsController do
 
       it "can be read" do
         get :read, params: { id: @token, product_file_id: @post.product_files.first.external_id }
-        expect(response.body).to have_selector("h1", text: "A new file!")
+        expect_inertia.to render_component("UrlRedirects/Read")
+        expect(inertia.props[:title]).to eq("A new file!")
+        expect(inertia.props[:read_id]).to eq(@post.product_files.first.external_id)
+        expect(inertia.props[:url_redirect_id]).to eq(@url_redirect.external_id)
+        expect(inertia.props[:purchase_id]).to be_nil
+        expect(inertia.props[:product_file_id]).to eq(@post.product_files.first.external_id)
+        expect(inertia.props[:latest_media_location]).to be_nil
       end
     end
   end
@@ -1645,7 +1673,7 @@ describe UrlRedirectsController do
     end
   end
 
-  describe "GET membership_inactive_page" do
+  describe "GET membership_inactive_page", inertia: true do
     let(:product) { create(:membership_product) }
     let(:subscription) { create(:subscription, link: product) }
     let(:purchase) do create(:purchase, link: product, email: subscription.user.email,
@@ -1653,44 +1681,50 @@ describe UrlRedirectsController do
                                         purchaser: create(:user), subscription:, created_at: 2.days.ago) end
     let(:url_redirect) { create(:url_redirect, purchase:, link: product) }
 
-    it "renders the manage subscription link for subscriptions that can be restarted" do
+    it "renders the Inertia component" do
       get :membership_inactive_page, params: { id: url_redirect.token }
 
       expect(response).to be_successful
-      expect(response.body).to have_title("The Works of Edgar Gumstein - Your membership is inactive")
-      expect(response.body).to have_text("Your membership is inactive")
-      expect(response.body).to have_link("Manage membership", href: manage_subscription_url(subscription.external_id))
+      expect(inertia.component).to eq("UrlRedirects/MembershipInactive")
+      expect(inertia.props[:content_unavailability_reason_code]).to eq("inactive_membership")
     end
 
-    it "renders the product link for subscriptions that cannot be restarted" do
+    it "includes purchase data for subscriptions that can be restarted" do
+      get :membership_inactive_page, params: { id: url_redirect.token }
+
+      expect(response).to be_successful
+      expect(inertia.props[:purchase][:membership][:is_alive_or_restartable]).to eq(true)
+      expect(inertia.props[:purchase][:membership][:subscription_id]).to eq(subscription.external_id)
+    end
+
+    it "includes purchase data for subscriptions that cannot be restarted" do
       allow_any_instance_of(Subscription).to receive(:alive_or_restartable?).and_return(false)
 
       get :membership_inactive_page, params: { id: url_redirect.token }
 
       expect(response).to be_successful
-      expect(response.body).to have_link("Resubscribe", href: product.long_url)
+      expect(inertia.props[:purchase][:membership][:is_alive_or_restartable]).to eq(false)
+      expect(inertia.props[:purchase][:product_long_url]).to eq(product.long_url)
     end
   end
 
-  describe "GET rental_expired_page" do
-    let(:url_redirect) { create(:url_redirect) }
-
-    it "renders the page" do
+  describe "GET rental_expired_page", inertia: true do
+    it "renders the Inertia component" do
       get :rental_expired_page, params: { id: @url_redirect.token }
+
       expect(response).to be_successful
-      expect(response.body).to have_title("The Works of Edgar Gumstein - Your rental has expired")
-      expect(response.body).to have_text("Your rental has expired")
+      expect(inertia.component).to eq("UrlRedirects/RentalExpired")
+      expect(inertia.props[:content_unavailability_reason_code]).to eq("rental_expired")
     end
   end
 
-  describe "GET expired" do
-    let(:url_redirect) { create(:url_redirect) }
-
-    it "renders the page" do
+  describe "GET expired", inertia: true do
+    it "renders the Inertia component" do
       get :expired, params: { id: @url_redirect.token }
+
       expect(response).to be_successful
-      expect(response.body).to have_title("The Works of Edgar Gumstein - Access expired")
-      expect(response.body).to have_text("Access expired")
+      expect(inertia.component).to eq("UrlRedirects/Expired")
+      expect(inertia.props[:content_unavailability_reason_code]).to eq("access_expired")
     end
   end
 
@@ -1804,6 +1838,91 @@ describe UrlRedirectsController do
         expect(response.parsed_body.count).to eq(2)
         expect(response.parsed_body[@audio.external_id]).to eq([@url_redirect.signed_location_for_file(@audio)])
         expect(response.parsed_body[@video.external_id]).to eq([@url_redirect.hls_playlist_or_smil_xml_path(@video), @url_redirect.signed_location_for_file(@video)])
+      end
+    end
+  end
+
+  describe "POST 'save_last_content_page'" do
+    let(:product) { create(:product_with_pdf_file) }
+    let(:purchase) { create(:purchase, link: product) }
+    let!(:url_redirect) { create(:url_redirect, link: product, purchase:) }
+
+    it "saves the last content page id for the purchase" do
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+      end.to change { purchase.reload.last_content_page_id }.from(nil).to("page_123")
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("success" => true)
+    end
+
+    it "updates an existing last content page id" do
+      purchase.update!(last_content_page_id: "old_page")
+
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "new_page" }
+      end.to change { purchase.reload.last_content_page_id }.from("old_page").to("new_page")
+
+      expect(response).to be_successful
+    end
+
+    context "when there is no purchase" do
+      let!(:url_redirect_without_purchase) { create(:url_redirect, link: product, purchase: nil) }
+
+      it "returns an error" do
+        post :save_last_content_page, params: { id: url_redirect_without_purchase.token, page_id: "page_123" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "error" => "Purchase not found")
+      end
+    end
+
+    it "handles missing page_id parameter by setting nil" do
+      purchase.update!(last_content_page_id: "existing_page")
+
+      expect do
+        post :save_last_content_page, params: { id: url_redirect.token }
+      end.to change { purchase.reload.last_content_page_id }.from("existing_page").to(nil)
+
+      expect(response).to be_successful
+    end
+
+    context "when access is revoked for purchase" do
+      before do
+        purchase.update!(is_access_revoked: true)
+      end
+
+      it "redirects to expired page" do
+        post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(id: url_redirect.token))
+      end
+    end
+
+    context "when purchase is refunded" do
+      before do
+        purchase.update!(stripe_refunded: true)
+      end
+
+      it "raises an e404" do
+        expect do
+          post :save_last_content_page, params: { id: url_redirect.token, page_id: "page_123" }
+        end.to raise_error(ActionController::RoutingError)
+      end
+    end
+
+    context "with custom domain route", type: :request do
+      let!(:custom_domain) { create(:custom_domain, user: product.user) }
+
+      it "saves the last content page id via custom domain" do
+        expect do
+          post "/r/#{url_redirect.token}/save_last_content_page",
+               params: { page_id: "page_123" },
+               headers: { "HOST" => custom_domain.domain }
+        end.to change { purchase.reload.last_content_page_id }.from(nil).to("page_123")
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true)
       end
     end
   end

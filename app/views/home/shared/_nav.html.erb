@@ -38,7 +38,7 @@
   def toggle_button
     content_tag :div, class: "flex items-center lg:hidden" do
       content_tag :button,
-        class: "relative flex h-8 w-8 flex-col items-center justify-center focus:outline-hidden",
+        class: "relative flex h-8 w-8 flex-col all-unset items-center justify-center focus:outline-hidden",
         data: { toggle: "mobile-menu" } do
           content_tag(:div, "",
             class: "mb-1 h-0.5 w-8 origin-center bg-black transition-transform duration-200 dark:bg-white",
@@ -58,7 +58,8 @@
       nav_link("Blog", gumroad_blog_root_path, {current_page_predicate: -> { request.path.start_with?(gumroad_blog_root_path) }}) +
       nav_link("Pricing", pricing_path) +
       nav_link("Features", features_path) +
-      nav_link("About", about_path, {current_page_predicate: -> { current_page?(root_path) }})
+      nav_link("About", about_path, {current_page_predicate: -> { current_page?(root_path) }}) +
+      (Feature.active?(:career_pages) ? nav_link("Careers", careers_path, {current_page_predicate: -> { request.path.start_with?(careers_path) }}) : "".html_safe)
     end
   end
 

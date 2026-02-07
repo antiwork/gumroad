@@ -6,7 +6,7 @@ class BalanceController < Sellers::BaseController
   def index
     authorize :balance
 
-    @title = "Payouts"
+    set_meta_tag(title: "Payouts")
 
     payouts_presenter = PayoutsPresenter.new(seller: current_seller, params:)
 

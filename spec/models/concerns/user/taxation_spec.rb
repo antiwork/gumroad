@@ -27,6 +27,7 @@ describe User::Taxation do
 
       # To simulate eligibility
       stub_const("#{described_class}::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 100_00)
+      stub_const("#{described_class}::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 5)
     end
 
     context "when user is not from the US" do
@@ -53,6 +54,48 @@ describe User::Taxation do
       it "returns false" do
         stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 100_000)
         expect(@user.eligible_for_1099_k?(year)).to eq(false)
+      end
+    end
+
+    context "when user doesn't meet the minimum sales count" do
+      it "returns false" do
+        stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 100)
+        expect(@user.eligible_for_1099_k?(year)).to eq(false)
+      end
+    end
+
+    context "for an year with different sales threshold than default" do
+      context "when user doesn't meet the minimum sales amount" do
+        it "returns false" do
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 10_00)
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 1)
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 1000_00 })
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 1 })
+
+          expect(@user.eligible_for_1099_k?(year)).to eq(false)
+        end
+      end
+
+      context "when user doesn't meet the minimum sales count" do
+        it "returns false" do
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 10_00)
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 1)
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 10_00 })
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 100 })
+
+          expect(@user.eligible_for_1099_k?(year)).to eq(false)
+        end
+      end
+
+      context "when user meets the minimum sales amount and count" do
+        it "returns true" do
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 1000_00)
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 100)
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 10_00 })
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 1 })
+
+          expect(@user.eligible_for_1099_k?(year)).to eq(true)
+        end
       end
     end
 

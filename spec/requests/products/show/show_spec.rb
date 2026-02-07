@@ -64,6 +64,26 @@ describe("ProductShowScenario", type: :system, js: true) do
     expect(page).to have_field "Name a fair price", with: "1234.43"
   end
 
+  it "shows an error alert when entered PWYW price is below the minimum for membership product" do
+    product = create(:membership_product_with_preset_tiered_pwyw_pricing, price_cents: 0)
+
+    visit short_link_path(product)
+    fill_in "Name a fair price", with: "1"
+    click_on "Subscribe"
+
+    expect(page).to have_alert(text: "Minimum price for this product is $500", visible: :all)
+  end
+
+  it "shows an error alert when entered PWYW price is below the minimum for regular PWYW product" do
+    product = create(:product, customizable_price: true, price_cents: 1000)
+
+    visit short_link_path(product)
+    fill_in "Name a fair price", with: "5"
+    click_on "I want this!"
+
+    expect(page).to have_alert(text: "Minimum price for this product is $10.", visible: :all)
+  end
+
   it "discards the quantity, price, and variant query string parameters if they are not applicable to the product" do
     product = create(:product)
 

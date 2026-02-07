@@ -46,9 +46,11 @@ import {
   requiresReusablePaymentMethod,
   isSubmitDisabled,
 } from "$app/components/Checkout/payment";
+import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -221,28 +223,28 @@ const EmailAddress = ({ card }: { card: boolean }) => {
               <h4>Email address</h4>
             </label>
           </legend>
-          <div className={cx("popover", { expanded: !!state.emailTypoSuggestion })} style={{ width: "100%" }}>
-            <input
-              id={`${uid}email`}
-              type="email"
-              aria-invalid={errors.has("email")}
-              value={state.email}
-              onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
-              placeholder="Your email address"
-              disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
-              onBlur={checkForEmailTypos}
-            />
-
-            {state.emailTypoSuggestion ? (
-              <div className="dropdown grid gap-2">
+          <div className="relative inline-block w-full">
+            <Popover open={!!state.emailTypoSuggestion}>
+              <PopoverAnchor>
+                <input
+                  id={`${uid}email`}
+                  type="email"
+                  aria-invalid={errors.has("email")}
+                  value={state.email}
+                  onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
+                  placeholder="Your email address"
+                  disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
+                  onBlur={checkForEmailTypos}
+                />
+              </PopoverAnchor>
+              <PopoverContent className="grid gap-2" matchTriggerWidth>
                 <div>Did you mean {state.emailTypoSuggestion}?</div>
-
-                <div className="flex flex-wrap gap-2">
+                <div className="flex gap-2">
                   <Button onClick={rejectEmailTypoSuggestion}>No</Button>
                   <Button onClick={acceptEmailTypoSuggestion}>Yes</Button>
                 </div>
-              </div>
-            ) : null}
+              </PopoverContent>
+            </Popover>
           </div>
         </fieldset>
       </div>
@@ -555,7 +557,7 @@ const CustomerDetails = ({ showCustomFields, className }: { showCustomFields: bo
             <CountryInput />
           </div>
           {addressVerification && addressVerification.type !== "done" ? (
-            <div className="dropdown flex flex-col gap-4">
+            <Dropdown className="flex flex-col gap-4">
               {addressVerification.type === "verification-required" ? (
                 <>
                   <div>
@@ -589,7 +591,7 @@ const CustomerDetails = ({ showCustomFields, className }: { showCustomFields: bo
                   <Button onClick={verifyAddress}>Yes, it is</Button>
                 </>
               )}
-            </div>
+            </Dropdown>
           ) : null}
         </div>
       ) : null}
@@ -1102,7 +1104,12 @@ export const PaymentForm = ({
   className,
   notice,
   showCustomFields = true,
-}: React.HTMLAttributes<HTMLDivElement> & { notice?: string | null; showCustomFields?: boolean }) => {
+  borderless = false,
+}: React.HTMLAttributes<HTMLDivElement> & {
+  notice?: string | null;
+  showCustomFields?: boolean;
+  borderless?: boolean;
+}) => {
   const [state, dispatch] = useState();
   const loggedInUser = useLoggedInUser();
   const isTestPurchase = loggedInUser && state.products.find((product) => product.testPurchase);
@@ -1139,7 +1146,7 @@ export const PaymentForm = ({
   }, [state.status.type]);
 
   return (
-    <Card ref={paymentFormRef} className={className} aria-label="Payment form">
+    <Card ref={paymentFormRef} className={className} borderless={borderless} aria-label="Payment form">
       {isTestPurchase ? (
         <CardContent>
           <Alert variant="info" className="grow">

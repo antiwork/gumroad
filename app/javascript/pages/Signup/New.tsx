@@ -122,5 +122,5 @@ function SignupPage() {
   );
 }
 
-SignupPage.disableLayout = true;
+SignupPage.publicLayout = true;
 export default SignupPage;

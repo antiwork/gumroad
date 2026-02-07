@@ -130,6 +130,7 @@ describe UrlRedirectPresenter do
         content: {
           license: nil,
           rich_content_pages: nil,
+          last_content_page_id: nil,
           content_items: [],
           posts: [],
           video_transcoding_info: nil,
@@ -195,6 +196,14 @@ describe UrlRedirectPresenter do
       @product.update!(custom_receipt: "Lorem ipsum <b>dolor</b> sit amet https://example.com")
       instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
       expect(instance.download_page_with_content_props[:content][:custom_receipt]).to be_nil
+    end
+
+    it "includes 'last_content_page_id' in props" do
+      instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
+      expect(instance.download_page_with_content_props[:content][:last_content_page_id]).to be_nil
+
+      @purchase.update!(last_content_page_id: "page_abc123")
+      expect(instance.download_page_with_content_props[:content][:last_content_page_id]).to eq("page_abc123")
     end
 
     it "includes 'discord' in props" do
@@ -703,6 +712,65 @@ describe UrlRedirectPresenter do
         expect(props[:purchase][:membership][:is_installment_plan_completed]).to eq(false)
         expect(props[:purchase][:membership][:is_subscription_ended]).to eq(false)
       end
+    end
+  end
+
+  describe "#read_page_props" do
+    it "returns all necessary props for the PDF reader page" do
+      product = create(:product_with_pdf_file)
+      purchase = create(:purchase, link: product, purchaser: create(:user))
+      url_redirect = create(:url_redirect, purchase:)
+      product_file = product.product_files.first
+      read_url = "https://example.com/read/test.pdf"
+      title = "Test PDF Title"
+
+      props = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).read_page_props(
+        product_file:,
+        read_url:,
+        title:,
+      )
+
+      expect(props).to eq(
+        read_id: product_file.external_id,
+        url: read_url,
+        url_redirect_id: url_redirect.external_id,
+        purchase_id: purchase.external_id,
+        product_file_id: product_file.external_id,
+        latest_media_location: nil,
+        title:,
+      )
+    end
+
+    it "includes latest_media_location when available" do
+      product = create(:product_with_pdf_file)
+      purchase = create(:purchase, link: product, purchaser: create(:user))
+      url_redirect = create(:url_redirect, purchase:)
+      product_file = product.product_files.first
+      media_location = create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                               product_file_id: product_file.id, product_id: product.id, location: 5)
+
+      props = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).read_page_props(
+        product_file:,
+        read_url: "https://example.com/read/test.pdf",
+        title: "Test PDF",
+      )
+
+      expect(props[:latest_media_location]).to eq(media_location.as_json)
+    end
+
+    it "returns nil for purchase_id when there is no purchase" do
+      creator = create(:user)
+      post = create(:follower_installment, seller: creator)
+      url_redirect = create(:installment_url_redirect, installment: post)
+      product_file = post.product_files.first
+
+      props = described_class.new(url_redirect:, logged_in_user: nil).read_page_props(
+        product_file:,
+        read_url: "https://example.com/read/test.pdf",
+        title: "Test PDF",
+      )
+
+      expect(props[:purchase_id]).to be_nil
     end
   end
 end
