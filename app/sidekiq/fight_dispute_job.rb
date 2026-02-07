@@ -30,6 +30,7 @@ class FightDisputeJob
       "DISPUTE_ALREADY_RESOLVED",
       "EVIDENCE_ALREADY_PROVIDED",
       "DISPUTE_LIFE_CYCLE_STAGE_INVALID",
+      "PayPal dispute ID is missing",
     ].freeze
 
     def rejected?(message)
