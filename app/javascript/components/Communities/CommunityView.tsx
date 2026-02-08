@@ -159,7 +159,6 @@ export function CommunityView({
     }
   }, [selectedCommunity]);
 
-  // Mark as read with debounce
   const debouncedMarkAsRead = React.useMemo(
     () =>
       debounce((communityId: string, messageId: string, messageCreatedAt: string) => {
@@ -196,9 +195,8 @@ export function CommunityView({
     [selectedCommunity, debouncedMarkAsRead],
   );
 
-  // Handle scroll to message effect
   React.useEffect(() => {
-    if (!scrollToMessage || allMessages.length === 0) return;
+    if (allMessages.length === 0 || !scrollToMessage) return;
     const exists = allMessages.findIndex((message) => message.id === scrollToMessage.id) !== -1;
     if (exists && chatContainerRef.current) {
       scrollTo({
@@ -241,7 +239,6 @@ export function CommunityView({
     setLocalMessages((prev) => prev.filter((m) => m.id !== messageId));
   }, []);
 
-  // Send message using Inertia
   const sendMessage = () => {
     if (!selectedCommunity) return;
     if (!selectedCommunityDraft) return;
@@ -289,7 +286,7 @@ export function CommunityView({
     });
 
     return () => channel.disconnect();
-  }, [cable, loggedInUser, updateCommunity]);
+  }, [cable, loggedInUser]);
 
   const sendMessageToUserChannel = useDebouncedCallback((msg: OutgoingUserChannelMessage) => {
     const userChannelState = userChannelRef.current?.state;
