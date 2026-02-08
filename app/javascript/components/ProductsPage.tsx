@@ -18,6 +18,7 @@ const ProductsPage = ({
   query,
   setEnableArchiveTab,
   type = "products",
+  emptyPlaceholder,
 }: {
   memberships: Membership[];
   membershipsPagination: PaginationProps;
@@ -28,30 +29,37 @@ const ProductsPage = ({
   query: string | null;
   setEnableArchiveTab?: (enable: boolean) => void;
   type?: Tab;
-}) => (
-  <div className="grid gap-12">
-    {memberships.length > 0 ? (
-      <ProductsPageMembershipsTable
-        query={query}
-        entries={memberships}
-        pagination={membershipsPagination}
-        sort={membershipsSort}
-        selectedTab={type}
-        setEnableArchiveTab={setEnableArchiveTab}
-      />
-    ) : null}
+  emptyPlaceholder?: React.ReactNode;
+}) => {
+  if (memberships.length === 0 && products.length === 0 && emptyPlaceholder) {
+    return <>{emptyPlaceholder}</>;
+  }
 
-    {products.length > 0 ? (
-      <ProductsPageProductsTable
-        query={query}
-        entries={products}
-        pagination={productsPagination}
-        sort={productsSort}
-        selectedTab={type}
-        setEnableArchiveTab={setEnableArchiveTab}
-      />
-    ) : null}
-  </div>
-);
+  return (
+    <div className="grid gap-12">
+      {memberships.length > 0 ? (
+        <ProductsPageMembershipsTable
+          query={query}
+          entries={memberships}
+          pagination={membershipsPagination}
+          sort={membershipsSort}
+          selectedTab={type}
+          setEnableArchiveTab={setEnableArchiveTab}
+        />
+      ) : null}
+
+      {products.length > 0 ? (
+        <ProductsPageProductsTable
+          query={query}
+          entries={products}
+          pagination={productsPagination}
+          sort={productsSort}
+          selectedTab={type}
+          setEnableArchiveTab={setEnableArchiveTab}
+        />
+      ) : null}
+    </div>
+  );
+};
 
 export default ProductsPage;
