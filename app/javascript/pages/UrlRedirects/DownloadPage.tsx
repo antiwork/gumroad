@@ -1,5 +1,6 @@
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
@@ -7,7 +8,6 @@ import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
 import { request } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -34,7 +34,18 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { Layout, LayoutProps } from "./Layout";
+import {
+  Layout,
+  LayoutProps,
+} from "$app/components/server-components/DownloadPage/Layout";
+import {
+  ContentFilesProvider,
+  IsMobileAppViewProvider,
+  MediaUrlsProvider,
+  PurchaseInfoProvider,
+  PurchaseCustomFieldsProvider,
+  License,
+} from "$app/components/server-components/DownloadPage/WithContent";
 
 const LATEST_MEDIA_LOCATIONS_FETCH_INTERVAL_IN_MS = 10_000;
 const MISSING_AUDIO_DURATIONS_FETCH_INTERVAL_IN_MS = 5_000;
@@ -47,53 +58,7 @@ const PAGE_ICON_LABEL: Record<string, string> = {
   "outline-key": "Page has license key",
 };
 
-const ContentFilesContext = React.createContext<FileItem[] | null>(null);
-export const ContentFilesProvider = ContentFilesContext.Provider;
-export const useContentFiles = () =>
-  assertDefined(React.useContext(ContentFilesContext), "ContentFilesProvider is missing");
-
-const IsMobileAppViewContext = React.createContext<boolean | null>(null);
-export const IsMobileAppViewProvider = IsMobileAppViewContext.Provider;
-export const useIsMobileAppView = () =>
-  assertDefined(React.useContext(IsMobileAppViewContext), "IsMobileAppViewProvider is missing");
-
-const PurchaseInfoContext = React.createContext<{
-  purchaseId: string | null;
-  redirectId: string;
-  token: string;
-} | null>(null);
-export const PurchaseInfoProvider = PurchaseInfoContext.Provider;
-export const usePurchaseInfo = () =>
-  assertDefined(React.useContext(PurchaseInfoContext), "PurchaseInfoProvider is missing");
-
-const MediaUrlsContext = React.createContext<
-  [Record<string, string[]>, React.Dispatch<React.SetStateAction<Record<string, string[]>>>] | null
->(null);
-export const MediaUrlsProvider = MediaUrlsContext.Provider;
-export const useMediaUrls = () => assertDefined(React.useContext(MediaUrlsContext), "MediaUrlsProvider is missing");
-
-export type PurchaseCustomField = {
-  custom_field_id: string;
-} & (
-  | { type: "shortAnswer" | "longAnswer"; value: string }
-  | { type: "fileUpload"; files: { name: string; size: number; extension: string }[] }
-);
-const PurchaseCustomFieldsContext = React.createContext<PurchaseCustomField[]>([]);
-export const PurchaseCustomFieldsProvider = PurchaseCustomFieldsContext.Provider;
-export const usePurchaseCustomFields = () =>
-  assertDefined(React.useContext(PurchaseCustomFieldsContext), "PurchaseCustomFieldsProvider is missing");
-
-export type License = {
-  license_key: string;
-  is_multiseat_license: boolean;
-  seats: number;
-};
-
-const WithContent = ({
-  content,
-  product_has_third_party_analytics,
-  ...props
-}: LayoutProps & {
+type PageProps = LayoutProps & {
   content: {
     rich_content_pages: RichContentPage[] | null;
     last_content_page_id: string | null;
@@ -109,7 +74,11 @@ const WithContent = ({
     community_chat_url: string | null;
   };
   product_has_third_party_analytics: boolean | null;
-}) => {
+};
+
+export default function DownloadPage() {
+  const { content, product_has_third_party_analytics, ...props } = cast<PageProps>(usePage().props);
+
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   const [contentFiles, setContentFiles] = React.useState(
@@ -420,7 +389,7 @@ const WithContent = ({
       ) : null}
     </Layout>
   );
-};
+}
 
 const findFileEmbeds = (node: RichContent): string[] =>
   node.content?.flatMap((child) => {
@@ -432,5 +401,3 @@ const COMMON_CONTAINER_NODE_TYPES = ["doc", "orderedList", "bulletList", "listIt
 const nodeHasLicense = (node: RichContent) =>
   node.type === LicenseKey.name ||
   ((COMMON_CONTAINER_NODE_TYPES.includes(node.type ?? "") && node.content?.some(nodeHasLicense)) ?? false);
-
-export default register({ component: WithContent, propParser: createCast() });
