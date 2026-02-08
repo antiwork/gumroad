@@ -27,12 +27,12 @@ export const FollowForm = ({ creatorProfile, buttonColor, buttonLabel }: FollowF
   const isOwnProfile = loggedInUser?.id === creatorProfile.external_id;
   const emailInputRef = React.useRef<HTMLInputElement>(null);
 
-  const { data, setData, post, processing, wasSuccessful } = useForm<FollowFormData>({
+  const { data, setData, post, processing } = useForm<FollowFormData>({
     email: isOwnProfile ? "" : (loggedInUser?.email ?? ""),
     seller_id: creatorProfile.external_id,
   });
 
-  const [formStatus, setFormStatus] = React.useState<"initial" | "invalid">("initial");
+  const [formStatus, setFormStatus] = React.useState<"initial" | "success" | "invalid">("initial");
 
   React.useEffect(() => setFormStatus("initial"), [data.email]);
 
@@ -56,6 +56,7 @@ export const FollowForm = ({ creatorProfile, buttonColor, buttonLabel }: FollowF
 
     post("/follow", {
       preserveScroll: true,
+      onSuccess: () => setFormStatus("success"),
     });
   };
 
@@ -71,10 +72,10 @@ export const FollowForm = ({ creatorProfile, buttonColor, buttonLabel }: FollowF
             onChange={(event) => setData("email", event.target.value)}
             placeholder="Your email address"
           />
-          <Button color={buttonColor} disabled={processing || wasSuccessful} type="submit">
+          <Button color={buttonColor} disabled={processing || formStatus === "success"} type="submit">
             {buttonLabel && buttonLabel !== "Subscribe"
               ? buttonLabel
-              : wasSuccessful
+              : formStatus === "success"
                 ? "Subscribed"
                 : processing
                   ? "Subscribing..."
