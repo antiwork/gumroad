@@ -131,9 +131,12 @@ describe InvoicePresenter::FormInfo do
       it "returns form data" do
         form_data = presenter.data
         address_fields.except(:country).each do |key, value|
-          expect(form_data[key]).to eq(value)
+          expect(form_data[:address_fields][key]).to eq(value)
         end
-        expect(form_data[:country_iso2]).to eq("US")
+        expect(form_data[:address_fields][:country_code]).to eq("US")
+        expect(form_data[:email]).to eq(purchase.email)
+        expect(form_data[:vat_id]).to eq("")
+        expect(form_data[:additional_notes]).to eq("")
       end
     end
   end
@@ -145,7 +148,8 @@ describe InvoicePresenter::FormInfo do
   end
 
   describe "for Charge", :vcr do
-    let(:charge) { create(:charge, purchases: [purchase]) }
+    let(:order) { create(:order, purchases: [purchase]) }
+    let(:charge) { create(:charge, order:, purchases: [purchase]) }
     let(:chargeable) { charge }
 
     it_behaves_like "chargeable"

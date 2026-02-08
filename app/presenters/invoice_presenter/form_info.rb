@@ -30,12 +30,17 @@ class InvoicePresenter::FormInfo
 
   def data
     {
-      full_name: chargeable.full_name&.strip.presence || chargeable.purchaser&.name,
-      street_address: chargeable.street_address,
-      city: chargeable.city,
-      state: chargeable.state_or_from_ip_address,
-      zip_code: chargeable.zip_code,
-      country_iso2: Compliance::Countries.find_by_name(chargeable.country)&.alpha2,
+      address_fields: {
+        full_name: chargeable.full_name&.strip.presence || chargeable.purchaser&.name || "",
+        street_address: chargeable.street_address || "",
+        city: chargeable.city || "",
+        state: chargeable.state_or_from_ip_address || "",
+        zip_code: chargeable.zip_code || "",
+        country_code: Compliance::Countries.find_by_name(chargeable.country)&.alpha2 || "",
+      },
+      email: chargeable.orderable.email,
+      vat_id: "",
+      additional_notes: "",
     }
   end
 

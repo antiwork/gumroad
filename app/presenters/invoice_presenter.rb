@@ -8,34 +8,24 @@ class InvoicePresenter
     @business_vat_id = business_vat_id
   end
 
-  def invoice_generation_props
-    form_info = InvoicePresenter::FormInfo.new(chargeable)
+  def invoice_generation_form_data_props
+    form_info.data.merge(purchase_id: chargeable.external_id_for_invoice)
+  end
 
+  def invoice_generation_form_metadata_props
     {
-      form_info: {
-        heading: form_info.heading,
-        display_vat_id: form_info.display_vat_id?,
-        vat_id_label: form_info.vat_id_label,
-        data: form_info.data
-      },
-      supplier_info: {
-        heading: supplier_info.heading,
-        attributes: supplier_info.attributes
-      },
-      seller_info: {
-        heading: seller_info.heading,
-        attributes: seller_info.attributes
-      },
-      order_info: {
-        heading: order_info.heading,
-        pdf_attributes: order_info.pdf_attributes,
-        form_attributes: order_info.form_attributes,
-        invoice_date_attribute: order_info.invoice_date_attribute
-      },
-      id: chargeable.external_id_for_invoice,
-      email: chargeable.orderable.email,
+      heading: form_info.heading,
+      display_vat_id: form_info.display_vat_id?,
+      vat_id_label: form_info.vat_id_label,
+      supplier_info: { heading: supplier_info.heading, attributes: supplier_info.attributes },
+      seller_info: { heading: seller_info.heading, attributes: seller_info.attributes },
+      order_info: { heading: order_info.heading, form_attributes: order_info.form_attributes, invoice_date_attribute: order_info.invoice_date_attribute },
       countries: Compliance::Countries.for_select.to_h,
     }
+  end
+
+  def form_info
+    @_form_info ||= InvoicePresenter::FormInfo.new(chargeable)
   end
 
   def order_info

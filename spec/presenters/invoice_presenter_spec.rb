@@ -99,47 +99,35 @@ describe InvoicePresenter do
       end
     end
 
-    describe "#invoice_generation_props" do
-      it "returns the correct props structure" do
-        props = presenter.invoice_generation_props
+    describe "#invoice_generation_form_data_props" do
+      it "returns the form data" do
+        props = presenter.invoice_generation_form_data_props
 
         expect(props).to match(
-          form_info: be_a(Hash),
-          supplier_info: be_a(Hash),
-          seller_info: be_a(Hash),
-          order_info: be_a(Hash),
-          id: chargeable.external_id_for_invoice,
+          purchase_id: chargeable.external_id_for_invoice,
+          address_fields: be_a(Hash),
           email: purchase.email,
-          countries: be_a(Hash),
+          vat_id: "",
+          additional_notes: "",
         )
+      end
+    end
 
-        expect(props[:form_info]).to match(
+    describe "#invoice_generation_form_metadata_props" do
+      it "returns the form metadata" do
+        props = presenter.invoice_generation_form_metadata_props
+
+        expect(props).to match(
           heading: be_a(String),
           display_vat_id: be_in([true, false]),
           vat_id_label: be_a(String),
-          data: be_a(Hash)
+          supplier_info: be_a(Hash),
+          seller_info: be_a(Hash),
+          order_info: be_a(Hash),
+          countries: be_a(Hash),
         )
 
-        expect(props[:supplier_info]).to match(
-          heading: be_a(String),
-          attributes: be_an(Array)
-        )
-
-        expect(props[:seller_info]).to match(
-          heading: be_a(String),
-          attributes: be_an(Array)
-        )
-
-        expect(props[:order_info]).to match(
-          heading: be_a(String),
-          pdf_attributes: be_an(Array),
-          form_attributes: be_an(Array),
-          invoice_date_attribute: be_a(Hash)
-        )
-
-        expect(props[:id]).to eq(chargeable.external_id_for_invoice)
         expect(props[:countries]).to eq(Compliance::Countries.for_select.to_h)
-        expect(props[:email]).to eq(purchase.email)
       end
     end
   end
@@ -229,47 +217,35 @@ describe InvoicePresenter do
       end
     end
 
-    describe "#invoice_generation_props" do
-      it "returns the correct props structure" do
-        props = presenter.invoice_generation_props
+    describe "#invoice_generation_form_data_props" do
+      it "returns the form data" do
+        props = presenter.invoice_generation_form_data_props
 
-        expect(props).to include(
-          form_info: be_a(Hash),
-          supplier_info: be_a(Hash),
-          seller_info: be_a(Hash),
-          order_info: be_a(Hash),
-          id: chargeable.external_id_for_invoice,
+        expect(props).to match(
+          purchase_id: chargeable.external_id_for_invoice,
+          address_fields: be_a(Hash),
           email: purchase.email,
-          countries: be_a(Hash),
+          vat_id: "",
+          additional_notes: "",
         )
+      end
+    end
 
-        expect(props[:form_info]).to match(
+    describe "#invoice_generation_form_metadata_props" do
+      it "returns the form metadata" do
+        props = presenter.invoice_generation_form_metadata_props
+
+        expect(props).to match(
           heading: be_a(String),
           display_vat_id: be_in([true, false]),
           vat_id_label: be_a(String),
-          data: be_a(Hash)
+          supplier_info: be_a(Hash),
+          seller_info: be_a(Hash),
+          order_info: be_a(Hash),
+          countries: be_a(Hash),
         )
 
-        expect(props[:supplier_info]).to match(
-          heading: be_a(String),
-          attributes: be_an(Array)
-        )
-
-        expect(props[:seller_info]).to match(
-          heading: be_a(String),
-          attributes: be_an(Array)
-        )
-
-        expect(props[:order_info]).to match(
-          heading: be_a(String),
-          pdf_attributes: be_an(Array),
-          form_attributes: be_an(Array),
-          invoice_date_attribute: be_a(Hash)
-        )
-
-        expect(props[:id]).to eq(chargeable.external_id_for_invoice)
         expect(props[:countries]).to eq(Compliance::Countries.for_select.to_h)
-        expect(props[:email]).to eq(purchase.email)
       end
     end
   end

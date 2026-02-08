@@ -86,7 +86,7 @@ class Charge < ApplicationRecord
   # Avoids creating an endpoint for the charge invoice since the invoice is the same
   # for all purchases that belong to the same charge
   def invoice_url
-    Rails.application.routes.url_helpers.generate_invoice_by_buyer_url(
+    Rails.application.routes.url_helpers.new_purchase_invoice_url(
       purchase_as_chargeable.external_id,
       email: purchase_as_chargeable.email,
       host: UrlService.domain_with_protocol
