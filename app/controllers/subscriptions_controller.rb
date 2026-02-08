@@ -3,12 +3,12 @@
 class SubscriptionsController < ApplicationController
   include PageMeta::Product
 
-  PUBLIC_ACTIONS = %i[manage unsubscribe_by_user magic_link send_magic_link].freeze
+  PUBLIC_ACTIONS = %i[manage unsubscribe_by_user].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
   after_action :verify_authorized, except: PUBLIC_ACTIONS
 
-  before_action :fetch_subscription, only: %i[unsubscribe_by_seller unsubscribe_by_user magic_link send_magic_link]
-  before_action :hide_layouts, only: [:manage, :magic_link, :send_magic_link]
+  before_action :fetch_subscription, only: %i[unsubscribe_by_seller unsubscribe_by_user]
+  before_action :hide_layouts, only: [:manage]
   before_action :set_noindex_header, only: [:manage]
   before_action :check_can_manage, only: [:manage, :unsubscribe_by_user]
 
@@ -39,23 +39,6 @@ class SubscriptionsController < ApplicationController
     set_product_page_meta(@product)
 
     set_subscription_confirmed_redirect_cookie
-  end
-
-  def magic_link
-    @react_component_props = SubscriptionsPresenter.new(subscription: @subscription).magic_link_props
-  end
-
-  def send_magic_link
-    @subscription.refresh_token
-
-    emails = @subscription.emails
-    email_source = params[:email_source].to_sym
-    email = emails[email_source]
-    e404 if email.nil?
-
-    CustomerMailer.subscription_magic_link(@subscription.id, email).deliver_later(queue: "critical")
-
-    head :no_content
   end
 
   private
