@@ -36,7 +36,7 @@ export const FollowForm = ({ creatorProfile, buttonColor, buttonLabel }: FollowF
 
   React.useEffect(() => setFormStatus("initial"), [data.email]);
 
-  const submit = (e: React.FormEvent) => {
+  const submitForm = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!isValidEmail(data.email)) {
@@ -61,7 +61,7 @@ export const FollowForm = ({ creatorProfile, buttonColor, buttonLabel }: FollowF
   };
 
   return (
-    <form onSubmit={submit} style={{ flexGrow: 1 }} noValidate>
+    <form onSubmit={submitForm} style={{ flexGrow: 1 }} noValidate>
       <fieldset className={cx({ danger: formStatus === "invalid" })}>
         <div className="flex gap-2">
           <input
