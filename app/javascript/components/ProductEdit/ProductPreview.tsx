@@ -4,10 +4,11 @@ import { recurrenceIds } from "$app/utils/recurringPricing";
 
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Product, ProductDiscount } from "$app/components/Product";
+import { CoffeeProduct } from "$app/components/Product/CoffeeProduct";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
-import { CoffeePage } from "$app/components/server-components/Profile/CoffeePage";
+import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
 
 export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
   const currentSeller = useCurrentSeller();
@@ -152,40 +153,42 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
   };
 
   return product.native_type === "coffee" ? (
-    <CoffeePage
-      product={{
-        ...serializedProduct,
-        is_published: true,
-        pwyw: {
-          suggested_price_cents: Math.max(
-            ...serializedProduct.options.map(({ price_difference_cents }) => price_difference_cents ?? 0),
-          ),
-        },
-        options: serializedProduct.options.sort(
-          (a, b) => (a.price_difference_cents ?? 0) - (b.price_difference_cents ?? 0),
-        ),
-      }}
-      creator_profile={{
+    <ProfileLayout
+      creatorProfile={{
         external_id: currentSeller.id,
         avatar_url: currentSeller.avatarUrl,
         name: currentSeller.name ?? "",
         subdomain: currentSeller.subdomain,
         twitter_handle: "",
       }}
-      purchase={null}
-      discount_code={defaultDiscountCode}
-      wishlists={[]}
-      selection={{
-        optionId: null,
-        price: {
-          value:
-            serializedProduct.options.length === 1
-              ? (serializedProduct.options[0]?.price_difference_cents ?? null)
-              : null,
-          error: false,
-        },
-      }}
-    />
+      hideFollowForm
+    >
+      <CoffeeProduct
+        product={{
+          ...serializedProduct,
+          is_published: true,
+          pwyw: {
+            suggested_price_cents: Math.max(
+              ...serializedProduct.options.map(({ price_difference_cents }) => price_difference_cents ?? 0),
+            ),
+          },
+          options: serializedProduct.options.sort(
+            (a, b) => (a.price_difference_cents ?? 0) - (b.price_difference_cents ?? 0),
+          ),
+        }}
+        purchase={null}
+        selection={{
+          optionId: null,
+          price: {
+            value:
+              serializedProduct.options.length === 1
+                ? (serializedProduct.options[0]?.price_difference_cents ?? null)
+                : null,
+            error: false,
+          },
+        }}
+      />
+    </ProfileLayout>
   ) : (
     <>
       <RefundPolicyModalPreview open={showRefundPolicyModal ?? false} refundPolicy={product.refund_policy} />
