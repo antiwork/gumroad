@@ -13,7 +13,7 @@ describe UrlRedirectsController do
     @url = @url_redirect.referenced_link.product_files.alive.first.url
   end
 
-  describe "GET 'download_page'" do
+  describe "GET 'download_page'", inertia: true do
     before do
       # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
       # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
@@ -27,19 +27,18 @@ describe UrlRedirectsController do
     it "renders correctly" do
       get :download_page, params: { id: @token }
       expect(response).to be_successful
-      expect(assigns(:hide_layouts)).to eq(true)
-      expect(
-        assigns(:react_component_props)
-      ).to eq(
-        UrlRedirectPresenter.new(
-          url_redirect: @url_redirect,
-          logged_in_user: nil
-        ).download_page_with_content_props.merge(
-          is_mobile_app_web_view: false,
-          content_unavailability_reason_code: nil,
-          add_to_library_option: "signup_form"
-        )
+      expect(inertia.component).to eq("UrlRedirects/DownloadPage")
+      expected_props = UrlRedirectPresenter.new(
+        url_redirect: @url_redirect,
+        logged_in_user: nil
+      ).download_page_with_content_props.merge(
+        is_mobile_app_web_view: false,
+        content_unavailability_reason_code: nil,
+        add_to_library_option: "signup_form"
       )
+      expected_props.each do |key, value|
+        expect(inertia.props[key]).to eq(value)
+      end
     end
 
     context "with access revoked for purchase" do
@@ -75,12 +74,8 @@ describe UrlRedirectsController do
       it "renders correctly" do
         get :download_page, params: { id: @token, display: "mobile_app" }
         expect(response).to be_successful
-        expect(assigns(:react_component_props)[:is_mobile_app_web_view]).to eq(true)
-
-        assert_select "h1", { text: @product.name, count: 0 }
-        assert_select "h4", { text: "Liked it? Give it a rating:", count: 0 }
-        assert_select "h4", { text: "Display Name", count: 1 }
-        assert_select "a", { text: "Download", count: 1 }
+        expect(inertia.component).to eq("UrlRedirects/DownloadPage")
+        expect(inertia.props[:is_mobile_app_web_view]).to eq(true)
       end
     end
 
@@ -102,7 +97,7 @@ describe UrlRedirectsController do
     context "posts" do
       let(:url_redirect) { create(:url_redirect, purchase:) }
       let(:token) { url_redirect.token }
-      let(:subject) { assigns(:react_component_props).dig(:content, :posts) }
+      let(:subject) { inertia.props.dig(:content, :posts) }
 
       context "for products" do
         let(:seller) { create(:named_seller) }

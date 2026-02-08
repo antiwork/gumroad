@@ -6,7 +6,7 @@ class UrlRedirectsController < ApplicationController
   include PageMeta::Favicon
 
   layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page]
-  layout "inertia", only: [:confirm_page, :read]
+  layout "inertia", only: [:confirm_page, :read, :download_page]
 
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file read download_archive latest_media_locations download_product_files
@@ -20,7 +20,7 @@ class UrlRedirectsController < ApplicationController
                                              download_archive latest_media_locations download_product_files audio_durations
                                              save_last_content_page]
   before_action :hide_layouts, only: %i[
-    show download_page download_product_files stream smil hls_playlist download_subtitle_file
+    show download_product_files stream smil hls_playlist download_subtitle_file
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
@@ -75,13 +75,11 @@ class UrlRedirectsController < ApplicationController
   end
 
   def download_page
-    @hide_layouts = true
-
-    @body_class = "download-page responsive responsive-nav"
     set_favicon_meta_tags(@url_redirect.seller)
     set_meta_tag(title: @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name)
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_with_content_props(common_props)
     trigger_files_lifecycle_events
+
+    render inertia: "UrlRedirects/DownloadPage", props: UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_with_content_props(common_props)
   end
 
   def download_product_files
