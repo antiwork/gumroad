@@ -200,7 +200,6 @@ def fill_in_credit_card(number: "4242424242424242", expiry: StripePaymentMethodH
       fill_in "ZIP", with: zip_code, visible: false if zip_code.present?
     end
   end
-  fill_in "Name on card", with: "Gumhead Moneybags"
 end
 
 def within_sca_frame(&block)
