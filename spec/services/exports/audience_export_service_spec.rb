@@ -96,6 +96,26 @@ describe Exports::AudienceExportService do
       end
     end
 
+    context "when exporting with small batch size" do
+      let(:options) { { followers: true, customers: true, affiliates: true } }
+
+      it "exports all records across multiple batches" do
+        # Use a small batch size to verify cursor-based batching works correctly
+        stub_const("#{described_class}::BATCH_SIZE", 1) if defined?(described_class::BATCH_SIZE)
+
+        result = subject.perform
+        rows = CSV.parse(result.tempfile.read)
+
+        # Should still contain all 3 audience members + header
+        expect(rows.size).to eq(4)
+        expect(rows.first).to eq(described_class::FIELDS)
+        emails = rows[1..].map(&:first)
+        expect(emails).to include(follower.email)
+        expect(emails).to include(customer.email)
+        expect(emails).to include(affiliate_user.email)
+      end
+    end
+
     context "when no options are provided" do
       let(:options) { {} }
 
