@@ -2,70 +2,64 @@
   &,
   .ProseMirror {
     > * {
-      margin-bottom: spacer(4);
+      @apply mb-4;
     }
   }
 
   h1 {
-    margin-bottom: spacer(5);
+    @apply mb-6;
   }
 
   h2,
   h3 {
-    margin-top: spacer(6);
+    @apply mt-8;
 
     &:first-child {
-      margin-top: 0;
+      @apply mt-0;
     }
   }
 
   ul:not(.inline),
   ol {
-    margin-left: spacer(4);
+    @apply ml-4;
   }
 
   li:not(:last-child) {
-    margin-bottom: spacer(4);
+    @apply mb-4;
   }
 
   hr {
-    margin: spacer(6) 0;
+    @apply my-8;
   }
 
   p {
-    margin-bottom: spacer(4);
+    @apply mb-4;
   }
 
   blockquote {
-    padding-left: spacer(6);
+    @apply pl-8;
   }
 
   figure:not(.tailwind-override) {
-    margin-bottom: spacer(5);
+    @apply mb-6;
 
     img {
-      width: 100%;
-      object-fit: contain;
-      border-radius: border-radius(1);
+      @apply w-full object-contain rounded;
     }
 
     figcaption,
     .figcaption {
-      padding-left: spacer(1);
-      margin: spacer(3) 0 0 0;
+      @apply pl-1 mt-3 mb-0;
     }
   }
 
   pre {
     border: $border;
-    border-radius: border-radius(1);
-    margin-bottom: spacer(4);
-    padding: spacer(2) spacer(3);
-    white-space: pre-wrap;
+    @apply rounded mb-4 whitespace-pre-wrap;
+    padding: 0.5rem 0.75rem;
 
     .copy-wrapper {
-      float: right;
-      display: none;
+      @apply float-right hidden;
     }
 
     &:hover {
@@ -77,7 +71,7 @@
     .hljs {
       &-comment,
       &-quote {
-        @include text-muted;
+        @apply text-muted;
       }
 
       &-variable,
@@ -86,7 +80,6 @@
       &-name,
       &-regexp,
       &-link,
-      &-name,
       &-selector-id,
       &-selector-class {
         color: #99568b;
@@ -124,37 +117,32 @@
       }
 
       &-emphasis {
-        font-style: italic;
+        @apply italic;
       }
 
       &-strong {
-        font-weight: 700;
+        @apply font-bold;
       }
     }
   }
 
   .actions-menu {
-    position: absolute;
-    bottom: spacer(4);
-    left: 0;
+    @apply absolute bottom-4 left-0 z-[1];
     @include font-size(2);
-    z-index: z-index(overlay);
 
     @include breakpoint-up(lg) {
-      display: none;
-      bottom: unset;
-      top: spacer(5);
+      @apply hidden top-6 bottom-auto;
       left: -(spacer(2));
       translate: -100% 0;
     }
   }
 
   :has(> .actions-menu) {
-    position: relative;
+    @apply relative;
 
     &::before {
       content: "";
-      position: absolute;
+      @apply absolute;
       inset: 0 100% 0 #{-(spacer(7))};
     }
 
@@ -166,14 +154,13 @@
     }
 
     &.selected {
-      border-radius: border-radius(1);
+      @apply relative rounded;
       outline: $outline;
       // Fix outline clipping when items are next to each other in a list
-      position: relative;
     }
 
     [role="group"] {
-      padding-left: spacer(5);
+      @apply pl-6;
     }
   }
 
@@ -183,54 +170,47 @@
 
   .embed {
     border: $border;
-    border-radius: border-radius(1);
+    @apply rounded;
     @include bg-color(filled);
 
     > .preview {
       background-color: var(--body-bg);
-      border-radius: border-radius(1) border-radius(1) 0 0;
-      grid-template-columns: 1fr;
+      @apply rounded-t relative;
       border-bottom: $border;
-      margin: -1 * spacer(4);
+      grid-template-columns: 1fr;
+      margin: -1rem;
       max-width: unset;
-      margin-bottom: spacer(2);
-      position: relative;
+      @apply mb-2;
       aspect-ratio: 16 / 9;
 
       > :first-child {
-        top: 0;
+        @apply top-0;
 
         &.placeholder {
-          height: calc(100% - 2 * spacer(4));
+          height: calc(100% - 2rem);
           place-content: center;
-          margin: spacer(4);
+          @apply m-4;
         }
       }
     }
 
     .content h4 {
-      font-weight: bold;
+      @apply font-bold;
       @include max-lines(1);
       word-break: keep-all;
     }
 
     .content > .thumbnail {
-      position: relative;
+      @apply relative mr-2;
       width: size(4);
       height: size(3);
-      margin-right: spacer(2);
 
       img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: border-radius(1);
+        @apply w-full h-full object-cover rounded;
       }
 
       .placeholder {
-        position: absolute;
-        inset: 0;
-        padding: 0;
+        @apply absolute inset-0 p-0;
         background: $backdrop-bg;
       }
 
@@ -240,75 +220,70 @@
       }
 
       &:not(:hover) img + .placeholder {
-        opacity: 0;
+        @apply opacity-0;
       }
     }
   }
 }
 
 .rich-text-editor-toolbar[role="toolbar"] {
-  position: sticky;
-  top: 0;
+  @apply sticky top-0 flex flex-wrap z-[1];
   @include bg-color(primary);
-  display: flex;
-  gap: spacer(1);
-  flex-wrap: wrap;
-  padding-block: spacer(1);
-  z-index: z-index(overlay);
+  gap: 0.25rem;
+  padding-block: 0.25rem;
 
   &.ghost {
     @include bg-color(filled);
   }
 
   .toolbar-item {
-    padding: spacer(1) spacer(2);
-    border-radius: border-radius(1);
+    @apply rounded;
+    padding: 0.25rem 0.5rem;
 
     &:hover {
-      background-color: gray(1);
+      @apply bg-active-bg;
     }
 
     &[aria-pressed="true"],
     .active {
-      color: full-color(accent);
+      @apply text-accent;
     }
   }
 
   [role="separator"] {
-    display: none;
+    @apply hidden m-2;
     border-right: solid $border-width gray(3);
-    margin: spacer(2);
 
     &::before {
       content: none;
     }
 
     @include breakpoint-up(sm) {
-      display: flex;
+      @apply flex;
     }
   }
 
   [role="menuitemradio"] {
     &[aria-checked="true"] {
-      background-color: var(--active-bg);
+      @apply bg-active-bg;
     }
   }
 }
 
 :where(.rich-text-editor-toolbar) {
-  padding-inline: spacer(2);
+  @apply px-2;
 }
 
 .ProseMirror[contenteditable="true"] {
   white-space: break-spaces;
 
   &:focus-within {
-    outline: none;
+    @apply outline-none;
   }
 
   figure {
     & > img {
-      cursor: pointer;
+      @apply cursor-pointer;
     }
 
     // Chrome-specific workaround to prevent highlighting the br
@@ -317,7 +292,7 @@
     }
 
     img::selection {
-      background: gray(3);
+      background: rgb(var(--color) / var(--gray-1));
     }
 
     &[data-has-focus] img {
@@ -327,21 +302,17 @@
 }
 
 .rich-text-editor {
-  display: grid;
+  @apply grid rounded;
   grid-template-rows: max-content 1fr;
   min-height: size(14);
-  border-radius: border-radius(1);
 
   .rich-text-editor-toolbar[role="toolbar"] {
     border: $border;
-    border-bottom: none;
-    border-radius: border-radius(1) border-radius(1) 0 0;
+    @apply border-b-0 rounded-t;
   }
 
   .textarea {
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-    min-height: 100%;
+    @apply rounded-tl-none rounded-tr-none min-h-full;
 
     &:focus-within {
       outline: $outline;
@@ -353,8 +324,5 @@
 .ProseMirror p.is-editor-empty:first-child::before,
 .ProseMirror .node-image.is-empty .figcaption::before {
   content: attr(data-placeholder);
-  pointer-events: none;
-  float: left;
-  height: 0;
-  @include text-muted;
+  @apply pointer-events-none float-left h-0 text-muted;
 }
