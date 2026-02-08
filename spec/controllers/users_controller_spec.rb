@@ -50,7 +50,7 @@ describe UsersController do
     end
   end
 
-  describe "#show" do
+  describe "#show", inertia: true do
     it "404s if user isn't found in HTML format" do
       expect { get :show, params: { username: "creator" }, format: :html }
         .to raise_error(ActionController::RoutingError)
@@ -163,8 +163,8 @@ describe UsersController do
           expect(assigns(:user)).to eq(@user)
         end
 
-        it "renders the show template" do
-          expect(response).to render_template(:show)
+        it "renders the standard profile page" do
+          expect(inertia.component).to eq("Users/Show")
         end
       end
 
@@ -198,8 +198,8 @@ describe UsersController do
         end
 
 
-        it "renders the show template" do
-          expect(response).to render_template(:show)
+        it "renders the profile page" do
+          expect(inertia.component).to eq("Users/Show")
         end
 
         describe "when the host is another subdomain that is www with the same apex domain" do
@@ -212,8 +212,8 @@ describe UsersController do
             expect(assigns(:user)).to eq(@user)
           end
 
-          it "renders the show template" do
-            expect(response).to render_template(:show)
+          it "renders the profile page" do
+            expect(inertia.component).to eq("Users/Show")
           end
         end
 
@@ -264,8 +264,7 @@ describe UsersController do
         @request.host = "#{creator.username}.test.gumroad.com"
         get :show, params: { username: creator.username }
 
-        profile_props = assigns[:profile_props]
-        expect(profile_props[:creator_profile][:external_id]).to eq(creator.external_id)
+        expect(inertia.props[:creator_profile][:external_id]).to eq(creator.external_id)
       end
     end
 
@@ -677,18 +676,18 @@ describe UsersController do
     end
   end
 
-  describe "GET subscribe" do
+  describe "GET subscribe", inertia: true do
     context "with user signed in as admin for seller" do
       include_context "with user signed in as admin for seller"
 
-      it "assigns the correct instance variables" do
+      it "assigns the correct props" do
         @request.host = "#{creator.username}.test.gumroad.com"
         get :subscribe
 
         expect(controller.send(:page_title)).to eq("Subscribe to creator")
-        profile_presenter = assigns[:profile_presenter]
-        expect(profile_presenter.seller).to eq(creator)
-        expect(profile_presenter.pundit_user).to eq(controller.pundit_user)
+        expect(inertia.component).to eq("Users/Subscribe")
+        expect(inertia.props[:creator_profile][:name]).to eq(creator.name_or_username)
+        expect(inertia.props[:creator_profile][:external_id]).to eq(creator.external_id)
       end
     end
   end
