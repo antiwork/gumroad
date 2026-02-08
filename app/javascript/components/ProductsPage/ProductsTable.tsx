@@ -79,7 +79,13 @@ export const ProductsPageProductsTable = (props: {
 
   const reloadProducts = () => loadProducts(pagination.page);
 
-  if (!products.length) return null;
+  if (!products.length) {
+    return (
+      <div className="py-8 text-center text-gray-500">
+        No products found
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">

@@ -28,30 +28,35 @@ const ProductsPage = ({
   query: string | null;
   setEnableArchiveTab?: (enable: boolean) => void;
   type?: Tab;
-}) => (
-  <div className="grid gap-12">
-    {memberships.length > 0 ? (
-      <ProductsPageMembershipsTable
-        query={query}
-        entries={memberships}
-        pagination={membershipsPagination}
-        sort={membershipsSort}
-        selectedTab={type}
-        setEnableArchiveTab={setEnableArchiveTab}
-      />
-    ) : null}
+}) => {
+  const hadInitialMemberships = React.useRef(memberships.length > 0);
+  const hadInitialProducts = React.useRef(products.length > 0);
 
-    {products.length > 0 ? (
-      <ProductsPageProductsTable
-        query={query}
-        entries={products}
-        pagination={productsPagination}
-        sort={productsSort}
-        selectedTab={type}
-        setEnableArchiveTab={setEnableArchiveTab}
-      />
-    ) : null}
-  </div>
-);
+  return (
+    <div className="grid gap-12">
+      {hadInitialMemberships.current ? (
+        <ProductsPageMembershipsTable
+          query={query}
+          entries={memberships}
+          pagination={membershipsPagination}
+          sort={membershipsSort}
+          selectedTab={type}
+          setEnableArchiveTab={setEnableArchiveTab}
+        />
+      ) : null}
+
+      {hadInitialProducts.current ? (
+        <ProductsPageProductsTable
+          query={query}
+          entries={products}
+          pagination={productsPagination}
+          sort={productsSort}
+          selectedTab={type}
+          setEnableArchiveTab={setEnableArchiveTab}
+        />
+      ) : null}
+    </div>
+  );
+};
 
 export default ProductsPage;

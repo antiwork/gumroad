@@ -703,4 +703,27 @@ describe "Products Page Scenario", type: :system, js: true do
       expect(product.reload.archived?).to be(true)
     end
   end
+
+  describe "search" do
+    it "keeps the search bar visible when no products match the query" do
+      create(:product, user: seller, name: "Digital Art Pack")
+
+      visit(products_path)
+
+      expect(page).to have_field("Search products")
+      expect(page).to have_content("Digital Art Pack")
+
+      fill_in "Search products", with: "nonexistent"
+      wait_for_ajax
+
+      expect(page).to have_field("Search products")
+      expect(page).to have_text("No products found")
+      expect(page).not_to have_content("Digital Art Pack")
+
+      fill_in "Search products", with: ""
+      wait_for_ajax
+
+      expect(page).to have_content("Digital Art Pack")
+    end
+  end
 end
