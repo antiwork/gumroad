@@ -204,10 +204,10 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
       visit "/subscriptions/#{@subscription_with_purchaser.external_id}/manage?token=#{@subscription_with_purchaser.token}"
 
       click_on "Cancel membership"
-      wait_for_ajax
 
-      expect(page).to have_button("Cancelled", disabled: true)
+      expect(page).to have_alert(text: "Your membership has been cancelled.")
       expect(page).to have_button("Restart membership")
+      expect(page).not_to have_button("Cancel membership")
 
       click_on "Restart membership"
       wait_for_ajax

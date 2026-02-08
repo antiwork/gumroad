@@ -2,8 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe SubscriptionsController do
+describe SubscriptionsController, inertia: true do
   let(:seller) { create(:named_seller) }
   let(:subscriber) { create(:user) }
 
@@ -66,9 +67,10 @@ describe SubscriptionsController do
         post :unsubscribe_by_user, params: { id: @subscription.external_id }
       end
 
-      it "returns json success" do
+      it "redirects to manage page with success notice" do
         post :unsubscribe_by_user, params: { id: @subscription.external_id }
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(manage_subscription_path(@subscription.external_id))
+        expect(flash[:notice]).to eq("Your membership has been cancelled.")
       end
 
       it "is not allowed for installment plans" do
@@ -79,8 +81,8 @@ describe SubscriptionsController do
 
         post :unsubscribe_by_user, params: { id: subscription.external_id }
 
-        expect(response.parsed_body["success"]).to be(false)
-        expect(response.parsed_body["error"]).to include("Installment plans cannot be cancelled by the customer")
+        expect(response).to redirect_to(manage_subscription_path(subscription.external_id))
+        expect(flash[:alert]).to include("Installment plans cannot be cancelled by the customer")
       end
 
       context "when the encrypted cookie is not present" do
@@ -88,13 +90,12 @@ describe SubscriptionsController do
           cookies.encrypted[@subscription.cookie_key] = nil
         end
 
-        it "renders success false with redirect_to URL" do
+        it "redirects to magic link page" do
           expect do
-            post :unsubscribe_by_user, params: { id: @subscription.external_id }, format: :json
+            post :unsubscribe_by_user, params: { id: @subscription.external_id }
           end.to_not change { @subscription.reload.user_requested_cancellation_at }
 
-          expect(response.parsed_body["success"]).to be(false)
-          expect(response.parsed_body["redirect_to"]).to eq(magic_link_subscription_path(@subscription.external_id))
+          expect(response).to redirect_to(magic_link_subscription_path(@subscription.external_id))
         end
       end
     end
@@ -129,20 +130,24 @@ describe SubscriptionsController do
       end
 
       context "when encrypted cookie is present" do
-        it "renders the manage page" do
+        it "renders the Inertia manage page with correct props" do
           cookies.encrypted[@subscription.cookie_key] = @subscription.external_id
           get :manage, params: { id: @subscription.external_id }
 
           expect(response).to be_successful
+          expect(inertia).to render_component("Subscriptions/Manage")
+          expect(inertia.props[:subscription]).to be_present
+          expect(inertia.props[:product]).to be_present
         end
       end
 
       context "when the user is signed in" do
-        it "renders the manage page" do
+        it "renders the Inertia manage page" do
           sign_in subscriber
           get :manage, params: { id: @subscription.external_id }
 
           expect(response).to be_successful
+          expect(inertia).to render_component("Subscriptions/Manage")
         end
       end
 
