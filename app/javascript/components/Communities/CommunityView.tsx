@@ -154,7 +154,7 @@ export function CommunityView({
         notificationsHandledRef.current = true;
         setShowNotificationsSettings(true);
         url.searchParams.delete("notifications");
-        router.visit(url.toString(), { replace: true, preserveScroll: true });
+        router.visit(url.toString(), { replace: true, preserveState: true, preserveScroll: true });
       }
     }
   }, [selectedCommunity]);
@@ -168,6 +168,7 @@ export function CommunityView({
           Routes.mark_read_chat_messages_path(communityId),
           { message_id: messageId },
           {
+            preserveState: true,
             preserveScroll: true,
             only: ["communities"],
             onSuccess: () => {
@@ -255,6 +256,7 @@ export function CommunityView({
         community_chat_message: { content: selectedCommunityDraft.content },
       },
       {
+        preserveState: true,
         preserveScroll: true,
         onSuccess: () => {
           updateCommunityDraft(selectedCommunity.id, { content: "", isSending: false });
@@ -345,6 +347,7 @@ export function CommunityView({
     const community = communities.find((community) => community.seller.id === sellerId);
     if (community) {
       router.visit(Routes.community_path(community.seller.id, community.id), {
+        preserveState: true,
         preserveScroll: true,
       });
       setSwitcherOpen(false);
@@ -372,6 +375,7 @@ export function CommunityView({
     const community = communities.find((community) => community.id === communityId);
     if (!community) return;
     router.visit(Routes.community_path(community.seller.id, community.id), {
+      preserveState: true,
       preserveScroll: true,
     });
   });
@@ -402,6 +406,7 @@ export function CommunityView({
       Routes.notification_settings_path(community.id),
       { settings },
       {
+        preserveState: true,
         preserveScroll: true,
         onSuccess: () => {
           setShowNotificationsSettings(false);
