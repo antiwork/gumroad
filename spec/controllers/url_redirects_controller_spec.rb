@@ -536,7 +536,7 @@ describe UrlRedirectsController do
       end
     end
 
-    describe "streaming" do
+    describe "streaming", inertia: true do
       before do
         @product = create(:product_with_video_file)
         @url_redirect = create(:url_redirect, link: @product, purchase: nil)
@@ -567,7 +567,10 @@ describe UrlRedirectsController do
           get :stream, params: { id: @url_redirect.token }
 
           expect(response).to have_http_status(:ok)
-          expect(assigns(:product_file)).to eq(@product.product_files.first)
+          expect_inertia.to render_component("UrlRedirects/VideoStream")
+          expect(inertia.props[:url_redirect_id]).to eq(@url_redirect.external_id)
+          expect(inertia.props[:purchase_id]).to be_nil
+          expect(inertia.props[:playlist]).to be_an(Array)
         end
       end
 

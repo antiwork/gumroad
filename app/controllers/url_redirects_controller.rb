@@ -236,19 +236,19 @@ class UrlRedirectsController < ApplicationController
 
   # Consumption event is created by front-end code
   def stream
-    set_meta_tag(title: "Watch")
-    @body_id = "stream_page"
-    @body_class = "download-page responsive responsive-nav"
-
     @product_file = @url_redirect.product_file(params[:product_file_id]) || @url_redirect.alive_product_files.find(&:streamable?)
     e404 unless @product_file&.streamable?
 
-    @videos_playlist = @url_redirect.video_files_playlist(@product_file)
-    @should_show_transcoding_notice = logged_in_user == @url_redirect.seller && !@url_redirect.with_product_files.has_been_transcoded?
+    videos_playlist = @url_redirect.video_files_playlist(@product_file)
 
-    @url_redirect_id = @url_redirect.external_id
-    @purchase_id = @url_redirect.purchase.try(:external_id)
-    render :video_stream
+    render inertia: "UrlRedirects/VideoStream", props: {
+      playlist: videos_playlist[:playlist],
+      index_to_play: videos_playlist[:index_to_play].to_i,
+      url_redirect_id: @url_redirect.external_id,
+      purchase_id: @url_redirect.purchase.try(:external_id),
+      should_show_transcoding_notice: logged_in_user == @url_redirect.seller && !@url_redirect.with_product_files.has_been_transcoded?,
+      transcode_on_first_sale: @product_file.link&.transcode_videos_on_purchase.present?,
+    }
   end
 
   def latest_media_locations
