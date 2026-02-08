@@ -1,27 +1,20 @@
-import { Head, usePage } from "@inertiajs/react";
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { CreatorProfile } from "$app/parsers/profile";
-import { FollowFormBlockInertia } from "$app/components/Profile/FollowFormInertia";
+import { FollowFormBlock } from "$app/components/Profile/FollowForm";
 import { Layout } from "$app/components/Profile/Layout";
 
 type Props = {
   creator_profile: CreatorProfile;
-  custom_styles?: string;
 };
 
 export default function UsersSubscribePage() {
-  const { creator_profile, custom_styles } = cast<Props>(usePage().props);
+  const { creator_profile } = usePage<Props>().props;
   return (
     <div className="flex h-screen flex-col overflow-y-auto">
-      {custom_styles ? (
-        <Head>
-          <style type="text/css">{custom_styles}</style>
-        </Head>
-      ) : null}
       <Layout hideFollowForm creatorProfile={creator_profile}>
-        <FollowFormBlockInertia creatorProfile={creator_profile} className="px-4" />
+        <FollowFormBlock creatorProfile={creator_profile} className="px-4" />
       </Layout>
     </div>
   );

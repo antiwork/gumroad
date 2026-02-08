@@ -1,10 +1,10 @@
+import { useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
 import { classNames } from "$app/utils/classNames";
 import { isValidEmail } from "$app/utils/email";
-import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { ButtonColor } from "$app/components/design";
@@ -23,21 +23,30 @@ export const FollowForm = ({
   const loggedInUser = useLoggedInUser();
   const isOwnProfile = loggedInUser?.id === creatorProfile.external_id;
   const emailInputRef = React.useRef<HTMLInputElement>(null);
-  const [email, setEmail] = React.useState(isOwnProfile ? "" : (loggedInUser?.email ?? ""));
-  const [isInvalid, setIsInvalid] = React.useState(false);
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [isSuccess, setIsSuccess] = React.useState(false);
 
-  React.useEffect(() => setIsInvalid(false), [email]);
+  const form = useForm({
+    email: isOwnProfile ? "" : (loggedInUser?.email ?? ""),
+    seller_id: creatorProfile.external_id,
+  });
 
-  const submit = async (e: React.FormEvent) => {
+  const isSubmitting = form.processing;
+  const isSuccess = form.recentlySuccessful;
+  const isInvalid = form.errors.email != null;
+
+  React.useEffect(() => {
+    if (form.errors.email) {
+      emailInputRef.current?.focus();
+      showAlert(form.errors.email, "error");
+    }
+  }, [form.errors.email]);
+
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(form.data.email)) {
       emailInputRef.current?.focus();
-      setIsInvalid(true);
       showAlert(
-        email.trim() === "" ? "Please enter your email address." : "Please enter a valid email address.",
+        form.data.email.trim() === "" ? "Please enter your email address." : "Please enter a valid email address.",
         "error",
       );
       return;
@@ -48,39 +57,21 @@ export const FollowForm = ({
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      const response = await request({
-        method: "POST",
-        accept: "json",
-        url: Routes.follow_user_path(),
-        data: { email, seller_id: creatorProfile.external_id },
-      });
-      const result = await response.json();
-      if (result.success) {
-        setIsSuccess(true);
-        showAlert(result.message, "success");
-      } else {
-        showAlert(result.message || "Sorry, something went wrong. Please try again.", "error");
-      }
-    } catch (e) {
-      assertResponseError(e);
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    } finally {
-      setIsSubmitting(false);
-    }
+    form.post(Routes.follow_user_path(), {
+      preserveScroll: true,
+    });
   };
 
   return (
-    <form onSubmit={(e) => void submit(e)} style={{ flexGrow: 1 }} noValidate>
-      <fieldset className={cx({ danger: isInvalid })}>
+    <form onSubmit={submit} style={{ flexGrow: 1 }} noValidate>
+      <fieldset className={cx({ danger: isInvalid })} disabled={isSubmitting}>
         <div className="flex gap-2">
           <input
             ref={emailInputRef}
             type="email"
-            value={email}
+            value={form.data.email}
             className="flex-1"
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => form.setData("email", e.target.value)}
             placeholder="Your email address"
           />
           <Button color={buttonColor} disabled={isSubmitting || isSuccess} type="submit">

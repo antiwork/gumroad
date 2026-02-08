@@ -54,13 +54,13 @@ class UsersController < ApplicationController
 
   def subscribe
     set_meta_tag(title: "Subscribe to #{@user.name.presence || @user.username}")
+    set_user_custom_styles_meta(@user)
     profile_presenter = ProfilePresenter.new(
       pundit_user:,
       seller: @user
     )
     render inertia: "Users/Subscribe", props: {
-      creator_profile: profile_presenter.creator_profile,
-      custom_styles: @user&.seller_profile&.custom_styles.to_s
+      creator_profile: profile_presenter.creator_profile
     }
   end
 
