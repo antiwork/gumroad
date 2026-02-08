@@ -113,6 +113,7 @@ describe CreatorMailer do
         end,
         total_products_sold_count: 5,
         total_amount_cents: 5000,
+        creator_rank: 2,
         by_country: ["🇪🇸 Spain", "🇷🇴 Romania", "🇦🇪 United Arab Emirates", "🇺🇸 United States", "🌎 Elsewhere"].index_with do
           [
             5,
@@ -134,6 +135,7 @@ describe CreatorMailer do
         body = mail.body.encoded
 
         expect(body).to have_text("Your year on Gumroad in review")
+        expect(body).to have_text("You ranked #2 among all creators")
         expect(body).to have_text("You sold products in 5 countries")
         expect(body).to have_text("Sales 12", normalize_ws: true)
         expect(body).to have_text("Views 144", normalize_ws: true)

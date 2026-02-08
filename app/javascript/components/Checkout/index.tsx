@@ -28,7 +28,7 @@ import {
 import { GiftForm } from "$app/components/Checkout/GiftForm";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { Icon } from "$app/components/Icons";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Card } from "$app/components/Product/Card";
 import {
@@ -270,11 +270,11 @@ export const Checkout = ({
               </CartItemList>
               <CartItemList>
                 {displayTipSelector ? (
-                  <div className="p-3 sm:p-5">
+                  <div className="p-4 sm:p-5">
                     <TipSelector />
                   </div>
                 ) : null}
-                <div className={classNames("grid gap-4 p-4", displayTipSelector && "border-t border-border")}>
+                <div className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}>
                   {state.surcharges.type === "loaded" ? (
                     <>
                       <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
@@ -360,7 +360,7 @@ export const Checkout = ({
                 </div>
                 {total != null ? (
                   <>
-                    <footer className="grid gap-4 border-t border-border p-4">
+                    <footer className="grid gap-4 border-t border-border p-4 sm:px-5">
                       <CartPriceItem title="Total" price={formatPrice(total)} variant="large" />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
@@ -635,27 +635,30 @@ const CartItemComponent = ({
             item.product.options.length > 0 ||
             item.product.installment_plan ||
             isPWYW ? (
-              <Popover
-                trigger={<Button className="h-8 w-15 !p-0 !text-xs">Edit</Button>}
-                open={editPopoverOpen}
-                onToggle={setEditPopoverOpen}
-              >
-                <div className="flex w-96 flex-col gap-4">
-                  <ConfigurationSelector
-                    selection={selection}
-                    setSelection={(selection) => {
-                      setError(null);
-                      setSelection(selection);
-                    }}
-                    product={item.product}
-                    discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
-                    showInstallmentPlan
-                  />
-                  {error ? <Alert variant="danger">{error}</Alert> : null}
-                  <Button color="accent" onClick={saveChanges}>
-                    Save changes
-                  </Button>
-                </div>
+              <Popover open={editPopoverOpen} onOpenChange={setEditPopoverOpen}>
+                <PopoverAnchor>
+                  <PopoverTrigger asChild>
+                    <Button className="h-8 w-15 !p-0 !text-xs">Edit</Button>
+                  </PopoverTrigger>
+                </PopoverAnchor>
+                <PopoverContent className="max-h-[var(--radix-popover-content-available-height,80vh)] overflow-auto">
+                  <div className="flex w-96 flex-col gap-4">
+                    <ConfigurationSelector
+                      selection={selection}
+                      setSelection={(selection) => {
+                        setError(null);
+                        setSelection(selection);
+                      }}
+                      product={item.product}
+                      discount={discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null}
+                      showInstallmentPlan
+                    />
+                    {error ? <Alert variant="danger">{error}</Alert> : null}
+                    <Button color="accent" onClick={saveChanges}>
+                      Save changes
+                    </Button>
+                  </div>
+                </PopoverContent>
               </Popover>
             ) : null}
             <Button

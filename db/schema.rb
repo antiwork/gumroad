@@ -2171,6 +2171,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.bigint "seller_id"
     t.string "token"
     t.datetime "token_expires_at"
+    t.string "business_vat_id", limit: 191
     t.index ["cancelled_at"], name: "index_subscriptions_on_cancelled_at"
     t.index ["deactivated_at"], name: "index_subscriptions_on_deactivated_at"
     t.index ["ended_at"], name: "index_subscriptions_on_ended_at"

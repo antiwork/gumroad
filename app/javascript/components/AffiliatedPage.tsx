@@ -6,13 +6,13 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { GlobalAffiliates } from "$app/components/GlobalAffiliates";
 import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
-import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
+import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Stats as StatsComponent } from "$app/components/Stats";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -170,47 +170,6 @@ const AffiliatedProductsTable = ({
         <Pagination onChangePage={(page) => loadAffiliatedProducts(page, sort)} pagination={pagination} />
       ) : null}
     </section>
-  );
-};
-
-type SearchProps = {
-  onSearch: (query: string) => void;
-  value: string;
-};
-
-const Search = ({ onSearch, value }: SearchProps) => {
-  const [open, setOpen] = React.useState(false);
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-
-  React.useEffect(() => {
-    if (open) searchInputRef.current?.focus();
-  }, [open]);
-
-  return (
-    <Popover
-      open={open}
-      onToggle={setOpen}
-      aria-label="Toggle Search"
-      trigger={
-        <WithTooltip tip="Search" position="bottom">
-          <div className={buttonVariants({ size: "default" })}>
-            <Icon name="solid-search" />
-          </div>
-        </WithTooltip>
-      }
-    >
-      <div className="input input-wrapper">
-        <Icon name="solid-search" />
-        <input
-          ref={searchInputRef}
-          value={value}
-          autoFocus
-          type="text"
-          placeholder="Search"
-          onChange={(e) => onSearch(e.target.value)}
-        />
-      </div>
-    </Popover>
   );
 };
 

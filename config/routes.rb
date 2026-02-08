@@ -279,6 +279,8 @@ Rails.application.routes.draw do
 
   constraints GumroadDomainConstraint do
     get "/about", to: "home#about"
+    get "/careers", to: "careers#index"
+    get "/careers/:slug", to: "careers#show", as: :career
     get "/features", to: "home#features"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
@@ -518,7 +520,9 @@ Rails.application.routes.draw do
       resources :pings, controller: "purchases/pings", only: [:create]
       resource :product, controller: "purchases/product", only: [:show]
       resources :variants, controller: "purchases/variants", param: :variant_id, only: [:update]
-      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update]
+      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update] do
+        get :success
+      end
     end
 
     resources :orders, only: [:create] do
@@ -602,15 +606,26 @@ Rails.application.routes.draw do
       get :compute_discount
     end
 
-    resources :bundles, only: [:show, :update] do
-      member do
-        get "*other", to: "bundles#show"
-        post :update_purchases_content
+    resources :bundles, only: [:show] do
+      collection do
+        get :create_from_email
+      end
+    end
+
+    resources :bundles, only: [] do
+      scope module: :bundles do
+        resource :product, only: [:edit, :update], controller: "product"
+        resource :content, only: [:edit, :update], controller: "content" do
+          post :update_purchases_content
+        end
+        resource :share, only: [:edit, :update], controller: "share"
       end
 
-      collection do
-        get :products
-        get :create_from_email
+      # Backward compatibility redirects for old bundle edit URLs
+      member do
+        get :edit, to: redirect("/bundles/%{id}/product/edit")
+        get "edit/content", to: redirect("/bundles/%{id}/content/edit")
+        get "edit/share", to: redirect("/bundles/%{id}/share/edit")
       end
     end
 

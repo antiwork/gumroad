@@ -88,7 +88,7 @@ describe "Sales page", type: :system, js: true do
 
       expect(page).to have_table_row({ "Email" => "customer11@gumroad.com", "Name" => "Customer 11" })
       expect(page).to have_text("All sales (1)")
-      select_disclosure "Search" do
+      select_disclosure "Toggle Search" do
         expect(page).to have_field("Search sales", with: "customer11@gumroad.com")
         fill_in "Search sales", with: "customer1"
       end
@@ -100,7 +100,7 @@ describe "Sales page", type: :system, js: true do
       expect(page).to have_nth_table_row_record(1, "Customer 11")
       expect(page).to have_nth_table_row_record(2, "Customer 1")
 
-      select_disclosure "Search" do
+      select_disclosure "Toggle Search" do
         fill_in "Search sales", with: ""
       end
       expect(page).to have_nth_table_row_record(1, "Customer 11")
