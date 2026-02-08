@@ -73,6 +73,8 @@
   }
 }
 
+@import "./rich-text.css";
+
 @utility all-unset {
   /* Ensure low precedence so it doesn't override other styles */
   :where(&) {

@@ -16,7 +16,6 @@ import { assertDefined } from "$app/utils/assert";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { Separator } from "$app/components/Separator";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { CodeBlock } from "$app/components/TiptapExtensions/CodeBlock";
 import { Image, uploadImages } from "$app/components/TiptapExtensions/Image";
@@ -89,7 +88,7 @@ export const MenuItem = ({
   <MenuItemTooltip tip={name}>
     <button
       type="button"
-      className="toolbar-item cursor-pointer all-unset"
+      className="cursor-pointer all-unset rounded px-2 py-1 hover:bg-active-bg aria-pressed:text-accent"
       aria-pressed={active}
       disabled={disabled}
       aria-label={name}
@@ -112,7 +111,7 @@ export const PopoverMenuItem = ({
   <Popover>
     <PopoverTrigger aria-label={name} className="all-unset">
       <MenuItemTooltip tip={name}>
-        <div className="toolbar-item">
+        <div className="rounded px-2 py-1 hover:bg-active-bg">
           <Icon name={icon} />
         </div>
       </MenuItemTooltip>
@@ -387,11 +386,15 @@ export const RichTextEditorToolbar = ({
     <ToolbarTooltipContext.Provider value={showTooltipState}>
       <div
         role="toolbar"
-        className={cx("rich-text-editor-toolbar", color, className)}
+        className={cx(
+            "sticky top-0 z-1 flex flex-wrap gap-1 py-1 px-2",
+            color === "ghost" ? "bg-background text-foreground" : "bg-primary text-primary-foreground",
+            className,
+          )}
         onMouseLeave={() => setShowTooltip(false)}
       >
         <Popover>
-          <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
+          <PopoverTrigger aria-label="Text formats" className="all-unset rounded px-2 py-1 hover:bg-active-bg">
             {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
           </PopoverTrigger>
           <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -401,6 +404,7 @@ export const RichTextEditorToolbar = ({
                   <div
                     role="menuitemradio"
                     aria-checked={option === activeFormatOption}
+                    className="aria-checked:bg-active-bg"
                     onClick={() => {
                       const commands = editor.chain();
                       if (isList(option.type, editor.extensionManager.extensions))
@@ -417,7 +421,7 @@ export const RichTextEditorToolbar = ({
             </div>
           </PopoverContent>
         </Popover>
-        <Separator aria-orientation="vertical" />
+        <div role="separator" className="hidden sm:block border-r border-border my-2" />
         <MenuItem
           name="Bold"
           icon="bold"
@@ -448,7 +452,7 @@ export const RichTextEditorToolbar = ({
           active={editor.isActive("blockquote")}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         />
-        <Separator aria-orientation="vertical" />
+        <div role="separator" className="hidden sm:block border-r border-border my-2" />
         {custom ?? (
           <>
             {topMenuItems.map((extension, i) => (
@@ -467,9 +471,9 @@ export const RichTextEditorToolbar = ({
 
             {insertMenuItems.length > 1 ? (
               <>
-                <Separator aria-orientation="vertical" />
+                <div role="separator" className="hidden sm:block border-r border-border my-2" />
                 <Popover>
-                  <PopoverTrigger className="toolbar-item all-unset">
+                  <PopoverTrigger className="all-unset rounded px-2 py-1 hover:bg-active-bg">
                     Insert <Icon name="outline-cheveron-down" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -576,9 +580,14 @@ export const RichTextEditor = ({
   });
 
   return (
-    <div className="rich-text-editor" data-gumroad-ignore>
-      {editor ? <RichTextEditorToolbar editor={editor} /> : null}
-      <EditorContent className="rich-text" editor={editor} />
+    <div className="grid grid-rows-[max-content_1fr] min-h-56 rounded" data-gumroad-ignore>
+      {editor ? (
+        <RichTextEditorToolbar editor={editor} className="border border-b-0 rounded-t-[inherit] rounded-b-none" />
+      ) : null}
+      <EditorContent
+        className="rich-text [&>.tiptap.textarea]:rounded-t-none [&>.tiptap.textarea]:min-h-full [&>.tiptap.textarea:focus-within]:outline-2 [&>.tiptap.textarea:focus-within]:outline-accent"
+        editor={editor}
+      />
     </div>
   );
 };

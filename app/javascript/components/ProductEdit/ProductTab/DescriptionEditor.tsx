@@ -343,9 +343,18 @@ export const DescriptionEditor = ({
       <label htmlFor={uid}>Description</label>
       <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
         <ImageUploadSettingsContext.Provider value={imageSettings}>
-          <div className="rich-text-editor" data-gumroad-ignore>
-            {editor ? <RichTextEditorToolbar editor={editor} productId={id} /> : null}
-            <EditorContent className="rich-text" editor={editor} />
+          <div className="grid grid-rows-[max-content_1fr] min-h-56 rounded" data-gumroad-ignore>
+            {editor ? (
+              <RichTextEditorToolbar
+                editor={editor}
+                productId={id}
+                className="border border-b-0 rounded-t-[inherit] rounded-b-none"
+              />
+            ) : null}
+            <EditorContent
+              className="rich-text [&>.tiptap.textarea]:rounded-t-none [&>.tiptap.textarea]:min-h-full [&>.tiptap.textarea:focus-within]:outline-2 [&>.tiptap.textarea:focus-within]:outline-accent"
+              editor={editor}
+            />
           </div>
         </ImageUploadSettingsContext.Provider>
       </PublicFilesSettingsContext.Provider>
