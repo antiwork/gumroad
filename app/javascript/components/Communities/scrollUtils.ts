@@ -1,4 +1,3 @@
-// Utility function for scrolling to specific elements in the chat
 export const scrollTo = (
   to:
     | { target: "top" }
