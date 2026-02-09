@@ -37,12 +37,3 @@ export type CommunityDraft = {
   content: string;
   isSending: boolean;
 };
-
-export type CommunitiesPageProps = {
-  hasProducts: boolean;
-  communities: Community[];
-  notificationSettings: CommunityNotificationSettings;
-  selectedCommunityId: string | null;
-  messages: CommunityChatMessage[] | null;
-  hasOlderMessages: boolean;
-};
