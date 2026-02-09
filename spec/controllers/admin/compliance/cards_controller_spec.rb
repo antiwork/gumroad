@@ -29,12 +29,21 @@ describe Admin::Compliance::CardsController do
       it "enqueues jobs" do
         post :refund, params: { stripe_fingerprint: }
 
+        expect(RefundPurchaseWorker.jobs.size).to eq(1)
         expect(RefundPurchaseWorker).to have_enqueued_sidekiq_job(successful_purchase.id, @admin_user.id, Refund::FRAUD)
-        expect(RefundPurchaseWorker).to_not have_enqueued_sidekiq_job(failed_purchase.id, @admin_user.id, Refund::FRAUD)
-        expect(RefundPurchaseWorker).to_not have_enqueued_sidekiq_job(disputed_purchase.id, @admin_user.id, Refund::FRAUD)
-        expect(RefundPurchaseWorker).to_not have_enqueued_sidekiq_job(refunded_purchase.id, @admin_user.id, Refund::FRAUD)
 
         expect(response.parsed_body["success"]).to eq(true)
+      end
+
+      it "only refunds purchases from the last 6 months" do
+        create(:purchase, stripe_fingerprint:, created_at: 7.months.ago)
+        recent_purchase = create(:purchase, stripe_fingerprint:, created_at: 5.months.ago)
+
+        post :refund, params: { stripe_fingerprint: }
+
+        expect(RefundPurchaseWorker.jobs.size).to eq(2)
+        expect(RefundPurchaseWorker).to have_enqueued_sidekiq_job(successful_purchase.id, @admin_user.id, Refund::FRAUD)
+        expect(RefundPurchaseWorker).to have_enqueued_sidekiq_job(recent_purchase.id, @admin_user.id, Refund::FRAUD)
       end
     end
   end
