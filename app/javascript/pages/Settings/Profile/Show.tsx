@@ -5,7 +5,7 @@ import { cast } from "ts-safe-cast";
 import { unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile, ProfileSettings } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
-import { getContrastColor } from "$app/utils/color";
+import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -82,9 +82,6 @@ export default function SettingsPage() {
   });
 
   const subdomain = `${profileSettings.username}.${rootDomain}`;
-
-  const hexToRgb = (hex: string) =>
-    `${parseInt(hex.slice(1, 3), 16)} ${parseInt(hex.slice(3, 5), 16)} ${parseInt(hex.slice(5), 16)}`;
 
   return (
     <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate}>

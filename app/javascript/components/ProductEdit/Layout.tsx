@@ -5,7 +5,7 @@ import { Link, useMatches, useNavigate } from "react-router-dom";
 import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
-import { getContrastColor } from "$app/utils/color";
+import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -25,9 +25,6 @@ import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEntry, useProductEditContext } from "./state";
-
-const hexToRgb = (hex: string) =>
-  `${parseInt(hex.slice(1, 3), 16)} ${parseInt(hex.slice(3, 5), 16)} ${parseInt(hex.slice(5), 16)}`;
 
 export const useProductUrl = (params = {}) => {
   const { product, uniquePermalink } = useProductEditContext();

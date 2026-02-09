@@ -1,7 +1,7 @@
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { getContrastColor } from "$app/utils/color";
+import { getContrastColor, hexToRgb } from "$app/utils/color";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -16,9 +16,6 @@ import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
-
-const hexToRgb = (hex: string) =>
-  `${parseInt(hex.slice(1, 3), 16)} ${parseInt(hex.slice(3, 5), 16)} ${parseInt(hex.slice(5), 16)}`;
 
 export const useProductUrl = (uniquePermalink: string, customPermalink?: string | null) => {
   const currentSeller = useCurrentSeller();
