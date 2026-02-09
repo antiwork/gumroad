@@ -14,11 +14,13 @@ class Exports::AudienceExportService
 
   attr_reader :filename, :tempfile
 
+  BATCH_SIZE = 10_000
+
   def perform
     @tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
 
     CsvSafe.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
-      query = @user.audience_members.select(:id, :email, :min_created_at)
+      query = @user.audience_members
 
       conditions = []
       conditions << "follower = true" if @options[:followers]
@@ -27,8 +29,10 @@ class Exports::AudienceExportService
 
       query = query.where(conditions.join(" OR "))
 
-      query.order(:min_created_at).find_each do |member|
-        csv << [member.email, member.min_created_at]
+      query.in_batches(of: BATCH_SIZE) do |batch|
+        batch.pluck(:email, :min_created_at).each do |email, min_created_at|
+          csv << [email, min_created_at]
+        end
       end
     end
 

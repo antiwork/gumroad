@@ -103,5 +103,22 @@ describe Exports::AudienceExportService do
         expect { described_class.new(user, {}) }.to raise_error(ArgumentError, "At least one audience type (followers, customers, or affiliates) must be selected")
       end
     end
+
+    context "when audience exceeds batch size" do
+      let(:options) { { followers: true } }
+
+      it "exports all members across multiple batches" do
+        stub_const("Exports::AudienceExportService::BATCH_SIZE", 1)
+
+        second_follower = create(:active_follower, email: "follower2@example.com", user: user, created_at: 2.days.ago)
+
+        rows = CSV.parse(subject.perform.tempfile.read)
+
+        emails = rows[1..].map(&:first)
+        expect(emails).to include(follower.email)
+        expect(emails).to include(second_follower.email)
+        expect(rows.size).to eq(3)
+      end
+    end
   end
 end
