@@ -20,10 +20,10 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
 
       CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
 
-      expect(us_stripe_account_1.reload.unclaimed_balance_collection_transfer).to match(/^tr_/)
+      expect(us_stripe_account_1.reload.unclaimed_balance_collection_transfer_id).to match(/^tr_/)
       expect(us_stripe_account_1.user.unpaid_balances.where(merchant_account_id: us_stripe_account_1.id).sum(:holding_amount_cents)).to eq 0
       expect(us_stripe_account_1.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 100_00
-      expect(us_stripe_account_2.reload.unclaimed_balance_collection_transfer).to match(/^tr_/)
+      expect(us_stripe_account_2.reload.unclaimed_balance_collection_transfer_id).to match(/^tr_/)
       expect(us_stripe_account_2.user.unpaid_balances.where(merchant_account_id: us_stripe_account_2.id).sum(:holding_amount_cents)).to eq 0
       expect(us_stripe_account_2.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 200_00
     end
@@ -89,10 +89,10 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
 
       CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
 
-      expect(us_stripe_account_1.reload.unclaimed_balance_collection_transfer).to be nil
+      expect(us_stripe_account_1.reload.unclaimed_balance_collection_transfer_id).to be nil
       expect(us_stripe_account_1.user.unpaid_balances.where(merchant_account_id: us_stripe_account_1.id).sum(:holding_amount_cents)).to eq 100_00
       expect(us_stripe_account_1.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 0
-      expect(us_stripe_account_2.reload.unclaimed_balance_collection_transfer).to match(/^tr_/)
+      expect(us_stripe_account_2.reload.unclaimed_balance_collection_transfer_id).to match(/^tr_/)
       expect(us_stripe_account_2.user.unpaid_balances.where(merchant_account_id: us_stripe_account_2.id).sum(:holding_amount_cents)).to eq 0
       expect(us_stripe_account_2.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 200_00
     end
@@ -112,10 +112,10 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
 
       CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
 
-      expect(us_stripe_account_1.reload.unclaimed_balance_collection_transfer).to match(/^tr_/)
+      expect(us_stripe_account_1.reload.unclaimed_balance_collection_transfer_id).to match(/^tr_/)
       expect(us_stripe_account_1.user.unpaid_balances.where(merchant_account_id: us_stripe_account_1.id).sum(:holding_amount_cents)).to eq 0
       expect(us_stripe_account_1.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 100_00
-      expect(us_stripe_account_2.reload.unclaimed_balance_collection_transfer).to be nil
+      expect(us_stripe_account_2.reload.unclaimed_balance_collection_transfer_id).to be nil
       expect(us_stripe_account_2.user.unpaid_balances.where(merchant_account_id: us_stripe_account_2.id).sum(:holding_amount_cents)).to eq 200_00
       expect(us_stripe_account_2.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 0
     end
@@ -126,7 +126,7 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       us_stripe_account_2 = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SOZihINUYgu4sRU", created_at: 1.month.ago)
       create(:balance, user: us_stripe_account_2.user, merchant_account: us_stripe_account_2, amount_cents: 200_00)
 
-      us_stripe_account_1.update!(unclaimed_balance_collection_transfer: "tr_12345")
+      us_stripe_account_1.update!(unclaimed_balance_collection_transfer_id: "tr_12345")
 
       expect(Stripe::Account).to receive(:retrieve).once.and_call_original
       expect(Stripe::Payout).to receive(:list).once.and_return(double(data: []))
@@ -136,10 +136,10 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
 
       CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
 
-      expect(us_stripe_account_1.reload.unclaimed_balance_collection_transfer).to eq "tr_12345"
+      expect(us_stripe_account_1.reload.unclaimed_balance_collection_transfer_id).to eq "tr_12345"
       expect(us_stripe_account_1.user.unpaid_balances.where(merchant_account_id: us_stripe_account_1.id).sum(:holding_amount_cents)).to eq 100_00
       expect(us_stripe_account_1.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 0
-      expect(us_stripe_account_2.reload.unclaimed_balance_collection_transfer).to match(/^tr_/)
+      expect(us_stripe_account_2.reload.unclaimed_balance_collection_transfer_id).to match(/^tr_/)
       expect(us_stripe_account_2.user.unpaid_balances.where(merchant_account_id: us_stripe_account_2.id).sum(:holding_amount_cents)).to eq 0
       expect(us_stripe_account_2.user.unpaid_balances.where(merchant_account_id: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).id).sum(:holding_amount_cents)).to eq 200_00
     end
@@ -177,6 +177,19 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       expect(Stripe::Account).to receive(:retrieve).and_call_original
       expect(Stripe::Payout).to receive(:list).and_call_original
       expect(Stripe::Charge).to receive(:list).and_call_original
+      expect(Stripe::Balance).not_to receive(:retrieve)
+      expect(Stripe::Transfer).not_to receive(:create)
+
+      CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
+    end
+
+    it "does not attempt to collect balance if the Stripe account is a standard Stripe account" do
+      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SOb0DEwFhlcVS6d", created_at: 2.months.ago)
+      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+
+      expect(Stripe::Account).to receive(:retrieve).and_call_original
+      expect(Stripe::Payout).not_to receive(:list).and_call_original
+      expect(Stripe::Charge).not_to receive(:list).and_call_original
       expect(Stripe::Balance).not_to receive(:retrieve)
       expect(Stripe::Transfer).not_to receive(:create)
 

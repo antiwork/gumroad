@@ -4,25 +4,24 @@ class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :default
 
+  # Stripe considers these accounts inactive after >=3 years, so we use the same time frame.
+  # Ref: https://support.stripe.com/questions/unclaimed-balances-faqs-for-platforms
   STRIPE_ACCOUNT_INACTIVE_AFTER_DURATION = 3.years
 
   def perform
     MerchantAccount.stripe
                    .where(country: Compliance::Countries::USA.alpha2)
                    .where.not(charge_processor_merchant_id: nil)
-                   .where("json_data->>'$.unclaimed_balance_collection_transfer' IS NULL")
+                   .where.not("json_data LIKE '%stripe_connect%'")
+                   .where("json_data->>'$.unclaimed_balance_collection_transfer_id' IS NULL")
                    .where("created_at < ?", Time.current - STRIPE_ACCOUNT_INACTIVE_AFTER_DURATION)
                    .find_each do |merchant_account|
-      stripe_account_id = merchant_account.charge_processor_merchant_id
-      next if stripe_account_id.blank?
-      next unless merchant_account.country == Compliance::Countries::USA.alpha2
-      next unless merchant_account.currency == Currency::USD
-      next if merchant_account.unclaimed_balance_collection_transfer.present?
-
       next if [merchant_account.user.sales.successful.last&.created_at.to_i,
                merchant_account.user.payments.completed.last&.created_at.to_i].max > (Time.current - STRIPE_ACCOUNT_INACTIVE_AFTER_DURATION).to_i
 
+      stripe_account_id = merchant_account.charge_processor_merchant_id
       stripe_account = Stripe::Account.retrieve(stripe_account_id)
+      next if stripe_account&.type == "standard"
       next if stripe_account&.created.to_i > (Time.current - STRIPE_ACCOUNT_INACTIVE_AFTER_DURATION).to_i
 
       last_payout_on_stripe = Stripe::Payout.list({ limit: 1 }, { stripe_account: stripe_account_id }).data[0]
@@ -44,7 +43,7 @@ class CollectUnclaimedBalancesOfInactiveStripeAccountsJob
                                            description: "Collect unclaimed balance of inactive account",
                                            destination: STRIPE_PLATFORM_ACCOUNT_ID,
                                          }, { stripe_account: stripe_account_id })
-      merchant_account.update!(unclaimed_balance_collection_transfer: transfer.id)
+      merchant_account.update!(unclaimed_balance_collection_transfer_id: transfer.id)
 
       # Move the unpaid balances in our records to be against Gumroad's platform Stripe account,
       # as the money has been moved to Gumroad's platform Stripe account with the above transfer.
