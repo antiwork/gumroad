@@ -209,7 +209,7 @@ class Payment < ApplicationRecord
     end
 
     if options[:include_transactions]
-      json[:transactions] = transactions
+      json[:transactions] = Exports::Payouts::Api.new(self).perform
     end
 
     json
@@ -234,10 +234,6 @@ class Payment < ApplicationRecord
             .includes(:link)
             .distinct
             .order(created_at: :desc, id: :desc)
-  end
-
-  def transactions
-    Exports::Payouts::Api.new(self).perform
   end
 
   private

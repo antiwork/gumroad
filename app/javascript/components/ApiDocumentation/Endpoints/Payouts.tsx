@@ -105,7 +105,7 @@ export const GetPayout = () => (
       />
       <ApiParameter
         name="include_transactions"
-        description='(optional, default: "false") - Set to "true" to include the same transaction details as exported payout CSV in the response. All balance transactions included in the payout will be listed in a "transactions" array. Each transaction will be in format: ["Type", "Date", "Purchase ID", "Item Name", "Buyer Name", "Buyer Email", "Taxes ($)", "Shipping ($)", "Sale Price ($)", "Gumroad Fees ($)", "Net Total ($)"]. The "Type" of transactions can be "Sale", "Chargeback", "Full Refund", "Partial Refund", "PayPal Refund", "Stripe Connect Refund", "Affiliate Credit", "PayPal Connect Affiliate Fees", "Stripe Connect Affiliate Fees", "PayPal Payouts", "Stripe Connect Payouts", "Credit", "Payout Fee", and "Technical Adjustment".'
+        description='(optional, default: "false") - Set to "true" to include the same transaction details in the response as exported payout CSV. All balance-affecting transactions included in the payout will be listed in a "transactions" array. Each transaction will have these keys: { type:, date:, purchase_id:, item_name:, buyer_name:, buyer_email:, taxes:, shipping:, sale_price:, gumroad_fees:, net_total: }. The "type" of transactions can be "Sale", "Chargeback", "Full Refund", "Partial Refund", "PayPal Refund", "Stripe Connect Refund", "Affiliate Credit", "PayPal Connect Affiliate Fees", "Stripe Connect Affiliate Fees", "PayPal Payouts", "Stripe Connect Payouts", "Credit", "Payout Fee", and "Technical Adjustment".'
       />
     </ApiParameters>
     <CodeSnippet caption="cURL example">
@@ -128,49 +128,74 @@ export const GetPayout = () => (
     "sales": ["A-m3CDDC5dlrSdKZp0RFhA==", "mN7CdHiwHaR9FlxKvF-n-g=="],
     "refunded_sales": ["mN7CdHiwHaR9FlxKvF-n-g=="],
     "disputed_sales": ["A-m3CDDC5dlrSdKZp0RFhA=="],
-    "transactions": [[
-          "Sale",
-          "2021-01-04",
-          "A-m3CDDC5dlrSdKZp0RFhA==",
-          "Beautiful widget",
-          "Jane Doe",
-          "jane@example.com",
-          0, 0, 200, 26.6, 173.4],
-        [
-          "Sale",
-          "2021-01-05",
-          "mN7CdHiwHaR9FlxKvF-n-g==",
-          "Demo",
-          "John Doe",
-          "john@example.com",
-          0, 0, 10, 2.09, 7.91],
-        [
-          "Full Refund",
-          "2021-01-05",
-          "mN7CdHiwHaR9FlxKvF-n-g==",
-          "Demo",
-          "John Doe",
-          "john@example.com",
-          0, 0, -10, 2.09, -7.91],
-        [
-          "Chargeback",
-          "2021-01-05",
-          "A-m3CDDC5dlrSdKZp0RFhA== ",
-          "Demo",
-          "John Doe",
-          "john@example.com",
-          0, 0, -200, 26.6, -173.4],
-        [
-          "PayPal Payouts",
-          "2021-01-06",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          -667, "",
-          -667]]
+    "transactions": [
+      {
+        "type": "Sale",
+        "date": "2021-01-04",
+        "purchase_id": "A-m3CDDC5dlrSdKZp0RFhA==",
+        "item_name": "Beautiful widget",
+        "buyer_name": "Jane Doe",
+        "buyer_email": "jane@example.com",
+        "taxes": 0.0,
+        "shipping": 0.0,
+        "sale_price": 200.0,
+        "gumroad_fees": 26.6,
+        "net_total": 173.4
+      },
+      {
+        "type": "Sale",
+        "date": "2021-01-05",
+        "purchase_id": "mN7CdHiwHaR9FlxKvF-n-g==",
+        "item_name": "Demo",
+        "buyer_name": "John Doe",
+        "buyer_email": "john@example.com",
+        "taxes": 0.0,
+        "shipping": 0.0,
+        "sale_price": 10.0,
+        "gumroad_fees": 2.09,
+        "net_total": 7.91
+      },
+      {
+        "type": "Full Refund",
+        "date": "2021-01-05",
+        "purchase_id": "mN7CdHiwHaR9FlxKvF-n-g==",
+        "item_name": "Demo",
+        "buyer_name": "John Doe",
+        "buyer_email": "john@example.com",
+        "taxes": 0.0,
+        "shipping": 0.0,
+        "sale_price": -10,
+        "gumroad_fees": 2.09,
+        "net_total": -7.91
+      },
+      {
+        "type": "Chargeback",
+        "date": "2021-01-05",
+        "purchase_id": "A-m3CDDC5dlrSdKZp0RFhA==",
+        "item_name": "Beautiful widget",
+        "buyer_name": "Jane Doe",
+        "buyer_email": "jane@example.com",
+        "taxes": 0.0,
+        "shipping": 0.0,
+        "sale_price": -200.0,
+        "gumroad_fees": 26.6,
+        "net_total": -173.4
+      },
+      {
+        "type": "PayPal Payouts",
+        "date": "2021-01-06",
+        "purchase_id": "",
+        "item_name": "",
+        "buyer_name": "",
+        "buyer_email": "",
+        "taxes": "",
+        "shipping": "",
+        "sale_price": -667.0,
+        "gumroad_fees": "",
+        "net_total": -667.0
+      },
+      ...
+    ]
   }
 }`}
     </CodeSnippet>
@@ -190,7 +215,7 @@ export const GetUpcomingPayouts = () => (
       />
       <ApiParameter
         name="include_transactions"
-        description='(optional, default: "false") - Set to "true" to include the same transaction details as exported payout CSV in the response. All balance transactions included in the payout will be listed in a "transactions" array. Each transaction will be in format: ["Type", "Date", "Purchase ID", "Item Name", "Buyer Name", "Buyer Email", "Taxes ($)", "Shipping ($)", "Sale Price ($)", "Gumroad Fees ($)", "Net Total ($)"]. The "Type" of transactions can be "Sale", "Chargeback", "Full Refund", "Partial Refund", "PayPal Refund", "Stripe Connect Refund", "Affiliate Credit", "PayPal Connect Affiliate Fees", "Stripe Connect Affiliate Fees", "PayPal Payouts", "Stripe Connect Payouts", "Credit", "Payout Fee", and "Technical Adjustment".'
+        description='(optional, default: "false") - Set to "true" to include the same transaction details in the response as exported payout CSV. All balance-affecting transactions included in the payout will be listed in a "transactions" array. Each transaction will have these keys: { type:, date:, purchase_id:, item_name:, buyer_name:, buyer_email:, taxes:, shipping:, sale_price:, gumroad_fees:, net_total: }. The "type" of transactions can be "Sale", "Chargeback", "Full Refund", "Partial Refund", "PayPal Refund", "Stripe Connect Refund", "Affiliate Credit", "PayPal Connect Affiliate Fees", "Stripe Connect Affiliate Fees", "PayPal Payouts", "Stripe Connect Payouts", "Credit", "Payout Fee", and "Technical Adjustment".'
       />
     </ApiParameters>
     <CodeSnippet caption="cURL example">
@@ -202,115 +227,167 @@ export const GetUpcomingPayouts = () => (
     <CodeSnippet caption="Example response:">
       {`{
   "success": true,
-  "payouts": [{
-    "id": null,
-    "amount": "150.00",
-    "currency": "USD",
-    "status": "payable",
-    "created_at": "2021-01-15T19:38:56Z",
-    "processed_at": "2021-01-16T10:15:30Z",
-    "payment_processor": "stripe",
-    "sales": ["A-m3CDDC5dlrSdKZp0RFhA==", "mN7CdHiwHaR9FlxKvF-n-g=="],
-    "refunded_sales": ["mN7CdHiwHaR9FlxKvF-n-g=="],
-    "disputed_sales": ["A-m3CDDC5dlrSdKZp0RFhA=="],
-    "transactions": [[
-          "Sale",
-          "2021-01-04",
-          "A-m3CDDC5dlrSdKZp0RFhA==",
-          "Beautiful widget",
-          "Jane Doe",
-          "jane@example.com",
-          0, 0, 200, 26.6, 173.4],
-        [
-          "Sale",
-          "2021-01-05",
-          "mN7CdHiwHaR9FlxKvF-n-g==",
-          "Demo",
-          "John Doe",
-          "john@example.com",
-          0, 0, 10, 2.09, 7.91],
-        [
-          "Full Refund",
-          "2021-01-05",
-          "mN7CdHiwHaR9FlxKvF-n-g==",
-          "Demo",
-          "John Doe",
-          "john@example.com",
-          0, 0, -10, 2.09, -7.91],
-        [
-          "Chargeback",
-          "2021-01-05",
-          "A-m3CDDC5dlrSdKZp0RFhA== ",
-          "Demo",
-          "John Doe",
-          "john@example.com",
-          0, 0, -200, 26.6, -173.4],
-        [
-          "PayPal Payouts",
-          "2021-01-06",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          -667, "",
-          -667]]
-  }, {
-    "id": null,
-    "amount": "275.50",
-    "currency": "USD",
-    "status": "payable",
-    "created_at": "2021-01-22T19:38:56Z",
-    "processed_at": "2021-01-23T10:15:30Z",
-    "payment_processor": "stripe",
-    "sales": ["A-m3CDDC5dlrSdKZp0RFhA==", "mN7CdHiwHaR9FlxKvF-n-g=="],
-    "refunded_sales": ["mN7CdHiwHaR9FlxKvF-n-g=="],
-    "disputed_sales": ["A-m3CDDC5dlrSdKZp0RFhA=="],
-    "transactions": [[
-          "Sale",
-          "2021-01-04",
-          "A-m3CDDC5dlrSdKZp0RFhA==",
-          "Beautiful widget",
-          "Jane Doe",
-          "jane@example.com",
-          0, 0, 200, 26.6, 173.4],
-        [
-          "Sale",
-          "2021-01-05",
-          "mN7CdHiwHaR9FlxKvF-n-g==",
-          "Demo",
-          "John Doe",
-          "john@example.com",
-          0, 0, 10, 2.09, 7.91],
-        [
-          "Full Refund",
-          "2021-01-05",
-          "mN7CdHiwHaR9FlxKvF-n-g==",
-          "Demo",
-          "John Doe",
-          "john@example.com",
-          0, 0, -10, 2.09, -7.91],
-        [
-          "Chargeback",
-          "2021-01-05",
-          "A-m3CDDC5dlrSdKZp0RFhA== ",
-          "Demo",
-          "John Doe",
-          "john@example.com",
-          0, 0, -200, 26.6, -173.4],
-        [
-          "PayPal Payouts",
-          "2021-01-06",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          -667, "",
-          -667]]
-  }]
+  "payouts": [
+    {
+      "id": null,
+      "amount": "150.00",
+      "currency": "USD",
+      "status": "payable",
+      "created_at": "2021-01-15T19:38:56Z",
+      "processed_at": null,
+      "payment_processor": "stripe",
+      "sales": ["A-m3CDDC5dlrSdKZp0RFhA==", "mN7CdHiwHaR9FlxKvF-n-g=="],
+      "refunded_sales": ["mN7CdHiwHaR9FlxKvF-n-g=="],
+      "disputed_sales": ["A-m3CDDC5dlrSdKZp0RFhA=="],
+      "transactions": [
+        {
+          "type": "Sale",
+          "date": "2021-01-04",
+          "purchase_id": "A-m3CDDC5dlrSdKZp0RFhA==",
+          "item_name": "Beautiful widget",
+          "buyer_name": "Jane Doe",
+          "buyer_email": "jane@example.com",
+          "taxes": 0.0,
+          "shipping": 0.0,
+          "sale_price": 200.0,
+          "gumroad_fees": 26.6,
+          "net_total": 173.4
+        },
+        {
+          "type": "Sale",
+          "date": "2021-01-05",
+          "purchase_id": "mN7CdHiwHaR9FlxKvF-n-g==",
+          "item_name": "Demo",
+          "buyer_name": "John Doe",
+          "buyer_email": "john@example.com",
+          "taxes": 0.0,
+          "shipping": 0.0,
+          "sale_price": 10.0,
+          "gumroad_fees": 2.09,
+          "net_total": 7.91
+        },
+        {
+          "type": "Full Refund",
+          "date": "2021-01-05",
+          "purchase_id": "mN7CdHiwHaR9FlxKvF-n-g==",
+          "item_name": "Demo",
+          "buyer_name": "John Doe",
+          "buyer_email": "john@example.com",
+          "taxes": 0.0,
+          "shipping": 0.0,
+          "sale_price": -10,
+          "gumroad_fees": 2.09,
+          "net_total": -7.91
+        },
+        {
+          "type": "Chargeback",
+          "date": "2021-01-05",
+          "purchase_id": "A-m3CDDC5dlrSdKZp0RFhA==",
+          "item_name": "Beautiful widget",
+          "buyer_name": "Jane Doe",
+          "buyer_email": "jane@example.com",
+          "taxes": 0.0,
+          "shipping": 0.0,
+          "sale_price": -200.0,
+          "gumroad_fees": 26.6,
+          "net_total": -173.4
+        },
+        {
+          "type": "PayPal Payouts",
+          "date": "2021-01-06",
+          "purchase_id": "",
+          "item_name": "",
+          "buyer_name": "",
+          "buyer_email": "",
+          "taxes": "",
+          "shipping": "",
+          "sale_price": -667.0,
+          "gumroad_fees": "",
+          "net_total": -667.0
+        },
+        ...
+      ]
+    }, {
+      "id": null,
+      "amount": "275.50",
+      "currency": "USD",
+      "status": "payable",
+      "created_at": "2021-01-22T19:38:56Z",
+      "processed_at": null,
+      "payment_processor": "stripe",
+      "sales": ["A-m3CDDC5dlrSdKZp0RFhA==", "mN7CdHiwHaR9FlxKvF-n-g=="],
+      "refunded_sales": ["mN7CdHiwHaR9FlxKvF-n-g=="],
+      "disputed_sales": ["A-m3CDDC5dlrSdKZp0RFhA=="],
+      "transactions": [
+        {
+          "type": "Sale",
+          "date": "2021-01-04",
+          "purchase_id": "A-m3CDDC5dlrSdKZp0RFhA==",
+          "item_name": "Beautiful widget",
+          "buyer_name": "Jane Doe",
+          "buyer_email": "jane@example.com",
+          "taxes": 0.0,
+          "shipping": 0.0,
+          "sale_price": 200.0,
+          "gumroad_fees": 26.6,
+          "net_total": 173.4
+        },
+        {
+          "type": "Sale",
+          "date": "2021-01-05",
+          "purchase_id": "mN7CdHiwHaR9FlxKvF-n-g==",
+          "item_name": "Demo",
+          "buyer_name": "John Doe",
+          "buyer_email": "john@example.com",
+          "taxes": 0.0,
+          "shipping": 0.0,
+          "sale_price": 10.0,
+          "gumroad_fees": 2.09,
+          "net_total": 7.91
+        },
+        {
+          "type": "Full Refund",
+          "date": "2021-01-05",
+          "purchase_id": "mN7CdHiwHaR9FlxKvF-n-g==",
+          "item_name": "Demo",
+          "buyer_name": "John Doe",
+          "buyer_email": "john@example.com",
+          "taxes": 0.0,
+          "shipping": 0.0,
+          "sale_price": -10,
+          "gumroad_fees": 2.09,
+          "net_total": -7.91
+        },
+        {
+          "type": "Chargeback",
+          "date": "2021-01-05",
+          "purchase_id": "A-m3CDDC5dlrSdKZp0RFhA==",
+          "item_name": "Beautiful widget",
+          "buyer_name": "Jane Doe",
+          "buyer_email": "jane@example.com",
+          "taxes": 0.0,
+          "shipping": 0.0,
+          "sale_price": -200.0,
+          "gumroad_fees": 26.6,
+          "net_total": -173.4
+        },
+        {
+          "type": "PayPal Payouts",
+          "date": "2021-01-06",
+          "purchase_id": "",
+          "item_name": "",
+          "buyer_name": "",
+          "buyer_email": "",
+          "taxes": "",
+          "shipping": "",
+          "sale_price": -667.0,
+          "gumroad_fees": "",
+          "net_total": -667.0
+        },
+        ...
+      ]
+    }
+  ]
 }`}
     </CodeSnippet>
   </ApiEndpoint>
