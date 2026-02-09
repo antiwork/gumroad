@@ -144,6 +144,28 @@ describe UserComplianceInfo do
         end
       end
     end
+
+    describe "legal_entity_state_code" do
+      describe "is an individual" do
+        let(:user_compliance_info) { create(:user_compliance_info, country: "Canada", state: "Ontario") }
+
+        it "returns the individual state code" do
+          expect(user_compliance_info.legal_entity_state_code).to eq("ON")
+        end
+      end
+
+      describe "is a business" do
+        let(:user_compliance_info) do create(:user_compliance_info_business,
+                                             country: "Canada",
+                                             state: "Ontario",
+                                             business_country: "United States",
+                                             business_state: "New York") end
+
+        it "returns the business state code" do
+          expect(user_compliance_info.legal_entity_state_code).to eq("NY")
+        end
+      end
+    end
   end
 
   describe "legal_entity_payable_business_type" do
