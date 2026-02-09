@@ -24,7 +24,7 @@ import { Link, Button as TiptapButton } from "$app/components/TiptapExtensions/L
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
-import { WithTooltip } from "$app/components/WithTooltip";
+import { WithTooltip, Alignment } from "$app/components/WithTooltip";
 
 import { Raw } from "./TiptapExtensions/MediaEmbed";
 
@@ -48,7 +48,7 @@ export const useImageUploadSettings = () => React.useContext(ImageUploadSettings
 
 const TOOLBAR_TOOLTIP_DEFAULT_DELAY = 800; // in milliseconds
 
-const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.ReactNode }) => {
+const MenuItemTooltip = ({ tip, align, children }: { tip: string; align?: Alignment | undefined; children: React.ReactNode }) => {
   const [showTooltip, setShowTooltip] = assertDefined(React.useContext(ToolbarTooltipContext));
 
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
@@ -65,7 +65,7 @@ const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.React
   };
 
   return (
-    <WithTooltip position="bottom" tip={showTooltip ? tip : null}>
+    <WithTooltip position="bottom" align={align} tip={showTooltip ? tip : null}>
       <span onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         {children}
       </span>
@@ -78,15 +78,17 @@ export const MenuItem = ({
   icon,
   active,
   disabled,
+  align,
   onClick,
 }: {
   name: string;
   icon: IconName;
   active?: boolean;
   disabled?: boolean;
+  align?: Alignment | undefined;
   onClick?: () => void;
 }) => (
-  <MenuItemTooltip tip={name}>
+  <MenuItemTooltip tip={name} align={align}>
     <button
       type="button"
       className="toolbar-item cursor-pointer all-unset"
@@ -519,6 +521,7 @@ export const RichTextEditorToolbar = ({
             icon="redo"
             active={editor.isActive("redo")}
             disabled={redoDepth(editor.state) === 0}
+            align="end"
             onClick={() => editor.chain().focus().redo().run()}
           />
         </div>
