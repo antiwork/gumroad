@@ -2,7 +2,7 @@
 
 class Iffy::Product::IngestJob
   include Sidekiq::Job
-  sidekiq_options queue: :default, retry: 3
+  sidekiq_options queue: :long, retry: 3
 
   def perform(product_id)
     product = Link.find(product_id)

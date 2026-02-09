@@ -887,32 +887,23 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                     />
                   </label>
                 ) : null}
-                <label htmlFor={`${uid}-channel_profile`}>
-                  Post to profile
-                  <WithTooltip
-                    tip={
-                      audienceType === "everyone"
-                        ? "This post will be visible to anyone who visits your profile."
-                        : audienceType === "customers"
-                          ? "This post will be visible to your logged-in customers only."
-                          : audienceType === "followers"
-                            ? "This post will be visible to your logged-in followers only."
-                            : "This post will be visible to your logged-in affiliates only."
-                    }
-                    position="top"
-                  >
-                    (?)
-                  </WithTooltip>
-                  <input
-                    id={`${uid}-channel_profile`}
-                    type="checkbox"
-                    checked={channel.profile}
-                    onChange={(event) => {
-                      setChannel((prev) => ({ ...prev, profile: event.target.checked }));
-                      markFieldAsValid("channel");
-                    }}
-                  />
-                </label>
+                {audienceType === "everyone" ? (
+                  <label htmlFor={`${uid}-channel_profile`}>
+                    Post to profile
+                    <WithTooltip tip="This post will be visible to anyone who visits your profile." position="top">
+                      (?)
+                    </WithTooltip>
+                    <input
+                      id={`${uid}-channel_profile`}
+                      type="checkbox"
+                      checked={channel.profile}
+                      onChange={(event) => {
+                        setChannel((prev) => ({ ...prev, profile: event.target.checked }));
+                        markFieldAsValid("channel");
+                      }}
+                    />
+                  </label>
+                ) : null}
                 {audienceType === "everyone" && channel.profile ? (
                   context.profile_sections.length > 0 ? (
                     <>
