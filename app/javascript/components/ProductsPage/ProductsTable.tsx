@@ -79,7 +79,7 @@ export const ProductsPageProductsTable = (props: {
 
   const reloadProducts = () => loadProducts(pagination.page);
 
-  if (!products.length) return null;
+  if (!products.length) return <div aria-live="polite" />;
 
   return (
     <div className="flex flex-col gap-4">

@@ -79,7 +79,7 @@ export const ProductsPageMembershipsTable = (props: {
 
   const reloadMemberships = () => loadMemberships(pagination.page);
 
-  if (!memberships.length) return null;
+  if (!memberships.length) return <div aria-live="polite" />;
 
   return (
     <section className="flex flex-col gap-4">
