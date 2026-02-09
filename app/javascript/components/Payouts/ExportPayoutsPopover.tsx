@@ -7,11 +7,11 @@ import { assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => void }) => {
+const ExportPayoutsPopoverContent = () => {
   const currentYear = new Date().getFullYear();
   const [yearsWithPayouts, setYearsWithPayouts] = React.useState<number[]>([currentYear]);
   const [selectedYear, setSelectedYear] = React.useState<number>(currentYear);
@@ -65,7 +65,6 @@ const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => voi
 
     try {
       await exportPayouts(Array.from(selectedPayouts));
-      closePopover();
       showAlert("You will receive an email in your inbox shortly with the data you've requested.", "success");
     } catch (e) {
       assertResponseError(e);
@@ -133,38 +132,32 @@ const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => voi
         >
           {payouts.length && selectedPayouts.size === payouts.length ? "Deselect all" : "Select all"}
         </Button>
-        <Button
-          color="primary"
-          onClick={handleDownload}
-          disabled={selectedPayouts.size === 0 || isLoading || isDownloading}
-          className="flex-1"
-        >
-          {isDownloading ? <LoadingSpinner /> : "Download"}
-        </Button>
+        <PopoverClose asChild>
+          <Button
+            color="primary"
+            onClick={handleDownload}
+            disabled={selectedPayouts.size === 0 || isLoading || isDownloading}
+            className="flex-1"
+          >
+            {isDownloading ? <LoadingSpinner /> : "Download"}
+          </Button>
+        </PopoverClose>
       </footer>
     </div>
   );
 };
 
-export const ExportPayoutsPopover = () => {
-  const [isOpen, setIsOpen] = React.useState(false);
-
-  const closePopover = () => {
-    setIsOpen(false);
-  };
-
-  return (
-    <Popover
-      aria-label="Bulk export"
-      open={isOpen}
-      onToggle={setIsOpen}
-      trigger={
-        <Button aria-label="Bulk export">
+export const ExportPayoutsPopover = () => (
+  <Popover>
+    <PopoverAnchor>
+      <PopoverTrigger aria-label="Bulk export" asChild>
+        <Button>
           <Icon name="download" />
         </Button>
-      }
-    >
-      {isOpen ? <ExportPayoutsPopoverContent closePopover={closePopover} /> : null}
-    </Popover>
-  );
-};
+      </PopoverTrigger>
+    </PopoverAnchor>
+    <PopoverContent sideOffset={4}>
+      <ExportPayoutsPopoverContent />
+    </PopoverContent>
+  </Popover>
+);

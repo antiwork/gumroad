@@ -120,6 +120,7 @@ describe PostPresenter do
           }
         },
         comments_max_allowed_depth: 4,
+        custom_styles: @creator.seller_profile.custom_styles,
       )
     end
 

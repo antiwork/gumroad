@@ -180,8 +180,8 @@ class CustomersController < Sellers::BaseController
         .load
     end
 
-    def set_title
-      @title = "Sales"
+    def set_default_page_title
+      set_meta_tag(title: "Sales")
     end
 
     def set_on_page_type

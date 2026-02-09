@@ -134,11 +134,13 @@ const SellerCustomFields = ({ seller, className }: { seller: Creator; className?
     state.products.filter(({ creator }) => creator.id === seller.id),
   );
 
+  if (sharedCustomFields.length === 0 && customFieldGroups.length === 0) return null;
+
   return sharedCustomFields.length > 0 ? (
     <div className={className}>
       <section className="flex grow flex-col gap-4">
-        <h4 className="font-bold">
-          <img className="user-avatar" src={seller.avatar_url} />
+        <h4 className="text-base sm:text-lg">
+          <img className="user-avatar h-8 !w-8" src={seller.avatar_url} />
           &ensp;
           {seller.name}
         </h4>
@@ -167,7 +169,7 @@ const SellerCustomFields = ({ seller, className }: { seller: Creator; className?
     customFieldGroups.map(({ product, customFields }) => (
       <div key={`${product.permalink}-${product.bundleProductId}`} className={className}>
         <section className="flex grow flex-col gap-4">
-          <h4 className="font-bold">{product.name}</h4>
+          <h4 className="text-base sm:text-lg">{product.name}</h4>
           {customFields.map((field) => (
             <CustomField key={field.id} field={field} fieldKey={getCustomFieldKey(field, product)} />
           ))}
@@ -185,5 +187,20 @@ export const CustomFields = ({ className }: { className?: string | undefined }) 
     "id",
   );
 
-  return sellers.map((seller) => <SellerCustomFields key={seller.id} seller={seller} className={className} />);
+  const hasAnyCustomFields = sellers.some((seller) => {
+    const { sharedCustomFields, customFieldGroups } = getCustomFields(
+      state.products.filter(({ creator }) => creator.id === seller.id),
+    );
+    return sharedCustomFields.length > 0 || customFieldGroups.length > 0;
+  });
+
+  if (!hasAnyCustomFields) return null;
+
+  return (
+    <Card>
+      {sellers.map((seller) => (
+        <SellerCustomFields key={seller.id} seller={seller} className={className} />
+      ))}
+    </Card>
+  );
 };

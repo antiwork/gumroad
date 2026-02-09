@@ -219,6 +219,7 @@ class SettingsPresenter
       payouts_paused_by_user: seller.payouts_paused_by_user?,
       payout_threshold_cents: seller.minimum_payout_amount_cents,
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
+      payout_country_name: Compliance::Countries.for_select.to_h[seller.alive_user_compliance_info&.legal_entity_country_code],
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
     }
@@ -286,6 +287,7 @@ class SettingsPresenter
         business_type: user_compliance_info.business_type,
         business_street_address: user_compliance_info.business_street_address,
         business_building_number: user_compliance_info.business_building_number,
+        business_building_number_kana: user_compliance_info.business_building_number_kana,
         business_street_address_kanji: user_compliance_info.business_street_address_kanji,
         business_street_address_kana: user_compliance_info.business_street_address_kana,
         business_city: user_compliance_info.business_city,
@@ -302,6 +304,7 @@ class SettingsPresenter
         last_name_kana: user_compliance_info.last_name_kana,
         street_address: user_compliance_info.street_address,
         building_number: user_compliance_info.building_number,
+        building_number_kana: user_compliance_info.building_number_kana,
         street_address_kanji: user_compliance_info.street_address_kanji,
         street_address_kana: user_compliance_info.street_address_kana,
         city: user_compliance_info.city,
@@ -393,6 +396,7 @@ class SettingsPresenter
         ae: Compliance::Countries.subdivisions_for_select(Compliance::Countries::ARE.alpha2).map { |code, name| { code:, name: } },
         ir: Compliance::Countries.subdivisions_for_select(Compliance::Countries::IRL.alpha2).map { |code, name| { code:, name: } },
         br: Compliance::Countries.subdivisions_for_select(Compliance::Countries::BRA.alpha2).map { |code, name| { code:, name: } },
+        jp: Compliance::Countries.japan_prefectures_for_select,
       }
     end
 

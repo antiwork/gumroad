@@ -68,5 +68,5 @@ function PasswordReset() {
   );
 }
 
-PasswordReset.disableLayout = true;
+PasswordReset.publicLayout = true;
 export default PasswordReset;
