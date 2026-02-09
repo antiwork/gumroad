@@ -10,10 +10,12 @@ import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sort } from "$app/components/useSortingTableDriver";
 
 import ProductsPage from "./ProductsPage";
+import { useProductsSearch } from "./ProductsPage/useProductsSearch";
 
 import placeholder from "$assets/images/product_nudge.svg";
 
 export type ProductsDashboardPageProps = {
+  has_products: boolean;
   products_data: {
     products: Product[];
     pagination: PaginationProps;
@@ -29,13 +31,14 @@ export type ProductsDashboardPageProps = {
 };
 
 export const ProductsDashboardPage = ({
+  has_products: hasProducts,
   products_data: { products, pagination: productsPagination, sort: productsSort },
   memberships_data: { memberships, pagination: membershipsPagination, sort: membershipsSort },
   archived_products_count: archivedProductsCount,
   can_create_product: canCreateProduct,
 }: ProductsDashboardPageProps) => {
   const [enableArchiveTab, setEnableArchiveTab] = React.useState(archivedProductsCount > 0);
-  const [query, setQuery] = React.useState("");
+  const { query, setQuery } = useProductsSearch();
 
   return (
     <ProductsLayout
@@ -44,7 +47,7 @@ export const ProductsDashboardPage = ({
       archivedTabVisible={enableArchiveTab}
       ctaButton={
         <>
-          {products.length > 0 ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
+          {hasProducts ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
           </NavigationButtonInertia>
