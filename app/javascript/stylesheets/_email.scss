@@ -451,6 +451,20 @@ $accent-color: map-get($colors, "pink"); // [1]
     }
   }
 
+  .items {
+    padding: 0;
+
+    > .item {
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+
+      &:first-child {
+        border-top: none;
+      }
+    }
+  }
+
   .item {
     border: $border;
     border-radius: border-radius(1);

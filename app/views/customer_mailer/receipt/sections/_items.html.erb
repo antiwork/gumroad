@@ -1,5 +1,5 @@
 <% charge_info = receipt_presenter.charge_info %>
-<div>
+<div class="items">
   <% receipt_presenter.items_infos.each do |item_info| %>
     <div class="item">
       <%= render("customer_mailer/receipt/item", item_info: item_info) %>
