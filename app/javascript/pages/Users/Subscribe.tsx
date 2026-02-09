@@ -10,7 +10,6 @@ type Props = {
   creator_profile: CreatorProfile;
 };
 
-// Module-level variable to ensure initialization only runs once per session
 let initialized = false;
 
 export default function UsersSubscribePage() {

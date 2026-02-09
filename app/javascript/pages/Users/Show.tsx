@@ -9,7 +9,6 @@ type Props = ProfileProps & {
   paypal_merchant_currency: string;
 };
 
-// Module-level variable to ensure initialization only runs once per session
 let initialized = false;
 
 export default function UsersShowPage() {
