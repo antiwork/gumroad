@@ -19,7 +19,6 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { Button } from "$app/components/Button";
-import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
@@ -45,7 +44,6 @@ import { S3UploadConfigProvider, useS3UploadConfig } from "$app/components/S3Upl
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { EntityInfo } from "$app/components/server-components/DownloadPage/Layout";
-import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { uploadImages } from "$app/components/TiptapExtensions/Image";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
@@ -60,11 +58,20 @@ import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
-import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
+
+import type { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
+import type { Product, ProductOption } from "$app/components/UpsellSelectModal";
+
+const UpsellSelectModal = React.lazy(() =>
+  import("$app/components/UpsellSelectModal").then((m) => ({ default: m.UpsellSelectModal })),
+);
+const TestimonialSelectModal = React.lazy(() =>
+  import("$app/components/TestimonialSelectModal").then((m) => ({ default: m.TestimonialSelectModal })),
+);
 
 import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
@@ -274,6 +281,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     };
   }, [editor]);
 
+  const pagesKey = React.useMemo(() => pages.map((p) => `${p.id}:${JSON.stringify(p.description)}`).join("|"), [pages]);
   const pageIcons = React.useMemo(
     () =>
       new Map(
@@ -293,7 +301,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             })
           : [],
       ),
-    [pages],
+    [pagesKey],
   );
 
   const findPageWithNode = (type: string) =>
@@ -961,14 +969,20 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           </Modal>
         </>
       ) : null}
-      <UpsellSelectModal isOpen={showUpsellModal} onClose={() => setShowUpsellModal(false)} onInsert={onInsertUpsell} />
-      {id ? (
-        <TestimonialSelectModal
-          isOpen={showReviewModal}
-          onClose={() => setShowReviewModal(false)}
-          onInsert={onInsertReviews}
-          productId={id}
-        />
+      {showUpsellModal ? (
+        <React.Suspense fallback={null}>
+          <UpsellSelectModal isOpen onClose={() => setShowUpsellModal(false)} onInsert={onInsertUpsell} />
+        </React.Suspense>
+      ) : null}
+      {showReviewModal && id ? (
+        <React.Suspense fallback={null}>
+          <TestimonialSelectModal
+            isOpen
+            onClose={() => setShowReviewModal(false)}
+            onInsert={onInsertReviews}
+            productId={id}
+          />
+        </React.Suspense>
       ) : null}
     </>
   );
