@@ -490,7 +490,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         {editor ? (
           <RichTextEditorToolbar
             color="ghost"
-            className="border-b border-border px-8"
+            className="relative z-10 border-b border-border px-8"
             editor={editor}
             productId={id}
             custom={
