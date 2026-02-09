@@ -40,25 +40,15 @@ class CommunitiesController < ApplicationController
   end
 
   private
-    def last_read_at
-      LastReadCommunityChatMessage
-        .includes(:community_chat_message)
-        .find_by(user_id: current_seller.id, community_id: @community.id)
-        &.community_chat_message
-        &.created_at
-        &.iso8601
+    def communities_presenter
+      @communities_presenter ||= CommunitiesPresenter.new(current_user: current_seller)
     end
 
-    def message_cursor
-      params[:cursor].presence || last_read_at || Time.current.iso8601
-    end
+    def set_community
+      seller = User.find_by_external_id!(params[:seller_id])
+      @community = Community.alive.find_by_external_id!(params[:community_id])
 
-    def message_fetch_type
-      case request.headers["X-Inertia-Infinite-Scroll-Merge-Intent"]
-      when "prepend" then "older"
-      when "append" then "newer"
-      else "around"
-      end
+      raise ActiveRecord::RecordNotFound unless @community.seller_id == seller.id
     end
 
     def paginated_messages_data(cursor)
@@ -78,15 +68,25 @@ class CommunitiesController < ApplicationController
       }
     end
 
-    def set_community
-      seller = User.find_by_external_id!(params[:seller_id])
-      @community = Community.alive.find_by_external_id!(params[:community_id])
-
-      raise ActiveRecord::RecordNotFound unless @community.seller_id == seller.id
+    def last_read_at
+      LastReadCommunityChatMessage
+        .includes(:community_chat_message)
+        .find_by(user_id: current_seller.id, community_id: @community.id)
+        &.community_chat_message
+        &.created_at
+        &.iso8601
     end
 
-    def communities_presenter
-      @communities_presenter ||= CommunitiesPresenter.new(current_user: current_seller)
+    def message_cursor
+      params[:cursor].presence || last_read_at || Time.current.iso8601
+    end
+
+    def message_fetch_type
+      case request.headers["X-Inertia-Infinite-Scroll-Merge-Intent"]
+      when "prepend" then "older"
+      when "append" then "newer"
+      else "around"
+      end
     end
 
     def set_default_page_title
