@@ -513,14 +513,14 @@ export const RichTextEditorToolbar = ({
         )}
         <div className="ml-auto flex">
           <MenuItem
-            name="Undo last change"
+            name="Undo"
             icon="undo"
             active={editor.isActive("undo")}
             disabled={undoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().undo().run()}
           />
           <MenuItem
-            name="Redo last undone change"
+            name="Redo"
             icon="redo"
             active={editor.isActive("redo")}
             disabled={redoDepth(editor.state) === 0}
