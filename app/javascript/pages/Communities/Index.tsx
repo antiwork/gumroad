@@ -75,14 +75,12 @@ function CommunityView() {
   const currentSeller = useCurrentSeller();
   const isAboveBreakpoint = useIsAboveBreakpoint("lg");
 
-  // State management
   const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialCommunities));
   const [communityDrafts, setCommunityDrafts] = React.useState<Record<string, CommunityDraft>>({});
 
   // Local messages from WebSocket - merged with Inertia messages
   const [localMessages, setLocalMessages] = React.useState<CommunityChatMessage[]>([]);
 
-  // Clear local messages when community changes
   React.useEffect(() => {
     setLocalMessages([]);
   }, [selectedCommunityId]);
@@ -130,7 +128,6 @@ function CommunityView() {
   const [showNotificationsSettings, setShowNotificationsSettings] = React.useState(false);
   const isSendingMessageRef = React.useRef(false);
 
-  // Update community helper
   const updateCommunity = React.useCallback(
     (communityId: string, value: Partial<Omit<Community, "id" | "seller">>) =>
       setCommunities((prev) => {
@@ -144,7 +141,6 @@ function CommunityView() {
     [],
   );
 
-  // Update community draft helper
   const updateCommunityDraft = React.useCallback(
     (communityId: string, value: Partial<CommunityDraft>) =>
       setCommunityDrafts((prev) => {
@@ -156,7 +152,6 @@ function CommunityView() {
     [],
   );
 
-  // Check for notifications query param
   React.useEffect(() => {
     if (selectedCommunity && !notificationsHandledRef.current) {
       const url = new URL(window.location.href);
@@ -230,7 +225,6 @@ function CommunityView() {
     setShowScrollToBottomButton(!isNearBottom);
   }, 100);
 
-  // Insert or update message from WebSocket
   const insertOrUpdateMessage = React.useCallback(
     (message: CommunityChatMessage, isUpdate = false) => {
       setLocalMessages((prev) => {
