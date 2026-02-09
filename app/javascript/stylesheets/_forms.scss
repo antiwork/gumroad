@@ -231,6 +231,8 @@ input[type="checkbox"]:not([role="switch"]) {
 
   button[role="radio"] {
     @extend %select-button;
+    min-width: 0;
+    overflow-wrap: break-word;
 
     &[aria-checked="true"] {
       @extend %select-button-active;

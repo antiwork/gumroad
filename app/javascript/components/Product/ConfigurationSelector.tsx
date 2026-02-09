@@ -488,7 +488,7 @@ const PaymentOptionSelector = ({
   return (
     <section>
       <h4 className="mb-2">Payment option</h4>
-      <div role="radiogroup" className="radio-buttons">
+      <div role="radiogroup" className="radio-buttons" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(18rem, 100%), 1fr))" }}>
         <Button
           role="radio"
           aria-checked={!selection.payInInstallments}
