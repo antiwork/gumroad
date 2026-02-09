@@ -84,6 +84,7 @@ class ProductPresenter
     profile_sections = product.user.seller_profile_products_sections
     collaborator = product.collaborator_for_display
     cancellation_discount = product.cancellation_discount_offer_code
+    default_offer_code = product.default_offer_code
     {
       product: {
         name: product.name,
@@ -197,11 +198,12 @@ class ProductPresenter
             { type: "percent", percents: cancellation_discount.amount_percentage },
           duration_in_billing_cycles: cancellation_discount.duration_in_billing_cycles,
         } : nil,
-        default_offer_code: product.default_offer_code ? {
-          id: product.default_offer_code.external_id,
-          code: product.default_offer_code.code,
-          name: product.default_offer_code.name.presence || "",
-          discount: product.default_offer_code.discount,
+        default_offer_code_id: default_offer_code&.external_id,
+        default_offer_code: default_offer_code ? {
+          id: default_offer_code.external_id,
+          code: default_offer_code.code,
+          name: default_offer_code.name.presence || "",
+          discount: default_offer_code.discount,
         } : nil,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
