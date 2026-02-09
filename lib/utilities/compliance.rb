@@ -83,6 +83,68 @@ module Compliance
       "#{GLOBE_SHOWING_AMERICAS_EMOJI} Elsewhere"
     end
 
+    JAPAN_PREFECTURE_KANA = {
+      "北海道" => "ホッカイドウ",
+      "青森県" => "アオモリケン",
+      "岩手県" => "イワテケン",
+      "宮城県" => "ミヤギケン",
+      "秋田県" => "アキタケン",
+      "山形県" => "ヤマガタケン",
+      "福島県" => "フクシマケン",
+      "茨城県" => "イバラキケン",
+      "栃木県" => "トチギケン",
+      "群馬県" => "グンマケン",
+      "埼玉県" => "サイタマケン",
+      "千葉県" => "チバケン",
+      "東京都" => "トウキョウト",
+      "神奈川県" => "カナガワケン",
+      "新潟県" => "ニイガタケン",
+      "富山県" => "トヤマケン",
+      "石川県" => "イシカワケン",
+      "福井県" => "フクイケン",
+      "山梨県" => "ヤマナシケン",
+      "長野県" => "ナガノケン",
+      "岐阜県" => "ギフケン",
+      "静岡県" => "シズオカケン",
+      "愛知県" => "アイチケン",
+      "三重県" => "ミエケン",
+      "滋賀県" => "シガケン",
+      "京都府" => "キョウトフ",
+      "大阪府" => "オオサカフ",
+      "兵庫県" => "ヒョウゴケン",
+      "奈良県" => "ナラケン",
+      "和歌山県" => "ワカヤマケン",
+      "鳥取県" => "トットリケン",
+      "島根県" => "シマネケン",
+      "岡山県" => "オカヤマケン",
+      "広島県" => "ヒロシマケン",
+      "山口県" => "ヤマグチケン",
+      "徳島県" => "トクシマケン",
+      "香川県" => "カガワケン",
+      "愛媛県" => "エヒメケン",
+      "高知県" => "コウチケン",
+      "福岡県" => "フクオカケン",
+      "佐賀県" => "サガケン",
+      "長崎県" => "ナガサキケン",
+      "熊本県" => "クマモトケン",
+      "大分県" => "オオイタケン",
+      "宮崎県" => "ミヤザキケン",
+      "鹿児島県" => "カゴシマケン",
+      "沖縄県" => "オキナワケン",
+    }.freeze
+    private_constant :JAPAN_PREFECTURE_KANA
+
+    def self.japan_prefecture_kana(kanji)
+      JAPAN_PREFECTURE_KANA[kanji]
+    end
+
+    def self.japan_prefectures_for_select
+      Compliance::Countries::JPN.subdivisions.values.map do |subdivision|
+        kanji = subdivision.translations["ja"]
+        { value: kanji, label: kanji, kana: JAPAN_PREFECTURE_KANA[kanji] }
+      end
+    end
+
     def self.subdivisions_for_select(alpha2)
       case alpha2
       when Compliance::Countries::USA.alpha2
