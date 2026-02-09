@@ -50,10 +50,14 @@ module User::PayoutSchedule
       payout_amount = payout_amount_for_payout_date(upcoming_payout_date) - upcoming_payouts.sum(&:amount_cents)
       break if payout_amount < minimum_payout_amount_cents
 
+      payout_period_end_date = payout_period_end_date_for_payout_date(upcoming_payout_date)
+      payout_balances = unpaid_balances_up_to_date(payout_period_end_date)
+      payout_balances -= unpaid_balances_up_to_date(upcoming_payouts.last.payout_period_end_date) if upcoming_payouts.present?
+
       upcoming_payout = Payment.new(
         user: self,
         amount_cents: payout_amount,
-        payout_period_end_date: payout_period_end_date_for_payout_date(upcoming_payout_date),
+        payout_period_end_date:,
         currency: Currency::USD,
         state: payouts_status,
         created_at: upcoming_payout_date,
@@ -61,7 +65,7 @@ module User::PayoutSchedule
         bank_account: (active_bank_account if current_payout_processor == PayoutProcessorType::STRIPE),
         payment_address: (paypal_payout_email if current_payout_processor == PayoutProcessorType::PAYPAL),
         )
-      upcoming_payout.balances = unpaid_balances_up_to_date(upcoming_payout.payout_period_end_date)
+      upcoming_payout.balances = payout_balances
 
       upcoming_payouts << upcoming_payout
 

@@ -95,18 +95,21 @@ describe User::PayoutSchedule do
       end
 
       it "returns the correct upcoming payouts" do
-        create(:balance, user:, amount_cents: 100, date: Date.new(2025, 9, 17))
-        create(:balance, user:, amount_cents: 2000, date: Date.new(2025, 9, 18))
+        balance_1 = create(:balance, user:, amount_cents: 100, date: Date.new(2025, 9, 17))
+        balance_2 = create(:balance, user:, amount_cents: 2000, date: Date.new(2025, 9, 18))
         expect(user.upcoming_payouts.size).to eq 1
         expect(user.upcoming_payouts[0].created_at).to eq(Date.new(2025, 9, 26))
         expect(user.upcoming_payouts[0].amount_cents).to eq 2100
+        expect(user.upcoming_payouts[0].balances).to match_array [balance_1, balance_2]
 
-        create(:balance, user:, amount_cents: 2000, date: Date.new(2025, 9, 22))
+        balance_3 = create(:balance, user:, amount_cents: 2000, date: Date.new(2025, 9, 22))
         expect(user.upcoming_payouts.size).to eq 2
         expect(user.upcoming_payouts[0].created_at).to eq(Date.new(2025, 9, 26))
         expect(user.upcoming_payouts[0].amount_cents).to eq 2100
+        expect(user.upcoming_payouts[0].balances).to match_array [balance_1, balance_2]
         expect(user.upcoming_payouts[1].created_at).to eq(Date.new(2025, 10, 3))
         expect(user.upcoming_payouts[1].amount_cents).to eq 2000
+        expect(user.upcoming_payouts[1].balances).to match_array [balance_3]
       end
     end
   end
