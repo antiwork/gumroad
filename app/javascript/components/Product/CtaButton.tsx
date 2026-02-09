@@ -15,6 +15,7 @@ import {
 } from "$app/components/Product/ConfigurationSelector";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
+import { useDomains } from "$app/components/DomainSettings";
 
 type Props = {
   product: Product;
@@ -80,6 +81,7 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
   ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false }, ref) => {
     const { searchParams } = new URL(useOriginalLocation());
+    const { appDomain, scheme } = useDomains();
 
     const [referrer, setReferrer] = React.useState("");
     useRunOnce(() => setReferrer(document.referrer));
@@ -90,7 +92,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       selection,
     );
 
-    const url = new URL(Routes.checkout_index_url());
+    const url = new URL(Routes.checkout_index_url({ host: appDomain, protocol: scheme }));
 
     const transformations: Record<string, string> = { a: "affiliate_id" };
 

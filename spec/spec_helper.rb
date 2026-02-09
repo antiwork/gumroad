@@ -171,7 +171,9 @@ RSpec.configure do |config|
 
     if examples.any? { |ex| ex.metadata[:type] == :system }
       begin
-        StripeBalanceEnforcer.ensure_sufficient_balance
+        VCR.turned_off do
+          StripeBalanceEnforcer.ensure_sufficient_balance
+        end
       rescue StandardError => e
         warn "Stripe balance check failed: #{e.class} #{e.message}"
       end

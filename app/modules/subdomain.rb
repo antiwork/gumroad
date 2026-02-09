@@ -8,9 +8,15 @@ module Subdomain
       find_seller_by_hostname(request.host)
     end
 
+    def from_username(username)
+      return if username.blank?
+
+      "#{username.tr("_", "-")}.#{ROOT_DOMAIN}"
+    end
+
     def find_seller_by_hostname(hostname)
-      if subdomain_request?(hostname)
-        subdomain = ActionDispatch::Http::URL.extract_subdomains(hostname, 1)[0]
+      if (match = subdomain_regex.match(hostname))
+        subdomain = match[:subdomain]
 
         return User.alive.find_by(external_id: subdomain) if /^[0-9]+$/.match?(subdomain)
 
@@ -20,13 +26,12 @@ module Subdomain
       end
     end
 
-    def from_username(username)
-      return unless username.present?
-      "#{username.tr("_", "-")}.#{ROOT_DOMAIN}"
+    def subdomain_request?(hostname)
+      subdomain_regex.match?(hostname)
     end
 
     private
-      def subdomain_request?(hostname)
+      def subdomain_regex
         # Strip port from ROOT_DOMAIN in development and test environments since request.host doesn't contain port.
         domain = if Rails.env.development? || Rails.env.test?
           URI("#{PROTOCOL}://#{ROOT_DOMAIN}").host
@@ -36,7 +41,7 @@ module Subdomain
 
         # Allows lowercase letters, numbers and hyphens (to support usernames with underscores).
         # Subdomain should contain at least one letter.
-        hostname =~ /\A#{USERNAME_REGEXP.source}.#{domain}\z/
+        /\A(?<subdomain>#{USERNAME_REGEXP.source})\.#{Regexp.escape(domain)}\z/
       end
   end
 end

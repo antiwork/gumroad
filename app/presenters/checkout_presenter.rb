@@ -280,7 +280,7 @@ class CheckoutPresenter
         us_states: STATES,
         ca_provinces: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first),
         recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
-        paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
+        paypal_client_id: PAYPAL_PARTNER_CLIENT_ID || "",
       }
     end
 

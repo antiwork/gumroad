@@ -226,11 +226,12 @@ class LinksController < ApplicationController
     # E.g., we want to redirect gumroad.com/l/id to username.gumroad.com/l/id
     creator_subdomain_with_protocol = @product.user.subdomain_with_protocol
     target_host = !@is_user_custom_domain && creator_subdomain_with_protocol.present? ? creator_subdomain_with_protocol : request.host
+    target_host_only = creator_subdomain_with_protocol.present? ? URI(creator_subdomain_with_protocol).host : request.host
     target_permalink = @product.general_permalink
 
     searched_id = params[:id] || params[:link_id]
 
-    if target_host != request.host || target_permalink != searched_id
+    if target_host_only != request.host || target_permalink != searched_id
       target_product_url = if params[:code].present?
         short_link_offer_code_url(target_permalink, code: params[:code], host: target_host, format: params[:format])
       else
