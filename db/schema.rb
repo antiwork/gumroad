@@ -171,6 +171,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.index ["seller_id", "min_created_at", "max_created_at"], name: "idx_audience_on_seller_and_minmax_created_at"
     t.index ["seller_id", "min_paid_cents", "max_paid_cents"], name: "idx_audience_on_seller_and_minmax_paid_cents"
     t.index ["seller_id", "min_purchase_created_at", "max_purchase_created_at"], name: "idx_audience_on_seller_and_minmax_purchase_created_at"
+    t.index ["seller_id"], name: "idx_audience_on_seller_id"
   end
 
   create_table "australia_backtax_email_infos", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1124,7 +1125,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.string "native_type", default: "digital", null: false
     t.integer "discover_fee_per_thousand", default: 100, null: false
     t.string "support_email"
-    t.integer "default_offer_code_id"
+    t.bigint "default_offer_code_id"
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
     t.index ["default_offer_code_id"], name: "index_links_on_default_offer_code_id"
