@@ -1,9 +1,8 @@
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
-import { cast } from "ts-safe-cast";
 
 import { BrandName, Button, ButtonProps } from "$app/components/Button";
-import { useRunOnce } from "$app/components/useRunOnce";
 
 export const SocialAuthButton = ({
   href,
@@ -14,8 +13,7 @@ export const SocialAuthButton = ({
   provider: BrandName;
 } & ButtonProps) => {
   const formRef = React.useRef<HTMLFormElement>(null);
-  const [csrfToken, setCsrfToken] = React.useState("");
-  useRunOnce(() => setCsrfToken(cast(document.querySelector("meta[name=csrf-token]")?.getAttribute("content"))));
+  const { authenticity_token: csrfToken } = usePage<{ authenticity_token: string }>().props;
 
   return (
     // Omniauth requires a non-AJAX POST request to redirect to the provider, so we need to submit a form.
