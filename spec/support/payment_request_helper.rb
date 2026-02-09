@@ -2,59 +2,67 @@
 
 module PaymentRequestHelper
   def mock_payment_request_availability(apple_pay: false, google_pay: false)
-    bridge = page.driver.browser.send(:bridge)
-
     mock_script = <<~JS
       (function() {
         const OriginalStripe = window.Stripe;
 
         window.Stripe = function(...args) {
-          const stripe = OriginalStripe.apply(this, args);
-          const originalPaymentRequest = stripe.paymentRequest.bind(stripe);
+          const stripe = OriginalStripe ? OriginalStripe.apply(this, args) : this;
+          if (!stripe) return this;
 
-          stripe.paymentRequest = function(options) {
-            const pr = originalPaymentRequest(options);
-            const originalCanMakePayment = pr.canMakePayment.bind(pr);
-            const originalShow = pr.show.bind(pr);
+          const originalPaymentRequest = stripe.paymentRequest ? stripe.paymentRequest.bind(stripe) : null;
 
-            pr.canMakePayment = function() {
-              return Promise.resolve({
-                applePay: #{apple_pay},
-                googlePay: #{google_pay}
-              });
+          if (originalPaymentRequest) {
+            stripe.paymentRequest = function(options) {
+              const pr = originalPaymentRequest(options);
+              const originalCanMakePayment = pr.canMakePayment ? pr.canMakePayment.bind(pr) : null;
+              const originalShow = pr.show ? pr.show.bind(pr) : null;
+
+              if (originalCanMakePayment) {
+                pr.canMakePayment = function() {
+                  return Promise.resolve({
+                    applePay: #{apple_pay},
+                    googlePay: #{google_pay}
+                  });
+                };
+              }
+
+              if (originalShow) {
+                pr.show = function() {
+                  return originalShow().catch((error) => {
+                    if (error.message.includes('not supported') || error.message.includes('Not available')) {
+                      setTimeout(() => {
+                        const cancelEvent = new Event('cancel');
+                        if (pr.emit) pr.emit('cancel', cancelEvent);
+                      }, 100);
+                    }
+                    throw error;
+                  });
+                };
+              }
+
+              return pr;
             };
-
-            pr.show = function() {
-              return originalShow().catch((error) => {
-                if (error.message.includes('not supported') || error.message.includes('Not available')) {
-                  setTimeout(() => {
-                    const cancelEvent = new Event('cancel');
-                    pr.emit('cancel', cancelEvent);
-                  }, 100);
-                }
-                throw error;
-              });
-            };
-
-            return pr;
-          };
+          }
 
           return stripe;
         };
 
-        Object.setPrototypeOf(window.Stripe, OriginalStripe);
-        Object.keys(OriginalStripe).forEach(key => {
-          window.Stripe[key] = OriginalStripe[key];
-        });
+        if (OriginalStripe) {
+          Object.setPrototypeOf(window.Stripe, OriginalStripe);
+          Object.keys(OriginalStripe).forEach(key => {
+            window.Stripe[key] = OriginalStripe[key];
+          });
+        }
 
         #{apple_pay ? mock_apple_pay_session : ''}
       })();
     JS
 
-    bridge.http.call(:post, "/session/#{bridge.session_id}/goog/cdp/execute", {
-      cmd: 'Page.addScriptToEvaluateOnNewDocument',
-      params: { source: mock_script }
-    })
+    page.driver.browser.execute_cdp(
+      'Page.addScriptToEvaluateOnNewDocument',
+      source: mock_script
+    )
   rescue StandardError => e
     warn "Warning: CDP mocking unavailable: #{e.message}"
   end
@@ -79,11 +87,11 @@ module PaymentRequestHelper
   end
 
   def clear_payment_request_mocks
-    bridge = page.driver.browser.send(:bridge)
-
-    page.execute_script("window.location.href = 'about:blank'")
-  rescue StandardError => e
-    warn "Warning: Could not clear CDP mocks: #{e.message}"
+    page.driver.browser.execute_cdp(
+      'Page.addScriptToEvaluateOnNewDocument',
+      source: 'delete window.__payment_request_mocked;'
+    )
+  rescue StandardError
   end
 end
 
