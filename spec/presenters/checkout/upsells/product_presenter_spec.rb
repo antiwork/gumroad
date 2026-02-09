@@ -14,7 +14,7 @@ describe Checkout::Upsells::ProductPresenter do
   let(:presenter) { described_class.new(product) }
 
   before do
-    create(:purchase, :with_review, link: product)
+    create(:free_purchase, :with_review, link: product)
   end
 
   describe "#product_props" do
@@ -28,8 +28,15 @@ describe Checkout::Upsells::ProductPresenter do
         review_count: 1,
         average_rating: 5.0,
         native_type: "ebook",
+        thumbnail_url: nil,
         options: []
       )
+    end
+
+    it "includes thumbnail_url when product has a thumbnail" do
+      thumbnail = create(:thumbnail, product:)
+
+      expect(presenter.product_props[:thumbnail_url]).to eq(thumbnail.url)
     end
   end
 end
