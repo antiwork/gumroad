@@ -12,7 +12,7 @@ describe "Checkout payment", :js, type: :system do
     create(:merchant_account_paypal, user: @product.user, charge_processor_merchant_id: "CJS32DZ7NDN5L", currency: "gbp")
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    select_tab "PayPal"
+    choose "PayPal"
     if PAYPAL_PARTNER_CLIENT_ID.blank? || PAYPAL_PARTNER_CLIENT_ID.start_with?("test-")
       supports_paypal = page.evaluate_script("JSON.parse(document.querySelector('script.js-react-on-rails-component[data-component-name=\"CheckoutPage\"]').textContent).add_products[0].product.supports_paypal")
       expect(supports_paypal).to eq("native")
@@ -24,7 +24,7 @@ describe "Checkout payment", :js, type: :system do
     product2 = create(:product, price_cents: 1000)
     visit "/l/#{product2.unique_permalink}"
     add_to_cart(product2)
-    select_tab "PayPal"
+    choose "PayPal"
     expect(page).to_not have_selector("iframe[title=PayPal]")
     expect(page).to have_button "Pay"
 
@@ -32,7 +32,7 @@ describe "Checkout payment", :js, type: :system do
     product3.user.update!(disable_paypal_sales: true)
     visit "/l/#{product3.unique_permalink}"
     add_to_cart(product3)
-    expect(page).to_not have_tab_button "PayPal"
+    expect(page).to_not have_field("PayPal", type: "radio")
   end
 
   context "email typo suggestions" do

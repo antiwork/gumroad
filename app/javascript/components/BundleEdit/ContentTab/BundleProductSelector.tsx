@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { BundleProduct } from "$app/components/BundleEdit/state";
+import { BundleProduct } from "$app/components/BundleEdit/types";
 import {
   CartItem,
   CartItemEnd,
