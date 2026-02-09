@@ -14,12 +14,10 @@ import DownloadPageWithContent from "$app/components/server-components/DownloadP
 import GenerateInvoiceConfirmationPage from "$app/components/server-components/GenerateInvoiceConfirmationPage";
 import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
 import Nav from "$app/components/server-components/Nav";
-import PdfReaderPage from "$app/components/server-components/PdfReaderPage";
 import ProductPage from "$app/components/server-components/Product";
 import ProductIframePage from "$app/components/server-components/Product/IframePage";
 import ProductEditPage from "$app/components/server-components/ProductEditPage";
 import Profile from "$app/components/server-components/Profile";
-import ProfileCoffeePage from "$app/components/server-components/Profile/CoffeePage";
 import ProfileProductPage from "$app/components/server-components/Profile/ProductPage";
 import SubscribePage from "$app/components/server-components/SubscribePage";
 import SubscriptionManager from "$app/components/server-components/SubscriptionManager";
@@ -44,13 +42,11 @@ ReactOnRails.register({
   GenerateInvoiceConfirmationPage,
   GenerateInvoicePage,
   Nav,
-  PdfReaderPage,
   Pill,
   ProductEditPage,
   ProductIframePage,
   ProductPage,
   Profile,
-  ProfileCoffeePage,
   ProfileProductPage,
   SubscribePage,
   SubscriptionManager,

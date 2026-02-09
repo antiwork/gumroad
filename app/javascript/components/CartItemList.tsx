@@ -27,8 +27,8 @@ export const CartItem = ({
   ...props
 }: BaseProps & { asChild?: boolean; extra?: React.ReactNode; isBundleItem?: boolean }) => {
   const Comp = asChild ? Slot : "div";
-  const paddingClasses = isBundleItem ? "p-0" : "px-3 py-4 sm:p-5";
-  const rowGapClasses = isBundleItem ? "gap-0" : "gap-3 sm:gap-5";
+  const paddingClasses = isBundleItem ? "p-0" : "p-4 sm:p-5";
+  const rowGapClasses = isBundleItem ? "gap-0" : "gap-4 sm:gap-5";
   const contextValue = React.useMemo(() => ({ isBundleItem }), [isBundleItem]);
 
   return (
@@ -40,7 +40,9 @@ export const CartItem = ({
       >
         <>
           <section className={classNames("flex flex-row", rowGapClasses, paddingClasses)}>{children}</section>
-          {extra ? <section className="flex flex-col gap-4 border-border p-4 pt-0">{extra}</section> : null}
+          {extra ? (
+            <section className="flex flex-col gap-4 border-border p-4 pt-0 sm:p-6 sm:pt-0">{extra}</section>
+          ) : null}
         </>
       </Comp>
     </CartItemContext.Provider>

@@ -12,8 +12,9 @@ class ReceiptPresenter::GifteeManageSubscription
     @_note ||= begin
       return unless gifted_subscription?
 
+      # Get the subscription associated with the original purchase
+      # Due to concurrency issues while creating the purchase, giftee purchase many not have the subscription yet
       subscription = chargeable.gift_received.gifter_purchase.subscription
-      return unless subscription.present?
 
       url = Rails.application.routes.url_helpers.manage_subscription_url(
         subscription.external_id,
