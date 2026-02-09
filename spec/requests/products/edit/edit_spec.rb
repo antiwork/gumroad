@@ -1094,7 +1094,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button(product.name)
           end
@@ -1129,7 +1129,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button("#{product.name} - #{product.alive_variants.first.name}")
             expect(page).not_to have_selector(:button, exact_text: product.name)

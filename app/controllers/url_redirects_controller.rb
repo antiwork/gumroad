@@ -95,7 +95,7 @@ class UrlRedirectsController < ApplicationController
       @product_file = product_files.first
 
       if @product_file.must_be_pdf_stamped? && @url_redirect.missing_stamped_pdf?(@product_file)
-        flash[:alert] = "We are preparing the file for download. You will receive an email when it is ready."
+        flash[:warning] = "We are preparing the file for download. You will receive an email when it is ready."
 
         # Do not enqueue the job more than once in 2 hours
         Rails.cache.fetch(PdfStampingService.cache_key_for_purchase(@url_redirect.purchase_id), expires_in: 4.hours) do
