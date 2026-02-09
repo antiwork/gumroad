@@ -57,7 +57,7 @@ export const PopoverContent = React.forwardRef<
         forceMount
         onOpenAutoFocus={(e: Event) => e.preventDefault()}
         className={classNames(
-          "z-30 w-max max-w-[calc(100vw-2rem)] rounded-sm border border-border bg-background p-4 text-foreground shadow outline-none focus-visible:outline-none data-[state=closed]:hidden",
+          "z-30 max-h-[var(--radix-popper-available-height)] w-max max-w-[calc(100vw-2rem)] overflow-y-auto rounded-sm border border-border bg-background p-4 text-foreground shadow outline-none focus-visible:outline-none data-[state=closed]:hidden",
           { "w-[var(--radix-popover-trigger-width)] min-w-[var(--radix-popover-trigger-width)]": matchTriggerWidth },
           className,
         )}
