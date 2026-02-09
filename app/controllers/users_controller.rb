@@ -32,10 +32,10 @@ class UsersController < ApplicationController
         paypal_merchant_currency = @user.native_paypal_payment_enabled? ?
                                      @user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
                                      ChargeProcessor::DEFAULT_CURRENCY_CODE
+        set_user_custom_styles_meta(@user)
         render inertia: "Users/Show", props: profile_props.merge(
           card_data_handling_mode:,
-          paypal_merchant_currency:,
-          custom_styles: @user&.seller_profile&.custom_styles.to_s
+          paypal_merchant_currency:
         )
       end
       format.json { render json: @user.as_json }
