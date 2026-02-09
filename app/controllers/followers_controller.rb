@@ -46,14 +46,18 @@ class FollowersController < ApplicationController
 
   def create
     follower = create_follower(params)
-    return render json: { success: false, message: "Sorry, something went wrong." } if follower.nil?
-    return render json: { success: false, message: follower.errors.full_messages.to_sentence } if follower.errors.present?
 
-    if follower.confirmed?
-      render json: { success: true, message: "You are now following #{follower.user.name_or_username}!" }
+    if follower.nil?
+      flash[:alert] = "Sorry, something went wrong."
+    elsif follower.errors.present?
+      flash[:alert] = follower.errors.full_messages.to_sentence
+    elsif follower.confirmed?
+      flash[:notice] = "You are now following #{follower.user.name_or_username}!"
     else
-      render json: { success: true, message: "Check your inbox to confirm your follow request." }
+      flash[:notice] = "Check your inbox to confirm your follow request."
     end
+
+    redirect_back fallback_location: root_path
   end
 
   def new
