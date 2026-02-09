@@ -194,6 +194,45 @@ describe Compliance do
       end
     end
 
+    describe ".japan_prefectures_for_select" do
+      it "returns all 47 Japan prefectures" do
+        prefectures = Compliance::Countries.japan_prefectures_for_select
+        expect(prefectures.length).to eq(47)
+      end
+
+      it "includes value, label, and kana for each prefecture" do
+        prefectures = Compliance::Countries.japan_prefectures_for_select
+        prefectures.each do |prefecture|
+          expect(prefecture).to have_key(:value)
+          expect(prefecture).to have_key(:label)
+          expect(prefecture).to have_key(:kana)
+          expect(prefecture[:value]).to eq(prefecture[:label])
+        end
+      end
+
+      it "has kana mappings for all prefectures from ISO3166" do
+        iso_prefectures = Compliance::Countries::JPN.subdivisions.values.map { |s| s.translations["ja"] }
+
+        iso_prefectures.each do |prefecture_kanji|
+          kana = Compliance::Countries.japan_prefecture_kana(prefecture_kanji)
+          expect(kana).to be_present,
+                          "Missing kana mapping for prefecture: #{prefecture_kanji}"
+        end
+      end
+    end
+
+    describe ".japan_prefecture_kana" do
+      it "returns the kana reading for a valid prefecture" do
+        expect(Compliance::Countries.japan_prefecture_kana("東京都")).to eq("トウキョウト")
+        expect(Compliance::Countries.japan_prefecture_kana("北海道")).to eq("ホッカイドウ")
+        expect(Compliance::Countries.japan_prefecture_kana("大阪府")).to eq("オオサカフ")
+      end
+
+      it "returns nil for an invalid prefecture" do
+        expect(Compliance::Countries.japan_prefecture_kana("Invalid")).to be_nil
+      end
+    end
+
     describe ".find_subdivision_code" do
       it "returns the subdivision code for a valid subdivision code" do
         expect(Compliance::Countries.find_subdivision_code(Compliance::Countries::USA.alpha2, "CA")).to eq("CA")
