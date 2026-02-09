@@ -43,9 +43,6 @@ export type CommunitiesPageProps = {
   communities: Community[];
   notificationSettings: CommunityNotificationSettings;
   selectedCommunityId: string | null;
-  messages: {
-    messages: CommunityChatMessage[];
-    next_older_timestamp: string | null;
-    next_newer_timestamp: string | null;
-  } | null;
+  messages: CommunityChatMessage[] | null;
+  hasOlderMessages: boolean;
 };

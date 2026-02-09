@@ -100,6 +100,7 @@ export const ChatMessage = ({
       {
         preserveState: true,
         preserveScroll: true,
+        only: ["messages"],
         onSuccess: () => setIsEditing(false),
         onFinish: () => setIsSaving(false),
       },

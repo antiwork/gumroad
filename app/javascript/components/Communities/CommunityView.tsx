@@ -62,6 +62,7 @@ export function CommunityView({
   notificationSettings,
   selectedCommunityId,
   messages,
+  hasOlderMessages,
 }: CommunitiesPageProps) {
   const currentSeller = useCurrentSeller();
   const isAboveBreakpoint = useIsAboveBreakpoint("lg");
@@ -80,7 +81,7 @@ export function CommunityView({
 
   // Merge Inertia messages with local WebSocket updates
   const allMessages = React.useMemo(() => {
-    const serverMessages = messages?.messages ?? [];
+    const serverMessages = messages ?? [];
     if (serverMessages.length === 0 && localMessages.length === 0) return [];
 
     const merged = new Map<string, CommunityChatMessage>();
@@ -119,6 +120,7 @@ export function CommunityView({
   const userChannelRef = React.useRef<Channel | null>(null);
   const [chatMessageInputHeight, setChatMessageInputHeight] = React.useState(0);
   const [showNotificationsSettings, setShowNotificationsSettings] = React.useState(false);
+  const isSendingMessageRef = React.useRef(false);
 
   // Update community helper
   const updateCommunity = React.useCallback(
@@ -167,6 +169,7 @@ export function CommunityView({
           Routes.mark_read_chat_messages_path(communityId),
           { message_id: messageId },
           {
+            async: true,
             preserveState: true,
             preserveScroll: true,
             only: ["communities"],
@@ -212,6 +215,13 @@ export function CommunityView({
     if (!sidebarOpen) setSidebarOpen(true);
   }, [isAboveBreakpoint]);
 
+  const handleScroll = useDebouncedCallback(() => {
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setShowScrollToBottomButton(!isNearBottom);
+  }, 100);
+
   // Insert or update message from WebSocket
   const insertOrUpdateMessage = React.useCallback(
     (message: CommunityChatMessage, isUpdate = false) => {
@@ -243,23 +253,37 @@ export function CommunityView({
     if (!selectedCommunity) return;
     if (!selectedCommunityDraft) return;
     if (selectedCommunityDraft.isSending) return;
+    if (isSendingMessageRef.current) return;
     if (selectedCommunityDraft.content.trim() === "") return;
 
-    updateCommunityDraft(selectedCommunity.id, { isSending: true });
+    const communityId = selectedCommunity.id;
+    const messageContent = selectedCommunityDraft.content;
+
+    isSendingMessageRef.current = true;
+    updateCommunityDraft(communityId, { isSending: true });
 
     router.post(
-      Routes.chat_messages_path(selectedCommunity.id),
+      Routes.chat_messages_path(communityId),
       {
-        community_chat_message: { content: selectedCommunityDraft.content },
+        community_chat_message: { content: messageContent },
       },
       {
+        async: true,
         preserveState: true,
         preserveScroll: true,
+        only: ["messages"],
         onSuccess: () => {
-          updateCommunityDraft(selectedCommunity.id, { content: "", isSending: false });
+          updateCommunityDraft(communityId, { content: "", isSending: false });
         },
         onError: () => {
-          updateCommunityDraft(selectedCommunity.id, { isSending: false });
+          updateCommunityDraft(communityId, { isSending: false });
+        },
+        onCancel: () => {
+          updateCommunityDraft(communityId, { isSending: false });
+        },
+        onFinish: () => {
+          isSendingMessageRef.current = false;
+          updateCommunityDraft(communityId, { isSending: false });
         },
       },
     );
@@ -432,9 +456,6 @@ export function CommunityView({
     setShowScrollToBottomButton(false);
   };
 
-  // Check if we have more pages to load (for "Welcome" message visibility)
-  const hasOlderMessages = messages?.next_older_timestamp !== null;
-
   return (
     <>
       <div className="flex h-screen flex-col">
@@ -529,7 +550,7 @@ export function CommunityView({
               />
 
               <div className="flex flex-1 overflow-auto">
-                <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto">
+                <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto" onScroll={handleScroll}>
                   <div
                     className={cx("sticky top-0 z-20 flex justify-center transition-opacity duration-300", {
                       "opacity-100": stickyDate,

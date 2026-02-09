@@ -9,15 +9,12 @@ type Props = {
   communities: Community[];
   notification_settings: CommunityNotificationSettings;
   selected_community_id: string | null;
-  messages: {
-    messages: CommunityChatMessage[];
-    next_older_timestamp: string | null;
-    next_newer_timestamp: string | null;
-  } | null;
+  messages: CommunityChatMessage[] | null;
 };
 
 function CommunitiesIndex() {
   const props = usePage<Props>().props;
+  const hasOlderMessages = usePage().scrollProps?.messages?.previousPage != null;
 
   return (
     <CommunityView
@@ -26,6 +23,7 @@ function CommunitiesIndex() {
       notificationSettings={props.notification_settings}
       selectedCommunityId={props.selected_community_id}
       messages={props.messages}
+      hasOlderMessages={hasOlderMessages}
     />
   );
 }

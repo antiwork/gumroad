@@ -160,7 +160,17 @@ export const ChatMessageList = ({
         {community.unread_count > 0 && lastReadMessageIndex === -1 && messages.length > 0 && (
           <UnreadSeparator visible={unreadSeparatorVisibility} />
         )}
-        <InfiniteScroll data="messages" reverse previous={hasOlderMessages ? undefined : null}>
+        <InfiniteScroll
+          data="messages"
+          previous={hasOlderMessages ? undefined : null}
+          as="div"
+          preserveUrl
+          loading={
+            <div className="flex items-center justify-center p-4">
+              <span className="loader" />
+            </div>
+          }
+        >
           {sortedDates.map((date) => (
             <div className="flex flex-col gap-4" key={date} ref={(el) => el && dateElementsRef.current.set(date, el)}>
               <DateSeparator date={date} />

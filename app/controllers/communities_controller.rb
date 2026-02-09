@@ -3,6 +3,8 @@
 class CommunitiesController < ApplicationController
   layout "inertia"
   before_action :authenticate_user!
+  before_action :set_default_page_title
+  before_action :set_community, only: [:show]
   after_action :verify_authorized
 
   def index
@@ -22,63 +24,69 @@ class CommunitiesController < ApplicationController
   end
 
   def show
-    seller = User.find_by_external_id!(params[:seller_id])
-    community = Community.alive.find_by_external_id!(params[:community_id])
-    raise ActiveRecord::RecordNotFound unless community.seller_id == seller.id
+    authorize @community
 
-    authorize community
-
-    messages_data = paginated_messages(community)
-    metadata = scroll_metadata(community, messages_data)
+    cursor = message_cursor
+    paginated = paginated_messages_data(cursor)
+    scroll_data = messages_scroll_data(paginated, cursor)
 
     render inertia: "Communities/Index", props: {
       has_products: -> { current_seller.products.visible_and_not_archived.exists? },
       communities: -> { communities_presenter.communities_props },
       notification_settings: -> { communities_presenter.notification_settings_props },
-      selected_community_id: community.external_id,
-      messages: InertiaRails.scroll(metadata) { messages_data },
+      selected_community_id: @community.external_id,
+      messages: InertiaRails.scroll(scroll_data) { paginated[:messages] },
     }
   end
 
   private
-    def communities_presenter
-      @communities_presenter ||= CommunitiesPresenter.new(current_user: current_seller)
+    def last_read_at
+      LastReadCommunityChatMessage
+        .includes(:community_chat_message)
+        .find_by(user_id: current_seller.id, community_id: @community.id)
+        &.community_chat_message
+        &.created_at
+        &.iso8601
     end
 
-    def paginated_messages(community)
-      cursor = params[:cursor]
-      merge_intent = request.headers["X-Inertia-Infinite-Scroll-Merge-Intent"]
+    def message_cursor
+      params[:cursor].presence || last_read_at || Time.current.iso8601
+    end
 
-      if cursor.present? && merge_intent.present?
-        fetch_type = merge_intent == "prepend" ? "older" : "newer"
-      else
-        cursor = initial_cursor(community)
-        fetch_type = "around"
+    def message_fetch_type
+      case request.headers["X-Inertia-Infinite-Scroll-Merge-Intent"]
+      when "prepend" then "older"
+      when "append" then "newer"
+      else "around"
       end
+    end
 
+    def paginated_messages_data(cursor)
       PaginatedCommunityChatMessagesPresenter.new(
-        community: community,
+        community: @community,
         timestamp: cursor,
-        fetch_type: fetch_type,
+        fetch_type: message_fetch_type,
       ).props
     end
 
-    def initial_cursor(community)
-      last_read = LastReadCommunityChatMessage
-        .includes(:community_chat_message)
-        .find_by(user_id: current_seller.id, community_id: community.id)
-      last_read&.community_chat_message&.created_at&.iso8601 || Time.current.iso8601
-    end
-
-    def scroll_metadata(community, messages_data)
-      cursor = params[:cursor] || initial_cursor(community)
-
+    def messages_scroll_data(paginated, cursor)
       {
         page_name: "cursor",
+        previous_page: paginated[:next_older_timestamp],
+        next_page: paginated[:next_newer_timestamp],
         current_page: cursor,
-        previous_page: messages_data[:next_newer_timestamp],
-        next_page: messages_data[:next_older_timestamp],
       }
+    end
+
+    def set_community
+      seller = User.find_by_external_id!(params[:seller_id])
+      @community = Community.alive.find_by_external_id!(params[:community_id])
+
+      raise ActiveRecord::RecordNotFound unless @community.seller_id == seller.id
+    end
+
+    def communities_presenter
+      @communities_presenter ||= CommunitiesPresenter.new(current_user: current_seller)
     end
 
     def set_default_page_title
