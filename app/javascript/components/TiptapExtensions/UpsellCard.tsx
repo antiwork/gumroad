@@ -36,6 +36,7 @@ type Product = {
   review_count: number;
   average_rating: number;
   native_type: ProductNativeType;
+  thumbnail_url: string | null;
   permalink: string;
   options: ProductOption[];
 };
@@ -175,7 +176,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         ) : product ? (
           <ProductCard className="lg:h-32 lg:flex-row">
             <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0">
-              <Thumbnail url={null} nativeType={product.native_type} />
+              <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
             </ProductCardFigure>
             <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">
               {isEditable ? (
