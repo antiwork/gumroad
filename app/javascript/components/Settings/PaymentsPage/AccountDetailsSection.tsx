@@ -1,4 +1,3 @@
-import cx from "classnames";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -7,6 +6,12 @@ import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Select } from "$app/components/ui/Select";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 type StateConfig = {
   states: { code: string; name: string }[];
@@ -309,11 +314,11 @@ const AccountDetailsSection = ({
   ): React.ReactNode => {
     if (isPrefectureConfig(config)) {
       return (
-        <fieldset className={cx({ danger: errorFieldNames.has(fieldName) })}>
-          <legend>
-            <label htmlFor={`${uid}-${config.idSuffix}`}>{config.label}</label>
-          </legend>
-          <select
+        <Fieldset state={errorFieldNames.has(fieldName) ? "danger" : undefined}>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}-${config.idSuffix}`}>{config.label}</Label>
+          </FieldsetTitle>
+          <Select
             id={`${uid}-${config.idSuffix}`}
             required={complianceInfo.is_business}
             disabled={isFormDisabled}
@@ -329,17 +334,17 @@ const AccountDetailsSection = ({
                 {prefecture.label}
               </option>
             ))}
-          </select>
-        </fieldset>
+          </Select>
+        </Fieldset>
       );
     }
 
     return (
-      <fieldset className={cx({ danger: errorFieldNames.has(fieldName) })}>
-        <legend>
-          <label htmlFor={`${uid}-${config.idSuffix}`}>{config.label}</label>
-        </legend>
-        <select
+      <Fieldset state={errorFieldNames.has(fieldName) ? "danger" : undefined}>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-${config.idSuffix}`}>{config.label}</Label>
+        </FieldsetTitle>
+        <Select
           id={`${uid}-${config.idSuffix}`}
           required={complianceInfo.is_business}
           disabled={isFormDisabled}
@@ -355,8 +360,8 @@ const AccountDetailsSection = ({
               {state.name}
             </option>
           ))}
-        </select>
-      </fieldset>
+        </Select>
+      </Fieldset>
     );
   };
 
@@ -386,45 +391,49 @@ const AccountDetailsSection = ({
     <section className="grid gap-8">
       {showAccountTypeSection ? (
         <section>
-          <fieldset>
-            <legend>
-              <label>Account type</label>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label>Account type</Label>
               <a href="/help/article/260-your-payout-settings-page">What type of account should I choose?</a>
-            </legend>
-          </fieldset>
-          <div className="radio-buttons" role="radiogroup">
-            <Button
-              role="radio"
-              key="individual"
-              aria-checked={!complianceInfo.is_business}
-              onClick={() => updateComplianceInfo({ is_business: false })}
-              disabled={isFormDisabled}
-            >
-              <Icon name="person" />
-              <div>
-                <h4>Individual</h4>
-                When you are selling as yourself
-              </div>
-            </Button>
-            <Button
-              role="radio"
-              key="business"
-              aria-checked={complianceInfo.is_business}
-              onClick={() =>
-                updateComplianceInfo({
-                  is_business: true,
-                  business_country: complianceInfo.business_country ?? complianceInfo.country,
-                })
-              }
-              disabled={isFormDisabled}
-            >
-              <Icon name="shop-window" />
-              <div>
-                <h4>Business</h4>
-                When you are selling as a business
-              </div>
-            </Button>
-          </div>
+            </FieldsetTitle>
+          </Fieldset>
+          <Tabs variant="buttons" className="grid-cols-1 gap-4 sm:grid-cols-2" role="radiogroup">
+            <Tab key="individual" isSelected={!complianceInfo.is_business} asChild>
+              <Button
+                role="radio"
+                aria-checked={!complianceInfo.is_business}
+                onClick={() => updateComplianceInfo({ is_business: false })}
+                disabled={isFormDisabled}
+                className="items-start justify-start text-left"
+              >
+                <Icon name="person" />
+                <div>
+                  <h4 className="font-bold">Individual</h4>
+                  When you are selling as yourself
+                </div>
+              </Button>
+            </Tab>
+            <Tab key="business" isSelected={complianceInfo.is_business} asChild>
+              <Button
+                role="radio"
+                aria-checked={complianceInfo.is_business}
+                onClick={() =>
+                  updateComplianceInfo({
+                    is_business: true,
+                    business_country: complianceInfo.business_country ?? complianceInfo.country,
+                  })
+                }
+                disabled={isFormDisabled}
+                className="items-start justify-start text-left"
+              >
+                <Icon name="shop-window" />
+                <div>
+                  <h4 className="font-bold">Business</h4>
+                  When you are selling as a business
+                </div>
+              </Button>
+            </Tab>
+          </Tabs>
         </section>
       ) : null}
       {complianceInfo.is_business ? (
@@ -436,11 +445,11 @@ const AccountDetailsSection = ({
               gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
             }}
           >
-            <fieldset className={cx({ danger: errorFieldNames.has("business_name") })}>
-              <legend>
-                <label htmlFor={`${uid}-business-legal-name`}>Legal business name</label>
-              </legend>
-              <input
+            <Fieldset state={errorFieldNames.has("business_name") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-business-legal-name`}>Legal business name</Label>
+              </FieldsetTitle>
+              <Input
                 id={`${uid}-business-legal-name`}
                 placeholder="Acme"
                 required={complianceInfo.is_business}
@@ -449,13 +458,13 @@ const AccountDetailsSection = ({
                 aria-invalid={errorFieldNames.has("business_name")}
                 onChange={(evt) => updateComplianceInfo({ business_name: evt.target.value })}
               />
-            </fieldset>
-            <fieldset className={cx({ danger: errorFieldNames.has("business_type") })}>
-              <legend>
-                <label htmlFor={`${uid}-business-type`}>Type</label>
-              </legend>
+            </Fieldset>
+            <Fieldset state={errorFieldNames.has("business_type") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-business-type`}>Type</Label>
+              </FieldsetTitle>
               {businessTypes ? (
-                <select
+                <Select
                   id={`${uid}-business-type`}
                   required={complianceInfo.is_business}
                   disabled={isFormDisabled}
@@ -469,9 +478,9 @@ const AccountDetailsSection = ({
                       {businessType.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               ) : (
-                <select
+                <Select
                   id={`${uid}-business-type`}
                   disabled={isFormDisabled}
                   value={complianceInfo.business_type || "Type"}
@@ -485,17 +494,17 @@ const AccountDetailsSection = ({
                   <option value="profit">Non Profit</option>
                   <option value="sole_proprietorship">Sole Proprietorship</option>
                   <option value="corporation">Corporation</option>
-                </select>
+                </Select>
               )}
-            </fieldset>
+            </Fieldset>
           </div>
           {complianceInfo.business_country === "JP" ? (
             <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
-              <fieldset className={cx({ danger: errorFieldNames.has("business_name_kanji") })}>
-                <legend>
-                  <label htmlFor={`${uid}-business-name-kanji`}>Business Name (Kanji)</label>
-                </legend>
-                <input
+              <Fieldset state={errorFieldNames.has("business_name_kanji") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-business-name-kanji`}>Business Name (Kanji)</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-business-name-kanji`}
                   type="text"
                   placeholder="Legal Business Name (Kanji)"
@@ -505,12 +514,12 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ business_name_kanji: evt.target.value })}
                 />
-              </fieldset>
-              <fieldset className={cx({ danger: errorFieldNames.has("business_name_kana") })}>
-                <legend>
-                  <label htmlFor={`${uid}-business-name-kana`}>Legal Business Name (Kana)</label>
-                </legend>
-                <input
+              </Fieldset>
+              <Fieldset state={errorFieldNames.has("business_name_kana") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-business-name-kana`}>Legal Business Name (Kana)</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-business-name-kana`}
                   type="text"
                   placeholder="Business Name (Kana)"
@@ -520,7 +529,7 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ business_name_kana: evt.target.value })}
                 />
-              </fieldset>
+              </Fieldset>
             </div>
           ) : null}
           {complianceInfo.business_country === "JP" ? (
@@ -534,11 +543,11 @@ const AccountDetailsSection = ({
                   alignItems: "end",
                 }}
               >
-                <fieldset className={cx({ danger: errorFieldNames.has("business_building_number") })}>
-                  <legend>
-                    <label htmlFor={`${uid}-business-building-number`}>Block / Building number</label>
-                  </legend>
-                  <input
+                <Fieldset state={errorFieldNames.has("business_building_number") ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-business-building-number`}>Block / Building number</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={`${uid}-business-building-number`}
                     type="text"
                     placeholder="1-1"
@@ -548,12 +557,12 @@ const AccountDetailsSection = ({
                     required
                     onChange={(evt) => updateComplianceInfo({ business_building_number: evt.target.value })}
                   />
-                </fieldset>
-                <fieldset className={cx({ danger: errorFieldNames.has("business_building_number_kana") })}>
-                  <legend>
-                    <label htmlFor={`${uid}-business-building-number-kana`}>Block / Building number (Kana)</label>
-                  </legend>
-                  <input
+                </Fieldset>
+                <Fieldset state={errorFieldNames.has("business_building_number_kana") ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-business-building-number-kana`}>Block / Building number (Kana)</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={`${uid}-business-building-number-kana`}
                     type="text"
                     placeholder="イチノイチ"
@@ -563,14 +572,14 @@ const AccountDetailsSection = ({
                     required
                     onChange={(evt) => updateComplianceInfo({ business_building_number_kana: evt.target.value })}
                   />
-                </fieldset>
+                </Fieldset>
               </div>
               <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
-                <fieldset className={cx({ danger: errorFieldNames.has("business_street_address_kanji") })}>
-                  <legend>
-                    <label htmlFor={`${uid}-business-street-address-kanji`}>Business town/Cho-me (Kanji)</label>
-                  </legend>
-                  <input
+                <Fieldset state={errorFieldNames.has("business_street_address_kanji") ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-business-street-address-kanji`}>Business town/Cho-me (Kanji)</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={`${uid}-business-street-address-kanji`}
                     type="text"
                     placeholder="千代田"
@@ -580,12 +589,12 @@ const AccountDetailsSection = ({
                     required
                     onChange={(evt) => updateComplianceInfo({ business_street_address_kanji: evt.target.value })}
                   />
-                </fieldset>
-                <fieldset className={cx({ danger: errorFieldNames.has("business_street_address_kana") })}>
-                  <legend>
-                    <label htmlFor={`${uid}-business-street-address-kana`}>Business town/Cho-me (Kana)</label>
-                  </legend>
-                  <input
+                </Fieldset>
+                <Fieldset state={errorFieldNames.has("business_street_address_kana") ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-business-street-address-kana`}>Business town/Cho-me (Kana)</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={`${uid}-business-street-address-kana`}
                     type="text"
                     placeholder="チヨダ"
@@ -595,15 +604,15 @@ const AccountDetailsSection = ({
                     required
                     onChange={(evt) => updateComplianceInfo({ business_street_address_kana: evt.target.value })}
                   />
-                </fieldset>
+                </Fieldset>
               </div>
             </>
           ) : (
-            <fieldset className={cx({ danger: errorFieldNames.has("business_street_address") })}>
-              <legend>
-                <label htmlFor={`${uid}-business-street-address`}>Address</label>
-              </legend>
-              <input
+            <Fieldset state={errorFieldNames.has("business_street_address") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-business-street-address`}>Address</Label>
+              </FieldsetTitle>
+              <Input
                 id={`${uid}-business-street-address`}
                 placeholder="123 smith street"
                 value={complianceInfo.business_street_address || ""}
@@ -611,7 +620,7 @@ const AccountDetailsSection = ({
                 aria-invalid={errorFieldNames.has("business_street_address")}
                 onChange={(evt) => updateComplianceInfo({ business_street_address: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
           )}
           <div
             style={{
@@ -620,11 +629,11 @@ const AccountDetailsSection = ({
               gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
             }}
           >
-            <fieldset className={cx({ danger: errorFieldNames.has("business_city") })}>
-              <legend>
-                <label htmlFor={`${uid}-business-city`}>City</label>
-              </legend>
-              <input
+            <Fieldset state={errorFieldNames.has("business_city") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-business-city`}>City</Label>
+              </FieldsetTitle>
+              <Input
                 id={`${uid}-business-city`}
                 placeholder="Springfield"
                 value={complianceInfo.business_city || ""}
@@ -632,7 +641,7 @@ const AccountDetailsSection = ({
                 aria-invalid={errorFieldNames.has("business_city")}
                 onChange={(evt) => updateComplianceInfo({ business_city: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
             {businessStateConfig
               ? renderStateSelect(
                   businessStateConfig,
@@ -641,13 +650,13 @@ const AccountDetailsSection = ({
                   "business_state",
                 )
               : null}
-            <fieldset className={cx({ danger: errorFieldNames.has("business_zip_code") })}>
-              <legend>
-                <label htmlFor={`${uid}-business-zip-code`}>
+            <Fieldset state={errorFieldNames.has("business_zip_code") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-business-zip-code`}>
                   {complianceInfo.business_country === "US" ? "ZIP code" : "Postal code"}
-                </label>
-              </legend>
-              <input
+                </Label>
+              </FieldsetTitle>
+              <Input
                 id={`${uid}-business-zip-code`}
                 placeholder="12345"
                 required={complianceInfo.is_business}
@@ -656,13 +665,13 @@ const AccountDetailsSection = ({
                 aria-invalid={errorFieldNames.has("business_zip_code")}
                 onChange={(evt) => updateComplianceInfo({ business_zip_code: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
           </div>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-business-country`}>Country</label>
-            </legend>
-            <select
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-business-country`}>Country</Label>
+            </FieldsetTitle>
+            <Select
               id={`${uid}-business-country`}
               value={complianceInfo.business_country || ""}
               disabled={isFormDisabled}
@@ -674,13 +683,13 @@ const AccountDetailsSection = ({
                   {name}
                 </option>
               ))}
-            </select>
-          </fieldset>
-          <fieldset className={cx({ danger: errorFieldNames.has("business_phone") })}>
-            <legend>
-              <label htmlFor={`${uid}-business-phone-number`}>Business phone number</label>
-            </legend>
-            <input
+            </Select>
+          </Fieldset>
+          <Fieldset state={errorFieldNames.has("business_phone") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-business-phone-number`}>Business phone number</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-business-phone-number`}
               type="tel"
               placeholder="555-555-5555"
@@ -694,18 +703,18 @@ const AccountDetailsSection = ({
                 })
               }
             />
-          </fieldset>
+          </Fieldset>
           {user.country_supports_native_payouts || complianceInfo.business_country === "AE" ? (
-            <fieldset className={cx({ danger: errorFieldNames.has("business_tax_id") })}>
-              <legend>
-                <label htmlFor={`${uid}-${businessTaxIdConfig.idSuffix}`}>{businessTaxIdConfig.label}</label>
+            <Fieldset state={errorFieldNames.has("business_tax_id") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-${businessTaxIdConfig.idSuffix}`}>{businessTaxIdConfig.label}</Label>
                 {complianceInfo.business_country === "US" ? (
                   <div className="small">
                     <a href="/help/article/260-your-payout-settings-page">I'm not sure what my Tax ID is.</a>
                   </div>
                 ) : null}
-              </legend>
-              <input
+              </FieldsetTitle>
+              <Input
                 id={`${uid}-${businessTaxIdConfig.idSuffix}`}
                 type="text"
                 placeholder={user.business_tax_id_entered ? "Hidden for security" : businessTaxIdConfig.placeholder}
@@ -714,14 +723,13 @@ const AccountDetailsSection = ({
                 aria-invalid={errorFieldNames.has("business_tax_id")}
                 onChange={(evt) => updateComplianceInfo({ business_tax_id: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
           ) : null}
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-personal-address-is-business-address`}>
-                <input
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-personal-address-is-business-address`}>
+                <Checkbox
                   id={`${uid}-personal-address-is-business-address`}
-                  type="checkbox"
                   disabled={isFormDisabled}
                   onChange={(e) =>
                     e.target.checked &&
@@ -734,18 +742,18 @@ const AccountDetailsSection = ({
                   }
                 />
                 Same as business
-              </label>
-            </legend>
-          </fieldset>
+              </Label>
+            </FieldsetTitle>
+          </Fieldset>
         </section>
       ) : null}
       <section className="grid gap-8">
         <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
-          <fieldset className={cx({ danger: errorFieldNames.has("first_name") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-first-name`}>First name</label>
-            </legend>
-            <input
+          <Fieldset state={errorFieldNames.has("first_name") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-creator-first-name`}>First name</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-creator-first-name`}
               type="text"
               placeholder="First name"
@@ -755,13 +763,13 @@ const AccountDetailsSection = ({
               required
               onChange={(evt) => updateComplianceInfo({ first_name: evt.target.value })}
             />
-            <small>Include your middle name if it appears on your ID.</small>
-          </fieldset>
-          <fieldset className={cx({ danger: errorFieldNames.has("last_name") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-last-name`}>Last name</label>
-            </legend>
-            <input
+            <FieldsetDescription>Include your middle name if it appears on your ID.</FieldsetDescription>
+          </Fieldset>
+          <Fieldset state={errorFieldNames.has("last_name") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-creator-last-name`}>Last name</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-creator-last-name`}
               type="text"
               placeholder="Last name"
@@ -771,14 +779,14 @@ const AccountDetailsSection = ({
               required
               onChange={(evt) => updateComplianceInfo({ last_name: evt.target.value })}
             />
-          </fieldset>
+          </Fieldset>
         </div>
         {complianceInfo.is_business && complianceInfo.country === "CA" ? (
-          <fieldset className={cx({ danger: errorFieldNames.has("job_title") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-job-title`}>Job title</label>
-            </legend>
-            <input
+          <Fieldset state={errorFieldNames.has("job_title") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-creator-job-title`}>Job title</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-creator-job-title`}
               type="text"
               placeholder="CEO"
@@ -788,16 +796,16 @@ const AccountDetailsSection = ({
               required
               onChange={(evt) => updateComplianceInfo({ job_title: evt.target.value })}
             />
-          </fieldset>
+          </Fieldset>
         ) : null}
         {complianceInfo.country === "JP" ? (
           <>
             <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
-              <fieldset className={cx({ danger: errorFieldNames.has("first_name_kanji") })}>
-                <legend>
-                  <label htmlFor={`${uid}-creator-first-name-kanji`}>First name (Kanji)</label>
-                </legend>
-                <input
+              <Fieldset state={errorFieldNames.has("first_name_kanji") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-first-name-kanji`}>First name (Kanji)</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-creator-first-name-kanji`}
                   type="text"
                   placeholder="First name (Kanji)"
@@ -807,12 +815,12 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ first_name_kanji: evt.target.value })}
                 />
-              </fieldset>
-              <fieldset className={cx({ danger: errorFieldNames.has("last_name_kanji") })}>
-                <legend>
-                  <label htmlFor={`${uid}-creator-last-name-kanji`}>Last name (Kanji)</label>
-                </legend>
-                <input
+              </Fieldset>
+              <Fieldset state={errorFieldNames.has("last_name_kanji") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-last-name-kanji`}>Last name (Kanji)</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-creator-last-name-kanji`}
                   type="text"
                   placeholder="Last name (Kanji)"
@@ -822,14 +830,14 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ last_name_kanji: evt.target.value })}
                 />
-              </fieldset>
+              </Fieldset>
             </div>
             <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
-              <fieldset className={cx({ danger: errorFieldNames.has("first_name_kana") })}>
-                <legend>
-                  <label htmlFor={`${uid}-creator-first-name-kana`}>First name (Kana)</label>
-                </legend>
-                <input
+              <Fieldset state={errorFieldNames.has("first_name_kana") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-first-name-kana`}>First name (Kana)</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-creator-first-name-kana`}
                   type="text"
                   placeholder="First name (Kana)"
@@ -839,12 +847,12 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ first_name_kana: evt.target.value })}
                 />
-              </fieldset>
-              <fieldset className={cx({ danger: errorFieldNames.has("last_name_kana") })}>
-                <legend>
-                  <label htmlFor={`${uid}-creator-last-name-kana`}>Last name (Kana)</label>
-                </legend>
-                <input
+              </Fieldset>
+              <Fieldset state={errorFieldNames.has("last_name_kana") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-last-name-kana`}>Last name (Kana)</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-creator-last-name-kana`}
                   type="text"
                   placeholder="Last name (Kana)"
@@ -854,7 +862,7 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ last_name_kana: evt.target.value })}
                 />
-              </fieldset>
+              </Fieldset>
             </div>
           </>
         ) : null}
@@ -869,11 +877,11 @@ const AccountDetailsSection = ({
                 alignItems: "end",
               }}
             >
-              <fieldset className={cx({ danger: errorFieldNames.has("building_number") })}>
-                <legend>
-                  <label htmlFor={`${uid}-creator-building-number`}>Block / Building number</label>
-                </legend>
-                <input
+              <Fieldset state={errorFieldNames.has("building_number") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-building-number`}>Block / Building number</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-creator-building-number`}
                   type="text"
                   placeholder="1-1"
@@ -883,12 +891,12 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ building_number: evt.target.value })}
                 />
-              </fieldset>
-              <fieldset className={cx({ danger: errorFieldNames.has("building_number_kana") })}>
-                <legend>
-                  <label htmlFor={`${uid}-creator-building-number-kana`}>Block / Building number (Kana)</label>
-                </legend>
-                <input
+              </Fieldset>
+              <Fieldset state={errorFieldNames.has("building_number_kana") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-building-number-kana`}>Block / Building number (Kana)</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-creator-building-number-kana`}
                   type="text"
                   placeholder="イチノイチ"
@@ -898,14 +906,14 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ building_number_kana: evt.target.value })}
                 />
-              </fieldset>
+              </Fieldset>
             </div>
             <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
-              <fieldset className={cx({ danger: errorFieldNames.has("street_address_kanji") })}>
-                <legend>
-                  <label htmlFor={`${uid}-creator-street-address-kanji`}>Town/Cho-me (Kanji)</label>
-                </legend>
-                <input
+              <Fieldset state={errorFieldNames.has("street_address_kanji") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-street-address-kanji`}>Town/Cho-me (Kanji)</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-creator-street-address-kanji`}
                   type="text"
                   placeholder="千代田"
@@ -915,12 +923,12 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ street_address_kanji: evt.target.value })}
                 />
-              </fieldset>
-              <fieldset className={cx({ danger: errorFieldNames.has("street_address_kana") })}>
-                <legend>
-                  <label htmlFor={`${uid}-creator-street-address-kana`}>Town/Cho-me (Kana)</label>
-                </legend>
-                <input
+              </Fieldset>
+              <Fieldset state={errorFieldNames.has("street_address_kana") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-creator-street-address-kana`}>Town/Cho-me (Kana)</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-creator-street-address-kana`}
                   type="text"
                   placeholder="チヨダ"
@@ -930,15 +938,15 @@ const AccountDetailsSection = ({
                   required
                   onChange={(evt) => updateComplianceInfo({ street_address_kana: evt.target.value })}
                 />
-              </fieldset>
+              </Fieldset>
             </div>
           </>
         ) : (
-          <fieldset className={cx({ danger: errorFieldNames.has("street_address") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-street-address`}>Address</label>
-            </legend>
-            <input
+          <Fieldset state={errorFieldNames.has("street_address") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-creator-street-address`}>Address</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-creator-street-address`}
               type="text"
               placeholder="Street address"
@@ -948,7 +956,7 @@ const AccountDetailsSection = ({
               aria-invalid={errorFieldNames.has("street_address")}
               onChange={(evt) => updateComplianceInfo({ street_address: evt.target.value })}
             />
-          </fieldset>
+          </Fieldset>
         )}
       </section>
       {complianceInfo.country === "JP" ? (
@@ -959,11 +967,11 @@ const AccountDetailsSection = ({
             gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
           }}
         >
-          <fieldset className={cx({ danger: errorFieldNames.has("state") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-prefecture`}>Prefecture</label>
-            </legend>
-            <select
+          <Fieldset state={errorFieldNames.has("state") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-creator-prefecture`}>Prefecture</Label>
+            </FieldsetTitle>
+            <Select
               id={`${uid}-creator-prefecture`}
               required
               disabled={isFormDisabled}
@@ -979,13 +987,13 @@ const AccountDetailsSection = ({
                   {prefecture.label}
                 </option>
               ))}
-            </select>
-          </fieldset>
-          <fieldset className={cx({ danger: errorFieldNames.has("zip_code") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-zip-code`}>Postal code</label>
-            </legend>
-            <input
+            </Select>
+          </Fieldset>
+          <Fieldset state={errorFieldNames.has("zip_code") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-creator-zip-code`}>Postal code</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-creator-zip-code`}
               type="text"
               placeholder="100-0000"
@@ -995,7 +1003,7 @@ const AccountDetailsSection = ({
               required
               onChange={(evt) => updateComplianceInfo({ zip_code: evt.target.value })}
             />
-          </fieldset>
+          </Fieldset>
         </div>
       ) : (
         <div
@@ -1005,11 +1013,11 @@ const AccountDetailsSection = ({
             gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
           }}
         >
-          <fieldset className={cx({ danger: errorFieldNames.has("city") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-city`}>City</label>
-            </legend>
-            <input
+          <Fieldset state={errorFieldNames.has("city") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-creator-city`}>City</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-creator-city`}
               type="text"
               placeholder="City"
@@ -1019,7 +1027,7 @@ const AccountDetailsSection = ({
               required
               onChange={(evt) => updateComplianceInfo({ city: evt.target.value })}
             />
-          </fieldset>
+          </Fieldset>
           {individualStateConfig
             ? renderStateSelect(
                 individualStateConfig,
@@ -1028,13 +1036,13 @@ const AccountDetailsSection = ({
                 "state",
               )
             : null}
-          <fieldset className={cx({ danger: errorFieldNames.has("zip_code") })}>
-            <legend>
-              <label htmlFor={`${uid}-creator-zip-code`}>
+          <Fieldset state={errorFieldNames.has("zip_code") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-creator-zip-code`}>
                 {complianceInfo.country === "US" ? "ZIP code" : "Postal code"}
-              </label>
-            </legend>
-            <input
+              </Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-creator-zip-code`}
               type="text"
               placeholder={complianceInfo.country === "US" ? "ZIP code" : "Postal code"}
@@ -1044,14 +1052,14 @@ const AccountDetailsSection = ({
               required
               onChange={(evt) => updateComplianceInfo({ zip_code: evt.target.value })}
             />
-          </fieldset>
+          </Fieldset>
         </div>
       )}
-      <fieldset>
-        <legend>
-          <label htmlFor={`${uid}-creator-country`}>Country</label>
-        </legend>
-        <select
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-creator-country`}>Country</Label>
+        </FieldsetTitle>
+        <Select
           id={`${uid}-creator-country`}
           disabled={isFormDisabled}
           value={complianceInfo.country || ""}
@@ -1066,13 +1074,13 @@ const AccountDetailsSection = ({
               {name}
             </option>
           ))}
-        </select>
-      </fieldset>
-      <fieldset className={cx({ danger: errorFieldNames.has("phone") })}>
-        <legend>
-          <label htmlFor={`${uid}-creator-phone`}>Phone number</label>
-        </legend>
-        <input
+        </Select>
+      </Fieldset>
+      <Fieldset state={errorFieldNames.has("phone") ? "danger" : undefined}>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-creator-phone`}>Phone number</Label>
+        </FieldsetTitle>
+        <Input
           id={`${uid}-creator-phone`}
           type="tel"
           placeholder="Phone number"
@@ -1084,15 +1092,15 @@ const AccountDetailsSection = ({
             updateComplianceInfo({ phone: formatPhoneNumber(evt.target.value, complianceInfo.country) })
           }
         />
-      </fieldset>
-      <fieldset>
-        <legend>
-          <label>Date of Birth</label>
+      </Fieldset>
+      <Fieldset>
+        <FieldsetTitle>
+          <Label>Date of Birth</Label>
           <a href="/help/article/260-your-payout-settings-page">Why does Gumroad need this information?</a>
-        </legend>
+        </FieldsetTitle>
         <div style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", gridAutoColumns: "1fr" }}>
-          <fieldset className={cx({ danger: errorFieldNames.has("dob_month") })}>
-            <select
+          <Fieldset state={errorFieldNames.has("dob_month") ? "danger" : undefined}>
+            <Select
               id={`${uid}-creator-dob-month`}
               disabled={isFormDisabled}
               required
@@ -1107,13 +1115,13 @@ const AccountDetailsSection = ({
                   {new Date(2000, month - 1, 1).toLocaleString("en-US", { month: "long" })}
                 </option>
               ))}
-            </select>
-          </fieldset>
-          <fieldset
+            </Select>
+          </Fieldset>
+          <Fieldset
             style={complianceInfo.country !== "US" ? { gridRow: 1, gridColumn: 1 } : {}}
-            className={cx({ danger: errorFieldNames.has("dob_day") })}
+            state={errorFieldNames.has("dob_day") ? "danger" : undefined}
           >
-            <select
+            <Select
               id={`${uid}-creator-dob-day`}
               disabled={isFormDisabled}
               required
@@ -1128,10 +1136,10 @@ const AccountDetailsSection = ({
                   {day}
                 </option>
               ))}
-            </select>
-          </fieldset>
-          <fieldset className={cx({ danger: errorFieldNames.has("dob_year") })}>
-            <select
+            </Select>
+          </Fieldset>
+          <Fieldset state={errorFieldNames.has("dob_year") ? "danger" : undefined}>
+            <Select
               id={`${uid}-creator-dob-year`}
               disabled={isFormDisabled}
               required
@@ -1146,17 +1154,17 @@ const AccountDetailsSection = ({
                   {year}
                 </option>
               ))}
-            </select>
-          </fieldset>
+            </Select>
+          </Fieldset>
         </div>
-      </fieldset>
+      </Fieldset>
       {showNationalityField ? (
-        <fieldset className={cx({ danger: errorFieldNames.has("nationality") })}>
-          <legend>
-            <label htmlFor={`${uid}-nationality`}>Nationality</label>
-          </legend>
+        <Fieldset state={errorFieldNames.has("nationality") ? "danger" : undefined}>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}-nationality`}>Nationality</Label>
+          </FieldsetTitle>
           <div>
-            <select
+            <Select
               id={`${uid}-nationality`}
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("nationality")}
@@ -1169,17 +1177,17 @@ const AccountDetailsSection = ({
                   {name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
-        </fieldset>
+        </Fieldset>
       ) : null}
       {needsIndividualTaxId && individualTaxIdConfig ? (
-        <fieldset className={cx({ danger: errorFieldNames.has("individual_tax_id") })}>
+        <Fieldset state={errorFieldNames.has("individual_tax_id") ? "danger" : undefined}>
           <div>
-            <legend>
-              <label htmlFor={`${uid}-${individualTaxIdConfig.idSuffix}`}>{individualTaxIdConfig.label}</label>
-            </legend>
-            <input
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-${individualTaxIdConfig.idSuffix}`}>{individualTaxIdConfig.label}</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-${individualTaxIdConfig.idSuffix}`}
               type="text"
               minLength={individualTaxIdConfig.minLength}
@@ -1191,7 +1199,7 @@ const AccountDetailsSection = ({
               onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
             />
           </div>
-        </fieldset>
+        </Fieldset>
       ) : null}
     </section>
   );

@@ -1,5 +1,4 @@
 import { useForm, usePage } from "@inertiajs/react";
-import cx from "classnames";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -31,7 +30,11 @@ import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmai
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -744,7 +747,7 @@ export default function PaymentsPage() {
   };
 
   const payoutsPausedToggle = (
-    <fieldset>
+    <Fieldset>
       <Switch
         checked={form.data.payouts_paused_by_user || props.payouts_paused_internally}
         onChange={(e) => form.setData("payouts_paused_by_user", e.target.checked)}
@@ -752,11 +755,11 @@ export default function PaymentsPage() {
         disabled={props.is_form_disabled || props.payouts_paused_internally}
         label="Pause payouts"
       />
-      <small>
+      <FieldsetDescription>
         By pausing payouts, they won't be processed until you decide to resume them, and your balance will remain in
         your account until then.
-      </small>
-    </fieldset>
+      </FieldsetDescription>
+    </Fieldset>
   );
 
   return (
@@ -810,10 +813,7 @@ export default function PaymentsPage() {
           </Alert>
         ) : null}
 
-        <section className="p-4! md:p-8!">
-          <header>
-            <h2>Verification</h2>
-          </header>
+        <FormSection header={<h2>Verification</h2>}>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
           ) : (
@@ -834,7 +834,7 @@ export default function PaymentsPage() {
               </div>
             </div>
           )}
-        </section>
+        </FormSection>
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
           <AusBackTaxesSection
@@ -864,20 +864,23 @@ export default function PaymentsPage() {
             </Alert>
           </div>
         ) : null}
-        <section className="p-4! md:p-8!">
-          <header>
-            <h2>Payout schedule</h2>
-            <p>
-              Payouts will only happen on your chosen schedule once the minimum balance of{" "}
-              {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
-                symbolFormat: "long",
-              })}{" "}
-              is reached.
-            </p>
-          </header>
+        <FormSection
+          header={
+            <>
+              <h2>Payout schedule</h2>
+              <p>
+                Payouts will only happen on your chosen schedule once the minimum balance of{" "}
+                {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
+                  symbolFormat: "long",
+                })}{" "}
+                is reached.
+              </p>
+            </>
+          }
+        >
           <section className="flex flex-col gap-4">
-            <fieldset>
-              <label htmlFor="payout_frequency">Schedule</label>
+            <Fieldset>
+              <Label htmlFor="payout_frequency">Schedule</Label>
               <TypeSafeOptionSelect
                 id="payout_frequency"
                 name="Schedule"
@@ -889,11 +892,11 @@ export default function PaymentsPage() {
                   disabled: frequency === "daily" && !props.payout_frequency_daily_supported,
                 }))}
               />
-              <small>
+              <FieldsetDescription>
                 Daily payouts are only available for US users with eligible bank accounts and more than 4 previous
                 payouts.
-              </small>
-            </fieldset>
+              </FieldsetDescription>
+            </Fieldset>
             {form.data.payout_frequency === "daily" && props.payout_frequency_daily_supported ? (
               <Alert variant="info" role="status">
                 <div>
@@ -907,8 +910,8 @@ export default function PaymentsPage() {
                 <div>Your account is no longer eligible for daily payouts. Please update your schedule.</div>
               </Alert>
             )}
-            <fieldset className={cx({ danger: payoutThresholdError })}>
-              <label htmlFor="payout_threshold_cents">Minimum payout threshold</label>
+            <Fieldset state={payoutThresholdError ? "danger" : undefined}>
+              <Label htmlFor="payout_threshold_cents">Minimum payout threshold</Label>
               <PriceInput
                 id="payout_threshold_cents"
                 currencyCode="usd"
@@ -920,14 +923,14 @@ export default function PaymentsPage() {
                 ariaLabel="Minimum payout threshold"
                 hasError={!!payoutThresholdError}
               />
-              <small>
+              <FieldsetDescription>
                 The minimum payout threshold for {props.payout_country_name ?? "your country"} is{" "}
                 {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
                   symbolFormat: "long",
                 })}
                 .
-              </small>
-            </fieldset>
+              </FieldsetDescription>
+            </Fieldset>
             {props.payouts_paused_internally ? (
               <WithTooltip
                 tip={
@@ -946,80 +949,91 @@ export default function PaymentsPage() {
               payoutsPausedToggle
             )}
           </section>
-        </section>
+        </FormSection>
 
-        <section className="p-4! md:p-8!">
-          <header>
-            <h2>Payout method</h2>
-            <div>
-              <a href="/help/article/260-your-payout-settings-page" target="_blank" rel="noreferrer">
-                Any questions about these payout settings?
-              </a>
-            </div>
-          </header>
+        <FormSection
+          header={
+            <>
+              <h2>Payout method</h2>
+              <div>
+                <a href="/help/article/260-your-payout-settings-page" target="_blank" rel="noreferrer">
+                  Any questions about these payout settings?
+                </a>
+              </div>
+            </>
+          }
+        >
           <section className="grid gap-8">
-            <div className="radio-buttons" role="radiogroup">
+            <Tabs variant="buttons" className="gap-4" role="radiogroup">
               {props.bank_account_details.show_bank_account ? (
                 <>
-                  <Button
-                    role="radio"
-                    key="bank"
-                    aria-checked={selectedPayoutMethod === "bank"}
-                    onClick={() => updatePayoutMethod("bank")}
-                    disabled={props.is_form_disabled}
-                  >
-                    <Icon name="bank" />
-                    <div>
-                      <h4>Bank Account</h4>
-                    </div>
-                  </Button>
-                  {props.user.country_code === "US" ? (
+                  <Tab key="bank" isSelected={selectedPayoutMethod === "bank"} asChild>
                     <Button
                       role="radio"
-                      key="card"
-                      aria-checked={selectedPayoutMethod === "card"}
-                      onClick={() => updatePayoutMethod("card")}
+                      aria-checked={selectedPayoutMethod === "bank"}
+                      onClick={() => updatePayoutMethod("bank")}
                       disabled={props.is_form_disabled}
+                      className="items-start justify-start text-left"
                     >
-                      <Icon name="card" />
+                      <Icon name="bank" />
                       <div>
-                        <h4>Debit Card</h4>
+                        <h4 className="font-bold">Bank Account</h4>
                       </div>
                     </Button>
+                  </Tab>
+                  {props.user.country_code === "US" ? (
+                    <Tab key="card" isSelected={selectedPayoutMethod === "card"} asChild>
+                      <Button
+                        role="radio"
+                        aria-checked={selectedPayoutMethod === "card"}
+                        onClick={() => updatePayoutMethod("card")}
+                        disabled={props.is_form_disabled}
+                        className="items-start justify-start text-left"
+                      >
+                        <Icon name="card" />
+                        <div>
+                          <h4 className="font-bold">Debit Card</h4>
+                        </div>
+                      </Button>
+                    </Tab>
                   ) : null}
                 </>
               ) : null}
               {props.bank_account_details.show_paypal ? (
-                <Button
-                  role="radio"
-                  key="paypal"
-                  aria-checked={selectedPayoutMethod === "paypal"}
-                  onClick={() => updatePayoutMethod("paypal")}
-                  disabled={props.is_form_disabled}
-                >
-                  <Icon name="shop-window" />
-                  <div>
-                    <h4>PayPal</h4>
-                  </div>
-                </Button>
+                <Tab key="paypal" isSelected={selectedPayoutMethod === "paypal"} asChild>
+                  <Button
+                    role="radio"
+                    aria-checked={selectedPayoutMethod === "paypal"}
+                    onClick={() => updatePayoutMethod("paypal")}
+                    disabled={props.is_form_disabled}
+                    className="items-start justify-start text-left"
+                  >
+                    <Icon name="shop-window" />
+                    <div>
+                      <h4 className="font-bold">PayPal</h4>
+                    </div>
+                  </Button>
+                </Tab>
               ) : null}
               {props.user.country_code === "BR" ||
               props.user.can_connect_stripe ||
               props.stripe_connect.has_connected_stripe ? (
-                <Button
-                  role="radio"
-                  key="stripe"
-                  aria-checked={selectedPayoutMethod === "stripe"}
-                  onClick={() => updatePayoutMethod("stripe")}
-                  disabled={props.is_form_disabled}
-                >
-                  <Icon name="stripe" />
-                  <div>
-                    <h4>Connect to Stripe</h4>
-                  </div>
-                </Button>
+                <Tab key="stripe" isSelected={selectedPayoutMethod === "stripe"} asChild>
+                  <Button
+                    role="radio"
+                    aria-checked={selectedPayoutMethod === "stripe"}
+                    onClick={() => updatePayoutMethod("stripe")}
+                    disabled={props.is_form_disabled}
+                    className="items-start justify-start text-left"
+                  >
+                    <Icon name="stripe" />
+                    <div>
+                      <h4 className="font-bold">Connect to Stripe</h4>
+                    </div>
+                  </Button>
+                </Tab>
               ) : null}
-            </div>
+            </Tabs>
             {selectedPayoutMethod === "bank" ? (
               <BankAccountSection
                 bankAccountDetails={props.bank_account_details}
@@ -1077,7 +1091,7 @@ export default function PaymentsPage() {
               />
             )}
           </section>
-        </section>
+        </FormSection>
         {props.paypal_connect.show_paypal_connect ? (
           <PayPalConnectSection
             paypalConnect={props.paypal_connect}

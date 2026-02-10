@@ -3,6 +3,9 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { TagInput } from "$app/components/TagInput";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 
@@ -76,9 +79,9 @@ const ProductLevelSupportEmailRow = React.memo(
         </RowActions>
         {expanded ? (
           <RowDetails className="flex flex-col gap-4">
-            <fieldset>
-              <label htmlFor={`${uid}email`}>Email</label>
-              <input
+            <Fieldset>
+              <Label htmlFor={`${uid}email`}>Email</Label>
+              <Input
                 id={`${uid}email`}
                 type="email"
                 value={supportEmail.email}
@@ -86,12 +89,14 @@ const ProductLevelSupportEmailRow = React.memo(
                 required={supportEmail.product_ids.length > 0}
                 onChange={handleEmailChange}
               />
-              <small>This reply-to email will appear on receipts for selected products.</small>
-            </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-products`}>Products</label>
-              </legend>
+              <FieldsetDescription>
+                This reply-to email will appear on receipts for selected products.
+              </FieldsetDescription>
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-products`}>Products</Label>
+              </FieldsetTitle>
               <TagInput
                 inputId={`${uid}-products`}
                 tagIds={supportEmail.product_ids}
@@ -99,7 +104,7 @@ const ProductLevelSupportEmailRow = React.memo(
                 isDisabled={isDisabled}
                 onChangeTagIds={handleProductIdsChange}
               />
-            </fieldset>
+            </Fieldset>
           </RowDetails>
         ) : null}
       </Row>

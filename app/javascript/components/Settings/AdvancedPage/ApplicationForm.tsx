@@ -1,6 +1,5 @@
 import { router } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
-import cx from "classnames";
 import placeholderAppIcon from "images/gumroad_app.png";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -12,6 +11,9 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export type Application = {
@@ -126,26 +128,27 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
       <input
         ref={iconInputRef}
         type="file"
+        className="sr-only"
         accept={ALLOWED_ICON_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
         tabIndex={-1}
         onChange={handleIconChange}
       />
-      <fieldset>
-        <legend>
-          <label>Application icon</label>
-        </legend>
+      <Fieldset>
+        <FieldsetTitle>
+          <Label>Application icon</Label>
+        </FieldsetTitle>
         <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "flex-start" }}>
           <img className="application-icon" src={icon?.url || placeholderAppIcon} width={80} height={80} />
           <Button onClick={() => iconInputRef.current?.click()} disabled={isUploadingIcon || isSubmitting}>
             {isUploadingIcon ? "Uploading..." : "Upload icon"}
           </Button>
         </div>
-      </fieldset>
-      <fieldset className={cx({ danger: name.error })}>
-        <legend>
-          <label htmlFor={`${uid}-name`}>Application name</label>
-        </legend>
-        <input
+      </Fieldset>
+      <Fieldset state={name.error ? "danger" : undefined}>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-name`}>Application name</Label>
+        </FieldsetTitle>
+        <Input
           id={`${uid}-name`}
           ref={nameRef}
           placeholder="Name"
@@ -153,12 +156,12 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
           value={name.value}
           onChange={(e) => setName({ value: e.target.value })}
         />
-      </fieldset>
-      <fieldset className={cx({ danger: redirectUri.error })}>
-        <legend>
-          <label htmlFor={`${uid}-redirectUri`}>Redirect URI</label>
-        </legend>
-        <input
+      </Fieldset>
+      <Fieldset state={redirectUri.error ? "danger" : undefined}>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-redirectUri`}>Redirect URI</Label>
+        </FieldsetTitle>
+        <Input
           id={`${uid}-redirectUri`}
           ref={redirectUriRef}
           placeholder="http://yourapp.com/callback"
@@ -167,35 +170,35 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
           value={redirectUri.value}
           onChange={(e) => setRedirectUri({ value: e.target.value })}
         />
-      </fieldset>
+      </Fieldset>
 
       {application ? (
         <>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-uid`}>Application ID</label>
-            </legend>
-            <input id={`${uid}-uid`} readOnly type="text" value={application.uid} />
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-secret`}>Application Secret</label>
-            </legend>
-            <input id={`${uid}-secret`} readOnly type="text" value={application.secret} />
-          </fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-uid`}>Application ID</Label>
+            </FieldsetTitle>
+            <Input id={`${uid}-uid`} readOnly type="text" value={application.uid} />
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-secret`}>Application Secret</Label>
+            </FieldsetTitle>
+            <Input id={`${uid}-secret`} readOnly type="text" value={application.secret} />
+          </Fieldset>
 
           {token ? (
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-accessToken`}>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-accessToken`}>
                   Access Token
                   <WithTooltip tip="This is a ready-to-use access token for our API.">
                     <span>(?)</span>
                   </WithTooltip>
-                </label>
-              </legend>
-              <input id={`${uid}-accessToken`} readOnly type="text" value={token} />
-            </fieldset>
+                </Label>
+              </FieldsetTitle>
+              <Input id={`${uid}-accessToken`} readOnly type="text" value={token} />
+            </Fieldset>
           ) : null}
           <div className="flex gap-2">
             <Button color="accent" onClick={handleSubmit} disabled={isSubmitting || isUploadingIcon}>

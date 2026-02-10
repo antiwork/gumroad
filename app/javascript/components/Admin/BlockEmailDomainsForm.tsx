@@ -35,7 +35,6 @@ const Form = ({ action, header, buttonLabel }: Props) => {
   return (
     <form onSubmit={handleSubmit}>
       <FormSection
-        className="p-4 md:p-8"
         header={
           <>
             <p>{header}</p>
