@@ -106,16 +106,16 @@ describe FollowersController, inertia: true do
         expect(follower.user).to eq seller
       end
 
-      it "returns json success with a message" do
+      it "redirects with a notice on success" do
         post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
-        expect(response.parsed_body["success"]).to be(true)
-        expect(response.parsed_body["message"]).to eq("Check your inbox to confirm your follow request.")
+        expect(response).to redirect_to(custom_domain_subscribe_path)
+        expect(flash[:notice]).to eq("Check your inbox to confirm your follow request.")
       end
 
-      it "returns json error when email is invalid" do
+      it "redirects with an alert when email is invalid" do
         post :create, params: { email: "invalid email", seller_id: seller.external_id }
-        expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["message"]).to eq("Email invalid.")
+        expect(response).to redirect_to(custom_domain_subscribe_path)
+        expect(flash[:alert]).to eq("Email invalid.")
       end
 
       it "uncancels if follow object exists" do
@@ -132,10 +132,10 @@ describe FollowersController, inertia: true do
           sign_in @buyer
         end
 
-        it "returns json success with a message" do
+        it "redirects with a notice on success" do
           post :create, params: @params
-          expect(response.parsed_body["success"]).to be(true)
-          expect(response.parsed_body["message"]).to eq("You are now following #{seller.name_or_username}!")
+          expect(response).to redirect_to(custom_domain_subscribe_path)
+          expect(flash[:notice]).to eq("You are now following #{seller.name_or_username}!")
         end
 
         it "creates a new follower row" do
@@ -149,8 +149,8 @@ describe FollowersController, inertia: true do
         it "follow should update the existing follower and not create another one or throw an exception" do
           post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
 
-          expect(response.parsed_body["success"]).to be(true)
-          expect(response.parsed_body["message"]).to eq("Check your inbox to confirm your follow request.")
+          expect(response).to redirect_to(custom_domain_subscribe_path)
+          expect(flash[:notice]).to eq("Check your inbox to confirm your follow request.")
 
           follower = Follower.last
           expect(follower.email).to eq "follower@example.com"
@@ -160,8 +160,8 @@ describe FollowersController, inertia: true do
           sign_in new_user
 
           post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
-          expect(response.parsed_body["success"]).to be(true)
-          expect(response.parsed_body["message"]).to eq("You are now following #{seller.name_or_username}!")
+          expect(response).to redirect_to(custom_domain_subscribe_path)
+          expect(flash[:notice]).to eq("You are now following #{seller.name_or_username}!")
 
           expect(Follower.count).to be 1
           expect(Follower.last.follower_user_id).to be new_user.id

@@ -163,8 +163,8 @@ describe UsersController do
           expect(assigns(:user)).to eq(@user)
         end
 
-        it "renders the show template" do
-          expect(response).to render_template(:show)
+        it "renders successfully" do
+          expect(response).to be_successful
         end
       end
 
@@ -198,8 +198,8 @@ describe UsersController do
         end
 
 
-        it "renders the show template" do
-          expect(response).to render_template(:show)
+        it "renders successfully" do
+          expect(response).to be_successful
         end
 
         describe "when the host is another subdomain that is www with the same apex domain" do
@@ -212,8 +212,8 @@ describe UsersController do
             expect(assigns(:user)).to eq(@user)
           end
 
-          it "renders the show template" do
-            expect(response).to render_template(:show)
+          it "renders successfully" do
+            expect(response).to be_successful
           end
         end
 
@@ -239,33 +239,20 @@ describe UsersController do
       end
     end
 
-    it "sets paypal_merchant_currency as merchant account's currency if native paypal payments are enabled else as usd" do
-      creator = create(:named_user)
-      create(:product, user: creator)
-
-      @request.host = "#{creator.username}.test.gumroad.com"
-      get :show, params: { username: creator.username }
-      expect(assigns[:paypal_merchant_currency]).to eq "USD"
-
-      create(:merchant_account_paypal, user: creator, currency: "GBP")
-      get :show, params: { username: creator.username }
-      expect(assigns[:paypal_merchant_currency]).to eq "GBP"
-    end
-
-    context "with user signed in as admin for seller" do
+    context "with user signed in as admin for seller", inertia: true do
       let(:seller) { create(:named_seller) }
       let(:creator) { create(:user, username: "creator") }
 
       include_context "with user signed in as admin for seller"
 
-      it "assigns the correct instance variables" do
-        expect(ProfilePresenter).to receive(:new).with(seller: creator, pundit_user: controller.pundit_user).at_least(:once).and_call_original
-
+      it "renders the Inertia Users/Show component with correct props" do
         @request.host = "#{creator.username}.test.gumroad.com"
         get :show, params: { username: creator.username }
 
-        profile_props = assigns[:profile_props]
-        expect(profile_props[:creator_profile][:external_id]).to eq(creator.external_id)
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Users/Show")
+        expect(inertia.props[:creator_profile][:external_id]).to eq(creator.external_id)
+        expect(inertia.props[:custom_styles]).to be_present
       end
     end
 
@@ -677,18 +664,19 @@ describe UsersController do
     end
   end
 
-  describe "GET subscribe" do
+  describe "GET subscribe", inertia: true do
     context "with user signed in as admin for seller" do
       include_context "with user signed in as admin for seller"
 
-      it "assigns the correct instance variables" do
+      it "renders the Inertia Users/Subscribe component with correct props" do
         @request.host = "#{creator.username}.test.gumroad.com"
         get :subscribe
 
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Users/Subscribe")
         expect(controller.send(:page_title)).to eq("Subscribe to creator")
-        profile_presenter = assigns[:profile_presenter]
-        expect(profile_presenter.seller).to eq(creator)
-        expect(profile_presenter.pundit_user).to eq(controller.pundit_user)
+        expect(inertia.props[:creator_profile][:external_id]).to eq(creator.external_id)
+        expect(inertia.props[:custom_styles]).to be_present
       end
     end
   end
