@@ -254,7 +254,7 @@
   gap: spacer(1);
   flex-wrap: wrap;
   padding-block: spacer(1);
-  z-index: z-index(overlay);
+  z-index: z-index(above-overlay);
 
   &.ghost {
     @include bg-color(filled);
