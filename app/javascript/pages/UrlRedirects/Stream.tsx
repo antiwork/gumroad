@@ -41,8 +41,14 @@ type PageProps = {
 const fakeVideoUrlGuidForObfuscation = "ef64f2fef0d6c776a337050020423fc0";
 
 function StreamPage() {
-  const { playlist: initialPlaylist, index_to_play, url_redirect_id, purchase_id, should_show_transcoding_notice, transcode_on_first_sale } =
-    cast<PageProps>(usePage().props);
+  const {
+    playlist: initialPlaylist,
+    index_to_play,
+    url_redirect_id,
+    purchase_id,
+    should_show_transcoding_notice,
+    transcode_on_first_sale,
+  } = cast<PageProps>(usePage().props);
 
   const containerRef = React.useRef<HTMLDivElement>(null);
 
