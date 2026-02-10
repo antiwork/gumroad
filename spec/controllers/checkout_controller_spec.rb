@@ -460,7 +460,7 @@ describe CheckoutController, type: :controller, inertia: true do
           }, as: :json
         end.not_to change(Cart, :count)
 
-        expect(response).to have_http_status(:see_other)
+        expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
         expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
       end
@@ -469,7 +469,7 @@ describe CheckoutController, type: :controller, inertia: true do
         items = (Cart::MAX_ALLOWED_CART_PRODUCTS + 1).times.map { { product: { id: _1 + 1 } }  }
         patch :update, params: { cart: { items: } }, as: :json
 
-        expect(response).to have_http_status(:see_other)
+        expect(response).to have_http_status(:found)
         expect(response).to redirect_to(checkout_path)
         expect(flash[:alert]).to eq("You cannot add more than 50 products to the cart.")
       end
