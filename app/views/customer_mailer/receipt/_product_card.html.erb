@@ -9,13 +9,13 @@
     <h4>
       <%= link_to(product[:name], product[:url], target: "_blank") %>
     </h4>
-    <% if product[:creator].present? %>
+    <% if product[:seller].present? %>
       <div>
         <div class="user">
-          <% if product[:creator][:avatar_url].present? %>
-            <%= link_to(image_tag(product[:creator][:avatar_url], alt: "Avatar of #{product[:creator][:name]}", class: "user-avatar"), product[:creator][:profile_url], target: "_blank") %>
+          <% if product[:seller][:avatar_url].present? %>
+            <%= link_to(image_tag(product[:seller][:avatar_url], alt: "Avatar of #{product[:seller][:name]}", class: "user-avatar"), product[:seller][:profile_url], target: "_blank") %>
           <% end %>
-          <%= link_to(product[:creator][:name], product[:creator][:profile_url], target: "_blank", class: "user-name") %>
+          <%= link_to(product[:seller][:name], product[:seller][:profile_url], target: "_blank", class: "user-name") %>
         </div>
       </div>
     <% end %>
