@@ -47,12 +47,10 @@ class FollowersController < ApplicationController
   def create
     follower = create_follower(params)
 
-    if follower.nil?
-      return redirect_back fallback_location: root_path, alert: "Sorry, something went wrong."
-    end
+    return redirect_to(custom_domain_subscribe_path, alert: "Sorry, something went wrong.", allow_other_host: true, status: :see_other) if follower.nil?
 
     if follower.errors.present?
-      return redirect_back fallback_location: root_path, alert: follower.errors.full_messages.to_sentence
+      return redirect_to(custom_domain_subscribe_path, alert: follower.errors.full_messages.to_sentence, allow_other_host: true, status: :see_other)
     end
 
     message = if follower.confirmed?
@@ -61,7 +59,7 @@ class FollowersController < ApplicationController
                 "Check your inbox to confirm your follow request."
               end
 
-    redirect_back fallback_location: root_path, notice: message
+    redirect_to custom_domain_subscribe_path, notice: message, allow_other_host: true, status: :see_other
   end
 
   def new

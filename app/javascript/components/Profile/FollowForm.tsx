@@ -55,7 +55,6 @@ export const FollowForm = ({ creatorProfile, buttonColor, buttonLabel }: FollowF
     }
 
     post("/follow", {
-      preserveScroll: true,
       onSuccess: () => setFormStatus("success"),
     });
   };

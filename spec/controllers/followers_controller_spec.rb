@@ -104,13 +104,13 @@ describe FollowersController, inertia: true do
         follower = Follower.last
         expect(follower.email).to eq "follower@example.com"
         expect(follower.user).to eq seller
-        expect(response).to redirect_to(root_path)
+        expect(response).to redirect_to(custom_domain_subscribe_path)
         expect(flash[:notice]).to eq("Check your inbox to confirm your follow request.")
       end
 
       it "redirects with alert when email is invalid" do
         post :create, params: { email: "invalid email", seller_id: seller.external_id }
-        expect(response).to redirect_to(root_path)
+        expect(response).to redirect_to(custom_domain_subscribe_path)
         expect(flash[:alert]).to include("Email invalid")
       end
 
@@ -130,7 +130,7 @@ describe FollowersController, inertia: true do
 
         it "redirects with success notice" do
           post :create, params: @params
-          expect(response).to redirect_to(root_path)
+          expect(response).to redirect_to(custom_domain_subscribe_path)
           expect(flash[:notice]).to eq("You are now following #{seller.name_or_username}!")
         end
 
@@ -145,7 +145,7 @@ describe FollowersController, inertia: true do
         it "follow should update the existing follower and not create another one or throw an exception" do
           post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
 
-          expect(response).to redirect_to(root_path)
+          expect(response).to redirect_to(custom_domain_subscribe_path)
           expect(flash[:notice]).to eq("Check your inbox to confirm your follow request.")
 
           follower = Follower.last
@@ -156,7 +156,7 @@ describe FollowersController, inertia: true do
           sign_in new_user
 
           post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
-          expect(response).to redirect_to(root_path)
+          expect(response).to redirect_to(custom_domain_subscribe_path)
           expect(flash[:notice]).to eq("You are now following #{seller.name_or_username}!")
 
           expect(Follower.count).to be 1
