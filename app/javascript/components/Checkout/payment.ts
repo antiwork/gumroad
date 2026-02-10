@@ -409,7 +409,7 @@ export function createReducer(initial: {
     const searchParams = new URLSearchParams([...url.searchParams].filter(([key]) => key === "_gl"));
     url.search = searchParams.toString();
     // TODO (sm17p) Replace with Inertia's router.replace once subscription manager page is migrated to Inertia
-    // remove the checkout-path early return above so this runs on checkout too; then remove the duplicate useRunOnce url stripping logic in Checkout/Show.tsx.
+    // then remove the checkout-path early return above so this runs on checkout too.
     window.history.replaceState(window.history.state, "", url.toString());
   });
 

@@ -1,12 +1,8 @@
 import * as React from "react";
 
-import { LineItemResult } from "$app/data/purchase";
-
 import { Button } from "$app/components/Button";
-import { CartState, CartItem, getDiscountedPrice, Upsell } from "$app/components/Checkout/cartState";
-import { computeOptionPrice, OptionRadioButton, Option } from "$app/components/Product/ConfigurationSelector";
-
-export type Result = { item: CartItem; result: LineItemResult };
+import { type CartState, type CartItem, getDiscountedPrice, type Upsell } from "$app/components/Checkout/cartState";
+import { computeOptionPrice, OptionRadioButton, type Option } from "$app/components/Product/ConfigurationSelector";
 
 export type OfferedUpsell = Upsell & { item: CartItem; offeredOption: Option };
 

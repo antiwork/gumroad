@@ -3,11 +3,11 @@ import { reverse } from "lodash-es";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import { SurchargesResponse } from "$app/data/customer_surcharge";
+import { type SurchargesResponse } from "$app/data/customer_surcharge";
 import { startOrderCreation } from "$app/data/order";
 import { getPlugins, trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
-import { SavedCreditCard } from "$app/parsers/card";
-import { CardProduct, COMMISSION_DEPOSIT_PROPORTION, CustomFieldDescriptor } from "$app/parsers/product";
+import { type SavedCreditCard } from "$app/parsers/card";
+import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
 import { getIsSingleUnitCurrency } from "$app/utils/currency";
@@ -18,24 +18,24 @@ import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analy
 
 import { Checkout } from "$app/components/Checkout";
 import {
-  CartItem,
-  CartState,
+  type CartItem,
+  type CartState,
   convertToUSD,
   findCartItem,
   getDiscountedPrice,
-  ProductToAdd,
-  CrossSell,
-  Result,
+  type ProductToAdd,
+  type CrossSell,
+  type Result,
   newCartState,
 } from "$app/components/Checkout/cartState";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import {
   StateContext,
   createReducer,
-  Product,
+  type Product,
   loadSurcharges,
   requiresReusablePaymentMethod,
-  Gift,
+  type Gift,
   getCustomFieldKey,
   computeTipForPrice,
 } from "$app/components/Checkout/payment";

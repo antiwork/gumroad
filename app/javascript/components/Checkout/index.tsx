@@ -47,11 +47,11 @@ import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import {
-  CartState,
+  type CartState,
   convertToUSD,
   hasFreeTrial,
   getDiscountedPrice,
-  CartItem as CartItemProps,
+  type CartItem as CartItemProps,
   findCartItem,
 } from "./cartState";
 import {
