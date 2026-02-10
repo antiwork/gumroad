@@ -311,99 +311,12 @@ form {
   }
 }
 
-.combobox {
-  position: relative;
-
-  input[aria-expanded="true"],
-  .input:has(input[aria-expanded="true"]) {
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-
-  datalist {
-    display: block;
-    @include bg-color(filled);
-    border: $border;
-    width: 100%;
-    overflow: auto;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    border-radius: 0 0 border-radius(1) border-radius(1);
-    box-shadow: box-shadow(1);
-    z-index: z-index(modal);
-    padding: spacer(2) 0;
-
-    option,
-    [role="option"],
-    .option {
-      padding: spacer(2) spacer(4);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      &.focused,
-      &:focus {
-        @include bg-color(primary);
-      }
-
-      img {
-        border-radius: border-radius(1);
-        border: $border;
-        height: size(3);
-        flex: 0 0 size(3);
-        object-fit: cover;
-      }
-    }
-
-    &[aria-multiselectable="true"] {
-      option,
-      [role="option"] {
-        &[aria-selected="true"]:after {
-          @extend %icon, .icon-solid-check-circle;
-          color: full-color(success);
-          margin-left: auto;
-        }
-      }
-    }
-
-    h3 {
-      padding: spacer(2) spacer(4);
-
-      &:not(:first-child) {
-        border-top: $border;
-        padding-top: spacer(4);
-        margin-top: spacer(2);
-      }
-    }
-  }
-}
-
 [role="combobox"] {
   cursor: pointer;
 }
 
 textarea {
   resize: vertical;
-}
-
-.color-picker {
-  position: relative;
-  overflow: hidden;
-  padding: spacer(4);
-  border: $border;
-  border-radius: border-radius(3);
-  max-width: fit-content;
-
-  > input[type="color"] {
-    position: absolute;
-    width: 200%;
-    height: 200%;
-    max-width: unset;
-    left: -50%;
-    top: -50%;
-    border: none;
-    cursor: pointer;
-  }
 }
 
 [role="radio"],

@@ -6,6 +6,7 @@ import { SettingPage } from "$app/parsers/settings";
 
 import ApplicationForm from "$app/components/Settings/AdvancedPage/ApplicationForm";
 import { Layout } from "$app/components/Settings/Layout";
+import { FormSection } from "$app/components/ui/FormSection";
 
 type Application = {
   id: string;
@@ -27,12 +28,9 @@ export default function EditApplicationPage() {
   return (
     <Layout currentPage="advanced" pages={props.settings_pages}>
       <form>
-        <section className="p-4! md:p-8!">
-          <header>
-            <h2>Edit application</h2>
-          </header>
+        <FormSection header={<h2>Edit application</h2>}>
           <ApplicationForm application={props.application} />
-        </section>
+        </FormSection>
       </form>
     </Layout>
   );

@@ -257,6 +257,7 @@ describe ProductPresenter do
             **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
             customizable_price: true,
             suggested_price_cents: 200,
+            default_offer_code_id: nil,
             default_offer_code: nil,
             custom_button_text_option: "pay_prompt",
             custom_summary: "To summarize, I am a product.",
@@ -378,6 +379,7 @@ describe ProductPresenter do
             native_type: "ebook",
             require_shipping: false,
             cancellation_discount: nil,
+            default_offer_code_id: nil,
             default_offer_code: nil,
             public_files: [],
             audio_previews_enabled: false,
@@ -445,15 +447,15 @@ describe ProductPresenter do
         product.update!(default_offer_code: offer_code)
       end
 
-      it "includes default_offer_code with id in edit_props" do
-        expect(presenter.edit_props[:product][:default_offer_code][:id]).to eq(offer_code.external_id)
-      end
-
-      it "includes default_offer_code in product data" do
-        default_offer_code = presenter.edit_props[:product][:default_offer_code]
-        expect(default_offer_code).to be_a(Hash)
-        expect(default_offer_code[:id]).to eq(offer_code.external_id)
-        expect(default_offer_code[:code]).to eq(offer_code.code)
+      it "includes default offer code data in edit_props" do
+        product_data = presenter.edit_props[:product]
+        expect(product_data[:default_offer_code_id]).to eq(offer_code.external_id)
+        expect(product_data[:default_offer_code]).to eq(
+          id: offer_code.external_id,
+          code: offer_code.code,
+          name: "",
+          discount: offer_code.discount,
+        )
       end
     end
 
@@ -505,6 +507,7 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
+              default_offer_code_id: nil,
               default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
@@ -628,6 +631,7 @@ describe ProductPresenter do
                 },
                 duration_in_billing_cycles: 3
               },
+              default_offer_code_id: nil,
               default_offer_code: nil,
               public_files: [],
               audio_previews_enabled: false,
@@ -760,6 +764,7 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
+              default_offer_code_id: nil,
               default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
@@ -839,6 +844,7 @@ describe ProductPresenter do
               native_type: "digital",
               require_shipping: false,
               cancellation_discount: nil,
+              default_offer_code_id: nil,
               default_offer_code: nil,
               public_files: [],
               audio_previews_enabled: false,

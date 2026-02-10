@@ -8,6 +8,9 @@ import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Label } from "$app/components/ui/Label";
 
 const MIN_PASSWORD_LENGTH = 4;
 const MAX_PASSWORD_LENGTH = 128;
@@ -54,15 +57,12 @@ export default function PasswordPage() {
   return (
     <SettingsLayout currentPage="password" pages={props.settings_pages}>
       <form onSubmit={handleSubmit}>
-        <section className="p-4! md:p-8!">
-          <header>
-            <h2>Change password</h2>
-          </header>
+        <FormSection header={<h2>Change password</h2>}>
           {requireOldPassword ? (
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-old-password`}>Old password</label>
-              </legend>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-old-password`}>Old password</Label>
+              </FieldsetTitle>
               <PasswordInput
                 id={`${uid}-old-password`}
                 value={form.data.user.password}
@@ -70,12 +70,12 @@ export default function PasswordPage() {
                 required
                 disabled={form.processing}
               />
-            </fieldset>
+            </Fieldset>
           ) : null}
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-new-password`}>{requireOldPassword ? "New password" : "Add password"}</label>
-            </legend>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-new-password`}>{requireOldPassword ? "New password" : "Add password"}</Label>
+            </FieldsetTitle>
             <PasswordInput
               id={`${uid}-new-password`}
               value={form.data.user.new_password}
@@ -83,15 +83,15 @@ export default function PasswordPage() {
               required
               disabled={form.processing}
             />
-          </fieldset>
-          <fieldset>
+          </Fieldset>
+          <Fieldset>
             <div>
               <Button type="submit" color="accent" disabled={form.processing}>
                 {form.processing ? "Changing..." : "Change password"}
               </Button>
             </div>
-          </fieldset>
-        </section>
+          </Fieldset>
+        </FormSection>
       </form>
     </SettingsLayout>
   );
