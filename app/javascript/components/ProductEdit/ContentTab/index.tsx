@@ -717,7 +717,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             <Icon name="cart-plus" />
                             <span>Upsell</span>
                           </div>
-
                           <InsertReviewMenuItem editor={editor} productId={id} />
                         </>
                       )}
