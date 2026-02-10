@@ -92,7 +92,7 @@ describe BestOfferCodeService do
 
           it "returns the url_code" do
             expect(subject.result&.dig(:code)).to eq(url_offer_code.code)
-          expect(subject.result&.dig(:valid)).to be(true)
+            expect(subject.result&.dig(:valid)).to be(true)
           end
         end
 
@@ -102,7 +102,7 @@ describe BestOfferCodeService do
 
           it "returns the default_code" do
             expect(subject.result&.dig(:code)).to eq(default_offer_code.code)
-          expect(subject.result&.dig(:valid)).to be(true)
+            expect(subject.result&.dig(:valid)).to be(true)
           end
         end
 
@@ -112,7 +112,7 @@ describe BestOfferCodeService do
 
           it "returns the url_code" do
             expect(subject.result&.dig(:code)).to eq(url_offer_code.code)
-          expect(subject.result&.dig(:valid)).to be(true)
+            expect(subject.result&.dig(:valid)).to be(true)
           end
         end
 
@@ -122,7 +122,7 @@ describe BestOfferCodeService do
 
           it "returns the default_code" do
             expect(subject.result&.dig(:code)).to eq(default_offer_code.code)
-          expect(subject.result&.dig(:valid)).to be(true)
+            expect(subject.result&.dig(:valid)).to be(true)
           end
         end
 
@@ -132,7 +132,7 @@ describe BestOfferCodeService do
 
           it "returns the default_code (tie goes to default)" do
             expect(subject.result&.dig(:code)).to eq(default_offer_code.code)
-          expect(subject.result&.dig(:valid)).to be(true)
+            expect(subject.result&.dig(:valid)).to be(true)
           end
         end
 
@@ -143,7 +143,7 @@ describe BestOfferCodeService do
 
             it "returns the code with better discount (400 cents > 30% of 1000 = 300 cents)" do
               expect(subject.result&.dig(:code)).to eq(url_offer_code.code)
-          expect(subject.result&.dig(:valid)).to be(true)
+              expect(subject.result&.dig(:valid)).to be(true)
             end
           end
 
@@ -153,7 +153,7 @@ describe BestOfferCodeService do
 
             it "returns the code with better discount (50% of 1000 = 500 cents > 200 cents)" do
               expect(subject.result&.dig(:code)).to eq(url_offer_code.code)
-          expect(subject.result&.dig(:valid)).to be(true)
+              expect(subject.result&.dig(:valid)).to be(true)
             end
           end
         end
