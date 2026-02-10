@@ -49,7 +49,7 @@ class DiscoverController < ApplicationController
 
     prepare_discover_page
 
-    @react_discover_props = {
+    render inertia: "Discover/Index", props: {
       search_results: @search_results,
       currency_code: logged_in_user&.currency_type || "usd",
       taxonomies_for_nav:,

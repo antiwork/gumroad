@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe DiscoverController do
+describe DiscoverController, inertia: true do
   render_views
 
   let(:discover_domain_with_protocol) { UrlService.discover_domain_with_protocol }
@@ -15,12 +16,24 @@ describe DiscoverController do
   end
 
   describe "#index" do
-    it "displays navigation" do
+    it "renders Inertia page with correct component and props" do
       sign_in @buyer
 
       get :index
 
-      expect(response.body).to have_field "Search products"
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Discover/Index")
+      expect(inertia.props).to include(
+        :search_results,
+        :currency_code,
+        :taxonomies_for_nav,
+        :recommended_products,
+        :curated_product_ids,
+        :search_offset,
+        :show_black_friday_hero,
+        :is_black_friday_page,
+        :black_friday_offer_code,
+      )
     end
 
     it "renders the proper meta tags with no extra parameters" do
@@ -83,18 +96,22 @@ describe DiscoverController do
     end
 
     context "nav first render" do
-      it "renders as mobile if the user-agent is of an iPhone" do
+      it "renders Inertia page with taxonomies for nav regardless of user agent (mobile)" do
         @request.user_agent = "Mozilla/5.0 (iPhone; CPU OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.2 Mobile/15E148 Safari/604.1"
         get :index
 
-        expect(response.body).to have_selector("[role='nav'] > * > [aria-haspopup='menu'][aria-label='Categories']")
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Discover/Index")
+        expect(inertia.props[:taxonomies_for_nav]).to be_present
       end
 
-      it "renders as desktop if the user-agent is windows chrome" do
+      it "renders Inertia page with taxonomies for nav regardless of user agent (desktop)" do
         @request.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36."
         get :index
 
-        expect(response.body).to have_selector("[role='nav'] > * > [role='menubar']")
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Discover/Index")
+        expect(inertia.props[:taxonomies_for_nav]).to be_present
       end
     end
 
