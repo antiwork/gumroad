@@ -15,7 +15,7 @@ class CheckoutController < ApplicationController
 
   def update
     if update_permitted_params[:items].length > Cart::MAX_ALLOWED_CART_PRODUCTS
-      return redirect_to checkout_path, alert: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart.", status: :see_other
+      return redirect_to checkout_path, alert: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart."
     end
 
     ActiveRecord::Base.transaction do
@@ -64,7 +64,7 @@ class CheckoutController < ApplicationController
   rescue ActiveRecord::RecordInvalid => e
     Bugsnag.notify(e)
     Rails.logger.error(e.full_message) if Rails.env.development?
-    redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again.", status: :see_other
+    redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
   end
 
   private
