@@ -3274,6 +3274,40 @@ describe LinksController, :vcr, inertia: true do
               expect(query_params["code"]).to be_nil
             end
           end
+
+          context "when discount code is passed as offer_code param (embed/legacy URLs)" do
+            it "picks up offer_code and uses the better of URL code and default in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", offer_code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              # Default (300) is better than URL code (200), so redirect uses default
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          it "includes code exactly once in redirect query string when code param is passed" do
+            get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            query_string = redirect_url.query
+
+            code_param_count = query_string.split("&").count { |param| param.start_with?("code=") }
+            expect(code_param_count).to eq(1), "Expected code to appear exactly once in query string, got: #{query_string}"
+          end
+
+          it "includes code exactly once in redirect query string when offer_code param is passed" do
+            get :show, params: { id: product.to_param, wanted: "true", offer_code: url_offer_code.code }
+
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            query_string = redirect_url.query
+
+            code_param_count = query_string.split("&").count { |param| param.start_with?("code=") }
+            expect(code_param_count).to eq(1), "Expected code to appear exactly once in query string, got: #{query_string}"
+          end
         end
       end
 
