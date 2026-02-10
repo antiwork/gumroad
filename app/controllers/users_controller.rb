@@ -32,10 +32,9 @@ class UsersController < ApplicationController
                                       @user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
                                       ChargeProcessor::DEFAULT_CURRENCY_CODE
 
-        render inertia: "Users/Show", props: {
-          **ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:),
-          custom_styles: @user.seller_profile.custom_styles
-        }
+          render inertia: "Users/Show", props: {
+            **ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:),
+          }
       end
       format.json { render json: @user.as_json }
       format.any { e404 }
@@ -66,10 +65,10 @@ class UsersController < ApplicationController
   end
 
   def subscribe
+    set_user_page_meta(@user)
     set_meta_tag(title: "Subscribe to #{@user.name.presence || @user.username}")
     render inertia: "Users/Subscribe", props: {
       creator_profile: ProfilePresenter.new(pundit_user:, seller: @user).creator_profile,
-      custom_styles: @user.seller_profile.custom_styles
     }
   end
 

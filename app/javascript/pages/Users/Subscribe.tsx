@@ -9,16 +9,14 @@ import { Layout } from "$app/components/Profile/Layout";
 
 type Props = {
   creator_profile: CreatorProfile;
-  custom_styles: string;
 };
 
 export default function SubscribePage() {
-  const { creator_profile, custom_styles } = cast<Props>(usePage().props);
+  const { creator_profile } = cast<Props>(usePage().props);
 
   return (
     <>
       <Head>
-        <style>{custom_styles}</style>
       </Head>
       <Layout hideFollowForm creatorProfile={creator_profile}>
         <FollowFormBlock creatorProfile={creator_profile} className="px-4" />
