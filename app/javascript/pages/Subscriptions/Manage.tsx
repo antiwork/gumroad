@@ -1,6 +1,7 @@
+import { usePage } from "@inertiajs/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { confirmLineItem } from "$app/data/purchase";
 import { cancelSubscriptionByUser, updateSubscription } from "$app/data/subscription";
@@ -16,7 +17,6 @@ import {
 import { asyncVoid } from "$app/utils/promise";
 import { recurrenceLabels, RecurrenceId } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { Creator } from "$app/components/Checkout/cartState";
@@ -38,9 +38,8 @@ import {
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { useOnChangeSync } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-
-import { useOnChangeSync } from "../useOnChange";
 
 type Props = {
   product: {
@@ -98,17 +97,19 @@ type Props = {
   paypal_client_id: string;
 };
 
-const SubscriptionManager = ({
-  product,
-  subscription,
-  recaptcha_key,
-  paypal_client_id,
-  contact_info,
-  countries,
-  us_states,
-  ca_provinces,
-  used_card,
-}: Props) => {
+function ManageSubscriptionPage() {
+  const {
+    product,
+    subscription,
+    recaptcha_key,
+    paypal_client_id,
+    contact_info,
+    countries,
+    us_states,
+    ca_provinces,
+    used_card,
+  } = cast<Props>(usePage().props);
+
   const url = new URL(useOriginalLocation());
 
   const subscriptionEntity = subscription.is_installment_plan ? "installment plan" : "membership";
@@ -196,7 +197,7 @@ const SubscriptionManager = ({
     price: Math.round(amountDueToday / product.exchange_rate),
     payInInstallments: subscription.is_installment_plan,
     requireShipping: product.require_shipping,
-    customFields: [], // Custom fields were already collected during original purchase
+    customFields: [],
     bundleProductCustomFields: [],
     supportsPaypal: product.supports_paypal,
     testPurchase: subscription.is_test,
@@ -293,9 +294,6 @@ const SubscriptionManager = ({
   }
   React.useEffect(() => void pay(), [state.status]);
 
-  // show (the Stripe Payment Request method that triggers the Apple Pay
-  // modal) can't be called in asynchronous code, so we have to use a
-  // synchronous layout effect.
   useOnChangeSync(() => {
     if (state.status.type === "offering") dispatchAction({ type: "validate" });
   }, [state.status.type]);
@@ -388,6 +386,7 @@ const SubscriptionManager = ({
       ) : null}
     </Card>
   );
-};
+}
 
-export default register({ component: SubscriptionManager, propParser: createCast() });
+ManageSubscriptionPage.publicLayout = true;
+export default ManageSubscriptionPage;
