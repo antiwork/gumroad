@@ -2,8 +2,7 @@ import type { Editor } from "@tiptap/react";
 import * as React from "react";
 
 import { Icon } from "$app/components/Icons";
-
-const TestimonialSelectModal = React.lazy(() => import("$app/components/TestimonialSelectModal"));
+import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 
 export const InsertReviewMenuItem = ({ editor, productId }: { editor: Editor; productId: string }) => {
   const [showReviewModal, setShowReviewModal] = React.useState(false);
@@ -22,14 +21,12 @@ export const InsertReviewMenuItem = ({ editor, productId }: { editor: Editor; pr
         <span>Review</span>
       </div>
       {showReviewModal ? (
-        <React.Suspense fallback={null}>
-          <TestimonialSelectModal
-            isOpen={showReviewModal}
-            onClose={() => setShowReviewModal(false)}
-            onInsert={onInsertReviews}
-            productId={productId}
-          />
-        </React.Suspense>
+        <TestimonialSelectModal
+          isOpen={showReviewModal}
+          onClose={() => setShowReviewModal(false)}
+          onInsert={onInsertReviews}
+          productId={productId}
+        />
       ) : null}
     </>
   );

@@ -155,7 +155,7 @@ const TestimonialSelectModal = ({
   );
 };
 
-export default TestimonialSelectModal;
+export { TestimonialSelectModal };
 
 const SelectableReviewCard = ({
   review,
