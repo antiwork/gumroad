@@ -572,7 +572,7 @@ const CheckoutIndexPage = () => {
         const url = new URL(window.location.href);
         const searchParams = new URLSearchParams([...url.searchParams].filter(([key]) => key === "_gl"));
         url.search = searchParams.toString();
-        router.replace(url.toString());
+        router.replace({ url: url.toString() });
       },
     });
   }, cart_save_debounce_ms);
