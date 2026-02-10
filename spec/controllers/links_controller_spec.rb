@@ -3161,6 +3161,56 @@ describe LinksController, :vcr, inertia: true do
         end
       end
 
+      describe "Inertia page rendering" do
+        it "renders the default Product/Show page" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param }
+
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Product/Show")
+          expect(inertia.props[:product]).to be_present
+        end
+
+        it "renders the Product/Profile page when layout is profile" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, layout: "profile" }
+
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Product/Profile")
+          expect(inertia.props[:product]).to be_present
+          expect(inertia.props[:creator_profile]).to be_present
+        end
+
+        it "renders the Product/Discover page when layout is discover" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, layout: "discover" }
+
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Product/Discover")
+          expect(inertia.props[:product]).to be_present
+          expect(inertia.props[:taxonomy_path]).to be_present.or be_nil
+          expect(inertia.props[:taxonomies_for_nav]).to be_present
+        end
+
+        it "renders the Product/Iframe page when embed param is present" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, embed: "true" }
+
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Product/Iframe")
+          expect(inertia.props[:product]).to be_present
+        end
+
+        it "renders the Product/Iframe page when overlay param is present" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, overlay: "true" }
+
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Product/Iframe")
+          expect(inertia.props[:product]).to be_present
+        end
+      end
+
       describe "wanted=true parameter" do
         it "passes pay_in_installments parameter to checkout when wanted=true" do
           get :show, params: { id: product.to_param, wanted: "true", pay_in_installments: "true" }
