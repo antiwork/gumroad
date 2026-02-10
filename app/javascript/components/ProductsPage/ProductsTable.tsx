@@ -80,7 +80,10 @@ export const ProductsPageProductsTable = (props: {
 
   const reloadProducts = () => loadProducts(pagination.page);
 
-  if (!products.length) return null;
+  if (!products.length)
+    return props.query ? (
+      <div className="text-center text-gray-500 py-8">No products found matching your search.</div>
+    ) : null;
 
   return (
     <div className="flex flex-col gap-4">

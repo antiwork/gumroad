@@ -44,7 +44,7 @@ export const ProductsDashboardPage = ({
       archivedTabVisible={enableArchiveTab}
       ctaButton={
         <>
-          {products.length > 0 ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
+          {products.length > 0 || query ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
           </NavigationButtonInertia>
@@ -52,7 +52,7 @@ export const ProductsDashboardPage = ({
       }
     >
       <section className="p-4 md:p-8">
-        {memberships.length === 0 && products.length === 0 ? (
+        {memberships.length === 0 && products.length === 0 && !query ? (
           <Placeholder>
             <PlaceholderImage src={placeholder} />
             <h2>We’ve never met an idea we didn’t like.</h2>

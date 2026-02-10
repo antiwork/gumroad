@@ -30,7 +30,7 @@ const ProductsPage = ({
   type?: Tab;
 }) => (
   <div className="grid gap-12">
-    {memberships.length > 0 ? (
+    {memberships.length > 0 || query ? (
       <ProductsPageMembershipsTable
         query={query}
         entries={memberships}
@@ -41,7 +41,7 @@ const ProductsPage = ({
       />
     ) : null}
 
-    {products.length > 0 ? (
+    {products.length > 0 || query ? (
       <ProductsPageProductsTable
         query={query}
         entries={products}
