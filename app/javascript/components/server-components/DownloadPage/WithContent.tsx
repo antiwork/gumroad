@@ -1,13 +1,12 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
-import { request } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -89,27 +88,35 @@ export type License = {
   seats: number;
 };
 
-const WithContent = ({
+export type DownloadPageContent = {
+  rich_content_pages: RichContentPage[] | null;
+  last_content_page_id: string | null;
+  license: License | null;
+  content_items: (FileItem | FolderItem)[];
+  posts: Post[];
+  video_transcoding_info: { transcode_on_first_sale: boolean } | null;
+  custom_receipt: string | null;
+  discord: { connected: boolean } | null;
+  ios_app_url: string;
+  android_app_url: string;
+  download_all_button: { files: { url: string; filename: string | null }[] } | null;
+  community_chat_url: string | null;
+};
+
+export type DownloadPageWithContentProps = LayoutProps & {
+  content: DownloadPageContent;
+  product_has_third_party_analytics: boolean | null;
+  audio_durations?: Record<string, FileItem["duration"]>;
+  latest_media_locations?: Record<string, FileItem["latest_media_location"]>;
+};
+
+export const WithContent = ({
   content,
   product_has_third_party_analytics,
+  audio_durations,
+  latest_media_locations,
   ...props
-}: LayoutProps & {
-  content: {
-    rich_content_pages: RichContentPage[] | null;
-    last_content_page_id: string | null;
-    license: License | null;
-    content_items: (FileItem | FolderItem)[];
-    posts: Post[];
-    video_transcoding_info: { transcode_on_first_sale: boolean } | null;
-    custom_receipt: string | null;
-    discord: { connected: boolean } | null;
-    ios_app_url: string;
-    android_app_url: string;
-    download_all_button: { files: { url: string; filename: string | null }[] } | null;
-    community_chat_url: string | null;
-  };
-  product_has_third_party_analytics: boolean | null;
-}) => {
+}: DownloadPageWithContentProps) => {
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
   const [contentFiles, setContentFiles] = React.useState(
@@ -122,47 +129,62 @@ const WithContent = ({
           FileUtils.isAudioExtension(file.extension) && file.duration === null ? [file.id] : [],
         )
       : [];
-  const missingAudioDurationsFetchIntevalRef = React.useRef<ReturnType<typeof setInterval>>();
+  const audioDurationsToFetch = unprocessedAudioIds.slice(0, MAX_AUDIO_IDS_PER_FETCH);
+
   React.useEffect(() => {
-    const fetchMissingAudioDurations = async () => {
-      try {
-        if (unprocessedAudioIds.length === 0) {
-          clearInterval(missingAudioDurationsFetchIntevalRef.current);
-          return;
-        }
+    if (!audio_durations || Object.keys(audio_durations).length === 0) return;
+    setContentFiles((files) =>
+      files.map((file) => {
+        const duration = audio_durations[file.id];
+        return duration !== null && duration !== undefined ? { ...file, duration, content_length: duration } : file;
+      }),
+    );
+  }, [audio_durations]);
 
-        const response = await request({
-          url: Routes.url_redirect_audio_durations_path(props.token, {
-            params: { file_ids: unprocessedAudioIds.slice(0, MAX_AUDIO_IDS_PER_FETCH) },
-          }),
-          method: "GET",
-          accept: "json",
-        });
-        if (!response.ok) return;
-        const durations = cast<Record<string, FileItem["duration"]>>(await response.json());
-        if (Object.keys(durations).length === 0) return;
-        setContentFiles((files) =>
-          files.map((file) => {
-            const duration = durations[file.id];
-            return duration !== null && duration !== undefined ? { ...file, duration, content_length: duration } : file;
-          }),
-        );
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error(e);
-      }
-    };
+  React.useEffect(() => {
+    if (audioDurationsToFetch.length === 0) return;
 
-    missingAudioDurationsFetchIntevalRef.current = setInterval(() => {
-      void fetchMissingAudioDurations();
-    }, MISSING_AUDIO_DURATIONS_FETCH_INTERVAL_IN_MS);
+    const audioDurationsPoll = router.poll(
+      MISSING_AUDIO_DURATIONS_FETCH_INTERVAL_IN_MS,
+      {
+        only: ["audio_durations"],
+        data: { file_ids: audioDurationsToFetch },
+        preserveUrl: true,
+      },
+      { autoStart: true, keepAlive: true },
+    );
 
-    return () => {
-      clearInterval(missingAudioDurationsFetchIntevalRef.current);
-    };
-  }, [unprocessedAudioIds.length]);
+    return () => audioDurationsPoll.stop();
+  }, [audioDurationsToFetch.join(",")]);
 
-  const isFetchingLatestMediaLocationsRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!latest_media_locations || Object.keys(latest_media_locations).length === 0) return;
+    setContentFiles((files) =>
+      files.map((file) => ({ ...file, latest_media_location: latest_media_locations[file.id] ?? null })),
+    );
+  }, [latest_media_locations]);
+
+  const shouldPollLatestMediaLocations =
+    content.rich_content_pages !== null &&
+    contentFiles.length > 0 &&
+    props.purchase !== null &&
+    props.installment === null;
+
+  React.useEffect(() => {
+    if (!shouldPollLatestMediaLocations) return;
+
+    const latestMediaLocationsPoll = router.poll(
+      LATEST_MEDIA_LOCATIONS_FETCH_INTERVAL_IN_MS,
+      {
+        only: ["latest_media_locations"],
+        preserveUrl: true,
+      },
+      { autoStart: true, keepAlive: true },
+    );
+
+    return () => latestMediaLocationsPoll.stop();
+  }, [shouldPollLatestMediaLocations]);
+
   useRunOnce(() => {
     if (url.searchParams.get("receipt") === "true" && props.purchase?.email) {
       showAlert(`Your purchase was successful! We sent a receipt to ${props.purchase.email}.`, "success");
@@ -175,36 +197,6 @@ const WithContent = ({
           location: "receipt",
           purchaseId: props.purchase.id,
         });
-    }
-
-    const fetchLatestMediaLocations = async () => {
-      if (isFetchingLatestMediaLocationsRef.current) return;
-
-      isFetchingLatestMediaLocationsRef.current = true;
-      try {
-        const response = await request({
-          url: Routes.url_redirect_latest_media_locations_path(props.token),
-          method: "GET",
-          accept: "json",
-        });
-        if (!response.ok) return;
-        const latestMediaLocations = cast<Record<string, FileItem["latest_media_location"]>>(await response.json());
-        if (Object.keys(latestMediaLocations).length === 0) return;
-        setContentFiles((files) =>
-          files.map((file) => ({ ...file, latest_media_location: latestMediaLocations[file.id] ?? null })),
-        );
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error(e);
-      } finally {
-        isFetchingLatestMediaLocationsRef.current = false;
-      }
-    };
-
-    if (content.rich_content_pages != null && contentFiles.length > 0) {
-      setInterval(() => {
-        void fetchLatestMediaLocations();
-      }, LATEST_MEDIA_LOCATIONS_FETCH_INTERVAL_IN_MS);
     }
   });
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -433,4 +425,4 @@ const nodeHasLicense = (node: RichContent) =>
   node.type === LicenseKey.name ||
   ((COMMON_CONTAINER_NODE_TYPES.includes(node.type ?? "") && node.content?.some(nodeHasLicense)) ?? false);
 
-export default register({ component: WithContent, propParser: createCast() });
+export default WithContent;

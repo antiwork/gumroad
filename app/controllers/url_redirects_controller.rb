@@ -6,31 +6,29 @@ class UrlRedirectsController < ApplicationController
   include PageMeta::Favicon
 
   layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page]
-  layout "inertia", only: [:confirm_page, :read]
+  layout "inertia", only: [:confirm_page, :download_page, :read]
 
   before_action :fetch_url_redirect, except: %i[
-    show stream download_subtitle_file read download_archive latest_media_locations download_product_files
-    audio_durations
+    show stream download_subtitle_file read download_archive download_product_files
   ]
   before_action :redirect_to_custom_domain_if_needed, only: :download_page
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
                                              hls_playlist download_subtitle_file read
-                                             download_archive latest_media_locations download_product_files audio_durations
-                                             save_last_content_page]
+                                             download_archive download_product_files save_last_content_page]
   before_action :hide_layouts, only: %i[
-    show download_page download_product_files stream smil hls_playlist download_subtitle_file
+    show download_product_files stream smil hls_playlist download_subtitle_file
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ) }, only: [:read]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_WATCH) }, only: [:hls_playlist, :smil]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD) }, only: [:show]
-  after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_VIEW) }, only: [:download_page]
+  after_action :create_download_page_view_consumption_event!, only: [:download_page]
 
   skip_before_action :check_suspended, only: %i[show stream confirm confirm_page download_page
-                                                download_subtitle_file download_archive download_product_files audio_durations]
+                                                download_subtitle_file download_archive download_product_files]
   before_action :set_noindex_header, only: %i[confirm_page download_page]
 
   rescue_from ActionController::RoutingError do |exception|
@@ -46,6 +44,8 @@ class UrlRedirectsController < ApplicationController
     ADD_TO_LIBRARY_BUTTON = "add_to_library_button"
     SIGNUP_FORM = "signup_form"
   end
+
+  DOWNLOAD_PAGE_POLLING_PROPS = %w[audio_durations latest_media_locations].freeze
 
   def show
     trigger_files_lifecycle_events
@@ -75,13 +75,13 @@ class UrlRedirectsController < ApplicationController
   end
 
   def download_page
-    @hide_layouts = true
-
     @body_class = "download-page responsive responsive-nav"
-    set_favicon_meta_tags(@url_redirect.seller)
-    set_meta_tag(title: @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name)
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_with_content_props(common_props)
-    trigger_files_lifecycle_events
+    unless download_page_polling_request?
+      set_download_page_meta_tags
+      trigger_files_lifecycle_events
+    end
+
+    render inertia: "UrlRedirects/DownloadPage", props: download_page_props
   end
 
   def download_product_files
@@ -251,29 +251,6 @@ class UrlRedirectsController < ApplicationController
     render :video_stream
   end
 
-  def latest_media_locations
-    e404 if @url_redirect.purchase.nil? || @url_redirect.installment.present?
-
-    product_files = @url_redirect.alive_product_files.select(:id)
-    media_locations_by_file = MediaLocation.max_consumed_at_by_file(purchase_id: @url_redirect.purchase.id).index_by(&:product_file_id)
-
-    json = product_files.each_with_object({}) do |product_file, hash|
-      hash[product_file.external_id] = media_locations_by_file[product_file.id].as_json
-    end
-
-    render json:
-  end
-
-  def audio_durations
-    return render json: {} if params[:file_ids].blank?
-
-    json = @url_redirect.alive_product_files.where(filegroup: "audio").by_external_ids(params[:file_ids]).each_with_object({}) do |product_file, hash|
-      hash[product_file.external_id] = product_file.content_length
-    end
-
-    render json:
-  end
-
   def media_urls
     return render json: {} if params[:file_ids].blank?
 
@@ -298,6 +275,48 @@ class UrlRedirectsController < ApplicationController
     def trigger_files_lifecycle_events
       @url_redirect.update_transcoded_videos_last_accessed_at
       @url_redirect.enqueue_job_to_regenerate_deleted_transcoded_videos
+    end
+
+    def download_page_props
+      optional_props = {
+        audio_durations: InertiaRails.optional { audio_durations_props },
+        latest_media_locations: InertiaRails.optional { latest_media_locations_props },
+      }
+      return optional_props if download_page_polling_request?
+
+      UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:)
+        .download_page_with_content_props(common_props)
+        .merge(optional_props)
+        .merge(dropbox_api_key: DROPBOX_PICKER_API_KEY)
+    end
+
+    def audio_durations_props(file_ids: params[:file_ids])
+      return {} if file_ids.blank?
+
+      @url_redirect.alive_product_files.where(filegroup: "audio").by_external_ids(file_ids).each_with_object({}) do |product_file, hash|
+        hash[product_file.external_id] = product_file.content_length
+      end
+    end
+
+    def latest_media_locations_props
+      return {} if @url_redirect.purchase.nil? || @url_redirect.installment.present?
+
+      product_files = @url_redirect.alive_product_files.select(:id)
+      media_locations_by_file = MediaLocation.max_consumed_at_by_file(purchase_id: @url_redirect.purchase.id).index_by(&:product_file_id)
+
+      product_files.each_with_object({}) do |product_file, hash|
+        hash[product_file.external_id] = media_locations_by_file[product_file.id].as_json
+      end
+    end
+
+    def set_download_page_meta_tags
+      set_favicon_meta_tags(@url_redirect.seller)
+      title = @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name
+      set_meta_tag(title:)
+      set_meta_tag(
+        name: "apple-itunes-app",
+        content: "app-id=#{IOS_APP_ID}, app-argument=#{@url_redirect.download_page_url}",
+      )
     end
 
     def redirect_to_custom_domain_if_needed
@@ -328,10 +347,26 @@ class UrlRedirectsController < ApplicationController
 
     def register_that_user_has_downloaded_product
       return if @url_redirect.nil?
+      return if download_page_polling_request?
 
       @url_redirect.increment!(:uses, 1)
       @url_redirect.mark_as_seen
       set_confirmed_redirect_cookie
+    end
+
+    def create_download_page_view_consumption_event!
+      return if download_page_polling_request?
+
+      create_consumption_event!(ConsumptionEvent::EVENT_TYPE_VIEW)
+    end
+
+    def download_page_polling_request?
+      return false unless action_name == "download_page"
+      return false unless request.headers["X-Inertia"] == "true"
+      return false unless request.headers["X-Inertia-Partial-Component"] == "UrlRedirects/DownloadPage"
+
+      requested_props = request.headers["X-Inertia-Partial-Data"].to_s.split(",").map(&:strip).reject(&:blank?).uniq
+      requested_props.present? && (requested_props - DOWNLOAD_PAGE_POLLING_PROPS).empty?
     end
 
     def mark_rental_as_viewed
