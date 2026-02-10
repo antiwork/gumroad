@@ -123,7 +123,7 @@ class LinksController < ApplicationController
       BasePrice::Recurrence::ALLOWED_RECURRENCES.each do |r|
         params[:recurrence] ||= r if params[r] == "true"
       end
-      params[:price] = (params[:price].to_f * 100).to_i if params[:price].present?
+      params[:price] = (params[:price].to_d * 100).to_i if params[:price].present?
       cart_item = @product.cart_item(params)
 
       unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
@@ -494,7 +494,7 @@ class LinksController < ApplicationController
       tier:,
       effective_date: params[:effective_date].present? ? Date.parse(params[:effective_date]) : tier.subscription_price_change_effective_date,
       recurrence: params.require(:recurrence),
-      new_price: (params.require(:amount).to_f * 100).to_i,
+      new_price: (params.require(:amount).to_d * 100).to_i,
       custom_message: strip_tags(params[:custom_message]).present? ? params[:custom_message] : nil,
     ).deliver_later
 

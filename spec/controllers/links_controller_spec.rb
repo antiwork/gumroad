@@ -3309,6 +3309,33 @@ describe LinksController, :vcr, inertia: true do
             expect(code_param_count).to eq(1), "Expected code to appear exactly once in query string, got: #{query_string}"
           end
         end
+
+        describe "price conversion precision" do
+          it "converts price to cents without floating-point precision loss" do
+            # 19.99 * 100 = 1998.9999999999998 with floating-point math
+            # Using BigDecimal (to_d) correctly gives 1999
+            product = create(:product, user: @user, customizable_price: true, price_cents: 0)
+
+            get :show, params: { id: product.to_param, wanted: "true", price: "19.99" }
+
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            query_params = Rack::Utils.parse_query(redirect_url.query)
+            expect(query_params["price"]).to eq("1999")
+          end
+
+          it "handles another problematic floating-point value" do
+            # 9.99 * 100 = 998.9999999999999 with floating-point math
+            product = create(:product, user: @user, customizable_price: true, price_cents: 0)
+
+            get :show, params: { id: product.to_param, wanted: "true", price: "9.99" }
+
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            query_params = Rack::Utils.parse_query(redirect_url.query)
+            expect(query_params["price"]).to eq("999")
+          end
+        end
       end
 
       context "with user signed in" do
