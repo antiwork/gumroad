@@ -1,9 +1,9 @@
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { sendMagicLink } from "$app/data/subscription_magic_link";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Layout } from "$app/components/Authentication/Layout";
 import { Button } from "$app/components/Button";
@@ -13,18 +13,15 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type UserEmail = { email: string; source: string };
 
-type SubscriptionManagerMagicLinkProps = {
+type Props = {
   product_name: string;
   subscription_id: string;
   is_installment_plan: boolean;
   user_emails: [UserEmail, ...UserEmail[]];
 };
-const SubscriptionManagerMagicLink = ({
-  product_name,
-  subscription_id,
-  is_installment_plan,
-  user_emails,
-}: SubscriptionManagerMagicLinkProps) => {
+
+function MagicLinkPage() {
+  const { product_name, subscription_id, is_installment_plan, user_emails } = cast<Props>(usePage().props);
   const [loading, setLoading] = React.useState(false);
   const [hasSentEmail, setHasSentEmail] = React.useState(false);
   const [selectedUserEmail, setSelectedUserEmail] = React.useState(user_emails[0]);
@@ -119,6 +116,7 @@ const SubscriptionManagerMagicLink = ({
       </form>
     </Layout>
   );
-};
+}
 
-export default register({ component: SubscriptionManagerMagicLink, propParser: createCast() });
+MagicLinkPage.publicLayout = true;
+export default MagicLinkPage;
