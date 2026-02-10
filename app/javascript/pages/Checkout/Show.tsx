@@ -51,7 +51,6 @@ import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnaly
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOnChange, useOnChangeSync } from "$app/components/useOnChange";
-import { useRunOnce } from "$app/components/useRunOnce";
 
 const GUMROAD_PARAMS = [
   "product",
@@ -212,12 +211,7 @@ const CheckoutIndexPage = () => {
     return { cart: initialCart };
   });
   const { require_email_typo_acknowledgment } = useFeatureFlags();
-  useRunOnce(() => {
-    const url = new URL(window.location.href);
-    const searchParams = new URLSearchParams([...url.searchParams].filter(([key]) => key === "_gl"));
-    url.search = searchParams.toString();
-    router.replace({ url: url.toString() });
-  });
+  const urlCleanedRef = React.useRef(false);
   const reducer = createReducer({
     country,
     email,
@@ -566,7 +560,21 @@ const CheckoutIndexPage = () => {
   React.useEffect(() => void pay(), [state.status]);
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
-    cartForm.patch(Routes.checkout_path(), { only: ["cart", "flash"], preserveUrl: true, preserveScroll: true });
+    cartForm.patch(Routes.checkout_path(), {
+      only: ["cart", "flash"],
+      preserveUrl: true,
+      preserveScroll: true,
+      onSuccess: () => {
+        // Clean URL params after successful cart save to avoid race conditions
+        // router.replace() in Inertia 2.x is client-side only and won't cancel in-flight requests
+        if (urlCleanedRef.current) return;
+        urlCleanedRef.current = true;
+        const url = new URL(window.location.href);
+        const searchParams = new URLSearchParams([...url.searchParams].filter(([key]) => key === "_gl"));
+        url.search = searchParams.toString();
+        router.replace(url.toString());
+      },
+    });
   }, cart_save_debounce_ms);
   React.useEffect(() => {
     debouncedSaveCartState();
