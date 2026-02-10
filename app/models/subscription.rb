@@ -248,7 +248,20 @@ class Subscription < ApplicationRecord
     purchase = Purchase.new(purchase_params)
     purchase.variant_attributes = original_purchase.variant_attributes
 
-    purchase.offer_code = original_purchase.offer_code if discount_applies_to_next_charge?
+    if discount_applies_to_next_charge?
+      purchase.offer_code = original_purchase.offer_code
+      # Copy the cached discount data from the original purchase
+      # This ensures the discount is preserved even if the offer code is deleted/expired/maxed out
+      if (original_discount = original_purchase.purchase_offer_code_discount)
+        purchase.build_purchase_offer_code_discount(
+          offer_code: original_discount.offer_code,
+          offer_code_amount: original_discount.offer_code_amount,
+          offer_code_is_percent: original_discount.offer_code_is_percent,
+          pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
+          duration_in_months: original_discount.duration_in_months
+        )
+      end
+    end
 
     purchase.purchaser = user
     purchase.link = link

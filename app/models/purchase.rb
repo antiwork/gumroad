@@ -1999,7 +1999,11 @@ class Purchase < ApplicationRecord
   end
 
   def does_not_count_towards_max_purchases
-    is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? || is_gift_receiver_purchase || is_updated_original_subscription_purchase || is_commission_completion_purchase
+    is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? || is_gift_receiver_purchase || is_updated_original_subscription_purchase || is_commission_completion_purchase || is_subsequent_installment_payment?
+  end
+
+  def is_subsequent_installment_payment?
+    is_installment_payment && !is_original_subscription_purchase
   end
 
   # Public: Determine if this purchase is a test purchase by the links owner.
@@ -2411,13 +2415,14 @@ class Purchase < ApplicationRecord
   end
 
   def original_offer_code(include_deleted: false)
-    return nil if offer_code&.deleted? && !include_deleted
-
+    # Check cached discount data first - this preserves the discount even if the offer code is deleted/maxed
     if has_cached_offer_code?
-      code = purchase_offer_code_discount.offer_code.code
+      code = purchase_offer_code_discount.offer_code&.code
       purchase_offer_code_discount.offer_code_is_percent ?
         OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code:) :
         OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code:)
+    elsif offer_code&.deleted? && !include_deleted
+      nil
     else
       offer_code
     end
@@ -3361,7 +3366,8 @@ class Purchase < ApplicationRecord
     def validate_offer_code
       return if errors.present?
       # accept the offer code that was used when the buyer preordered/subscribed
-      return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase
+      # also skip validation for subsequent installment payments - discount was already validated on first payment
+      return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase || is_subsequent_installment_payment?
       return if discount_code.blank?
 
       if offer_code.nil?
