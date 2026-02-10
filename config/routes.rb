@@ -783,8 +783,8 @@ Rails.application.routes.draw do
     resources :subscriptions, only: [] do
       member do
         get :manage
-        get :magic_link
-        post :send_magic_link
+        get :magic_link, to: "subscriptions/magic_links#new"
+        post :send_magic_link, to: "subscriptions/magic_links#create"
         post :unsubscribe_by_user
         post :unsubscribe_by_seller
         put :update, to: "purchases#update_subscription"
