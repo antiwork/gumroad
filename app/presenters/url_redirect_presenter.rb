@@ -53,6 +53,17 @@ class UrlRedirectPresenter
     download_page_layout_props(email_confirmation_required: extra_props[:content_unavailability_reason_code] == CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]).merge(extra_props)
   end
 
+  def video_stream_props(product_file:, videos_playlist:, should_show_transcoding_notice:)
+    {
+      playlist: videos_playlist[:playlist],
+      index_to_play: videos_playlist[:index_to_play].to_i,
+      url_redirect_id: url_redirect.external_id,
+      purchase_id: purchase&.external_id,
+      should_show_transcoding_notice:,
+      transcode_on_first_sale: product_file.link&.transcode_videos_on_purchase.present?,
+    }
+  end
+
   def read_page_props(product_file:, read_url:, title:)
     {
       read_id: product_file.external_id,

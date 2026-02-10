@@ -1,12 +1,12 @@
+import { usePage } from "@inertiajs/react";
 import { throttle } from "lodash-es";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
 import GuidGenerator from "$app/utils/guid_generator";
 import { createJWPlayer } from "$app/utils/jwPlayer";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { TranscodingNoticeModal } from "$app/components/Download/TranscodingNoticeModal";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -29,23 +29,19 @@ type Video = {
   content_length: number | null;
 };
 
-const fakeVideoUrlGuidForObfuscation = "ef64f2fef0d6c776a337050020423fc0";
-
-export const VideoStreamPlayer = ({
-  playlist: initialPlaylist,
-  index_to_play,
-  url_redirect_id,
-  purchase_id,
-  should_show_transcoding_notice,
-  transcode_on_first_sale,
-}: {
+type Props = {
   playlist: Video[];
   index_to_play: number;
   url_redirect_id: string;
   purchase_id: string | null;
   should_show_transcoding_notice: boolean;
   transcode_on_first_sale: boolean;
-}) => {
+};
+
+const fakeVideoUrlGuidForObfuscation = "ef64f2fef0d6c776a337050020423fc0";
+
+const VideoStream = () => {
+  const { playlist: initialPlaylist, index_to_play, url_redirect_id, purchase_id, should_show_transcoding_notice, transcode_on_first_sale } = cast<Props>(usePage().props);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   useRunOnce(() => {
@@ -161,4 +157,5 @@ export const VideoStreamPlayer = ({
   );
 };
 
-export default register({ component: VideoStreamPlayer, propParser: createCast() });
+VideoStream.loggedInUserLayout = true;
+export default VideoStream;
