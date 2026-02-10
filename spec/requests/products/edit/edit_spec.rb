@@ -392,6 +392,21 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(product.reload.suggested_price_cents).to be_nil
   end
 
+  it "persists default discount code on save without changes" do
+    offer_code = create(:offer_code, user: seller, products: [product], code: "PERSIST10")
+    product.update!(default_offer_code: offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
+
+    save_change
+
+    expect(product.reload.default_offer_code).to eq(offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
+  end
+
   it "allows user to update name and price", :sidekiq_inline, :elasticsearch_wait_for_refresh do
     visit edit_link_path(product.unique_permalink)
     new_name = "Slot machine"
@@ -1094,7 +1109,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button(product.name)
           end
@@ -1129,7 +1144,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button("#{product.name} - #{product.alive_variants.first.name}")
             expect(page).not_to have_selector(:button, exact_text: product.name)
