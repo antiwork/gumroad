@@ -14,6 +14,7 @@ module PaymentRequestMockHelper
             this.methodData = methodData;
             this.details = details;
             this.options = options;
+            this._listeners = {};
           }
 
           async canMakePayment() {
@@ -31,79 +32,189 @@ module PaymentRequestMockHelper
 
           async show() {
             console.log('MockPaymentRequest.show() called');
+
+            if (window.__triggerShippingAddressChange) {
+              setTimeout(() => {
+                const event = {
+                  type: 'shippingaddresschange',
+                  shippingAddress: {
+                    country: 'US',
+                    region: 'CA',
+                    city: 'San Francisco',
+                    addressLine: ['123 Test St'],
+                    postalCode: '94105',
+                    recipient: 'Test User'
+                  },
+                  updateWith: (details) => {
+                    console.log('MockPaymentRequest shippingaddresschange.updateWith called:', details);
+                    return Promise.resolve(details);
+                  }
+                };
+                this.dispatchEvent(event);
+              }, 100);
+            }
+
+            if (window.__triggerPaymentCancel) {
+              setTimeout(() => {
+                const event = new Event('cancel');
+                this.dispatchEvent(event);
+                if (this._oncancel) this._oncancel(event);
+              }, 100);
+              return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
+            }
+
+            if (window.__triggerPaymentSuccess) {
+              setTimeout(() => {
+                const event = {
+                  type: 'paymentmethod',
+                  paymentMethod: {
+                    id: 'pm_mock_success',
+                    card: { country: 'US', wallet: { type: 'apple_pay' } },
+                    billing_details: {
+                      email: 'test@gumroad.com',
+                      address: { postal_code: '12345', country: 'US' }
+                    }
+                  },
+                  payerName: 'Test User',
+                  payerEmail: 'test@gumroad.com',
+                  complete: async (result) => console.log('MockPaymentRequest complete:', result)
+                };
+                this.dispatchEvent(event);
+              }, 100);
+            }
+
             return {
               complete: async (result) => console.log('MockPaymentRequest complete:', result),
-              details: {
-                paymentMethod: 'mock',
-              }
+              details: { paymentMethod: 'mock' }
             };
           }
+
+          addEventListener(type, listener) {
+            this._listeners[type] = this._listeners[type] || [];
+            this._listeners[type].push(listener);
+          }
+
+          dispatchEvent(event) {
+            if (this._listeners[event.type]) {
+              this._listeners[event.type].forEach(l => l(event));
+            }
+          }
+
+          set oncancel(fn) { this._oncancel = fn; }
         }
 
         window.PaymentRequest = MockPaymentRequest;
 
-        // Also mock Stripe's paymentRequest if it's used
-        // We'll hook into window.Stripe if it's loaded later
+        function createStripePaymentRequestMock() {
+          const pr = {
+            _listeners: {},
+            canMakePayment: async () => {
+              const supportsApplePay = #{supports_apple_pay};
+              const supportsGooglePay = #{supports_google_pay};
+              const result = {};
+              if (supportsApplePay) result.applePay = true;
+              if (supportsGooglePay) result.googlePay = true;
+              return Object.keys(result).length > 0 ? result : null;
+            },
+            update: (options) => {
+              console.log('StripeMock.paymentRequest.update called:', options);
+            },
+            on: (event, handler) => {
+              pr._listeners[event] = pr._listeners[event] || [];
+              pr._listeners[event].push(handler);
+            },
+            show: () => {
+              console.log('StripeMock.paymentRequest.show() called');
+
+              if (window.__triggerShippingAddressChange) {
+                setTimeout(() => {
+                  if (pr._listeners.shippingaddresschange) {
+                    const event = {
+                      shippingAddress: {
+                        country: 'US',
+                        region: 'CA',
+                        city: 'San Francisco',
+                        addressLine: ['123 Test St'],
+                        postalCode: '94105',
+                        recipient: 'Test User'
+                      },
+                      updateWith: (details) => {
+                        console.log('StripeMock shippingaddresschange.updateWith called:', details);
+                        return Promise.resolve(details);
+                      }
+                    };
+                    pr._listeners.shippingaddresschange.forEach(fn => fn(event));
+                  }
+                }, 100);
+              }
+
+              if (window.__triggerPaymentCancel) {
+                setTimeout(() => {
+                  if (pr._listeners.cancel) pr._listeners.cancel.forEach(fn => fn());
+                }, 100);
+              } else if (window.__triggerPaymentSuccess) {
+                setTimeout(() => {
+                  if (pr._listeners.paymentmethod) {
+                    const event = {
+                      paymentMethod: {
+                        id: 'pm_mock_success',
+                        card: { country: 'US', wallet: { type: 'google_pay' } },
+                        billing_details: {
+                          email: 'test@gumroad.com',
+                          name: 'Test User',
+                          address: { postal_code: '12345', country: 'US' }
+                        }
+                      },
+                      payerName: 'Test User',
+                      payerEmail: 'test@gumroad.com',
+                      complete: (result) => console.log('StripeMock complete:', result)
+                    };
+                    pr._listeners.paymentmethod.forEach(fn => fn(event));
+                  }
+                }, 100);
+              }
+            }
+          };
+          return pr;
+        }
+
         let originalStripe = window.Stripe;
         Object.defineProperty(window, 'Stripe', {
           get: function() {
             return function(key, options) {
-              const stripe = originalStripe ? originalStripe(key, options) : {
-                // If the real Stripe isn't loaded yet, provide a mock
+              const mockStripe = {
                 elements: (options) => ({
                   create: (type, options) => ({
                     mount: (el) => {},
+                    unmount: () => {},
                     on: (event, handler) => {},
-                    destroy: () => {}
+                    off: (event, handler) => {},
+                    update: (options) => {},
+                    destroy: () => {},
+                    focus: () => {},
+                    blur: () => {},
+                    clear: () => {}
                   }),
                   getElement: (type) => null
                 }),
                 createToken: async (element) => ({ token: { id: 'tok_test' } }),
-                createSource: async (element) => ({ source: { id: 'src_test' } }),
-                createPaymentMethod: async (element) => ({ paymentMethod: { id: 'pm_test' } }),
+                createSource: async (element, options) => ({ source: { id: 'src_test' } }),
+                createPaymentMethod: async (data) => ({ paymentMethod: { id: 'pm_test' } }),
                 confirmCardPayment: async (secret, elements) => ({ paymentIntent: { status: 'succeeded' } }),
                 confirmCardSetup: async (secret, elements) => ({ setupIntent: { status: 'succeeded' } }),
-                paymentRequest: function(params) {
-                  return {
-                    canMakePayment: async () => {
-                      const supportsApplePay = #{supports_apple_pay};
-                      const supportsGooglePay = #{supports_google_pay};
-                      const result = {};
-                      if (supportsApplePay) result.applePay = true;
-                      if (supportsGooglePay) result.googlePay = true;
-                      return Object.keys(result).length > 0 ? result : null;
-                    },
-                    on: () => {},
-                    show: () => {}
-                  };
-                }
+                paymentRequest: createStripePaymentRequestMock
               };
 
-              // If we have the real stripe instance, just patch paymentRequest
-              if (originalStripe) {
-                const originalPaymentRequest = stripe.paymentRequest;
-                stripe.paymentRequest = function(params) {
-                  return {
-                    canMakePayment: async () => {
-                      const supportsApplePay = #{supports_apple_pay};
-                      const supportsGooglePay = #{supports_google_pay};
-                      const result = {};
-                      if (supportsApplePay) result.applePay = true;
-                      if (supportsGooglePay) result.googlePay = true;
-                      return Object.keys(result).length > 0 ? result : null;
-                    },
-                    on: () => {},
-                    show: () => {}
-                  };
-                };
-              }
+              // If real Stripe loaded, use it but override paymentRequest
+              const stripe = originalStripe ? originalStripe(key, options) : mockStripe;
 
+              if (originalStripe) {
+                stripe.paymentRequest = createStripePaymentRequestMock;
+              }
               return stripe;
             };
           },
-          set: function(val) {
-            originalStripe = val;
-          },
+          set: function(val) { originalStripe = val; },
           configurable: true
         });
       })();
