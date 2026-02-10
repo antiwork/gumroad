@@ -433,4 +433,5 @@ const nodeHasLicense = (node: RichContent) =>
   node.type === LicenseKey.name ||
   ((COMMON_CONTAINER_NODE_TYPES.includes(node.type ?? "") && node.content?.some(nodeHasLicense)) ?? false);
 
+export { WithContent };
 export default register({ component: WithContent, propParser: createCast() });

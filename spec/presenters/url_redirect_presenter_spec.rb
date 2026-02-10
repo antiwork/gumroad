@@ -174,7 +174,7 @@ describe UrlRedirectPresenter do
       }
     end
 
-    it "returns all props for DownloadPageWithContent component" do
+    it "returns all props for DownloadPage component" do
       instance = described_class.new(url_redirect: @url_redirect, logged_in_user: @user)
 
       @props[:content][:posts] = [{

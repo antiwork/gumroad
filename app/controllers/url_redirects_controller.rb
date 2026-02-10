@@ -5,7 +5,7 @@ class UrlRedirectsController < ApplicationController
   include ProductsHelper
   include PageMeta::Favicon
 
-  layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page]
+  layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page, :download_page]
   layout "inertia", only: [:confirm_page, :read]
 
   before_action :fetch_url_redirect, except: %i[
@@ -20,7 +20,7 @@ class UrlRedirectsController < ApplicationController
                                              download_archive latest_media_locations download_product_files audio_durations
                                              save_last_content_page]
   before_action :hide_layouts, only: %i[
-    show download_page download_product_files stream smil hls_playlist download_subtitle_file
+    show download_product_files stream smil hls_playlist download_subtitle_file
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
@@ -75,13 +75,14 @@ class UrlRedirectsController < ApplicationController
   end
 
   def download_page
-    @hide_layouts = true
-
-    @body_class = "download-page responsive responsive-nav"
     set_favicon_meta_tags(@url_redirect.seller)
     set_meta_tag(title: @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name)
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_with_content_props(common_props)
     trigger_files_lifecycle_events
+
+    render inertia: "UrlRedirects/DownloadPage", props: UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_with_content_props(common_props).merge(
+      audio_durations: InertiaRails.optional { audio_durations_data },
+      latest_media_locations: InertiaRails.optional { latest_media_locations_data },
+    )
   end
 
   def download_product_files
@@ -410,6 +411,23 @@ class UrlRedirectsController < ApplicationController
         value: @url_redirect.token,
         httponly: true
       }
+    end
+
+    def audio_durations_data
+      @url_redirect.alive_product_files.where(filegroup: "audio").each_with_object({}) do |product_file, hash|
+        hash[product_file.external_id] = product_file.content_length
+      end
+    end
+
+    def latest_media_locations_data
+      return {} if @url_redirect.purchase.nil? || @url_redirect.installment.present?
+
+      product_files = @url_redirect.alive_product_files.select(:id)
+      media_locations_by_file = MediaLocation.max_consumed_at_by_file(purchase_id: @url_redirect.purchase.id).index_by(&:product_file_id)
+
+      product_files.each_with_object({}) do |product_file, hash|
+        hash[product_file.external_id] = media_locations_by_file[product_file.id].as_json
+      end
     end
 
     def unavailable_page_props(reason_code)
