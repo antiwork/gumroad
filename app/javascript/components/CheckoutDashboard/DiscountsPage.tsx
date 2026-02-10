@@ -297,7 +297,7 @@ const DiscountsPage = ({
       pages={pages}
       actions={
         <>
-          {offerCodes.length > 0 ? (
+          {offerCodes.length > 0 || searchQuery ? (
             <Search
               onSearch={(query) => {
                 setSearchQuery(query);

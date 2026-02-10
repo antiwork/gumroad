@@ -13,9 +13,9 @@ import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/Prof
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
-import { Toggle } from "$app/components/Toggle";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
+import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 export const ShareTab = () => {
@@ -93,19 +93,24 @@ export const ShareTab = () => {
             />
             <TagSelector tags={product.tags} onChange={(tags) => updateProduct({ tags })} />
             <fieldset>
-              <Toggle
-                value={product.display_product_reviews}
-                onChange={(newValue) => updateProduct({ display_product_reviews: newValue })}
-              >
-                Display your product's 1-5 star rating to prospective customers
-              </Toggle>
-              <Toggle value={product.is_adult} onChange={(newValue) => updateProduct({ is_adult: newValue })}>
-                This product contains content meant{" "}
-                <a href="/help/article/156-gumroad-and-adult-content" target="_blank" rel="noreferrer">
-                  only for adults,
-                </a>{" "}
-                including the preview
-              </Toggle>
+              <Switch
+                checked={product.display_product_reviews}
+                onChange={(e) => updateProduct({ display_product_reviews: e.target.checked })}
+                label="Display your product's 1-5 star rating to prospective customers"
+              />
+              <Switch
+                checked={product.is_adult}
+                onChange={(e) => updateProduct({ is_adult: e.target.checked })}
+                label={
+                  <>
+                    This product contains content meant{" "}
+                    <a href="/help/article/156-gumroad-and-adult-content" target="_blank" rel="noreferrer">
+                      only for adults,
+                    </a>{" "}
+                    including the preview
+                  </>
+                }
+              />
             </fieldset>
           </section>
         </form>

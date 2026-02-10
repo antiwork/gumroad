@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 
 import AppWrapper from "../inertia/app_wrapper.tsx";
-import Layout, { AuthenticationLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
+import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
 
 router.on("start", () => {
   window.__activeRequests = (window.__activeRequests || 0) + 1;
@@ -55,8 +55,8 @@ async function resolvePageComponent(name) {
   try {
     const module = await import(`../pages/${name}.tsx`);
     const page = module.default;
-    if (page.authenticationLayout) {
-      page.layout ||= (page) => createElement(AuthenticationLayout, { children: page });
+    if (page.publicLayout) {
+      page.layout ||= (page) => createElement(PublicLayout, { children: page });
       return page;
     } else if (page.loggedInUserLayout) {
       page.layout ||= (page) => createElement(LoggedInUserLayout, { children: page });
@@ -68,8 +68,8 @@ async function resolvePageComponent(name) {
     try {
       const module = await import(`../pages/${name}.jsx`);
       const page = module.default;
-      if (page.authenticationLayout) {
-        page.layout ||= (page) => createElement(AuthenticationLayout, { children: page });
+      if (page.publicLayout) {
+        page.layout ||= (page) => createElement(PublicLayout, { children: page });
         return page;
       } else if (page.loggedInUserLayout) {
         page.layout ||= (page) => createElement(LoggedInUserLayout, { children: page });

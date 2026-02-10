@@ -69,6 +69,34 @@ module User::Stats
     preorders_using_charge_processor
   end
 
+  def rank(year:, limit: 1000)
+    range = Date.new(year).all_year
+    search_options = Purchase::CHARGED_SALES_SEARCH_OPTIONS.merge(
+      created_on_or_after: range.begin,
+      created_on_or_before: range.end,
+      size: 0,
+      track_total_hits: false,
+      aggs: {
+        sellers: {
+          terms: {
+            field: "seller_id",
+            size: limit,
+            order: { total_sales: "desc" }
+          },
+          aggs: {
+            total_sales: { sum: { field: "price_cents" } }
+          }
+        }
+      }
+    )
+    buckets = PurchaseSearchService.search(search_options).aggregations.sellers.buckets
+    rank_index = buckets.index { |bucket| bucket["key"].to_i == id }
+    rank_index ? rank_index + 1 : nil
+  rescue StandardError => e
+    Rails.logger.error("Failed to compute creator rank for seller=#{id} year=#{year}: #{e.class}: #{e.message}")
+    nil
+  end
+
   def balance_formatted(via: :sql)
     formatted_dollar_amount(unpaid_balance_cents(via:), with_currency: should_be_shown_currencies_always?)
   end

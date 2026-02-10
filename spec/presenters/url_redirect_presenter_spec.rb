@@ -714,4 +714,63 @@ describe UrlRedirectPresenter do
       end
     end
   end
+
+  describe "#read_page_props" do
+    it "returns all necessary props for the PDF reader page" do
+      product = create(:product_with_pdf_file)
+      purchase = create(:purchase, link: product, purchaser: create(:user))
+      url_redirect = create(:url_redirect, purchase:)
+      product_file = product.product_files.first
+      read_url = "https://example.com/read/test.pdf"
+      title = "Test PDF Title"
+
+      props = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).read_page_props(
+        product_file:,
+        read_url:,
+        title:,
+      )
+
+      expect(props).to eq(
+        read_id: product_file.external_id,
+        url: read_url,
+        url_redirect_id: url_redirect.external_id,
+        purchase_id: purchase.external_id,
+        product_file_id: product_file.external_id,
+        latest_media_location: nil,
+        title:,
+      )
+    end
+
+    it "includes latest_media_location when available" do
+      product = create(:product_with_pdf_file)
+      purchase = create(:purchase, link: product, purchaser: create(:user))
+      url_redirect = create(:url_redirect, purchase:)
+      product_file = product.product_files.first
+      media_location = create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                               product_file_id: product_file.id, product_id: product.id, location: 5)
+
+      props = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).read_page_props(
+        product_file:,
+        read_url: "https://example.com/read/test.pdf",
+        title: "Test PDF",
+      )
+
+      expect(props[:latest_media_location]).to eq(media_location.as_json)
+    end
+
+    it "returns nil for purchase_id when there is no purchase" do
+      creator = create(:user)
+      post = create(:follower_installment, seller: creator)
+      url_redirect = create(:installment_url_redirect, installment: post)
+      product_file = post.product_files.first
+
+      props = described_class.new(url_redirect:, logged_in_user: nil).read_page_props(
+        product_file:,
+        read_url: "https://example.com/read/test.pdf",
+        title: "Test PDF",
+      )
+
+      expect(props[:purchase_id]).to be_nil
+    end
+  end
 end

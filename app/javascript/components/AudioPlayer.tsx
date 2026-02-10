@@ -4,6 +4,7 @@ import { asyncVoid } from "$app/utils/promise";
 
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Range } from "$app/components/ui/Range";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 type Props = {
@@ -17,12 +18,6 @@ type Props = {
   onLoadedMetadata?: (duration: number) => void;
   isPlaying?: boolean;
 };
-
-declare module "react" {
-  export interface CSSProperties {
-    "--progress"?: number | string;
-  }
-}
 
 export const AudioPlayer = (props: Props) => {
   const userAgentInfo = useUserAgentInfo();
@@ -124,8 +119,7 @@ export const AudioPlayer = (props: Props) => {
           <time aria-label="Progress" className="text-[0.875rem] leading-[1.3] tabular-nums">
             {formattedTime(progress)}
           </time>
-          <input
-            type="range"
+          <Range
             min={0}
             step={0.01}
             value={progress}
@@ -133,7 +127,7 @@ export const AudioPlayer = (props: Props) => {
             onChange={withAudio(
               (audio, ev: React.ChangeEvent<HTMLInputElement>) => (audio.currentTime = parseInt(ev.target.value, 10)),
             )}
-            style={{ "--progress": `${(progress * 100) / duration}%` }}
+            progress={(progress * 100) / duration}
             className="grow"
           />
           <time aria-label="Remaining" className="text-[0.875rem] leading-[1.3] tabular-nums">

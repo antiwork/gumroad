@@ -22,6 +22,7 @@ import { DateRangePicker } from "$app/components/DateRangePicker";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Select } from "$app/components/ui/Select";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
@@ -150,13 +151,14 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
       actions={
         hasContent ? (
           <>
-            <select
+            <Select
               aria-label="Aggregate by"
               onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
+              wrapperClassName="w-auto"
             >
               <option value="daily">Daily</option>
               <option value="monthly">Monthly</option>
-            </select>
+            </Select>
             <ProductsPopover products={products} setProducts={setProducts} />
             <DateRangePicker {...dateRange} />
           </>

@@ -270,11 +270,11 @@ export const Checkout = ({
               </CartItemList>
               <CartItemList>
                 {displayTipSelector ? (
-                  <div className="p-3 sm:p-5">
+                  <div className="p-4 sm:p-5">
                     <TipSelector />
                   </div>
                 ) : null}
-                <div className={classNames("grid gap-4 p-4", displayTipSelector && "border-t border-border")}>
+                <div className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}>
                   {state.surcharges.type === "loaded" ? (
                     <>
                       <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
@@ -360,7 +360,7 @@ export const Checkout = ({
                 </div>
                 {total != null ? (
                   <>
-                    <footer className="grid gap-4 border-t border-border p-4">
+                    <footer className="grid gap-4 border-t border-border p-4 sm:px-5">
                       <CartPriceItem title="Total" price={formatPrice(total)} variant="large" />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (

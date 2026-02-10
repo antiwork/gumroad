@@ -1,0 +1,148 @@
+{
+  "jobs": [
+    {
+      "slug": "senior-fullstack-engineer",
+      "title": "Senior Full Stack Engineer",
+      "salary": "$189k-$210k",
+      "type": "Full-time",
+      "location": "New York / Remote",
+      "category": "Engineering",
+      "responsibilities": [
+        {
+          "title": "Full Stack development",
+          "description": "Build and maintain features across our entire stack, from database to user interface."
+        },
+        {
+          "title": "Product ownership",
+          "description": "Take ownership of significant features and see them through from concept to production."
+        },
+        {
+          "title": "Code quality",
+          "description": "Write clean, maintainable code and contribute to our engineering best practices."
+        },
+        {
+          "title": "Collaboration",
+          "description": "Work closely with designers, product managers, open source contributors, and other engineers to ship great products. Review code and provide thoughtful feedback."
+        }
+      ],
+      "stack": [
+        { "name": "Backend", "tech": "Ruby on Rails." },
+        { "name": "Frontend", "tech": "React, TypeScript, Inertia.js, Tailwind CSS." },
+        { "name": "Data", "tech": "MySQL, Elasticsearch, MongoDB, Redis." },
+        { "name": "Infrastructure", "tech": "AWS, Hetzner, Docker, GitHub." }
+      ],
+      "how_to_apply": [
+        {
+          "step": "Email us.",
+          "description": "Send a few sentences about your background and why you want to join Gumroad to jobs@antiwork.com."
+        },
+        {
+          "step": "Show your work.",
+          "description": "Include a list of things you've built (with URLs). To skip the line, find an open issue in our GitHub repo, fix it, and get the PR merged."
+        },
+        {
+          "step": "Initial conversation.",
+          "description": "If your work stands out, we'll have a conversation to see if we're a mutual fit."
+        },
+        {
+          "step": "Paid trial.",
+          "description": "4–6 week paid work trial where you ship real work for real creators. If it's a fit, you join the team."
+        }
+      ]
+    },
+    {
+      "slug": "senior-designer",
+      "title": "Senior Designer",
+      "salary": "$189k-$210k",
+      "type": "Full-time",
+      "location": "New York / Remote",
+      "category": "Design",
+      "responsibilities": [
+        {
+          "title": "End-to-end product design",
+          "description": "Own the design of creator-facing features from concept to launch, ensuring every pixel serves our creators."
+        },
+        {
+          "title": "Design systems and consistency",
+          "description": "Build and maintain design systems that scale across web and mobile experiences."
+        },
+        {
+          "title": "User research and iteration",
+          "description": "Talk to creators, understand their needs, and rapidly iterate on designs based on real feedback."
+        },
+        {
+          "title": "Collaboration",
+          "description": "Work closely with engineers, open source contributors, and other designers to ship polished products."
+        }
+      ],
+      "stack": [
+        { "name": "Design tools", "tech": "Figma, prototyping." },
+        { "name": "Frontend basics", "tech": "HTML, CSS, understanding of React and Tailwind." },
+        { "name": "Design systems", "tech": "Component libraries, tokens, documentation." }
+      ],
+      "how_to_apply": [
+        {
+          "step": "Email us.",
+          "description": "Send a few sentences about your background and why you want to join Gumroad to jobs@antiwork.com."
+        },
+        {
+          "step": "Show your work.",
+          "description": "Share your portfolio with case studies showing your design process and shipped work. Include links to live products you've designed."
+        },
+        {
+          "step": "Initial conversation.",
+          "description": "If your work stands out, we'll have a conversation to see if we're a mutual fit."
+        },
+        {
+          "step": "Paid trial.",
+          "description": "4–6 week paid work trial where you ship real work for real creators. If it's a fit, you join the team."
+        }
+      ]
+    },
+    {
+      "slug": "customer-support-specialist",
+      "title": "Customer Support Specialist",
+      "salary": "$90k-$100k",
+      "type": "Full-time",
+      "location": "New York / Remote",
+      "category": "Support",
+      "responsibilities": [
+        {
+          "title": "Creator support",
+          "description": "Help creators succeed by providing excellent support and guidance on using Gumroad."
+        },
+        {
+          "title": "Problem solving",
+          "description": "Troubleshoot issues and find creative solutions to help creators achieve their goals."
+        },
+        {
+          "title": "Relationship building",
+          "description": "Build strong relationships with creators and become their trusted advisor."
+        },
+        {
+          "title": "Product feedback",
+          "description": "Channel creator feedback to the product team to help improve the platform."
+        }
+      ],
+      "stack": [],
+      "how_to_apply": [
+        {
+          "step": "Email us.",
+          "description": "Send a few sentences about your background and why you want to join Gumroad to jobs@antiwork.com."
+        },
+        {
+          "step": "Show your work.",
+          "description": "Include examples of how you've helped customers succeed, communication skills, and problem-solving abilities."
+        },
+        {
+          "step": "Initial conversation.",
+          "description": "If your experience stands out, we'll have a conversation to see if we're a mutual fit."
+        },
+        {
+          "step": "Paid trial.",
+          "description": "4–6 week paid work trial where you support real creators. If it's a fit, you join the team."
+        }
+      ]
+    }
+  ]
+}

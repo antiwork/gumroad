@@ -1,8 +1,9 @@
 # frozen_string_literal: false
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe Purchases::DisputeEvidenceController do
+describe Purchases::DisputeEvidenceController, type: :controller, inertia: true do
   let(:dispute_evidence) { create(:dispute_evidence) }
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
 
@@ -51,13 +52,11 @@ describe Purchases::DisputeEvidenceController do
         get :show, params: { purchase_id: purchase.external_id }
 
         expect(response).to be_successful
-        expect(controller.send(:page_title)).to eq("Submit additional information")
-        expect(assigns[:hide_layouts]).to be(true)
+        expect(inertia.component).to eq("Purchases/DisputeEvidence/Show")
 
-        expect(assigns[:dispute_evidence]).to eq(dispute_evidence)
-        expect(assigns[:purchase]).to eq(purchase)
-        dispute_evidence_page_presenter = assigns(:dispute_evidence_page_presenter)
-        expect(dispute_evidence_page_presenter.send(:purchase)).to eq(purchase)
+        expected_props = DisputeEvidencePagePresenter.new(dispute_evidence).props
+        actual_props = inertia.props.slice(*expected_props.keys)
+        expect(actual_props).to eq(expected_props)
       end
     end
 
@@ -91,8 +90,24 @@ describe Purchases::DisputeEvidenceController do
     end
   end
 
+  describe "GET success" do
+    it "renders the success page" do
+      get :success, params: { purchase_id: purchase.external_id }
+
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Purchases/DisputeEvidence/Success")
+    end
+
+    it "adds X-Robots-Tag response header to avoid page indexing" do
+      get :success, params: { purchase_id: purchase.external_id }
+
+      expect(response).to be_successful
+      expect(response.headers["X-Robots-Tag"]).to eq("noindex")
+    end
+  end
+
   describe "PUT update" do
-    it "updates the dispute evidence" do
+    it "updates the dispute evidence and redirects to success page" do
       put :update, params: {
         purchase_id: purchase.external_id,
         dispute_evidence: {
@@ -102,13 +117,13 @@ describe Purchases::DisputeEvidenceController do
         }
       }
 
-      dispute_evidence = assigns(:dispute_evidence)
+      dispute_evidence.reload
       expect(dispute_evidence.reason_for_winning).to eq("Reason for winning")
       expect(dispute_evidence.cancellation_rebuttal).to eq("Cancellation rebuttal")
       expect(dispute_evidence.refund_refusal_explanation).to eq("Refusal explanation")
       expect(dispute_evidence.seller_submitted?).to be(true)
 
-      expect(response.parsed_body).to eq({ "success" => true })
+      expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
     end
 
     context "when a signed_id for a PNG file is provided" do
@@ -121,12 +136,12 @@ describe Purchases::DisputeEvidenceController do
         allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
         put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: blob.signed_id } }
 
-        dispute_evidence = assigns(:dispute_evidence)
+        dispute_evidence.reload
         expect(dispute_evidence.customer_communication_file.attached?).to be(true)
         expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("receipt_image.jpg")
         expect(dispute_evidence.customer_communication_file.content_type).to eq("image/jpeg")
 
-        expect(response.parsed_body).to eq({ "success" => true })
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
       end
     end
 
@@ -138,23 +153,21 @@ describe Purchases::DisputeEvidenceController do
       it "attaches it to the dispute evidence" do
         put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_id: blob.signed_id } }
 
-        dispute_evidence = assigns(:dispute_evidence)
+        dispute_evidence.reload
         expect(dispute_evidence.customer_communication_file.attached?).to be(true)
         expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("test.pdf")
         expect(dispute_evidence.customer_communication_file.content_type).to eq("application/pdf")
 
-        expect(response.parsed_body).to eq({ "success" => true })
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
       end
     end
 
     context "when the dispute evidence is invalid" do
-      it "returns errors" do
+      it "redirects with error message" do
         put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { cancellation_rebuttal: "a" * 3_001 } }
 
-        dispute_evidence = assigns(:dispute_evidence)
-        expect(dispute_evidence.valid?).to be(false)
-
-        expect(response.parsed_body).to eq({ "success" => false, "error" => "Cancellation rebuttal is too long (maximum is 3000 characters)" })
+        expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+        expect(flash[:alert]).to eq("Cancellation rebuttal is too long (maximum is 3000 characters)")
       end
     end
   end

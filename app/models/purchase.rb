@@ -3151,6 +3151,8 @@ class Purchase < ApplicationRecord
 
       self.purchase_sales_tax_info = purchase_sales_tax_info
       self.purchase_sales_tax_info.save!
+
+      subscription&.update_business_vat_id!(purchase_sales_tax_info.business_vat_id) if purchase_sales_tax_info.business_vat_id.present?
     end
 
     def charge_discover_fee?

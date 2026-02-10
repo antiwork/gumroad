@@ -24,7 +24,7 @@ import { Link, Button as TiptapButton } from "$app/components/TiptapExtensions/L
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
-import { WithTooltip } from "$app/components/WithTooltip";
+import { WithTooltip, Position } from "$app/components/WithTooltip";
 
 import { Raw } from "./TiptapExtensions/MediaEmbed";
 
@@ -48,7 +48,15 @@ export const useImageUploadSettings = () => React.useContext(ImageUploadSettings
 
 const TOOLBAR_TOOLTIP_DEFAULT_DELAY = 800; // in milliseconds
 
-const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.ReactNode }) => {
+const MenuItemTooltip = ({
+  tip,
+  children,
+  position = "bottom",
+}: {
+  tip: string;
+  children: React.ReactNode;
+  position?: Position | undefined;
+}) => {
   const [showTooltip, setShowTooltip] = assertDefined(React.useContext(ToolbarTooltipContext));
 
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
@@ -65,7 +73,7 @@ const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.React
   };
 
   return (
-    <WithTooltip position="bottom" tip={showTooltip ? tip : null}>
+    <WithTooltip position={position} tip={showTooltip ? tip : null}>
       <span onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         {children}
       </span>
@@ -79,14 +87,16 @@ export const MenuItem = ({
   active,
   disabled,
   onClick,
+  position,
 }: {
   name: string;
   icon: IconName;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
+  position?: Position | undefined;
 }) => (
-  <MenuItemTooltip tip={name}>
+  <MenuItemTooltip tip={name} position={position}>
     <button
       type="button"
       className="toolbar-item cursor-pointer all-unset"
@@ -394,11 +404,11 @@ export const RichTextEditorToolbar = ({
           <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
             {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
           </PopoverTrigger>
-          <PopoverContent className="border-0 p-0 shadow-none">
-            <ul role="menu" className="flex flex-col">
+          <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+            <div role="menu">
               {textFormatOptions.map((option) => (
-                <PopoverClose key={option.name}>
-                  <li
+                <PopoverClose key={option.name} asChild>
+                  <div
                     role="menuitemradio"
                     aria-checked={option === activeFormatOption}
                     onClick={() => {
@@ -411,10 +421,10 @@ export const RichTextEditorToolbar = ({
                   >
                     <Icon name={option.icon} />
                     <span>{option.name}</span>
-                  </li>
+                  </div>
                 </PopoverClose>
               ))}
-            </ul>
+            </div>
           </PopoverContent>
         </Popover>
         <Separator aria-orientation="vertical" />
@@ -525,6 +535,7 @@ export const RichTextEditorToolbar = ({
             active={editor.isActive("redo")}
             disabled={redoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().redo().run()}
+            position="bottom-end"
           />
         </div>
       </div>

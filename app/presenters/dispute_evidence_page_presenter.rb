@@ -7,7 +7,7 @@ class DisputeEvidencePagePresenter
     @purchase_product_presenter = PurchaseProductPresenter.new(@purchase)
   end
 
-  def react_props
+  def props
     {
       dispute_evidence: dispute_evidence_props,
       disputable: disputable_props,

@@ -3966,7 +3966,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     end
   end
 
-  describe "Canada Tax", taxjar: true, force_vcr_on: true do
+  describe "Canada Tax", taxjar: true do
     let (:product) { create(:product, price_cents: 100_00) }
 
     it "detects the province for Canada" do
@@ -4247,7 +4247,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_select("Country", selected: "Austria")
 
       fill_in("Your email address", with: "test@test.com")
-      fill_cc_details
+      fill_in_credit_card
 
       expect(page).to have_text("VAT US$20", normalize_ws: true)
 

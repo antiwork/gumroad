@@ -49,9 +49,11 @@ export type ComplianceInfo = {
   business_name_kanji?: string | null;
   business_name_kana?: string | null;
   building_number?: string | null;
+  building_number_kana?: string | null;
   street_address_kanji?: string | null;
   street_address_kana?: string | null;
   business_building_number?: string | null;
+  business_building_number_kana?: string | null;
   business_street_address_kanji?: string | null;
   business_street_address_kana?: string | null;
 };
@@ -65,6 +67,7 @@ export type FormFieldName =
   | "first_name_kana"
   | "last_name_kana"
   | "building_number"
+  | "building_number_kana"
   | "street_address_kanji"
   | "street_address_kana"
   | "street_address"
@@ -83,6 +86,7 @@ export type FormFieldName =
   | "business_name_kana"
   | "business_street_address"
   | "business_building_number"
+  | "business_building_number_kana"
   | "business_street_address_kanji"
   | "business_street_address_kana"
   | "business_city"

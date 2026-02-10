@@ -299,14 +299,13 @@ describe UsersController do
     end
   end
 
-  describe "GET coffee" do
+  describe "GET coffee", inertia: true do
     let(:seller) { create(:user, :eligible_for_service_products) }
-    render_views
 
     context "user has coffee product" do
       let!(:product) { create(:product, name: "Buy me a coffee", user: seller, native_type: Link::NATIVE_TYPE_COFFEE, purchase_disabled_at: Time.current) }
 
-      it "responds successfully and sets the title" do
+      it "renders the Inertia Users/Coffee component with correct props" do
         get :coffee, params: { username: seller.username }
 
         expect(response).to be_successful
@@ -683,12 +682,14 @@ describe UsersController do
     end
   end
 
-  describe "GET subscribe_preview" do
+  describe "GET subscribe_preview", inertia: true do
     it "assigns subscribe preview props for the react component" do
       get :subscribe_preview, params: { username: creator.username }
       expect(response).to be_successful
-      expect(assigns[:subscribe_preview_props][:title]).to eq(creator.name_or_username)
-      expect(assigns[:subscribe_preview_props][:avatar_url]).to end_with(".png")
+      expect(inertia.component).to eq("Users/SubscribePreview")
+      expect(inertia.props[:title]).to eq(creator.name_or_username)
+      expect(inertia.props[:avatar_url]).to end_with(".png")
+      expect(inertia.props[:custom_styles]).to eq(creator.seller_profile.custom_styles)
     end
   end
 end
