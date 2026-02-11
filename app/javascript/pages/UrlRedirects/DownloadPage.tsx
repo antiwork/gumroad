@@ -6,10 +6,10 @@ import { useDropbox } from "$app/hooks/useDropbox";
 import { StandaloneLayout } from "$app/inertia/layout";
 import FileUtils from "$app/utils/file";
 
+import { FileItem } from "$app/components/Download/FileList";
 import DownloadPageWithContent, {
   DownloadPageWithContentProps,
 } from "$app/components/server-components/DownloadPage/WithContent";
-import { FileItem } from "$app/components/Download/FileList";
 
 const AUDIO_DURATIONS_POLL_INTERVAL_MS = 5_000;
 const LATEST_MEDIA_LOCATIONS_POLL_INTERVAL_MS = 10_000;
