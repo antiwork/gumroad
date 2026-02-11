@@ -151,7 +151,7 @@ describe UsersController do
         stub_const("ROOT_DOMAIN", "test.gumroad.com")
       end
 
-      context "when the subdomain is valid and present" do
+      context "when the subdomain is valid and present", inertia: true do
         before do
           @user = create(:user, username: "testuser")
           create(:product, user: @user, name: "onelolol")
@@ -163,8 +163,8 @@ describe UsersController do
           expect(assigns(:user)).to eq(@user)
         end
 
-        it "renders the show template" do
-          expect(response).to render_template(:show)
+        it "renders the Inertia Users/Show page" do
+          expect(inertia.component).to eq("Users/Show")
         end
       end
 
@@ -184,7 +184,7 @@ describe UsersController do
         allow(Resolv::DNS).to receive_message_chain(:new, :getresources).and_return([double(name: "domains.gumroad.com")])
       end
 
-      describe "when the custom domain is valid" do
+      describe "when the custom domain is valid", inertia: true do
         before do
           @user = create(:user, username: "dude")
           create(:product, user: @user, name: "onelolol")
@@ -197,9 +197,8 @@ describe UsersController do
           expect(assigns(:user)).to eq(@user)
         end
 
-
-        it "renders the show template" do
-          expect(response).to render_template(:show)
+        it "renders the Inertia Users/Show page" do
+          expect(inertia.component).to eq("Users/Show")
         end
 
         describe "when the host is another subdomain that is www with the same apex domain" do
@@ -212,8 +211,8 @@ describe UsersController do
             expect(assigns(:user)).to eq(@user)
           end
 
-          it "renders the show template" do
-            expect(response).to render_template(:show)
+          it "renders the Inertia Users/Show page" do
+            expect(inertia.component).to eq("Users/Show")
           end
         end
 
@@ -239,33 +238,20 @@ describe UsersController do
       end
     end
 
-    it "sets paypal_merchant_currency as merchant account's currency if native paypal payments are enabled else as usd" do
-      creator = create(:named_user)
-      create(:product, user: creator)
-
-      @request.host = "#{creator.username}.test.gumroad.com"
-      get :show, params: { username: creator.username }
-      expect(assigns[:paypal_merchant_currency]).to eq "USD"
-
-      create(:merchant_account_paypal, user: creator, currency: "GBP")
-      get :show, params: { username: creator.username }
-      expect(assigns[:paypal_merchant_currency]).to eq "GBP"
-    end
-
-    context "with user signed in as admin for seller" do
+    context "with user signed in as admin for seller", inertia: true do
       let(:seller) { create(:named_seller) }
       let(:creator) { create(:user, username: "creator") }
 
       include_context "with user signed in as admin for seller"
 
-      it "assigns the correct instance variables" do
+      it "renders the Inertia Users/Show page with correct props" do
         expect(ProfilePresenter).to receive(:new).with(seller: creator, pundit_user: controller.pundit_user).at_least(:once).and_call_original
 
         @request.host = "#{creator.username}.test.gumroad.com"
         get :show, params: { username: creator.username }
 
-        profile_props = assigns[:profile_props]
-        expect(profile_props[:creator_profile][:external_id]).to eq(creator.external_id)
+        expect(inertia.component).to eq("Users/Show")
+        expect(inertia.props[:creator_profile][:external_id]).to eq(creator.external_id)
       end
     end
 
@@ -296,6 +282,17 @@ describe UsersController do
       seller.update!(bio: "f" * 301)
       get :show, params: { username: seller.username }
       expect(response.body).to have_selector("meta[name='description'][content='#{"f" * 300}']", visible: false)
+    end
+
+    it "renders seller custom_styles in the head as a style tag" do
+      seller.seller_profile.update!(custom_styles: "body { background: blue; }")
+      @request.host = seller.subdomain
+      get :show, params: { username: seller.username }
+
+      doc = Nokogiri::HTML(response.body)
+      style_tag = doc.at_css("head style")
+      expect(style_tag).to be_present
+      expect(style_tag.text).to include("body { background: blue; }")
     end
   end
 
@@ -677,18 +674,28 @@ describe UsersController do
     end
   end
 
-  describe "GET subscribe" do
+  describe "GET subscribe", inertia: true do
     context "with user signed in as admin for seller" do
       include_context "with user signed in as admin for seller"
 
-      it "assigns the correct instance variables" do
+      it "renders the Inertia Users/Subscribe page with correct props" do
         @request.host = "#{creator.username}.test.gumroad.com"
         get :subscribe
 
         expect(controller.send(:page_title)).to eq("Subscribe to creator")
-        profile_presenter = assigns[:profile_presenter]
-        expect(profile_presenter.seller).to eq(creator)
-        expect(profile_presenter.pundit_user).to eq(controller.pundit_user)
+        expect(inertia.component).to eq("Users/Subscribe")
+        expect(inertia.props[:creator_profile][:external_id]).to eq(creator.external_id)
+      end
+
+      it "renders seller custom_styles in the head as a style tag" do
+        creator.seller_profile.update!(custom_styles: "body { color: red; }")
+        @request.host = "#{creator.username}.test.gumroad.com"
+        get :subscribe
+
+        doc = Nokogiri::HTML(response.body)
+        style_tag = doc.at_css("head style")
+        expect(style_tag).to be_present
+        expect(style_tag.text).to include("body { color: red; }")
       end
     end
   end

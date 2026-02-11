@@ -46,13 +46,13 @@ class FollowersController < ApplicationController
 
   def create
     follower = create_follower(params)
-    return render json: { success: false, message: "Sorry, something went wrong." } if follower.nil?
-    return render json: { success: false, message: follower.errors.full_messages.to_sentence } if follower.errors.present?
+    return redirect_to custom_domain_subscribe_path, alert: "Sorry, something went wrong.", status: :see_other if follower.nil?
+    return redirect_to custom_domain_subscribe_path, alert: follower.errors.full_messages.to_sentence, status: :see_other if follower.errors.present?
 
     if follower.confirmed?
-      render json: { success: true, message: "You are now following #{follower.user.name_or_username}!" }
+      redirect_to custom_domain_subscribe_path, notice: "You are now following #{follower.user.name_or_username}!", status: :see_other
     else
-      render json: { success: true, message: "Check your inbox to confirm your follow request." }
+      redirect_to custom_domain_subscribe_path, notice: "Check your inbox to confirm your follow request.", status: :see_other
     end
   end
 
