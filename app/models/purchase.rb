@@ -1999,7 +1999,7 @@ class Purchase < ApplicationRecord
   end
 
   def does_not_count_towards_max_purchases
-    is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? || is_gift_receiver_purchase || is_updated_original_subscription_purchase || is_commission_completion_purchase
+    is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? || is_gift_receiver_purchase || is_updated_original_subscription_purchase || is_commission_completion_purchase || (is_installment_payment && !is_original_subscription_purchase)
   end
 
   # Public: Determine if this purchase is a test purchase by the links owner.
@@ -2411,13 +2411,13 @@ class Purchase < ApplicationRecord
   end
 
   def original_offer_code(include_deleted: false)
-    return nil if offer_code&.deleted? && !include_deleted
-
     if has_cached_offer_code?
-      code = purchase_offer_code_discount.offer_code.code
+      code = purchase_offer_code_discount.offer_code&.code
       purchase_offer_code_discount.offer_code_is_percent ?
         OfferCode.new(amount_percentage: purchase_offer_code_discount.offer_code_amount, code:) :
         OfferCode.new(amount_cents: purchase_offer_code_discount.offer_code_amount, code:)
+    elsif offer_code&.deleted? && !include_deleted
+      nil
     else
       offer_code
     end

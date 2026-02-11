@@ -3614,6 +3614,43 @@ describe Subscription, :vcr do
     end
   end
 
+  describe "#build_purchase offer code persistence" do
+    let(:product) { create(:product, :with_installment_plan, user: seller, price_cents: 10_00) }
+    let(:offer_code) { create(:offer_code, products: [product], amount_cents: 2_00, max_purchase_count: 1) }
+    let(:subscription) { create(:subscription, link: product, is_installment_plan: true, user: create(:user)) }
+    let!(:original_purchase) do
+      purchase = create(:installment_plan_purchase, subscription:, link: product, offer_code:, purchaser: subscription.user)
+      purchase.create_purchase_offer_code_discount!(
+        offer_code:, offer_code_amount: 2_00, offer_code_is_percent: false,
+        pre_discount_minimum_price_cents: 10_00
+      )
+      purchase
+    end
+
+    it "copies the cached offer code discount when the offer code is deleted" do
+      offer_code.mark_deleted!
+
+      new_purchase = subscription.build_purchase
+      expect(new_purchase.purchase_offer_code_discount).to be_present
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(2_00)
+    end
+
+    it "copies the cached offer code discount when the offer code is maxed out" do
+      create(:purchase, link: product, offer_code:, is_original_subscription_purchase: true)
+
+      new_purchase = subscription.build_purchase
+      expect(new_purchase.purchase_offer_code_discount).to be_present
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(2_00)
+    end
+
+    it "preserves the original discount amount even if the offer code amount changes" do
+      offer_code.update!(amount_cents: 5_00)
+
+      new_purchase = subscription.build_purchase
+      expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(2_00)
+    end
+  end
+
   describe "#cookie_key" do
     it "returns the cookie key" do
       expect(@subscription.cookie_key).to eq("subscription_#{@subscription.external_id_numeric}")
