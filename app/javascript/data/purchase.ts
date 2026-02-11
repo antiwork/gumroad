@@ -68,6 +68,7 @@ export type PurchaseLineItemPayload = {
 export type StartCartPurchaseRequestPayload = {
   paymentMethod: PurchasePaymentMethod;
   email: string;
+  fullName: string;
   zipCode: string | null;
   state: string | null;
   shippingInfo: {
@@ -245,6 +246,9 @@ export const createPurchasesRequestData = (
       custom_fields: lineItem.customFields,
     })),
   };
+  if (payload.fullName) {
+    purchase.full_name = payload.fullName;
+  }
   if (payload.shippingInfo) {
     data.save_shipping_address = payload.shippingInfo.save;
     purchase.full_name = payload.shippingInfo.fullName;
@@ -315,14 +319,9 @@ export const createPurchasesRequestData = (
         data.save_card = cardParamsResult.keepOnFile;
       }
     }
-    if (cardParamsResult.type === "cc") {
-      if (cardParamsResult.fullName && payload.shippingInfo == null) {
-        purchase.full_name = cardParamsResult.fullName;
-      }
-      if (cardParamsResult.zipCode != null) {
-        data.cc_zipcode_required = true;
-        data.cc_zipcode = cardParamsResult.zipCode;
-      }
+    if (cardParamsResult.type === "cc" && cardParamsResult.zipCode != null) {
+      data.cc_zipcode_required = true;
+      data.cc_zipcode = cardParamsResult.zipCode;
     }
   }
   return data;

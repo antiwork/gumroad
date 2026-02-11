@@ -2,15 +2,12 @@ import React from "react";
 
 import { Membership, Product, SortKey } from "$app/data/products";
 
-import { buttonVariants } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { PaginationProps } from "$app/components/Pagination";
-import { Popover } from "$app/components/Popover";
 import { ProductsLayout } from "$app/components/ProductsLayout";
+import { Search } from "$app/components/Search";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sort } from "$app/components/useSortingTableDriver";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 import ProductsPage from "./ProductsPage";
 
@@ -38,13 +35,7 @@ export const ProductsDashboardPage = ({
   can_create_product: canCreateProduct,
 }: ProductsDashboardPageProps) => {
   const [enableArchiveTab, setEnableArchiveTab] = React.useState(archivedProductsCount > 0);
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-  const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
-  const [query, setQuery] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (isSearchPopoverOpen) searchInputRef.current?.focus();
-  }, [isSearchPopoverOpen]);
+  const [query, setQuery] = React.useState("");
 
   return (
     <ProductsLayout
@@ -53,32 +44,7 @@ export const ProductsDashboardPage = ({
       archivedTabVisible={enableArchiveTab}
       ctaButton={
         <>
-          {products.length > 0 ? (
-            <Popover
-              open={isSearchPopoverOpen}
-              onToggle={setIsSearchPopoverOpen}
-              aria-label="Toggle Search"
-              trigger={
-                <WithTooltip tip="Search" position="bottom">
-                  <div className={buttonVariants({ size: "default" })}>
-                    <Icon name="solid-search" />
-                  </div>
-                </WithTooltip>
-              }
-            >
-              <div className="input">
-                <Icon name="solid-search" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search products"
-                  value={query ?? ""}
-                  onChange={(evt) => setQuery(evt.target.value)}
-                />
-              </div>
-            </Popover>
-          ) : null}
-
+          {products.length > 0 ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
           </NavigationButtonInertia>

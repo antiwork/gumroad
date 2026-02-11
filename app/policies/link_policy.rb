@@ -56,6 +56,10 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
+  def update_purchases_content?
+    update?
+  end
+
   def product_permitted_attributes
     attributes = [
       :name,

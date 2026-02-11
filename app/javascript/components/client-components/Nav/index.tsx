@@ -112,7 +112,7 @@ export const Nav = (props: Props) => {
           text="Products"
           icon="archive-fill"
           href={Routes.products_url(routeParams)}
-          additionalPatterns={[Routes.bundle_path(".", routeParams).slice(0, -1)]}
+          additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
           <ClientNavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />

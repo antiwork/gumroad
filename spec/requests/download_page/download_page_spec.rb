@@ -281,7 +281,7 @@ describe("Download Page", type: :system, js: true) do
       expect(page).to have_text("chapter2")
       expect(page).to have_link("Watch")
       expect(page).to have_link("Download", exact: true)
-      expect(page).to have_disclosure("Download all")
+      expect(page).to have_disclosure_button("Download all")
 
       # Stream-only files can only be watched and not downloaded
       @post.product_files.first.update!(stream_only: true)
@@ -291,7 +291,7 @@ describe("Download Page", type: :system, js: true) do
       expect(page).to have_text("chapter2")
       expect(page).to have_link("Watch")
       expect(page).not_to have_link("Download", exact: true)
-      expect(page).not_to have_disclosure("Download all")
+      expect(page).not_to have_disclosure_button("Download all")
     end
   end
 

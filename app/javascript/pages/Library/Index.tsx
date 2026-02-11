@@ -16,7 +16,7 @@ import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
@@ -108,22 +108,22 @@ export const Card = ({
           ) : null}
         </div>
         <div className="p-4">
-          <Popover
-            aria-label="Open product action menu"
-            trigger={<Icon name="three-dots" />}
-            open={isPopoverOpen}
-            onToggle={setIsPopoverOpen}
-          >
-            <div role="menu">
-              <div role="menuitem" onClick={toggleArchived}>
-                <Icon name="archive" />
-                &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
+          <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+            <PopoverTrigger aria-label="Open product action menu">
+              <Icon name="three-dots" />
+            </PopoverTrigger>
+            <PopoverContent className="border-0 p-0 shadow-none" usePortal>
+              <div role="menu">
+                <div role="menuitem" onClick={toggleArchived}>
+                  <Icon name="archive" />
+                  &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
+                </div>
+                <div className="danger" role="menuitem" onClick={() => onDelete()}>
+                  <Icon name="trash2" />
+                  &ensp;Delete permanently
+                </div>
               </div>
-              <div className="danger" role="menuitem" onClick={() => onDelete()}>
-                <Icon name="trash2" />
-                &ensp;Delete permanently
-              </div>
-            </div>
+            </PopoverContent>
           </Popover>
         </div>
       </ProductCardFooter>

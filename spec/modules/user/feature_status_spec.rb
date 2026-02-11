@@ -229,8 +229,14 @@ describe User::FeatureStatus do
       expect(seller.can_setup_paypal_payouts?).to be true
     end
 
-    it "returns false for all Stripe supported countries except UAE and Egypt" do
-      (User::Compliance.const_get(:SUPPORTED_COUNTRIES) - [Compliance::Countries::ARE, Compliance::Countries::EGY]).each do |country|
+    it "returns true if user is from Kazakhstan" do
+      seller = create(:user, payment_address: nil)
+      create(:user_compliance_info, user: seller, country: "Kazakhstan")
+      expect(seller.can_setup_paypal_payouts?).to be true
+    end
+
+    it "returns false for all Stripe supported countries except UAE, Kazakhstan, and Egypt" do
+      (User::Compliance.const_get(:SUPPORTED_COUNTRIES) - [Compliance::Countries::ARE, Compliance::Countries::KAZ, Compliance::Countries::EGY]).each do |country|
         seller = create(:user, payment_address: nil)
         create(:user_compliance_info, user: seller, country: country.common_name)
         expect(seller.can_setup_paypal_payouts?).to be false

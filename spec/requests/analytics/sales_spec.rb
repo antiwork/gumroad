@@ -164,7 +164,7 @@ describe "Sales analytics", :js, :sidekiq_inline, :elasticsearch_wait_for_refres
 
     it "fixes the date range when from is after to" do
       visit sales_dashboard_path(from: "2023-12-14", to: "2023-01-01")
-      expect(page).to have_disclosure("12/14/2023")
+      expect(page).to have_disclosure_button("12/14/2023")
       expect(page).to have_current_path(sales_dashboard_path(from: "2023-12-14", to: "2023-12-14"))
     end
 

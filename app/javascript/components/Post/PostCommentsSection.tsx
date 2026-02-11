@@ -3,11 +3,11 @@ import * as React from "react";
 
 import {
   addComment as addCommentRequest,
+  Comment,
   deleteComment as deleteCommentRequest,
   fetchPaginatedComments,
-  updateComment,
-  Comment,
   PaginatedComments,
+  updateComment,
 } from "$app/data/comments";
 import { classNames } from "$app/utils/classNames";
 import { formatDate } from "$app/utils/date";
@@ -18,7 +18,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { UserAvatar } from "$app/components/server-components/CommunitiesPage/UserAvatar";
 import { Pill } from "$app/components/ui/Pill";
@@ -256,19 +256,26 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
           {comment.author_id === seller_id ? <Pill size="small">Creator</Pill> : null}
           <div className="ml-auto">
             {comment.is_editable || comment.is_deletable ? (
-              <Popover aria-label="Open comment action menu" trigger={<Icon name="three-dots" />}>
-                {(close) => (
-                  <div className="grid gap-3" onClick={close}>
+              <Popover>
+                <PopoverTrigger aria-label="Open comment action menu">
+                  <Icon name="three-dots" />
+                </PopoverTrigger>
+                <PopoverContent>
+                  <div className="grid gap-3">
                     {comment.is_editable ? (
-                      <Button onClick={() => setEditDraft(comment.content.original)}>Edit</Button>
+                      <PopoverClose asChild>
+                        <Button onClick={() => setEditDraft(comment.content.original)}>Edit</Button>
+                      </PopoverClose>
                     ) : null}
                     {comment.is_deletable ? (
-                      <Button color="danger" onClick={() => confirmCommentDeletion(comment)}>
-                        Delete
-                      </Button>
+                      <PopoverClose asChild>
+                        <Button color="danger" onClick={() => confirmCommentDeletion(comment)}>
+                          Delete
+                        </Button>
+                      </PopoverClose>
                     ) : null}
                   </div>
-                )}
+                </PopoverContent>
               </Popover>
             ) : null}
           </div>

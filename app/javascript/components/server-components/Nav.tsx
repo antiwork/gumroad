@@ -85,7 +85,7 @@ export const Nav = (props: Props) => {
             }
           />
           <DashboardNavProfilePopover user={currentSeller}>
-            <div role="menu">
+            <div role="menu" className="border-0! shadow-none! dark:border!">
               {teamMemberships != null && teamMemberships.length > 0 ? (
                 <>
                   {teamMemberships.map((teamMembership) => (
@@ -114,7 +114,7 @@ export const Nav = (props: Props) => {
           text="Products"
           icon="archive-fill"
           href={Routes.products_url(routeParams)}
-          additionalPatterns={[Routes.bundle_path(".", routeParams).slice(0, -1)]}
+          additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
           <NavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />

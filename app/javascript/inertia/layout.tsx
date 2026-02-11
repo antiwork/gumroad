@@ -52,7 +52,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function AuthenticationLayout({ children }: { children: React.ReactNode }) {
+export function PublicLayout({ children }: { children: React.ReactNode }) {
+  const { flash } = usePage<PageProps>().props;
+
+  useFlashMessage(flash);
+
   return (
     <div>
       <MetaTags />
@@ -73,6 +77,24 @@ export function LoggedInUserLayout({ children }: { children: React.ReactNode }) 
         <MetaTags />
         <Alert initial={null} />
         {children}
+      </CurrentSellerProvider>
+    </LoggedInUserProvider>
+  );
+}
+
+export function StandaloneLayout({ children }: { children: React.ReactNode }) {
+  const { flash, logged_in_user, current_seller } = usePage<PageProps>().props;
+
+  useFlashMessage(flash);
+
+  return (
+    <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
+      <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
+        <MetaTags />
+        <Alert initial={null} />
+        <div className="flex min-h-screen flex-col lg:flex-row">
+          <main className="flex-1">{children}</main>
+        </div>
       </CurrentSellerProvider>
     </LoggedInUserProvider>
   );

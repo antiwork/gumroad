@@ -141,11 +141,14 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_disclosure "Insert" do
       click_on "Upsell"
     end
-    select_combo_box_option search: "Sample product", from: "Product"
-    check "Add a discount to the offered product"
-    choose "Fixed amount"
-    fill_in "Fixed amount", with: "1"
-    click_on "Insert"
+
+    within_modal do
+      select_combo_box_option search: "Sample product", from: "Product"
+      check "Add a discount to the offered product"
+      choose "Fixed amount"
+      fill_in "Fixed amount", with: "1"
+      click_on "Insert"
+    end
 
     within("[aria-label='Description']") do
       within_section "Sample product", section_element: :article do
@@ -212,6 +215,9 @@ describe("Product Edit Scenario", type: :system, js: true) do
       expect(variant2_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
     end
 
+    discount_amount_cents = 100
+    discount_amount = discount_amount_cents / 100.0
+
     # When searching, only variants should appear, not the product itself, and no icon
     within_modal do
       fill_in "Product", with: "Sample product"
@@ -222,16 +228,14 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
       variant2_option = find("[role='option']", text: "Sample product (#{variant2.name})")
       expect(variant2_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
-    end
 
-    # Select the first variant
-    select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
-    check "Add a discount to the offered product"
-    choose "Fixed amount"
-    discount_amount_cents = 100
-    discount_amount = discount_amount_cents / 100.0
-    fill_in "Fixed amount", with: discount_amount
-    click_on "Insert"
+      # Select the first variant
+      select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
+      check "Add a discount to the offered product"
+      choose "Fixed amount"
+      fill_in "Fixed amount", with: discount_amount
+      click_on "Insert"
+    end
 
     within_section "Sample product", section_element: :article do
       expect(page).to have_selector("span", text: "(#{variant1.name})")
@@ -289,11 +293,13 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_disclosure "Insert" do
       click_on "Upsell"
     end
-    select_combo_box_option search: "Sample product", from: "Product"
-    check "Add a discount to the offered product"
-    choose "Fixed amount"
-    fill_in "Fixed amount", with: "1"
-    click_on "Insert"
+    within_modal do
+      select_combo_box_option search: "Sample product", from: "Product"
+      check "Add a discount to the offered product"
+      choose "Fixed amount"
+      fill_in "Fixed amount", with: "1"
+      click_on "Insert"
+    end
 
     within_section "Sample product", section_element: :article do
       expect(page).to have_text("5.0 (1)", normalize_ws: true)
@@ -384,6 +390,21 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(page).to have_alert(text: "Changes saved!")
 
     expect(product.reload.suggested_price_cents).to be_nil
+  end
+
+  it "persists default discount code on save without changes" do
+    offer_code = create(:offer_code, user: seller, products: [product], code: "PERSIST10")
+    product.update!(default_offer_code: offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
+
+    save_change
+
+    expect(product.reload.default_offer_code).to eq(offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
   end
 
   it "allows user to update name and price", :sidekiq_inline, :elasticsearch_wait_for_refresh do
@@ -930,7 +951,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
         end
         expect(page).to have_text("Conversion is not reversible once completed.")
 
-        expect(page).to have_link("Yes, let's select the products", href: "#{bundle_path(product.external_id)}/content")
+        expect(page).to have_link("Yes, let's select the products", href: edit_bundle_content_path(product.external_id))
         click_on "No, cancel"
       end
 
@@ -1088,7 +1109,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button(product.name)
           end
@@ -1123,7 +1144,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button("#{product.name} - #{product.alive_variants.first.name}")
             expect(page).not_to have_selector(:button, exact_text: product.name)

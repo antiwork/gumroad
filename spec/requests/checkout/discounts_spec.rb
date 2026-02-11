@@ -889,7 +889,7 @@ describe("Checkout discounts page", type: :system, js: true) do
     it "searches the offer codes" do
       visit checkout_discounts_path
 
-      select_disclosure "Search" do
+      select_disclosure "Toggle Search" do
         fill_in "Search", with: "code"
       end
       wait_for_ajax
@@ -902,7 +902,7 @@ describe("Checkout discounts page", type: :system, js: true) do
       expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, query: "code", sort: "asc" }))
 
-      select_disclosure "Search" do
+      select_disclosure "Toggle Search" do
         fill_in "Search", with: "Discount 4"
       end
       wait_for_ajax

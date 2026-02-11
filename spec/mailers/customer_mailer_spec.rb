@@ -966,9 +966,9 @@ describe CustomerMailer do
       expect(sanitized_body).to_not have_text("Product 4")
       expect(sanitized_body).to_not have_text("Another seller product")
       expect(mail.body).to have_link("John Doe", href: "http://seller.test.gumroad.com:31337", exact: true, count: 3)
-      expect(mail.body).to have_link("and 1 more product", href: checkout_index_url(host: UrlService.domain_with_protocol))
+      expect(mail.body).to have_link("and 1 more product", href: checkout_url(host: UrlService.domain_with_protocol))
       expect(sanitized_body).to have_text("Thanks!")
-      expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol))
+      expect(mail.body).to have_link("Complete checkout", href: checkout_url(host: UrlService.domain_with_protocol))
     end
   end
 
@@ -1005,7 +1005,7 @@ describe CustomerMailer do
           expect(mail.body.sanitized).to have_text("S1 Product 1")
           expect(mail.body.sanitized).to_not have_text("S1 Product 2")
           expect(mail.body.sanitized).to have_text("Thanks!")
-          expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id))
+          expect(mail.body).to have_link("Complete checkout", href: checkout_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id))
         end.to change { SentAbandonedCartEmail.count }.by(1)
       end
 
@@ -1082,7 +1082,7 @@ describe CustomerMailer do
             expect(mail.body.sanitized).to_not have_text("S1 Product 2")
             expect(mail.body.sanitized).to_not have_text("S2 Product 1")
             expect(mail.body.sanitized).to have_text("Thanks!")
-            expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id))
+            expect(mail.body).to have_link("Complete checkout", href: checkout_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id))
           end.to change { SentAbandonedCartEmail.count }.by(1)
 
           expect(SentAbandonedCartEmail.last).to have_attributes(cart_id: cart.id, installment_id: seller1_workflow_installment.id)
@@ -1094,7 +1094,7 @@ describe CustomerMailer do
             expect(mail.body.sanitized).to have_text("S1 Product 1")
             expect(mail.body.sanitized).to have_text("S1 Product 2")
             expect(mail.body.sanitized).to have_text("S1 Product 3")
-            expect(mail.body).to have_link("and 1 more product", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id))
+            expect(mail.body).to have_link("and 1 more product", href: checkout_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id))
             expect(mail.body.sanitized).to_not have_text("S1 Product 4")
           end
         end
@@ -1133,8 +1133,8 @@ describe CustomerMailer do
             expect(mail.body.sanitized).to have_text("S2 Product 3")
             expect(mail.body.sanitized).to_not have_text("S2 Product 4")
             expect(mail.body).to have_link("John Smith", href: "http://johnsmith.test.gumroad.com:31337", exact: true, count: 3)
-            expect(mail.body).to have_link("and 1 more product", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id), count: 1)
-            expect(mail.body).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id), count: 2)
+            expect(mail.body).to have_link("and 1 more product", href: checkout_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id), count: 1)
+            expect(mail.body).to have_link("Complete checkout", href: checkout_url(host: UrlService.domain_with_protocol, cart_id: stubbed_cart_id), count: 2)
           end.to change { SentAbandonedCartEmail.count }.by(2)
 
           expect(SentAbandonedCartEmail.pluck(:cart_id, :installment_id)).to match_array([

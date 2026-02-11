@@ -20,22 +20,24 @@ import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/cur
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button, buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { ProductToAdd, CartItem } from "$app/components/Checkout/cartState";
+import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
+import { UpsellModal } from "$app/components/Checkout/UpsellModal";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
-import { Popover } from "$app/components/Popover";
 import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
+import { Search } from "$app/components/Search";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -152,11 +154,6 @@ const UpsellsPage = (props: UpsellsPageProps) => {
   }, [upsells]);
 
   const [searchQuery, setSearchQuery] = React.useState<string | null>(null);
-  const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
-  React.useEffect(() => {
-    if (isSearchPopoverOpen) searchInputRef.current?.focus();
-  }, [isSearchPopoverOpen]);
 
   const handleCancel = () => {
     setView("list");
@@ -232,32 +229,15 @@ const UpsellsPage = (props: UpsellsPageProps) => {
       pages={props.pages}
       actions={
         <>
-          {upsells.length > 0 && (
-            <Popover
-              open={isSearchPopoverOpen}
-              onToggle={setIsSearchPopoverOpen}
-              aria-label="Search"
-              trigger={
-                <div className={buttonVariants({ size: "default" })}>
-                  <Icon name="solid-search" />
-                </div>
-              }
-            >
-              <div className="input">
-                <Icon name="solid-search" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search"
-                  value={searchQuery ?? ""}
-                  onChange={(evt) => {
-                    setSearchQuery(evt.target.value);
-                    debouncedLoadUpsells();
-                  }}
-                />
-              </div>
-            </Popover>
-          )}
+          {upsells.length > 0 || searchQuery ? (
+            <Search
+              onSearch={(query) => {
+                setSearchQuery(query);
+                debouncedLoadUpsells();
+              }}
+              value={searchQuery ?? ""}
+            />
+          ) : null}
           <Button color="accent" onClick={() => setView("create")} disabled={isReadOnly}>
             New upsell
           </Button>
@@ -883,9 +863,9 @@ const Form = ({
                     }
                   >
                     {discount ? (
-                      <div className="dropdown">
+                      <Dropdown>
                         <DiscountInput discount={discount} setDiscount={setDiscount} currencyCode="usd" />
-                      </div>
+                      </Dropdown>
                     ) : null}
                   </Details>
                 </fieldset>

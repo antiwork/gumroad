@@ -1,40 +1,35 @@
+import { router } from "@inertiajs/react";
 import * as React from "react";
 
-import { updatePurchasesContent } from "$app/data/bundle";
-import { assertResponseError } from "$app/utils/request";
-
-import { useBundleEditContext } from "$app/components/BundleEdit/state";
 import { Button } from "$app/components/Button";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 
-export const BundleContentUpdatedStatus = () => {
-  const { id } = useBundleEditContext();
-  const [isHidden, setIsHidden] = React.useState(false);
+type BundleContentUpdatedStatusProps = {
+  id: string;
+};
+
+export const BundleContentUpdatedStatus = ({ id }: BundleContentUpdatedStatusProps) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
-  const handleSubmit = async () => {
-    setIsLoading(true);
-    try {
-      await updatePurchasesContent(id);
-      showAlert("Queued an update to the content of all outdated purchases.", "success");
-      setIsHidden(true);
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsLoading(false);
+  const updatePurchases = () => {
+    router.post(
+      Routes.update_purchases_content_bundle_content_path(id),
+      {},
+      {
+        preserveScroll: true,
+        onStart: () => setIsLoading(true),
+        onFinish: () => setIsLoading(false),
+      },
+    );
   };
-
-  if (isHidden) return null;
 
   return (
     <Alert role="status" variant="info">
       <div className="flex flex-col gap-4">
         <strong>Some of your customers don't have access to the latest content in your bundle.</strong>
         Would you like to give them access and send them an email notification?
-        <Button color="primary" onClick={() => void handleSubmit()} disabled={isLoading}>
-          Yes, update
+        <Button color="primary" onClick={updatePurchases} disabled={isLoading}>
+          {isLoading ? "Updating..." : "Yes, update"}
         </Button>
       </div>
     </Alert>
