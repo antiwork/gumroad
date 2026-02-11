@@ -6,7 +6,7 @@ class UrlRedirectsController < ApplicationController
   include PageMeta::Favicon
 
   layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page]
-  layout "inertia", only: [:confirm_page, :read]
+  layout "inertia", only: [:confirm_page, :read, :download_page]
 
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file read download_archive latest_media_locations download_product_files
@@ -75,13 +75,22 @@ class UrlRedirectsController < ApplicationController
   end
 
   def download_page
-    @hide_layouts = true
-
     @body_class = "download-page responsive responsive-nav"
     set_favicon_meta_tags(@url_redirect.seller)
     set_meta_tag(title: @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name)
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_with_content_props(common_props)
+
+    presenter = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:)
+    props = presenter.download_page_with_content_props(common_props).merge(
+      dropbox_app_key: DROPBOX_PICKER_API_KEY,
+      ios_app_id: IOS_APP_ID,
+      download_page_url: @url_redirect.download_page_url,
+      audio_durations: InertiaRails.optional { audio_durations_for_download_page },
+      latest_media_locations: InertiaRails.optional { latest_media_locations_for_download_page },
+    )
+
     trigger_files_lifecycle_events
+
+    render inertia: "UrlRedirects/DownloadPage", props:
   end
 
   def download_product_files
@@ -295,6 +304,23 @@ class UrlRedirectsController < ApplicationController
   end
 
   private
+    def audio_durations_for_download_page
+      @url_redirect.alive_product_files.where(filegroup: "audio").each_with_object({}) do |product_file, hash|
+        hash[product_file.external_id] = product_file.content_length
+      end
+    end
+
+    def latest_media_locations_for_download_page
+      return {} if @url_redirect.purchase.nil? || @url_redirect.installment.present?
+
+      product_files = @url_redirect.alive_product_files.select(:id, :external_id)
+      media_locations_by_file = MediaLocation.max_consumed_at_by_file(purchase_id: @url_redirect.purchase.id).index_by(&:product_file_id)
+
+      product_files.each_with_object({}) do |product_file, hash|
+        hash[product_file.external_id] = media_locations_by_file[product_file.id]&.as_json
+      end
+    end
+
     def trigger_files_lifecycle_events
       @url_redirect.update_transcoded_videos_last_accessed_at
       @url_redirect.enqueue_job_to_regenerate_deleted_transcoded_videos

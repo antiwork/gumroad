@@ -48,7 +48,7 @@ const PAGE_ICON_LABEL: Record<string, string> = {
 };
 
 const ContentFilesContext = React.createContext<FileItem[] | null>(null);
-const ContentFilesProvider = ContentFilesContext.Provider;
+export const ContentFilesProvider = ContentFilesContext.Provider;
 export const useContentFiles = () =>
   assertDefined(React.useContext(ContentFilesContext), "ContentFilesProvider is missing");
 

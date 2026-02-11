@@ -13,7 +13,7 @@ describe UrlRedirectsController do
     @url = @url_redirect.referenced_link.product_files.alive.first.url
   end
 
-  describe "GET 'download_page'" do
+  describe "GET 'download_page'", inertia: true do
     before do
       # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
       # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
@@ -27,19 +27,21 @@ describe UrlRedirectsController do
     it "renders correctly" do
       get :download_page, params: { id: @token }
       expect(response).to be_successful
-      expect(assigns(:hide_layouts)).to eq(true)
-      expect(
-        assigns(:react_component_props)
-      ).to eq(
-        UrlRedirectPresenter.new(
-          url_redirect: @url_redirect,
-          logged_in_user: nil
-        ).download_page_with_content_props.merge(
-          is_mobile_app_web_view: false,
-          content_unavailability_reason_code: nil,
-          add_to_library_option: "signup_form"
-        )
+      expect(inertia.component).to eq("UrlRedirects/DownloadPage")
+      expected_props = UrlRedirectPresenter.new(
+        url_redirect: @url_redirect,
+        logged_in_user: nil
+      ).download_page_with_content_props.merge(
+        is_mobile_app_web_view: false,
+        content_unavailability_reason_code: nil,
+        add_to_library_option: "signup_form"
       )
+      expect(inertia.props[:token]).to eq(expected_props[:token])
+      expect(inertia.props[:redirect_id]).to eq(expected_props[:redirect_id])
+      expect(inertia.props[:is_mobile_app_web_view]).to eq(false)
+      expect(inertia.props[:add_to_library_option]).to eq("signup_form")
+      expect(inertia.props[:content]).to be_present
+      expect(inertia.props[:dropbox_app_key]).to be_present
     end
 
     context "with access revoked for purchase" do
@@ -75,12 +77,7 @@ describe UrlRedirectsController do
       it "renders correctly" do
         get :download_page, params: { id: @token, display: "mobile_app" }
         expect(response).to be_successful
-        expect(assigns(:react_component_props)[:is_mobile_app_web_view]).to eq(true)
-
-        assert_select "h1", { text: @product.name, count: 0 }
-        assert_select "h4", { text: "Liked it? Give it a rating:", count: 0 }
-        assert_select "h4", { text: "Display Name", count: 1 }
-        assert_select "a", { text: "Download", count: 1 }
+        expect(inertia.props[:is_mobile_app_web_view]).to eq(true)
       end
     end
 
@@ -95,14 +92,14 @@ describe UrlRedirectsController do
 
       it "displays the license key for the purchase" do
         get :download_page, params: { id: @token }
-        expect(response.body).to include @purchase.license.serial
+        expect(inertia.props.dig(:content, :license, :license_key)).to eq(@purchase.license.serial)
       end
     end
 
     context "posts" do
       let(:url_redirect) { create(:url_redirect, purchase:) }
       let(:token) { url_redirect.token }
-      let(:subject) { assigns(:react_component_props).dig(:content, :posts) }
+      let(:subject) { inertia.props.dig(:content, :posts) }
 
       context "for products" do
         let(:seller) { create(:named_seller) }
@@ -119,7 +116,8 @@ describe UrlRedirectsController do
           get :download_page, params: { id: token }
 
           expect(response).to be_successful
-          expect(response.body).to include(installment_1.displayed_name)
+          post_names = inertia.props.dig(:content, :posts).map { _1[:name] }
+          expect(post_names).to include(installment_1.displayed_name)
         end
 
         it "returns updates from those other purchases if they've bought the same product multiple times" do
@@ -135,9 +133,10 @@ describe UrlRedirectsController do
           get :download_page, params: { id: token }
 
           expect(response).to be_successful
-          expect(response.body).to include(installment_1.displayed_name)
-          expect(response.body).to include(installment_2.displayed_name)
-          expect(response.body).to include(installment_3.displayed_name)
+          post_names = inertia.props.dig(:content, :posts).map { _1[:name] }
+          expect(post_names).to include(installment_1.displayed_name)
+          expect(post_names).to include(installment_2.displayed_name)
+          expect(post_names).to include(installment_3.displayed_name)
         end
 
         it "does not break if the user has been sent a post for a product they have not purchased" do
@@ -321,7 +320,7 @@ describe UrlRedirectsController do
       describe "with purchase purchaser is nil" do
         it "renders add to library" do
           get :download_page, params: { id: @token }
-          expect(response.body).to include "Add to library"
+          expect(inertia.props[:add_to_library_option]).to eq("add_to_library_button")
         end
       end
 
@@ -333,7 +332,7 @@ describe UrlRedirectsController do
 
         it "does not render add to library" do
           get :download_page, params: { id: @token }
-          expect(response.body).to_not include "Add to library"
+          expect(inertia.props[:add_to_library_option]).to eq("none")
         end
       end
 
@@ -348,8 +347,7 @@ describe UrlRedirectsController do
     describe "when user does not exist with purchase email" do
       it "renders signup form" do
         get :download_page, params: { id: @token }
-        expect(response.body).to_not include "Access this product from anywhere, forever:"
-        expect(response.body).to include "Create an account to access all of your purchases"
+        expect(inertia.props[:add_to_library_option]).to eq("signup_form")
       end
     end
 
@@ -373,8 +371,8 @@ describe UrlRedirectsController do
 
       it "renders the download page properly for a product installment with files" do
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_urls = inertia.props.dig(:content, :content_items).filter_map { _1[:download_url] }
+        expect(download_urls).to include(url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] }))
       end
 
       it "renders the download page properly for a variant installment with files" do
@@ -384,32 +382,32 @@ describe UrlRedirectsController do
         @seller_installment.update!(installment_type: Installment::VARIANT_TYPE, base_variant_id: variant.id)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_urls = inertia.props.dig(:content, :content_items).filter_map { _1[:download_url] }
+        expect(download_urls).to include(url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] }))
       end
 
       it "renders the download page properly for a follower installment with files" do
         @seller_installment.update!(installment_type: Installment::FOLLOWER_TYPE)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_urls = inertia.props.dig(:content, :content_items).filter_map { _1[:download_url] }
+        expect(download_urls).to include(url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] }))
       end
 
       it "renders the download page properly for an affiliate installment with files" do
         @seller_installment.update!(installment_type: Installment::AFFILIATE_TYPE)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_urls = inertia.props.dig(:content, :content_items).filter_map { _1[:download_url] }
+        expect(download_urls).to include(url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] }))
       end
 
       it "renders the download page properly for an audience installment with files" do
         @seller_installment.update!(installment_type: Installment::AUDIENCE_TYPE)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_urls = inertia.props.dig(:content, :content_items).filter_map { _1[:download_url] }
+        expect(download_urls).to include(url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] }))
       end
 
       it "renders the download page properly for a membership installment that used to have files and now does not" do
@@ -418,8 +416,7 @@ describe UrlRedirectsController do
         @seller_installment.product_files.last.mark_deleted!
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_page_path(@token)
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        expect(response).to be_successful
       end
 
       it "returns a 404 if the url redirect is not found" do
@@ -458,8 +455,8 @@ describe UrlRedirectsController do
         @seller_installment.update!(installment_type: Installment::PRODUCT_TYPE, link: @product)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_page_path(@token)
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        expect(response).to be_successful
+        expect(inertia.component).to eq("UrlRedirects/DownloadPage")
       end
 
       it "renders the download page properly for a variant installment without files that was purchased" do
@@ -470,8 +467,8 @@ describe UrlRedirectsController do
         @seller_installment.update!(installment_type: Installment::VARIANT_TYPE, base_variant_id: variant.id)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_page_path(@token)
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        expect(response).to be_successful
+        expect(inertia.component).to eq("UrlRedirects/DownloadPage")
       end
 
       it "returns 404 error if the url redirect is for a product installment without files and was not purchased" do
