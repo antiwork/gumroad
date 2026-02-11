@@ -1,4 +1,3 @@
-import { router } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -35,9 +34,6 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { Layout, LayoutProps } from "./Layout";
 
-const LATEST_MEDIA_LOCATIONS_FETCH_INTERVAL_IN_MS = 10_000;
-const MISSING_AUDIO_DURATIONS_FETCH_INTERVAL_IN_MS = 5_000;
-const MAX_AUDIO_IDS_PER_FETCH = 25;
 const PAGE_ICON_LABEL: Record<string, string> = {
   "file-arrow-down": "Page has various types of files",
   "file-music": "Page has audio files",
@@ -123,13 +119,6 @@ export const WithContent = ({
     content.content_items.filter((item): item is FileItem => item.type === "file"),
   );
   const mediaUrlsValue = React.useState<Record<string, string[]>>({});
-  const unprocessedAudioIds =
-    content.rich_content_pages !== null && props.is_mobile_app_web_view
-      ? contentFiles.flatMap((file) =>
-          FileUtils.isAudioExtension(file.extension) && file.duration === null ? [file.id] : [],
-        )
-      : [];
-  const audioDurationsToFetch = unprocessedAudioIds.slice(0, MAX_AUDIO_IDS_PER_FETCH);
 
   React.useEffect(() => {
     if (!audio_durations || Object.keys(audio_durations).length === 0) return;
@@ -142,48 +131,11 @@ export const WithContent = ({
   }, [audio_durations]);
 
   React.useEffect(() => {
-    if (audioDurationsToFetch.length === 0) return;
-
-    const audioDurationsPoll = router.poll(
-      MISSING_AUDIO_DURATIONS_FETCH_INTERVAL_IN_MS,
-      {
-        only: ["audio_durations"],
-        data: { file_ids: audioDurationsToFetch },
-        preserveUrl: true,
-      },
-      { autoStart: true, keepAlive: true },
-    );
-
-    return () => audioDurationsPoll.stop();
-  }, [audioDurationsToFetch.join(",")]);
-
-  React.useEffect(() => {
     if (!latest_media_locations || Object.keys(latest_media_locations).length === 0) return;
     setContentFiles((files) =>
       files.map((file) => ({ ...file, latest_media_location: latest_media_locations[file.id] ?? null })),
     );
   }, [latest_media_locations]);
-
-  const shouldPollLatestMediaLocations =
-    content.rich_content_pages !== null &&
-    contentFiles.length > 0 &&
-    props.purchase !== null &&
-    props.installment === null;
-
-  React.useEffect(() => {
-    if (!shouldPollLatestMediaLocations) return;
-
-    const latestMediaLocationsPoll = router.poll(
-      LATEST_MEDIA_LOCATIONS_FETCH_INTERVAL_IN_MS,
-      {
-        only: ["latest_media_locations"],
-        preserveUrl: true,
-      },
-      { autoStart: true, keepAlive: true },
-    );
-
-    return () => latestMediaLocationsPoll.stop();
-  }, [shouldPollLatestMediaLocations]);
 
   useRunOnce(() => {
     if (url.searchParams.get("receipt") === "true" && props.purchase?.email) {

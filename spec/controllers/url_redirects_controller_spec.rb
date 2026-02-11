@@ -132,6 +132,96 @@ describe UrlRedirectsController do
         expect(url_redirect.reload.uses).to eq(initial_uses)
       end
 
+      it "returns latest media locations for all files including nil values for files without progress" do
+        product = create(:product)
+        video = create(:streamable_video)
+        audio = create(:listenable_audio)
+        readable_document = create(:readable_document)
+        non_readable_document = create(:non_readable_document)
+        product.product_files = [video, audio, readable_document, non_readable_document]
+        product.save!
+        purchase = create(:purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+        audio_consumption_timestamp = Time.current.change(usec: 0)
+        readable_document_consumption_timestamp = audio_consumption_timestamp + 5.minutes
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                product_file_id: audio.id, product_id: product.id,
+                                location: 5, consumed_at: audio_consumption_timestamp)
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id, platform: Platform::ANDROID,
+                                product_file_id: readable_document.id, product_id: product.id,
+                                location: 3, consumed_at: readable_document_consumption_timestamp)
+
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "UrlRedirects/DownloadPage"
+        request.headers["X-Inertia-Partial-Data"] = "latest_media_locations"
+
+        get :download_page, params: { id: url_redirect.token }
+
+        expect(inertia.props[:latest_media_locations]).to eq(
+          video.external_id => nil,
+          audio.external_id => { "location" => 5, "timestamp" => audio_consumption_timestamp.as_json, "unit" => "seconds" },
+          readable_document.external_id => { "location" => 3, "timestamp" => readable_document_consumption_timestamp.as_json, "unit" => "page_number" },
+          non_readable_document.external_id => nil
+        )
+      end
+
+      it "returns nil durations for files that are still processing" do
+        product = create(:product)
+        audio1 = create(:listenable_audio, duration: 100)
+        audio2 = create(:listenable_audio, duration: nil)
+        product.product_files = [audio1, audio2]
+        product.save!
+        purchase = create(:purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "UrlRedirects/DownloadPage"
+        request.headers["X-Inertia-Partial-Data"] = "audio_durations"
+
+        get :download_page, params: { id: url_redirect.token, file_ids: [audio1.external_id, audio2.external_id] }
+
+        expect(inertia.props[:audio_durations]).to eq(
+          audio1.external_id => 100,
+          audio2.external_id => nil
+        )
+      end
+
+      it "supports polling both optional props in a single partial request" do
+        product = create(:product)
+        audio = create(:listenable_audio, duration: 120)
+        readable_document = create(:readable_document)
+        product.product_files = [audio, readable_document]
+        product.save!
+        purchase = create(:purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+        media_timestamp = Time.current.change(usec: 0)
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                product_file_id: readable_document.id, product_id: product.id,
+                                location: 8, consumed_at: media_timestamp)
+
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "UrlRedirects/DownloadPage"
+        request.headers["X-Inertia-Partial-Data"] = "audio_durations,latest_media_locations"
+
+        initial_uses = url_redirect.reload.uses
+        expect(UrlRedirectPresenter).not_to receive(:new)
+
+        expect do
+          get :download_page, params: { id: url_redirect.token, file_ids: [audio.external_id] }
+        end.not_to change(ConsumptionEvent, :count)
+
+        expect(inertia.props[:audio_durations]).to eq(audio.external_id => 120)
+        expect(inertia.props[:latest_media_locations]).to eq(
+          audio.external_id => nil,
+          readable_document.external_id => {
+            "location" => 8,
+            "timestamp" => media_timestamp.as_json,
+            "unit" => "page_number",
+          }
+        )
+        expect(url_redirect.reload.uses).to eq(initial_uses)
+      end
+
       it "does not treat invalid partial headers as polling requests" do
         request.headers["X-Inertia"] = "true"
         request.headers["X-Inertia-Partial-Component"] = "UrlRedirects/DownloadPage"
