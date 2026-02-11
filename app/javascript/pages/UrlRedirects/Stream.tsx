@@ -12,6 +12,7 @@ import { TranscodingNoticeModal } from "$app/components/Download/TranscodingNoti
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const LOCATION_TRACK_EVENT_DELAY_MS = 10_000;
+const FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION = "ef64f2fef0d6c776a337050020423fc0";
 
 type SubtitleFile = {
   file: string;
@@ -37,8 +38,6 @@ type PageProps = {
   should_show_transcoding_notice: boolean;
   transcode_on_first_sale: boolean;
 };
-
-const fakeVideoUrlGuidForObfuscation = "ef64f2fef0d6c776a337050020423fc0";
 
 function StreamPage() {
   const {
@@ -68,7 +67,7 @@ function StreamPage() {
         height: "100%",
         playlist: playlist.map((video) => ({
           sources: video.sources.map((source) => ({
-            file: source.replace(fakeVideoUrlGuidForObfuscation, video.guid),
+            file: source.replace(FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION, video.guid),
           })),
           tracks: video.tracks,
           title: video.title,
