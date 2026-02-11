@@ -5,8 +5,8 @@ import { cast } from "ts-safe-cast";
 import { unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile, ProfileSettings } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
-import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { classNames } from "$app/utils/classNames";
+import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
