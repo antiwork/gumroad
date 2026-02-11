@@ -30,6 +30,7 @@ class CustomersPresenter
       countries: Compliance::Countries.for_select.map(&:last),
       can_ping: pundit_user.seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0,
       show_refund_fee_notice: pundit_user.seller.show_refund_fee_notice?,
+      show_refund_payment_method_banner: !pundit_user.seller.dismissed_refund_payment_method_banner? && pundit_user.seller.refund_funding_credit_card.blank?,
     }
   end
 end

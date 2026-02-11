@@ -574,6 +574,10 @@ describe SettingsPresenter do
         payout_country_name: nil,
         payout_frequency: User::PayoutSchedule::WEEKLY,
         payout_frequency_daily_supported: false,
+        refund_payment_method: {
+          enabled: false,
+          credit_card: nil
+        },
       }
     end
 

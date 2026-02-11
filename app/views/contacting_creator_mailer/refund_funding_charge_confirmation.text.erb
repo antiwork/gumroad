@@ -1,0 +1,14 @@
+<% card_visual = @credit.credit_card&.visual || "****" %>
+<% product_name = @credit.refund_funding_purchase&.link&.name %>
+Your backup card was charged <%= @amount %>
+
+Hi <%= @seller.display_name.presence || "there" %>,
+
+We successfully charged your backup payment method (ending in <%= card_visual %>) for <%= @amount %> to cover a refund<%= product_name.present? ? " for #{product_name}" : "" %>.
+
+This amount has been added to your Gumroad balance and the refund has been processed for your customer.
+
+You can manage your backup payment method in your Payments Settings: <%= settings_payments_url %>
+
+Best,
+The Gumroad Team

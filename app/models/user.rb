@@ -50,6 +50,7 @@ class User < ApplicationRecord
   has_many :devices
 
   belongs_to :credit_card, optional: true
+  belongs_to :refund_funding_credit_card, class_name: "CreditCard", optional: true
 
   # Associate with CustomDomain.alive objects
   has_one :custom_domain, -> { alive }
@@ -280,6 +281,7 @@ class User < ApplicationRecord
             50 => :paypal_payout_fee_waived,
             51 => :dismissed_create_products_with_ai_promo_alert,
             52 => :disable_affiliate_requests,
+            53 => :dismissed_refund_payment_method_banner,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

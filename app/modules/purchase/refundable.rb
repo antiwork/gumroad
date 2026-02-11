@@ -44,9 +44,31 @@ class Purchase
         end
 
         amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
+        funding_result = nil
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
-          errors.add :base, "Your balance is insufficient to process this refund."
-          return false
+          if seller.refund_funding_credit_card.present?
+            shortfall = amount_cents_to_refund - seller.unpaid_balance_cents
+            charge_amount = [shortfall, RefundFundingChargeService::MINIMUM_CHARGE_CENTS].max
+            funding_result = RefundFundingChargeService.new(
+              user: seller,
+              amount_cents: charge_amount,
+              purchase: self
+            ).perform
+
+            if !funding_result.success?
+              errors.add :base, funding_result.error_message || "Could not charge your backup card to cover the refund shortfall."
+              return false
+            end
+
+            if amount_cents_to_refund > seller.reload.unpaid_balance_cents
+              RefundFundingChargeService.reverse_charge!(payment_intent_id: funding_result.payment_intent_id) if funding_result.payment_intent_id
+              errors.add :base, "Your balance is insufficient to process this refund."
+              return false
+            end
+          else
+            errors.add :base, "Your balance is insufficient to process this refund."
+            return false
+          end
         end
       end
 
@@ -94,19 +116,27 @@ class Purchase
         if charge_refund.flow_of_funds.nil? && StripeChargeProcessor.charge_processor_id != charge_processor_id
           charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -(gross_amount_cents.presence || gross_amount_refundable_cents))
         end
-        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud)
+        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud).tap do
+          if funding_result&.credit.present?
+            ContactingCreatorMailer.refund_funding_charge_confirmation(credit_id: funding_result.credit.id).deliver_later
+          end
+        end
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
+        RefundFundingChargeService.reverse_charge!(payment_intent_id: funding_result.payment_intent_id) if funding_result&.success? && funding_result.payment_intent_id
         false
       rescue ChargeProcessorInsufficientFundsError => e
         logger.error "Creator's PayPal account does not have sufficient funds to refund purchase: #{external_id}. Response: #{e.message}"
+        RefundFundingChargeService.reverse_charge!(payment_intent_id: funding_result.payment_intent_id) if funding_result&.success? && funding_result.payment_intent_id
         errors.add :base, "Your PayPal account does not have sufficient funds to make this refund."
         false
       rescue ChargeProcessorInvalidRequestError => e
         logger.error "Charge refund encountered an invalid request error in purchase: #{external_id}. Response: #{e.message}. #{e.backtrace_locations}"
+        RefundFundingChargeService.reverse_charge!(payment_intent_id: funding_result.payment_intent_id) if funding_result&.success? && funding_result.payment_intent_id
         false
       rescue ChargeProcessorUnavailableError => e
         logger.error "Charge processor unavailable in purchase: #{external_id}. Response: #{e.message}"
+        RefundFundingChargeService.reverse_charge!(payment_intent_id: funding_result.payment_intent_id) if funding_result&.success? && funding_result.payment_intent_id
         errors.add :base, "There is a temporary problem. Try to refund later."
         false
       end

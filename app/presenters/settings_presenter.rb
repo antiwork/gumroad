@@ -222,6 +222,20 @@ class SettingsPresenter
       payout_country_name: Compliance::Countries.for_select.to_h[seller.alive_user_compliance_info&.legal_entity_country_code],
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
+      refund_payment_method: refund_payment_method_data,
+    }
+  end
+
+  def refund_payment_method_data
+    funding_card = seller.refund_funding_credit_card
+    {
+      enabled: funding_card.present?,
+      credit_card: funding_card.present? ? {
+        visual: funding_card.visual,
+        card_type: funding_card.card_type,
+        expiry_month: funding_card.expiry_month,
+        expiry_year: funding_card.expiry_year
+      } : nil
     }
   end
 
