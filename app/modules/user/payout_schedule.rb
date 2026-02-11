@@ -42,19 +42,37 @@ module User::PayoutSchedule
     end
   end
 
-  def upcoming_payout_amounts
+  def upcoming_payouts
     upcoming_payout_date = next_payout_date
-    upcoming_amounts = {}
+    upcoming_payouts = []
 
     while upcoming_payout_date
-      payout_amount = payout_amount_for_payout_date(upcoming_payout_date) - upcoming_amounts.values.sum
+      payout_amount = payout_amount_for_payout_date(upcoming_payout_date) - upcoming_payouts.sum(&:amount_cents)
       break if payout_amount < minimum_payout_amount_cents
 
-      upcoming_amounts[upcoming_payout_date] = payout_amount
+      payout_period_end_date = payout_period_end_date_for_payout_date(upcoming_payout_date)
+      payout_balances = unpaid_balances_up_to_date(payout_period_end_date)
+      payout_balances -= unpaid_balances_up_to_date(upcoming_payouts.last.payout_period_end_date) if upcoming_payouts.present?
+
+      upcoming_payout = Payment.new(
+        user: self,
+        amount_cents: payout_amount,
+        payout_period_end_date:,
+        currency: Currency::USD,
+        state: payouts_status,
+        created_at: upcoming_payout_date,
+        processor: current_payout_processor,
+        bank_account: (active_bank_account if current_payout_processor == PayoutProcessorType::STRIPE),
+        payment_address: (paypal_payout_email if current_payout_processor == PayoutProcessorType::PAYPAL),
+        )
+      upcoming_payout.balances = payout_balances
+
+      upcoming_payouts << upcoming_payout
+
       upcoming_payout_date = advance_payout_date(upcoming_payout_date)
     end
 
-    upcoming_amounts
+    upcoming_payouts
   end
 
   def payout_amount_for_payout_date(payout_date)
@@ -62,6 +80,14 @@ module User::PayoutSchedule
       instantly_payable_unpaid_balance_cents_up_to_date(payout_date - 1)
     else
       unpaid_balance_cents_up_to_date(payout_date - PAYOUT_DELAY_DAYS)
+    end
+  end
+
+  def payout_period_end_date_for_payout_date(payout_date)
+    if payout_frequency == DAILY && Payouts.is_user_payable(self, payout_date - 1, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+      payout_date - 1
+    else
+      payout_date - PAYOUT_DELAY_DAYS
     end
   end
 
