@@ -241,6 +241,16 @@ export const resendPost = async (purchaseId: string, postId: string) => {
   if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
 };
 
+export const resendAllPosts = async (purchaseId: string): Promise<{ sent_count: number }> => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.send_all_for_purchase_path(purchaseId),
+  });
+  if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
+  return cast<{ sent_count: number }>(await response.json());
+};
+
 export const updatePurchase = (
   purchaseId: string,
   update: Partial<{ email: string; giftee_email: string; quantity: number } & Address>,

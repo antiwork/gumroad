@@ -98,6 +98,27 @@ describe PostsController, type: :controller, inertia: true do
         expect(response).to have_http_status(:no_content)
       end
     end
+
+    describe "POST send_all_for_purchase" do
+      before do
+        link = create(:product, user: seller)
+        @post1 = create(:installment, link:)
+        @post2 = create(:installment, link:, name: "Second Post")
+        @purchase = create(:purchase, seller:, link:, created_at: Time.current)
+        create(:creator_contacting_customers_email_info_delivered, installment: @post1, purchase: @purchase)
+        create(:creator_contacting_customers_email_info_delivered, installment: @post2, purchase: @purchase)
+        create(:payment_completed, user: seller)
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+      end
+
+      it "sends all missed posts and returns the count" do
+        @purchase.create_url_redirect!
+        expect(PostEmailApi).to receive(:process).twice
+        post :send_all_for_purchase, params: { purchase_id: @purchase.external_id }
+        expect(response).to be_successful
+        expect(response.parsed_body["sent_count"]).to eq(2)
+      end
+    end
   end
 
   context "within consumer area" do

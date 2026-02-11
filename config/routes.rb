@@ -794,6 +794,7 @@ Rails.application.routes.draw do
     # posts
     post "/posts/:id/increment_post_views", to: "posts#increment_post_views", as: :increment_post_views
     post "/posts/:id/send_for_purchase/:purchase_id", to: "posts#send_for_purchase", as: :send_for_purchase
+    post "/posts/send_all_for_purchase/:purchase_id", to: "posts#send_all_for_purchase", as: :send_all_for_purchase
 
     # communities
     get "/communities(/:seller_id/:community_id)", to: "communities#index", as: :community

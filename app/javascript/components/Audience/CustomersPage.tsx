@@ -35,6 +35,7 @@ import {
   refund,
   rejectReviewVideo,
   resendPing,
+  resendAllPosts,
   resendPost,
   resendReceipt,
   revokeAccess,
@@ -695,6 +696,8 @@ const CustomerDrawer = ({
     });
   });
 
+  const [sendingAll, setSendingAll] = React.useState(false);
+
   const onSend = async (id: string, type: "receipt" | "post") => {
     setLoadingId(id);
     try {
@@ -706,6 +709,19 @@ const CustomerDrawer = ({
       showAlert(e.message, "error");
     }
     setLoadingId(null);
+  };
+
+  const onSendAll = async () => {
+    setSendingAll(true);
+    try {
+      const { sent_count } = await resendAllPosts(customer.id);
+      missedPosts?.forEach((post) => sentEmailIds.current.add(post.id));
+      showAlert(`${sent_count} missed post${sent_count === 1 ? "" : "s"} sent`, "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setSendingAll(false);
   };
 
   const [productPurchases, setProductPurchases] = React.useState<Customer[]>([]);
@@ -1225,6 +1241,15 @@ const CustomerDrawer = ({
             <CardContent asChild>
               <header>
                 <h3 className="grow">Send missed posts</h3>
+                {missedPosts && missedPosts.length > 1 ? (
+                  <Button
+                    color="primary"
+                    disabled={sendingAll || !!loadingId}
+                    onClick={() => void onSendAll()}
+                  >
+                    {sendingAll ? "Sending all..." : "Send all"}
+                  </Button>
+                ) : null}
               </header>
             </CardContent>
             {missedPosts ? (
@@ -1242,7 +1267,7 @@ const CustomerDrawer = ({
                       </div>
                       <Button
                         color="primary"
-                        disabled={!!loadingId || sentEmailIds.current.has(post.id)}
+                        disabled={sendingAll || !!loadingId || sentEmailIds.current.has(post.id)}
                         onClick={() => void onSend(post.id, "post")}
                       >
                         {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Send"}
