@@ -608,7 +608,7 @@ describe("Workflows", js: true, type: :system) do
 
       installment = workflow.installments.alive.sole
       expect(installment.name).to eq("You left something in your cart")
-      expect(installment.message).to eq(%Q(<p>When you're ready to buy, <a href="#{checkout_index_url(host: UrlService.domain_with_protocol)}" target="_blank" rel="noopener noreferrer nofollow">complete checking out</a>.</p><product-list-placeholder />))
+      expect(installment.message).to eq(%Q(<p>When you're ready to buy, <a href="#{checkout_url(host: UrlService.domain_with_protocol)}" target="_blank" rel="noopener noreferrer nofollow">complete checking out</a>.</p><product-list-placeholder />))
       expect(installment.installment_type).to eq(Installment::ABANDONED_CART_TYPE)
       expect(installment.installment_rule.time_period).to eq("hour")
       expect(installment.installment_rule.delayed_delivery_time).to eq(24.hour)
@@ -622,7 +622,7 @@ describe("Workflows", js: true, type: :system) do
         expect(page).to_not have_button("Delete")
         within find("[aria-label='Email message']") do
           expect(page).to have_text("When you're ready to buy, complete checking out", normalize_ws: true)
-          expect(page).to have_link("complete checking out", href: checkout_index_url(host: UrlService.domain_with_protocol))
+          expect(page).to have_link("complete checking out", href: checkout_url(host: UrlService.domain_with_protocol))
           find_abandoned_cart_item(@product.name).hover
           expect(page).to have_text("This cannot be deleted")
           within find_abandoned_cart_item(@product.name) do
@@ -633,14 +633,14 @@ describe("Workflows", js: true, type: :system) do
           expect(page).to have_abandoned_cart_item(product3.name)
           expect(page).to have_abandoned_cart_item(product4.name)
           expect(page).to_not have_abandoned_cart_item(product5.name)
-          expect(page).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol))
+          expect(page).to have_link("Complete checkout", href: checkout_url(host: UrlService.domain_with_protocol))
         end
       end
       within_section "Preview", section_element: :aside do
         within_section "You left something in your cart" do
           expect(page).to have_text("24 hours after cart abandonment")
           expect(page).to have_text("When you're ready to buy, complete checking out", normalize_ws: true)
-          expect(page).to have_link("complete checking out", href: checkout_index_url(host: UrlService.domain_with_protocol))
+          expect(page).to have_link("complete checking out", href: checkout_url(host: UrlService.domain_with_protocol))
           find_abandoned_cart_item(@product.name).hover
           expect(page).to_not have_text("This cannot be deleted")
           within find_abandoned_cart_item(@product.name) do
@@ -651,7 +651,7 @@ describe("Workflows", js: true, type: :system) do
           expect(page).to have_abandoned_cart_item(product3.name)
           expect(page).to have_abandoned_cart_item(product4.name)
           expect(page).to_not have_abandoned_cart_item(product5.name)
-          expect(page).to have_link("Complete checkout", href: checkout_index_url(host: UrlService.domain_with_protocol))
+          expect(page).to have_link("Complete checkout", href: checkout_url(host: UrlService.domain_with_protocol))
           expect(page).to have_text("548 Market St, San Francisco, CA 94104-5401, USA")
           expect(page).to have_text("Powered by")
         end

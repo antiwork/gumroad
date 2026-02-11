@@ -32,10 +32,10 @@ module CapybaraHelpers
     wait_for_ajax
   end
 
-  def wait_until_true
+  def wait_until_true(sleep_interval: 1)
     Timeout.timeout(Capybara.default_max_wait_time) do
       until yield
-        sleep 1
+        sleep sleep_interval
       end
     end
   end
