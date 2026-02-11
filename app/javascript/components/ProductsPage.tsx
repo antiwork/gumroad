@@ -28,7 +28,7 @@ const ProductsPage = ({
   query: string | null;
   setEnableArchiveTab?: (enable: boolean) => void;
   type?: Tab;
-}) => (
+) => (
   <div className="grid gap-12">
     {memberships.length > 0 ? (
       <ProductsPageMembershipsTable
@@ -50,6 +50,10 @@ const ProductsPage = ({
         selectedTab={type}
         setEnableArchiveTab={setEnableArchiveTab}
       />
+    ) : null}
+
+    {memberships.length === 0 && products.length === 0 && query ? (
+      <p className="text-center text-muted">No products match your search.</p>
     ) : null}
   </div>
 );
