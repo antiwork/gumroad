@@ -1,13 +1,19 @@
 <head prefix="og: http://ogp.me/ns# fb: http://ogp.me/ns/fb# <%= FACEBOOK_OG_NAMESPACE %>: http://ogp.me/ns/fb/<%= FACEBOOK_OG_NAMESPACE %>#">
   <% if Rails.application.config.asset_host %>
-    <link rel="dns-prefetch" href="<%= "//#{URI.parse(Rails.application.config.asset_host).host}" %>">
+    <%# PERF: Upgraded to preconnect for faster asset loading %>
+    <link rel="preconnect" href="<%= "//#{URI.parse(Rails.application.config.asset_host).host}" %>" crossorigin>
   <% end %>
   <% if CDN_S3_PROXY_HOST %>
-    <link rel="dns-prefetch" href="<%= "//#{URI.parse(CDN_S3_PROXY_HOST).host}" %>">
+    <link rel="preconnect" href="<%= "//#{URI.parse(CDN_S3_PROXY_HOST).host}" %>" crossorigin>
   <% end %>
   <% if PUBLIC_STORAGE_CDN_S3_PROXY_HOST %>
-    <link rel="dns-prefetch" href="<%= "//#{URI.parse(PUBLIC_STORAGE_CDN_S3_PROXY_HOST).host}" %>">
+    <link rel="preconnect" href="<%= "//#{URI.parse(PUBLIC_STORAGE_CDN_S3_PROXY_HOST).host}" %>" crossorigin>
   <% end %>
+
+  <%# PERF: Pre-connect to Stripe to speed up checkout modal appearance %>
+  <link rel="preconnect" href="https://js.stripe.com">
+  <link rel="preconnect" href="https://m.stripe.network">
+
   <% packs = ["design"] %>
   <% packs << @css_pack_name if @css_pack_name %>
   <%= action_cable_meta_tag %>
