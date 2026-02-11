@@ -369,23 +369,15 @@ class UrlRedirectsController < ApplicationController
 
     def download_page_polling_request?
       return false unless action_name == "download_page"
-      return false unless inertia_request?
-      return false unless request_header("X-Inertia-Partial-Component") == "UrlRedirects/DownloadPage"
+      return false unless request.headers["X-Inertia"] == "true"
+      return false unless request.headers["X-Inertia-Partial-Component"] == "UrlRedirects/DownloadPage"
 
       requested_props = requested_download_page_polling_props
       requested_props.present? && (requested_props - DOWNLOAD_PAGE_POLLING_PROPS).empty?
     end
 
     def requested_download_page_polling_props
-      request_header("X-Inertia-Partial-Data").to_s.split(",").map(&:strip).reject(&:blank?).uniq
-    end
-
-    def inertia_request?
-      ActiveModel::Type::Boolean.new.cast(request_header("X-Inertia"))
-    end
-
-    def request_header(name)
-      request.headers[name] || request.headers["HTTP_#{name.upcase.tr('-', '_')}"]
+      request.headers["X-Inertia-Partial-Data"].to_s.split(",").map(&:strip).reject(&:blank?).uniq
     end
 
     def mark_rental_as_viewed
