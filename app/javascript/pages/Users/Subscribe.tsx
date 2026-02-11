@@ -1,4 +1,4 @@
-import { Head, usePage } from "@inertiajs/react";
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -16,8 +16,6 @@ export default function SubscribePage() {
 
   return (
     <>
-      <Head>
-      </Head>
       <Layout hideFollowForm creatorProfile={creator_profile}>
         <FollowFormBlock creatorProfile={creator_profile} className="px-4" />
       </Layout>

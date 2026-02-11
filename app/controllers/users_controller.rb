@@ -27,14 +27,10 @@ class UsersController < ApplicationController
       format.html do
         set_user_page_meta(@user)
         set_favicon_meta_tags(@user)
-        @card_data_handling_mode = CardDataHandlingMode.get_card_data_handling_mode(@user)
-        @paypal_merchant_currency = @user.native_paypal_payment_enabled? ?
-                                      @user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
-                                      ChargeProcessor::DEFAULT_CURRENCY_CODE
 
-          render inertia: "Users/Show", props: {
-            **ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:),
-          }
+        render inertia: "Users/Show", props: {
+          **ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:),
+        }
       end
       format.json { render json: @user.as_json }
       format.any { e404 }

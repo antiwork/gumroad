@@ -105,6 +105,19 @@ describe UsersController do
       expect(response.parsed_body).to eq(link.user.as_json)
     end
 
+    it "includes custom styles in inertia shared props" do
+      user = create(:user, username: "styleduser")
+      allow(user.seller_profile).to receive(:custom_styles).and_return(".body { color: red; }")
+
+      @request.host = "#{user.username}.test.gumroad.com"
+      get :show, params: { username: "styleduser" }
+
+      style_tag = inertia.props[:_inertia_meta].find { |t| t.instance_variable_get(:@head_key) == "custom_styles" }
+      expect(style_tag).to be_present
+      expect(style_tag.instance_variable_get(:@tag_name)).to eq :style
+      expect(style_tag.instance_variable_get(:@tag_data)[:inner_content]).to include("body")
+    end
+
     describe "redirection to subdomain for profile pages" do
       before do
         @user = create(:named_user)
@@ -237,19 +250,6 @@ describe UsersController do
           expect { get :show }.to raise_error(ActionController::RoutingError)
         end
       end
-    end
-
-    it "sets paypal_merchant_currency as merchant account's currency if native paypal payments are enabled else as usd" do
-      creator = create(:named_user)
-      create(:product, user: creator)
-
-      @request.host = "#{creator.username}.test.gumroad.com"
-      get :show, params: { username: creator.username }
-      expect(assigns[:paypal_merchant_currency]).to eq "USD"
-
-      create(:merchant_account_paypal, user: creator, currency: "GBP")
-      get :show, params: { username: creator.username }
-      expect(assigns[:paypal_merchant_currency]).to eq "GBP"
     end
 
     context "with user signed in as admin for seller" do
