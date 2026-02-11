@@ -3,6 +3,7 @@ import placeholderAppIcon from "images/gumroad_app.png";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import ApplicationForm from "$app/components/Settings/AdvancedPage/ApplicationForm";
 import { FormSection } from "$app/components/ui/FormSection";
@@ -41,17 +42,21 @@ const ApplicationList = (props: { applications: Application[] }) => {
 };
 
 const ApplicationRow = ({ application, onRemove }: { application: Application; onRemove: () => void }) => {
-  const deleteApp = () => {
-    // eslint-disable-next-line no-alert
-    if (!confirm("Delete this application forever?")) return;
+  const [deleteConfirmation, setDeleteConfirmation] = React.useState<{
+    state: "delete-confirmation" | "deleting";
+  } | null>(null);
 
+  const deleteApp = () => {
+    setDeleteConfirmation({ state: "deleting" });
     router.delete(Routes.oauth_application_path(application.id), {
       preserveScroll: true,
       onSuccess: () => {
+        setDeleteConfirmation(null);
         showAlert("Application deleted.", "success");
         onRemove(); // This will update the local state immediately
       },
       onError: () => {
+        setDeleteConfirmation({ state: "delete-confirmation" });
         showAlert("Failed to delete app.", "error");
       },
     });
@@ -69,10 +74,30 @@ const ApplicationRow = ({ application, onRemove }: { application: Application; o
             Edit
           </Link>
         </Button>
-        <Button color="danger" onClick={deleteApp}>
+        <Button color="danger" onClick={() => setDeleteConfirmation({ state: "delete-confirmation" })}>
           Delete
         </Button>
       </RowActions>
+      {deleteConfirmation ? (
+        <Modal
+          open
+          allowClose={deleteConfirmation.state === "delete-confirmation"}
+          onClose={() => setDeleteConfirmation(null)}
+          title="Delete application"
+          footer={
+            <>
+              <Button disabled={deleteConfirmation.state === "deleting"} onClick={() => setDeleteConfirmation(null)}>
+                Cancel
+              </Button>
+              <Button color="danger" disabled={deleteConfirmation.state === "deleting"} onClick={deleteApp}>
+                {deleteConfirmation.state === "deleting" ? "Deleting..." : "Delete"}
+              </Button>
+            </>
+          }
+        >
+          <h4>Are you sure you want to delete {application.name}? This action cannot be undone.</h4>
+        </Modal>
+      ) : null}
     </Row>
   );
 };

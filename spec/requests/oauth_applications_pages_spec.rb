@@ -66,6 +66,48 @@ describe "OauthApplicationsPages", type: :system, js: true do
         expect(page).to have_current_path(/\/oauth\/applications\/.*\/edit/)
       end.to change { OauthApplication.count }.by(1)
     end
+
+    context "when the user has an existing application" do
+      let!(:application) { create(:oauth_application, owner: user, name: "My Test App") }
+
+      before do
+        visit settings_advanced_path
+      end
+
+      it "deletes the application after confirming in the modal" do
+        within_section "Applications", section_element: :section do
+          expect(page).to have_text("My Test App")
+          click_on "Delete"
+        end
+
+        within_modal "Delete application" do
+          expect(page).to have_text("Are you sure you want to delete My Test App? This action cannot be undone.")
+          click_on "Delete"
+        end
+
+        expect(page).to have_alert(text: "Application deleted.")
+        within_section "Applications", section_element: :section do
+          expect(page).not_to have_text("My Test App")
+        end
+        expect(application.reload.deleted_at).not_to be_nil
+      end
+
+      it "does not delete the application when cancelling the modal" do
+        within_section "Applications", section_element: :section do
+          click_on "Delete"
+        end
+
+        within_modal "Delete application" do
+          click_on "Cancel"
+        end
+
+        expect(page).not_to have_selector("[role='dialog']")
+        within_section "Applications", section_element: :section do
+          expect(page).to have_text("My Test App")
+        end
+        expect(application.reload.deleted_at).to be_nil
+      end
+    end
   end
 
   it "allows seller to generate an access token for their application without breaking '/settings/authorized_applications'" do
