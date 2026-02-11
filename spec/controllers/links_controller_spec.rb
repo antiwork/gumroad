@@ -3121,6 +3121,14 @@ describe LinksController, :vcr, inertia: true do
           custom_message: "<p>hi!</p>",
         )
       end
+
+      it "converts price with decimal precision" do
+        expect do
+          post :send_sample_price_change_email, params: required_params.merge(amount: "19.99")
+        end.to have_enqueued_mail(CustomerLowPriorityMailer, :sample_subscription_price_change_notification).with(
+          hash_including(new_price: 19_99)
+        )
+      end
     end
 
     it "allows updating and publishing a product without files" do
