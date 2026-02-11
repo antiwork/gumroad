@@ -305,7 +305,7 @@ class UrlRedirectsController < ApplicationController
       media_locations_by_file = MediaLocation.max_consumed_at_by_file(purchase_id: @url_redirect.purchase.id).index_by(&:product_file_id)
 
       product_files.each_with_object({}) do |product_file, hash|
-        hash[product_file.external_id] = media_locations_by_file[product_file.id].as_json
+        hash[product_file.external_id] = media_locations_by_file[product_file.id]&.as_json
       end
     end
 
