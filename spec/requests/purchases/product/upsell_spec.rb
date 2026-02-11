@@ -578,7 +578,8 @@ describe("Product checkout with upsells", type: :system, js: true) do
 
       expect(purchase.link).to eq(selected_product)
 
-      visit checkout_index_path
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(email: "test@gumroad.com").exists? }
+      visit checkout_path
       expect { check_out(product) }.to change { Purchase.count }.by(1)
 
       purchase = Purchase.last
@@ -597,8 +598,12 @@ describe("Product checkout with upsells", type: :system, js: true) do
       within_modal "Cross-sell" do
         click_on "Add to cart"
       end
+      # TODO (sm17p): This is a bug.
+      # As per ensure_only_one_alive_cart_per_user, two alive carts per user are not allowed.
+      # The actual user flow always processes the cart even after cross sell product is removed so the user ends up buying the removed cross sell product.
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.last.cart_products.alive.count == 2 }
 
-      visit checkout_index_path
+      visit checkout_path
       expect(page).to have_text("Discounts US$-1", normalize_ws: true)
       within_cart_item "Product" do
         click_on "Remove"

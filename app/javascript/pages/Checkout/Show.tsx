@@ -1,61 +1,57 @@
+import { router, useForm, usePage } from "@inertiajs/react";
 import { reverse } from "lodash-es";
 import * as React from "react";
-import { createCast, cast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
-import { SurchargesResponse } from "$app/data/customer_surcharge";
+import { type SurchargesResponse } from "$app/data/customer_surcharge";
 import { startOrderCreation } from "$app/data/order";
-import { LineItemResult } from "$app/data/purchase";
 import { getPlugins, trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
-import { SavedCreditCard } from "$app/parsers/card";
-import { CardProduct, COMMISSION_DEPOSIT_PROPORTION, CustomFieldDescriptor } from "$app/parsers/product";
+import { type SavedCreditCard } from "$app/parsers/card";
+import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
 import { getIsSingleUnitCurrency } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
-import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
-import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
-import { Button } from "$app/components/Button";
 import { Checkout } from "$app/components/Checkout";
 import {
-  CartItem,
-  CartState,
+  type CartItem,
+  type CartState,
   convertToUSD,
   findCartItem,
   getDiscountedPrice,
-  Upsell,
-  ProductToAdd,
-  CrossSell,
-  saveCartState,
+  type ProductToAdd,
+  type CrossSell,
+  type Result,
   newCartState,
 } from "$app/components/Checkout/cartState";
+import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import {
   StateContext,
   createReducer,
-  Product,
+  type Product,
   loadSurcharges,
   requiresReusablePaymentMethod,
-  Gift,
+  type Gift,
   getCustomFieldKey,
   computeTipForPrice,
 } from "$app/components/Checkout/payment";
 import { Receipt } from "$app/components/Checkout/Receipt";
 import { TemporaryLibrary } from "$app/components/Checkout/TemporaryLibrary";
+import { type OfferedUpsell, UpsellModal } from "$app/components/Checkout/UpsellModal";
 import { useFeatureFlags } from "$app/components/FeatureFlags";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
-import { AuthorByline } from "$app/components/Product/AuthorByline";
-import { computeOptionPrice, OptionRadioButton, Option } from "$app/components/Product/ConfigurationSelector";
-import { PriceTag } from "$app/components/Product/PriceTag";
+import { computeOptionPrice } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOnChange, useOnChangeSync } from "$app/components/useOnChange";
+import { useRunOnce } from "$app/components/useRunOnce";
 
 const GUMROAD_PARAMS = [
   "product",
@@ -72,27 +68,29 @@ const GUMROAD_PARAMS = [
   "pay_in_installments",
 ];
 
-type Props = {
-  discover_url: string;
-  countries: Record<string, string>;
-  us_states: string[];
-  ca_provinces: string[];
-  clear_cart: boolean;
-  add_products: ProductToAdd[];
-  gift: Gift | null;
-  country: string | null;
-  state: string | null;
-  address: { street: string | null; city: string | null; zip: string | null } | null;
-  saved_credit_card: SavedCreditCard | null;
-  recaptcha_key: string | null;
-  paypal_client_id: string;
+type CheckoutIndexPageProps = {
   cart: CartState | null;
-  max_allowed_cart_products: number;
-  tip_options: number[];
-  default_tip_option: number;
+  recommended_products?: CardProduct[]; // InertiaRails.optional prop, loaded after determining screen size
+  checkout: {
+    add_products: ProductToAdd[];
+    address: { street: string | null; city: string | null; zip: string | null } | null;
+    ca_provinces: string[];
+    cart_save_debounce_ms: number;
+    clear_cart: boolean;
+    countries: Record<string, string>;
+    country: string | null;
+    default_tip_option: number;
+    discover_url: string;
+    gift: Gift | null;
+    max_allowed_cart_products: number;
+    paypal_client_id: string;
+    recaptcha_key: string | null;
+    saved_credit_card: SavedCreditCard | null;
+    state: string | null;
+    tip_options: number[];
+    us_states: string[];
+  };
 };
-
-export type Result = { item: CartItem; result: LineItemResult };
 
 function getCartItemUid(item: CartItem) {
   return `${item.product.permalink} ${item.option_id ?? ""}`;
@@ -139,28 +137,33 @@ const addProduct = ({
   else cart.items.unshift(newItem);
 };
 
-export const CheckoutPage = ({
-  discover_url,
-  countries,
-  us_states,
-  ca_provinces,
-  country,
-  state: addressState,
-  address,
-  clear_cart,
-  add_products,
-  gift,
-  saved_credit_card,
-  recaptcha_key,
-  paypal_client_id,
-  max_allowed_cart_products,
-  tip_options,
-  default_tip_option,
-  ...props
-}: Props) => {
+const CheckoutIndexPage = () => {
+  const {
+    checkout: {
+      discover_url,
+      countries,
+      us_states,
+      ca_provinces,
+      country,
+      state: addressState,
+      address,
+      clear_cart,
+      add_products,
+      gift,
+      saved_credit_card,
+      recaptcha_key,
+      paypal_client_id,
+      max_allowed_cart_products,
+      cart_save_debounce_ms,
+      tip_options,
+      default_tip_option,
+    },
+    ...props
+  } = cast<CheckoutIndexPageProps>(usePage().props);
+
   const user = useLoggedInUser();
   const email = props.cart?.email ?? user?.email ?? "";
-  const [cart, setCart] = React.useState<CartState>(() => {
+  const cartForm = useForm<{ cart: CartState }>(() => {
     const initialCart = clear_cart ? newCartState() : (props.cart ?? newCartState());
     const url = new URL(window.location.href);
     const urlReferrer = url.searchParams.get("referrer");
@@ -174,7 +177,7 @@ export const CheckoutPage = ({
     if (initialCart.items.length + newAddProducts.length > max_allowed_cart_products) {
       showAlert(`You cannot add more than ${max_allowed_cart_products} products to the cart.`, "error");
       initialCart.items = initialCart.items.slice(0, max_allowed_cart_products);
-      return initialCart;
+      return { cart: initialCart };
     }
 
     if (add_products.length) {
@@ -206,7 +209,7 @@ export const CheckoutPage = ({
 
       initialCart.rejectPppDiscount = false;
     }
-    return initialCart;
+    return { cart: initialCart };
   });
   const { require_email_typo_acknowledgment } = useFeatureFlags();
   const reducer = createReducer({
@@ -220,7 +223,7 @@ export const CheckoutPage = ({
     defaultTipOption: default_tip_option,
     savedCreditCard: saved_credit_card,
     state: addressState,
-    products: getProducts(cart),
+    products: getProducts(cartForm.data.cart),
     recaptchaKey: recaptcha_key,
     paypalClientId: paypal_client_id,
     gift,
@@ -231,7 +234,19 @@ export const CheckoutPage = ({
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
-  const [recommendedProducts, setRecommendedProducts] = React.useState<CardProduct[] | null>(null);
+  const isMobile = !useIsAboveBreakpoint("sm");
+  const cartProductIds = cartForm.data.cart.items.map(({ product }) => product.id).join(",");
+  React.useEffect(() => {
+    if (state.status.type !== "input" || !cartProductIds.length) return;
+    router.reload({
+      data: {
+        cart_product_ids: cartForm.data.cart.items.map(({ product }) => product.id),
+        limit: isMobile ? 2 : 6,
+      },
+      preserveUrl: true,
+      only: ["recommended_products"],
+    });
+  }, [state.status.type, isMobile, cartForm.data.cart.items]);
 
   const completedOfferIds = React.useRef(new Set()).current;
   const [offers, setOffers] = React.useState<
@@ -265,7 +280,7 @@ export const CheckoutPage = ({
   };
   const acceptOffer = () => {
     const newCart = getCartIfAccepted();
-    setCart(newCart);
+    cartForm.setData({ cart: newCart });
     if (surchargesIfAccepted)
       dispatch({
         type: "update-products",
@@ -282,7 +297,7 @@ export const CheckoutPage = ({
     if (state.status.type !== "offering") return;
     const seenCrossSellIds = new Set();
     const newOffers = [
-      ...cart.items
+      ...cartForm.data.cart.items
         .flatMap(({ product }) => product.cross_sells)
         .filter((crossSell) => {
           const seen = seenCrossSellIds.has(crossSell.id);
@@ -290,17 +305,21 @@ export const CheckoutPage = ({
           return (
             !completedOfferIds.has(crossSell.id) &&
             !seen &&
-            !findCartItem(cart, crossSell.offered_product.product.permalink, crossSell.offered_product.option_id)
+            !findCartItem(
+              cartForm.data.cart,
+              crossSell.offered_product.product.permalink,
+              crossSell.offered_product.option_id,
+            )
           );
         })
         .map((crossSell) => ({ type: "cross-sell", ...crossSell }) as const),
-      ...cart.items.flatMap((item) => {
+      ...cartForm.data.cart.items.flatMap((item) => {
         const currentOption = item.product.options.find(({ id }) => id === item.option_id);
         const offeredOption = item.product.options.find(({ id }) => id === currentOption?.upsell_offered_variant_id);
         return item.product.upsell &&
           !completedOfferIds.has(item.product.upsell.id) &&
           offeredOption &&
-          !findCartItem(cart, item.product.permalink, offeredOption.id)
+          !findCartItem(cartForm.data.cart, item.product.permalink, offeredOption.id)
           ? ({ type: "upsell", ...item.product.upsell, item, offeredOption } as const)
           : [];
       }),
@@ -344,7 +363,7 @@ export const CheckoutPage = ({
       await trackUserActionEvent("process_payment");
       if (user) {
         await Promise.all(
-          cart.items.map((item) =>
+          cartForm.data.cart.items.map((item) =>
             trackUserProductAction({
               name: "process_payment",
               permalink: item.product.permalink,
@@ -360,7 +379,7 @@ export const CheckoutPage = ({
         zipCode: state.zipCode,
         state: state.state,
         paymentMethod: state.status.paymentMethod,
-        shippingInfo: cart.items.some((item) => item.product.require_shipping)
+        shippingInfo: cartForm.data.cart.items.some((item) => item.product.require_shipping)
           ? {
               save: state.saveAddress,
               country: state.country,
@@ -385,8 +404,8 @@ export const CheckoutPage = ({
           locale: navigator.language,
         },
         recaptchaResponse: state.status.recaptchaResponse ?? null,
-        lineItems: cart.items.map((item) => {
-          const discounted = getDiscountedPrice(cart, item);
+        lineItems: cartForm.data.cart.items.map((item) => {
+          const discounted = getDiscountedPrice(cartForm.data.cart, item);
 
           const discountedPriceTotal = discounted.price;
           let discountedPriceToChargeNow = discounted.price;
@@ -424,7 +443,7 @@ export const CheckoutPage = ({
             discountCode: discounted.discount?.type === "code" ? discounted.discount.code : null,
             isPppDiscounted:
               !!item.product.ppp_details &&
-              !cart.rejectPppDiscount &&
+              !cartForm.data.cart.rejectPppDiscount &&
               discounted.discount?.type === "ppp" &&
               item.price !== 0,
             acceptedOffer: item.accepted_offer ?? null,
@@ -450,14 +469,14 @@ export const CheckoutPage = ({
       const result = await startOrderCreation(requestData);
       const results = Object.entries(result.lineItems).flatMap(([key, result]) => {
         const [permalink, optionId] = key.split(" ");
-        const item = cart.items.find(
+        const item = cartForm.data.cart.items.find(
           (item) => item.product.permalink === permalink && item.option_id === (optionId || null),
         );
         return item ? { item, result } : [];
       });
       assert(isOpenTuple(results, 1), "startCartPayment returned empty results");
 
-      const failedItems = cart.items.flatMap((item) => {
+      const failedItems = cartForm.data.cart.items.flatMap((item) => {
         const lineItem = result.lineItems[getCartItemUid(item)];
         return lineItem && !lineItem.success
           ? {
@@ -506,15 +525,17 @@ export const CheckoutPage = ({
 
       setRedirecting(!!redirectTo);
 
-      setCart({
-        ...cart,
-        items: failedItems,
-        discountCodes: result.offerCodes.map((discountCode) => ({
-          ...discountCode,
-          fromUrl: cart.discountCodes.find(({ code }) => code === discountCode.code)?.fromUrl ?? false,
-        })),
-        rejectPppDiscount: false,
-      });
+      cartForm.setData((prev) => ({
+        cart: {
+          ...prev.cart,
+          items: failedItems,
+          discountCodes: result.offerCodes.map((discountCode) => ({
+            ...discountCode,
+            fromUrl: prev.cart.discountCodes.find(({ code }) => code === discountCode.code)?.fromUrl ?? false,
+          })),
+          rejectPppDiscount: false,
+        },
+      }));
 
       if (redirectTo === "content-page" && firstResult.success && firstResult.content_url) {
         const contentUrl = new URL(firstResult.content_url);
@@ -538,42 +559,47 @@ export const CheckoutPage = ({
   }
   React.useEffect(() => void pay(), [state.status]);
 
-  const debouncedSaveCartState = useDebouncedCallback(
-    asyncVoid(async () => {
-      try {
-        await saveCartState(cart);
-      } catch (e) {
-        assertResponseError(e);
-        showAlert("Sorry, something went wrong. Please try again.", "error");
-      }
-    }),
-    100,
-  );
+  const debouncedSaveCartState = useDebouncedCallback(() => {
+    cartForm.patch(Routes.checkout_path(), {
+      only: ["cart", "flash"],
+      preserveUrl: true,
+      preserveScroll: true,
+    });
+  }, cart_save_debounce_ms);
+
+  // Clean URL params after initial render to avoid stale URL references during Inertia updates
+  useRunOnce(() => {
+    const url = new URL(window.location.href);
+    const searchParams = new URLSearchParams([...url.searchParams].filter(([key]) => key === "_gl"));
+    url.search = searchParams.toString();
+    router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
+  });
   React.useEffect(() => {
     debouncedSaveCartState();
     if (state.status.type === "input") {
-      dispatch({ type: "update-products", products: getProducts(cart) });
+      dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
     }
-  }, [cart]);
+  }, [cartForm.data.cart]);
   useOnChange(() => {
     if (state.email.trim() === "" || isValidEmail(state.email.trim())) {
-      setCart((prev) => ({ ...prev, email: state.email.trim() }));
+      // @ts-expect-error FormDataKeys recurses into Product.cross_sells; CartState is still correct at runtime
+      cartForm.setData("cart.email", state.email.trim());
     }
   }, [state.email]);
 
   const getCartIfAccepted = () => {
     if (currentOffer?.type === "cross-sell") {
-      const originalCartItems = cart.items.filter(({ product }) =>
+      const originalCartItems = cartForm.data.cart.items.filter(({ product }) =>
         product.cross_sells.some(({ id }) => id === currentOffer.id),
       );
       const originalCartItem = originalCartItems[0];
       if (originalCartItem) {
         return {
-          ...cart,
+          ...cartForm.data.cart,
           items: [
             ...(currentOffer.replace_selected_products
-              ? cart.items.filter((item) => !originalCartItems.includes(item))
-              : cart.items),
+              ? cartForm.data.cart.items.filter((item) => !originalCartItems.includes(item))
+              : cartForm.data.cart.items),
             {
               ...currentOffer.offered_product,
               product: { ...currentOffer.offered_product.product, cross_sells: [] },
@@ -593,9 +619,9 @@ export const CheckoutPage = ({
       }
     } else if (currentOffer?.type === "upsell") {
       return {
-        ...cart,
+        ...cartForm.data.cart,
         items: [
-          ...cart.items.filter((item) => item !== currentOffer.item),
+          ...cartForm.data.cart.items.filter((item) => item !== currentOffer.item),
           {
             ...currentOffer.item,
             option_id: currentOffer.offeredOption.id,
@@ -611,7 +637,7 @@ export const CheckoutPage = ({
         ],
       };
     }
-    return cart;
+    return cartForm.data.cart;
   };
 
   return (
@@ -628,18 +654,22 @@ export const CheckoutPage = ({
       ) : (
         <Checkout
           discoverUrl={discover_url}
-          cart={cart}
-          setCart={setCart}
-          recommendedProducts={recommendedProducts}
-          setRecommendedProducts={setRecommendedProducts}
+          cart={cartForm.data.cart}
+          updateCart={(updated) => cartForm.setData((prev) => ({ cart: { ...prev.cart, ...updated } }))}
+          recommendedProducts={props.recommended_products ?? null}
         />
       )}
       {currentOffer && surchargesIfAccepted ? (
         <Modal open onClose={completeOffer} title={currentOffer.text}>
           {currentOffer.type === "cross-sell" ? (
-            <CrossSellModal crossSell={currentOffer} accept={acceptOffer} decline={completeOffer} cart={cart} />
+            <CrossSellModal
+              crossSell={currentOffer}
+              accept={acceptOffer}
+              decline={completeOffer}
+              cart={cartForm.data.cart}
+            />
           ) : (
-            <UpsellModal cart={cart} upsell={currentOffer} accept={acceptOffer} decline={completeOffer} />
+            <UpsellModal cart={cartForm.data.cart} upsell={currentOffer} accept={acceptOffer} decline={completeOffer} />
           )}
         </Modal>
       ) : null}
@@ -647,134 +677,6 @@ export const CheckoutPage = ({
   );
 };
 
-export const CrossSellModal = ({
-  crossSell,
-  decline,
-  accept,
-  cart,
-}: {
-  crossSell: CrossSell;
-  accept: () => void;
-  decline: () => void;
-  cart: CartState;
-}) => {
-  const product = crossSell.offered_product.product;
-  const option = product.options.find(({ id }) => id === crossSell.offered_product.option_id);
+CheckoutIndexPage.loggedInUserLayout = true;
 
-  const crossSellCartItem: CartItem = {
-    ...crossSell.offered_product,
-    quantity: crossSell.offered_product.quantity || 1,
-    url_parameters: {},
-    referrer: "",
-    recommender_model_name: null,
-    accepted_offer: crossSell.discount ? { id: crossSell.id, discount: crossSell.discount } : null,
-  };
-  const { price: discountedPrice } = getDiscountedPrice(cart, crossSellCartItem);
-
-  return (
-    <>
-      <div className="grid gap-4">
-        <h4 dangerouslySetInnerHTML={{ __html: crossSell.description }} />
-        <ProductCard className="lg:flex-row">
-          <ProductCardFigure className="lg:w-56 lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0">
-            {product.thumbnail_url ? <img src={product.thumbnail_url} /> : null}
-          </ProductCardFigure>
-          <section className="flex flex-1 flex-col overflow-hidden lg:gap-8 lg:px-6 lg:py-4">
-            <ProductCardHeader className="lg:border-b-0 lg:p-0">
-              <a className="stretched-link" href={product.url} target="_blank" rel="noreferrer">
-                <h3 className="truncate">{option ? `${product.name} - ${option.name}` : product.name}</h3>
-              </a>
-              <AuthorByline
-                name={product.creator.name}
-                profileUrl={product.creator.profile_url}
-                avatarUrl={product.creator.avatar_url}
-              />
-            </ProductCardHeader>
-            <ProductCardFooter className="lg:divide-x-0">
-              {crossSell.ratings ? (
-                <div className="flex flex-[1_0_max-content] items-center gap-1 p-4 lg:p-0">
-                  <span className="rating-average">{crossSell.ratings.average.toFixed(1)}</span>
-                  <span>{`(${formatOrderOfMagnitude(crossSell.ratings.count, 1)})`}</span>
-                </div>
-              ) : null}
-              <div className="p-4 lg:p-0">
-                <PriceTag
-                  currencyCode={product.currency_code}
-                  oldPrice={
-                    discountedPrice < crossSell.offered_product.price ? crossSell.offered_product.price : undefined
-                  }
-                  price={discountedPrice}
-                  recurrence={
-                    product.recurrences
-                      ? {
-                          id: product.recurrences.default,
-                          duration_in_months: product.duration_in_months,
-                        }
-                      : undefined
-                  }
-                  isPayWhatYouWant={product.is_tiered_membership ? !!option?.is_pwyw : !!product.pwyw}
-                  isSalesLimited={false}
-                  creatorName={product.creator.name}
-                  tooltipPosition="top"
-                />
-              </div>
-            </ProductCardFooter>
-          </section>
-        </ProductCard>
-      </div>
-      <footer style={{ display: "grid", gap: "var(--spacer-4)", gridTemplateColumns: "1fr 1fr" }}>
-        <Button onClick={decline}>
-          {crossSell.replace_selected_products ? "Don't upgrade" : "Continue without adding"}
-        </Button>
-        <Button color="primary" onClick={accept}>
-          {crossSell.replace_selected_products ? "Upgrade" : "Add to cart"}
-        </Button>
-      </footer>
-    </>
-  );
-};
-
-type OfferedUpsell = Upsell & { item: CartItem; offeredOption: Option };
-export const UpsellModal = ({
-  upsell,
-  accept,
-  decline,
-  cart,
-}: {
-  upsell: OfferedUpsell;
-  accept: () => void;
-  decline: () => void;
-  cart: CartState;
-}) => {
-  const { item, offeredOption } = upsell;
-  const product = item.product;
-  const { discount } = getDiscountedPrice(cart, { ...item, option_id: offeredOption.id });
-  return (
-    <>
-      <div className="flex flex-col gap-4">
-        <h4 dangerouslySetInnerHTML={{ __html: upsell.description }} />
-        <div className="radio-buttons" role="radiogroup">
-          <OptionRadioButton
-            selected
-            priceCents={product.price_cents + computeOptionPrice(offeredOption, item.recurrence)}
-            name={offeredOption.name}
-            description={offeredOption.description}
-            currencyCode={product.currency_code}
-            isPWYW={product.is_tiered_membership ? offeredOption.is_pwyw : !!item.product.pwyw}
-            discount={discount && discount.type !== "ppp" ? discount.value : null}
-            recurrence={item.recurrence}
-            product={product}
-          />
-        </div>
-      </div>
-      <footer style={{ display: "grid", gap: "var(--spacer-4)", gridTemplateColumns: "1fr 1fr" }}>
-        <Button onClick={decline}>Don't upgrade</Button>
-        <Button color="primary" onClick={accept}>
-          Upgrade
-        </Button>
-      </footer>
-    </>
-  );
-};
-
-export default register({ component: CheckoutPage, propParser: createCast() });
+export default CheckoutIndexPage;
