@@ -652,9 +652,13 @@ $accent-color: map-get($colors, "pink"); // [1]
 
     .items {
       position: unset;
+      aspect-ratio: 1;
+      overflow: hidden;
 
       & img {
         width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
     }
   }
