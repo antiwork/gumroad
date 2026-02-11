@@ -1,6 +1,5 @@
 <%
   jobs = local_assigns[:jobs] || []
-  categories = jobs.map { |j| j[:category] }.uniq
 %>
 
 <div id="open-roles" class="bg-white pb-24 md:pb-32 job-listings">
@@ -9,17 +8,6 @@
       We have <%= jobs.length %> open roles
     </h2>
 
-    <div class="flex items-center justify-start md:justify-center gap-3 mb-6 sm:mb-12 overflow-x-auto scrollbar-hide px-8 md:px-0" role="tablist">
-      <input type="radio" name="job-filter" id="filter-all" value="all" checked class="hidden">
-      <label for="filter-all" class="job-tab shrink-0 px-3 py-2 rounded-full border border-transparent text-black text-sm cursor-pointer transition-all hover:border-black">All</label>
-      <% categories.each do |category| %>
-        <% slug = category.downcase %>
-        <input type="radio" name="job-filter" id="filter-<%= slug %>" value="<%= slug %>" class="hidden">
-        <label for="filter-<%= slug %>" class="job-tab shrink-0 px-3 py-2 rounded-full border border-transparent text-black text-sm cursor-pointer transition-all hover:border-black">
-          <%= category %> (<%= jobs.count { |j| j[:category] == category } %>)
-        </label>
-      <% end %>
-    </div>
 
     <div>
       <% jobs.each do |job| %>
@@ -41,14 +29,3 @@
   </div>
 </div>
 
-<style>
-  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
-
-  input[name="job-filter"]:checked + .job-tab { border-color: black; background-color: white; }
-
-  <% categories.each do |cat| %>
-  <% slug = cat.downcase %>
-  .job-listings:has(#filter-<%= slug %>:checked) .job-item:not([data-category="<%= slug %>"]) { display: none; }
-  <% end %>
-</style>
