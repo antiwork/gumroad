@@ -168,7 +168,7 @@ describe Workflow::ManageService do
         expect(workflow.installments.count).to eq(1)
         installment = workflow.installments.alive.sole
         expect(installment.name).to eq("You left something in your cart")
-        expect(installment.message).to eq(%Q(<p>When you're ready to buy, <a href="#{Rails.application.routes.url_helpers.checkout_index_url(host: UrlService.domain_with_protocol)}" target="_blank" rel="noopener noreferrer nofollow">complete checking out</a>.</p><product-list-placeholder />))
+        expect(installment.message).to eq(%Q(<p>When you're ready to buy, <a href="#{Rails.application.routes.url_helpers.checkout_url(host: UrlService.domain_with_protocol)}" target="_blank" rel="noopener noreferrer nofollow">complete checking out</a>.</p><product-list-placeholder />))
         expect(installment.installment_type).to eq(Installment::ABANDONED_CART_TYPE)
         expect(installment.json_data).to eq(workflow.json_data)
         expect(installment.seller_id).to eq(workflow.seller_id)
@@ -304,7 +304,7 @@ describe Workflow::ManageService do
           expect(installment1.reload).to be_deleted
           installment = workflow.installments.alive.sole
           expect(installment.name).to eq("You left something in your cart")
-          expect(installment.message).to eq(%Q(<p>When you're ready to buy, <a href="#{Rails.application.routes.url_helpers.checkout_index_url(host: UrlService.domain_with_protocol)}" target="_blank" rel="noopener noreferrer nofollow">complete checking out</a>.</p><product-list-placeholder />))
+          expect(installment.message).to eq(%Q(<p>When you're ready to buy, <a href="#{Rails.application.routes.url_helpers.checkout_url(host: UrlService.domain_with_protocol)}" target="_blank" rel="noopener noreferrer nofollow">complete checking out</a>.</p><product-list-placeholder />))
           expect(installment.installment_type).to eq(Installment::ABANDONED_CART_TYPE)
           expect(installment.json_data).to eq(workflow.json_data)
           expect(installment.seller_id).to eq(workflow.seller_id)

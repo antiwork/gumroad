@@ -2,10 +2,10 @@
   "jobs": [
     {
       "slug": "senior-fullstack-engineer",
-      "title": "Senior Full Stack Engineer",
+      "title": "Senior Software Engineer",
       "salary": "$189k-$210k",
       "type": "Full-time",
-      "location": "New York / Remote",
+      "location": "New York",
       "category": "Engineering",
       "responsibilities": [
         {
@@ -55,7 +55,7 @@
       "title": "Senior Designer",
       "salary": "$189k-$210k",
       "type": "Full-time",
-      "location": "New York / Remote",
+      "location": "New York",
       "category": "Design",
       "responsibilities": [
         {
@@ -104,7 +104,7 @@
       "title": "Customer Support Specialist",
       "salary": "$90k-$100k",
       "type": "Full-time",
-      "location": "New York / Remote",
+      "location": "New York",
       "category": "Support",
       "responsibilities": [
         {

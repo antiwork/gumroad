@@ -67,7 +67,11 @@ Rails.application.routes.draw do
           post :resend_receipt
         end
       end
-      resources :payouts, only: [:index, :show]
+      resources :payouts, only: [:index, :show] do
+        collection do
+          get :upcoming
+        end
+      end
       resources :subscribers, only: [:show]
 
       put "/resource_subscriptions", to: "resource_subscriptions#create"
@@ -579,7 +583,7 @@ Rails.application.routes.draw do
     get "/purchases" => redirect("/library")
     get "/purchases/search", to: "purchases#search"
 
-    resources :checkout, only: [:index]
+    resource :checkout, only: [:show, :update], controller: :checkout
 
     resources :licenses, only: [:update]
 
@@ -911,7 +915,6 @@ Rails.application.routes.draw do
             resource :recipient_count, only: [:show], controller: "installments/recipient_counts", as: :installment_recipient_count
           end
         end
-        resource :cart, only: [:update]
         resources :products, only: [:show] do
           resources :product_posts, only: [:index]
           resources :existing_product_files, only: [:index]
