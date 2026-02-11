@@ -1999,7 +1999,7 @@ class Purchase < ApplicationRecord
   end
 
   def does_not_count_towards_max_purchases
-    is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? || is_gift_receiver_purchase || is_updated_original_subscription_purchase || is_commission_completion_purchase
+    is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? || is_gift_receiver_purchase || is_updated_original_subscription_purchase || is_commission_completion_purchase || (is_installment_payment && !is_original_subscription_purchase)
   end
 
   # Public: Determine if this purchase is a test purchase by the links owner.
@@ -3361,7 +3361,7 @@ class Purchase < ApplicationRecord
     def validate_offer_code
       return if errors.present?
       # accept the offer code that was used when the buyer preordered/subscribed
-      return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase
+      return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase || (is_installment_payment && !is_original_subscription_purchase)
       return if discount_code.blank?
 
       if offer_code.nil?
