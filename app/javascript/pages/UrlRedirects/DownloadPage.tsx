@@ -1,4 +1,4 @@
-import { usePage, usePoll } from "@inertiajs/react";
+import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -41,40 +41,36 @@ function DownloadPage() {
     hasRichContent && contentFiles.length > 0 && props.purchase !== null && props.installment === null;
 
   useDropbox(dropbox_api_key);
-  const { start: startAudioDurationsPoll, stop: stopAudioDurationsPoll } = usePoll(
-    AUDIO_DURATIONS_POLL_INTERVAL_MS,
-    {
-      only: ["audio_durations"],
-      data: { file_ids: audioDurationsToFetch },
-      preserveUrl: true,
-    },
-    { autoStart: false },
-  );
-  const { start: startLatestMediaLocationsPoll, stop: stopLatestMediaLocationsPoll } = usePoll(
-    LATEST_MEDIA_LOCATIONS_POLL_INTERVAL_MS,
-    {
-      only: ["latest_media_locations"],
-      preserveUrl: true,
-    },
-    { autoStart: false },
-  );
+  React.useEffect(() => {
+    if (audioDurationsToFetch.length === 0) return;
+
+    const audioDurationsPoll = router.poll(
+      AUDIO_DURATIONS_POLL_INTERVAL_MS,
+      {
+        only: ["audio_durations"],
+        data: { file_ids: audioDurationsToFetch },
+        preserveUrl: true,
+      },
+      { autoStart: true, keepAlive: true },
+    );
+
+    return () => audioDurationsPoll.stop();
+  }, [audioDurationsToFetch.join(",")]);
 
   React.useEffect(() => {
-    if (audioDurationsToFetch.length > 0) {
-      stopAudioDurationsPoll();
-      startAudioDurationsPoll();
-    } else {
-      stopAudioDurationsPoll();
-    }
-  }, [audioDurationsToFetch.join(","), startAudioDurationsPoll, stopAudioDurationsPoll]);
+    if (!shouldPollLatestMediaLocations) return;
 
-  React.useEffect(() => {
-    if (shouldPollLatestMediaLocations) {
-      startLatestMediaLocationsPoll();
-    } else {
-      stopLatestMediaLocationsPoll();
-    }
-  }, [shouldPollLatestMediaLocations, startLatestMediaLocationsPoll, stopLatestMediaLocationsPoll]);
+    const latestMediaLocationsPoll = router.poll(
+      LATEST_MEDIA_LOCATIONS_POLL_INTERVAL_MS,
+      {
+        only: ["latest_media_locations"],
+        preserveUrl: true,
+      },
+      { autoStart: true, keepAlive: true },
+    );
+
+    return () => latestMediaLocationsPoll.stop();
+  }, [shouldPollLatestMediaLocations]);
 
   return <DownloadPageWithContent {...withContentProps} />;
 }

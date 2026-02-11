@@ -93,8 +93,9 @@ describe UrlRedirectsController do
           get :download_page, params: { id: url_redirect.token, file_ids: [audio.external_id] }
         end.not_to change(ConsumptionEvent, :count)
 
-        expect(inertia.props[:audio_durations]).to eq(audio.external_id => 120)
-        expect(inertia.props[:dropbox_api_key]).to be_nil
+        partial_props = (response.parsed_body["props"] || response.parsed_body).deep_stringify_keys
+        expect(partial_props["audio_durations"]).to eq(audio.external_id => 120)
+        expect(partial_props["dropbox_api_key"]).to be_nil
         expect(url_redirect.reload.uses).to eq(initial_uses)
       end
 
@@ -121,14 +122,15 @@ describe UrlRedirectsController do
           get :download_page, params: { id: url_redirect.token }
         end.not_to change(ConsumptionEvent, :count)
 
-        expect(inertia.props[:latest_media_locations]).to eq(
+        partial_props = (response.parsed_body["props"] || response.parsed_body).deep_stringify_keys
+        expect(partial_props["latest_media_locations"]).to eq(
           readable_document.external_id => {
             "location" => 5,
             "timestamp" => media_timestamp.as_json,
             "unit" => "page_number",
           }
         )
-        expect(inertia.props[:dropbox_api_key]).to be_nil
+        expect(partial_props["dropbox_api_key"]).to be_nil
         expect(url_redirect.reload.uses).to eq(initial_uses)
       end
 
@@ -157,7 +159,8 @@ describe UrlRedirectsController do
 
         get :download_page, params: { id: url_redirect.token }
 
-        expect(inertia.props[:latest_media_locations]).to eq(
+        partial_props = (response.parsed_body["props"] || response.parsed_body).deep_stringify_keys
+        expect(partial_props["latest_media_locations"]).to eq(
           video.external_id => nil,
           audio.external_id => { "location" => 5, "timestamp" => audio_consumption_timestamp.as_json, "unit" => "seconds" },
           readable_document.external_id => { "location" => 3, "timestamp" => readable_document_consumption_timestamp.as_json, "unit" => "page_number" },
@@ -180,7 +183,8 @@ describe UrlRedirectsController do
 
         get :download_page, params: { id: url_redirect.token, file_ids: [audio1.external_id, audio2.external_id] }
 
-        expect(inertia.props[:audio_durations]).to eq(
+        partial_props = (response.parsed_body["props"] || response.parsed_body).deep_stringify_keys
+        expect(partial_props["audio_durations"]).to eq(
           audio1.external_id => 100,
           audio2.external_id => nil
         )
@@ -210,8 +214,9 @@ describe UrlRedirectsController do
           get :download_page, params: { id: url_redirect.token, file_ids: [audio.external_id] }
         end.not_to change(ConsumptionEvent, :count)
 
-        expect(inertia.props[:audio_durations]).to eq(audio.external_id => 120)
-        expect(inertia.props[:latest_media_locations]).to eq(
+        partial_props = (response.parsed_body["props"] || response.parsed_body).deep_stringify_keys
+        expect(partial_props["audio_durations"]).to eq(audio.external_id => 120)
+        expect(partial_props["latest_media_locations"]).to eq(
           audio.external_id => nil,
           readable_document.external_id => {
             "location" => 8,
@@ -282,7 +287,8 @@ describe UrlRedirectsController do
           get :download_page, params: { id: token }
 
           expect(response).to be_successful
-          expect(response.body).to include(installment_1.displayed_name)
+          post_names = inertia.props.dig(:content, :posts).pluck(:name)
+          expect(post_names).to include(installment_1.displayed_name)
         end
 
         it "returns updates from those other purchases if they've bought the same product multiple times" do
@@ -298,9 +304,10 @@ describe UrlRedirectsController do
           get :download_page, params: { id: token }
 
           expect(response).to be_successful
-          expect(response.body).to include(installment_1.displayed_name)
-          expect(response.body).to include(installment_2.displayed_name)
-          expect(response.body).to include(installment_3.displayed_name)
+          post_names = inertia.props.dig(:content, :posts).pluck(:name)
+          expect(post_names).to include(installment_1.displayed_name)
+          expect(post_names).to include(installment_2.displayed_name)
+          expect(post_names).to include(installment_3.displayed_name)
         end
 
         it "does not break if the user has been sent a post for a product they have not purchased" do

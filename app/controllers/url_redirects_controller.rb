@@ -278,11 +278,18 @@ class UrlRedirectsController < ApplicationController
     end
 
     def download_page_props
+      if download_page_polling_request?
+        requested_props = requested_download_page_polling_props
+        return {
+          audio_durations: (audio_durations_props if requested_props.include?("audio_durations")),
+          latest_media_locations: (latest_media_locations_props if requested_props.include?("latest_media_locations")),
+        }.compact
+      end
+
       optional_props = {
         audio_durations: InertiaRails.optional { audio_durations_props },
         latest_media_locations: InertiaRails.optional { latest_media_locations_props },
       }
-      return optional_props if download_page_polling_request?
 
       UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:)
         .download_page_with_content_props(common_props)
@@ -362,11 +369,23 @@ class UrlRedirectsController < ApplicationController
 
     def download_page_polling_request?
       return false unless action_name == "download_page"
-      return false unless request.headers["X-Inertia"] == "true"
-      return false unless request.headers["X-Inertia-Partial-Component"] == "UrlRedirects/DownloadPage"
+      return false unless inertia_request?
+      return false unless request_header("X-Inertia-Partial-Component") == "UrlRedirects/DownloadPage"
 
-      requested_props = request.headers["X-Inertia-Partial-Data"].to_s.split(",").map(&:strip).reject(&:blank?).uniq
+      requested_props = requested_download_page_polling_props
       requested_props.present? && (requested_props - DOWNLOAD_PAGE_POLLING_PROPS).empty?
+    end
+
+    def requested_download_page_polling_props
+      request_header("X-Inertia-Partial-Data").to_s.split(",").map(&:strip).reject(&:blank?).uniq
+    end
+
+    def inertia_request?
+      ActiveModel::Type::Boolean.new.cast(request_header("X-Inertia"))
+    end
+
+    def request_header(name)
+      request.headers[name] || request.headers["HTTP_#{name.upcase.tr('-', '_')}"]
     end
 
     def mark_rental_as_viewed
