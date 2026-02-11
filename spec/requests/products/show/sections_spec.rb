@@ -80,25 +80,25 @@ describe "Profile settings on product pages", type: :system, js: true do
       select_combo_box_option search: product2.name, from: "Featured Product"
     end
 
-    all(:disclosure, "Add section").last.select_disclosure do
+    all(:disclosure_button, "Add section").last.select_disclosure do
       click_on "Posts"
     end
     sleep 1
-    all(:disclosure, "Edit section").last.select_disclosure do
+    all(:disclosure_button, "Edit section").last.select_disclosure do
       click_on "Name"
       fill_in "Name", with: "Posts!"
     end
 
-    all(:disclosure, "Add section").last.select_disclosure do
+    all(:disclosure_button, "Add section").last.select_disclosure do
       click_on "Subscribe"
     end
     sleep 1
 
-    all(:disclosure, "Add section")[2].select_disclosure do
+    all(:disclosure_button, "Add section")[2].select_disclosure do
       click_on "Rich text"
     end
     sleep 1
-    edit_rich_text_disclosure = all(:disclosure, "Edit section")[1]
+    edit_rich_text_disclosure = all(:disclosure_button, "Edit section")[1]
     edit_rich_text_disclosure.select_disclosure do
       click_on "Name"
       fill_in "Name", with: "Rich text!"

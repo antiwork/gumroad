@@ -12,10 +12,10 @@ import { classNames } from "$app/utils/classNames";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
+import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
@@ -175,37 +175,40 @@ const FileEmbedGroupNodeView = ({
           {showDownloadButton || editor.isEditable ? (
             <RowActions>
               {showDownloadButton ? (
-                <Popover
-                  trigger={
-                    <div className={buttonVariants({ size: "default" })}>
-                      Download all
-                      <Icon name="outline-cheveron-down" />
-                    </div>
-                  }
-                >
-                  <div className="grid gap-2">
-                    {downloading ? (
-                      <Button disabled>
-                        <LoadingSpinner />
-                        Zipping files...
+                <Popover>
+                  <PopoverAnchor>
+                    <PopoverTrigger asChild>
+                      <Button>
+                        Download all
+                        <Icon name="outline-cheveron-down" />
                       </Button>
-                    ) : isTuple(downloadableFiles, 1) ? (
-                      <NavigationButton
-                        href={downloadableFiles[0].url ?? undefined}
-                        download={downloadableFiles[0].display_name}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Download file
-                      </NavigationButton>
-                    ) : (
-                      <Button onClick={() => void download()}>Download as ZIP</Button>
-                    )}
-                    <Button disabled={downloading} onClick={() => void saveToDropbox()}>
-                      <Icon name="dropbox" />
-                      Save to Dropbox
-                    </Button>
-                  </div>
+                    </PopoverTrigger>
+                  </PopoverAnchor>
+                  <PopoverContent sideOffset={4}>
+                    <div className="grid gap-2">
+                      {downloading ? (
+                        <Button disabled>
+                          <LoadingSpinner />
+                          Zipping files...
+                        </Button>
+                      ) : isTuple(downloadableFiles, 1) ? (
+                        <NavigationButton
+                          href={downloadableFiles[0].url ?? undefined}
+                          download={downloadableFiles[0].display_name}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Download file
+                        </NavigationButton>
+                      ) : (
+                        <Button onClick={() => void download()}>Download as ZIP</Button>
+                      )}
+                      <Button disabled={downloading} onClick={() => void saveToDropbox()}>
+                        <Icon name="dropbox" />
+                        Save to Dropbox
+                      </Button>
+                    </div>
+                  </PopoverContent>
                 </Popover>
               ) : null}
               {editor.isEditable ? (

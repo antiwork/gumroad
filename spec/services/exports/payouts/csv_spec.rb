@@ -89,7 +89,7 @@ describe Exports::Payouts::Csv, :vcr do
     end
 
     it "shows all activity related to the payout" do
-      csv = Exports::Payouts::Csv.new(payment_id: @payout.id).perform
+      csv = Exports::Payouts::Csv.new(payment: @payout).perform
       parsed_csv = CSV.parse(csv)
       expected = [
         Exports::Payouts::Csv::HEADERS,
@@ -122,7 +122,7 @@ describe Exports::Payouts::Csv, :vcr do
         @payout.amount_cents = @payout.amount_cents + 100
         @payout.currency = Currency::GBP
         @payout.save!
-        csv = Exports::Payouts::Csv.new(payment_id: @payout.id).perform
+        csv = Exports::Payouts::Csv.new(payment: @payout).perform
         parsed_csv = CSV.parse(csv)
         expect(parsed_csv).not_to include(["Technical Adjustment", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "", "1.0"])
       end
@@ -130,7 +130,7 @@ describe Exports::Payouts::Csv, :vcr do
       it "add entry for usd payment currency" do
         @payout.amount_cents = @payout.amount_cents + 100
         @payout.save!
-        csv = Exports::Payouts::Csv.new(payment_id: @payout.id).perform
+        csv = Exports::Payouts::Csv.new(payment: @payout).perform
         parsed_csv = CSV.parse(csv)
         expect(parsed_csv).to include(["Technical Adjustment", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "", "1.0"])
       end
@@ -159,7 +159,7 @@ describe Exports::Payouts::Csv, :vcr do
 
       payout = create_payout(1.week.ago, PayoutProcessorType::PAYPAL, seller)
 
-      csv = Exports::Payouts::Csv.new(payment_id: payout.id).perform
+      csv = Exports::Payouts::Csv.new(payment: payout).perform
       parsed_csv = CSV.parse(csv)
       expect(parsed_csv).to match_array [
         Exports::Payouts::Csv::HEADERS,
@@ -211,7 +211,7 @@ describe Exports::Payouts::Csv, :vcr do
     end
 
     it "takes refunded credit into account, even if actual credit happened in a different payout" do
-      csv = Exports::Payouts::Csv.new(payment_id: @payout.id).perform
+      csv = Exports::Payouts::Csv.new(payment: @payout).perform
       parsed_csv = CSV.parse(csv)
       # +3.96 for from_this_payout credit
       # -0.30 for from_previous_payout refund

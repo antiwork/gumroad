@@ -33,7 +33,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new]
+  layout "inertia", only: [:index, :new, :cart_items_count]
 
   def index
     authorize Link
@@ -128,12 +128,19 @@ class LinksController < ApplicationController
 
       unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
              (params[:price].blank? || params[:price] < cart_item[:price])
-        redirect_to checkout_index_url(**params.permit!, host: DOMAIN, product: @product.unique_permalink,
-                                                         rent: cart_item[:rental], recurrence: cart_item[:recurrence],
-                                                         price: cart_item[:price],
-                                                         code: params[:offer_code] || params[:code],
-                                                         affiliate_id: params[:affiliate_id] || params[:a],
-                                                         referrer: params[:referrer] || request.referrer),
+        discount_result = BestOfferCodeService.new(
+          product: @product,
+          url_code: params[:offer_code] || params[:code],
+          quantity: (params[:quantity] || 1).to_i
+        ).result
+        code = discount_result&.dig(:code) if discount_result&.dig(:valid)
+        redirect_params = params.permit!.except(:code, :offer_code)
+        redirect_to checkout_url(**redirect_params, host: DOMAIN, product: @product.unique_permalink,
+                                                    rent: cart_item[:rental], recurrence: cart_item[:recurrence],
+                                                    price: cart_item[:price],
+                                                    code: code,
+                                                    affiliate_id: params[:affiliate_id] || params[:a],
+                                                    referrer: params[:referrer] || request.referrer),
                     allow_other_host: true
       end
     end
@@ -169,7 +176,9 @@ class LinksController < ApplicationController
   end
 
   def cart_items_count
-    @hide_layouts = true
+    render inertia: "Products/CartItemsCount", props: {
+      cart: CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid]).cart_props
+    }
   end
 
   def search
@@ -277,7 +286,7 @@ class LinksController < ApplicationController
     fetch_product_by_unique_permalink
     authorize @product
 
-    redirect_to bundle_path(@product.external_id) if @product.is_bundle?
+    redirect_to edit_bundle_product_path(@product.external_id) if @product.is_bundle?
 
     set_meta_tag(title: @product.name)
 

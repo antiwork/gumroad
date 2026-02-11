@@ -1,6 +1,7 @@
 import React from "react";
 
 import { buttonVariants } from "$app/components/Button";
+import { Input } from "$app/components/ui/Input";
 
 const AdminDashboard = () => {
   const [userIdentifier, setUserIdentifier] = React.useState("");
@@ -9,7 +10,7 @@ const AdminDashboard = () => {
     <section>
       <div className="flex max-w-2xl flex-col gap-4">
         <div className="flex flex-col gap-4">
-          <input
+          <Input
             type="text"
             name="user_identifier"
             value={userIdentifier}

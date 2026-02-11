@@ -1,11 +1,11 @@
-import { Editor, Content, createDocument, isList } from "@tiptap/core";
+import { Content, createDocument, Editor, isList } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorState, Selection } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
-import { EditorContent, useEditor, Extensions } from "@tiptap/react";
+import { EditorContent, Extensions, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import cx from "classnames";
 import { partition } from "lodash-es";
@@ -15,7 +15,7 @@ import { assertDefined } from "$app/utils/assert";
 
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Icon } from "$app/components/Icons";
-import { Popover, Props as PopoverProps } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { CodeBlock } from "$app/components/TiptapExtensions/CodeBlock";
@@ -24,7 +24,7 @@ import { Link, Button as TiptapButton } from "$app/components/TiptapExtensions/L
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
-import { WithTooltip } from "$app/components/WithTooltip";
+import { WithTooltip, Position } from "$app/components/WithTooltip";
 
 import { Raw } from "./TiptapExtensions/MediaEmbed";
 
@@ -48,7 +48,15 @@ export const useImageUploadSettings = () => React.useContext(ImageUploadSettings
 
 const TOOLBAR_TOOLTIP_DEFAULT_DELAY = 800; // in milliseconds
 
-const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.ReactNode }) => {
+const MenuItemTooltip = ({
+  tip,
+  children,
+  position = "bottom",
+}: {
+  tip: string;
+  children: React.ReactNode;
+  position?: Position | undefined;
+}) => {
   const [showTooltip, setShowTooltip] = assertDefined(React.useContext(ToolbarTooltipContext));
 
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
@@ -65,7 +73,7 @@ const MenuItemTooltip = ({ tip, children }: { tip: string; children: React.React
   };
 
   return (
-    <WithTooltip position="bottom" tip={showTooltip ? tip : null}>
+    <WithTooltip position={position} tip={showTooltip ? tip : null}>
       <span onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         {children}
       </span>
@@ -79,14 +87,16 @@ export const MenuItem = ({
   active,
   disabled,
   onClick,
+  position,
 }: {
   name: string;
   icon: IconName;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
+  position?: Position | undefined;
 }) => (
-  <MenuItemTooltip tip={name}>
+  <MenuItemTooltip tip={name} position={position}>
     <button
       type="button"
       className="toolbar-item cursor-pointer all-unset"
@@ -103,20 +113,24 @@ export const MenuItem = ({
 export const PopoverMenuItem = ({
   name,
   icon,
-  active,
-  ...props
-}: { name: string; icon: IconName; active?: boolean } & Pick<PopoverProps, "children"> & Partial<PopoverProps>) => (
-  <Popover
-    aria-label={name}
-    trigger={
+  children,
+}: {
+  name: string;
+  icon: IconName;
+  children: React.ReactNode;
+}) => (
+  <Popover>
+    <PopoverTrigger aria-label={name} className="all-unset">
       <MenuItemTooltip tip={name}>
-        <div className={cx("toolbar-item", active)}>
+        <div className="toolbar-item">
           <Icon name={icon} />
         </div>
       </MenuItemTooltip>
-    }
-    {...props}
-  />
+    </PopoverTrigger>
+    <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+      {children}
+    </PopoverContent>
+  </Popover>
 );
 
 declare module "@tiptap/core" {
@@ -386,36 +400,32 @@ export const RichTextEditorToolbar = ({
         className={cx("rich-text-editor-toolbar", color, className)}
         onMouseLeave={() => setShowTooltip(false)}
       >
-        <Popover
-          aria-label="Text formats"
-          trigger={
-            <div className="toolbar-item">
-              {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
-            </div>
-          }
-        >
-          {(close) => (
-            <ul role="menu">
+        <Popover>
+          <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
+            {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
+          </PopoverTrigger>
+          <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+            <div role="menu">
               {textFormatOptions.map((option) => (
-                <li
-                  key={option.name}
-                  role="menuitemradio"
-                  aria-checked={option === activeFormatOption}
-                  onClick={() => {
-                    const commands = editor.chain();
-                    if (isList(option.type, editor.extensionManager.extensions))
-                      commands.toggleList(option.type, "listItem", false, option.attrs);
-                    else commands.toggleNode(option.type, "paragraph", option.attrs);
-                    commands.focus().run();
-                    close();
-                  }}
-                >
-                  <Icon name={option.icon} />
-                  <span>{option.name}</span>
-                </li>
+                <PopoverClose key={option.name} asChild>
+                  <div
+                    role="menuitemradio"
+                    aria-checked={option === activeFormatOption}
+                    onClick={() => {
+                      const commands = editor.chain();
+                      if (isList(option.type, editor.extensionManager.extensions))
+                        commands.toggleList(option.type, "listItem", false, option.attrs);
+                      else commands.toggleNode(option.type, "paragraph", option.attrs);
+                      commands.focus().run();
+                    }}
+                  >
+                    <Icon name={option.icon} />
+                    <span>{option.name}</span>
+                  </div>
+                </PopoverClose>
               ))}
-            </ul>
-          )}
+            </div>
+          </PopoverContent>
         </Popover>
         <Separator aria-orientation="vertical" />
         <MenuItem
@@ -468,39 +478,44 @@ export const RichTextEditorToolbar = ({
             {insertMenuItems.length > 1 ? (
               <>
                 <Separator aria-orientation="vertical" />
-                <Popover
-                  trigger={
-                    <div className="toolbar-item">
-                      Insert <Icon name="outline-cheveron-down" />
-                    </div>
-                  }
-                >
-                  {(close) => (
-                    <div role="menu" onClick={close}>
+                <Popover>
+                  <PopoverTrigger className="toolbar-item all-unset">
+                    Insert <Icon name="outline-cheveron-down" />
+                  </PopoverTrigger>
+                  <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+                    <div role="menu">
                       {insertMenuItems.map((item, i) => (
                         <React.Fragment key={i}>
                           {item.name === "horizontalRule" ? (
-                            <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                              <Icon name="horizontal-rule" />
-                              <span>Divider</span>
-                            </div>
+                            <PopoverClose asChild>
+                              <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+                                <Icon name="horizontal-rule" />
+                                <span>Divider</span>
+                              </div>
+                            </PopoverClose>
                           ) : (
-                            item.config.submenu?.item(editor)
+                            <PopoverClose asChild>
+                              <div>{item.config.submenu?.item(editor)}</div>
+                            </PopoverClose>
                           )}
                         </React.Fragment>
                       ))}
-                      <div role="menuitem" onClick={() => setIsUpsellModalOpen(true)}>
-                        <Icon name="cart-plus" />
-                        <span>Upsell</span>
-                      </div>
-                      {productId ? (
-                        <div role="menuitem" onClick={() => setIsReviewModalOpen(true)}>
-                          <Icon name="solid-star" />
-                          <span>Reviews</span>
+                      <PopoverClose asChild>
+                        <div role="menuitem" onClick={() => setIsUpsellModalOpen(true)}>
+                          <Icon name="cart-plus" />
+                          <span>Upsell</span>
                         </div>
+                      </PopoverClose>
+                      {productId ? (
+                        <PopoverClose asChild>
+                          <div role="menuitem" onClick={() => setIsReviewModalOpen(true)}>
+                            <Icon name="solid-star" />
+                            <span>Reviews</span>
+                          </div>
+                        </PopoverClose>
                       ) : null}
                     </div>
-                  )}
+                  </PopoverContent>
                 </Popover>
               </>
             ) : null}
@@ -520,6 +535,7 @@ export const RichTextEditorToolbar = ({
             active={editor.isActive("redo")}
             disabled={redoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().redo().run()}
+            position="bottom-end"
           />
         </div>
       </div>

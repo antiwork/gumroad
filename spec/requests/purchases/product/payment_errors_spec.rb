@@ -52,6 +52,7 @@ describe("Purchase from a product page", type: :system, js: true) do
 
     expect(Purchase.last.stripe_error_code).to eq("card_declined_insufficient_funds")
 
+    wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(email: "test@gumroad.com").exists? }
     visit current_path
 
     check_out(@product)
@@ -85,7 +86,8 @@ describe("Purchase from a product page", type: :system, js: true) do
       add_to_cart(@product)
       @product.price_cents += 100
       check_out(@product, error: "The price just changed! Refresh the page for the updated price.")
-      visit checkout_index_path
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(email: "test@gumroad.com").exists? }
+      visit checkout_path
       check_out(@product)
 
       expect(Purchase.last.price_cents).to eq(200)

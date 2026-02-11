@@ -5,9 +5,10 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { PopoverClose } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 
-export const ExportSubscribersPopover = ({ closePopover }: { closePopover: () => void }) => {
+export const ExportSubscribersPopover = () => {
   const [loading, setLoading] = React.useState(false);
   const [followers, setFollowers] = React.useState(true);
   const [customers, setCustomers] = React.useState(false);
@@ -25,7 +26,6 @@ export const ExportSubscribersPopover = ({ closePopover }: { closePopover: () =>
       });
 
       showAlert("Your export is being prepared. You’ll receive an email with the download link shortly.", "success");
-      closePopover();
     } catch (error) {
       assertResponseError(error);
       showAlert("Something went wrong.", "error");
@@ -85,9 +85,11 @@ export const ExportSubscribersPopover = ({ closePopover }: { closePopover: () =>
         </label>
       </div>
       <div className="grid">
-        <Button disabled={noOptionSelected || loading} onClick={() => void handleDownload()}>
-          {loading ? <LoadingSpinner color="grey" /> : "Download"}
-        </Button>
+        <PopoverClose asChild>
+          <Button disabled={noOptionSelected || loading} onClick={() => void handleDownload()}>
+            {loading ? <LoadingSpinner color="grey" /> : "Download"}
+          </Button>
+        </PopoverClose>
       </div>
     </div>
   );

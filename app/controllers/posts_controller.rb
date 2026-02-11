@@ -6,6 +6,8 @@ class PostsController < ApplicationController
   include PageMeta::Favicon
   include PageMeta::Post
 
+  layout "inertia", only: [:show]
+
   before_action :authenticate_user!, only: %i[send_for_purchase]
   after_action :verify_authorized, only: %i[send_for_purchase]
   before_action :fetch_post, only: %i[send_for_purchase]
@@ -17,33 +19,25 @@ class PostsController < ApplicationController
     # Skip fetching post again if it's already fetched in check_if_needs_redirect
     @post || fetch_post(false)
 
-    @hide_layouts = true
-    @body_class = "post-page"
-    @body_id = "post_page"
-
     # Set @user instance variable to apply third-party analytics config in layouts/_head partial.
     @user = @post.seller
     seller_context = SellerContext.new(
       user: logged_in_user,
       seller: (logged_in_user && policy(@post).preview?) ? current_seller : logged_in_user
     )
-    @post_presenter = PostPresenter.new(
+    post_presenter = PostPresenter.new(
       pundit_user: seller_context,
       post: @post,
       purchase_id_param: params[:purchase_id]
     )
 
     set_meta_tag(title: "#{@post.name} - #{@post.user.name_or_username}")
-    set_post_page_meta(@post, @post_presenter)
+    set_post_page_meta(@post, post_presenter)
     set_favicon_meta_tags(@user)
 
-    purchase = @post_presenter.purchase
+    e404 if post_presenter.e404?
 
-    if purchase
-      @subscription = purchase.subscription
-    end
-
-    e404 if @post_presenter.e404?
+    render inertia: "Posts/Show", props: post_presenter.post_component_props
   end
 
   def redirect_from_purchase_id

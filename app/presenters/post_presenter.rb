@@ -30,6 +30,7 @@ class PostPresenter
       recent_posts:,
       paginated_comments:,
       comments_max_allowed_depth: Comment::MAX_ALLOWED_DEPTH,
+      custom_styles: seller.seller_profile.custom_styles,
     }
   end
 

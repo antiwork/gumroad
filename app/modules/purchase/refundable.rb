@@ -294,6 +294,9 @@ class Purchase
         refunds << refund
         save!
         Credit.create_for_vat_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
+
+        # Store VAT ID on subscription so future recurring charges are automatically VAT-exempt
+        subscription&.update_business_vat_id!(business_vat_id) if business_vat_id.present?
       end
       true
     rescue ChargeProcessorAlreadyRefundedError => e

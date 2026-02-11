@@ -2,7 +2,10 @@
 
 class SendYearInReviewEmailJob
   include Sidekiq::Job
+  include CurrencyHelper
   sidekiq_options retry: 5, queue: :low
+
+  MAX_SHOWCASE_RANK = 1_000
 
   def perform(seller_id, year, recipient = nil)
     analytics_data = {}
@@ -24,6 +27,11 @@ class SendYearInReviewEmailJob
 
     analytics_data[:top_selling_products] = map_top_selling_products(seller, data_by_date[:by_date])
 
+    analytics_data[:gpt_buy_list] = self.class.get_buy_list_from_total(
+      total_amount_cents: analytics_data[:total_amount_cents],
+      currency: seller.currency_type
+    )
+
     data_by_state = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(range.begin, range.end, by: :state)
     analytics_data[:by_country] = build_stats_by_country(data_by_state[:by_state])
     analytics_data[:total_countries_with_sales_count] = analytics_data[:by_country].size
@@ -33,6 +41,10 @@ class SendYearInReviewEmailJob
                                                           .select(:email)
                                                           .distinct
                                                           .count
+
+    creator_rank = seller.rank(year:)
+    analytics_data[:creator_rank] = creator_rank if creator_rank.present? && creator_rank <= MAX_SHOWCASE_RANK
+
     CreatorMailer.year_in_review(
       seller:,
       year:,
@@ -40,6 +52,20 @@ class SendYearInReviewEmailJob
       payout_csv_url:,
       recipient:,
     ).deliver_now
+  end
+
+  def self.get_buy_list_from_total(total_amount_cents:, currency:)
+    formatted_total_in_usd = Money.new(total_amount_cents, currency).format(no_cents_if_whole: true)
+
+    Rails.cache.fetch("gpt_buy_list_#{total_amount_cents}_#{currency}", expires_in: 1.day) do
+      content = "Print a numbered list of 5 things that I could buy with #{formatted_total_in_usd}. " \
+                "Don't include their prices. Don't start the answer with any introduction, just list the items."
+      response = OpenAI::Client.new.chat(parameters: { model: "gpt-4o-mini",
+                                                       messages: [{ role: "user", content: }],
+                                                       max_tokens: 125 })
+      answer = response.dig("choices", 0, "message", "content")
+      answer.split("\n").delete_if(&:blank?).map { |item| item.match(/^\d\.\s?(.+)/)[1] }
+    end
   end
 
   private

@@ -208,6 +208,10 @@ class Payment < ApplicationRecord
       json[:disputed_sales] = disputed_sales.map(&:external_id)
     end
 
+    if options[:include_transactions]
+      json[:transactions] = Exports::Payouts::Api.new(self).perform
+    end
+
     json
   end
 

@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { createAccount, CreateAccountPayload } from "$app/data/account";
-import { ErrorLineItemResult, LineItemResult, SuccessfulLineItemResult } from "$app/data/purchase";
+import type { ErrorLineItemResult, LineItemResult, SuccessfulLineItemResult } from "$app/data/purchase";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";

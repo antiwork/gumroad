@@ -3,12 +3,10 @@ import React from "react";
 
 import { EmailTab } from "$app/data/installments";
 
-import { Button, buttonVariants } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
-import { Popover } from "$app/components/Popover";
+import { Button } from "$app/components/Button";
+import { Search } from "$app/components/Search";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 type LayoutProps = {
   selectedTab: EmailTab;
@@ -29,41 +27,12 @@ export const EmailsLayout = ({
   hideNewButton,
   actions,
 }: LayoutProps) => {
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-  const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
-
-  React.useEffect(() => {
-    if (isSearchPopoverOpen) searchInputRef.current?.focus();
-  }, [isSearchPopoverOpen]);
-
   const title = selectedTab === "subscribers" ? "Subscribers" : "Emails";
 
   const defaultActions = (
     <>
       {hasPosts && onQueryChange ? (
-        <Popover
-          open={isSearchPopoverOpen}
-          onToggle={setIsSearchPopoverOpen}
-          aria-label="Toggle Search"
-          trigger={
-            <WithTooltip tip="Search" position="bottom">
-              <div className={buttonVariants({ size: "default" })}>
-                <Icon name="solid-search" />
-              </div>
-            </WithTooltip>
-          }
-        >
-          <div className="input">
-            <Icon name="solid-search" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search emails"
-              value={query ?? ""}
-              onChange={(evt) => onQueryChange(evt.target.value)}
-            />
-          </div>
-        </Popover>
+        <Search value={query ?? ""} onSearch={onQueryChange} placeholder="Search emails" />
       ) : null}
       {!hideNewButton && <NewEmailButton />}
     </>

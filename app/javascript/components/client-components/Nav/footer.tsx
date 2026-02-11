@@ -23,7 +23,7 @@ function NavbarFooter() {
       <ClientNavLink text="Settings" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
       <ClientNavLink text="Help" icon="book" href={Routes.help_center_root_url(routeParams)} />
       <DashboardNavProfilePopover user={currentSeller}>
-        <div role="menu">
+        <div role="menu" className="flex flex-col border-0! shadow-none! dark:border!">
           {teamMemberships != null && teamMemberships.length > 0 ? (
             <>
               {teamMemberships.map((teamMembership) => (
@@ -38,7 +38,7 @@ function NavbarFooter() {
             href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
           />
           <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
-          <Link role="menuitem" href={Routes.logout_url(routeParams)} method="delete" className="w-full all-unset">
+          <Link role="menuitem" href={Routes.logout_url(routeParams)} method="delete" className="all-unset">
             <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
             Logout
           </Link>

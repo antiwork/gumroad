@@ -44,6 +44,18 @@ describe User::SocialGoogle do
       expect(createdUser.reload.google_uid).to eq(foundUser.google_uid)
       expect(createdUser.reload.google_uid).to eq(@dataCopy2["uid"])
     end
+
+    it "creates user with sanitized name when name contains colons" do
+      @data_with_colon = @data.deep_dup
+      @data_with_colon["uid"] = "unique_colon_test_uid"
+      @data_with_colon["info"]["name"] = "Test: User"
+
+      user = User.find_or_create_for_google_oauth2(@data_with_colon)
+
+      expect(user).to be_persisted
+      expect(user).to be_valid
+      expect(user.name).to eq("Test User")
+    end
   end
 
   describe ".google_picture_url", :vcr do
@@ -59,6 +71,24 @@ describe User::SocialGoogle do
       picture_response = HTTParty.get(google_picture_url)
       expect(picture_response.content_type).to eq("image/jpeg")
       expect(picture_response.success?).to eq(true)
+    end
+
+    it "returns nil for unsupported avatar content types" do
+      allow(URI).to receive(:open).and_yield(double(content_type: "image/webp", read: ""))
+
+      result = @user.google_picture_url(@data)
+
+      expect(result).to be_nil
+    end
+
+    it "returns nil when avatar file size exceeds maximum" do
+      large_content = "x" * (User::Validations::MAXIMUM_AVATAR_FILE_SIZE + 1)
+
+      allow(URI).to receive(:open).and_yield(double(content_type: "image/jpeg", read: large_content))
+
+      result = @user.google_picture_url(@data)
+
+      expect(result).to be_nil
     end
   end
 

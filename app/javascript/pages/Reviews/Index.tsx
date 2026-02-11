@@ -4,11 +4,11 @@ import { cast } from "ts-safe-cast";
 import { ProductNativeType } from "$app/parsers/product";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartItemList";
+import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { RatingStars } from "$app/components/RatingStars";
@@ -85,25 +85,26 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
       <TableCell className="break-words">{review.message ? `"${review.message}"` : null}</TableCell>
       <TableCell>
         <div className="flex flex-wrap gap-3 lg:justify-end">
-          <Popover
-            open={isEditing}
-            onToggle={setIsEditing}
-            trigger={
-              <Button aria-label="Edit">
-                <Icon name="pencil" />
-              </Button>
-            }
-          >
-            <Card>
-              <ReviewForm
-                permalink={review.product.permalink}
-                purchaseId={review.purchase_id}
-                purchaseEmailDigest={review.purchase_email_digest}
-                review={review}
-                onChange={(newReview) => onChange({ ...review, ...newReview })}
-                className="flex flex-wrap items-center justify-between gap-4 p-4"
-              />
-            </Card>
+          <Popover open={isEditing} onOpenChange={setIsEditing}>
+            <PopoverAnchor>
+              <PopoverTrigger aria-label="Edit" asChild>
+                <Button>
+                  <Icon name="pencil" />
+                </Button>
+              </PopoverTrigger>
+            </PopoverAnchor>
+            <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+              <Card>
+                <ReviewForm
+                  permalink={review.product.permalink}
+                  purchaseId={review.purchase_id}
+                  purchaseEmailDigest={review.purchase_email_digest}
+                  review={review}
+                  onChange={(newReview) => onChange({ ...review, ...newReview })}
+                  className="flex flex-wrap items-center justify-between gap-4 p-4"
+                />
+              </Card>
+            </PopoverContent>
           </Popover>
         </div>
       </TableCell>

@@ -21,6 +21,7 @@ class UpdateUserComplianceInfo
         new_compliance_info.last_name_kana =          compliance_params[:last_name_kana]          if compliance_params[:last_name_kana].present?
         new_compliance_info.street_address =          compliance_params[:street_address]          if compliance_params[:street_address].present?
         new_compliance_info.building_number =         compliance_params[:building_number]         if compliance_params[:building_number].present?
+        new_compliance_info.building_number_kana =    compliance_params[:building_number_kana]    if compliance_params[:building_number_kana].present?
         new_compliance_info.street_address_kanji =    compliance_params[:street_address_kanji]    if compliance_params[:street_address_kanji].present?
         new_compliance_info.street_address_kana =     compliance_params[:street_address_kana]     if compliance_params[:street_address_kana].present?
         new_compliance_info.city =                    compliance_params[:city]                    if compliance_params[:city].present?
@@ -32,6 +33,7 @@ class UpdateUserComplianceInfo
         new_compliance_info.business_name_kana =      compliance_params[:business_name_kana]      if compliance_params[:business_name_kana].present?
         new_compliance_info.business_street_address = compliance_params[:business_street_address] if compliance_params[:business_street_address].present?
         new_compliance_info.business_building_number =      compliance_params[:business_building_number]      if compliance_params[:business_building_number].present?
+        new_compliance_info.business_building_number_kana = compliance_params[:business_building_number_kana] if compliance_params[:business_building_number_kana].present?
         new_compliance_info.business_street_address_kanji = compliance_params[:business_street_address_kanji] if compliance_params[:business_street_address_kanji].present?
         new_compliance_info.business_street_address_kana =  compliance_params[:business_street_address_kana]  if compliance_params[:business_street_address_kana].present?
         new_compliance_info.business_city =           compliance_params[:business_city]           if compliance_params[:business_city].present?
@@ -57,7 +59,11 @@ class UpdateUserComplianceInfo
       begin
         StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info)
       rescue Stripe::InvalidRequestError => e
-        return { success: false, error_message: "Compliance info update failed with this error: #{e.message.split("Please contact us").first.strip}", error_code: "stripe_error" }
+        if e.code == "postal_code_invalid"
+          country = new_compliance_info.legal_entity_country
+          return { success: false, error_message: "The postal code you entered is not valid for #{country}." }
+        end
+        return { success: false, error_message: e.message.split("Please contact us").first.strip, error_code: "stripe_error" }
       end
     end
 

@@ -8,7 +8,7 @@ import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { PageListItem } from "$app/components/Download/PageListLayout";
 import { Icon } from "$app/components/Icons";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { BlurOnEnter } from "$app/components/TiptapExtensions/BlurOnEnter";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 
@@ -91,15 +91,20 @@ export const PageTab = ({
       </span>
       {renaming || disabled ? null : (
         <span onClick={(e) => e.stopPropagation()}>
-          <Popover trigger={<Icon name="three-dots" />}>
-            <div role="menu">
-              <div role="menuitem" onClick={() => setRenaming(true)}>
-                <Icon name="pencil" /> Rename
+          <Popover>
+            <PopoverTrigger>
+              <Icon name="three-dots" />
+            </PopoverTrigger>
+            <PopoverContent className="border-0 p-0 shadow-none">
+              <div role="menu">
+                <div role="menuitem" onClick={() => setRenaming(true)}>
+                  <Icon name="pencil" /> Rename
+                </div>
+                <div className="danger" role="menuitem" onClick={onDelete}>
+                  <Icon name="trash2" /> Delete
+                </div>
               </div>
-              <div className="danger" role="menuitem" onClick={onDelete}>
-                <Icon name="trash2" /> Delete
-              </div>
-            </div>
+            </PopoverContent>
           </Popover>
         </span>
       )}

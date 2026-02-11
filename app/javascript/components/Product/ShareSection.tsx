@@ -10,13 +10,12 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Product, WishlistForProduct } from "$app/components/Product";
 import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
-import { WithTooltip } from "$app/components/WithTooltip";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
 
@@ -175,25 +174,25 @@ export const ShareSection = ({
           }}
         />
 
-        <Popover
-          aria-label="Share"
-          trigger={
-            <WithTooltip tip="Share" position="bottom">
-              <Button aria-label="Share">
+        <Popover>
+          <PopoverAnchor>
+            <PopoverTrigger aria-label="Share" asChild>
+              <Button>
                 <Icon name="share" />
               </Button>
-            </WithTooltip>
-          }
-        >
-          <div className="grid grid-cols-1 gap-4">
-            <TwitterShareButton url={product.long_url} text={`Buy ${product.name} on @Gumroad`} />
-            <FacebookShareButton url={product.long_url} text={product.name} />
-            <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
-              <Button aria-label="Copy product URL">
-                <Icon name="link" /> Copy link
-              </Button>
-            </CopyToClipboard>
-          </div>
+            </PopoverTrigger>
+          </PopoverAnchor>
+          <PopoverContent sideOffset={4}>
+            <div className="grid grid-cols-1 gap-4">
+              <TwitterShareButton url={product.long_url} text={`Buy ${product.name} on @Gumroad`} />
+              <FacebookShareButton url={product.long_url} text={product.name} />
+              <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
+                <Button aria-label="Copy product URL">
+                  <Icon name="link" /> Copy link
+                </Button>
+              </CopyToClipboard>
+            </div>
+          </PopoverContent>
         </Popover>
       </div>
       {saveState.type === "success" ? (

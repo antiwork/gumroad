@@ -8,6 +8,7 @@ import { assertResponseError, request } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Details } from "$app/components/Details";
+import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { RecurrencePriceValue } from "$app/components/ProductEdit/state";
 import { Select } from "$app/components/Select";
@@ -169,13 +170,13 @@ export const UpsellSelectModal = ({
           }
         >
           {discount && selectedProduct ? (
-            <div className="dropdown !max-w-sm">
+            <Dropdown className="max-w-sm">
               <DiscountInput
                 discount={discount}
                 setDiscount={(newDiscount: InputtedDiscount) => setDiscount(newDiscount)}
                 currencyCode={selectedProduct.currency_code}
               />
-            </div>
+            </Dropdown>
           ) : null}
         </Details>
       </fieldset>
