@@ -108,7 +108,7 @@ class UserComplianceInfo < ApplicationRecord
   end
 
   def business_state_code
-    Compliance::Countries.find_subdivision_code(country_code, business_state)
+    Compliance::Countries.find_subdivision_code(business_country_code, business_state)
   end
 
   def legal_entity_business_type
