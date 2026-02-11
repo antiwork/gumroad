@@ -277,6 +277,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     };
   }, [editor]);
 
+  const pagesKey = React.useMemo(
+    () => pages.map((p) => `${p.id}:${JSON.stringify(p.description)}`).join("|"),
+    [pages],
+  );
   const pageIcons = React.useMemo(
     () =>
       new Map(
@@ -296,7 +300,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             })
           : [],
       ),
-    [pages],
+    [pagesKey],
   );
 
   const findPageWithNode = (type: string) =>
@@ -964,10 +968,12 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           </Modal>
         </>
       ) : null}
-      <UpsellSelectModal isOpen={showUpsellModal} onClose={() => setShowUpsellModal(false)} onInsert={onInsertUpsell} />
-      {id ? (
+      {showUpsellModal ? (
+        <UpsellSelectModal isOpen onClose={() => setShowUpsellModal(false)} onInsert={onInsertUpsell} />
+      ) : null}
+      {showReviewModal && id ? (
         <TestimonialSelectModal
-          isOpen={showReviewModal}
+          isOpen
           onClose={() => setShowReviewModal(false)}
           onInsert={onInsertReviews}
           productId={id}

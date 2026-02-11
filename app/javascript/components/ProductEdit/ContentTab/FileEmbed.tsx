@@ -154,14 +154,14 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   // The `selected` prop from Tiptap also returns true when the parent folder is selected,
   // but we only want to show the outline when this exact node is selected
   const selected = editor.state.selection instanceof NodeSelection && editor.state.selection.node === node;
-  const fileEmbedGroups = React.useMemo(
+  const getFileEmbedGroups = React.useCallback(
     () =>
       findChildren(editor.state.doc, ({ type }) => type.name === FileEmbedGroup.name).flatMap(({ node: groupNode }) =>
         groupNode === parentNode
           ? []
           : [{ uid: cast<string>(groupNode.attrs.uid), name: titleWithFallback(groupNode.attrs.name) }],
       ),
-    [selected],
+    [editor.state.doc, parentNode],
   );
 
   const isInGroup = parentNode?.type.name === FileEmbedGroup.name;
@@ -287,34 +287,37 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
         <span>Move to folder...</span>
       </>
     ),
-    menu: () => (
-      <>
-        {parentNode?.childCount === 1 ? null : (
-          <div
-            onClick={() => editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: null })}
-            role="menuitem"
-          >
-            <Icon name="folder-plus" />
-            <span>New folder</span>
-          </div>
-        )}
-        {fileEmbedGroups.map(({ uid, name }) => (
-          <div
-            key={uid}
-            onClick={() => {
-              editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: uid });
+    menu: () => {
+      const groups = getFileEmbedGroups();
+      return (
+        <>
+          {parentNode?.childCount === 1 ? null : (
+            <div
+              onClick={() => editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: null })}
+              role="menuitem"
+            >
+              <Icon name="folder-plus" />
+              <span>New folder</span>
+            </div>
+          )}
+          {groups.map(({ uid, name }) => (
+            <div
+              key={uid}
+              onClick={() => {
+                editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: uid });
 
-              const fileName = filesById.get(cast<string>(node.attrs.id))?.display_name;
-              if (fileName) showAlert(`Moved "${fileName}" to "${name}".`, "success");
-            }}
-            role="menuitem"
-          >
-            <Icon name="solid-folder-open" />
-            <span>{name || "Untitled"}</span>
-          </div>
-        ))}
-      </>
-    ),
+                const fileName = filesById.get(cast<string>(node.attrs.id))?.display_name;
+                if (fileName) showAlert(`Moved "${fileName}" to "${name}".`, "success");
+              }}
+              role="menuitem"
+            >
+              <Icon name="solid-folder-open" />
+              <span>{name || "Untitled"}</span>
+            </div>
+          ))}
+        </>
+      );
+    },
   };
 
   return (
@@ -436,7 +439,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
         ) : null}
         <NodeActionsMenu
           editor={editor}
-          actions={!isInGroup || fileEmbedGroups.length > 0 || parentNode.childCount > 1 ? [folderAction] : []}
+          actions={!isInGroup || parentNode.childCount > 1 || getFileEmbedGroups().length > 0 ? [folderAction] : []}
         />
         <RowContent className="content">
           {file.is_streamable && node.attrs.collapsed ? (
