@@ -935,6 +935,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
           click_on "Move down"
           click_on "Move down"
         end
+        find("[aria-label='Actions']").click
       end
 
       toggle_file_group("Folder 1")
@@ -987,18 +988,21 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
           select_disclosure "Actions" do
             expect(page).to have_menuitem("Move to folder...")
           end
+          find("[aria-label='Actions']").click
         end
 
         within find_file_group("Folder 1").hover do
           select_disclosure "Actions" do
             expect(page).to_not have_menuitem("Move to folder...")
           end
+          find("[aria-label='Actions']").click
         end
 
         within find_embed(name: "6F0E4C97-B72A4E69-A11BF6C4-AF6517E7").hover do
           select_disclosure "Actions" do
             expect(page).to_not have_menuitem("Move to folder...")
           end
+          find("[aria-label='Actions']").click
         end
 
         within find_embed(name: "Posts (emails) sent to customers of this product will appear here").hover do
