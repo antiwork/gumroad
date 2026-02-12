@@ -3,6 +3,7 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { TextInput } from "$app/components/Download/CustomField/TextInput";
+import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 
 export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewProps) => {
   const label = cast<string | null>(node.attrs.label);
@@ -16,6 +17,7 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
 
   return (
     <NodeViewWrapper data-drag-handle>
+      {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
       <fieldset>
         {editor.isEditable ? (
           <>
@@ -23,16 +25,7 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
               value={label ?? ""}
               placeholder="Title"
               onChange={(evt) => updateAttributes({ label: evt.target.value })}
-              className="border-0"
-              style={{
-                background: "none",
-                padding: 0,
-                margin: 0,
-                font: "inherit",
-                color: "inherit",
-                outline: "none",
-                borderRadius: 0,
-              }}
+              className="w-full border-0 bg-transparent p-0 font-inherit text-inherit outline-none"
             />
             {type === "shortAnswer" ? <input {...sharedProps} /> : <textarea {...sharedProps} />}
           </>
