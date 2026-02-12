@@ -793,11 +793,12 @@ Rails.application.routes.draw do
     resources :subscriptions, only: [] do
       member do
         get :manage
-        get :magic_link
-        post :send_magic_link
         post :unsubscribe_by_user
         post :unsubscribe_by_seller
         put :update, to: "purchases#update_subscription"
+      end
+      scope module: "subscriptions" do
+        resource :magic_link, only: %i[new create]
       end
     end
 
