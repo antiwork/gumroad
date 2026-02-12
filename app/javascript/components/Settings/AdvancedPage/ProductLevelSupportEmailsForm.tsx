@@ -1,10 +1,10 @@
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { TagInput } from "$app/components/TagInput";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { ChevronDown, ChevronUp, Envelope, Plus, Trash } from "@boxicons/react";
 
 type ProductLevelSupportEmail = {
   email: string;
@@ -18,7 +18,7 @@ type Product = {
 
 const AddProductLevelSupportEmailButton = React.memo(({ onClick }: { onClick: () => void }) => (
   <Button color="primary" onClick={onClick}>
-    <Icon name="plus" />
+    <Plus />
     Add a product specific email
   </Button>
 ));
@@ -58,7 +58,7 @@ const ProductLevelSupportEmailRow = React.memo(
     return (
       <Row role="listitem">
         <RowContent>
-          <Icon name="envelope-fill" className="type-icon" />
+          <Envelope pack="filled" className="type-icon" />
           <div className="ml-1">
             <h4>{supportEmail.email || "No email set"}</h4>
             <span>
@@ -68,10 +68,10 @@ const ProductLevelSupportEmailRow = React.memo(
         </RowContent>
         <RowActions>
           <Button onClick={handleToggleExpandedState} aria-label="Edit email">
-            {expanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
+            {expanded ? <ChevronUp /> : <ChevronDown />}
           </Button>
           <Button onClick={handleRemove} aria-label="Delete email">
-            <Icon name="trash2" />
+            <Trash />
           </Button>
         </RowActions>
         {expanded ? (

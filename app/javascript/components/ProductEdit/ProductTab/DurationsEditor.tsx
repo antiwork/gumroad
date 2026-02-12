@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { Clock, Plus, Trash } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -52,7 +53,7 @@ export const DurationsEditor = ({
         ]);
       }}
     >
-      <Icon name="plus" />
+      <Plus />
       Add duration
     </Button>
   );
@@ -126,7 +127,7 @@ const DurationEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Icon name="outline-clock" />
+        <Clock />
         <h3>{duration.name}</h3>
       </RowContent>
       <RowActions>
@@ -137,7 +138,7 @@ const DurationEditor = ({
         </WithTooltip>
         <WithTooltip tip="Remove">
           <Button onClick={onDelete} aria-label="Remove">
-            <Icon name="trash2" />
+            <Trash />
           </Button>
         </WithTooltip>
       </RowActions>

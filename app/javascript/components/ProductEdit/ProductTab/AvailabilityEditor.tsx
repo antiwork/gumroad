@@ -4,9 +4,9 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
-import { Icon } from "$app/components/Icons";
 import { Availability } from "$app/components/ProductEdit/state";
 import { Placeholder } from "$app/components/ui/Placeholder";
+import { Plus, Trash } from "@boxicons/react";
 
 const DEFAULT_INTERVAL_START_HOURS = 9;
 const DEFAULT_INTERVAL_LENGTH = 8;
@@ -149,11 +149,11 @@ export const AvailabilityEditor = ({
                     onClick={() => onChange(serializedAvailabilities.filter(({ id }) => availability.id !== id))}
                     aria-label="Delete hours"
                   >
-                    <Icon name="trash2" />
+                    <Trash />
                   </Button>
                   {idx === 0 ? (
                     <Button onClick={() => addAvailability(lastGroupEndTime ?? new Date())} aria-label="Add hours">
-                      <Icon name="plus" />
+                      <Plus />
                     </Button>
                   ) : (
                     <span />
@@ -193,7 +193,7 @@ export const AvailabilityEditor = ({
 
 const AddButton = ({ onClick }: { onClick: () => void }) => (
   <Button color="primary" onClick={onClick}>
-    <Icon name="plus" />
+    <Plus />
     Add day of availability
   </Button>
 );

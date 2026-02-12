@@ -1,8 +1,7 @@
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-
-import { Icon } from "$app/components/Icons";
+import { Check } from "@boxicons/react";
 
 export const ProgressPie = ({
   progress,
@@ -27,7 +26,7 @@ export const ProgressPie = ({
     >
       {progress === 1 ? (
         <div className="rounded-full bg-accent p-1 text-2xl/none text-accent-foreground">
-          <Icon name="outline-check" />
+          <Check />
         </div>
       ) : (
         <svg viewBox="0 0 1 1" className="w-8">

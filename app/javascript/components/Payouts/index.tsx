@@ -8,6 +8,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { ArrowDown, Calendar, ChevronDown, Gear } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -352,7 +353,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
               onClick={handleRequestPayoutCSV}
               aria-label="Export"
             >
-              <Icon name="download" />
+              <ArrowDown />
             </Button>
           </WithTooltip>
         ) : null}
@@ -706,7 +707,7 @@ const Payouts = ({
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Icon name="gear-fill" />
+      <Gear pack="filled" />
       Settings
     </NavigationButton>
   ) : null;
@@ -795,7 +796,7 @@ const Payouts = ({
               <fieldset>
                 <label htmlFor="instant-payout-date">Pay out balance up to</label>
                 <div className="input cursor-pointer">
-                  <Icon name="calendar-all" />
+                  <Calendar />
                   <select
                     id="instant-payout-date"
                     value={instantPayoutId}
@@ -811,7 +812,7 @@ const Payouts = ({
                       </option>
                     ))}
                   </select>
-                  <Icon name="outline-cheveron-down" />
+                  <ChevronDown />
                 </div>
               </fieldset>
               <fieldset>

@@ -1,7 +1,7 @@
 import * as React from "react";
 
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { ChevronDown } from "@boxicons/react";
 
 type User = { name: string | null; email: string | null; avatarUrl: string };
 
@@ -16,7 +16,7 @@ export const DashboardNavProfilePopover = ({ children, user }: { children: React
         />
         {user?.name || user?.email}
       </div>
-      <Icon name="outline-cheveron-down" className="group-data-[state=open]:rotate-180" />
+      <ChevronDown className="group-data-[state=open]:rotate-180" />
     </PopoverTrigger>
     <PopoverContent
       side="top"

@@ -1,3 +1,4 @@
+import { ChevronDown, Dropbox as DropboxIcon, FolderOpen } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
@@ -15,7 +16,7 @@ import { assertResponseError } from "$app/utils/request";
 import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
@@ -150,7 +151,7 @@ const FileEmbedGroupNodeView = ({
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
             <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
-            <Icon name="solid-folder-open" className="type-icon" />
+            <FolderOpen pack="filled" className="type-icon" />
             {editing ? (
               <input
                 type="text"
@@ -180,7 +181,7 @@ const FileEmbedGroupNodeView = ({
                     <PopoverTrigger asChild>
                       <Button>
                         Download all
-                        <Icon name="outline-cheveron-down" />
+                        <ChevronDown />
                       </Button>
                     </PopoverTrigger>
                   </PopoverAnchor>
@@ -204,7 +205,7 @@ const FileEmbedGroupNodeView = ({
                         <Button onClick={() => void download()}>Download as ZIP</Button>
                       )}
                       <Button disabled={downloading} onClick={() => void saveToDropbox()}>
-                        <Icon name="dropbox" />
+                        <DropboxIcon pack="brands" />
                         Save to Dropbox
                       </Button>
                     </div>

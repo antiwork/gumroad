@@ -18,7 +18,6 @@ import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import Errors from "$app/components/Form/Errors";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -26,6 +25,7 @@ import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { ChevronDown, Sparkle, XSquare } from "@boxicons/react";
 
 const nativeTypeIcons = require.context("$assets/images/native_types/");
 
@@ -252,7 +252,7 @@ const NewProductPage = () => {
           <>
             <Button asChild>
               <Link href={Routes.products_path()}>
-                <Icon name="x-square" />
+                <XSquare />
                 <span>Cancel</span>
               </Link>
             </Button>
@@ -261,7 +261,7 @@ const NewProductPage = () => {
                 <PopoverAnchor>
                   <PopoverTrigger aria-label="Create a product with AI" asChild>
                     <Button color="primary" outline>
-                      <Icon name="sparkle" />
+                      <Sparkle />
                     </Button>
                   </PopoverTrigger>
                 </PopoverAnchor>
@@ -406,7 +406,7 @@ const NewProductPage = () => {
                         })}
                         className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                       />
-                      <Icon name="outline-cheveron-down" className="ml-auto" />
+                      <ChevronDown className="ml-auto" />
                     </label>
                   </Pill>
 
@@ -445,7 +445,7 @@ const NewProductPage = () => {
                           }))}
                           className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                         />
-                        <Icon name="outline-cheveron-down" className="ml-auto" />
+                        <ChevronDown className="ml-auto" />
                       </label>
                     </Pill>
                   ) : null}

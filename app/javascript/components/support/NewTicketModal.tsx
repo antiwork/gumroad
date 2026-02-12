@@ -6,11 +6,11 @@ import FileUtils from "$app/utils/file";
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ALLOWED_ATTACHMENT_MIMETYPES } from "$app/components/support/ConversationDetail";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+import { Paperclip, Trash } from "@boxicons/react";
 
 export function NewTicketModal({
   open,
@@ -40,7 +40,7 @@ export function NewTicketModal({
       footer={
         <>
           <Button onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-            <Icon name="paperclip" /> Attach files
+            <Paperclip /> Attach files
           </Button>
           <Button
             color="accent"
@@ -118,7 +118,7 @@ export function NewTicketModal({
                     aria-label="Remove"
                     onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
                   >
-                    <Icon name="trash2" />
+                    <Trash />
                   </Button>
                 </RowActions>
               </Row>

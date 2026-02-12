@@ -5,11 +5,11 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { BookmarkPlus, BookmarkStar } from "@boxicons/react";
 
 export const useFollowWishlist = ({
   wishlistId,
@@ -74,13 +74,13 @@ export const FollowButton = ({
   return isFollowing ? (
     <WithTooltip tip="Unfollow">
       <Button onClick={() => void toggleFollowing()} color="primary" disabled={isLoading}>
-        <Icon name="bookmark-check-fill" />
+        <BookmarkStar pack="filled" />
         Following
       </Button>
     </WithTooltip>
   ) : (
     <Button onClick={() => void toggleFollowing()} disabled={isLoading}>
-      <Icon name="bookmark-plus" />
+      <BookmarkPlus />
       Follow wishlist
     </Button>
   );

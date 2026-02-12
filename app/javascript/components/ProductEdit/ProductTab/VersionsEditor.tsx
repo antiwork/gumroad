@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { Layers, Plus, Trash } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -52,7 +53,7 @@ export const VersionsEditor = ({
         ]);
       }}
     >
-      <Icon name="plus" />
+      <Plus />
       Add version
     </Button>
   );
@@ -132,7 +133,7 @@ const VersionEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Icon name="stack-fill" />
+        <Layers pack="filled" />
         <h3>{version.name || "Untitled"}</h3>
       </RowContent>
       <RowActions>
@@ -143,7 +144,7 @@ const VersionEditor = ({
         </WithTooltip>
         <WithTooltip tip="Remove">
           <Button onClick={onDelete} aria-label="Remove version">
-            <Icon name="trash2" />
+            <Trash />
           </Button>
         </WithTooltip>
       </RowActions>

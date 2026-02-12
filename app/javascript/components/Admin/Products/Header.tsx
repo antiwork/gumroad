@@ -5,9 +5,8 @@ import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelat
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
 import { buttonVariants } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
-
 import coverPlaceholder from "$assets/images/cover_placeholder.png";
+import { ArrowUpRightSquare } from "@boxicons/react";
 
 type Props = {
   product: Product;
@@ -35,7 +34,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
             <Link href={Routes.admin_product_path(product.external_id)}>{product.name}</Link>
           )}
           <a href={product.long_url} target="_blank" rel="noreferrer noopener">
-            <Icon name="arrow-up-right-square" />
+            <ArrowUpRightSquare />
           </a>
         </h2>
 

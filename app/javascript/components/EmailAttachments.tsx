@@ -7,7 +7,6 @@ import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 import { Button } from "$app/components/Button";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer } from "$app/components/SortableList";
@@ -18,6 +17,7 @@ import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/u
 import { Switch } from "$app/components/ui/Switch";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Paperclip, Pencil, Trash } from "@boxicons/react";
 
 export type FileItem = {
   id: string;
@@ -122,7 +122,7 @@ export const FileRow = ({ file }: { file: FileState }) => {
       <RowActions>
         {file.is_streamable ? (
           <Button onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label="Edit">
-            <Icon name="pencil" />
+            <Pencil />
           </Button>
         ) : null}
         <WithTooltip tip={uploadProgress === null ? "Remove" : "Cancel"} position="left">
@@ -135,7 +135,7 @@ export const FileRow = ({ file }: { file: FileState }) => {
               filesDispatch({ type: "remove-file", fileId: file.id });
             }}
           >
-            <Icon name="trash2" />
+            <Trash />
           </Button>
         </WithTooltip>
       </RowActions>
@@ -215,7 +215,7 @@ export const EmailAttachments = ({
       <Button color="primary" asChild>
         <label>
           <input type="file" name="file" tabIndex={-1} multiple onChange={(e) => onAttachFiles(e.target)} />
-          <Icon name="paperclip" />
+          <Paperclip />
           Attach files
         </label>
       </Button>

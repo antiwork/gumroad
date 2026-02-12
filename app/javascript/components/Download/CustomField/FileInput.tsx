@@ -7,12 +7,12 @@ import { request } from "$app/utils/request";
 
 import { buttonVariants } from "$app/components/Button";
 import { FileKindIcon } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/server-components/DownloadPage/WithContent";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
+import { ArrowUp } from "@boxicons/react";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -83,7 +83,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
   const fileUpload = (
     <label className={buttonVariants({ size: "default", color: "primary" })}>
       <input type="file" onChange={handleFileChange} disabled={isUploading} multiple />
-      <Icon name="upload-fill" />
+      <ArrowUp pack="filled" />
       Upload files
     </label>
   );

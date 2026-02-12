@@ -11,7 +11,6 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { Card } from "$app/components/Product/Card";
 import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
@@ -22,6 +21,7 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { FollowButton } from "$app/components/Wishlist/FollowButton";
 import { WishlistEditor } from "$app/components/Wishlist/WishlistEditor";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Cart, Gift, Link, Pencil, Trash } from "@boxicons/react";
 
 export type WishlistItem = {
   id: string;
@@ -127,7 +127,7 @@ const WishlistItemCard = ({
                   onClick={() => void destroy()}
                   className="grid cursor-pointer p-4 all-unset"
                 >
-                  <Icon name="trash2" />
+                  <Trash />
                 </button>
               </WithTooltip>
             </div>
@@ -140,7 +140,7 @@ const WishlistItemCard = ({
                   href={Routes.checkout_index_url({ params: { gift_wishlist_product: item.id } })}
                   className="grid p-4"
                 >
-                  <Icon name="gift-fill" />
+                  <Gift pack="filled" />
                 </a>
               </WithTooltip>
             </div>
@@ -163,7 +163,7 @@ const WishlistItemCard = ({
                   })
                 }
               >
-                <Icon name="cart3-fill" />
+                <Cart pack="filled" />
               </NavigationButton>
             </WithTooltip>
           </div>
@@ -228,12 +228,12 @@ export const Wishlist = ({
     <>
       <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
         <Button aria-label="Copy link">
-          <Icon name="link" />
+          <Link />
         </Button>
       </CopyToClipboard>
       {can_edit ? (
         <Button onClick={() => setIsEditing(true)}>
-          <Icon name="pencil" />
+          <Pencil />
           Edit
         </Button>
       ) : null}
@@ -244,7 +244,7 @@ export const Wishlist = ({
           href={Routes.checkout_index_url({ params: { wishlist: id } })}
           disabled={!checkout_enabled}
         >
-          <Icon name="cart3-fill" />
+          <Cart pack="filled" />
           Buy this wishlist
         </NavigationButton>
       </WithTooltip>
@@ -295,7 +295,7 @@ export const Wishlist = ({
           {items.length === 0 ? (
             <Placeholder>
               <figure>
-                <Icon name="gift-fill" />
+                <Gift pack="filled" />
               </figure>
               {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
             </Placeholder>

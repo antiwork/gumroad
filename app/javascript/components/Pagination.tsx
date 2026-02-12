@@ -5,8 +5,7 @@ import { isOpenTuple, last } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
-
+import { ChevronLeft, ChevronRight } from "@boxicons/react";
 export type PaginationProps = { pages: number; page: number };
 
 type Props = {
@@ -53,7 +52,7 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
   return (
     <div role="navigation" aria-label="Pagination" className="flex w-full justify-center gap-2">
       <Button small disabled={pagination.page - 1 === 0} onClick={() => onChangePage(pagination.page - 1)}>
-        <Icon name="outline-cheveron-left" />
+        <ChevronLeft />
         Previous
       </Button>
       <menu className="hidden! flex-1 justify-center gap-2 lg:flex!">
@@ -79,7 +78,7 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
       </menu>
       <Button small disabled={pagination.page + 1 > pagination.pages} onClick={() => onChangePage(pagination.page + 1)}>
         Next
-        <Icon name="outline-cheveron-right" />
+        <ChevronRight />
       </Button>
     </div>
   );

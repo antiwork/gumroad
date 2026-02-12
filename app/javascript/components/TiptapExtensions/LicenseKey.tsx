@@ -7,6 +7,7 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { Key } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
@@ -50,7 +51,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
       <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
         <RowContent className="content" contentEditable={false}>
-          <Icon name="solid-key" className="type-icon" />
+          <Key pack="filled" className="type-icon" />
           <div>
             <h4 className="text-singleline">{licenseKey}</h4>
             <ul className="inline">

@@ -3,7 +3,6 @@ import React from "react";
 import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -13,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/wishlists.png";
+import { InfoCircle, Trash } from "@boxicons/react";
 
 export type Wishlist = {
   id: string;
@@ -75,7 +75,7 @@ export default function WishlistsPage() {
                     }
                     position="top"
                   >
-                    <Icon name="info-circle" />
+                    <InfoCircle />
                   </WithTooltip>
                 </TableHead>
                 <TableHead />
@@ -108,7 +108,7 @@ export default function WishlistsPage() {
                         aria-label="Delete wishlist"
                         onClick={() => setConfirmingDeleteWishlist(wishlist)}
                       >
-                        <Icon name="trash2" />
+                        <Trash />
                       </Button>
                     </div>
                   </TableCell>

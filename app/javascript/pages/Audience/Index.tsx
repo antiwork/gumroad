@@ -1,3 +1,4 @@
+import { ArrowDown } from "@boxicons/react";
 import { Deferred, router, usePage } from "@inertiajs/react";
 import { lightFormat } from "date-fns";
 import * as React from "react";
@@ -12,7 +13,6 @@ import { AudienceQuickStats } from "$app/components/Audience/AudienceQuickStats"
 import { Button } from "$app/components/Button";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -50,7 +50,7 @@ function Audience() {
                 <WithTooltip tip="Export" position="bottom">
                   <PopoverTrigger aria-label="Export" asChild>
                     <Button>
-                      <Icon aria-label="Download" name="download" />
+                      <ArrowDown aria-label="Download" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>

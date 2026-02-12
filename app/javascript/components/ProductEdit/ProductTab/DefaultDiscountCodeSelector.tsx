@@ -4,11 +4,11 @@ import { searchProductOfferCodes } from "$app/data/offer_code";
 import { assertResponseError } from "$app/utils/request";
 
 import { ComboBox } from "$app/components/ComboBox";
-import { Icon } from "$app/components/Icons";
 import { OfferCode, useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
+import { ChevronDown } from "@boxicons/react";
 
 export const DefaultDiscountCodeSelector = () => {
   const { uniquePermalink, product, updateProduct } = useProductEditContext();
@@ -108,7 +108,7 @@ export const DefaultDiscountCodeSelector = () => {
                       setIsOpen(true);
                     }}
                   />
-                  <Icon name="outline-cheveron-down" />
+                  <ChevronDown />
                 </div>
               )}
               option={(code, props) => (

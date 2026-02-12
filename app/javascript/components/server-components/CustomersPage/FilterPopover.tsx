@@ -4,8 +4,8 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Filter } from "@boxicons/react";
 
 type Props = { contentHTML: string };
 
@@ -13,7 +13,7 @@ export const FilterPopover = ({ contentHTML }: Props) => (
   <Popover>
     <PopoverTrigger aria-label="Filter" className="js-toggle-filter-list" asChild>
       <Button>
-        <Icon name="filter" />
+        <Filter />
       </Button>
     </PopoverTrigger>
     <PopoverContent sideOffset={4}>

@@ -6,9 +6,9 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { DateRangePicker } from "$app/components/DateRangePicker";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { ArrowDown } from "@boxicons/react";
 
 type Props = { authenticityToken: string };
 export const DownloadPopover = ({ authenticityToken }: Props) => {
@@ -19,7 +19,7 @@ export const DownloadPopover = ({ authenticityToken }: Props) => {
       <WithTooltip tip="Export" position="bottom">
         <PopoverTrigger aria-label="Export" className="js-toggle-download-box" asChild>
           <Button>
-            <Icon name="download" />
+            <ArrowDown />
           </Button>
         </PopoverTrigger>
       </WithTooltip>

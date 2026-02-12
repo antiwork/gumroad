@@ -1,3 +1,4 @@
+import { Store, User as UserIcon } from "@boxicons/react";
 import cx from "classnames";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
@@ -6,8 +7,6 @@ import { cast } from "ts-safe-cast";
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
-
 type StateConfig = {
   states: { code: string; name: string }[];
   label: string;
@@ -400,7 +399,7 @@ const AccountDetailsSection = ({
               onClick={() => updateComplianceInfo({ is_business: false })}
               disabled={isFormDisabled}
             >
-              <Icon name="person" />
+              <UserIcon />
               <div>
                 <h4>Individual</h4>
                 When you are selling as yourself
@@ -418,7 +417,7 @@ const AccountDetailsSection = ({
               }
               disabled={isFormDisabled}
             >
-              <Icon name="shop-window" />
+              <Store />
               <div>
                 <h4>Business</h4>
                 When you are selling as a business

@@ -27,7 +27,6 @@ import {
 } from "$app/components/CartItemList";
 import { GiftForm } from "$app/components/Checkout/GiftForm";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Card } from "$app/components/Product/Card";
@@ -69,6 +68,7 @@ import {
 } from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
+import { X } from "@boxicons/react";
 
 function formatPrice(price: number) {
   return formatUSDCentsWithExpandedCurrencySymbol(Math.floor(price));
@@ -314,7 +314,7 @@ export const Checkout = ({
                                 aria-label="Purchasing power parity discount"
                               >
                                 Purchasing power parity discount
-                                <Icon name="x" className="ml-2" />
+                                <X className="ml-2" />
                               </button>
                             </Pill>
                           </WithTooltip>
@@ -330,7 +330,7 @@ export const Checkout = ({
                             aria-label="Discount code"
                           >
                             {code.code}
-                            <Icon name="x" className="ml-2" />
+                            <X className="ml-2" />
                           </Pill>
                         ))}
                       </h4>

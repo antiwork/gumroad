@@ -14,7 +14,6 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
-import { Icon } from "$app/components/Icons";
 import { Seller } from "$app/components/Product";
 import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
@@ -24,6 +23,7 @@ import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEdi
 import { ProfileSection, PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Switch } from "$app/components/ui/Switch";
+import { Link } from "@boxicons/react";
 
 type SharePageProps = {
   bundle: {
@@ -149,7 +149,7 @@ export default function BundlesShareEdit() {
             <FacebookShareButton url={url} text={bundle.name} />
             <CopyToClipboard text={url} tooltipPosition="top">
               <Button color="primary">
-                <Icon name="link" />
+                <Link />
                 Copy URL
               </Button>
             </CopyToClipboard>

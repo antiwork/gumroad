@@ -1,3 +1,25 @@
+import {
+  ArrowUp,
+  Button as ButtonIcon,
+  CartPlus,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Dropbox as DropboxIcon,
+  File,
+  FileDetail,
+  FolderPlus,
+  Grid,
+  Key,
+  Link as LinkIcon,
+  Minus,
+  Paperclip,
+  PlayCircle,
+  Plus,
+  Rename,
+  Star,
+  Twitter,
+} from "@boxicons/react";
 import { findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorContent } from "@tiptap/react";
@@ -499,12 +521,12 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 <PopoverMenuItem name="Upload files" icon="upload-fill">
                   <div role="menu" aria-label="Image and file uploader">
                     <div role="menuitem" onClick={() => setShowEmbedModal(true)}>
-                      <Icon name="media" />
+                      <PlayCircle />
                       <span>Embed media</span>
                     </div>
                     <label role="menuitem">
                       <input type="file" name="file" multiple onChange={(e) => uploadFileInput(e.target)} />
-                      <Icon name="paperclip" />
+                      <Paperclip />
                       <span>Computer files</span>
                     </label>
                     {existingFiles.length > 0 ? (
@@ -515,12 +537,12 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           void fetchLatestExistingFiles();
                         }}
                       >
-                        <Icon name="files-earmark" />
+                        <File />
                         <span>Existing product files</span>
                       </div>
                     ) : null}
                     <div role="menuitem" onClick={uploadFromDropbox}>
-                      <Icon name="dropbox" />
+                      <DropboxIcon pack="brands" />
                       <span>Dropbox files</span>
                     </div>
                   </div>
@@ -602,7 +624,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <Tabs variant="buttons">
                     <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
                       <button type="button">
-                        <Icon name="link" />
+                        <LinkIcon />
                         <h4>Embed link</h4>
                       </button>
                     </Tab>
@@ -624,7 +646,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             setShowEmbedModal(false);
                           }}
                         />
-                        <Icon name="upload-fill" />
+                        <ArrowUp pack="filled" />
                         <h4>Upload</h4>
                       </label>
                     </Tab>
@@ -646,7 +668,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   onOpenChange={(open) => setInsertMenuState(open ? "open" : null)}
                 >
                   <PopoverTrigger className="toolbar-item all-unset">
-                    Insert <Icon name="outline-cheveron-down" />
+                    Insert <ChevronDown />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                     <div role="menu" onClick={() => setInsertMenuState(null)}>
@@ -659,30 +681,30 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               setInsertMenuState("open");
                             }}
                           >
-                            <Icon name="outline-cheveron-left" />
+                            <ChevronLeft />
                             <span>Back</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
-                            <Icon name="card-text" />
+                            <FileDetail />
                             <span>Short answer</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
-                            <Icon name="file-text" />
+                            <FileDetail />
                             <span>Long answer</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
-                            <Icon name="folder-plus" />
+                            <FolderPlus />
                             <span>Upload file</span>
                           </div>
                         </>
                       ) : (
                         <>
                           <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
-                            <Icon name="button" />
+                            <ButtonIcon />
                             <span>Button</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                            <Icon name="horizontal-rule" />
+                            <Minus />
                             <span>Divider</span>
                           </div>
                           <div
@@ -693,24 +715,24 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             }}
                             className="flex items-center"
                           >
-                            <Icon name="input-cursor-text" />
+                            <Rename />
                             <span>Input</span>
-                            <Icon name="outline-cheveron-right" className="ml-auto" />
+                            <ChevronRight className="ml-auto" />
                           </div>
                           <div role="menuitem" onClick={onInsertMoreLikeThis}>
-                            <Icon name="grid" />
+                            <Grid />
                             <span>More like this</span>
                           </div>
                           <div role="menuitem" onClick={onInsertPosts}>
-                            <Icon name="file-earmark-medical" />
+                            <FileDetail />
                             <span>List of posts</span>
                           </div>
                           <div role="menuitem" onClick={onInsertLicense}>
-                            <Icon name="outline-key" />
+                            <Key />
                             <span>License key</span>
                           </div>
                           <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
-                            <Icon name="twitter" />
+                            <Twitter pack="brands" />
                             <span>Twitter post</span>
                           </div>
                           <div
@@ -720,7 +742,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               setShowUpsellModal(true);
                             }}
                           >
-                            <Icon name="cart-plus" />
+                            <CartPlus />
                             <span>Upsell</span>
                           </div>
                           <div
@@ -730,7 +752,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               setShowReviewModal(true);
                             }}
                           >
-                            <Icon name="solid-star" />
+                            <Star pack="filled" />
                             <span>Review</span>
                           </div>
                         </>
@@ -740,7 +762,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 </Popover>
                 <Separator aria-orientation="vertical" />
                 <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
-                  <Icon name="plus" /> Page
+                  <Plus /> Page
                 </button>
               </>
             }
@@ -831,7 +853,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                 handleCreatePageClick();
                               }}
                             >
-                              <Icon name="plus" />
+                              <Plus />
                               <span className="flex-1">Add another page</span>
                             </button>
                           </PageListItem>
@@ -1075,7 +1097,7 @@ export const ContentTab = () => {
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}
                           </span>
-                          <Icon name="outline-cheveron-down" />
+                          <ChevronDown />
                         </div>
                       )}
                       options={product.variants}

@@ -1,9 +1,9 @@
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
+import { Plus, Trash } from "@boxicons/react";
 
 let newVersionId = 0;
 
@@ -42,7 +42,7 @@ export const SuggestedAmountsEditor = ({
       }}
       disabled={versions.length === 3}
     >
-      <Icon name="plus" />
+      <Plus />
       Add amount
     </Button>
   );
@@ -93,7 +93,7 @@ const SuggestedAmountEditor = ({
         onBlur={onBlur}
       />
       <Button aria-label="Delete" onClick={onDelete ?? undefined} disabled={!onDelete}>
-        <Icon name="trash2" />
+        <Trash />
       </Button>
     </section>
   );

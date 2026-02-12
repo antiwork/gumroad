@@ -8,7 +8,6 @@ import { ComboBox } from "$app/components/ComboBox";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Product, WishlistForProduct } from "$app/components/Product";
@@ -16,6 +15,7 @@ import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
+import { Check, ChevronDown, FileDetail, Link, Plus, Share } from "@boxicons/react";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
 
@@ -107,7 +107,7 @@ export const ShareSection = ({
                     ? "Adding to wishlist..."
                     : "Add to wishlist"}
               </span>
-              <Icon name="outline-cheveron-down" />
+              <ChevronDown />
             </div>
           )}
           disabled={saveState.type === "saving"}
@@ -123,7 +123,7 @@ export const ShareSection = ({
                 }}
               >
                 <div>
-                  <Icon name="file-text" /> {wishlist.name}
+                  <FileDetail /> {wishlist.name}
                 </div>
               </div>
             ) : dropdownState.state === "creating" ? (
@@ -149,13 +149,13 @@ export const ShareSection = ({
                   aria-label="Wishlist name"
                 />
                 <Button type="submit" aria-label="Create wishlist" color="primary">
-                  <Icon name="outline-check" />
+                  <Check />
                 </Button>
               </form>
             ) : (
               <div {...props} onClick={() => setDropdownState({ state: "creating", newWishlistName: "" })}>
                 <div>
-                  <Icon name="plus" /> New wishlist
+                  <Plus /> New wishlist
                 </div>
               </div>
             )
@@ -178,7 +178,7 @@ export const ShareSection = ({
           <PopoverAnchor>
             <PopoverTrigger aria-label="Share" asChild>
               <Button>
-                <Icon name="share" />
+                <Share />
               </Button>
             </PopoverTrigger>
           </PopoverAnchor>
@@ -188,7 +188,7 @@ export const ShareSection = ({
               <FacebookShareButton url={product.long_url} text={product.name} />
               <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
                 <Button aria-label="Copy product URL">
-                  <Icon name="link" /> Copy link
+                  <Link /> Copy link
                 </Button>
               </CopyToClipboard>
             </div>

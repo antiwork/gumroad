@@ -1,8 +1,8 @@
 import cx from "classnames";
 import * as React from "react";
 
-import { Icon } from "$app/components/Icons";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { ArrowUpRight } from "@boxicons/react";
 
 export const WithPreviewSidebar = ({ children, className, ...props }: React.ComponentProps<"div">) => (
   <div className={cx("squished lg:grid lg:grid-cols-[1fr_30vw]", className)} {...props}>
@@ -33,7 +33,7 @@ export const PreviewSidebar = ({
         <h2 id={`${uid}-title`}>Preview</h2>
         {previewLink ? (
           <WithTooltip tip="Preview">
-            {previewLink({ "aria-label": "Preview", children: <Icon name="arrow-diagonal-up-right" /> })}
+            {previewLink({ "aria-label": "Preview", children: <ArrowUpRight /> })}
           </WithTooltip>
         ) : null}
       </div>

@@ -35,7 +35,6 @@ import {
   CartItemTitle,
   CartItemList,
 } from "$app/components/CartItemList";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
@@ -75,6 +74,7 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
+import { Star } from "@boxicons/react";
 
 export type Seller = { id: string; name: string; avatar_url: string; profile_url: string };
 
@@ -425,7 +425,7 @@ export const Product = ({
                       </CartItemTitle>
                       {bundleProduct.ratings ? (
                         <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
-                          <Icon name="solid-star" />
+                          <Star pack="filled" />
                           {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
                         </div>
                       ) : null}
@@ -778,7 +778,7 @@ const Reviews = ({
       <header className="flex items-center justify-between">
         <h3>Ratings</h3>
         <div className="flex shrink-0 items-center gap-1">
-          <Icon name="solid-star" />
+          <Star pack="filled" />
           <div className="rating-average">{ratings.average}</div>(
           {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "rating" : "ratings"}`})
         </div>

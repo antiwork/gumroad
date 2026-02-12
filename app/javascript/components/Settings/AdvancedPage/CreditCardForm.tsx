@@ -6,9 +6,9 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { CreditCard } from "@boxicons/react";
 
 type Props = {
   card: SavedCreditCard;
@@ -45,7 +45,7 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
       </header>
       <div className="flex flex-col gap-4">
         <div className="input read-only" aria-label="Saved credit card">
-          <Icon name="outline-credit-card" />
+          <CreditCard />
           <span>{card.number}</span>
           <span style={{ marginLeft: "auto" }}>{card.expiration_date}</span>
         </div>

@@ -3,9 +3,9 @@ import * as React from "react";
 import { updateWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { CheckCircle } from "@boxicons/react";
 
 export const WishlistEditor = ({
   id,
@@ -48,7 +48,7 @@ export const WishlistEditor = ({
       <SheetHeader>{newName || "Untitled"}</SheetHeader>
       {isDiscoverable ? (
         <small className="mt-1 text-muted">
-          <Icon name="solid-check-circle" /> Discoverable
+          <CheckCircle pack="filled" /> Discoverable
         </small>
       ) : null}
 

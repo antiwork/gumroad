@@ -4,8 +4,8 @@ import * as React from "react";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 
-import { Icon } from "$app/components/Icons";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { InfoCircle } from "@boxicons/react";
 
 const statsVariants = cva(
   "text-4xl leading-tight p-8 border border-border rounded grid content-between gap-2 bg-background",
@@ -64,7 +64,7 @@ export const Stats = ({
         {title}
         {description ? (
           <WithTooltip tip={description} position="top">
-            <Icon name="info-circle" />
+            <InfoCircle />
           </WithTooltip>
         ) : null}
       </h2>

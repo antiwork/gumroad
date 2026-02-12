@@ -13,7 +13,6 @@ import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -33,6 +32,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 import placeholder from "$assets/images/placeholders/library.png";
+import { Archive, DotsHorizontalRounded, Search, Trash } from "@boxicons/react";
 
 export type Result = {
   product: {
@@ -110,16 +110,16 @@ export const Card = ({
         <div className="p-4">
           <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
             <PopoverTrigger aria-label="Open product action menu">
-              <Icon name="three-dots" />
+              <DotsHorizontalRounded />
             </PopoverTrigger>
             <PopoverContent className="border-0 p-0 shadow-none" usePortal>
               <div role="menu">
                 <div role="menuitem" onClick={toggleArchived}>
-                  <Icon name="archive" />
+                  <Archive />
                   &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
                 </div>
                 <div className="danger" role="menuitem" onClick={() => onDelete()}>
-                  <Icon name="trash2" />
+                  <Trash />
                   &ensp;Delete permanently
                 </div>
               </div>
@@ -437,7 +437,7 @@ export default function LibraryPage() {
                 <>
                   <CardContent>
                     <div className="input input-wrapper product-search__wrapper grow">
-                      <Icon name="solid-search" />
+                      <Search pack="filled" />
                       <input
                         className="search-products"
                         placeholder="Search products"

@@ -1,3 +1,4 @@
+import { ArrowDown, Link } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -6,7 +7,6 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Search } from "$app/components/Search";
@@ -136,7 +136,7 @@ export default function FollowersPage() {
               <WithTooltip tip="Export" position="bottom">
                 <PopoverTrigger aria-label="Export" asChild>
                   <Button>
-                    <Icon aria-label="Download" name="download" />
+                    <ArrowDown aria-label="Download" />
                   </Button>
                 </PopoverTrigger>
               </WithTooltip>
@@ -152,7 +152,7 @@ export default function FollowersPage() {
               text={Routes.custom_domain_subscribe_url({ host: currentSeller.subdomain })}
             >
               <Button>
-                <Icon name="link" />
+                <Link />
                 Share subscribe page
               </Button>
             </CopyToClipboard>

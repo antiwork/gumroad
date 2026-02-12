@@ -5,10 +5,10 @@ import { asyncVoid } from "$app/utils/promise";
 import { request, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
+import { CheckCircle } from "@boxicons/react";
 
 export type StripeConnect = {
   has_connected_stripe: boolean;
@@ -71,7 +71,7 @@ const StripeConnectSection = ({
               </legend>
               <div className="input input-wrapper">
                 <div className="fake-input">{stripeConnect.stripe_connect_account_id}</div>
-                <Icon name="solid-check-circle" className="text-success" />
+                <CheckCircle pack="filled" className="text-success" />
               </div>
             </fieldset>
             <p>

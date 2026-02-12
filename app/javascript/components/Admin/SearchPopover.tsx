@@ -2,13 +2,13 @@ import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Pill } from "$app/components/ui/Pill";
 import { Select } from "$app/components/ui/Select";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+import { Calendar, CreditCard, DollarCircle, Lock, Search, User } from "@boxicons/react";
 
 type CardType = {
   id: string;
@@ -93,7 +93,7 @@ const SearchPopover = () => {
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
           <Button>
-            <Icon name="solid-search" />
+            <Search pack="filled" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
@@ -101,7 +101,7 @@ const SearchPopover = () => {
         <div className="grid w-96 max-w-full gap-3">
           <form onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")} className="flex gap-2">
             <InputGroup>
-              <Icon name="person" />
+              <User />
               <Input
                 autoFocus
                 name="query"
@@ -112,7 +112,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <Button color="primary" type="submit">
-              <Icon name="solid-search" />
+              <Search pack="filled" />
             </Button>
           </form>
 
@@ -121,7 +121,7 @@ const SearchPopover = () => {
             className="flex gap-2"
           >
             <InputGroup>
-              <Icon name="solid-currency-dollar" />
+              <DollarCircle pack="filled" />
               <Input
                 name="query"
                 placeholder="Search purchases (email, IP, card, external ID)"
@@ -131,7 +131,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <Button color="primary" type="submit">
-              <Icon name="solid-search" />
+              <Search pack="filled" />
             </Button>
           </form>
 
@@ -140,7 +140,7 @@ const SearchPopover = () => {
             className="flex gap-2"
           >
             <InputGroup>
-              <Icon name="people-fill" />
+              <User pack="filled" />
               <Input
                 name="query"
                 placeholder="Search affiliates (email, name, ID)"
@@ -150,7 +150,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <Button color="primary" type="submit">
-              <Icon name="solid-search" />
+              <Search pack="filled" />
             </Button>
           </form>
 
@@ -169,7 +169,7 @@ const SearchPopover = () => {
               ))}
             </Select>
             <InputGroup>
-              <Icon name="calendar-all" />
+              <Calendar />
               <Input
                 name="transaction_date"
                 placeholder="Date (02/22/2022)"
@@ -179,7 +179,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <InputGroup>
-              <Icon name="lock-fill" />
+              <Lock pack="filled" />
               <Input
                 name="last_4"
                 placeholder="Last 4 (7890)"
@@ -191,7 +191,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <InputGroup>
-              <Icon name="outline-credit-card" />
+              <CreditCard />
               <Input
                 name="expiry_date"
                 placeholder="Expiry (02/22)"

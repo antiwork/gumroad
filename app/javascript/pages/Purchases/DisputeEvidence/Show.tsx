@@ -14,13 +14,13 @@ import {
 import FileUtils from "$app/utils/file";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import { FileDetail, Paperclip, Trash } from "@boxicons/react";
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
 
@@ -333,7 +333,7 @@ export default function Show() {
                   </>
                 ) : (
                   <>
-                    <Icon name="paperclip" /> Upload customer communication
+                    <Paperclip /> Upload customer communication
                   </>
                 )}
               </Button>
@@ -393,7 +393,7 @@ const Files = ({
       {eligibleBlobs.map((blob) => (
         <Row role="listitem" key={blob.key}>
           <RowContent>
-            <Icon name="solid-document-text" className="type-icon" />
+            <FileDetail pack="filled" className="type-icon" />
             <div>
               <h4>{blob.title}</h4>
               <ul className="inline">
@@ -414,7 +414,7 @@ const Files = ({
                 disabled={isRemovingFile || isSubmitting}
                 onClick={handleFileRemove}
               >
-                <Icon name="trash2" />
+                <Trash />
               </Button>
             ) : null}
           </RowActions>

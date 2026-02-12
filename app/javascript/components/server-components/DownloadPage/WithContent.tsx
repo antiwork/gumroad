@@ -35,6 +35,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { Layout, LayoutProps } from "./Layout";
+import { ArrowLeft, ArrowRight, ListUl } from "@boxicons/react";
 
 const LATEST_MEDIA_LOCATIONS_FETCH_INTERVAL_IN_MS = 10_000;
 const MISSING_AUDIO_DURATIONS_FETCH_INTERVAL_IN_MS = 5_000;
@@ -358,7 +359,7 @@ const WithContent = ({
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Table of Contents" asChild>
                   <Button>
-                    <Icon name="unordered-list" />
+                    <ListUl />
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
@@ -392,7 +393,7 @@ const WithContent = ({
               onClick={() => handlePageChange(activePageIndex - 1)}
               className="flex-1 lg:flex-none"
             >
-              <Icon name="arrow-left" />
+              <ArrowLeft />
               Previous
             </Button>
           </WithTooltip>
@@ -403,7 +404,7 @@ const WithContent = ({
               className="flex-1 lg:flex-none"
             >
               Next
-              <Icon name="arrow-right" />
+              <ArrowRight />
             </Button>
           </WithTooltip>
         </div>

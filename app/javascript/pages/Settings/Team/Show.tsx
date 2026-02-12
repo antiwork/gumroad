@@ -22,7 +22,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Option, Select } from "$app/components/Select";
@@ -31,6 +30,7 @@ import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { Alert } from "$app/components/ui/Alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Shield } from "@boxicons/react";
 
 const ROLE_TITLES: Record<Role, string> = {
   owner: "Owner",
@@ -318,11 +318,8 @@ const TeamMembersSection = ({
                         tip="Invitation has expired. You can resend the invitation from the member's menu options."
                         position="top"
                       >
-                        <Icon
-                          name="solid-shield-exclamation"
-                          style={{ color: "rgb(var(--warning))" }}
-                          aria-label="Invitation has expired. You can resend the invitation from the member's menu options."
-                        />
+                        <Shield pack="filled" style={{ color: "rgb(var(--warning))" }}
+                          aria-label="Invitation has expired. You can resend the invitation from the member's menu options." />
                       </WithTooltip>
                     ) : null}
                   </div>

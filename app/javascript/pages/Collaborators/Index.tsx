@@ -8,7 +8,6 @@ import { formatCommission, formatProductNames } from "$app/utils/collaboratorFor
 import { Button } from "$app/components/Button";
 import CollaboratorDetailsSheet from "$app/components/Collaborators/CollaboratorDetailsSheet";
 import { Layout } from "$app/components/Collaborators/Layout";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -17,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
+import { Pencil, Shield, Trash } from "@boxicons/react";
 
 type CollaboratorsPageProps = {
   collaborators: Collaborator[];
@@ -99,11 +99,8 @@ const CollaboratorsPage = () => {
                         </div>
                         {collaborator.setup_incomplete ? (
                           <WithTooltip tip="Not receiving payouts" position="top">
-                            <Icon
-                              name="solid-shield-exclamation"
-                              style={{ color: "rgb(var(--warning))" }}
-                              aria-label="Not receiving payouts"
-                            />
+                            <Shield pack="filled" style={{ color: "rgb(var(--warning))" }}
+                              aria-label="Not receiving payouts" />
                           </WithTooltip>
                         ) : null}
                       </div>
@@ -122,7 +119,7 @@ const CollaboratorsPage = () => {
                           aria-label="Edit"
                           disabled={disableActions}
                         >
-                          <Icon name="pencil" />
+                          <Pencil />
                         </NavigationButtonInertia>
 
                         <Button
@@ -132,7 +129,7 @@ const CollaboratorsPage = () => {
                           aria-label="Delete"
                           disabled={disableActions}
                         >
-                          <Icon name="trash2" />
+                          <Trash />
                         </Button>
                       </div>
                     </TableCell>

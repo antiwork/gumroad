@@ -9,7 +9,6 @@ import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { PageListLayout } from "$app/components/Download/PageListLayout";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
@@ -19,6 +18,7 @@ import { PurchaseCustomField } from "$app/components/server-components/DownloadP
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { ArrowLeft } from "@boxicons/react";
 
 type ContentUnavailabilityReasonCode =
   | "inactive_membership"
@@ -243,7 +243,7 @@ export const Layout = ({
       {loggedInUser && !is_mobile_app_web_view ? (
         <div className="font-size-base grid-row-[-3] text-singleline border-b border-border px-8 py-4">
           <a style={{ textDecoration: "none" }} href={Routes.library_url()} title="Back to Library">
-            <Icon name="arrow-left" className="mr-1.5" />
+            <ArrowLeft className="mr-1.5" />
             {headerVisible ? "Back to Library" : null}
           </a>
           {!headerVisible ? <strong>{purchase?.product_name}</strong> : null}

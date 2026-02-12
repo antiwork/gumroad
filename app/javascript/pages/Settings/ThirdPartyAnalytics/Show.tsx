@@ -8,12 +8,12 @@ import { SettingPage } from "$app/parsers/settings";
 import { Button } from "$app/components/Button";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { ChevronDown, ChevronUp, CodeAlt, Plus, Trash } from "@boxicons/react";
 
 type Products = { permalink: string; name: string }[];
 
@@ -52,7 +52,7 @@ export default function ThirdPartyAnalyticsPage() {
         })
       }
     >
-      <Icon name="plus" />
+      <Plus />
       Add snippet
     </Button>
   );
@@ -256,7 +256,7 @@ const SnippetRow = ({
   return (
     <Row role="listitem">
       <RowContent>
-        <Icon name="code-square" className="type-icon" />
+        <CodeAlt className="type-icon" />
         <div>
           <h4>{snippet.name || "Untitled"}</h4>
           <ul className="inline">
@@ -267,7 +267,7 @@ const SnippetRow = ({
       </RowContent>
       <RowActions>
         <Button onClick={() => setExpanded((prevExpanded) => !prevExpanded)} aria-label="Edit snippet">
-          {expanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
+          {expanded ? <ChevronUp /> : <ChevronDown />}
         </Button>
         <Button
           onClick={() =>
@@ -277,7 +277,7 @@ const SnippetRow = ({
           }
           aria-label="Delete snippet"
         >
-          <Icon name="trash2" />
+          <Trash />
         </Button>
       </RowActions>
       {expanded ? (

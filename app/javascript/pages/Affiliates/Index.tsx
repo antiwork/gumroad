@@ -9,7 +9,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, buttonVariants } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
@@ -31,6 +30,7 @@ import { Sort, useClientSortingTableDriver, useSortingTableDriver } from "$app/c
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
+import { ArrowDown, Pencil, Search, Trash } from "@boxicons/react";
 
 type SortKey = "affiliate_user_name" | "products" | "fee_percent" | "volume_cents";
 
@@ -84,13 +84,13 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
           <Button>
-            <Icon name="solid-search" />
+            <Search pack="filled" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent>
         <div className="input input-wrapper">
-          <Icon name="solid-search" />
+          <Search pack="filled" />
           <input
             ref={searchInputRef}
             value={inputValue}
@@ -383,7 +383,7 @@ export default function AffiliatesIndex() {
                               className={buttonVariants({ size: "default", color: "primary" })}
                               aria-label="Export"
                             >
-                              <Icon name="download" />
+                              <ArrowDown />
                             </a>
                           </WithTooltip>
                         </div>
@@ -443,7 +443,7 @@ export default function AffiliatesIndex() {
                                   aria-label="Edit"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
-                                  <Icon name="pencil" />
+                                  <Pencil />
                                 </NavigationButtonInertia>
 
                                 <Button
@@ -453,7 +453,7 @@ export default function AffiliatesIndex() {
                                   aria-label="Delete"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
-                                  <Icon name="trash2" />
+                                  <Trash />
                                 </Button>
                               </div>
                             </TableCell>

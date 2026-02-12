@@ -10,7 +10,6 @@ import { formatCommission, formatProductNames } from "$app/utils/collaboratorFor
 import { Button } from "$app/components/Button";
 import CollaboratorDetailsSheet from "$app/components/Collaborators/CollaboratorDetailsSheet";
 import { Layout } from "$app/components/Collaborators/Layout";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -19,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
+import { Check, X } from "@boxicons/react";
 
 const IncomingCollaboratorsTableRow = ({
   incomingCollaborator,
@@ -60,10 +60,10 @@ const IncomingCollaboratorsTableRow = ({
       {incomingCollaborator.invitation_accepted ? null : (
         <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
           <Button type="submit" aria-label="Accept" onClick={onAccept} disabled={disabled}>
-            <Icon name="outline-check" />
+            <Check />
           </Button>
           <Button type="submit" color="danger" aria-label="Decline" onClick={onReject} disabled={disabled}>
-            <Icon name="x" />
+            <X />
           </Button>
         </div>
       )}

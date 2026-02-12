@@ -4,8 +4,8 @@ import * as React from "react";
 import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { ArrowDown, ArrowUp, ChevronLeft, Move, Trash } from "@boxicons/react";
 
 export const NodeActionsMenu = ({
   editor,
@@ -23,7 +23,7 @@ export const NodeActionsMenu = ({
         <PopoverAnchor>
           <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
             <Button small color="filled">
-              <Icon name="outline-drag" />
+              <Move />
             </Button>
           </PopoverTrigger>
         </PopoverAnchor>
@@ -36,7 +36,7 @@ export const NodeActionsMenu = ({
             {actions && selectedActionIndex !== null ? (
               <>
                 <div onClick={() => setSelectedActionIndex(null)} role="menuitem">
-                  <Icon name="outline-cheveron-left" />
+                  <ChevronLeft />
                   <span>Back</span>
                 </div>
                 {assertDefined(actions[selectedActionIndex]).menu(() => setOpen(false))}
@@ -44,11 +44,11 @@ export const NodeActionsMenu = ({
             ) : (
               <>
                 <div onClick={() => editor.commands.moveNodeUp()} role="menuitem">
-                  <Icon name="arrow-up" />
+                  <ArrowUp />
                   <span>Move up</span>
                 </div>
                 <div onClick={() => editor.commands.moveNodeDown()} role="menuitem">
-                  <Icon name="arrow-down" />
+                  <ArrowDown />
                   <span>Move down</span>
                 </div>
                 {actions?.map(({ item }, index) => (
@@ -61,7 +61,7 @@ export const NodeActionsMenu = ({
                   onClick={() => editor.commands.deleteSelection()}
                   role="menuitem"
                 >
-                  <Icon name="trash2" />
+                  <Trash />
                   <span>Delete</span>
                 </div>
               </>

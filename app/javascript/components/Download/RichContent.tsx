@@ -1,3 +1,4 @@
+import { ChevronDown, Dropbox as DropboxIcon, FolderOpen } from "@boxicons/react";
 import { Content, findParentNodeClosestToPos, Mark, Node as TiptapNode } from "@tiptap/core";
 import { LinkOptions as BaseLinkOptions } from "@tiptap/extension-link";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -11,7 +12,7 @@ import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
+import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
 import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -287,7 +288,7 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
         <Row role="treeitem" aria-expanded={expanded}>
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
             <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
-            <Icon name="solid-folder-open" className="type-icon" />
+            <FolderOpen pack="filled" className="type-icon" />
             <div>
               <h4>{folderTitle}</h4>
             </div>
@@ -378,7 +379,7 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
         <PopoverTrigger disabled={isDownloading} contentEditable={false} asChild>
           <Button>
             Download all
-            <Icon name="outline-cheveron-down" />
+            <ChevronDown />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
@@ -436,7 +437,7 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
               }
             })}
           >
-            <Icon name="dropbox" />
+            <DropboxIcon pack="brands" />
             Save to Dropbox
           </Button>
         </div>

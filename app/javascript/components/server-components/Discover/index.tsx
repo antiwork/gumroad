@@ -16,7 +16,6 @@ import { register } from "$app/utils/serverComponentUtil";
 
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
-import { Icon } from "$app/components/Icons";
 import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
@@ -28,6 +27,7 @@ import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
 
 import blackFridayImage from "$assets/images/illustrations/black_friday.svg";
 import saleImage from "$assets/images/illustrations/sale.svg";
+import { ArrowLeft, ArrowRight, X } from "@boxicons/react";
 
 type Props = {
   currency_code: CurrencyCode;
@@ -66,14 +66,14 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
             className="cursor-pointer all-unset"
             onClick={() => setActive((active + products.length - 1) % products.length)}
           >
-            <Icon name="arrow-left" className="text-xl" />
+            <ArrowLeft className="text-xl" />
           </button>
           {active + 1} / {products.length}
           <button
             className="cursor-pointer all-unset"
             onClick={() => setActive((active + products.length + 1) % products.length)}
           >
-            <Icon name="arrow-right" className="text-xl" />
+            <ArrowRight className="text-xl" />
           </button>
         </div>
       </header>
@@ -477,7 +477,7 @@ const Discover = (props: Props) => {
                           className="flex cursor-pointer items-center justify-center all-unset"
                           aria-label="Remove offer code filter"
                         >
-                          <Icon name="x" />
+                          <X />
                         </button>
                       </div>
                     </details>

@@ -7,11 +7,11 @@ import { cast } from "ts-safe-cast";
 import { getRecommendedProducts, RecommendationType } from "$app/data/recommended_products";
 import { CardProduct } from "$app/parsers/product";
 
-import { Icon } from "$app/components/Icons";
 import { Card } from "$app/components/Product/Card";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Archive, Gear } from "@boxicons/react";
 
 export const MoreLikeThis = TiptapNode.create<{ productId: string }>({
   name: "moreLikeThis",
@@ -79,7 +79,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
               {
                 item: () => (
                   <>
-                    <Icon name="gear" />
+                    <Gear />
                     <span>Settings</span>
                   </>
                 ),
@@ -147,7 +147,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
           </ProductCardGrid>
         ) : (
           <Placeholder>
-            <Icon name="archive-fill" />
+            <Archive pack="filled" />
             <p>No products found</p>
           </Placeholder>
         )}

@@ -7,11 +7,11 @@ import {
   parseCurrencyUnitStringToCents,
 } from "$app/utils/currency";
 
-import { Icon } from "$app/components/Icons";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Pill } from "$app/components/ui/Pill";
+import { ChevronDown } from "@boxicons/react";
 
 export const PriceInput = React.forwardRef<
   HTMLInputElement,
@@ -76,7 +76,7 @@ export const PriceInput = React.forwardRef<
               }))}
               className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
             />
-            <Icon name="outline-cheveron-down" className="ml-auto" />
+            <ChevronDown className="ml-auto" />
           </Pill>
         ) : (
           <Pill className="-ml-2 shrink-0">{getLongCurrencySymbol(currencyCode)}</Pill>

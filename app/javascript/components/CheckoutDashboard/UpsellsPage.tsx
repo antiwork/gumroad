@@ -27,7 +27,6 @@ import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboa
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
@@ -47,6 +46,7 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 import placeholder from "$assets/images/placeholders/upsells.png";
+import { ArrowRightCircle, XSquare } from "@boxicons/react";
 
 type Variant = {
   id: string;
@@ -683,7 +683,7 @@ const Form = ({
         actions={
           <>
             <Button onClick={onCancel} disabled={isLoading}>
-              <Icon name="x-square" />
+              <XSquare />
               Cancel
             </Button>
             <Button type="submit" color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -905,7 +905,7 @@ const Form = ({
                       return (
                         <React.Fragment key={option.id}>
                           <div className="input read-only">{option.name}</div>
-                          <Icon name="arrow-right-circle" />
+                          <ArrowRightCircle />
                           <Select
                             options={selectedProduct.options.flatMap(({ id, name: label }) =>
                               id !== option.id ? { id, label } : [],

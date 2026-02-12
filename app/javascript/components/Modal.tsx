@@ -2,8 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-
-import { Icon } from "$app/components/Icons";
+import { X } from "@boxicons/react";
 
 export const Modal = ({
   className,
@@ -41,7 +40,7 @@ export const Modal = ({
             <Dialog.Title>{title}</Dialog.Title>
             {allowClose ? (
               <Dialog.Close className="cursor-pointer text-base all-unset" aria-label="Close">
-                <Icon name="x" />
+                <X />
               </Dialog.Close>
             ) : null}
           </div>

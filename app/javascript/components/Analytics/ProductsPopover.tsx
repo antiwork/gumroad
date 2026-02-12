@@ -2,9 +2,9 @@ import * as React from "react";
 
 import { type Product } from "$app/components/Analytics";
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { ChevronDown } from "@boxicons/react";
 
 export type ProductOption = Product & { selected: boolean };
 
@@ -19,7 +19,7 @@ export const ProductsPopover = ({
     <PopoverTrigger>
       <span className="input whitespace-nowrap">
         <div className="fake-input">Select products...</div>
-        <Icon name="outline-cheveron-down" />
+        <ChevronDown />
       </span>
     </PopoverTrigger>
     <PopoverContent matchTriggerWidth className="p-0">

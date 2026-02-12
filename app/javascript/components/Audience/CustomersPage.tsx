@@ -63,7 +63,6 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { FileKindIcon } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
@@ -94,6 +93,7 @@ import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
+import { ArrowDown, ArrowLeft, ArrowUpRightSquare, Filter, Paperclip, Trash, Truck } from "@boxicons/react";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
@@ -266,7 +266,7 @@ const CustomersPage = ({
                 <WithTooltip tip="Filter">
                   <PopoverTrigger aria-label="Filter" asChild>
                     <Button>
-                      <Icon name="filter" />
+                      <Filter />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -394,7 +394,7 @@ const CustomersPage = ({
                 <WithTooltip tip="Export">
                   <PopoverTrigger aria-label="Export" asChild>
                     <Button>
-                      <Icon name="download" />
+                      <ArrowDown />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -462,7 +462,7 @@ const CustomersPage = ({
                       <TableCell>
                         {customer.shipping && !customer.shipping.tracking.shipped ? (
                           <WithTooltip tip="Not Shipped">
-                            <Icon name="truck" style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" />
+                            <Truck style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" />
                           </WithTooltip>
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
@@ -774,7 +774,7 @@ const CustomerDrawer = ({
         <div className="flex gap-4">
           {onBack ? (
             <button onClick={onBack} aria-label="Return to bundle" className="cursor-pointer all-unset">
-              <Icon name="arrow-left" style={{ fontSize: "var(--big-icon-size)" }} />
+              <ArrowLeft style={{ fontSize: "var(--big-icon-size)" }} />
             </button>
           ) : null}
           <h2>{customer.product.name}</h2>
@@ -886,7 +886,7 @@ const CustomerDrawer = ({
                   aria-label="Transaction"
                   className="grow"
                 >
-                  <Icon name="arrow-up-right-square" />
+                  <ArrowUpRightSquare />
                 </a>
               ) : null}
             </h3>
@@ -2397,7 +2397,7 @@ const ChargeRow = ({
             rel="noreferrer"
             aria-label="Transaction"
           >
-            <Icon name="arrow-up-right-square" />
+            <ArrowUpRightSquare />
           </a>
           {purchase.partially_refunded ? (
             <Pill size="small">Partial refund</Pill>
@@ -2591,7 +2591,7 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
     <RowActions>
       {onDelete ? (
         <Button color="danger" onClick={onDelete} disabled={disabled} aria-label="Delete">
-          <Icon name="trash2" />
+          <Trash />
         </Button>
       ) : null}
       <NavigationButton
@@ -2601,7 +2601,7 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
         disabled={disabled}
         aria-label="Download"
       >
-        <Icon name="download-fill" />
+        <ArrowDown pack="filled" />
       </NavigationButton>
     </RowActions>
   </Row>
@@ -2728,7 +2728,7 @@ const CommissionSection = ({
                   multiple
                   style={{ display: "none" }}
                 />
-                <Icon name="paperclip" /> Upload files
+                <Paperclip /> Upload files
               </label>
               {commission.status === "in_progress" ? (
                 <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()}>

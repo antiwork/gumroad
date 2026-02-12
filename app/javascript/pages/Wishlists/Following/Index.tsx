@@ -5,7 +5,6 @@ import { cast } from "ts-safe-cast";
 import { unfollowWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -13,6 +12,7 @@ import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 import placeholder from "$assets/images/placeholders/wishlists-following.png";
+import { BookmarkX, DotsHorizontalRounded } from "@boxicons/react";
 
 export type Wishlist = {
   id: string;
@@ -85,12 +85,12 @@ export default function WishlistsFollowingPage() {
                     <div className="flex flex-wrap gap-3 lg:justify-end">
                       <Popover>
                         <PopoverTrigger aria-label="Actions">
-                          <Icon name="three-dots" />
+                          <DotsHorizontalRounded />
                         </PopoverTrigger>
                         <PopoverContent className="border-0 p-0 shadow-none">
                           <div role="menu">
                             <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
-                              <Icon name="bookmark-x" /> Unfollow
+                              <BookmarkX /> Unfollow
                             </div>
                           </div>
                         </PopoverContent>

@@ -5,9 +5,9 @@ import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
 import { FileInput } from "$app/components/Download/CustomField/FileInput";
-import { Icon } from "$app/components/Icons";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Placeholder } from "$app/components/ui/Placeholder";
+import { ArrowUp } from "@boxicons/react";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -41,7 +41,7 @@ const FileUploadNodeView = ({ editor, node }: NodeViewProps) => (
     {editor.isEditable ? (
       <Placeholder>
         <Button color="primary">
-          <Icon name="upload-fill" />
+          <ArrowUp pack="filled" />
           Upload files
         </Button>
       </Placeholder>

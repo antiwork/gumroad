@@ -1,8 +1,8 @@
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Placeholder } from "$app/components/ui/Placeholder";
+import { Plus, Trash } from "@boxicons/react";
 
 export type Attribute = { name: string; value: string };
 
@@ -29,7 +29,7 @@ export const AttributesEditor = ({
 
   const addButton = (
     <Button color="primary" onClick={() => setCustomAttributes([...customAttributes, { name: "", value: "" }])}>
-      <Icon name="plus" />
+      <Plus />
       Add detail
     </Button>
   );
@@ -90,7 +90,7 @@ const AttributeEditor = ({
       disabled={!onUpdate}
     />
     <Button onClick={onDelete}>
-      <Icon name="trash2" />
+      <Trash />
     </Button>
   </div>
 );

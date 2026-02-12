@@ -2,11 +2,11 @@ import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import { Dollar, UserCircle } from "@boxicons/react";
 type SaleItemDetails = {
   price_cents: number;
   email: string;
@@ -23,7 +23,7 @@ export type ActivityItem =
 
 const Sale = ({ details: { price_cents, product_name, product_unique_permalink } }: { details: SaleItemDetails }) => (
   <>
-    <Icon name="outline-currency-dollar" className="text-green" />
+    <Dollar className="text-green" />
     <span>
       New sale of <a href={Routes.short_link_path({ id: product_unique_permalink })}>{product_name}</a> for{" "}
       {formatPriceCentsWithCurrencySymbol("usd", price_cents, { symbolFormat: "short", noCentsIfWhole: true })}
@@ -33,14 +33,14 @@ const Sale = ({ details: { price_cents, product_name, product_unique_permalink }
 
 const Follow = ({ details: { email, name } }: { details: FollowItemDetails }) => (
   <>
-    <Icon name="person-circle-fill" />
+    <UserCircle pack="filled" />
     <span> New follower {name || email} added</span>
   </>
 );
 
 const FollowRemoved = ({ details: { email, name } }: { details: FollowItemDetails }) => (
   <>
-    <Icon name="person-circle-fill" />
+    <UserCircle pack="filled" />
     <span> Follower {name || email} removed</span>
   </>
 );

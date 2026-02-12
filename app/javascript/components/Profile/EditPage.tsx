@@ -11,7 +11,6 @@ import { assertResponseError } from "$app/utils/request";
 import AutoLink from "$app/components/AutoLink";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { SectionLayout } from "$app/components/Profile/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
@@ -36,6 +35,7 @@ import {
   SectionToolbar,
 } from "./EditSections";
 import { FollowFormBlock } from "./FollowForm";
+import { Pencil, Trash } from "@boxicons/react";
 
 export type Props = ProfileProps & SectionsProps;
 
@@ -76,7 +76,7 @@ const EditTab = ({
       </RowContent>
       <RowActions>
         <Button small color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
-          <Icon name="trash2" />
+          <Trash />
         </Button>
       </RowActions>
       {confirmingDelete ? (
@@ -259,7 +259,7 @@ export const EditProfile = (props: Props) => {
             href={Routes.settings_profile_url({ host: appDomain })}
             aria-label="Edit profile"
           >
-            <Icon name="pencil" />
+            <Pencil />
           </NavigationButton>
         </WithTooltip>
       </div>

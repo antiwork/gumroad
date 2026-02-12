@@ -9,13 +9,13 @@ import { CreatorProfile } from "$app/parsers/profile";
 import { formatPostDate } from "$app/utils/date";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { CommentsMetadataProvider, PostCommentsSection } from "$app/components/Post/PostCommentsSection";
 import { Layout } from "$app/components/Profile/Layout";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
+import { ArrowUpRight } from "@boxicons/react";
 
 type RecentPost = {
   name: string;
@@ -139,7 +139,7 @@ export default function PostsShow() {
                   <h2>{post.name}</h2>
                   <time>{formatPostDate(post.published_at, userAgentInfo.locale)}</time>
                 </div>
-                <Icon name="arrow-diagonal-up-right" className="text-lg" />
+                <ArrowUpRight className="text-lg" />
               </a>
             ))}
             {has_posts_on_profile ? (
@@ -148,7 +148,7 @@ export default function PostsShow() {
                 className="flex justify-between border-b border-border px-4 py-8 no-underline lg:py-12"
               >
                 <h2>See all posts from {creator_profile.name}</h2>
-                <Icon name="arrow-diagonal-up-right" className="text-lg" />
+                <ArrowUpRight className="text-lg" />
               </a>
             ) : null}
           </>

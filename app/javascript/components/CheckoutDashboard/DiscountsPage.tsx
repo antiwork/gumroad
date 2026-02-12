@@ -24,7 +24,6 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
@@ -50,6 +49,7 @@ import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriv
 
 import blackFridayIllustration from "$assets/images/illustrations/black_friday.svg";
 import placeholder from "$assets/images/placeholders/discounts.png";
+import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash, XSquare } from "@boxicons/react";
 
 type Product = {
   id: string;
@@ -416,7 +416,7 @@ const DiscountsPage = ({
                               setView("edit");
                             }}
                           >
-                            <Icon name="pencil" />
+                            <Pencil />
                           </Button>
                           <Popover
                             open={popoverOfferCodeId === offerCode.id}
@@ -426,7 +426,7 @@ const DiscountsPage = ({
                           >
                             <PopoverTrigger asChild>
                               <Button aria-label="Open discount action menu" onClick={(e) => e.stopPropagation()}>
-                                <Icon name="three-dots" />
+                                <DotsHorizontalRounded />
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -440,7 +440,7 @@ const DiscountsPage = ({
                                     setView("create");
                                   }}
                                 >
-                                  <Icon name="outline-duplicate" />
+                                  <Copy />
                                   &ensp;Duplicate
                                 </div>
                                 <div
@@ -460,7 +460,7 @@ const DiscountsPage = ({
                                     setIsLoading(false);
                                   })}
                                 >
-                                  <Icon name="trash2" />
+                                  <Trash />
                                   &ensp;Delete
                                 </div>
                               </div>
@@ -585,7 +585,7 @@ const DiscountsPage = ({
                           text={`${product.url}/${selectedOfferCode.code}`}
                         >
                           <Button aria-label="Copy link with discount">
-                            <Icon name="link" />
+                            <Link />
                           </Button>
                         </CopyToClipboard>
                       </CardContent>
@@ -862,7 +862,7 @@ const Form = ({
         actions={
           <>
             <Button onClick={cancel} disabled={isLoading}>
-              <Icon name="x-square" />
+              <XSquare />
               Cancel
             </Button>
             <Button color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -924,7 +924,7 @@ const Form = ({
                 aria-label="Generate new discount"
                 disabled={readOnlyCode || isBlackFridayMode}
               >
-                <Icon name="outline-refresh" />
+                <RefreshCcw />
               </Button>
             </div>
             {isBlackFridayMode ? (

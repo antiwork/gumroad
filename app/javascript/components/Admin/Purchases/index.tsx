@@ -11,12 +11,12 @@ import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
 import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceiptForm";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
 import { type PurchaseStatesInfo, PurchaseStates } from "./States";
+import { ArrowUpRightSquare, Copy } from "@boxicons/react";
 
 type UrlRedirect = {
   download_page_url: string;
@@ -133,7 +133,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
       </Link>{" "}
       {purchase.variants_list}{" "}
       <Link href={purchase.product.long_url}>
-        <Icon name="arrow-up-right-square" />
+        <ArrowUpRightSquare />
       </Link>
     </h2>
     <ul className="inline">
@@ -157,7 +157,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dd>
             {purchase.seller.support_email}{" "}
             <CopyToClipboard text={purchase.seller.support_email}>
-              <Icon name="outline-duplicate" />
+              <Copy />
             </CopyToClipboard>
           </dd>
         </>
@@ -167,7 +167,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {purchase.seller.email}{" "}
         <CopyToClipboard text={purchase.seller.email}>
-          <Icon name="outline-duplicate" />
+          <Copy />
         </CopyToClipboard>
       </dd>
 

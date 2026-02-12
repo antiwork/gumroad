@@ -9,7 +9,6 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { TrackClick } from "$app/components/Download/Interactions";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
@@ -17,6 +16,7 @@ import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
+import { ChevronDown, ChevronRight, FileDetail, RefreshCcw } from "@boxicons/react";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -73,12 +73,12 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
           >
             {total > 0 ? (
               expanded ? (
-                <Icon name="outline-cheveron-down" />
+                <ChevronDown />
               ) : (
-                <Icon name="outline-cheveron-right" />
+                <ChevronRight />
               )
             ) : null}
-            <Icon name="file-earmark-medical-fill" className={cx("type-icon", { "text-muted": total === 0 })} />
+            <FileDetail pack="filled" className={cx("type-icon", { "text-muted": total === 0 })} />
             <div>
               {isLoading || total > 0 ? (
                 <>
@@ -104,7 +104,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
               disabled={isLoading}
               onClick={() => void fetchMorePosts?.(true)}
             >
-              <Icon name="outline-refresh" />
+              <RefreshCcw />
             </Button>
           </RowActions>
         ) : null}
@@ -114,7 +114,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
             <Drawer id={uid}>
               {posts.map((post) => (
                 <RowContent key={post.id}>
-                  <Icon name="file-earmark-medical-fill" className="type-icon" />
+                  <FileDetail pack="filled" className="type-icon" />
                   <div>
                     {editor.isEditable ? (
                       <a href={post.url} target="_blank" rel="noreferrer">

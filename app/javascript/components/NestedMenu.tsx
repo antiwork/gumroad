@@ -7,12 +7,12 @@ import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Sheet } from "$app/components/ui/Sheet";
 import { useIsOnTouchDevice } from "$app/components/useIsOnTouchDevice";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useWindowDimensions } from "$app/components/useWindowDimensions";
+import { ChevronDown, ChevronLeft, ChevronRight, Filter } from "@boxicons/react";
 
 type MenuItemKey = string;
 export type MenuItem = {
@@ -266,7 +266,7 @@ const MenubarItem = ({
         }}
       >
         {menuItem.label}
-        {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right" /> : null}
+        {showExpandableIcon ? <ChevronDown className="float-right" /> : null}
       </a>
     </Button>
   );
@@ -324,7 +324,7 @@ const OverlayMenu = ({
         aria-label={buttonLabel ?? "Open Menu"}
         {...extraAriaAttrs}
       >
-        <Icon name="filter" />
+        <Filter />
       </Button>
       <Sheet
         open={menuOpen}
@@ -388,7 +388,7 @@ const ItemsList = ({
             e.preventDefault();
           }}
         >
-          <Icon name="outline-cheveron-left" />
+          <ChevronLeft />
           <span>Back</span>
         </MenuItemLink>
       ) : null}
@@ -412,7 +412,7 @@ const ItemsList = ({
           aria-haspopup={item.children.length ? "menu" : undefined}
         >
           <span className="min-w-0 flex-1 overflow-visible! break-words">{item.label}</span>
-          {item.children.length > 0 && <Icon name="outline-cheveron-right" className="shrink-0" />}
+          {item.children.length > 0 && <ChevronRight className="shrink-0" />}
         </MenuItemLink>
       ))}
       {displayedItem.image ? <img src={displayedItem.image} className="w-full translate-x-6 translate-y-6" /> : null}

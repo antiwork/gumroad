@@ -2,12 +2,12 @@ import * as React from "react";
 
 import { Review as ReviewType } from "$app/data/product_reviews";
 
-import { Icon } from "$app/components/Icons";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { CheckCircle } from "@boxicons/react";
 
 export type Seller = {
   id: string;
@@ -30,7 +30,7 @@ const ReviewUserAttribution = ({
     <h5>{name}</h5>
     {isBuyer ? (
       <WithTooltip tip="Verified Buyer">
-        <Icon name="solid-check-circle" aria-label="Verified Buyer" />
+        <CheckCircle pack="filled" aria-label="Verified Buyer" />
       </WithTooltip>
     ) : null}
   </section>

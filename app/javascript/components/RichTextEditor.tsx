@@ -14,6 +14,7 @@ import * as React from "react";
 import { assertDefined } from "$app/utils/assert";
 
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
+import { CartPlus, ChevronDown, Minus, Star } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
@@ -392,7 +393,7 @@ export const RichTextEditorToolbar = ({
       >
         <Popover>
           <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
-            {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
+            {activeFormatOption?.name ?? "Text"} <ChevronDown />
           </PopoverTrigger>
           <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
             <div role="menu">
@@ -470,7 +471,7 @@ export const RichTextEditorToolbar = ({
                 <Separator aria-orientation="vertical" />
                 <Popover>
                   <PopoverTrigger className="toolbar-item all-unset">
-                    Insert <Icon name="outline-cheveron-down" />
+                    Insert <ChevronDown />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                     <div role="menu">
@@ -479,7 +480,7 @@ export const RichTextEditorToolbar = ({
                           {item.name === "horizontalRule" ? (
                             <PopoverClose asChild>
                               <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                                <Icon name="horizontal-rule" />
+                                <Minus />
                                 <span>Divider</span>
                               </div>
                             </PopoverClose>
@@ -492,14 +493,14 @@ export const RichTextEditorToolbar = ({
                       ))}
                       <PopoverClose asChild>
                         <div role="menuitem" onClick={() => setIsUpsellModalOpen(true)}>
-                          <Icon name="cart-plus" />
+                          <CartPlus />
                           <span>Upsell</span>
                         </div>
                       </PopoverClose>
                       {productId ? (
                         <PopoverClose asChild>
                           <div role="menuitem" onClick={() => setIsReviewModalOpen(true)}>
-                            <Icon name="solid-star" />
+                            <Star pack="filled" />
                             <span>Reviews</span>
                           </div>
                         </PopoverClose>

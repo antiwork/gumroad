@@ -1,3 +1,4 @@
+import { CartPlus, Link as LinkIcon } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { Link, useMatches, useNavigate } from "react-router-dom";
@@ -11,7 +12,6 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
@@ -19,7 +19,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -238,12 +238,12 @@ export const Layout = ({
               {saveButton}
               <CopyToClipboard text={url} copyTooltip="Copy product URL">
                 <Button>
-                  <Icon name="link" />
+                  <LinkIcon />
                 </Button>
               </CopyToClipboard>
               <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
                 <Button>
-                  <Icon name="cart-plus" />
+                  <CartPlus />
                 </Button>
               </CopyToClipboard>
             </>

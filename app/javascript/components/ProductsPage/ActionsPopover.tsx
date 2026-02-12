@@ -5,10 +5,10 @@ import { Membership, Product } from "$app/data/products";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Archive, Copy, DotsHorizontalRounded, Trash } from "@boxicons/react";
 
 const ActionsPopover = ({
   product,
@@ -92,23 +92,23 @@ const ActionsPopover = ({
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger aria-label="Open product action menu" className="cursor-pointer all-unset">
-          <Icon name="three-dots" />
+          <DotsHorizontalRounded />
         </PopoverTrigger>
         <PopoverContent className="border-0 p-0 shadow-none">
           <div role="menu">
             <div role="menuitem" inert={!product.can_duplicate || isDuplicating} onClick={() => void handleDuplicate()}>
-              <Icon name="outline-duplicate" />
+              <Copy />
               &ensp;{isDuplicating ? "Duplicating..." : "Duplicate"}
             </div>
             {product.can_unarchive ? (
               <div role="menuitem" inert={isUnarchiving} onClick={() => void handleUnarchive()}>
-                <Icon name="archive" />
+                <Archive />
                 &ensp;{isUnarchiving ? "Unarchiving..." : "Unarchive"}
               </div>
             ) : null}
             {product.can_archive ? (
               <div role="menuitem" inert={isArchiving} onClick={() => void handleArchive()}>
-                <Icon name="archive" />
+                <Archive />
                 &ensp;{isArchiving ? "Archiving..." : "Archive"}
               </div>
             ) : null}
@@ -118,7 +118,7 @@ const ActionsPopover = ({
               role="menuitem"
               onClick={() => setConfirmingDelete(true)}
             >
-              <Icon name="trash2" />
+              <Trash />
               &ensp;{isDeleting ? "Deleting..." : "Delete permanently"}
             </div>
           </div>

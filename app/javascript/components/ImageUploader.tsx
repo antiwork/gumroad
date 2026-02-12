@@ -4,10 +4,10 @@ import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
 
 import { Button, buttonVariants } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder } from "$app/components/ui/Placeholder";
+import { ArrowUp, Trash } from "@boxicons/react";
 
 export const ImageUploader = ({
   id,
@@ -61,7 +61,7 @@ export const ImageUploader = ({
               }}
               disabled={disabled}
             />
-            <Icon name="upload-fill" />
+            <ArrowUp pack="filled" />
             Upload
           </label>
         </Placeholder>
@@ -76,7 +76,7 @@ export const ImageUploader = ({
             onClick={onRemove}
             disabled={disabled}
           >
-            <Icon name="trash2" />
+            <Trash />
           </Button>
         </figure>
       )}

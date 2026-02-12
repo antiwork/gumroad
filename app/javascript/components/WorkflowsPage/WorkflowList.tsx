@@ -5,7 +5,6 @@ import { Workflow } from "$app/types/workflow";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -14,6 +13,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Layout } from "$app/components/WorkflowsPage";
 
 import placeholder from "$assets/images/placeholders/workflows.png";
+import { Pencil, Trash } from "@boxicons/react";
 
 type WorkflowListProps = {
   workflows: Workflow[];
@@ -133,11 +133,11 @@ const WorkflowRow = ({
               aria-label="Edit workflow"
               inert={!canManageWorkflow || undefined}
             >
-              <Icon name="pencil" />
+              <Pencil />
             </Link>
           </Button>
           <Button color="danger" outline aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
-            <Icon name="trash2" />
+            <Trash />
           </Button>
         </div>
       </div>

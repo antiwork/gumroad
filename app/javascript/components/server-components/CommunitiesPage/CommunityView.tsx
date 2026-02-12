@@ -24,7 +24,6 @@ import { AbortError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -43,6 +42,7 @@ import { useCommunities } from "./useCommunities";
 import { UserAvatar } from "./UserAvatar";
 
 import placeholderImage from "$assets/images/placeholders/community.png";
+import { ArrowLeft, Bell, ChevronDown, ChevronLeft, X } from "@boxicons/react";
 
 const COMMUNITY_CHANNEL_NAME = "CommunityChannel";
 const USER_CHANNEL_NAME = "UserChannel";
@@ -619,7 +619,7 @@ export const CommunityView = () => {
 
                     <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
                       <PopoverTrigger aria-label="Switch creator" className="flex h-8 w-8 justify-center">
-                        <Icon name="outline-cheveron-down" />
+                        <ChevronDown />
                       </PopoverTrigger>
                       <PopoverContent className="shrink-0 border-0 p-0 shadow-none">
                         <div role="menu">
@@ -645,7 +645,7 @@ export const CommunityView = () => {
                           ))}
                           {sellersExceptSelected.length > 0 ? <hr className="my-1" /> : null}
                           <div role="menuitem" onClick={() => setShowNotificationsSettings(true)}>
-                            <Icon name="outline-bell" /> Notifications
+                            <Bell /> Notifications
                           </div>
                         </div>
                       </PopoverContent>
@@ -660,7 +660,7 @@ export const CommunityView = () => {
                   })}
                   aria-label="Close sidebar"
                 >
-                  <Icon name="x" className="text-sm" />
+                  <X className="text-sm" />
                 </button>
               </div>
 
@@ -829,7 +829,7 @@ const CommunityChatHeader = ({
       aria-label="Open sidebar"
       onClick={() => setSidebarOpen(true)}
     >
-      <Icon name="outline-cheveron-left" className="text-sm" />
+      <ChevronLeft className="text-sm" />
     </button>
     <h1 className="flex-1 truncate py-3 text-base font-bold">{community.name}</h1>
   </div>
@@ -851,7 +851,7 @@ const GoBackHeader = () => {
           onClick={handleGoBack}
           className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline all-unset"
         >
-          <Icon name="arrow-left" className="mr-1" /> Go back
+          <ArrowLeft className="mr-1" /> Go back
         </button>
       </div>
     </header>

@@ -1,12 +1,12 @@
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { ShippingDestination, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Box, Plus, Trash } from "@boxicons/react";
 
 export const ShippingDestinationsEditor = ({
   shippingDestinations,
@@ -52,7 +52,7 @@ export const ShippingDestinationsEditor = ({
           ))}
           <CardContent>
             <Button onClick={addShippingDestination} className="grow basis-0">
-              <Icon name="plus" />
+              <Plus />
               Add shipping destination
             </Button>
           </CardContent>
@@ -62,7 +62,7 @@ export const ShippingDestinationsEditor = ({
           <h2>Add shipping destinations</h2>
           Choose where you're able to ship your physical product to
           <Button color="primary" onClick={addShippingDestination}>
-            <Icon name="box" />
+            <Box />
             Add shipping destination
           </Button>
         </Placeholder>
@@ -114,7 +114,7 @@ const ShippingDestinationRow = ({
           </select>
           <WithTooltip position="bottom" tip="Remove">
             <Button color="danger" outline onClick={onRemove} aria-label="Remove shipping destination">
-              <Icon name="trash2" />
+              <Trash />
             </Button>
           </WithTooltip>
         </div>

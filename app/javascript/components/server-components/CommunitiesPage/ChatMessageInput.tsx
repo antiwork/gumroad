@@ -1,11 +1,11 @@
 import cx from "classnames";
 import * as React from "react";
 
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 
 import { MAX_MESSAGE_LENGTH } from "./CommunityView";
 import { CommunityDraft } from "./useCommunities";
+import { Send } from "@boxicons/react";
 
 export const ChatMessageInput = React.forwardRef<
   HTMLTextAreaElement,
@@ -69,7 +69,7 @@ export const ChatMessageInput = React.forwardRef<
         disabled={draft?.isSending}
         aria-label="Send message"
       >
-        <Icon name="solid-send" className="text-sm" />
+        <Send pack="filled" className="text-sm" />
       </button>
     </div>
   );

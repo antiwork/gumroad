@@ -36,6 +36,7 @@ import {
   useFiles,
 } from "$app/components/EmailAttachments";
 import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
+import { ArrowLeft, Clock, Envelope, Eye, Trash, XSquare } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -269,12 +270,12 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                 <Link href={Routes.workflows_path()} inert={isBusy || undefined}>
                   {workflow.published ? (
                     <>
-                      <Icon name="x-square" />
+                      <XSquare />
                       Cancel
                     </>
                   ) : (
                     <>
-                      <Icon name="arrow-left" />
+                      <ArrowLeft />
                       Back
                     </>
                   )}
@@ -453,7 +454,7 @@ const EmailRow = ({
   return (
     <Row role="listitem" ref={selfRef} aria-label="Email">
       <RowContent>
-        <Icon name="envelope-fill" className="type-icon" />
+        <Envelope pack="filled" className="type-icon" />
         <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
       </RowContent>
       <RowActions>
@@ -469,13 +470,13 @@ const EmailRow = ({
         )}
         <WithTooltip tip="Send email preview">
           <Button outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
-            <Icon name="eye-fill" />
+            <Eye pack="filled" />
           </Button>
         </WithTooltip>
         {isAbandonedCartWorkflow ? null : (
           <WithTooltip tip="Delete">
             <Button outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
-              <Icon name="trash2" />
+              <Trash />
             </Button>
           </WithTooltip>
         )}
@@ -585,7 +586,7 @@ const EmailPreview = ({
     <section className="flex flex-col gap-4" ref={selfRef}>
       <Separator>
         <div className="flex gap-2">
-          <Icon name="outline-clock" />
+          <Clock />
           {email.delayed_delivery_time_duration}{" "}
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
         </div>

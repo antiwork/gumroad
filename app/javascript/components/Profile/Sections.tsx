@@ -15,7 +15,6 @@ import { CreatorProfile } from "$app/parsers/profile";
 import { CurrencyCode } from "$app/utils/currency";
 import { formatPostDate } from "$app/utils/date";
 
-import { Icon } from "$app/components/Icons";
 import { Product, Props as ProductProps } from "$app/components/Product";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { CoffeeProduct } from "$app/components/Product/CoffeeProduct";
@@ -25,6 +24,7 @@ import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { CardContent } from "$app/components/ui/Card";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Card as WishlistCard, CardGrid as WishlistCardGrid, CardWishlist } from "$app/components/Wishlist/Card";
+import { Archive, ArrowUpRight } from "@boxicons/react";
 
 type BaseSection = {
   id: string;
@@ -70,7 +70,7 @@ export const PostsView = ({ posts }: { posts: Post[] }) => {
             <h2>{post.name}</h2>
             <time>{formatPostDate(post.published_at, userAgentInfo.locale)}</time>
           </div>
-          <Icon name="arrow-diagonal-up-right" className="text-lg" />
+          <ArrowUpRight className="text-lg" />
         </a>
       ))}
     </>
@@ -171,7 +171,7 @@ export const WishlistsView = ({ wishlists }: { wishlists: CardWishlist[] }) =>
   ) : (
     <div className="flex h-full flex-col content-center gap-4 text-center">
       <h1>
-        <Icon name="archive-fill" />
+        <Archive pack="filled" />
       </h1>
       No wishlists selected
     </div>

@@ -7,7 +7,6 @@ import { isValidEmail } from "$app/utils/email";
 
 import { Button } from "$app/components/Button";
 import { Layout } from "$app/components/Collaborators/Layout";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
@@ -15,6 +14,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { XSquare } from "@boxicons/react";
 
 const WITH_CONFIRMED_ACKNOWLEDGEMENT = "withConfirmedAcknowledgement";
 
@@ -153,7 +153,7 @@ const CollaboratorForm = ({
       headerActions={
         <>
           <NavigationButtonInertia disabled={form.processing} href={Routes.collaborators_path()}>
-            <Icon name="x-square" />
+            <XSquare />
             Cancel
           </NavigationButtonInertia>
           <WithTooltip position="bottom" tip={collaboratorsDisabledReason}>

@@ -1,8 +1,8 @@
 import * as React from "react";
 
-import { Icon } from "$app/components/Icons";
 import { Stats } from "$app/components/Stats";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import { Circle } from "@boxicons/react";
 
 export const AudienceQuickStats = ({
   totalFollowers,
@@ -19,7 +19,7 @@ export const AudienceQuickStats = ({
         className="total-followers"
         title={
           <>
-            <Icon name="circle-fill" className="text-accent" />
+            <Circle pack="filled" className="text-accent" />
             Lifetime followers
             <div className="legend" />
           </>
@@ -30,7 +30,7 @@ export const AudienceQuickStats = ({
         className="new-followers"
         title={
           <>
-            <Icon name="circle-fill" className="text-active-bg" />
+            <Circle pack="filled" className="text-active-bg" />
             New followers
             <div className="legend" />
           </>

@@ -18,6 +18,7 @@ import { Button } from "$app/components/Button";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
+import { Layers, Plus, Trash } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -79,7 +80,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
         ]);
       }}
     >
-      <Icon name="plus" />
+      <Plus />
       Add tier
     </Button>
   );
@@ -193,7 +194,7 @@ const TierEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Icon name="stack-fill" />
+        <Layers pack="filled" />
         <div>
           <h3>{tier.name || "Untitled"}</h3>
           {tier.active_subscribers_count ? (
@@ -211,7 +212,7 @@ const TierEditor = ({
         </WithTooltip>
         <WithTooltip tip="Remove">
           <Button onClick={onDelete} aria-label="Remove">
-            <Icon name="trash2" />
+            <Trash />
           </Button>
         </WithTooltip>
       </RowActions>

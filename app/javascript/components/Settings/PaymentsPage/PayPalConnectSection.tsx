@@ -5,9 +5,9 @@ import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { CheckCircle } from "@boxicons/react";
 
 export type PayPalConnect = {
   email: string | null;
@@ -100,7 +100,7 @@ const PayPalConnectSection = ({
                 </legend>
                 <div className="input input-wrapper">
                   <div className="fake-input">{paypalConnect.charge_processor_merchant_id}</div>
-                  <Icon name="solid-check-circle" className="text-success" />
+                  <CheckCircle pack="filled" className="text-success" />
                 </div>
               </fieldset>
               {paypalConnect.show_paypal_connect ? (

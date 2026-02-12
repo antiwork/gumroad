@@ -19,6 +19,7 @@ import { Button, buttonVariants, NavigationButton } from "$app/components/Button
 import { connectedFileRowClassName } from "$app/components/Download/RichContent";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
+import { ArrowUp, FolderOpen, FolderPlus } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
@@ -283,7 +284,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const folderAction = {
     item: () => (
       <>
-        <Icon name="solid-folder-open" />
+        <FolderOpen pack="filled" />
         <span>Move to folder...</span>
       </>
     ),
@@ -294,7 +295,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             onClick={() => editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: null })}
             role="menuitem"
           >
-            <Icon name="folder-plus" />
+            <FolderPlus />
             <span>New folder</span>
           </div>
         )}
@@ -309,7 +310,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             }}
             role="menuitem"
           >
-            <Icon name="solid-folder-open" />
+            <FolderOpen pack="filled" />
             <span>{name || "Untitled"}</span>
           </div>
         ))}
@@ -407,7 +408,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         aria-label="Replace thumbnail"
                       >
                         {thumbnailInput}
-                        <Icon name="upload-fill" />
+                        <ArrowUp pack="filled" />
                       </label>
                     </WithTooltip>
                   </div>
@@ -418,7 +419,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                 <Placeholder>
                   <label className={buttonVariants({ size: "default", color: "primary" })}>
                     {thumbnailInput}
-                    <Icon name="upload-fill" />
+                    <ArrowUp pack="filled" />
                     Upload a thumbnail
                   </label>
                   <div>
@@ -450,7 +451,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   {file.thumbnail ? <img src={file.thumbnail.url} /> : null}
                   <Placeholder>
                     {thumbnailInput}
-                    <Icon name="upload-fill" />
+                    <ArrowUp pack="filled" />
                   </Placeholder>
                 </>
               )}

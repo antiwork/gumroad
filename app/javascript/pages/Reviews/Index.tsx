@@ -6,7 +6,6 @@ import { ProductNativeType } from "$app/parsers/product";
 import { Button, NavigationButton } from "$app/components/Button";
 import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
@@ -19,6 +18,7 @@ import { Table, TableBody, TableCaption, TableCell, TableRow } from "$app/compon
 import { useOnChange } from "$app/components/useOnChange";
 
 import placeholderImage from "$assets/images/placeholders/reviews.png";
+import { Pencil } from "@boxicons/react";
 
 const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbnails/");
 
@@ -89,7 +89,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
             <PopoverAnchor>
               <PopoverTrigger aria-label="Edit" asChild>
                 <Button>
-                  <Icon name="pencil" />
+                  <Pencil />
                 </Button>
               </PopoverTrigger>
             </PopoverAnchor>

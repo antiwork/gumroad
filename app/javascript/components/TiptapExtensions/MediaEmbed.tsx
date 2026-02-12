@@ -10,12 +10,12 @@ import { assertResponseError, request } from "$app/utils/request";
 import { sanitizeHtml } from "$app/utils/sanitize";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
+import { PlayCircle, Trash, Twitter } from "@boxicons/react";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -88,7 +88,7 @@ export const Raw = TiptapNode.create({
     item: (editor) => (
       <WithDialog editor={editor} type="twitter">
         <div role="menuitem">
-          <Icon name="twitter" />
+          <Twitter pack="brands" />
           <span>Twitter post</span>
         </div>
       </WithDialog>
@@ -249,7 +249,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
         <Row className="embed">
           <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }} />
           <RowContent className="content">
-            <Icon name="file-earmark-play-fill" className="type-icon" />
+            <PlayCircle pack="filled" className="type-icon" />
             <div>
               <h4 className="text-singleline">{node.attrs.title}</h4>
               {node.attrs.url ? (
@@ -264,7 +264,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
           {editor.isEditable ? (
             <RowActions>
               <Button color="danger" outline aria-label="Remove" onClick={deleteNode}>
-                <Icon name="trash2" />
+                <Trash />
               </Button>
             </RowActions>
           ) : null}

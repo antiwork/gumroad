@@ -6,7 +6,6 @@ import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -17,6 +16,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { CommunityViewContext, MAX_MESSAGE_LENGTH, MIN_MESSAGE_LENGTH } from "./CommunityView";
 import { UserAvatar } from "./UserAvatar";
+import { Pencil, Trash } from "@boxicons/react";
 
 const MAX_TEXTAREA_HEIGHT = 300;
 
@@ -172,7 +172,7 @@ export const ChatMessage = ({
                     onClick={handleEdit}
                     aria-label="Edit message"
                   >
-                    <Icon name="pencil" />
+                    <Pencil />
                   </button>
                 </WithTooltip>
                 <div className="flex border-r dark:border-[rgb(var(--parent-color)/var(--border-alpha))]" />
@@ -184,7 +184,7 @@ export const ChatMessage = ({
                 onClick={() => setDeleteConfirmation({ deleting: false })}
                 aria-label="Delete message"
               >
-                <Icon name="trash2" />
+                <Trash />
               </button>
             </WithTooltip>
           </div>

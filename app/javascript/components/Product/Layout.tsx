@@ -6,7 +6,6 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import {
   Product,
   ProductDiscount,
@@ -38,6 +37,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Pencil } from "@boxicons/react";
 
 export type Props = ProductProps & { main_section_index: number } & (SectionsProps | EditSectionsProps);
 
@@ -352,7 +352,7 @@ const EditButton = ({ product }: { product: Product }) => {
           href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
           aria-label="Edit product"
         >
-          <Icon name="pencil" />
+          <Pencil />
         </NavigationButton>
       </WithTooltip>
     </div>

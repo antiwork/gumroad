@@ -5,8 +5,7 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
-
+import { Copy } from "@boxicons/react";
 const lowlight = createLowlight(common);
 
 const LANGUAGES = lowlight.listLanguages().map((lang) => {
@@ -87,7 +86,7 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
               style={{ padding: "0 var(--spacer-1)" }}
               aria-label="Copy"
             >
-              <Icon name="outline-duplicate" />
+              <Copy />
             </button>
           </CopyToClipboard>
         )}

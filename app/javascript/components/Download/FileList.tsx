@@ -15,6 +15,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { FileRowContent } from "$app/components/FileRowContent";
+import { ArrowDown, CheckCircle, FolderOpen, PauseCircle } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
@@ -110,7 +111,7 @@ const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.R
     <Row role="treeitem" aria-expanded={isExpanded}>
       <RowContent onClick={() => setIsExpanded(!isExpanded)}>
         <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
-        <Icon name="solid-folder-open" className="type-icon" />
+        <FolderOpen pack="filled" className="type-icon" />
         <h4>{folder.name}</h4>
       </RowContent>
       <RowDetails role="group" className={classNames({ hidden: !isExpanded })}>
@@ -529,7 +530,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         {file.download_url ? (
           <TrackClick eventName="download_click" file={file}>
             <button aria-label="Download" className="cursor-pointer all-unset">
-              <Icon name="download" className="type-icon" />
+              <ArrowDown className="type-icon" />
             </button>
           </TrackClick>
         ) : null}
@@ -543,19 +544,11 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         >
           {isPlaying ? (
             <button aria-label="Pause" disabled={isProcessing} className="cursor-pointer all-unset">
-              <Icon
-                className="type-icon"
-                name="circle-pause"
-                style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
-              />
+              <PauseCircle className="type-icon" style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }} />
             </button>
           ) : isCompleted ? (
             <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
-              <Icon
-                className="type-icon text-muted"
-                name="outline-check-circle"
-                style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
-              />
+              <CheckCircle className="type-icon text-muted" style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }} />
             </button>
           ) : (
             <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">

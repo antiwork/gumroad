@@ -11,7 +11,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Covers } from "$app/components/Product/Covers";
@@ -21,6 +20,7 @@ import { Placeholder } from "$app/components/ui/Placeholder";
 import { Tab, TabIcon, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { ArrowUp, Plus } from "@boxicons/react";
 const MAX_PREVIEW_COUNT = 8;
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "mov", "m4v", "mpeg", "mpg", "mp4", "wmv"];
@@ -96,7 +96,7 @@ export const CoverEditor = ({
                 <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
                   <PopoverTrigger disabled={!canAddPreview || isUploading} asChild>
                     <Button aria-label="Add cover">
-                      <Icon name="plus" />
+                      <Plus />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -228,7 +228,7 @@ const CoverUploader = ({
                 }}
                 aria-label="Upload"
               >
-                <Icon name="upload-fill" />
+                <ArrowUp pack="filled" />
               </Button>
             </div>
           ) : null}
@@ -239,7 +239,7 @@ const CoverUploader = ({
   ) : (
     <>
       <Button color="primary" onClick={() => setIsSelecting(true)}>
-        <Icon name="upload-fill" /> Upload images or videos
+        <ArrowUp pack="filled" /> Upload images or videos
       </Button>
       Images should be horizontal, at least 1280x720px, and 72 DPI (dots per inch).
     </>

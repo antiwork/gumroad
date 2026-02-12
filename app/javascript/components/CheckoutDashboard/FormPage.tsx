@@ -13,7 +13,6 @@ import { Button } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Select } from "$app/components/Select";
@@ -21,6 +20,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Switch } from "$app/components/ui/Switch";
+import { Plus, Trash } from "@boxicons/react";
 
 export type SimpleProduct = { id: string; name: string; archived: boolean };
 
@@ -149,7 +149,7 @@ const FormPage = ({
                             outline
                             aria-label="Remove"
                           >
-                            <Icon name="trash2" />
+                            <Trash />
                           </Button>
                         </div>
                         {field.type !== "terms" ? (
@@ -247,7 +247,7 @@ const FormPage = ({
                   ])
                 }
               >
-                <Icon name="plus" />
+                <Plus />
                 Add custom field
               </Button>
             </div>

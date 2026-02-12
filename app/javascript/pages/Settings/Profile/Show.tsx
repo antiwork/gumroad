@@ -11,7 +11,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
@@ -20,6 +19,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Profile, Props as ProfileProps } from "$app/components/server-components/Profile";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
+import { FontFamily } from "@boxicons/react";
 
 type ProfilePageProps = {
   profile_settings: ProfileSettings;
@@ -197,7 +197,7 @@ export default function SettingsPage() {
                     style={{ fontFamily: font === "ABC Favorit" ? undefined : font }}
                     disabled={!canUpdate}
                   >
-                    <Icon name="file-earmark-font" />
+                    <FontFamily />
                     <div>
                       <h4>{font}</h4>
                       {FONT_DESCRIPTIONS[font]}

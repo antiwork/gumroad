@@ -7,6 +7,7 @@ import { classNames } from "$app/utils/classNames";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { getCssVariable } from "$app/utils/styles";
 
+import { Bookmark, FileDetail } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { ProductCard, ProductCardFigure, ProductCardHeader } from "$app/components/ui/ProductCard";
@@ -112,11 +113,11 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
         <footer className="flex">
           <div className="flex flex-1 items-center gap-3 p-4 lg:p-0">
             <span className="hidden lg:inline">
-              <Icon name="file-text-fill" /> {wishlist.product_count}{" "}
+              <FileDetail pack="filled" /> {wishlist.product_count}{" "}
               {wishlist.product_count === 1 ? "product" : "products"}
             </span>
             <span>
-              <Icon name="bookmark-fill" /> {formatOrderOfMagnitude(wishlist.follower_count, 1)}{" "}
+              <Bookmark pack="filled" /> {formatOrderOfMagnitude(wishlist.follower_count, 1)}{" "}
               {wishlist.follower_count === 1 ? "follower" : "followers"}
             </span>
           </div>

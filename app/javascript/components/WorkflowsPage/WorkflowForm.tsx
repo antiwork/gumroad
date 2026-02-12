@@ -13,7 +13,6 @@ import {
 } from "$app/types/workflow";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { TagInput } from "$app/components/TagInput";
 import { Pill } from "$app/components/ui/Pill";
@@ -31,6 +30,7 @@ import memberCancelsTriggerImage from "$assets/images/workflows/triggers/member_
 import newAffiliateTriggerImage from "$assets/images/workflows/triggers/new_affiliate.svg";
 import newSubscriberTriggerImage from "$assets/images/workflows/triggers/new_subscriber.svg";
 import purchaseTriggerImage from "$assets/images/workflows/triggers/purchase.svg";
+import { XSquare } from "@boxicons/react";
 
 // "legacy_audience" is for backwards compatibility and is only shown while editing an existing workflow of that type
 export type WorkflowTrigger =
@@ -286,7 +286,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         <>
           <Button asChild>
             <Link href={Routes.workflows_path()} inert={form.processing || undefined}>
-              <Icon name="x-square" />
+              <XSquare />
               Cancel
             </Link>
           </Button>

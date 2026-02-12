@@ -9,12 +9,12 @@ import { assertDefined } from "$app/utils/assert";
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Link, RefreshCcw, XSquare } from "@boxicons/react";
 
 type UtmLinkFormData = {
   utm_link: {
@@ -259,7 +259,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
       actions={
         <>
           <NavigationButtonInertia href={Routes.dashboard_utm_links_path()} disabled={processing}>
-            <Icon name="x-square" />
+            <XSquare />
             Cancel
           </NavigationButtonInertia>
           <Button color="accent" onClick={handleSubmit} disabled={processing}>
@@ -337,7 +337,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                   text={`${shortUrlProtocol}//${shortUrlPrefix}${isEditing ? permalink : data.utm_link.permalink}`}
                 >
                   <Button type="button" aria-label="Copy short link">
-                    <Icon name="link" />
+                    <Link />
                   </Button>
                 </CopyToClipboard>
                 {!isEditing && (
@@ -347,7 +347,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                       disabled={isLoadingNewPermalink}
                       aria-label="Generate new short link"
                     >
-                      <Icon name="outline-refresh" />
+                      <RefreshCcw />
                     </Button>
                   </WithTooltip>
                 )}
@@ -467,7 +467,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                 />
                 <CopyToClipboard copyTooltip="Copy UTM link" text={finalUrl}>
                   <Button type="button" aria-label="Copy UTM link">
-                    <Icon name="link" />
+                    <Link />
                   </Button>
                 </CopyToClipboard>
               </div>

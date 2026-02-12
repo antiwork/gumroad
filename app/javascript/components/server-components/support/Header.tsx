@@ -5,12 +5,12 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+import { Search } from "@boxicons/react";
 
 export function SupportHeader({
   onOpenNewTicket,
@@ -50,7 +50,7 @@ export function SupportHeader({
           isHelpArticle ? (
             <Button asChild>
               <a href={Routes.help_center_root_path()} aria-label="Search" title="Search">
-                <Icon name="solid-search" />
+                <Search pack="filled" />
               </a>
             </Button>
           ) : isAnonymousUserOnHelpCenter ? (

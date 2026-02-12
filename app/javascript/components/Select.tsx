@@ -16,8 +16,8 @@ import ReactSelect, {
 import { escapeRegExp } from "$app/utils";
 import { classNames } from "$app/utils/classNames";
 
-import { Icon } from "$app/components/Icons";
 import { Pill } from "$app/components/ui/Pill";
+import { ChevronDown, Reply, X } from "@boxicons/react";
 
 export type Option = { id: string; label: string; isSubOption?: boolean; disabled?: boolean };
 
@@ -166,7 +166,7 @@ const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel
   }
   return (
     <span>
-      {isSubOption ? <Icon name="arrow-right-reply" className="mr-2" /> : null}
+      {isSubOption ? <Reply className="mr-2" /> : null}
       {label}
     </span>
   );
@@ -178,7 +178,7 @@ const IndicatorSeparator = () => null;
 const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Option, IsMulti>) => (
   <components.ClearIndicator {...props}>
     <button className="cursor-pointer all-unset" aria-label="Clear value">
-      <Icon name="x" />
+      <X />
     </button>
   </components.ClearIndicator>
 );
@@ -186,7 +186,7 @@ const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Opti
 const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProps<Option, IsMulti>) =>
   props.isMulti ? null : (
     <components.DropdownIndicator {...props}>
-      <Icon name="outline-cheveron-down" />
+      <ChevronDown />
     </components.DropdownIndicator>
   );
 
@@ -229,7 +229,7 @@ const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMu
     <Pill asChild color="primary" className="cursor-pointer font-[inherit] text-[length:inherit]">
       <button>
         {props.data.label}
-        <Icon name="x" className="ml-2" />
+        <X className="ml-2" />
       </button>
     </Pill>
   </div>

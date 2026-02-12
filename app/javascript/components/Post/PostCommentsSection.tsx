@@ -15,7 +15,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -24,6 +23,7 @@ import { UserAvatar } from "$app/components/server-components/CommunitiesPage/Us
 import { Pill } from "$app/components/ui/Pill";
 
 import defaultUserAvatar from "$assets/images/user-avatar.png";
+import { DotsHorizontalRounded } from "@boxicons/react";
 
 type CommentsMetadata = {
   seller_id: string;
@@ -258,7 +258,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
             {comment.is_editable || comment.is_deletable ? (
               <Popover>
                 <PopoverTrigger aria-label="Open comment action menu">
-                  <Icon name="three-dots" />
+                  <DotsHorizontalRounded />
                 </PopoverTrigger>
                 <PopoverContent>
                   <div className="grid gap-3">

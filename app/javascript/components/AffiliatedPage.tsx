@@ -9,7 +9,6 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { GlobalAffiliates } from "$app/components/GlobalAffiliates";
-import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { Search } from "$app/components/Search";
@@ -25,6 +24,7 @@ import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriv
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
+import { Link, XCircle } from "@boxicons/react";
 
 export type AffiliatedProduct = {
   product_name: string;
@@ -156,7 +156,7 @@ const AffiliatedProductsTable = ({
                 <div className="flex flex-wrap gap-3 lg:justify-end">
                   <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={affiliatedProduct.url}>
                     <Button>
-                      <Icon name="link" />
+                      <Link />
                       Copy link
                     </Button>
                   </CopyToClipboard>
@@ -244,7 +244,7 @@ const AffiliatedPage = ({
       ctaButton={
         isShowingGlobalAffiliates ? (
           <Button onClick={() => toggleOpen(false)}>
-            <Icon name="x-circle" />
+            <XCircle />
             Close
           </Button>
         ) : (

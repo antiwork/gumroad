@@ -4,10 +4,10 @@ import React from "react";
 import { ClientNavLink } from "$app/components/client-components/Nav";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem } from "$app/components/Nav";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
+import { ArrowRight } from "@boxicons/react";
 
 function NavbarFooter() {
   const routeParams = { host: useAppDomain() };
@@ -39,7 +39,7 @@ function NavbarFooter() {
           />
           <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
           <Link role="menuitem" href={Routes.logout_url(routeParams)} method="delete" className="all-unset">
-            <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
+            <ArrowRight pack="filled" className="mr-3 ml-1" />
             Logout
           </Link>
           {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}

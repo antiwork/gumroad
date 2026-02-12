@@ -9,7 +9,6 @@ import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layo
 import { BundleProduct } from "$app/components/BundleEdit/types";
 import { Button } from "$app/components/Button";
 import { CartItemList } from "$app/components/CartItemList";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -17,6 +16,7 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
+import { Plus, Search } from "@boxicons/react";
 
 type ContentPageProps = {
   bundle: {
@@ -266,7 +266,7 @@ export default function BundlesContentEdit() {
                 aria-label="Product selector"
               >
                 <div className="input">
-                  <Icon name="solid-search" />
+                  <Search pack="filled" />
                   <input
                     type="text"
                     value={query}
@@ -302,7 +302,7 @@ export default function BundlesContentEdit() {
               <h2>Select products</h2>
               <p>Choose the products you want to include in your bundle</p>
               <Button color="primary" onClick={() => setIsSelecting(true)}>
-                <Icon name="plus" />
+                <Plus />
                 Add products
               </Button>
             </Placeholder>

@@ -6,7 +6,6 @@ import { cast } from "ts-safe-cast";
 import { classNames } from "$app/utils/classNames";
 
 import { NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -14,6 +13,7 @@ import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
+import { Gear } from "@boxicons/react";
 
 type TaxDocument = {
   document: string;
@@ -119,7 +119,7 @@ const TaxCenterIndex = () => {
 
   const settingsAction = loggedInUser?.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Icon name="gear-fill" />
+      <Gear pack="filled" />
       Settings
     </NavigationButton>
   ) : null;

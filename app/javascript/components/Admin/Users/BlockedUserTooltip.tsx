@@ -3,8 +3,8 @@ import React from "react";
 import { formatDate } from "$app/utils/date";
 
 import type { User } from "$app/components/Admin/Users/User";
-import { Icon } from "$app/components/Icons";
 import { WithTooltip, type Position } from "$app/components/WithTooltip";
+import { Shield } from "@boxicons/react";
 
 export type Props = {
   user: User;
@@ -34,7 +34,7 @@ const BlockedUserTooltip = ({ user, position = "bottom" }: Props) => {
 
   return (
     <WithTooltip tip={content()} position={position}>
-      <Icon name="solid-shield-exclamation" className="text-warning" />
+      <Shield pack="filled" className="text-warning" />
     </WithTooltip>
   );
 };

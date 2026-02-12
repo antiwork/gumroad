@@ -8,7 +8,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card as UICard, CardContent } from "$app/components/ui/Card";
@@ -19,6 +18,7 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
 import { Card } from "./Card";
+import { Archive } from "@boxicons/react";
 
 export const SORT_BY_LABELS = {
   default: "Default",
@@ -366,7 +366,7 @@ export const CardGrid = ({
       )}
       {results?.products.length === 0 ? (
         <Placeholder>
-          <Icon name="archive-fill" />
+          <Archive pack="filled" />
           No products found
         </Placeholder>
       ) : (

@@ -7,6 +7,7 @@ import { classNames } from "$app/utils/classNames";
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { PageListItem } from "$app/components/Download/PageListLayout";
+import { DotsHorizontalRounded, Move, Pencil, Trash } from "@boxicons/react";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { BlurOnEnter } from "$app/components/TiptapExtensions/BlurOnEnter";
@@ -79,11 +80,8 @@ export const PageTab = ({
       role="tab"
     >
       {!disabled ? (
-        <Icon
-          name="outline-drag"
-          className="invisible absolute left-0 text-muted group-hover/tab:visible"
-          aria-grabbed={dragging}
-        />
+        <Move className="invisible absolute left-0 text-muted group-hover/tab:visible"
+          aria-grabbed={dragging} />
       ) : null}
       <Icon name={icon} aria-label={iconLabels[icon]} />
       <span className="flex-1">
@@ -93,15 +91,15 @@ export const PageTab = ({
         <span onClick={(e) => e.stopPropagation()}>
           <Popover>
             <PopoverTrigger>
-              <Icon name="three-dots" />
+              <DotsHorizontalRounded />
             </PopoverTrigger>
             <PopoverContent className="border-0 p-0 shadow-none">
               <div role="menu">
                 <div role="menuitem" onClick={() => setRenaming(true)}>
-                  <Icon name="pencil" /> Rename
+                  <Pencil /> Rename
                 </div>
                 <div className="danger" role="menuitem" onClick={onDelete}>
-                  <Icon name="trash2" /> Delete
+                  <Trash /> Delete
                 </div>
               </div>
             </PopoverContent>

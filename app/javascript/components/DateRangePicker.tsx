@@ -13,12 +13,12 @@ import {
 import * as React from "react";
 
 import { DateInput } from "$app/components/DateInput";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 import { useUserAgentInfo } from "$app/components/UserAgent";
+import { ChevronDown } from "@boxicons/react";
 
 export const DateRangePicker = ({
   from,
@@ -55,7 +55,7 @@ export const DateRangePicker = ({
       <PopoverTrigger>
         <InputGroup className="whitespace-nowrap" aria-label="Date range selector">
           <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
-          <Icon name="outline-cheveron-down" className="ml-auto" />
+          <ChevronDown className="ml-auto" />
         </InputGroup>
       </PopoverTrigger>
       <PopoverContent matchTriggerWidth className={isCustom ? "" : "border-0 p-0 shadow-none"}>

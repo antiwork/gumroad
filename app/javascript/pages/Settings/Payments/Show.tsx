@@ -14,7 +14,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { Button } from "$app/components/Button";
 import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
 import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
-import { Icon } from "$app/components/Icons";
 import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { PriceInput } from "$app/components/PriceInput";
 import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
@@ -37,6 +36,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import logo from "$assets/images/logo-g.svg";
+import { Bank, CreditCard, Store, Stripe } from "@boxicons/react";
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
 type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
@@ -968,7 +968,7 @@ export default function PaymentsPage() {
                     onClick={() => updatePayoutMethod("bank")}
                     disabled={props.is_form_disabled}
                   >
-                    <Icon name="bank" />
+                    <Bank />
                     <div>
                       <h4>Bank Account</h4>
                     </div>
@@ -981,7 +981,7 @@ export default function PaymentsPage() {
                       onClick={() => updatePayoutMethod("card")}
                       disabled={props.is_form_disabled}
                     >
-                      <Icon name="card" />
+                      <CreditCard />
                       <div>
                         <h4>Debit Card</h4>
                       </div>
@@ -997,7 +997,7 @@ export default function PaymentsPage() {
                   onClick={() => updatePayoutMethod("paypal")}
                   disabled={props.is_form_disabled}
                 >
-                  <Icon name="shop-window" />
+                  <Store />
                   <div>
                     <h4>PayPal</h4>
                   </div>
@@ -1013,7 +1013,7 @@ export default function PaymentsPage() {
                   onClick={() => updatePayoutMethod("stripe")}
                   disabled={props.is_form_disabled}
                 >
-                  <Icon name="stripe" />
+                  <Stripe pack="brands" />
                   <div>
                     <h4>Connect to Stripe</h4>
                   </div>

@@ -8,8 +8,7 @@ import { getStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
 import { useFont } from "$app/components/DesignSettings";
-import { Icon } from "$app/components/Icons";
-
+import { CreditCard } from "@boxicons/react";
 export const CreditCardInput = ({
   disabled,
   savedCreditCard,
@@ -47,7 +46,7 @@ export const CreditCardInput = ({
       </legend>
       {savedCreditCard && useSavedCard ? (
         <div className="input read-only" aria-label="Saved credit card">
-          <Icon name="outline-credit-card" />
+          <CreditCard />
           <span>{savedCreditCard.number}</span>
           <span style={{ marginLeft: "auto" }}>{savedCreditCard.expiration_date}</span>
         </div>

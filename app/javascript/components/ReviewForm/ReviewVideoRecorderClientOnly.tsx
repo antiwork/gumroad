@@ -2,7 +2,6 @@ import cx from "classnames";
 import React, { useEffect, useRef, useState } from "react";
 import { useReactMediaRecorder } from "react-media-recorder";
 
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import {
   ReviewVideoRecorderContainer,
@@ -11,6 +10,7 @@ import {
 } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Trash } from "@boxicons/react";
 
 const MAX_RECORDING_DURATION_MS = 10 * 60 * 1000;
 
@@ -110,7 +110,7 @@ const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; dis
     onClick={onClick}
     disabled={disabled}
   >
-    <Icon name="trash2" className="text-sm text-white" />
+    <Trash className="text-sm text-white" />
   </button>
 );
 
