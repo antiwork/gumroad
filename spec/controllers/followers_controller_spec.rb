@@ -205,13 +205,15 @@ describe FollowersController, inertia: true do
 
       it "shows proper success messaging" do
         post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id }
-        expect(response.body).to match("Followed!")
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Followers/FromEmbedForm")
+        expect(inertia.props[:message]).to eq("Check your inbox to confirm your follow request.")
       end
 
       it "redirects to follow page on failure with proper messaging" do
         post :from_embed_form, params: { email: "exampleexample.com", seller_id: seller.external_id }
         expect(response).to redirect_to(seller.profile_url)
-        expect(flash[:warning]).to include("try to follow the creator again")
+        expect(flash[:alert]).to include("Email invalid")
       end
 
       context "when a user is already following the creator using the same email" do
@@ -224,7 +226,9 @@ describe FollowersController, inertia: true do
           end.not_to change { Follower.count }
 
           expect(following_relationship.follower_user_id).to eq(following_user.id)
-          expect(response.body).to match("Followed!")
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Followers/FromEmbedForm")
+          expect(inertia.props[:message]).to eq("You are now following #{seller.name_or_username}!")
         end
       end
     end

@@ -67,7 +67,7 @@ class FollowersController < ApplicationController
       message = @follower&.errors&.full_messages&.to_sentence || "Something went wrong. Please try to follow the creator again."
       user = User.find_by_external_id(params[:seller_id])
       e404 unless user.try(:username)
-      redirect_to user.profile_url, alert: message, allow_other_host: true
+      return redirect_to user.profile_url, alert: message, allow_other_host: true
     end
     message = @follower.confirmed? ?
       "You are now following #{@follower.user.name_or_username}!" :
