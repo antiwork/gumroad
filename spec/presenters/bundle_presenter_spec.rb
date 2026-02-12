@@ -9,6 +9,7 @@ describe BundlePresenter do
     it "returns the correct props" do
       props = ProductPresenter.card_for_web(product:).merge({
                                                               is_quantity_enabled: true,
+                                                              creation_date: product.created_at.iso8601,
                                                               price_cents: 100,
                                                               quantity: 2,
                                                               url: product.long_url,
