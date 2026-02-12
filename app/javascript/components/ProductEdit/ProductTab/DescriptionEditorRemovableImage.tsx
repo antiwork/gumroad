@@ -1,4 +1,3 @@
-import * as React from "react";
 import { NodeViewWrapper, ReactNodeViewRenderer, NodeViewProps } from "@tiptap/react";
 import { Image as BaseImage } from "$app/components/TiptapExtensions/Image";
 import { RemoveButton } from "$app/components/RemoveButton";
@@ -50,6 +49,10 @@ const RemovableImageView = (props: NodeViewProps) => {
 
 export const RemovableImage = BaseImage.extend({
   name: BaseImage.name,
+
+  ...(BaseImage.config.menuItem ? { menuItem: BaseImage.config.menuItem } : {}),
+  ...(BaseImage.config.submenu ? { submenu: BaseImage.config.submenu } : {}),
+
   addNodeView() {
     return ReactNodeViewRenderer(RemovableImageView);
   },
