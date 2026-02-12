@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe SubscriptionsPresenter do
+describe Subscriptions::MagicLinkPresenter do
   let(:product) { create(:product, name: "Test product name") }
   let(:user) { create(:user, email: "user@email.com") }
   let(:subscription) do

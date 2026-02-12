@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class SubscriptionsPresenter
+class Subscriptions::MagicLinkPresenter
   def initialize(subscription:)
     @subscription = subscription
   end
@@ -10,7 +10,7 @@ class SubscriptionsPresenter
       { email: EmailRedactorService.redact(email), source: } unless email.nil?
     end.compact.uniq { |email| email[:email] }
 
-    @react_component_props = {
+    {
       subscription_id: @subscription.external_id,
       is_installment_plan: @subscription.is_installment_plan,
       user_emails: unique_emails,

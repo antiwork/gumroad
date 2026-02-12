@@ -1,54 +1,40 @@
+import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
-
-import { sendMagicLink } from "$app/data/subscription_magic_link";
-import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
+import { cast } from "ts-safe-cast";
 
 import { Layout } from "$app/components/Authentication/Layout";
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type UserEmail = { email: string; source: string };
 
-type SubscriptionManagerMagicLinkProps = {
+type Props = {
   product_name: string;
   subscription_id: string;
   is_installment_plan: boolean;
   user_emails: [UserEmail, ...UserEmail[]];
+  email_sent: string | null;
 };
-const SubscriptionManagerMagicLink = ({
-  product_name,
-  subscription_id,
-  is_installment_plan,
-  user_emails,
-}: SubscriptionManagerMagicLinkProps) => {
-  const [loading, setLoading] = React.useState(false);
-  const [hasSentEmail, setHasSentEmail] = React.useState(false);
-  const [selectedUserEmail, setSelectedUserEmail] = React.useState(user_emails[0]);
+
+function SubscriptionsMagicLink() {
+  const { product_name, subscription_id, is_installment_plan, user_emails, email_sent } = cast<Props>(usePage().props);
+
+  const hasSentEmail = email_sent !== null;
+  const defaultEmailSource = email_sent ?? user_emails[0].source;
+  const form = useForm({ email_source: defaultEmailSource });
+  const selectedEmail = user_emails.find((e) => e.source === form.data.email_source) ?? user_emails[0];
 
   const subscriptionEntity = is_installment_plan ? "installment plan" : "membership";
   const invalid = new URL(useOriginalLocation()).searchParams.get("invalid") === "true";
 
-  const handleSendMagicLink = async () => {
-    setLoading(true);
-    try {
-      await sendMagicLink({ emailSource: selectedUserEmail.source, subscriptionId: subscription_id });
-      if (hasSentEmail) {
-        showAlert(`Magic link resent to ${selectedUserEmail.email}.`, "success");
-      }
-      setHasSentEmail(true);
-    } catch (error) {
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    }
-    setLoading(false);
+  const sendMagicLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    form.post(Routes.subscription_magic_link_path(subscription_id));
   };
 
   const title = hasSentEmail
-    ? `We've sent a link to ${selectedUserEmail.email}.`
+    ? `We've sent a link to ${selectedEmail.email}.`
     : invalid
       ? "Your magic link has expired."
       : "You're currently not signed in.";
@@ -56,7 +42,7 @@ const SubscriptionManagerMagicLink = ({
     ? `Please check your inbox and click the link in your email to manage your ${subscriptionEntity}.`
     : user_emails.length > 1
       ? `To manage your ${subscriptionEntity} for ${product_name}, choose one of the emails associated with your account to receive a magic link.`
-      : `To manage your ${subscriptionEntity} for ${product_name}, click the button below to receive a magic link at ${selectedUserEmail.email}`;
+      : `To manage your ${subscriptionEntity} for ${product_name}, click the button below to receive a magic link at ${selectedEmail.email}`;
 
   return (
     <Layout
@@ -68,21 +54,21 @@ const SubscriptionManagerMagicLink = ({
       }
       headerActions={<a href={Routes.login_path()}>Log in</a>}
     >
-      <form>
+      <form onSubmit={sendMagicLink}>
         <section>
           {hasSentEmail ? (
             <>
-              <Button color="primary" onClick={() => void handleSendMagicLink()} disabled={loading}>
-                {loading ? <LoadingSpinner /> : null}
+              <Button color="primary" type="submit" disabled={form.processing}>
+                {form.processing ? <LoadingSpinner /> : null}
                 Resend magic link
               </Button>
               <p>
                 {user_emails.length > 1 ? (
                   <>
                     Can't see the email? Please check your spam folder.{" "}
-                    <button className="cursor-pointer underline all-unset" onClick={() => setHasSentEmail(false)}>
+                    <Link href={Routes.new_subscription_magic_link_path(subscription_id)} className="underline">
                       Click here to choose another email
-                    </button>{" "}
+                    </Link>{" "}
                     or try resending the link above.
                   </>
                 ) : (
@@ -101,16 +87,16 @@ const SubscriptionManagerMagicLink = ({
                         type="radio"
                         name="email_source"
                         value={userEmail.source}
-                        onChange={() => setSelectedUserEmail(userEmail)}
-                        checked={userEmail === selectedUserEmail}
+                        onChange={() => form.setData("email_source", userEmail.source)}
+                        checked={userEmail.source === selectedEmail.source}
                       />
                       {userEmail.email}
                     </label>
                   ))}
                 </fieldset>
               ) : null}
-              <Button color="primary" onClick={() => void handleSendMagicLink()} disabled={loading}>
-                {loading ? <LoadingSpinner /> : null}
+              <Button color="primary" type="submit" disabled={form.processing}>
+                {form.processing ? <LoadingSpinner /> : null}
                 Send magic link
               </Button>
             </>
@@ -119,6 +105,8 @@ const SubscriptionManagerMagicLink = ({
       </form>
     </Layout>
   );
-};
+}
 
-export default register({ component: SubscriptionManagerMagicLink, propParser: createCast() });
+SubscriptionsMagicLink.publicLayout = true;
+
+export default SubscriptionsMagicLink;
