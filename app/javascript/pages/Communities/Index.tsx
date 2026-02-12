@@ -273,7 +273,6 @@ function CommunityView() {
         async: true,
         preserveState: true,
         preserveScroll: true,
-        only: ["messages"],
         onSuccess: () => {
           updateCommunityDraft(communityId, { content: "", isSending: false });
         },
@@ -286,6 +285,8 @@ function CommunityView() {
         onFinish: () => {
           isSendingMessageRef.current = false;
           updateCommunityDraft(communityId, { isSending: false });
+          scrollTo({ target: "bottom" });
+          setShowScrollToBottomButton(false);
         },
       },
     );

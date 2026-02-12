@@ -93,14 +93,13 @@ export const ChatMessage = ({
       return;
     }
 
-    setIsSaving(true);
     router.put(
       Routes.chat_message_path(message.community_id, message.id),
       { community_chat_message: { content: editedMessage } },
       {
-        preserveState: true,
         preserveScroll: true,
         only: ["messages"],
+        onStart: () => setIsSaving(true),
         onSuccess: () => setIsEditing(false),
         onFinish: () => setIsSaving(false),
       },
@@ -212,7 +211,6 @@ export const ChatMessage = ({
                 onClick={() => {
                   setDeleteConfirmation({ deleting: true });
                   router.delete(Routes.chat_message_path(message.community_id, message.id), {
-                    preserveState: true,
                     preserveScroll: true,
                     onSuccess: () => setDeleteConfirmation(null),
                     onError: () => {
