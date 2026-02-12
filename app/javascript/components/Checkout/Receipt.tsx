@@ -148,7 +148,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
                 Need an invoice for this?{" "}
                 <a
                   target="_blank"
-                  href={Routes.generate_invoice_by_buyer_path(result.id, { email: result.email })}
+                  href={Routes.new_purchase_invoice_path(result.id, { email: result.email })}
                   rel="noreferrer"
                 >
                   Generate

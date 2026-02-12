@@ -80,6 +80,19 @@ Rails.application.routes.draw do
     end
   end
 
+  def purchases_invoice_routes
+    scope module: :purchases do
+      resources :purchases, only: [] do
+        resource :invoice, only: [:create, :new] do
+          get :confirm
+          post :confirm, action: :confirm_email
+        end
+      end
+    end
+
+    get "/purchases/:purchase_id/generate_invoice", to: redirect { |path_params, request| "/purchases/#{path_params[:purchase_id]}/invoice/new#{request.query_string.present? ? "?#{request.query_string}" : ""}" }
+  end
+
   def product_tracking_routes(named_routes: true)
     resources :links, only: :create do
       member do
@@ -98,20 +111,15 @@ Rails.application.routes.draw do
 
   def product_info_and_purchase_routes(named_routes: true)
     product_tracking_routes(named_routes:)
+    purchases_invoice_routes
 
     get "/offer_codes/compute_discount", to: "offer_codes#compute_discount"
     get "/products/search", to: "links#search"
 
     if named_routes
       get "/braintree/client_token", to: "braintree#client_token", as: :braintree_client_token
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice", as: :generate_invoice_by_buyer
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice", as: :confirm_generate_invoice
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice", as: :send_invoice
     else
       get "/braintree/client_token", to: "braintree#client_token"
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice"
     end
 
     post "/braintree/generate_transient_customer_token", to: "braintree#generate_transient_customer_token"
@@ -512,7 +520,6 @@ Rails.application.routes.draw do
         post :confirm
         post :change_can_contact
         post :resend_receipt
-        post :send_invoice
         put :refund
         put :revoke_access
         put :undo_revoke_access
@@ -774,8 +781,7 @@ Rails.application.routes.draw do
     get "/dashboard/consumption" => redirect("/dashboard/audience")
 
     # invoices
-    get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-    get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
+    purchases_invoice_routes
 
     # preorder
     post "/purchases/:id/cancel_preorder_by_seller", to: "purchases#cancel_preorder_by_seller", as: :cancel_preorder_by_seller
