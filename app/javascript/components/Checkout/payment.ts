@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import { enableMapSet, produce } from "immer";
 import { groupBy } from "lodash-es";
 import * as React from "react";
@@ -403,14 +404,12 @@ export function createReducer(initial: {
     },
   );
   const [state, dispatch] = reducer;
+  // Clean URL params after initial render to avoid stale URL references during Inertia updates
   useRunOnce(() => {
     const url = new URL(window.location.href);
-    if (url.pathname.startsWith(Routes.checkout_path())) return;
     const searchParams = new URLSearchParams([...url.searchParams].filter(([key]) => key === "_gl"));
     url.search = searchParams.toString();
-    // TODO (sm17p) Replace with Inertia's router.replace once subscription manager page is migrated to Inertia
-    // then remove the checkout-path early return above so this runs on checkout too.
-    window.history.replaceState(window.history.state, "", url.toString());
+    router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
   });
 
   const updateSurcharges = useDebouncedCallback(

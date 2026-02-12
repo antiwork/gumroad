@@ -51,7 +51,6 @@ import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnaly
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOnChange, useOnChangeSync } from "$app/components/useOnChange";
-import { useRunOnce } from "$app/components/useRunOnce";
 
 const GUMROAD_PARAMS = [
   "product",
@@ -567,13 +566,6 @@ const CheckoutIndexPage = () => {
     });
   }, cart_save_debounce_ms);
 
-  // Clean URL params after initial render to avoid stale URL references during Inertia updates
-  useRunOnce(() => {
-    const url = new URL(window.location.href);
-    const searchParams = new URLSearchParams([...url.searchParams].filter(([key]) => key === "_gl"));
-    url.search = searchParams.toString();
-    router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
-  });
   React.useEffect(() => {
     debouncedSaveCartState();
     if (state.status.type === "input") {
