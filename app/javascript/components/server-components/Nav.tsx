@@ -1,3 +1,4 @@
+import { Archive, Bank, BarChart, Book, BookmarkHeart, Cart, DollarCircle, Envelope, Gear, MessageBubble, NetworkChart, Search, Store, Tag } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
@@ -68,13 +69,13 @@ export const Nav = (props: Props) => {
       footer={
         <>
           {currentSeller?.isBuyer ? (
-            <NavLink text="Start selling" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} />
+            <NavLink text="Start selling" icon={<Store pack="filled" />} href={Routes.dashboard_url(routeParams)} />
           ) : null}
-          <NavLink text="Settings" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
+          <NavLink text="Settings" icon={<Gear pack="filled" />} href={Routes.settings_main_url(routeParams)} />
 
           <NavLink
             text="Help"
-            icon="book"
+            icon={<Book />}
             href={Routes.help_center_root_url(routeParams)}
             badge={
               props.helper_host && props.helper_session ? (
@@ -109,33 +110,33 @@ export const Nav = (props: Props) => {
       {...props}
     >
       <NavSection>
-        <NavLink text="Home" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
+        <NavLink text="Home" icon={<Store pack="filled" />} href={Routes.dashboard_url(routeParams)} exactHrefMatch />
         <NavLink
           text="Products"
-          icon="archive-fill"
+          icon={<Archive pack="filled" />}
           href={Routes.products_url(routeParams)}
           additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
-          <NavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
+          <NavLink text="Collaborators" icon={<Tag pack="filled" />} href={Routes.collaborators_url(routeParams)} />
         ) : null}
         <NavLink
           text="Checkout"
-          icon="cart3-fill"
+          icon={<Cart pack="filled" />}
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
         />
         <NavLink
           text="Emails"
-          icon="envelope-fill"
+          icon={<Envelope pack="filled" />}
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
         />
-        <NavLink text="Workflows" icon="diagram-2-fill" href={Routes.workflows_url(routeParams)} />
-        <NavLink text="Sales" icon="solid-currency-dollar" href={Routes.customers_url(routeParams)} />
+        <NavLink text="Workflows" icon={<NetworkChart pack="filled" />} href={Routes.workflows_url(routeParams)} />
+        <NavLink text="Sales" icon={<DollarCircle pack="filled" />} href={Routes.customers_url(routeParams)} />
         <NavLink
           text="Analytics"
-          icon="bar-chart-fill"
+          icon={<BarChart pack="filled" />}
           href={Routes.sales_dashboard_url(routeParams)}
           additionalPatterns={[
             Routes.audience_dashboard_url(routeParams),
@@ -144,18 +145,18 @@ export const Nav = (props: Props) => {
           ]}
         />
         {loggedInUser?.policies.balance.index ? (
-          <NavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
+          <NavLink text="Payouts" icon={<Bank />} href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
-          <NavLink text="Community" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
+          <NavLink text="Community" icon={<MessageBubble pack="filled" />} href={Routes.community_path(routeParams)} />
         ) : null}
       </NavSection>
       <NavSection>
-        <NavLink text="Discover" icon="solid-search" href={discoverUrl} exactHrefMatch />
+        <NavLink text="Discover" icon={<Search pack="filled" />} href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <NavLink
             text="Library"
-            icon="bookmark-heart-fill"
+            icon={<BookmarkHeart pack="filled" />}
             href={Routes.library_url(routeParams)}
             additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
           />

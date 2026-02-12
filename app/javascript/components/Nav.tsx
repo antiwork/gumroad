@@ -1,3 +1,4 @@
+import { CheckCircle } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -22,7 +23,7 @@ export const useNav = () => React.useContext(NavContext);
 
 interface BaseNavLinkProps {
   text: string;
-  icon?: IconName;
+  icon?: React.ReactNode;
   badge?: React.ReactNode;
   href: string;
   exactHrefMatch?: boolean;
@@ -62,8 +63,8 @@ const BaseNavLink = ({
       )}
       {...props}
     >
-      {icon ? <Icon name={icon} className="mr-4" /> : null}
-      {text}
+      {icon}
+      <span className="ml-4">{text}</span>
       {badge ? (
         <>
           <span className="flex-1" />
@@ -211,7 +212,7 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
       <span className="min-w-0 flex-1 truncate" title={teamMembership.seller_name}>
         {teamMembership.seller_name}
       </span>
-      {teamMembership.is_selected ? <Icon name="solid-check-circle" className="h-5 shrink-0 text-accent" /> : null}
+      {teamMembership.is_selected ? <CheckCircle pack="filled" className="h-5 shrink-0 text-accent" /> : null}
     </a>
   );
 };

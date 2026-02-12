@@ -1,3 +1,4 @@
+import { ArrowRight, Book, Gear, Store } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -7,7 +8,6 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem } from "$app/components/Nav";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
-import { ArrowRight } from "@boxicons/react";
 
 function NavbarFooter() {
   const routeParams = { host: useAppDomain() };
@@ -18,10 +18,10 @@ function NavbarFooter() {
   return (
     <>
       {currentSeller?.isBuyer ? (
-        <NavLink text="Start selling" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} />
+        <NavLink text="Start selling" icon={<Store pack="filled" />} href={Routes.dashboard_url(routeParams)} />
       ) : null}
-      <ClientNavLink text="Settings" icon="gear-fill" href={Routes.settings_main_url(routeParams)} />
-      <ClientNavLink text="Help" icon="book" href={Routes.help_center_root_url(routeParams)} />
+      <ClientNavLink text="Settings" icon={<Gear pack="filled" />} href={Routes.settings_main_url(routeParams)} />
+      <ClientNavLink text="Help" icon={<Book />} href={Routes.help_center_root_url(routeParams)} />
       <DashboardNavProfilePopover user={currentSeller}>
         <div role="menu" className="flex flex-col border-0! shadow-none! dark:border!">
           {teamMemberships != null && teamMemberships.length > 0 ? (
