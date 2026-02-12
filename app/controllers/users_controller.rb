@@ -10,7 +10,7 @@ class UsersController < ApplicationController
 
   after_action :verify_authorized, only: %i[deactivate]
 
-  before_action :hide_layouts, only: %i[show coffee subscribe]
+  before_action :hide_layouts, only: %i[show subscribe]
   before_action :set_as_modal, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
   before_action :set_page_attributes, only: %i[show]
@@ -18,7 +18,7 @@ class UsersController < ApplicationController
   before_action :check_if_needs_redirect, only: %i[show]
   before_action :set_affiliate_cookie, only: %i[show]
 
-  layout "inertia", only: [:subscribe_preview]
+  layout "inertia", only: [:coffee, :subscribe_preview]
 
   def show
     format_search_params!
@@ -39,12 +39,26 @@ class UsersController < ApplicationController
   end
 
   def coffee
-    set_favicon_meta_tags(@user)
-    @product = @user.products.visible_and_not_archived.find_by(native_type: Link::NATIVE_TYPE_COFFEE)
-    e404 if @product.nil?
+    if params[:purchase_email].present?
+      flash[:notice] = "Your purchase was successful! We sent a receipt to #{params[:purchase_email]}."
+      return redirect_to request.path
+    end
 
-    set_meta_tag(title: @product.name)
-    @product_props = ProductPresenter.new(pundit_user:, product: @product, request:).product_props(seller_custom_domain_url:, recommended_by: params[:recommended_by])
+    set_favicon_meta_tags(@user)
+    product = @user.products.visible_and_not_archived.find_by(native_type: Link::NATIVE_TYPE_COFFEE)
+    e404 if product.nil?
+
+    set_meta_tag(title: product.name)
+
+    profile_presenter = ProfilePresenter.new(pundit_user:, seller: @user)
+    product_presenter = ProductPresenter.new(pundit_user:, product:, request:)
+    product_props = product_presenter.product_props(seller_custom_domain_url:, recommended_by: params[:recommended_by])
+
+    render inertia: "Users/Coffee", props: {
+      **product_props,
+      creator_profile: profile_presenter.creator_profile,
+      custom_styles: @user.seller_profile.custom_styles
+    }
   end
 
   def subscribe

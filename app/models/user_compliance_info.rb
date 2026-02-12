@@ -47,14 +47,15 @@ class UserComplianceInfo < ApplicationRecord
   attr_json_data_accessor :first_name_kana
   attr_json_data_accessor :last_name_kana
   attr_json_data_accessor :building_number
+  attr_json_data_accessor :building_number_kana
   attr_json_data_accessor :street_address_kanji
   attr_json_data_accessor :street_address_kana
   attr_json_data_accessor :business_name_kanji
   attr_json_data_accessor :business_name_kana
   attr_json_data_accessor :business_building_number
+  attr_json_data_accessor :business_building_number_kana
   attr_json_data_accessor :business_street_address_kanji
   attr_json_data_accessor :business_street_address_kana
-
   def is_individual?
     !is_business?
   end
@@ -107,7 +108,7 @@ class UserComplianceInfo < ApplicationRecord
   end
 
   def business_state_code
-    Compliance::Countries.find_subdivision_code(country_code, business_state)
+    Compliance::Countries.find_subdivision_code(business_country_code, business_state)
   end
 
   def legal_entity_business_type

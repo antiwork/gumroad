@@ -120,30 +120,11 @@ class SalesTaxCalculator
     end
 
     def is_vat_id_valid?
-      if buyer_location && Compliance::Countries::AUS.alpha2 == buyer_location[:country]
-        AbnValidationService.new(@buyer_vat_id).process
-      elsif buyer_location && Compliance::Countries::SGP.alpha2 == buyer_location[:country]
-        GstValidationService.new(@buyer_vat_id).process
-      elsif buyer_location && Compliance::Countries::CAN.alpha2 == buyer_location[:country] && state == QUEBEC
-        QstValidationService.new(@buyer_vat_id).process
-      elsif buyer_location && Compliance::Countries::NOR.alpha2 == buyer_location[:country]
-        MvaValidationService.new(@buyer_vat_id).process
-      elsif buyer_location && Compliance::Countries::KEN.alpha2 == buyer_location[:country]
-        KraPinValidationService.new(@buyer_vat_id).process
-      elsif buyer_location && Compliance::Countries::BHR.alpha2 == buyer_location[:country]
-        TrnValidationService.new(@buyer_vat_id).process
-      elsif buyer_location && Compliance::Countries::OMN.alpha2 == buyer_location[:country]
-        OmanVatNumberValidationService.new(@buyer_vat_id).process
-      elsif buyer_location && Compliance::Countries::NGA.alpha2 == buyer_location[:country]
-        FirsTinValidationService.new(@buyer_vat_id).process
-      elsif buyer_location && Compliance::Countries::TZA.alpha2 == buyer_location[:country]
-        TraTinValidationService.new(@buyer_vat_id).process
-      elsif buyer_location && (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(buyer_location[:country]) ||
-            Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS_WITH_TAX_ID_PRO_VALIDATION.include?(buyer_location[:country]))
-        TaxIdValidationService.new(@buyer_vat_id, buyer_location[:country]).process
-      else
-        VatValidationService.new(@buyer_vat_id).process
-      end
+      RegionalVatIdValidationService.new(
+        @buyer_vat_id,
+        country_code: buyer_location&.dig(:country),
+        state_code: state
+      ).process
     end
 
     # Internal: Determine the sales tax to be levied if applicable.

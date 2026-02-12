@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
+import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -73,7 +74,7 @@ export const ProductsPageMembershipsTable = (props: {
 
   const debouncedLoadMemberships = useDebouncedCallback(() => loadMemberships(1), 300);
 
-  React.useEffect(() => {
+  useOnChange(() => {
     if (props.query !== null) debouncedLoadMemberships();
   }, [props.query]);
 

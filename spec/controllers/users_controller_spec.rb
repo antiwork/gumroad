@@ -299,18 +299,27 @@ describe UsersController do
     end
   end
 
-  describe "GET coffee" do
+  describe "GET coffee", inertia: true do
     let(:seller) { create(:user, :eligible_for_service_products) }
-    render_views
 
     context "user has coffee product" do
       let!(:product) { create(:product, name: "Buy me a coffee", user: seller, native_type: Link::NATIVE_TYPE_COFFEE, purchase_disabled_at: Time.current) }
 
-      it "responds successfully and sets the title" do
+      it "renders the Inertia Users/Coffee component with correct props" do
         get :coffee, params: { username: seller.username }
 
         expect(response).to be_successful
-        expect(response.body).to have_selector("title:contains('Buy me a coffee')", visible: false)
+        expect(inertia.component).to eq("Users/Coffee")
+        expect(inertia.props[:product][:name]).to eq("Buy me a coffee")
+        expect(inertia.props[:creator_profile]).to be_present
+        expect(inertia.props[:custom_styles]).to be_present
+      end
+
+      it "redirects and sets the flash message when purchase_email is present" do
+        get :coffee, params: { username: seller.username, purchase_email: "buyer@example.com" }
+
+        expect(response).to redirect_to("/coffee")
+        expect(flash[:notice]).to eq("Your purchase was successful! We sent a receipt to buyer@example.com.")
       end
     end
 

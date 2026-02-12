@@ -248,7 +248,21 @@ class Subscription < ApplicationRecord
     purchase = Purchase.new(purchase_params)
     purchase.variant_attributes = original_purchase.variant_attributes
 
-    purchase.offer_code = original_purchase.offer_code if discount_applies_to_next_charge?
+    if discount_applies_to_next_charge?
+      if original_purchase.purchase_offer_code_discount.present?
+        original_discount = original_purchase.purchase_offer_code_discount
+        purchase.offer_code = original_purchase.offer_code
+        purchase.build_purchase_offer_code_discount(
+          offer_code: original_discount.offer_code,
+          offer_code_amount: original_discount.offer_code_amount,
+          offer_code_is_percent: original_discount.offer_code_is_percent,
+          pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
+          duration_in_months: original_discount.duration_in_months
+        )
+      elsif original_purchase.offer_code.present?
+        purchase.offer_code = original_purchase.offer_code
+      end
+    end
 
     purchase.purchaser = user
     purchase.link = link
@@ -861,44 +875,6 @@ class Subscription < ApplicationRecord
 
   def alive_or_restartable?
     !ended? && !cancelled_by_seller?
-  end
-
-  def self.restartable_for_user_and_product(user_or_email:, product:)
-    return nil unless product.is_recurring_billing
-
-    query = where(link_id: product.id).where(ended_at: nil)
-
-    if user_or_email.is_a?(User)
-      query = query.where(user_id: user_or_email.id)
-    else
-      query = query.joins(:original_purchase)
-                   .where(purchases: { email: user_or_email.to_s.downcase.strip })
-    end
-
-    query.where.not(deactivated_at: nil)
-      .not_cancelled_by_admin
-      .order(created_at: :desc)
-      .first
-  end
-
-  def self.active_for_user_and_product(user_or_email:, product:, with_lock: false)
-    return nil unless product.is_recurring_billing
-
-    query = where(link_id: product.id)
-              .where(ended_at: nil)
-              .where(failed_at: nil)
-              .where("cancelled_at IS NULL OR cancelled_at > ?", Time.current)
-
-    if user_or_email.is_a?(User)
-      query = query.where(user_id: user_or_email.id)
-    else
-      query = query.joins(:original_purchase)
-                   .where(purchases: { email: user_or_email.to_s.downcase.strip })
-    end
-
-    query = query.lock if with_lock
-
-    query.first
   end
 
   def discount_applies_to_next_charge?

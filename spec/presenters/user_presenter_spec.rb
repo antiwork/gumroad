@@ -57,6 +57,27 @@ describe UserPresenter do
     end
   end
 
+  describe "#as_current_seller" do
+    it "returns the correct props" do
+      time_zone = ActiveSupport::TimeZone[seller.timezone]
+
+      expect(presenter.as_current_seller).to eq(
+        id: seller.external_id,
+        email: seller.email,
+        name: seller.display_name(prefer_email_over_default_username: true),
+        subdomain: seller.subdomain,
+        avatar_url: seller.avatar_url,
+        is_buyer: seller.is_buyer?,
+        time_zone: { name: time_zone.tzinfo.name, offset: time_zone.tzinfo.utc_offset },
+        has_published_products: seller.products.alive.exists?,
+        is_name_invalid_for_email_delivery: seller.is_name_invalid_for_email_delivery?,
+        profile_background_color: seller.seller_profile.background_color,
+        profile_highlight_color: seller.seller_profile.highlight_color,
+        profile_font: seller.seller_profile.font
+      )
+    end
+  end
+
   describe "#author_byline_props" do
     it "returns the correct props" do
       expect(presenter.author_byline_props).to eq(

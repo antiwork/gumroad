@@ -81,3 +81,21 @@ export function LoggedInUserLayout({ children }: { children: React.ReactNode }) 
     </LoggedInUserProvider>
   );
 }
+
+export function StandaloneLayout({ children }: { children: React.ReactNode }) {
+  const { flash, logged_in_user, current_seller } = usePage<PageProps>().props;
+
+  useFlashMessage(flash);
+
+  return (
+    <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
+      <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
+        <MetaTags />
+        <Alert initial={null} />
+        <div className="flex min-h-screen flex-col lg:flex-row">
+          <main className="flex-1">{children}</main>
+        </div>
+      </CurrentSellerProvider>
+    </LoggedInUserProvider>
+  );
+}

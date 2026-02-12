@@ -8,22 +8,22 @@ describe "Generate invoice confirmation page", type: :system, js: true do
   end
 
   it "asks to confirm the email address before showing the generate invoice page" do
-    visit "/purchases/#{@purchase.external_id}/generate_invoice"
+    visit new_purchase_invoice_path(@purchase.external_id)
 
-    expect(page).to have_current_path(confirm_generate_invoice_path(id: @purchase.external_id))
+    expect(page).to have_current_path(confirm_purchase_invoice_path(@purchase.external_id))
     expect(page).to have_text "Generate invoice"
     expect(page).to have_text "Please enter the purchase's email address to generate the invoice."
 
     fill_in "Email address", with: "wrong.email@example.com"
     click_on "Confirm email"
 
-    expect(page).to have_current_path(confirm_generate_invoice_path(id: @purchase.external_id))
+    expect(page).to have_current_path(confirm_purchase_invoice_path(@purchase.external_id))
     expect(page).to have_alert(text: "Incorrect email address. Please try again.")
 
     fill_in "Email address", with: @purchase.email
     click_on "Confirm email"
 
-    expect(page).to have_current_path(generate_invoice_by_buyer_path(@purchase.external_id, email: @purchase.email))
+    expect(page).to have_current_path(new_purchase_invoice_path(@purchase.external_id, email: @purchase.email))
     expect(page).to have_text @purchase.link.name
 
     allow_any_instance_of(PDFKit).to receive(:to_pdf).and_return("")
