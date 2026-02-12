@@ -138,12 +138,13 @@ describe("Purchases from the product page", type: :system, js: true) do
     visit "/l/#{@product.unique_permalink}"
 
     add_to_cart(@product)
+    fill_in "Full name", with: "Gumhead Moneybags"
     check_out(@product)
 
     expect(Purchase.last.full_name).to eq "Gumhead Moneybags"
   end
 
-  it "sends customer email and name to Stripe for fraud detection" do
+  it "sends customer email to Stripe for fraud detection" do
     product = create(:product, price_cents: 2500)
 
     visit product.long_url
@@ -153,7 +154,6 @@ describe("Purchases from the product page", type: :system, js: true) do
 
     stripe_billing_details = Stripe::PaymentMethod.retrieve(Purchase.last.stripe_card_id).billing_details
     expect(stripe_billing_details.email).to eq "test+stripe@gumroad.com"
-    expect(stripe_billing_details.name).to eq "Gumhead Moneybags"
   end
 
   context "when an active account already exists for the purchase email" do

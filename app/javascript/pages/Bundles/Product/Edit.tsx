@@ -28,7 +28,7 @@ import { PriceEditor } from "$app/components/ProductEdit/ProductTab/PriceEditor"
 import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { RefundPolicy, RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
-import { Toggle } from "$app/components/Toggle";
+import { Switch } from "$app/components/ui/Switch";
 
 type ProductPageProps = {
   bundle: {
@@ -331,27 +331,28 @@ export default function BundlesProductEdit() {
               maxPurchaseCount={form.data.max_purchase_count}
               setMaxPurchaseCount={(value) => form.setData("max_purchase_count", value)}
             />
-            <Toggle
-              value={form.data.quantity_enabled}
-              onChange={(newValue) => form.setData("quantity_enabled", newValue)}
-            >
-              Allow customers to choose a quantity
-            </Toggle>
-            <Toggle
-              value={form.data.should_show_sales_count}
-              onChange={(newValue) => form.setData("should_show_sales_count", newValue)}
-            >
-              Publicly show the number of sales on your product page
-            </Toggle>
-            <Toggle
-              value={form.data.is_epublication}
-              onChange={(newValue) => form.setData("is_epublication", newValue)}
-            >
-              Mark product as e-publication for VAT purposes{" "}
-              <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
-                Learn more
-              </a>
-            </Toggle>
+            <Switch
+              checked={form.data.quantity_enabled}
+              onChange={(e) => form.setData("quantity_enabled", e.target.checked)}
+              label="Allow customers to choose a quantity"
+            />
+            <Switch
+              checked={form.data.should_show_sales_count}
+              onChange={(e) => form.setData("should_show_sales_count", e.target.checked)}
+              label="Publicly show the number of sales on your product page"
+            />
+            <Switch
+              checked={form.data.is_epublication}
+              onChange={(e) => form.setData("is_epublication", e.target.checked)}
+              label={
+                <>
+                  Mark product as e-publication for VAT purposes{" "}
+                  <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
+                    Learn more
+                  </a>
+                </>
+              }
+            />
             {!seller_refund_policy_enabled ? (
               <RefundPolicySelector
                 refundPolicy={form.data.refund_policy}

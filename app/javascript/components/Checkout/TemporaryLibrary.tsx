@@ -2,14 +2,13 @@ import * as React from "react";
 
 import { ProductNativeType } from "$app/parsers/product";
 
-import { Creator } from "$app/components/Checkout/cartState";
+import type { Creator, Result } from "$app/components/Checkout/cartState";
 import { useState } from "$app/components/Checkout/payment";
 import { CreateAccountForm } from "$app/components/Checkout/Receipt";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Result } from "$app/components/server-components/CheckoutPage";
 import { Card as UICard, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";

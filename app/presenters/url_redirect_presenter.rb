@@ -53,6 +53,18 @@ class UrlRedirectPresenter
     download_page_layout_props(email_confirmation_required: extra_props[:content_unavailability_reason_code] == CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]).merge(extra_props)
   end
 
+  def read_page_props(product_file:, read_url:, title:)
+    {
+      read_id: product_file.external_id,
+      url: read_url,
+      url_redirect_id: url_redirect.external_id,
+      purchase_id: purchase&.external_id,
+      product_file_id: product_file.external_id,
+      latest_media_location: product_file.latest_media_location_for(purchase),
+      title:,
+    }
+  end
+
   private
     def download_page_layout_props(email_confirmation_required: false)
       review = purchase&.original_product_review

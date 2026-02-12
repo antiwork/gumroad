@@ -234,6 +234,35 @@ describe("ProductShowScenario", type: :system, js: true) do
         expect(find_field("Name a fair price")["inputmode"]).to eq("decimal")
       end
     end
+
+    context "with a product with a default offer code" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller, price_cents: 10000) }
+      let(:default_offer_code) { create(:offer_code, user: seller, products: [product], code: "AUTO10", amount_cents: 1000) }
+
+      before do
+        product.update!(default_offer_code: default_offer_code)
+      end
+
+      it "includes the default offer code in the redirect URL and applies it on checkout" do
+        visit "#{product.long_url}?wanted=true"
+
+        expect(page).to have_current_path(/^\/checkout/, wait: 10)
+        expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
+        expect(page).to have_text("Total US$90", normalize_ws: true, wait: 5)
+      end
+
+      context "when both URL and default codes are present" do
+        it "takes the maximum discount between the two codes" do
+          url_offer_code = create(:offer_code, user: seller, products: [product], code: "URL5", amount_cents: 500)
+          visit "#{product.long_url}/#{url_offer_code.code}?wanted=true"
+
+          expect(page).to have_current_path(/^\/checkout/, wait: 10)
+          expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
+          expect(page).to have_text("Total US$90", normalize_ws: true, wait: 5)
+        end
+      end
+    end
   end
 
   it "substitutes `<br>`s for newlines in variant descriptions" do

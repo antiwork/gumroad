@@ -15,6 +15,7 @@ class Checkout::Upsells::ProductPresenter
       review_count: product.reviews_count,
       average_rating: product.average_rating,
       native_type: product.native_type,
+      thumbnail_url: product.thumbnail_or_cover_url,
       options: product.options
     }
   end

@@ -5,8 +5,8 @@ class Exports::Payouts::Csv < Exports::Payouts::Base
   TOTALS_COLUMN_NAME = "Totals"
   TOTALS_FIELDS = ["Taxes ($)", "Shipping ($)", "Sale Price ($)", "Gumroad Fees ($)", "Net Total ($)"]
 
-  def initialize(payment_id:)
-    @payment_id = payment_id
+  def initialize(payment:)
+    @payment = payment
   end
 
   def perform

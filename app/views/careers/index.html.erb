@@ -1,0 +1,85 @@
+<div class="min-h-screen">
+  <div class="-mb-8 lg:-mb-20">
+    <%= render "home/shared/header",
+      bg_color: "dark-gray",
+      text_color: "white",
+      subtitle: "Careers",
+      title: "Build the road<br class=\"sm:hidden\"> <span class=\"whitespace-nowrap\">with us.</span>",
+      description: "Join us in New York to build the #1 tool for creators.",
+      no_border: true,
+      gap: "gap-8 md:gap-12" do %>
+      <%= render "home/shared/button", text: "See open roles", url: "#open-roles", variant: "dark" %>
+    <% end %>
+  </div>
+
+  <div class="relative bg-dark-gray">
+    <div class="mx-auto px-8 max-w-7xl">
+      <%= render "home/shared/office_carousel",
+        images: [
+          image_path("careers/dumbo.jpg"),
+          image_path("careers/map.png")
+        ],
+        captions: [
+          "DUMBO, Brooklyn",
+          "20 Jay St, Brooklyn, New York"
+        ]
+      %>
+    </div>
+  </div>
+
+<div class="bg-dark-gray text-white pt-16 sm:pt-24 pb-32">
+  <div class="flex flex-col justify-center gap-4 sm:gap-6 mx-auto text-center max-w-5xl mb-12 sm:mb-16 px-8 md:mb-28">
+    <h2 class="text-4xl md:text-6xl lg:text-7xl">How we build</h2>
+    <p class="text-lg md:text-2xl">We give you what you need to ship your best work.</p>
+  </div>
+  <%= render "home/shared/how_we_build",
+    cards: [
+      {
+        icon: image_path("careers/flag.svg"),
+        icon_bg: "pink",
+        title: "Dumbo HQ, NYC",
+        description: "High-bandwidth work from our office overlooking the Brooklyn Bridge. A seat in the city’s most iconic neighborhood."
+      },
+      {
+        icon: image_path("careers/audience.svg"),
+        icon_bg: "yellow",
+        title: "Ownership",
+        description: "Own what you build. Every team member has the option to purchase stock at least once a year."
+      },
+      {
+        icon: image_path("careers/launch.svg"),
+        icon_bg: "purple",
+        title: "Open source",
+        description: "Our code is public. We believe in transparency and hire people who share that mindset."
+      }
+    ]
+  %>
+  </div>
+
+  <%= render "home/shared/office_carousel",
+    variant: "gallery",
+    title: "Meet the office",
+    subtitle: "We make work play.",
+    images: [
+      image_path("careers/office-1.jpg"),
+      image_path("careers/office-2.jpg"),
+      image_path("careers/office-3.jpg"),
+      image_path("careers/office-4.jpg")
+    ]
+  %>
+
+  <%= render "home/shared/job_listings",
+    jobs: @jobs.map { |job| job.merge(url: career_path(job[:slug])) }
+  %>
+
+  <div class="px-8 pb-16 lg:px-[4vw] lg:pb-24">
+    <div class="flex flex-col gap-8 lg:gap-16 max-w-5xl mx-auto items-center">
+      <h1 class="font-medium text-4xl sm:text-5xl lg:text-7xl text-center">Not looking for a full-time role? Contribute to our open source.</h1>
+      <%= render "home/shared/button", text: "Contribute on GitHub", url: "https://github.com/antiwork/gumroad" %>
+    </div>
+  </div>
+
+  <%= image_tag "about/new-sale.svg", alt: "Gumroad illustration", class: "w-full min-h-[300px] object-cover" %>
+
+  <%= render "home/shared/footer" %>
+</div>

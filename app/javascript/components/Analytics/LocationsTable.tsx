@@ -3,6 +3,7 @@ import * as React from "react";
 import { AnalyticsDataByState, LocationDataValue } from "$app/data/analytics";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -196,10 +197,15 @@ export const LocationsTable = ({
   const caption = (
     <div className="flex justify-between">
       Locations
-      <select aria-label="Locations" className="w-fit" value={selected} onChange={(ev) => setSelected(ev.target.value)}>
+      <Select
+        aria-label="Locations"
+        wrapperClassName="w-fit"
+        value={selected}
+        onChange={(ev) => setSelected(ev.target.value)}
+      >
         <option value="world">World</option>
         <option value="us">United States</option>
-      </select>
+      </Select>
     </div>
   );
 

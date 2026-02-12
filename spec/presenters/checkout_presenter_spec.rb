@@ -34,16 +34,11 @@ describe CheckoutPresenter do
         saved_credit_card: { expiration_date: "12/23", number: "**** **** **** 4242", type: "visa", requires_mandate: false },
         recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
         paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
-        cart: nil,
         max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
+        cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
         tip_options: [5, 15, 25],
         default_tip_option: 15,
       )
-    end
-
-    it "returns cart props" do
-      create(:cart, user: @user)
-      expect(@instance.checkout_props(params: {}, browser_guid:)).to include(cart: { email: nil, returnUrl: "", rejectPppDiscount: false, discountCodes: [], items: [] })
     end
 
     it "does not show paused upsells" do
@@ -197,9 +192,9 @@ describe CheckoutPresenter do
           pay_in_installments: false
         }],
         max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
+        cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
         tip_options: [5, 15, 25],
         default_tip_option: 15,
-        cart: nil,
       )
     end
 

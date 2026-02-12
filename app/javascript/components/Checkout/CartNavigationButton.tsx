@@ -10,7 +10,7 @@ export const CartNavigationButton = ({ className }: { className?: string }) => {
   const cartItemsCount = useCartItemsCount();
 
   return cartItemsCount ? (
-    <NavigationButton className={className} color="filled" href={Routes.checkout_index_url({ host: appDomain })}>
+    <NavigationButton className={className} color="filled" href={Routes.checkout_url({ host: appDomain })}>
       <Icon name="cart3-fill" />
       {cartItemsCount === "not-available" ? null : cartItemsCount}
     </NavigationButton>

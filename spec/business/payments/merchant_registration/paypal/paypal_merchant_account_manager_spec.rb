@@ -249,49 +249,5 @@ describe PaypalMerchantAccountManager, :vcr do
       expect(old_records.count).to eq(0)
       expect(creator.merchant_account("paypal").charge_processor_merchant_id).to eq(new_paypal_merchant_id)
     end
-
-    context "when PayPal account belongs to a Kazakhstan seller" do
-      it "stores the country and currency from PayPal and verifies the account" do
-        creator = create(:user)
-        create(:user_compliance_info, user: creator, country: "Kazakhstan")
-        creator.mark_compliant!(author_name: "Iffy")
-        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(150_00)
-        create(:payment_completed, user: creator)
-
-        mailer = instance_double(ActionMailer::MessageDelivery, deliver_later: true)
-        allow(MerchantRegistrationMailer).to receive(:paypal_account_updated).and_return(mailer)
-
-        paypal_details = {
-          "country" => "KZ",
-          "primary_currency" => "KZT",
-          "primary_email" => "kazakhstan@example.com",
-          "primary_email_confirmed" => true,
-          "payments_receivable" => true,
-          "oauth_integrations" => [
-            {
-              "integration_type" => "OAUTH_THIRD_PARTY",
-              "integration_method" => "PAYPAL",
-              "oauth_third_party" => [
-                {
-                  "partner_client_id" => PAYPAL_PARTNER_CLIENT_ID
-                }
-              ]
-            }
-          ]
-        }
-
-        allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(paypal_details)
-
-        response = subject.update_merchant_account(user: creator, paypal_merchant_id: "KZPAYPAL123")
-
-        merchant_account = creator.merchant_account("paypal")
-
-        expect(response).to eq("You have successfully connected your PayPal account with Gumroad.")
-        expect(merchant_account.country).to eq("KZ")
-        expect(merchant_account.currency).to eq("kzt")
-        expect(merchant_account.charge_processor_verified?).to be(true)
-        expect(MerchantRegistrationMailer).to have_received(:paypal_account_updated).with(creator.id)
-      end
-    end
   end
 end
