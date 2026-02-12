@@ -4,6 +4,7 @@ import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 
 let newVersionId = 0;
 
@@ -48,8 +49,8 @@ export const SuggestedAmountsEditor = ({
   );
 
   return (
-    <fieldset>
-      <legend>{versions.length > 1 ? "Suggested amounts" : "Suggested amount"}</legend>
+    <Fieldset>
+      <FieldsetTitle>{versions.length > 1 ? "Suggested amounts" : "Suggested amount"}</FieldsetTitle>
       {versions.map((version, index) => (
         <SuggestedAmountEditor
           key={version.id}
@@ -63,7 +64,7 @@ export const SuggestedAmountsEditor = ({
         />
       ))}
       {addButton}
-    </fieldset>
+    </Fieldset>
   );
 };
 

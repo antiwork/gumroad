@@ -1,5 +1,4 @@
 import { Link, useForm, usePage } from "@inertiajs/react";
-import cx from "classnames";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
 import { useState } from "react";
@@ -23,8 +22,14 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const nativeTypeIcons = require.context("$assets/images/native_types/");
@@ -311,8 +316,8 @@ const NewProductPage = () => {
       <div>
         <div>
           <form id={`new-product-form-${formUID}`} className="row" onSubmit={saveProduct}>
-            <section className="p-4! md:p-8!">
-              <header>
+            <FormSection
+              header={
                 <p>
                   Turn your idea into a live product in minutes. No fuss, just a few quick selections and you're ready
                   to start selling. Whether it's digital downloads, online courses, or memberships — see what sticks.
@@ -322,8 +327,8 @@ const NewProductPage = () => {
                     Need help adding a product?
                   </a>
                 </p>
-              </header>
-
+              }
+            >
               {ai_generation_enabled && aiPromoVisible ? (
                 <Alert className="gap-4 p-6" role="status" variant="accent">
                   <div className="flex items-center gap-4">
@@ -343,12 +348,12 @@ const NewProductPage = () => {
                 </Alert>
               ) : null}
 
-              <fieldset className={cx({ danger: !!errors["link.name"] })}>
-                <legend>
-                  <label htmlFor={`name-${formUID}`}>Name</label>
-                </legend>
+              <Fieldset state={errors["link.name"] ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`name-${formUID}`}>Name</Label>
+                </FieldsetTitle>
 
-                <input
+                <Input
                   id={`name-${formUID}`}
                   type="text"
                   placeholder="Name of product"
@@ -358,38 +363,38 @@ const NewProductPage = () => {
                   ref={nameInputRef}
                 />
                 <Errors errors={errors["link.name"]} label="Name" />
-              </fieldset>
+              </Fieldset>
 
-              <fieldset>
-                <legend>Products</legend>
+              <Fieldset>
+                <FieldsetTitle>Products</FieldsetTitle>
                 <ProductTypeSelector
                   selectedType={form.data.link.native_type}
                   types={native_product_types}
                   onChange={handleProductTypeChange}
                 />
-              </fieldset>
+              </Fieldset>
               {service_product_types.length > 0 ? (
-                <fieldset>
-                  <legend>Services</legend>
+                <Fieldset>
+                  <FieldsetTitle>Services</FieldsetTitle>
                   <ProductTypeSelector
                     selectedType={form.data.link.native_type}
                     types={service_product_types}
                     onChange={handleProductTypeChange}
                     disabled={!eligible_for_service_products}
                   />
-                </fieldset>
+                </Fieldset>
               ) : null}
 
-              <fieldset className={cx({ danger: !!errors["link.price_range"] || !!errors["link.base"] })}>
-                <legend>
-                  <label htmlFor={`price-${formUID}`}>
+              <Fieldset state={errors["link.price_range"] || errors["link.base"] ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`price-${formUID}`}>
                     {form.data.link.native_type === "coffee" ? "Suggested amount" : "Price"}
-                  </label>
-                </legend>
+                  </Label>
+                </FieldsetTitle>
 
-                <div className="input">
+                <InputGroup>
                   <Pill asChild className="relative -ml-2 shrink-0 cursor-pointer">
-                    <label>
+                    <Label>
                       <span>{selectedCurrency.longSymbol}</span>
                       <TypeSafeOptionSelect
                         onChange={(newCurrencyCode) => {
@@ -407,10 +412,10 @@ const NewProductPage = () => {
                         className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                       />
                       <Icon name="outline-cheveron-down" className="ml-auto" />
-                    </label>
+                    </Label>
                   </Pill>
 
-                  <input
+                  <Input
                     id={`price-${formUID}`}
                     type="text"
                     inputMode="decimal"
@@ -431,7 +436,7 @@ const NewProductPage = () => {
 
                   {isRecurringBilling ? (
                     <Pill asChild className="relative -mr-2 shrink-0 cursor-pointer">
-                      <label>
+                      <Label>
                         <span>{recurrenceLabels[form.data.link.subscription_duration || defaultRecurrence]}</span>
                         <TypeSafeOptionSelect
                           onChange={(newSubscriptionDuration) => {
@@ -446,14 +451,14 @@ const NewProductPage = () => {
                           className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                         />
                         <Icon name="outline-cheveron-down" className="ml-auto" />
-                      </label>
+                      </Label>
                     </Pill>
                   ) : null}
-                </div>
+                </InputGroup>
                 <Errors errors={errors["link.price_range"]} label="Price" />
                 <Errors errors={errors["link.base"]} label="" />
-              </fieldset>
-            </section>
+              </Fieldset>
+            </FormSection>
           </form>
         </div>
       </div>
@@ -523,29 +528,36 @@ const ProductTypeSelector = ({
   onChange: (type: ProductNativeType) => void;
   disabled?: boolean;
 }) => (
-  <div className="radio-buttons grid-cols-1! sm:grid-cols-2! md:grid-cols-3! 2xl:grid-cols-5!" role="radiogroup">
+  <Tabs
+    variant="buttons"
+    className="gap-4 sm:grid-cols-2 md:grid-flow-row md:grid-cols-3 2xl:grid-cols-5"
+    role="radiogroup"
+  >
     {types.map((type) => {
+      const isSelected = type === selectedType;
       const typeButton = (
-        <Button
-          key={type}
-          className="vertical"
-          role="radio"
-          aria-checked={type === selectedType}
-          data-type={type}
-          onClick={() => onChange(type)}
-          disabled={disabled}
-        >
-          <img
-            src={cast<string>(nativeTypeIcons(`./${type}.png`))}
-            alt={PRODUCT_TYPES[type].title}
-            width="40"
-            height="40"
-          />
-          <div>
-            <h4>{PRODUCT_TYPES[type].title}</h4>
-            {PRODUCT_TYPES[type].description}
-          </div>
-        </Button>
+        <Tab key={type} isSelected={isSelected} asChild>
+          <Button
+            className="flex-col"
+            role="radio"
+            aria-checked={isSelected}
+            data-type={type}
+            onClick={() => onChange(type)}
+            disabled={disabled}
+          >
+            <img
+              src={cast<string>(nativeTypeIcons(`./${type}.png`))}
+              alt={PRODUCT_TYPES[type].title}
+              className="shrink-0"
+              width="40"
+              height="40"
+            />
+            <div>
+              <h4 className="font-bold">{PRODUCT_TYPES[type].title}</h4>
+              {PRODUCT_TYPES[type].description}
+            </div>
+          </Button>
+        </Tab>
       );
       return disabled ? (
         <WithTooltip tip="Service products are disabled until your account is 30 days old." key={type}>
@@ -557,7 +569,7 @@ const ProductTypeSelector = ({
     })}
     {types.length < 2 ? <div /> : null}
     {types.length < 3 ? <div /> : null}
-  </div>
+  </Tabs>
 );
 
 export default NewProductPage;

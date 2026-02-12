@@ -3,6 +3,8 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
 
 type SearchProps = {
   onSearch: (query: string) => void;
@@ -24,9 +26,9 @@ export const Search = ({ onSearch, value: initialValue, placeholder = "Search" }
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent sideOffset={4} onOpenAutoFocus={() => searchInputRef.current?.focus()}>
-        <div className="input input-wrapper">
+        <InputGroup>
           <Icon name="solid-search" />
-          <input
+          <Input
             ref={searchInputRef}
             value={searchQuery}
             autoFocus
@@ -37,7 +39,7 @@ export const Search = ({ onSearch, value: initialValue, placeholder = "Search" }
               onSearch(e.target.value);
             }}
           />
-        </div>
+        </InputGroup>
       </PopoverContent>
     </Popover>
   );

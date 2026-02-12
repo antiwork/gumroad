@@ -59,6 +59,7 @@ import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
@@ -506,7 +507,13 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       <span>Embed media</span>
                     </div>
                     <label role="menuitem">
-                      <input type="file" name="file" multiple onChange={(e) => uploadFileInput(e.target)} />
+                      <input
+                        type="file"
+                        className="sr-only"
+                        name="file"
+                        multiple
+                        onChange={(e) => uploadFileInput(e.target)}
+                      />
                       <Icon name="paperclip" />
                       <span>Computer files</span>
                     </label>
@@ -550,7 +557,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     }
                   >
                     <div className="flex flex-col gap-4">
-                      <input
+                      <Input
                         type="text"
                         placeholder="Find your files"
                         value={selectingExistingFiles.query}
@@ -570,15 +577,14 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         ) : (
                           filteredExistingFiles.map((file) => (
                             <Row key={file.id} role="option" className="cursor-pointer" asChild>
-                              <label>
+                              <Label>
                                 <RowContent>
                                   <FileKindIcon extension={file.extension} />
-                                  <div>
+                                  <div className="flex-1">
                                     <h4>{file.display_name}</h4>
                                     <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
                                   </div>
-                                  <input
-                                    type="checkbox"
+                                  <Checkbox
                                     checked={selectingExistingFiles.selected.includes(file)}
                                     onChange={() => {
                                       setSelectingExistingFiles({
@@ -588,10 +594,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                           : [...selectingExistingFiles.selected, file],
                                       });
                                     }}
-                                    style={{ marginLeft: "auto" }}
+                                    className="ml-auto"
                                   />
                                 </RowContent>
-                              </label>
+                              </Label>
                             </Row>
                           ))
                         )}
@@ -610,7 +616,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       </button>
                     </Tab>
                     <Tab isSelected={false} asChild>
-                      <label>
+                      <Label>
                         <input
                           className="sr-only"
                           type="file"
@@ -629,7 +635,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         />
                         <Icon name="upload-fill" />
                         <h4>Upload</h4>
-                      </label>
+                      </Label>
                     </Tab>
                   </Tabs>
                   <div id={`${uid}-embed-tab`}>
@@ -942,7 +948,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
               </>
             }
           >
-            <input
+            <Input
               type="text"
               placeholder="Enter text"
               autoFocus={addingButton != null}
@@ -952,7 +958,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 if (el.key === "Enter") onInsertButton();
               }}
             />
-            <input
+            <Input
               type="text"
               placeholder="Enter URL"
               value={addingButton?.url ?? ""}

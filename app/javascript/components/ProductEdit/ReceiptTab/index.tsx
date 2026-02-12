@@ -13,7 +13,7 @@ export const ReceiptTab = () => {
     <Layout preview={<ReceiptPreview />} previewScaleFactor={1} showBorder={false} showNavigationButton={false}>
       <div className="squished">
         <form>
-          <section className="p-4! md:p-8!">
+          <section className="grid gap-8 p-4 md:p-8">
             <CustomViewContentButtonTextInput
               value={product.custom_view_content_button_text}
               onChange={(value) => updateProduct({ custom_view_content_button_text: value })}

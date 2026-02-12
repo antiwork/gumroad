@@ -1,5 +1,9 @@
 import * as React from "react";
 
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+
 export const CustomSummaryInput = ({
   value,
   onChange,
@@ -9,15 +13,15 @@ export const CustomSummaryInput = ({
 }) => {
   const uid = React.useId();
   return (
-    <fieldset>
-      <label htmlFor={uid}>Summary</label>
-      <input
+    <Fieldset>
+      <Label htmlFor={uid}>Summary</Label>
+      <Input
         id={uid}
         type="text"
         placeholder="You'll get..."
         value={value ?? ""}
         onChange={(evt) => onChange(evt.target.value)}
       />
-    </fieldset>
+    </Fieldset>
   );
 };

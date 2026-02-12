@@ -13,6 +13,9 @@ import { Icon } from "$app/components/Icons";
 import { usePublicFilesSettings } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 const NodeView = ({ editor, node }: NodeViewProps) => {
@@ -81,18 +84,18 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
         ) : null}
         {expanded ? (
           <RowDetails className="drawer flex flex-col gap-4">
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-name`}>Name</label>
-              </legend>
-              <input
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-name`}>Name</Label>
+              </FieldsetTitle>
+              <Input
                 type="text"
                 id={`${uid}-name`}
                 value={file.name}
                 onChange={(e) => updateFile?.(id, { name: e.target.value })}
                 placeholder="Enter file name"
               />
-            </fieldset>
+            </Fieldset>
           </RowDetails>
         ) : null}
       </Row>
@@ -132,6 +135,7 @@ export const PublicFileEmbed = TiptapNode.create({
         <input
           ref={inputRef}
           type="file"
+          className="sr-only"
           accept={FILE_TYPE_EXTENSIONS_MAP.audio.map((ext) => `.${ext.toLowerCase()}`).join(",")}
           onChange={(e) => {
             const files = [...(e.target.files || [])];
