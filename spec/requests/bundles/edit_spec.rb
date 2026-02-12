@@ -208,6 +208,9 @@ describe("Bundle edit page", type: :system, js: true) do
 
     it "updates the bundle products" do
       visit edit_bundle_content_path(bundle.external_id)
+      within_cart_item "Product 0" do
+        expect(page).to have_text(products[0].created_at.strftime("%-m/%-d/%Y"))
+      end
 
       within "[aria-label='Product selector']" do
         check("Product 1", unchecked: true)
