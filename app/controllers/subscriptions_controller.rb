@@ -3,12 +3,11 @@
 class SubscriptionsController < ApplicationController
   include PageMeta::Product
 
-  PUBLIC_ACTIONS = %i[manage unsubscribe_by_user magic_link send_magic_link].freeze
+  PUBLIC_ACTIONS = %i[manage unsubscribe_by_user].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
   after_action :verify_authorized, except: PUBLIC_ACTIONS
 
-  before_action :fetch_subscription, only: %i[unsubscribe_by_seller unsubscribe_by_user magic_link send_magic_link]
-  before_action :hide_layouts, only: [:magic_link, :send_magic_link]
+  before_action :fetch_subscription, only: %i[unsubscribe_by_seller unsubscribe_by_user]
   before_action :set_noindex_header, only: [:manage]
   before_action :check_can_manage, only: [:manage, :unsubscribe_by_user]
 
@@ -45,23 +44,6 @@ class SubscriptionsController < ApplicationController
                     .subscription_manager_props(subscription: @subscription)
   end
 
-  def magic_link
-    @react_component_props = SubscriptionsPresenter.new(subscription: @subscription).magic_link_props
-  end
-
-  def send_magic_link
-    @subscription.refresh_token
-
-    emails = @subscription.emails
-    email_source = params[:email_source].to_sym
-    email = emails[email_source]
-    e404 if email.nil?
-
-    CustomerMailer.subscription_magic_link(@subscription.id, email).deliver_later(queue: "critical")
-
-    head :no_content
-  end
-
   private
     def check_can_manage
       (@subscription = Subscription.find_by_external_id(params[:id])) || e404
@@ -75,12 +57,12 @@ class SubscriptionsController < ApplicationController
       token = params[:token]
       if token.present?
         return if @subscription.token.present? && ActiveSupport::SecurityUtils.secure_compare(token, @subscription.token) && @subscription.token_expires_at > Time.current
-        return redirect_to magic_link_subscription_path(params[:id], { invalid: true })
+        return redirect_to new_subscription_magic_link_path(params[:id], invalid: true)
       end
 
       respond_to do |format|
-        format.html { redirect_to magic_link_subscription_path(params[:id]) }
-        format.json { render json: { success: false, redirect_to: magic_link_subscription_path(params[:id]) } }
+        format.html { redirect_to new_subscription_magic_link_path(params[:id]) }
+        format.json { render json: { success: false, redirect_to: new_subscription_magic_link_path(params[:id]) } }
       end
     end
 
