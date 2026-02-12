@@ -47,7 +47,7 @@ const FileUploadNodeView = ({ editor, node }: NodeViewProps) => {
   }
 
   return (
-    <NodeViewWrapper contentEditable={false}>
+    <NodeViewWrapper contentEditable={false} data-input-embed>
       <NodeActionsMenu editor={editor} />
       <Placeholder>
         <Button color="primary">

@@ -16,7 +16,7 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
   };
 
   return (
-    <NodeViewWrapper data-drag-handle>
+    <NodeViewWrapper data-drag-handle data-input-embed>
       <fieldset>
         {editor.isEditable ? (
           <>
