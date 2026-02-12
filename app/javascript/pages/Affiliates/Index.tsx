@@ -84,13 +84,13 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
           <Button>
-            <Search pack="filled" />
+            <Search pack="filled" className="size-4" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent>
         <div className="input input-wrapper">
-          <Search pack="filled" />
+          <Search pack="filled" className="size-4" />
           <input
             ref={searchInputRef}
             value={inputValue}
@@ -383,7 +383,7 @@ export default function AffiliatesIndex() {
                               className={buttonVariants({ size: "default", color: "primary" })}
                               aria-label="Export"
                             >
-                              <ArrowDown />
+                              <ArrowDown className="size-4" />
                             </a>
                           </WithTooltip>
                         </div>
@@ -443,7 +443,7 @@ export default function AffiliatesIndex() {
                                   aria-label="Edit"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
-                                  <Pencil />
+                                  <Pencil className="size-4" />
                                 </NavigationButtonInertia>
 
                                 <Button
@@ -453,7 +453,7 @@ export default function AffiliatesIndex() {
                                   aria-label="Delete"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
-                                  <Trash />
+                                  <Trash className="size-4" />
                                 </Button>
                               </div>
                             </TableCell>

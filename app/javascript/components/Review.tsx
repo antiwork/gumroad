@@ -30,7 +30,7 @@ const ReviewUserAttribution = ({
     <h5>{name}</h5>
     {isBuyer ? (
       <WithTooltip tip="Verified Buyer">
-        <CheckCircle pack="filled" aria-label="Verified Buyer" />
+        <CheckCircle pack="filled" aria-label="Verified Buyer" className="size-4" />
       </WithTooltip>
     ) : null}
   </section>

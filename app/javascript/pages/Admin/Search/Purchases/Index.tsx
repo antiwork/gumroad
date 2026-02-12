@@ -75,7 +75,7 @@ export default function Purchases() {
               <option value="failed">Failed</option>
             </Select>
             <Button type="submit" color="primary">
-              <Search pack="filled" />
+              <Search pack="filled" className="size-4" />
             </Button>
             {data.product_title_query || data.purchase_status ? (
               <Button asChild>
@@ -101,7 +101,7 @@ export default function Purchases() {
                     <Link href={Routes.admin_product_url(purchase.product.external_id)}>{purchase.product.name}</Link>{" "}
                     {purchase.variants_list}{" "}
                     <a href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
-                      <ArrowUpRightSquare />
+                      <ArrowUpRightSquare className="size-4" />
                     </a>{" "}
                     <PurchaseStates purchase={purchase} />
                     <div className="text-sm">
@@ -114,7 +114,7 @@ export default function Purchases() {
                         <li>
                           Seller: {purchase.seller.email}{" "}
                           <CopyToClipboard text={purchase.seller.email}>
-                            <Copy />
+                            <Copy className="size-4" />
                           </CopyToClipboard>
                         </li>
                         {purchase.seller.support_email ? (
@@ -126,7 +126,7 @@ export default function Purchases() {
                   <TableCell>
                     <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>{" "}
                     <CopyToClipboard text={purchase.email}>
-                      <Copy />
+                      <Copy className="size-4" />
                     </CopyToClipboard>
                     <small>
                       <DateTimeWithRelativeTooltip date={purchase.created_at} />

@@ -399,7 +399,7 @@ const AccountDetailsSection = ({
               onClick={() => updateComplianceInfo({ is_business: false })}
               disabled={isFormDisabled}
             >
-              <UserIcon />
+              <UserIcon className="size-4" />
               <div>
                 <h4>Individual</h4>
                 When you are selling as yourself
@@ -417,7 +417,7 @@ const AccountDetailsSection = ({
               }
               disabled={isFormDisabled}
             >
-              <Store />
+              <Store className="size-4" />
               <div>
                 <h4>Business</h4>
                 When you are selling as a business

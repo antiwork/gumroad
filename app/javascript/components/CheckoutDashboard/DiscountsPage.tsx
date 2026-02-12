@@ -416,7 +416,7 @@ const DiscountsPage = ({
                               setView("edit");
                             }}
                           >
-                            <Pencil />
+                            <Pencil className="size-4" />
                           </Button>
                           <Popover
                             open={popoverOfferCodeId === offerCode.id}
@@ -426,7 +426,7 @@ const DiscountsPage = ({
                           >
                             <PopoverTrigger asChild>
                               <Button aria-label="Open discount action menu" onClick={(e) => e.stopPropagation()}>
-                                <DotsHorizontalRounded />
+                                <DotsHorizontalRounded className="size-4" />
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -440,7 +440,7 @@ const DiscountsPage = ({
                                     setView("create");
                                   }}
                                 >
-                                  <Copy />
+                                  <Copy className="size-4" />
                                   &ensp;Duplicate
                                 </div>
                                 <div
@@ -460,7 +460,7 @@ const DiscountsPage = ({
                                     setIsLoading(false);
                                   })}
                                 >
-                                  <Trash />
+                                  <Trash className="size-4" />
                                   &ensp;Delete
                                 </div>
                               </div>
@@ -585,7 +585,7 @@ const DiscountsPage = ({
                           text={`${product.url}/${selectedOfferCode.code}`}
                         >
                           <Button aria-label="Copy link with discount">
-                            <Link />
+                            <Link className="size-4" />
                           </Button>
                         </CopyToClipboard>
                       </CardContent>
@@ -862,7 +862,7 @@ const Form = ({
         actions={
           <>
             <Button onClick={cancel} disabled={isLoading}>
-              <XSquare />
+              <XSquare className="size-4" />
               Cancel
             </Button>
             <Button color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -924,7 +924,7 @@ const Form = ({
                 aria-label="Generate new discount"
                 disabled={readOnlyCode || isBlackFridayMode}
               >
-                <RefreshCcw />
+                <RefreshCcw className="size-4" />
               </Button>
             </div>
             {isBlackFridayMode ? (

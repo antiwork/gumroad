@@ -133,11 +133,11 @@ const WorkflowRow = ({
               aria-label="Edit workflow"
               inert={!canManageWorkflow || undefined}
             >
-              <Pencil />
+              <Pencil className="size-4" />
             </Link>
           </Button>
           <Button color="danger" outline aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
-            <Trash />
+            <Trash className="size-4" />
           </Button>
         </div>
       </div>

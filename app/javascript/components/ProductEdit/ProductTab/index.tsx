@@ -83,7 +83,7 @@ export const ProductTab = () => {
             {showAiNotification ? (
               <Alert role="status" variant="accent">
                 <div className="flex items-center gap-4">
-                  <Sparkle className="text-lg" />
+                  <Sparkle className="size-4 text-lg" />
                   <div className="flex-1">
                     <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
                     Tweak things and make it your own—this is your time to shine!

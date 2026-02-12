@@ -11,7 +11,7 @@ export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }
     <Stats
       title={
         <>
-          <Circle pack="filled" className="text-foreground" />
+          <Circle pack="filled" className="size-4 text-foreground" />
           Sales
         </>
       }
@@ -20,7 +20,7 @@ export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }
     <Stats
       title={
         <>
-          <Circle pack="filled" className="text-active-bg" />
+          <Circle pack="filled" className="size-4 text-active-bg" />
           Views
         </>
       }
@@ -29,7 +29,7 @@ export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }
     <Stats
       title={
         <>
-          <Circle pack="filled" className="text-accent" />
+          <Circle pack="filled" className="size-4 text-accent" />
           Total
         </>
       }

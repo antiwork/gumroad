@@ -96,7 +96,7 @@ export const CoverEditor = ({
                 <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
                   <PopoverTrigger disabled={!canAddPreview || isUploading} asChild>
                     <Button aria-label="Add cover">
-                      <Plus />
+                      <Plus className="size-4" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -228,7 +228,7 @@ const CoverUploader = ({
                 }}
                 aria-label="Upload"
               >
-                <ArrowUp pack="filled" />
+                <ArrowUp pack="filled" className="size-4" />
               </Button>
             </div>
           ) : null}
@@ -239,7 +239,7 @@ const CoverUploader = ({
   ) : (
     <>
       <Button color="primary" onClick={() => setIsSelecting(true)}>
-        <ArrowUp pack="filled" /> Upload images or videos
+        <ArrowUp pack="filled" className="size-4" /> Upload images or videos
       </Button>
       Images should be horizontal, at least 1280x720px, and 72 DPI (dots per inch).
     </>

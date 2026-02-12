@@ -252,7 +252,7 @@ const NewProductPage = () => {
           <>
             <Button asChild>
               <Link href={Routes.products_path()}>
-                <XSquare />
+                <XSquare className="size-4" />
                 <span>Cancel</span>
               </Link>
             </Button>
@@ -261,7 +261,7 @@ const NewProductPage = () => {
                 <PopoverAnchor>
                   <PopoverTrigger aria-label="Create a product with AI" asChild>
                     <Button color="primary" outline>
-                      <Sparkle />
+                      <Sparkle className="size-4" />
                     </Button>
                   </PopoverTrigger>
                 </PopoverAnchor>
@@ -406,7 +406,7 @@ const NewProductPage = () => {
                         })}
                         className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                       />
-                      <ChevronDown className="ml-auto" />
+                      <ChevronDown className="size-4 ml-auto" />
                     </label>
                   </Pill>
 
@@ -445,7 +445,7 @@ const NewProductPage = () => {
                           }))}
                           className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                         />
-                        <ChevronDown className="ml-auto" />
+                        <ChevronDown className="size-4 ml-auto" />
                       </label>
                     </Pill>
                   ) : null}

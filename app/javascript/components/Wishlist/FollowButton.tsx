@@ -74,13 +74,13 @@ export const FollowButton = ({
   return isFollowing ? (
     <WithTooltip tip="Unfollow">
       <Button onClick={() => void toggleFollowing()} color="primary" disabled={isLoading}>
-        <BookmarkStar pack="filled" />
+        <BookmarkStar pack="filled" className="size-4" />
         Following
       </Button>
     </WithTooltip>
   ) : (
     <Button onClick={() => void toggleFollowing()} disabled={isLoading}>
-      <BookmarkPlus />
+      <BookmarkPlus className="size-4" />
       Follow wishlist
     </Button>
   );

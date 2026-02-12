@@ -55,7 +55,7 @@ export const DateRangePicker = ({
       <PopoverTrigger>
         <InputGroup className="whitespace-nowrap" aria-label="Date range selector">
           <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
-          <ChevronDown className="ml-auto" />
+          <ChevronDown className="size-4 ml-auto" />
         </InputGroup>
       </PopoverTrigger>
       <PopoverContent matchTriggerWidth className={isCustom ? "" : "border-0 p-0 shadow-none"}>

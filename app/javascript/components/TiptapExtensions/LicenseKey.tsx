@@ -51,7 +51,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
       <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
         <RowContent className="content" contentEditable={false}>
-          <Key pack="filled" className="type-icon" />
+          <Key pack="filled" className="size-4 type-icon" />
           <div>
             <h4 className="text-singleline">{licenseKey}</h4>
             <ul className="inline">

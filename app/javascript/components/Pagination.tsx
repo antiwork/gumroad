@@ -52,7 +52,7 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
   return (
     <div role="navigation" aria-label="Pagination" className="flex w-full justify-center gap-2">
       <Button small disabled={pagination.page - 1 === 0} onClick={() => onChangePage(pagination.page - 1)}>
-        <ChevronLeft />
+        <ChevronLeft className="size-4" />
         Previous
       </Button>
       <menu className="hidden! flex-1 justify-center gap-2 lg:flex!">
@@ -78,7 +78,7 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
       </menu>
       <Button small disabled={pagination.page + 1 > pagination.pages} onClick={() => onChangePage(pagination.page + 1)}>
         Next
-        <ChevronRight />
+        <ChevronRight className="size-4" />
       </Button>
     </div>
   );

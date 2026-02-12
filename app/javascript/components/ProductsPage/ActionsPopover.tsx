@@ -92,23 +92,23 @@ const ActionsPopover = ({
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger aria-label="Open product action menu" className="cursor-pointer all-unset">
-          <DotsHorizontalRounded />
+          <DotsHorizontalRounded className="size-4" />
         </PopoverTrigger>
         <PopoverContent className="border-0 p-0 shadow-none">
           <div role="menu">
             <div role="menuitem" inert={!product.can_duplicate || isDuplicating} onClick={() => void handleDuplicate()}>
-              <Copy />
+              <Copy className="size-4" />
               &ensp;{isDuplicating ? "Duplicating..." : "Duplicate"}
             </div>
             {product.can_unarchive ? (
               <div role="menuitem" inert={isUnarchiving} onClick={() => void handleUnarchive()}>
-                <Archive />
+                <Archive className="size-4" />
                 &ensp;{isUnarchiving ? "Unarchiving..." : "Unarchive"}
               </div>
             ) : null}
             {product.can_archive ? (
               <div role="menuitem" inert={isArchiving} onClick={() => void handleArchive()}>
-                <Archive />
+                <Archive className="size-4" />
                 &ensp;{isArchiving ? "Archiving..." : "Archive"}
               </div>
             ) : null}
@@ -118,7 +118,7 @@ const ActionsPopover = ({
               role="menuitem"
               onClick={() => setConfirmingDelete(true)}
             >
-              <Trash />
+              <Trash className="size-4" />
               &ensp;{isDeleting ? "Deleting..." : "Delete permanently"}
             </div>
           </div>

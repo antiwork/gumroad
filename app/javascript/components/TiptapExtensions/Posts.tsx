@@ -73,9 +73,9 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
           >
             {total > 0 ? (
               expanded ? (
-                <ChevronDown />
+                <ChevronDown className="size-4" />
               ) : (
-                <ChevronRight />
+                <ChevronRight className="size-4" />
               )
             ) : null}
             <FileDetail pack="filled" className={cx("type-icon", { "text-muted": total === 0 })} />
@@ -104,7 +104,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
               disabled={isLoading}
               onClick={() => void fetchMorePosts?.(true)}
             >
-              <RefreshCcw />
+              <RefreshCcw className="size-4" />
             </Button>
           </RowActions>
         ) : null}
@@ -114,7 +114,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
             <Drawer id={uid}>
               {posts.map((post) => (
                 <RowContent key={post.id}>
-                  <FileDetail pack="filled" className="type-icon" />
+                  <FileDetail pack="filled" className="size-4 type-icon" />
                   <div>
                     {editor.isEditable ? (
                       <a href={post.url} target="_blank" rel="noreferrer">

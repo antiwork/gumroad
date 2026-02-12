@@ -135,7 +135,7 @@ export const BundleEditLayout = ({
                 tooltipPosition={isDesktop ? "left" : "bottom"}
               >
                 <Button>
-                  <LinkIcon />
+                  <LinkIcon className="size-4" />
                 </Button>
               </CopyToClipboard>
             </>

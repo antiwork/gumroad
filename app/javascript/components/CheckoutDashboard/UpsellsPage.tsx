@@ -683,7 +683,7 @@ const Form = ({
         actions={
           <>
             <Button onClick={onCancel} disabled={isLoading}>
-              <XSquare />
+              <XSquare className="size-4" />
               Cancel
             </Button>
             <Button type="submit" color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -905,7 +905,7 @@ const Form = ({
                       return (
                         <React.Fragment key={option.id}>
                           <div className="input read-only">{option.name}</div>
-                          <ArrowRightCircle />
+                          <ArrowRightCircle className="size-4" />
                           <Select
                             options={selectedProduct.options.flatMap(({ id, name: label }) =>
                               id !== option.id ? { id, label } : [],

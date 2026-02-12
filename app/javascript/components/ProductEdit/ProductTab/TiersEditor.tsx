@@ -80,7 +80,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
         ]);
       }}
     >
-      <Plus />
+      <Plus className="size-4" />
       Add tier
     </Button>
   );
@@ -194,7 +194,7 @@ const TierEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Layers pack="filled" />
+        <Layers pack="filled" className="size-4" />
         <div>
           <h3>{tier.name || "Untitled"}</h3>
           {tier.active_subscribers_count ? (
@@ -212,7 +212,7 @@ const TierEditor = ({
         </WithTooltip>
         <WithTooltip tip="Remove">
           <Button onClick={onDelete} aria-label="Remove">
-            <Trash />
+            <Trash className="size-4" />
           </Button>
         </WithTooltip>
       </RowActions>

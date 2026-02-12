@@ -46,7 +46,7 @@ export const CreditCardInput = ({
       </legend>
       {savedCreditCard && useSavedCard ? (
         <div className="input read-only" aria-label="Saved credit card">
-          <CreditCard />
+          <CreditCard className="size-4" />
           <span>{savedCreditCard.number}</span>
           <span style={{ marginLeft: "auto" }}>{savedCreditCard.expiration_date}</span>
         </div>

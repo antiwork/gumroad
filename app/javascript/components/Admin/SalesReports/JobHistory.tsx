@@ -74,7 +74,7 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
           <h2>Generate your first sales report</h2>
           Create a report to view sales data by country for a specified date range.
           <Button color="primary" onClick={() => setShowNewSalesReportForm(true)}>
-            <Plus />
+            <Plus className="size-4" />
             New report
           </Button>
         </Placeholder>
@@ -107,7 +107,7 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
                 {job.status === "completed" && job.download_url ? (
                   <a href={job.download_url} target="_blank" rel="noopener noreferrer">
                     <div className="grid grid-cols-[auto_1fr] gap-2">
-                      <ArrowDown />
+                      <ArrowDown className="size-4" />
                       {countryCodeToName[job.country_code]}_{job.sales_type}_report_{job.start_date}_{job.end_date}
                     </div>
                   </a>

@@ -359,7 +359,7 @@ const WithContent = ({
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Table of Contents" asChild>
                   <Button>
-                    <ListUl />
+                    <ListUl className="size-4" />
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
@@ -393,7 +393,7 @@ const WithContent = ({
               onClick={() => handlePageChange(activePageIndex - 1)}
               className="flex-1 lg:flex-none"
             >
-              <ArrowLeft />
+              <ArrowLeft className="size-4" />
               Previous
             </Button>
           </WithTooltip>
@@ -404,7 +404,7 @@ const WithContent = ({
               className="flex-1 lg:flex-none"
             >
               Next
-              <ArrowRight />
+              <ArrowRight className="size-4" />
             </Button>
           </WithTooltip>
         </div>

@@ -29,7 +29,7 @@ export const AttributesEditor = ({
 
   const addButton = (
     <Button color="primary" onClick={() => setCustomAttributes([...customAttributes, { name: "", value: "" }])}>
-      <Plus />
+      <Plus className="size-4" />
       Add detail
     </Button>
   );
@@ -90,7 +90,7 @@ const AttributeEditor = ({
       disabled={!onUpdate}
     />
     <Button onClick={onDelete}>
-      <Trash />
+      <Trash className="size-4" />
     </Button>
   </div>
 );

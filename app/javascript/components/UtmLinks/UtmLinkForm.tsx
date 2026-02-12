@@ -259,7 +259,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
       actions={
         <>
           <NavigationButtonInertia href={Routes.dashboard_utm_links_path()} disabled={processing}>
-            <XSquare />
+            <XSquare className="size-4" />
             Cancel
           </NavigationButtonInertia>
           <Button color="accent" onClick={handleSubmit} disabled={processing}>
@@ -337,7 +337,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                   text={`${shortUrlProtocol}//${shortUrlPrefix}${isEditing ? permalink : data.utm_link.permalink}`}
                 >
                   <Button type="button" aria-label="Copy short link">
-                    <Link />
+                    <Link className="size-4" />
                   </Button>
                 </CopyToClipboard>
                 {!isEditing && (
@@ -347,7 +347,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                       disabled={isLoadingNewPermalink}
                       aria-label="Generate new short link"
                     >
-                      <RefreshCcw />
+                      <RefreshCcw className="size-4" />
                     </Button>
                   </WithTooltip>
                 )}
@@ -467,7 +467,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                 />
                 <CopyToClipboard copyTooltip="Copy UTM link" text={finalUrl}>
                   <Button type="button" aria-label="Copy UTM link">
-                    <Link />
+                    <Link className="size-4" />
                   </Button>
                 </CopyToClipboard>
               </div>

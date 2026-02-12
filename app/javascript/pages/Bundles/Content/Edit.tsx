@@ -266,7 +266,7 @@ export default function BundlesContentEdit() {
                 aria-label="Product selector"
               >
                 <div className="input">
-                  <Search pack="filled" />
+                  <Search pack="filled" className="size-4" />
                   <input
                     type="text"
                     value={query}
@@ -302,7 +302,7 @@ export default function BundlesContentEdit() {
               <h2>Select products</h2>
               <p>Choose the products you want to include in your bundle</p>
               <Button color="primary" onClick={() => setIsSelecting(true)}>
-                <Plus />
+                <Plus className="size-4" />
                 Add products
               </Button>
             </Placeholder>

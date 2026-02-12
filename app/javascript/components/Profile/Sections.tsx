@@ -70,7 +70,7 @@ export const PostsView = ({ posts }: { posts: Post[] }) => {
             <h2>{post.name}</h2>
             <time>{formatPostDate(post.published_at, userAgentInfo.locale)}</time>
           </div>
-          <ArrowUpRight className="text-lg" />
+          <ArrowUpRight className="size-4 text-lg" />
         </a>
       ))}
     </>
@@ -171,7 +171,7 @@ export const WishlistsView = ({ wishlists }: { wishlists: CardWishlist[] }) =>
   ) : (
     <div className="flex h-full flex-col content-center gap-4 text-center">
       <h1>
-        <Archive pack="filled" />
+        <Archive pack="filled" className="size-4" />
       </h1>
       No wishlists selected
     </div>

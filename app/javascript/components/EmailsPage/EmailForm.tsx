@@ -688,20 +688,20 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                 <PopoverAnchor>
                   <PopoverTrigger disabled={isBusy} asChild>
                     <Button>
-                      <Eye pack="filled" />
+                      <Eye pack="filled" className="size-4" />
                       Preview
-                      <ChevronDown />
+                      <ChevronDown className="size-4" />
                     </Button>
                   </PopoverTrigger>
                 </PopoverAnchor>
                 <PopoverContent sideOffset={4}>
                   <div className="grid gap-3">
                     <Button disabled={isBusy} onClick={() => save("save_and_preview_post")}>
-                      <FileDetail pack="filled" />
+                      <FileDetail pack="filled" className="size-4" />
                       Preview Post
                     </Button>
                     <Button disabled={isBusy} onClick={() => save("save_and_preview_email")}>
-                      <Envelope pack="filled" />
+                      <Envelope pack="filled" className="size-4" />
                       Preview Email
                     </Button>
                   </div>
@@ -712,13 +712,13 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                 disabled={isBusy}
                 onClick={() => save(channel.profile ? "save_and_preview_post" : "save_and_preview_email")}
               >
-                <Eye pack="filled" />
+                <Eye pack="filled" className="size-4" />
                 Preview
               </Button>
             )}
             <Button asChild>
               <Link href={getCancelPath()} inert={isBusy ? true : undefined}>
-                <XSquare />
+                <XSquare className="size-4" />
                 Cancel
               </Link>
             </Button>
@@ -727,7 +727,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                 <PopoverTrigger disabled={isBusy} asChild>
                   <Button>
                     {channel.profile ? "Publish" : "Send"}
-                    <ChevronDown />
+                    <ChevronDown className="size-4" />
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
@@ -749,7 +749,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                             finishPublishing();
                           }}
                         >
-                          <X />
+                          <X className="size-4" />
                         </Button>
                       </>
                     ) : (

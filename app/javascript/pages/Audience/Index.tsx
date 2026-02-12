@@ -50,7 +50,7 @@ function Audience() {
                 <WithTooltip tip="Export" position="bottom">
                   <PopoverTrigger aria-label="Export" asChild>
                     <Button>
-                      <ArrowDown aria-label="Download" />
+                      <ArrowDown aria-label="Download" className="size-4" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>

@@ -283,7 +283,7 @@ export const Receipt = ({
           <h4 className="relative grow font-bold">
             Checkout
             <a href={discoverUrl} style={{ position: "absolute", right: 0 }} aria-label="Close">
-              <XCircle />
+              <XCircle className="size-4" />
             </a>
           </h4>
         </header>

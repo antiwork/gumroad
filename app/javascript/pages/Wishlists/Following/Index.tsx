@@ -85,12 +85,12 @@ export default function WishlistsFollowingPage() {
                     <div className="flex flex-wrap gap-3 lg:justify-end">
                       <Popover>
                         <PopoverTrigger aria-label="Actions">
-                          <DotsHorizontalRounded />
+                          <DotsHorizontalRounded className="size-4" />
                         </PopoverTrigger>
                         <PopoverContent className="border-0 p-0 shadow-none">
                           <div role="menu">
                             <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
-                              <BookmarkX /> Unfollow
+                              <BookmarkX className="size-4" /> Unfollow
                             </div>
                           </div>
                         </PopoverContent>

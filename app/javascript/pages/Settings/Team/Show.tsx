@@ -319,7 +319,7 @@ const TeamMembersSection = ({
                         position="top"
                       >
                         <Shield pack="filled" style={{ color: "rgb(var(--warning))" }}
-                          aria-label="Invitation has expired. You can resend the invitation from the member's menu options." />
+                          aria-label="Invitation has expired. You can resend the invitation from the member's menu options." className="size-4" />
                       </WithTooltip>
                     ) : null}
                   </div>

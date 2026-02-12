@@ -55,14 +55,14 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
           </RowContent>
           <RowActions>
             <Button onClick={onCancel} color="danger" outline aria-label="Remove">
-              <XCircle pack="filled" />
+              <XCircle pack="filled" className="size-4" />
             </Button>
           </RowActions>
         </>
       ) : (
         <>
           <RowContent>
-            <FileDetail pack="filled" className="type-icon" />
+            <FileDetail pack="filled" className="size-4 type-icon" />
             <div>
               <h4>{subtitleFile.file_name}</h4>
               {FileUtils.getFullFileSizeString(subtitleFile.file_size ?? 0)} {subtitleFile.extension}
@@ -71,7 +71,7 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
           <RowActions>
             <SubtitleLanguageSelect currentLanguage={subtitleFile.language} onChange={onChangeLanguage} />
             <Button onClick={onRemove} color="danger" outline aria-label="Remove">
-              <Trash />
+              <Trash className="size-4" />
             </Button>
           </RowActions>
         </>

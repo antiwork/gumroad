@@ -139,7 +139,7 @@ export default function PostsShow() {
                   <h2>{post.name}</h2>
                   <time>{formatPostDate(post.published_at, userAgentInfo.locale)}</time>
                 </div>
-                <ArrowUpRight className="text-lg" />
+                <ArrowUpRight className="size-4 text-lg" />
               </a>
             ))}
             {has_posts_on_profile ? (
@@ -148,7 +148,7 @@ export default function PostsShow() {
                 className="flex justify-between border-b border-border px-4 py-8 no-underline lg:py-12"
               >
                 <h2>See all posts from {creator_profile.name}</h2>
-                <ArrowUpRight className="text-lg" />
+                <ArrowUpRight className="size-4 text-lg" />
               </a>
             ) : null}
           </>

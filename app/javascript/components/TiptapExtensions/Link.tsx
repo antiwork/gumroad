@@ -327,7 +327,7 @@ const TiptapButton = Node.create({
     item: (editor) => (
       <WithDialog editor={editor} type="button">
         <div role="menuitem">
-          <ButtonIcon />
+          <ButtonIcon className="size-4" />
           <span>Button</span>
         </div>
       </WithDialog>

@@ -266,7 +266,7 @@ const MenubarItem = ({
         }}
       >
         {menuItem.label}
-        {showExpandableIcon ? <ChevronDown className="float-right" /> : null}
+        {showExpandableIcon ? <ChevronDown className="size-4 float-right" /> : null}
       </a>
     </Button>
   );
@@ -324,7 +324,7 @@ const OverlayMenu = ({
         aria-label={buttonLabel ?? "Open Menu"}
         {...extraAriaAttrs}
       >
-        <Filter />
+        <Filter className="size-4" />
       </Button>
       <Sheet
         open={menuOpen}
@@ -388,7 +388,7 @@ const ItemsList = ({
             e.preventDefault();
           }}
         >
-          <ChevronLeft />
+          <ChevronLeft className="size-4" />
           <span>Back</span>
         </MenuItemLink>
       ) : null}
@@ -412,7 +412,7 @@ const ItemsList = ({
           aria-haspopup={item.children.length ? "menu" : undefined}
         >
           <span className="min-w-0 flex-1 overflow-visible! break-words">{item.label}</span>
-          {item.children.length > 0 && <ChevronRight className="shrink-0" />}
+          {item.children.length > 0 && <ChevronRight className="size-4 shrink-0" />}
         </MenuItemLink>
       ))}
       {displayedItem.image ? <img src={displayedItem.image} className="w-full translate-x-6 translate-y-6" /> : null}

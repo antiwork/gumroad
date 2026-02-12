@@ -387,7 +387,7 @@ export const Icon = ({ name, className, ...props }: IconProps) => {
   const [Component, pack] = entry;
   return (
     <span className={cx("icon", className)} {...props}>
-      <Component {...(pack ? { pack } : {})} />
+      <Component className="size-4" {...(pack ? { pack } : {})} />
     </span>
   );
 };

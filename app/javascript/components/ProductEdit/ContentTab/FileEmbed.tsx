@@ -284,7 +284,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const folderAction = {
     item: () => (
       <>
-        <FolderOpen pack="filled" />
+        <FolderOpen pack="filled" className="size-4" />
         <span>Move to folder...</span>
       </>
     ),
@@ -295,7 +295,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             onClick={() => editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: null })}
             role="menuitem"
           >
-            <FolderPlus />
+            <FolderPlus className="size-4" />
             <span>New folder</span>
           </div>
         )}
@@ -310,7 +310,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             }}
             role="menuitem"
           >
-            <FolderOpen pack="filled" />
+            <FolderOpen pack="filled" className="size-4" />
             <span>{name || "Untitled"}</span>
           </div>
         ))}
@@ -408,7 +408,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         aria-label="Replace thumbnail"
                       >
                         {thumbnailInput}
-                        <ArrowUp pack="filled" />
+                        <ArrowUp pack="filled" className="size-4" />
                       </label>
                     </WithTooltip>
                   </div>
@@ -419,7 +419,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                 <Placeholder>
                   <label className={buttonVariants({ size: "default", color: "primary" })}>
                     {thumbnailInput}
-                    <ArrowUp pack="filled" />
+                    <ArrowUp pack="filled" className="size-4" />
                     Upload a thumbnail
                   </label>
                   <div>
@@ -451,7 +451,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   {file.thumbnail ? <img src={file.thumbnail.url} /> : null}
                   <Placeholder>
                     {thumbnailInput}
-                    <ArrowUp pack="filled" />
+                    <ArrowUp pack="filled" className="size-4" />
                   </Placeholder>
                 </>
               )}

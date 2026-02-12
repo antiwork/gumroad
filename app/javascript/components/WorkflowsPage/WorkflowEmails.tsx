@@ -270,12 +270,12 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                 <Link href={Routes.workflows_path()} inert={isBusy || undefined}>
                   {workflow.published ? (
                     <>
-                      <XSquare />
+                      <XSquare className="size-4" />
                       Cancel
                     </>
                   ) : (
                     <>
-                      <ArrowLeft />
+                      <ArrowLeft className="size-4" />
                       Back
                     </>
                   )}
@@ -454,7 +454,7 @@ const EmailRow = ({
   return (
     <Row role="listitem" ref={selfRef} aria-label="Email">
       <RowContent>
-        <Envelope pack="filled" className="type-icon" />
+        <Envelope pack="filled" className="size-4 type-icon" />
         <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
       </RowContent>
       <RowActions>
@@ -470,13 +470,13 @@ const EmailRow = ({
         )}
         <WithTooltip tip="Send email preview">
           <Button outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
-            <Eye pack="filled" />
+            <Eye pack="filled" className="size-4" />
           </Button>
         </WithTooltip>
         {isAbandonedCartWorkflow ? null : (
           <WithTooltip tip="Delete">
             <Button outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
-              <Trash />
+              <Trash className="size-4" />
             </Button>
           </WithTooltip>
         )}
@@ -586,7 +586,7 @@ const EmailPreview = ({
     <section className="flex flex-col gap-4" ref={selfRef}>
       <Separator>
         <div className="flex gap-2">
-          <Clock />
+          <Clock className="size-4" />
           {email.delayed_delivery_time_duration}{" "}
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
         </div>

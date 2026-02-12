@@ -80,7 +80,7 @@ export const PageTab = ({
       role="tab"
     >
       {!disabled ? (
-        <Move className="invisible absolute left-0 text-muted group-hover/tab:visible"
+        <Move className="size-4 invisible absolute left-0 text-muted group-hover/tab:visible"
           aria-grabbed={dragging} />
       ) : null}
       <Icon name={icon} aria-label={iconLabels[icon]} />
@@ -91,15 +91,15 @@ export const PageTab = ({
         <span onClick={(e) => e.stopPropagation()}>
           <Popover>
             <PopoverTrigger>
-              <DotsHorizontalRounded />
+              <DotsHorizontalRounded className="size-4" />
             </PopoverTrigger>
             <PopoverContent className="border-0 p-0 shadow-none">
               <div role="menu">
                 <div role="menuitem" onClick={() => setRenaming(true)}>
-                  <Pencil /> Rename
+                  <Pencil className="size-4" /> Rename
                 </div>
                 <div className="danger" role="menuitem" onClick={onDelete}>
-                  <Trash /> Delete
+                  <Trash className="size-4" /> Delete
                 </div>
               </div>
             </PopoverContent>

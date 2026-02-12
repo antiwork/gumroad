@@ -149,11 +149,11 @@ export const AvailabilityEditor = ({
                     onClick={() => onChange(serializedAvailabilities.filter(({ id }) => availability.id !== id))}
                     aria-label="Delete hours"
                   >
-                    <Trash />
+                    <Trash className="size-4" />
                   </Button>
                   {idx === 0 ? (
                     <Button onClick={() => addAvailability(lastGroupEndTime ?? new Date())} aria-label="Add hours">
-                      <Plus />
+                      <Plus className="size-4" />
                     </Button>
                   ) : (
                     <span />
@@ -193,7 +193,7 @@ export const AvailabilityEditor = ({
 
 const AddButton = ({ onClick }: { onClick: () => void }) => (
   <Button color="primary" onClick={onClick}>
-    <Plus />
+    <Plus className="size-4" />
     Add day of availability
   </Button>
 );

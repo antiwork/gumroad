@@ -163,14 +163,14 @@ export const EditorMenu = ({
       }}
     >
       <PopoverTrigger aria-label={label} className={sectionButtonClasses}>
-        <DotsHorizontalRounded />
+        <DotsHorizontalRounded className="size-4" />
       </PopoverTrigger>
       <PopoverContent className="p-0!" arrowClassName="dark:fill-[rgb(var(--parent-color)/var(--border-alpha))]">
         {isSubmenu(activeSubmenu) ? (
           <div className="flex w-75 flex-col gap-4 p-4">
             <h4 className="grid grid-cols-[1em_1fr_1em]">
               <button className="cursor-pointer all-unset" onClick={() => setMenuState("menu")} aria-label="Go back">
-                <ChevronLeft />
+                <ChevronLeft className="size-4" />
               </button>
               <div className="text-center">{activeSubmenu.props.heading}</div>
             </h4>
@@ -187,7 +187,7 @@ export const EditorMenu = ({
                   >
                     <h5 className="grow font-bold">{item.props.heading}</h5>
                     <div>
-                      {item.props.text} <ChevronRight />
+                      {item.props.text} <ChevronRight className="size-4" />
                     </div>
                   </button>
                 </CardContent>
@@ -287,7 +287,7 @@ export const SectionLayout = ({
           <CardContent asChild>
             <button className="cursor-pointer all-unset" onClick={copyLink}>
               <h5 className="grow font-bold">{linkCopied ? "Copied!" : "Copy link"}</h5>
-              <Link />
+              <Link className="size-4" />
             </button>
           </CardContent>
           <CardContent asChild>
@@ -297,7 +297,7 @@ export const SectionLayout = ({
               style={{ color: "rgb(var(--danger))" }}
             >
               <h5 className="grow font-bold">Remove</h5>
-              <Trash />
+              <Trash className="size-4" />
             </button>
           </CardContent>
         </EditorMenu>
@@ -307,7 +307,7 @@ export const SectionLayout = ({
           onClick={() => move("move-section-up")}
           className={sectionButtonClasses}
         >
-          <ArrowUp />
+          <ArrowUp className="size-4" />
         </button>
         <button
           aria-label="Move section down"
@@ -315,7 +315,7 @@ export const SectionLayout = ({
           onClick={() => move("move-section-down")}
           className={sectionButtonClasses}
         >
-          <ArrowDown />
+          <ArrowDown className="size-4" />
         </button>
       </SectionToolbar>
       <div ref={scrollRef} className="absolute" />
@@ -688,7 +688,7 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
             "rounded-b border",
           )}
         >
-          <Plus />
+          <Plus className="size-4" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -698,27 +698,27 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
       >
         <div role="menu" onClick={() => setOpen(false)}>
           <div role="menuitem" onClick={() => addSection("SellerProfileProductsSection")}>
-            <Grid />
+            <Grid className="size-4" />
             &ensp; Products
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfilePostsSection")}>
-            <Envelope pack="filled" />
+            <Envelope pack="filled" className="size-4" />
             &ensp; Posts
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileFeaturedProductSection")}>
-            <Box />
+            <Box className="size-4" />
             &ensp; Featured Product
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileRichTextSection")}>
-            <FileDetail />
+            <FileDetail className="size-4" />
             &ensp; Rich text
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileSubscribeSection")}>
-            <Bell pack="filled" />
+            <Bell pack="filled" className="size-4" />
             &ensp; Subscribe
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileWishlistsSection")}>
-            <FileDetail pack="filled" />
+            <FileDetail pack="filled" className="size-4" />
             &ensp; Wishlists
           </div>
         </div>

@@ -69,7 +69,7 @@ export const ChatMessageInput = React.forwardRef<
         disabled={draft?.isSending}
         aria-label="Send message"
       >
-        <Send pack="filled" className="text-sm" />
+        <Send pack="filled" className="size-4 text-sm" />
       </button>
     </div>
   );

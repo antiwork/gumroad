@@ -393,7 +393,7 @@ export const RichTextEditorToolbar = ({
       >
         <Popover>
           <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
-            {activeFormatOption?.name ?? "Text"} <ChevronDown />
+            {activeFormatOption?.name ?? "Text"} <ChevronDown className="size-4" />
           </PopoverTrigger>
           <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
             <div role="menu">
@@ -471,7 +471,7 @@ export const RichTextEditorToolbar = ({
                 <Separator aria-orientation="vertical" />
                 <Popover>
                   <PopoverTrigger className="toolbar-item all-unset">
-                    Insert <ChevronDown />
+                    Insert <ChevronDown className="size-4" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                     <div role="menu">
@@ -480,7 +480,7 @@ export const RichTextEditorToolbar = ({
                           {item.name === "horizontalRule" ? (
                             <PopoverClose asChild>
                               <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                                <Minus />
+                                <Minus className="size-4" />
                                 <span>Divider</span>
                               </div>
                             </PopoverClose>
@@ -493,14 +493,14 @@ export const RichTextEditorToolbar = ({
                       ))}
                       <PopoverClose asChild>
                         <div role="menuitem" onClick={() => setIsUpsellModalOpen(true)}>
-                          <CartPlus />
+                          <CartPlus className="size-4" />
                           <span>Upsell</span>
                         </div>
                       </PopoverClose>
                       {productId ? (
                         <PopoverClose asChild>
                           <div role="menuitem" onClick={() => setIsReviewModalOpen(true)}>
-                            <Star pack="filled" />
+                            <Star pack="filled" className="size-4" />
                             <span>Reviews</span>
                           </div>
                         </PopoverClose>

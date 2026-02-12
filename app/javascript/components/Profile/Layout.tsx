@@ -28,7 +28,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
       <div className="ml-auto flex items-center gap-3">
         {creatorProfile.twitter_handle ? (
           <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
-            <Twitter pack="brands" />
+            <Twitter pack="brands" className="size-4" />
           </NavigationButton>
         ) : null}
         <CartNavigationButton />

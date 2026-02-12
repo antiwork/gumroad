@@ -23,7 +23,7 @@ export type ActivityItem =
 
 const Sale = ({ details: { price_cents, product_name, product_unique_permalink } }: { details: SaleItemDetails }) => (
   <>
-    <Dollar className="text-green" />
+    <Dollar className="size-4 text-green" />
     <span>
       New sale of <a href={Routes.short_link_path({ id: product_unique_permalink })}>{product_name}</a> for{" "}
       {formatPriceCentsWithCurrencySymbol("usd", price_cents, { symbolFormat: "short", noCentsIfWhole: true })}
@@ -33,14 +33,14 @@ const Sale = ({ details: { price_cents, product_name, product_unique_permalink }
 
 const Follow = ({ details: { email, name } }: { details: FollowItemDetails }) => (
   <>
-    <UserCircle pack="filled" />
+    <UserCircle pack="filled" className="size-4" />
     <span> New follower {name || email} added</span>
   </>
 );
 
 const FollowRemoved = ({ details: { email, name } }: { details: FollowItemDetails }) => (
   <>
-    <UserCircle pack="filled" />
+    <UserCircle pack="filled" className="size-4" />
     <span> Follower {name || email} removed</span>
   </>
 );

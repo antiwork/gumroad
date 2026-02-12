@@ -366,7 +366,7 @@ export const CardGrid = ({
       )}
       {results?.products.length === 0 ? (
         <Placeholder>
-          <Archive pack="filled" />
+          <Archive pack="filled" className="size-4" />
           No products found
         </Placeholder>
       ) : (

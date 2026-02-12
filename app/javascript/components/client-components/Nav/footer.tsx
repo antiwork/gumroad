@@ -18,10 +18,10 @@ function NavbarFooter() {
   return (
     <>
       {currentSeller?.isBuyer ? (
-        <NavLink text="Start selling" icon={<Store pack="filled" />} href={Routes.dashboard_url(routeParams)} />
+        <NavLink text="Start selling" icon={<Store pack="filled" className="size-4" />} href={Routes.dashboard_url(routeParams)} />
       ) : null}
-      <ClientNavLink text="Settings" icon={<Gear pack="filled" />} href={Routes.settings_main_url(routeParams)} />
-      <ClientNavLink text="Help" icon={<Book />} href={Routes.help_center_root_url(routeParams)} />
+      <ClientNavLink text="Settings" icon={<Gear pack="filled" className="size-4" />} href={Routes.settings_main_url(routeParams)} />
+      <ClientNavLink text="Help" icon={<Book className="size-4" />} href={Routes.help_center_root_url(routeParams)} />
       <DashboardNavProfilePopover user={currentSeller}>
         <div role="menu" className="flex flex-col border-0! shadow-none! dark:border!">
           {teamMemberships != null && teamMemberships.length > 0 ? (
@@ -39,7 +39,7 @@ function NavbarFooter() {
           />
           <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
           <Link role="menuitem" href={Routes.logout_url(routeParams)} method="delete" className="all-unset">
-            <ArrowRight pack="filled" className="mr-3 ml-1" />
+            <ArrowRight pack="filled" className="size-4 mr-3 ml-1" />
             Logout
           </Link>
           {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}

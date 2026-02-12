@@ -26,7 +26,7 @@ export const ProgressPie = ({
     >
       {progress === 1 ? (
         <div className="rounded-full bg-accent p-1 text-2xl/none text-accent-foreground">
-          <Check />
+          <Check className="size-4" />
         </div>
       ) : (
         <svg viewBox="0 0 1 1" className="w-8">

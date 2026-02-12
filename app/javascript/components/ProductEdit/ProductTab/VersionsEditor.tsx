@@ -53,7 +53,7 @@ export const VersionsEditor = ({
         ]);
       }}
     >
-      <Plus />
+      <Plus className="size-4" />
       Add version
     </Button>
   );
@@ -133,7 +133,7 @@ const VersionEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Layers pack="filled" />
+        <Layers pack="filled" className="size-4" />
         <h3>{version.name || "Untitled"}</h3>
       </RowContent>
       <RowActions>
@@ -144,7 +144,7 @@ const VersionEditor = ({
         </WithTooltip>
         <WithTooltip tip="Remove">
           <Button onClick={onDelete} aria-label="Remove version">
-            <Trash />
+            <Trash className="size-4" />
           </Button>
         </WithTooltip>
       </RowActions>

@@ -12,18 +12,18 @@ export const DownloadAllButton = ({ zip_path, files }: Props) => (
       <PopoverTrigger asChild>
         <Button>
           Download all
-          <ChevronDown />
+          <ChevronDown className="size-4" />
         </Button>
       </PopoverTrigger>
     </PopoverAnchor>
     <PopoverContent sideOffset={4}>
       <div className="grid gap-2">
         <NavigationButton href={zip_path}>
-          <FileCode pack="filled" />
+          <FileCode pack="filled" className="size-4" />
           Download as ZIP
         </NavigationButton>
         <Button onClick={() => Dropbox.save({ files })}>
-          <DropboxIcon pack="brands" />
+          <DropboxIcon pack="brands" className="size-4" />
           Save to Dropbox
         </Button>
       </div>

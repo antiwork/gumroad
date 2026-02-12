@@ -136,7 +136,7 @@ export default function FollowersPage() {
               <WithTooltip tip="Export" position="bottom">
                 <PopoverTrigger aria-label="Export" asChild>
                   <Button>
-                    <ArrowDown aria-label="Download" />
+                    <ArrowDown aria-label="Download" className="size-4" />
                   </Button>
                 </PopoverTrigger>
               </WithTooltip>
@@ -152,7 +152,7 @@ export default function FollowersPage() {
               text={Routes.custom_domain_subscribe_url({ host: currentSeller.subdomain })}
             >
               <Button>
-                <Link />
+                <Link className="size-4" />
                 Share subscribe page
               </Button>
             </CopyToClipboard>

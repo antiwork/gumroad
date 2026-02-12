@@ -100,7 +100,7 @@ const PayPalConnectSection = ({
                 </legend>
                 <div className="input input-wrapper">
                   <div className="fake-input">{paypalConnect.charge_processor_merchant_id}</div>
-                  <CheckCircle pack="filled" className="text-success" />
+                  <CheckCircle pack="filled" className="size-4 text-success" />
                 </div>
               </fieldset>
               {paypalConnect.show_paypal_connect ? (

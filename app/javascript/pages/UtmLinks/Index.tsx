@@ -321,21 +321,21 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
     <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
       <CopyToClipboard copyTooltip="Copy short link" text={link.short_url}>
         <Button aria-label="Copy link">
-          <LinkIcon />
+          <LinkIcon className="size-4" />
         </Button>
       </CopyToClipboard>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverAnchor>
           <PopoverTrigger aria-label="Open action menu" asChild>
             <Button>
-              <DotsHorizontalRounded />
+              <DotsHorizontalRounded className="size-4" />
             </Button>
           </PopoverTrigger>
         </PopoverAnchor>
         <PopoverContent className="w-48 border-none p-0 shadow-none">
           <div role="menu" className="grid gap-1">
             <Link href={Routes.edit_dashboard_utm_link_path(link.id)} role="menuitem" className="no-underline">
-              <Pencil />
+              <Pencil className="size-4" />
               &ensp;Edit
             </Link>
             <Link
@@ -343,11 +343,11 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
               role="menuitem"
               className="no-underline"
             >
-              <Copy />
+              <Copy className="size-4" />
               &ensp;Duplicate
             </Link>
             <div className="danger" role="menuitem" onClick={onDelete}>
-              <Trash />
+              <Trash className="size-4" />
               &ensp;Delete
             </div>
           </div>
@@ -462,7 +462,7 @@ const UtmLinkDetails = ({
             <h3 className="grow">Short link</h3>
             <CopyToClipboard text={utmLink.short_url} copyTooltip="Copy short link">
               <Button aria-label="Copy short link">
-                <LinkIcon />
+                <LinkIcon className="size-4" />
               </Button>
             </CopyToClipboard>
           </CardContent>
@@ -477,7 +477,7 @@ const UtmLinkDetails = ({
             <h3 className="grow">UTM link</h3>
             <CopyToClipboard text={utmLink.utm_url} copyTooltip="Copy UTM link">
               <Button aria-label="Copy UTM link">
-                <LinkIcon />
+                <LinkIcon className="size-4" />
               </Button>
             </CopyToClipboard>
           </CardContent>

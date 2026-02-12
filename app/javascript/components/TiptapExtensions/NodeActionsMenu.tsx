@@ -23,7 +23,7 @@ export const NodeActionsMenu = ({
         <PopoverAnchor>
           <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
             <Button small color="filled">
-              <Move />
+              <Move className="size-4" />
             </Button>
           </PopoverTrigger>
         </PopoverAnchor>
@@ -36,7 +36,7 @@ export const NodeActionsMenu = ({
             {actions && selectedActionIndex !== null ? (
               <>
                 <div onClick={() => setSelectedActionIndex(null)} role="menuitem">
-                  <ChevronLeft />
+                  <ChevronLeft className="size-4" />
                   <span>Back</span>
                 </div>
                 {assertDefined(actions[selectedActionIndex]).menu(() => setOpen(false))}
@@ -44,11 +44,11 @@ export const NodeActionsMenu = ({
             ) : (
               <>
                 <div onClick={() => editor.commands.moveNodeUp()} role="menuitem">
-                  <ArrowUp />
+                  <ArrowUp className="size-4" />
                   <span>Move up</span>
                 </div>
                 <div onClick={() => editor.commands.moveNodeDown()} role="menuitem">
-                  <ArrowDown />
+                  <ArrowDown className="size-4" />
                   <span>Move down</span>
                 </div>
                 {actions?.map(({ item }, index) => (
@@ -61,7 +61,7 @@ export const NodeActionsMenu = ({
                   onClick={() => editor.commands.deleteSelection()}
                   role="menuitem"
                 >
-                  <Trash />
+                  <Trash className="size-4" />
                   <span>Delete</span>
                 </div>
               </>

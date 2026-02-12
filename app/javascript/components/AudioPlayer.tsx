@@ -102,18 +102,18 @@ export const AudioPlayer = (props: Props) => {
           <div role="toolbar" className="flex items-center gap-2 text-[1.25rem]">
             {isPlaying ? (
               <button type="button" className="cursor-pointer all-unset" onClick={pauseAudio} aria-label="Pause">
-                <PauseCircle />
+                <PauseCircle className="size-4" />
               </button>
             ) : (
               <button type="button" className="cursor-pointer all-unset" onClick={playAudio} aria-label="Play">
-                <PlayCircle />
+                <PlayCircle className="size-4" />
               </button>
             )}
             <button type="button" className="cursor-pointer all-unset" onClick={rewind15} aria-label="Rewind15">
-              <RotateCcw10 />
+              <RotateCcw10 className="size-4" />
             </button>
             <button type="button" className="cursor-pointer all-unset" onClick={skip30} aria-label="Skip30">
-              <RotateCw10 />
+              <RotateCw10 className="size-4" />
             </button>
           </div>
           <time aria-label="Progress" className="text-[0.875rem] leading-[1.3] tabular-nums">

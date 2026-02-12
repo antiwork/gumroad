@@ -95,7 +95,7 @@ function HelpCenterHeader({
     if (showSearchButton) {
       return (
         <Link href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
-          <Search pack="filled" />
+          <Search pack="filled" className="size-4" />
         </Link>
       );
     }

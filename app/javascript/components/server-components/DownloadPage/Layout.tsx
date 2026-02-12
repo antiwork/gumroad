@@ -243,7 +243,7 @@ export const Layout = ({
       {loggedInUser && !is_mobile_app_web_view ? (
         <div className="font-size-base grid-row-[-3] text-singleline border-b border-border px-8 py-4">
           <a style={{ textDecoration: "none" }} href={Routes.library_url()} title="Back to Library">
-            <ArrowLeft className="mr-1.5" />
+            <ArrowLeft className="size-4 mr-1.5" />
             {headerVisible ? "Back to Library" : null}
           </a>
           {!headerVisible ? <strong>{purchase?.product_name}</strong> : null}

@@ -166,7 +166,7 @@ const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel
   }
   return (
     <span>
-      {isSubOption ? <Reply className="mr-2" /> : null}
+      {isSubOption ? <Reply className="size-4 mr-2" /> : null}
       {label}
     </span>
   );
@@ -178,7 +178,7 @@ const IndicatorSeparator = () => null;
 const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Option, IsMulti>) => (
   <components.ClearIndicator {...props}>
     <button className="cursor-pointer all-unset" aria-label="Clear value">
-      <X />
+      <X className="size-4" />
     </button>
   </components.ClearIndicator>
 );
@@ -186,7 +186,7 @@ const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Opti
 const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProps<Option, IsMulti>) =>
   props.isMulti ? null : (
     <components.DropdownIndicator {...props}>
-      <ChevronDown />
+      <ChevronDown className="size-4" />
     </components.DropdownIndicator>
   );
 
@@ -229,7 +229,7 @@ const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMu
     <Pill asChild color="primary" className="cursor-pointer font-[inherit] text-[length:inherit]">
       <button>
         {props.data.label}
-        <X className="ml-2" />
+        <X className="size-4 ml-2" />
       </button>
     </Pill>
   </div>

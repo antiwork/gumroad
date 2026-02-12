@@ -108,7 +108,7 @@ export const DefaultDiscountCodeSelector = () => {
                       setIsOpen(true);
                     }}
                   />
-                  <ChevronDown />
+                  <ChevronDown className="size-4" />
                 </div>
               )}
               option={(code, props) => (

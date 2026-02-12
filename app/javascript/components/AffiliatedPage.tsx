@@ -156,7 +156,7 @@ const AffiliatedProductsTable = ({
                 <div className="flex flex-wrap gap-3 lg:justify-end">
                   <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={affiliatedProduct.url}>
                     <Button>
-                      <Link />
+                      <Link className="size-4" />
                       Copy link
                     </Button>
                   </CopyToClipboard>
@@ -244,7 +244,7 @@ const AffiliatedPage = ({
       ctaButton={
         isShowingGlobalAffiliates ? (
           <Button onClick={() => toggleOpen(false)}>
-            <XCircle />
+            <XCircle className="size-4" />
             Close
           </Button>
         ) : (

@@ -19,7 +19,7 @@ export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
         return (
           <Row key={post.id} role="listitem">
             <RowContent>
-              <FileDetail pack="filled" className="type-icon" />
+              <FileDetail pack="filled" className="size-4 type-icon" />
               <div>
                 <div>
                   <h4>{post.name}</h4>

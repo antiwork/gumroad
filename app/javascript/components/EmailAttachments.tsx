@@ -122,7 +122,7 @@ export const FileRow = ({ file }: { file: FileState }) => {
       <RowActions>
         {file.is_streamable ? (
           <Button onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label="Edit">
-            <Pencil />
+            <Pencil className="size-4" />
           </Button>
         ) : null}
         <WithTooltip tip={uploadProgress === null ? "Remove" : "Cancel"} position="left">
@@ -135,7 +135,7 @@ export const FileRow = ({ file }: { file: FileState }) => {
               filesDispatch({ type: "remove-file", fileId: file.id });
             }}
           >
-            <Trash />
+            <Trash className="size-4" />
           </Button>
         </WithTooltip>
       </RowActions>
@@ -215,7 +215,7 @@ export const EmailAttachments = ({
       <Button color="primary" asChild>
         <label>
           <input type="file" name="file" tabIndex={-1} multiple onChange={(e) => onAttachFiles(e.target)} />
-          <Paperclip />
+          <Paperclip className="size-4" />
           Attach files
         </label>
       </Button>

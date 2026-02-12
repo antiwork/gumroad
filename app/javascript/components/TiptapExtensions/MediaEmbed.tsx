@@ -88,7 +88,7 @@ export const Raw = TiptapNode.create({
     item: (editor) => (
       <WithDialog editor={editor} type="twitter">
         <div role="menuitem">
-          <Twitter pack="brands" />
+          <Twitter pack="brands" className="size-4" />
           <span>Twitter post</span>
         </div>
       </WithDialog>
@@ -249,7 +249,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
         <Row className="embed">
           <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }} />
           <RowContent className="content">
-            <PlayCircle pack="filled" className="type-icon" />
+            <PlayCircle pack="filled" className="size-4 type-icon" />
             <div>
               <h4 className="text-singleline">{node.attrs.title}</h4>
               {node.attrs.url ? (
@@ -264,7 +264,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
           {editor.isEditable ? (
             <RowActions>
               <Button color="danger" outline aria-label="Remove" onClick={deleteNode}>
-                <Trash />
+                <Trash className="size-4" />
               </Button>
             </RowActions>
           ) : null}

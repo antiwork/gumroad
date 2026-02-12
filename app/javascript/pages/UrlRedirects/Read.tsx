@@ -189,7 +189,7 @@ const Read = () => {
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
             <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
-              <X />
+              <X className="size-4" />
             </button>
           </div>
           <div className="flex flex-1 items-center border-r p-4">
@@ -197,17 +197,17 @@ const Read = () => {
           </div>
           <Popover>
             <PopoverTrigger aria-label="Appearance" className="border-r p-4">
-              <SearchPlus />
+              <SearchPlus className="size-4" />
             </PopoverTrigger>
             <PopoverContent>
               <fieldset>
                 <legend>Appearance</legend>
                 <div>
                   <Button className="mr-2" onClick={zoomOut}>
-                    <SearchMinus />
+                    <SearchMinus className="size-4" />
                   </Button>
                   <Button onClick={zoomIn}>
-                    <SearchPlus />
+                    <SearchPlus className="size-4" />
                   </Button>
                 </div>
               </fieldset>
@@ -223,7 +223,7 @@ const Read = () => {
               onClick={() => updatePage("previous")}
               disabled={pageNumber === 1 || pageCount === 1}
             >
-              <ArrowLeft />
+              <ArrowLeft className="size-4" />
             </button>
             <button
               className="cursor-pointer all-unset"
@@ -231,7 +231,7 @@ const Read = () => {
               onClick={() => updatePage("next")}
               disabled={pageNumber === pageCount || pageCount === 1}
             >
-              <ArrowRight />
+              <ArrowRight className="size-4" />
             </button>
           </div>
         </div>

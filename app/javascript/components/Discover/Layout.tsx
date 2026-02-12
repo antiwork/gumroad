@@ -19,7 +19,7 @@ const UserActionButtons: React.FC = () => {
     return (
       <>
         <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none">
-          <BookmarkHeart pack="filled" /> Library
+          <BookmarkHeart pack="filled" className="size-4" /> Library
         </NavigationButton>
         {currentSeller.has_published_products ? null : (
           <NavigationButton href={Routes.products_url()} color="primary" className="flex-1 lg:flex-none">

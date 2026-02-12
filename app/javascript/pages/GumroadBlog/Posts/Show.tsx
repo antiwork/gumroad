@@ -27,7 +27,7 @@ const BackToBlog = () => (
     href={Routes.gumroad_blog_root_path()}
     className="mt-4 flex items-center font-medium text-pink-600 hover:text-pink-800"
   >
-    <ArrowLeft className="mr-1.5" style={{ width: 18, height: 18 }} />
+    <ArrowLeft className="size-4 mr-1.5" style={{ width: 18, height: 18 }} />
     Back to Blog
   </Link>
 );

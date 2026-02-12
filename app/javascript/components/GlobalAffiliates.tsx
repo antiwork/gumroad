@@ -227,7 +227,7 @@ const ProductEligibilitySection = ({
               }
             })}
           />
-          <Search pack="filled" />
+          <Search pack="filled" className="size-4" />
         </div>
       </fieldset>
       {result.isLoading ? <LoadingSpinner /> : null}
@@ -240,7 +240,7 @@ const ProductEligibilitySection = ({
             <span>{result.product.formatted_price}</span>
             <CopyToClipboard text={result.product.short_url} tooltipPosition="bottom">
               <Button>
-                <Link />
+                <Link className="size-4" />
                 Copy link
               </Button>
             </CopyToClipboard>

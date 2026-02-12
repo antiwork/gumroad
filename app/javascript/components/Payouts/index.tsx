@@ -353,7 +353,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
               onClick={handleRequestPayoutCSV}
               aria-label="Export"
             >
-              <ArrowDown />
+              <ArrowDown className="size-4" />
             </Button>
           </WithTooltip>
         ) : null}
@@ -707,7 +707,7 @@ const Payouts = ({
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Gear pack="filled" />
+      <Gear pack="filled" className="size-4" />
       Settings
     </NavigationButton>
   ) : null;
@@ -796,7 +796,7 @@ const Payouts = ({
               <fieldset>
                 <label htmlFor="instant-payout-date">Pay out balance up to</label>
                 <div className="input cursor-pointer">
-                  <Calendar />
+                  <Calendar className="size-4" />
                   <select
                     id="instant-payout-date"
                     value={instantPayoutId}
@@ -812,7 +812,7 @@ const Payouts = ({
                       </option>
                     ))}
                   </select>
-                  <ChevronDown />
+                  <ChevronDown className="size-4" />
                 </div>
               </fieldset>
               <fieldset>

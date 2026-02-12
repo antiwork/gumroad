@@ -61,7 +61,7 @@ export const ImageUploader = ({
               }}
               disabled={disabled}
             />
-            <ArrowUp pack="filled" />
+            <ArrowUp pack="filled" className="size-4" />
             Upload
           </label>
         </Placeholder>
@@ -76,7 +76,7 @@ export const ImageUploader = ({
             onClick={onRemove}
             disabled={disabled}
           >
-            <Trash />
+            <Trash className="size-4" />
           </Button>
         </figure>
       )}

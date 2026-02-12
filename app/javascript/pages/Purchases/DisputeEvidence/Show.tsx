@@ -333,7 +333,7 @@ export default function Show() {
                   </>
                 ) : (
                   <>
-                    <Paperclip /> Upload customer communication
+                    <Paperclip className="size-4" /> Upload customer communication
                   </>
                 )}
               </Button>
@@ -393,7 +393,7 @@ const Files = ({
       {eligibleBlobs.map((blob) => (
         <Row role="listitem" key={blob.key}>
           <RowContent>
-            <FileDetail pack="filled" className="type-icon" />
+            <FileDetail pack="filled" className="size-4 type-icon" />
             <div>
               <h4>{blob.title}</h4>
               <ul className="inline">
@@ -414,7 +414,7 @@ const Files = ({
                 disabled={isRemovingFile || isSubmitting}
                 onClick={handleFileRemove}
               >
-                <Trash />
+                <Trash className="size-4" />
               </Button>
             ) : null}
           </RowActions>

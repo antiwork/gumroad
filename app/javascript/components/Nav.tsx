@@ -212,7 +212,7 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
       <span className="min-w-0 flex-1 truncate" title={teamMembership.seller_name}>
         {teamMembership.seller_name}
       </span>
-      {teamMembership.is_selected ? <CheckCircle pack="filled" className="h-5 shrink-0 text-accent" /> : null}
+      {teamMembership.is_selected ? <CheckCircle pack="filled" className="size-4 h-5 shrink-0 text-accent" /> : null}
     </a>
   );
 };

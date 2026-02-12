@@ -1169,10 +1169,10 @@ const PaymentMethodsSection = ({
     <>
       <div className="overflow-hidden rounded border border-border">
         {hasMultiplePaymentMethods ? (
-          <PaymentMethodRadioRow paymentMethod="card" label="Card" icon={<CreditCard />} />
+          <PaymentMethodRadioRow paymentMethod="card" label="Card" icon={<CreditCard className="size-4" />} />
         ) : (
           <div className="flex items-center gap-3 bg-body p-4">
-            <CreditCard />
+            <CreditCard className="size-4" />
             <span className="font-medium">Card</span>
           </div>
         )}

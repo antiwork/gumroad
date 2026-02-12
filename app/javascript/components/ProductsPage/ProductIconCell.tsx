@@ -6,7 +6,7 @@ import { Image } from "@boxicons/react";
 export const ProductIconCell = ({
   href,
   thumbnail,
-  placeholder = <Image pack="filled" />,
+  placeholder = <Image pack="filled" className="size-4" />,
 }: {
   href: string;
   thumbnail: string | null;

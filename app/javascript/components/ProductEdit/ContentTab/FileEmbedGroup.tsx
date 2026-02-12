@@ -151,7 +151,7 @@ const FileEmbedGroupNodeView = ({
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
             <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
-            <FolderOpen pack="filled" className="type-icon" />
+            <FolderOpen pack="filled" className="size-4 type-icon" />
             {editing ? (
               <input
                 type="text"
@@ -181,7 +181,7 @@ const FileEmbedGroupNodeView = ({
                     <PopoverTrigger asChild>
                       <Button>
                         Download all
-                        <ChevronDown />
+                        <ChevronDown className="size-4" />
                       </Button>
                     </PopoverTrigger>
                   </PopoverAnchor>
@@ -205,7 +205,7 @@ const FileEmbedGroupNodeView = ({
                         <Button onClick={() => void download()}>Download as ZIP</Button>
                       )}
                       <Button disabled={downloading} onClick={() => void saveToDropbox()}>
-                        <DropboxIcon pack="brands" />
+                        <DropboxIcon pack="brands" className="size-4" />
                         Save to Dropbox
                       </Button>
                     </div>

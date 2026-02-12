@@ -110,7 +110,7 @@ const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; dis
     onClick={onClick}
     disabled={disabled}
   >
-    <Trash className="text-sm text-white" />
+    <Trash className="size-4 text-sm text-white" />
   </button>
 );
 

@@ -45,7 +45,7 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
         <PopoverTrigger aria-label="Tax forms" asChild>
           <Button>
             Tax forms
-            <ArrowDown />
+            <ArrowDown className="size-4" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>

@@ -53,7 +53,7 @@ export const DurationsEditor = ({
         ]);
       }}
     >
-      <Plus />
+      <Plus className="size-4" />
       Add duration
     </Button>
   );
@@ -127,7 +127,7 @@ const DurationEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Clock />
+        <Clock className="size-4" />
         <h3>{duration.name}</h3>
       </RowContent>
       <RowActions>
@@ -138,7 +138,7 @@ const DurationEditor = ({
         </WithTooltip>
         <WithTooltip tip="Remove">
           <Button onClick={onDelete} aria-label="Remove">
-            <Trash />
+            <Trash className="size-4" />
           </Button>
         </WithTooltip>
       </RowActions>
