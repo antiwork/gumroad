@@ -222,6 +222,8 @@ class SettingsPresenter
       payout_country_name: Compliance::Countries.for_select.to_h[seller.alive_user_compliance_info&.legal_entity_country_code],
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
+      refund_funding_card: refund_funding_card_details,
+      show_refund_funding_banner: !seller.dismissed_refund_payment_method_banner? && seller.refund_funding_credit_card.blank?,
     }
   end
 
@@ -397,6 +399,18 @@ class SettingsPresenter
         ir: Compliance::Countries.subdivisions_for_select(Compliance::Countries::IRL.alpha2).map { |code, name| { code:, name: } },
         br: Compliance::Countries.subdivisions_for_select(Compliance::Countries::BRA.alpha2).map { |code, name| { code:, name: } },
         jp: Compliance::Countries.japan_prefectures_for_select,
+      }
+    end
+
+    def refund_funding_card_details
+      card = seller.refund_funding_credit_card
+      return nil unless card
+
+      {
+        visual: card.visual,
+        card_type: card.card_type,
+        expiry_month: card.expiry_month,
+        expiry_year: card.expiry_year
       }
     end
 

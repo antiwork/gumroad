@@ -37,6 +37,18 @@ class Settings::Payments::UserPolicy < ApplicationPolicy
     update?
   end
 
+  def save_refund_funding_card?
+    update?
+  end
+
+  def remove_refund_funding_card?
+    update?
+  end
+
+  def dismiss_refund_funding_banner?
+    update?
+  end
+
   def remediation?
     update?
   end

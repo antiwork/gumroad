@@ -155,6 +155,47 @@ class Settings::PaymentsController < Settings::BaseController
     end
   end
 
+  def save_refund_funding_card
+    card_data_handling_mode = CardParamsHelper.get_card_data_handling_mode(params)
+    card_data_handling_error = CardParamsHelper.check_for_errors(params)
+
+    if card_data_handling_error.present?
+      return render json: { success: false, error: card_data_handling_error.error_message }, status: :unprocessable_entity
+    end
+
+    chargeable = CardParamsHelper.build_chargeable(params)
+    if chargeable.blank?
+      return render json: { success: false, error: "Invalid card information." }, status: :unprocessable_entity
+    end
+
+    credit_card = CreditCard.create(chargeable, card_data_handling_mode, current_seller)
+    unless credit_card.persisted?
+      return render json: { success: false, error: credit_card.errors.full_messages.join(", ") }, status: :unprocessable_entity
+    end
+
+    current_seller.update!(refund_funding_credit_card: credit_card)
+
+    render json: {
+      success: true,
+      credit_card: {
+        visual: credit_card.visual,
+        card_type: credit_card.card_type,
+        expiry_month: credit_card.expiry_month,
+        expiry_year: credit_card.expiry_year
+      }
+    }
+  end
+
+  def remove_refund_funding_card
+    current_seller.update!(refund_funding_credit_card: nil)
+    render json: { success: true }
+  end
+
+  def dismiss_refund_funding_banner
+    current_seller.update!(dismissed_refund_payment_method_banner: true)
+    render json: { success: true }
+  end
+
   def remediation
     authorize
 

@@ -45,8 +45,27 @@ class Purchase
 
         amount_cents_to_refund = amount_cents.presence || amount_refundable_cents
         if amount_cents_to_refund > seller.unpaid_balance_cents && charged_using_gumroad_merchant_account?
-          errors.add :base, "Your balance is insufficient to process this refund."
-          return false
+          if seller.refund_funding_credit_card.present?
+            shortfall = amount_cents_to_refund - seller.unpaid_balance_cents
+            charge_amount = [shortfall, RefundFundingChargeService::MINIMUM_CHARGE_CENTS].max
+            @refund_funding_service = RefundFundingChargeService.new(user: seller, amount_cents: charge_amount, purchase: self)
+            @refund_funding_result = @refund_funding_service.perform
+
+            unless @refund_funding_result.success?
+              errors.add :base, @refund_funding_result.error_message || "Could not charge your backup card to cover the refund shortfall."
+              return false
+            end
+
+            seller.reload
+            if amount_cents_to_refund > seller.unpaid_balance_cents
+              @refund_funding_service.reverse_charge!(@refund_funding_result.credit.refund_funding_processor_payment_intent_id)
+              errors.add :base, "Refund funding was insufficient due to a concurrent operation. Please try again."
+              return false
+            end
+          else
+            errors.add :base, "Your balance is insufficient to process this refund."
+            return false
+          end
         end
       end
 
@@ -94,19 +113,27 @@ class Purchase
         if charge_refund.flow_of_funds.nil? && StripeChargeProcessor.charge_processor_id != charge_processor_id
           charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -(gross_amount_cents.presence || gross_amount_refundable_cents))
         end
-        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud)
+        refund_purchase!(charge_refund.flow_of_funds, refunding_user_id, charge_refund.refund, is_for_fraud).tap do |success|
+          if success && @refund_funding_result&.success?
+            ContactingCreatorMailer.refund_funding_charge_confirmation(credit_id: @refund_funding_result.credit.id).deliver_later(queue: "default")
+          end
+        end
       rescue ChargeProcessorAlreadyRefundedError => e
         logger.error "Charge was already refunded in purchase: #{external_id}. Response: #{e.message}"
+        reverse_refund_funding_charge_if_needed!
         false
       rescue ChargeProcessorInsufficientFundsError => e
         logger.error "Creator's PayPal account does not have sufficient funds to refund purchase: #{external_id}. Response: #{e.message}"
+        reverse_refund_funding_charge_if_needed!
         errors.add :base, "Your PayPal account does not have sufficient funds to make this refund."
         false
       rescue ChargeProcessorInvalidRequestError => e
         logger.error "Charge refund encountered an invalid request error in purchase: #{external_id}. Response: #{e.message}. #{e.backtrace_locations}"
+        reverse_refund_funding_charge_if_needed!
         false
       rescue ChargeProcessorUnavailableError => e
         logger.error "Charge processor unavailable in purchase: #{external_id}. Response: #{e.message}"
+        reverse_refund_funding_charge_if_needed!
         errors.add :base, "There is a temporary problem. Try to refund later."
         false
       end
@@ -342,6 +369,12 @@ class Purchase
   end
 
   private
+    def reverse_refund_funding_charge_if_needed!
+      return unless @refund_funding_result&.success? && @refund_funding_service.present?
+
+      @refund_funding_service.reverse_charge!(@refund_funding_result.credit.refund_funding_processor_payment_intent_id)
+    end
+
     def refundable_amounts
       amounts_query = "COALESCE(SUM(total_transaction_cents), 0) AS tt_cents, COALESCE(SUM(amount_cents), 0) AS p_cents, " \
                         "COALESCE(SUM(creator_tax_cents), 0) AS ct_cents, COALESCE(SUM(gumroad_tax_cents), 0) as gt_cents," \

@@ -1560,4 +1560,105 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(flash[:notice]).to eq("Thanks! You're all set.")
     end
   end
+
+  describe "POST save_refund_funding_card" do
+    before do
+      sign_in seller
+    end
+
+    context "with valid card params" do
+      let(:credit_card) do
+        CreditCard.new(
+          stripe_customer_id: "cus_test_rf",
+          processor_payment_method_id: "pm_test_rf",
+          stripe_fingerprint: "fp_test_rf",
+          visual: "**** **** **** 4242",
+          card_type: CardType::VISA,
+          expiry_month: 12,
+          expiry_year: 2030,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id
+        ).tap(&:save!)
+      end
+
+      before do
+        allow(CardParamsHelper).to receive(:get_card_data_handling_mode).and_return("stripejs.0")
+        allow(CardParamsHelper).to receive(:check_for_errors).and_return(nil)
+        allow(CardParamsHelper).to receive(:build_chargeable).and_return(double("chargeable"))
+        allow(CreditCard).to receive(:create).and_return(credit_card)
+      end
+
+      it "saves the refund funding card and returns success" do
+        post :save_refund_funding_card, params: { card_data_handling_mode: "stripejs.0", stripe_payment_method_id: "pm_test" }
+
+        expect(response).to have_http_status(:ok)
+        json = JSON.parse(response.body)
+        expect(json["success"]).to be true
+        expect(json["credit_card"]["visual"]).to eq("**** **** **** 4242")
+        expect(seller.reload.refund_funding_credit_card).to eq(credit_card)
+      end
+    end
+
+    context "with invalid card params" do
+      before do
+        allow(CardParamsHelper).to receive(:get_card_data_handling_mode).and_return(nil)
+        allow(CardParamsHelper).to receive(:check_for_errors).and_return(nil)
+        allow(CardParamsHelper).to receive(:build_chargeable).and_return(nil)
+      end
+
+      it "returns an error" do
+        post :save_refund_funding_card, params: {}
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        json = JSON.parse(response.body)
+        expect(json["success"]).to be false
+        expect(json["error"]).to eq("Invalid card information.")
+      end
+    end
+  end
+
+  describe "DELETE remove_refund_funding_card" do
+    let(:credit_card) do
+      CreditCard.new(
+        stripe_customer_id: "cus_test_rf",
+        processor_payment_method_id: "pm_test_rf",
+        stripe_fingerprint: "fp_test_rf",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        expiry_month: 12,
+        expiry_year: 2030,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id
+      ).tap(&:save!)
+    end
+
+    before do
+      sign_in seller
+      seller.update!(refund_funding_credit_card: credit_card)
+    end
+
+    it "removes the refund funding card" do
+      delete :remove_refund_funding_card
+
+      expect(response).to have_http_status(:ok)
+      json = JSON.parse(response.body)
+      expect(json["success"]).to be true
+      expect(seller.reload.refund_funding_credit_card).to be_nil
+    end
+  end
+
+  describe "POST dismiss_refund_funding_banner" do
+    before do
+      sign_in seller
+    end
+
+    it "dismisses the refund funding banner" do
+      expect(seller.dismissed_refund_payment_method_banner?).to be false
+
+      post :dismiss_refund_funding_banner
+
+      expect(response).to have_http_status(:ok)
+      json = JSON.parse(response.body)
+      expect(json["success"]).to be true
+      expect(seller.reload.dismissed_refund_payment_method_banner?).to be true
+    end
+  end
 end

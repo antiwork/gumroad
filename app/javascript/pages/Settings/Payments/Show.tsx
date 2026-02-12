@@ -27,6 +27,10 @@ import BankAccountSection, {
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
 import PayPalConnectSection, { PayPalConnect } from "$app/components/Settings/PaymentsPage/PayPalConnectSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
+import {
+  RefundPaymentMethodSection,
+  type RefundFundingCard,
+} from "$app/components/Settings/PaymentsPage/RefundPaymentMethodSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
@@ -91,6 +95,8 @@ type PaymentsPageProps = {
   payout_country_name: string | null;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
+  refund_funding_card: RefundFundingCard;
+  show_refund_funding_banner: boolean;
   errors?: {
     base?: string[];
     error_code?: string[];
@@ -1106,6 +1112,7 @@ export default function PaymentsPage() {
             read_only={props.is_form_disabled}
           />
         ) : null}
+        <RefundPaymentMethodSection initialCard={props.refund_funding_card} isFormDisabled={props.is_form_disabled} />
       </form>
     </Layout>
   );

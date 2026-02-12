@@ -525,6 +525,13 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Important: Update Your Payout Method on Gumroad"
   end
 
+  def refund_funding_charge_confirmation(credit_id:)
+    @credit = Credit.find(credit_id)
+    @seller = @credit.user
+    @amount = Money.new(@credit.amount_cents, :usd).format(no_cents_if_whole: true, symbol: true)
+    @subject = "Your backup card was charged #{@amount}"
+  end
+
   def ping_endpoint_failure(user_id, ping_url, response_code)
     @seller = User.find(user_id)
     @ping_url = redact_ping_url(ping_url)
