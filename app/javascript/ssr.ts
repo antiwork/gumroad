@@ -11,7 +11,6 @@ import Discover from "$app/components/server-components/Discover";
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import Nav from "$app/components/server-components/Nav";
 import ProductEditPage from "$app/components/server-components/ProductEditPage";
-import SubscriptionManagerMagicLink from "$app/components/server-components/SubscriptionManagerMagicLink";
 import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
@@ -30,7 +29,6 @@ ReactOnRails.register({
   Nav,
   Pill,
   ProductEditPage,
-  SubscriptionManagerMagicLink,
   TaxesCollectionModal,
   VideoStreamPlayer,
 });
