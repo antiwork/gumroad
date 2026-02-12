@@ -3,6 +3,7 @@ import { CardProduct } from "$app/parsers/product";
 export type BundleProduct = CardProduct & {
   is_quantity_enabled: boolean;
   quantity: number;
+  creation_date: string;
   variants: {
     selected_id: string;
     list: {

@@ -66,6 +66,7 @@ class BundlePresenter
       {
         is_quantity_enabled: product.quantity_enabled,
         quantity:,
+        creation_date: product.created_at.iso8601,
         price_cents: product.price_cents,
         variants: variants.present? ? {
           selected_id: selected_variant_id || variants.first.external_id,
