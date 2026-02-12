@@ -231,25 +231,28 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     extensions: contentEditorExtensions,
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
-  
+
   const [isEditorEmpty, setIsEditorEmpty] = React.useState(true);
-  
+
   React.useEffect(() => {
     if (!editor) return;
-    
+
     const updateEmptyState = () => {
-      const isEmpty = editor.isEmpty || editor.state.doc.textContent.length === 0;
+      const doc = editor.state.doc;
+      const isEmpty = doc.childCount === 1 &&
+                      doc.firstChild?.type.name === 'paragraph' &&
+                      doc.firstChild?.content.size === 0;
       setIsEditorEmpty(isEmpty);
     };
-    
+
     updateEmptyState();
     editor.on('update', updateEmptyState);
-    
+
     return () => {
       editor.off('update', updateEmptyState);
     };
   }, [editor]);
-  
+
   const handleEmptyStateUpload = React.useCallback(() => {
     fileInputRef.current?.click();
   }, []);
@@ -520,7 +523,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             editor={editor}
             productId={id}
             custom={
-              <>  
+              <>
                 <LinkMenuItem editor={editor} />
                 <PopoverMenuItem name="Upload files" icon="upload-fill" showLabel>
                   <div role="menu" aria-label="Image and file uploader">
