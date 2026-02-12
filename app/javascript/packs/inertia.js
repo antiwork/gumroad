@@ -77,7 +77,7 @@ async function resolvePageComponent(name) {
 }
 
 createInertiaApp({
-  progress: { delay: 100, color: '#FF90E8' },
+  progress: { delay: 100, color: "#FF90E8" },
   resolve: resolvePageComponent,
   title: (title) => title || "Gumroad",
   setup({ el, App, props }) {

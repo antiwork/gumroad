@@ -2,6 +2,7 @@ import { usePage } from "@inertiajs/react";
 import React from "react";
 
 import MetaTags, { type MetaTag } from "$app/layouts/components/MetaTags";
+
 import AdminNav from "$app/components/Admin/Nav";
 import AdminNewSalesReportPopover from "$app/components/Admin/SalesReports/NewSalesReportPopover";
 import AdminSearchPopover from "$app/components/Admin/SearchPopover";

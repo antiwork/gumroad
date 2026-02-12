@@ -2,6 +2,7 @@ import { usePage } from "@inertiajs/react";
 import React from "react";
 
 import MetaTags, { type MetaTag } from "$app/layouts/components/MetaTags";
+
 import { Nav } from "$app/components/client-components/Nav";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { type LoggedInUser, LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
