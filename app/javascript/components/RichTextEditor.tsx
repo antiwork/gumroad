@@ -163,8 +163,13 @@ export const validateUrl = (url?: string) => {
   }
 };
 
-export const baseEditorOptions = (extensions: Extensions) => ({
-  parseOptions: { preserveWhitespace: true },
+export const baseEditorOptions = (extensions: Extensions) => {
+  const imageOverride = extensions.find((ex) => ex.name === Image.name);
+  const nonOverrides = extensions.filter((ex) => ex.name !== Image.name);
+
+  const ImageExtension = imageOverride ?? Image;
+
+  return {  parseOptions: { preserveWhitespace: true },
   injectCSS: false,
   extensions: [
     StarterKit.configure({
@@ -174,14 +179,14 @@ export const baseEditorOptions = (extensions: Extensions) => ({
     Underline,
     Link,
     TiptapButton,
-    Image,
+    ImageExtension,
     Raw,
     CodeBlock,
     ReviewCard,
   ]
-    .filter((e) => !extensions.some((ex) => ex.name === e.name))
-    .concat(extensions),
-});
+    .filter((e) => !nonOverrides.some((ex) => ex.name === e.name))
+    .concat(nonOverrides),}
+}
 
 export const serializeEditorContentToHTML = (editor: Editor) => {
   const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
@@ -427,7 +432,9 @@ export const RichTextEditorToolbar = ({
             </div>
           </PopoverContent>
         </Popover>
+
         <Separator aria-orientation="vertical" />
+
         <MenuItem
           name="Bold"
           icon="bold"
@@ -458,7 +465,9 @@ export const RichTextEditorToolbar = ({
           active={editor.isActive("blockquote")}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         />
+
         <Separator aria-orientation="vertical" />
+
         {custom ?? (
           <>
             {topMenuItems.map((extension, i) => (
@@ -521,6 +530,7 @@ export const RichTextEditorToolbar = ({
             ) : null}
           </>
         )}
+
         <div className="ml-auto flex">
           <MenuItem
             name="Undo last change"
@@ -539,6 +549,7 @@ export const RichTextEditorToolbar = ({
           />
         </div>
       </div>
+
       <UpsellSelectModal
         isOpen={isUpsellModalOpen}
         onClose={() => setIsUpsellModalOpen(false)}
