@@ -6,76 +6,37 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CERTS_DIR="$PROJECT_DIR/docker/local-nginx/certs"
 
-SIGNED_CERT="$CERTS_DIR/gumroad_dev_signed.crt"
-SIGNED_CA_BUNDLE="$CERTS_DIR/gumroad_dev_signed.ca-bundle"
-SIGNED_KEY="$CERTS_DIR/gumroad_dev_signed.key"
-
 mkdir -p "$CERTS_DIR"
 
-# Check if a signed wildcard certificate is available and still valid
-use_signed=false
-if [[ -f "$SIGNED_CERT" && -f "$SIGNED_CA_BUNDLE" && -f "$SIGNED_KEY" ]]; then
-  if openssl x509 -in "$SIGNED_CERT" -noout -checkend 0 2>/dev/null; then
-    expiry=$(openssl x509 -in "$SIGNED_CERT" -noout -enddate 2>/dev/null | cut -d= -f2)
-    echo "Using signed wildcard certificate (expires: $expiry)"
-    use_signed=true
-  else
-    echo "Signed certificate has expired, falling back to mkcert."
-  fi
-fi
-
-if $use_signed; then
-  # Combine cert + CA bundle into a fullchain for nginx
-  cat "$SIGNED_CERT" "$SIGNED_CA_BUNDLE" > "$CERTS_DIR/gumroad_dev.crt"
-  cp "$SIGNED_KEY" "$CERTS_DIR/gumroad_dev.key"
-  chmod 600 "$CERTS_DIR/gumroad_dev.key"
-  echo "Installed signed certificate to docker/local-nginx/certs/"
-else
-  # Check if mkcert is installed
-  if ! command -v mkcert &> /dev/null; then
-    echo "mkcert is not installed. Please install it first:"
-    echo "  # For MacOS:"
-    echo "  brew install mkcert"
-    echo ""
-    echo "  # For Ubuntu/Debian:"
-    echo "  sudo apt install libnss3-tools"
-    echo "  curl -JLO \"https://dl.filippo.io/mkcert/latest?for=linux/amd64\""
-    echo "  chmod +x mkcert-v*-linux-amd64"
-    echo "  sudo cp mkcert-v*-linux-amd64 /usr/local/bin/mkcert"
-    echo ""
-    echo "  # For Fedora:"
-    echo "  sudo dnf install nss-tools"
-    echo "  curl -JLO \"https://dl.filippo.io/mkcert/latest?for=linux/amd64\""
-    echo "  chmod +x mkcert-v*-linux-amd64"
-    echo "  sudo cp mkcert-v*-linux-amd64 /usr/local/bin/mkcert"
-    exit 1
-  fi
-
-  # Install local CA if not already installed
-  mkcert -install
-
-  cd "$CERTS_DIR"
-
-  # Generate certificates
-  echo "Generating certificates for gumroad.dev..."
-  mkcert gumroad.dev "*.gumroad.dev"
-  mv gumroad.dev+1.pem gumroad_dev.crt
-  mv gumroad.dev+1-key.pem gumroad_dev.key
-fi
-
-# Always generate helperai certs with mkcert (no signed cert for this domain)
+# Check if mkcert is installed
 if ! command -v mkcert &> /dev/null; then
-  echo "mkcert is not installed — skipping helperai.dev certificate generation."
-  echo "Install mkcert if you need helperai.dev certificates."
-else
-  mkcert -install 2>/dev/null
-  cd "$CERTS_DIR"
-
-  echo "Generating certificates for helperai.dev..."
-  mkcert helperai.dev "*.helperai.dev"
-  mv helperai.dev+1.pem helperai_dev.crt
-  mv helperai.dev+1-key.pem helperai_dev.key
-  echo "SSL certificates for helperai.dev generated successfully!"
+  echo "mkcert is not installed. Please install it first:"
+  echo "  # For MacOS:"
+  echo "  brew install mkcert"
+  echo ""
+  echo "  # For Ubuntu/Debian:"
+  echo "  sudo apt install libnss3-tools"
+  echo "  curl -JLO \"https://dl.filippo.io/mkcert/latest?for=linux/amd64\""
+  echo "  chmod +x mkcert-v*-linux-amd64"
+  echo "  sudo cp mkcert-v*-linux-amd64 /usr/local/bin/mkcert"
+  echo ""
+  echo "  # For Fedora:"
+  echo "  sudo dnf install nss-tools"
+  echo "  curl -JLO \"https://dl.filippo.io/mkcert/latest?for=linux/amd64\""
+  echo "  chmod +x mkcert-v*-linux-amd64"
+  echo "  sudo cp mkcert-v*-linux-amd64 /usr/local/bin/mkcert"
+  exit 1
 fi
 
+# Install local CA if not already installed
+mkcert -install
+
+cd "$CERTS_DIR"
+
+echo "Generating certificates for helperai.dev..."
+mkcert helperai.dev "*.helperai.dev"
+mv helperai.dev+1.pem helperai_dev.crt
+mv helperai.dev+1-key.pem helperai_dev.key
+
+echo "SSL certificates for helperai.dev generated successfully!"
 echo "SSL certificates ready in docker/local-nginx/certs/"
