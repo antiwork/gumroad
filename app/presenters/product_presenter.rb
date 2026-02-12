@@ -55,6 +55,20 @@ class ProductPresenter
     ProductPresenter::ProductProps.new(product:).props(request:, pundit_user:, **kwargs)
   end
 
+  def profile_product_props(**kwargs)
+    product_page_props(**kwargs).merge(
+      creator_profile: ProfilePresenter.new(pundit_user:, seller: product.user).creator_profile
+    )
+  end
+
+  def discover_product_props(discover_props:, **kwargs)
+    product_page_props(**kwargs).merge(discover_props)
+  end
+
+  def iframe_product_props(**kwargs)
+    product_props(**kwargs)
+  end
+
   def product_page_props(seller_custom_domain_url:, **kwargs)
     sections_props = ProfileSectionsPresenter.new(seller: user, query: product.seller_profile_sections).props(request:, pundit_user:, seller_custom_domain_url:)
     {

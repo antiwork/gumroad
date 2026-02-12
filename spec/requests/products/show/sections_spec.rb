@@ -25,32 +25,32 @@ describe "Profile settings on product pages", type: :system, js: true do
     product.update!(sections: [section1, section2, section3, section5, section4].map(&:id), main_section_index: 2)
 
     visit short_link_path(product)
-    expect(page).to have_selector("section:nth-child(2) h2", text: "Section 1")
+    expect(page).to have_selector("section:nth-child(3) h2", text: "Section 1")
     within_section "Section 1", section_element: :section do
       expect_product_cards_in_order(products)
     end
 
-    expect(page).to have_selector("section:nth-child(3) h2", text: "Section 2")
+    expect(page).to have_selector("section:nth-child(4) h2", text: "Section 2")
     within_section "Section 2", section_element: :section do
       expect(page).to have_link(count: 2)
       posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
     end
 
-    expect(page).to have_selector("section:nth-child(4) article", text: product.name)
+    expect(page).to have_selector("section:nth-child(5) article", text: product.name)
 
-    expect(page).to have_selector("section:nth-child(5) h2", text: "Section 3")
+    expect(page).to have_selector("section:nth-child(6) h2", text: "Section 3")
     within_section "Section 3", section_element: :section do
       expect(page).to have_selector("h2", text: "Heading")
       expect(page).to have_text("Some more text")
     end
 
-    expect(page).to have_selector("section:nth-child(6) h2", text: "Section 5")
+    expect(page).to have_selector("section:nth-child(7) h2", text: "Section 5")
     within_section "Section 4", section_element: :section do
       expect(page).to have_field "Your email address"
       expect(page).to have_button "Subscribe"
     end
 
-    expect(page).to have_selector("section:nth-child(7) h2", text: "Section 4")
+    expect(page).to have_selector("section:nth-child(8) h2", text: "Section 4")
     within_section "Section 5", section_element: :section do
       expect(page).to have_section("Featured product", section_element: :article)
     end
@@ -184,7 +184,7 @@ describe "Profile settings on product pages", type: :system, js: true do
       expect(page).to_not have_product_card(products[9])
     end
 
-    find("main").scroll_to :bottom
+    page.scroll_to :bottom
     wait_for_ajax
 
     within_section "More Products", section_element: :section do
