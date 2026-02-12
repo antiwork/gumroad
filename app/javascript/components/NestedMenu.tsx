@@ -332,6 +332,17 @@ const OverlayMenu = ({
         modal
         className="right-auto w-80 max-w-80 border-l-0 p-0 md:left-0 md:border-r"
       >
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border p-4">
+          <span />
+          <h2 className="w-full truncate text-center text-base font-normal">{buttonLabel ?? "Menu"}</h2>
+          <button
+            className="all-unset cursor-pointer"
+            aria-label="Close"
+            onClick={() => setMenuOpen(false)}
+          >
+            <Icon name="x" />
+          </button>
+        </div>
         <ItemsList
           key={`${overlayMenuUID}-${menuOpen}`}
           menuId={overlayMenuUID}
