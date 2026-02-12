@@ -64,6 +64,14 @@ export default function BundlesContentEdit() {
   const [isSearchLoading, setIsSearchLoading] = React.useState(false);
   const [query, setQuery] = React.useState("");
 
+  const duplicateNames = React.useMemo(() => {
+    const nameCounts = new Map<string, number>();
+    for (const p of results) {
+      nameCounts.set(p.name, (nameCounts.get(p.name) ?? 0) + 1);
+    }
+    return new Set([...nameCounts].filter(([, count]) => count > 1).map(([name]) => name));
+  }, [results]);
+
   const form = useForm<ContentFormData>({
     products: bundle.products,
   });
@@ -288,6 +296,7 @@ export default function BundlesContentEdit() {
                           bundleProduct={bundleProduct}
                           selected={selected}
                           onToggle={() => toggleProductSelection(bundleProduct, selected)}
+                          showDetails={duplicateNames.has(bundleProduct.name)}
                         />
                       );
                     })}

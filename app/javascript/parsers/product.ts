@@ -50,6 +50,7 @@ export type CardProduct = {
   is_sales_limited: boolean;
   duration_in_months: number | null;
   recurrence: RecurrenceId | null;
+  created_at?: string;
   description?: string;
 };
 

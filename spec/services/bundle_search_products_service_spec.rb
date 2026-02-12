@@ -136,5 +136,14 @@ describe BundleSearchProductsService do
 
       expect(result[:total_count]).to eq(12)
     end
+
+    it "includes created_at in product results" do
+      create(:product, user: seller)
+      index_model_records(Link)
+
+      result = described_class.new(bundle:, seller:).call
+
+      expect(result[:products].first[:created_at]).to be_present
+    end
   end
 end

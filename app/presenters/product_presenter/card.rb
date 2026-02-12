@@ -43,6 +43,7 @@ class ProductPresenter::Card
       url: url_for_product_page(product, request:, recommended_by:, recommender_model_name:, layout: target, affiliate_id:, query:, offer_code:),
       duration_in_months: product.duration_in_months,
       recurrence: default_recurrence&.recurrence,
+      created_at: product.created_at.iso8601,
     }
 
     # Include base_price_cents when there's a discount to show original price with strikethrough
