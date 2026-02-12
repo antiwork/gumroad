@@ -114,16 +114,19 @@ export const PopoverMenuItem = ({
   name,
   icon,
   children,
+  showLabel,
 }: {
   name: string;
   icon: IconName;
   children: React.ReactNode;
+  showLabel?: boolean;
 }) => (
   <Popover>
     <PopoverTrigger aria-label={name} className="all-unset">
       <MenuItemTooltip tip={name}>
         <div className="toolbar-item">
           <Icon name={icon} />
+          {showLabel ? <span className="ml-2">{name}</span> : null}
         </div>
       </MenuItemTooltip>
     </PopoverTrigger>

@@ -152,6 +152,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       });
     }
   };
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const uploader = assertDefined(useEvaporateUploader());
   const s3UploadConfig = useS3UploadConfig();
   const uploadFiles = (files: File[]) => {
@@ -224,12 +225,34 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   ]);
   const editor = useRichTextEditor({
     ariaLabel: "Content editor",
-    placeholder: "Enter the content you want to sell. Upload your files or start typing.",
+    placeholder: "",
     initialValue,
     editable: true,
     extensions: contentEditorExtensions,
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
+  
+  const [isEditorEmpty, setIsEditorEmpty] = React.useState(true);
+  
+  React.useEffect(() => {
+    if (!editor) return;
+    
+    const updateEmptyState = () => {
+      const isEmpty = editor.isEmpty || editor.state.doc.textContent.length === 0;
+      setIsEditorEmpty(isEmpty);
+    };
+    
+    updateEmptyState();
+    editor.on('update', updateEmptyState);
+    
+    return () => {
+      editor.off('update', updateEmptyState);
+    };
+  }, [editor]);
+  
+  const handleEmptyStateUpload = React.useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
   const updateContentRef = useRefToLatest(() => {
     if (!editor) return;
 
@@ -497,16 +520,16 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             editor={editor}
             productId={id}
             custom={
-              <>
+              <>  
                 <LinkMenuItem editor={editor} />
-                <PopoverMenuItem name="Upload files" icon="upload-fill">
+                <PopoverMenuItem name="Upload files" icon="upload-fill" showLabel>
                   <div role="menu" aria-label="Image and file uploader">
                     <div role="menuitem" onClick={() => setShowEmbedModal(true)}>
                       <Icon name="media" />
                       <span>Embed media</span>
                     </div>
                     <label role="menuitem">
-                      <input type="file" name="file" multiple onChange={(e) => uploadFileInput(e.target)} />
+                      <input ref={fileInputRef} type="file" name="file" multiple onChange={(e) => uploadFileInput(e.target)} />
                       <Icon name="paperclip" />
                       <span>Computer files</span>
                     </label>
@@ -889,7 +912,27 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             )
           }
         >
-          <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
+          <div className="relative">
+            {isEditorEmpty && editor ? (
+              <div className="absolute inset-0 flex items-start justify-start p-4 pointer-events-none z-10">
+                <p className="text-muted-foreground flex flex-wrap items-center gap-2">
+                  <span>Enter the content you want to sell.</span>
+                  <Button
+                    small
+                    color="primary"
+                    onClick={handleEmptyStateUpload}
+                    className="pointer-events-auto"
+                    aria-label="Upload files to editor"
+                  >
+                    <Icon name="upload-fill" />
+                    Upload your files
+                  </Button>
+                  <span>or start typing.</span>
+                </p>
+              </div>
+            ) : null}
+            <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
+          </div>
         </PageListLayout>
       </div>
       {confirmingDeletePage !== null ? (
