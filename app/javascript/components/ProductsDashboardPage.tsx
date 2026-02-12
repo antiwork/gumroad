@@ -36,6 +36,18 @@ export const ProductsDashboardPage = ({
 }: ProductsDashboardPageProps) => {
   const [enableArchiveTab, setEnableArchiveTab] = React.useState(archivedProductsCount > 0);
   const [query, setQuery] = React.useState("");
+  const [hasExistingProducts, setHasExistingProducts] = React.useState(
+    products.length > 0 || memberships.length > 0,
+  );
+
+  React.useEffect(() => {
+    if (products.length > 0 || memberships.length > 0) {
+      setHasExistingProducts(true);
+    }
+  }, [products.length, memberships.length]);
+
+  const isSearchActive = query.length > 0;
+  const hasNoResults = isSearchActive && memberships.length === 0 && products.length === 0;
 
   return (
     <ProductsLayout
@@ -44,7 +56,9 @@ export const ProductsDashboardPage = ({
       archivedTabVisible={enableArchiveTab}
       ctaButton={
         <>
-          {products.length > 0 ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
+          {hasExistingProducts ? (
+            <Search value={query} onSearch={setQuery} placeholder="Search products" />
+          ) : null}
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
           </NavigationButtonInertia>
@@ -52,7 +66,7 @@ export const ProductsDashboardPage = ({
       }
     >
       <section className="p-4 md:p-8">
-        {memberships.length === 0 && products.length === 0 ? (
+        {!hasExistingProducts && memberships.length === 0 && products.length === 0 ? (
           <Placeholder>
             <PlaceholderImage src={placeholder} />
             <h2>We’ve never met an idea we didn’t like.</h2>
@@ -70,16 +84,24 @@ export const ProductsDashboardPage = ({
             </span>
           </Placeholder>
         ) : (
-          <ProductsPage
-            memberships={memberships}
-            membershipsPagination={membershipsPagination}
-            membershipsSort={membershipsSort}
-            products={products}
-            productsPagination={productsPagination}
-            productsSort={productsSort}
-            query={query}
-            setEnableArchiveTab={setEnableArchiveTab}
-          />
+          <>
+            {hasNoResults ? (
+              <Placeholder>
+                <h2>No products found</h2>
+                <p>No products matched your search. Try a different search term.</p>
+              </Placeholder>
+            ) : null}
+            <ProductsPage
+              memberships={memberships}
+              membershipsPagination={membershipsPagination}
+              membershipsSort={membershipsSort}
+              products={products}
+              productsPagination={productsPagination}
+              productsSort={productsSort}
+              query={query}
+              setEnableArchiveTab={setEnableArchiveTab}
+            />
+          </>
         )}
       </section>
     </ProductsLayout>

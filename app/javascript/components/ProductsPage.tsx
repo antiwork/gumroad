@@ -30,27 +30,22 @@ const ProductsPage = ({
   type?: Tab;
 }) => (
   <div className="grid gap-12">
-    {memberships.length > 0 ? (
-      <ProductsPageMembershipsTable
-        query={query}
-        entries={memberships}
-        pagination={membershipsPagination}
-        sort={membershipsSort}
-        selectedTab={type}
-        setEnableArchiveTab={setEnableArchiveTab}
-      />
-    ) : null}
-
-    {products.length > 0 ? (
-      <ProductsPageProductsTable
-        query={query}
-        entries={products}
-        pagination={productsPagination}
-        sort={productsSort}
-        selectedTab={type}
-        setEnableArchiveTab={setEnableArchiveTab}
-      />
-    ) : null}
+    <ProductsPageMembershipsTable
+      query={query}
+      entries={memberships}
+      pagination={membershipsPagination}
+      sort={membershipsSort}
+      selectedTab={type}
+      setEnableArchiveTab={setEnableArchiveTab}
+    />
+    <ProductsPageProductsTable
+      query={query}
+      entries={products}
+      pagination={productsPagination}
+      sort={productsSort}
+      selectedTab={type}
+      setEnableArchiveTab={setEnableArchiveTab}
+    />
   </div>
 );
 
