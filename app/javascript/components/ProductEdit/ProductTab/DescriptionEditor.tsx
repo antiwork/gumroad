@@ -20,6 +20,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
 import { useRunOnce } from "$app/components/useRunOnce";
+import { RemoveButton } from "$app/components/RemoveButton";
 
 const MAX_ALLOWED_PUBLIC_FILE_SIZE_IN_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_ALLOWED_PUBLIC_FILES_COUNT = 5;
