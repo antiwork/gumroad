@@ -4,23 +4,13 @@ import * as React from "react";
 import { CreatorProfile } from "$app/parsers/profile";
 import { FollowFormBlock } from "$app/components/Profile/FollowForm";
 import { Layout } from "$app/components/Profile/Layout";
-import BasePage from "$app/utils/base_page";
 
 type Props = {
   creator_profile: CreatorProfile;
 };
 
-let initialized = false;
-
 export default function UsersSubscribePage() {
   const { creator_profile } = usePage<Props>().props;
-
-  React.useEffect(() => {
-    if (!initialized) {
-      BasePage.initialize();
-      initialized = true;
-    }
-  }, []);
 
   return (
     <div className="flex h-screen flex-col overflow-y-auto">

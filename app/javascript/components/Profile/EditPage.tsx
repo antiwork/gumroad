@@ -16,7 +16,7 @@ import { Modal } from "$app/components/Modal";
 import { SectionLayout } from "$app/components/Profile/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ProfileProps, TabWithId, useTabs } from "$app/components/server-components/Profile";
+import { ProfileProps, TabWithId, useTabs } from "$app/components/Profile/useProfileTabs";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
 import { Tabs, Tab } from "$app/components/ui/Tabs";

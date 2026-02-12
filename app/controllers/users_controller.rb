@@ -6,13 +6,11 @@ class UsersController < ApplicationController
 
   include PageMeta::Favicon, PageMeta::User
 
-  layout "inertia", only: %i[show subscribe]
+  layout "inertia", only: %i[show subscribe coffee subscribe_preview]
 
   before_action :authenticate_user!, except: %i[show coffee subscribe subscribe_preview email_unsubscribe add_purchase_to_library session_info current_user_data]
 
   after_action :verify_authorized, only: %i[deactivate]
-
-  before_action :hide_layouts, only: %i[show subscribe]
   before_action :set_as_modal, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
   before_action :set_page_attributes, only: %i[show]
@@ -20,29 +18,14 @@ class UsersController < ApplicationController
   before_action :check_if_needs_redirect, only: %i[show]
   before_action :set_affiliate_cookie, only: %i[show]
 
-  layout "inertia", only: [:coffee, :subscribe_preview]
-
   def show
     format_search_params!
 
-    respond_to do |format|
-      format.html do
-        set_user_page_meta(@user)
-        set_favicon_meta_tags(@user)
-        profile_props = ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
-        card_data_handling_mode = CardDataHandlingMode.get_card_data_handling_mode(@user)
-        paypal_merchant_currency = @user.native_paypal_payment_enabled? ?
-                                     @user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
-                                     ChargeProcessor::DEFAULT_CURRENCY_CODE
-        set_user_custom_styles_meta(@user)
-        render inertia: "Users/Show", props: profile_props.merge(
-          card_data_handling_mode:,
-          paypal_merchant_currency:
-        )
-      end
-      format.json { render json: @user.as_json }
-      format.any { e404 }
-    end
+    set_user_page_meta(@user)
+    set_favicon_meta_tags(@user)
+    profile_props = ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
+    set_user_custom_styles_meta(@user)
+    render inertia: "Users/Show", props: profile_props
   end
 
   def coffee

@@ -18,7 +18,7 @@ import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Profile, Props as ProfileProps } from "$app/components/server-components/Profile";
+import { Profile, Props as ProfileProps } from "$app/components/Profile";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { ColorPicker } from "$app/components/ui/ColorPicker";

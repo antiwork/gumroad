@@ -56,23 +56,11 @@ describe UsersController do
         .to raise_error(ActionController::RoutingError)
     end
 
-    it "404s if user isn't found in JSON format" do
-      get :show, params: { username: "creator" }, format: :json
-
-      expect(response.status).to eq(404)
-    end
-
     it "404s if no username is passed" do
       expect { get :show }.to raise_error(ActionController::RoutingError)
     end
 
-    it "404s if the the extension isn't html or json" do
-      create(:product, user: create(:user, username: "creator"), name: "onelolol")
-      @request.host = "creator.test.gumroad.com"
-      expect do
-        get :show, params: { username: "creator", format: "txt" }
-      end.to raise_error(ActionController::RoutingError)
-    end
+
 
     it "sets a global affiliate cookie if affiliate_id is set in params" do
       affiliate = create(:user).global_affiliate
@@ -97,13 +85,7 @@ describe UsersController do
       end
     end
 
-    it "returns user json when json request is sent" do
-      link = create(:product, user: create(:user, username: "creator"), name: "onelolol")
 
-      @request.host = "creator.test.gumroad.com"
-      get :show, params: { username: "creator", format: "json" }
-      expect(response.parsed_body).to eq(link.user.as_json)
-    end
 
     describe "redirection to subdomain for profile pages" do
       before do
@@ -239,18 +221,6 @@ describe UsersController do
       end
     end
 
-    it "sets paypal_merchant_currency as merchant account's currency if native paypal payments are enabled else as usd" do
-      creator = create(:named_user)
-      create(:product, user: creator)
-
-      @request.host = "#{creator.username}.test.gumroad.com"
-      get :show, params: { username: creator.username }
-      expect(inertia.props[:paypal_merchant_currency]).to eq "USD"
-
-      create(:merchant_account_paypal, user: creator, currency: "GBP")
-      get :show, params: { username: creator.username }
-      expect(inertia.props[:paypal_merchant_currency]).to eq "GBP"
-    end
 
     context "with user signed in as admin for seller" do
       let(:seller) { create(:named_seller) }
