@@ -3120,34 +3120,7 @@ class Purchase < ApplicationRecord
       purchase_sales_tax_info.country_code = Compliance::Countries.find_by_name(country)&.alpha2
       purchase_sales_tax_info.ip_country_code = Compliance::Countries.find_by_name(ip_country)&.alpha2
       purchase_sales_tax_info.elected_country_code = sales_tax_country_code_election
-
-      if business_vat_id
-        if Compliance::Countries::AUS.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if AbnValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::SGP.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if GstValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::CAN.alpha2 == purchase_sales_tax_info.country_code &&
-              QUEBEC == purchase_sales_tax_info.state_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if QstValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::NOR.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if MvaValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::BHR.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if TrnValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::KEN.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if KraPinValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::OMN.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if OmanVatNumberValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::NGA.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if FirsTinValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::TZA.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if TraTinValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(purchase_sales_tax_info.country_code) ||
-              Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS_WITH_TAX_ID_PRO_VALIDATION.include?(purchase_sales_tax_info.country_code)
-          purchase_sales_tax_info.business_vat_id = business_vat_id if TaxIdValidationService.new(business_vat_id, purchase_sales_tax_info.country_code).process
-        else
-          purchase_sales_tax_info.business_vat_id = business_vat_id if VatValidationService.new(business_vat_id).process
-        end
-      end
+      purchase_sales_tax_info.business_vat_id = business_vat_id if RegionalVatIdValidationService.new(business_vat_id, country_code: purchase_sales_tax_info.country_code, state_code: purchase_sales_tax_info.state_code).process
 
       self.purchase_sales_tax_info = purchase_sales_tax_info
       self.purchase_sales_tax_info.save!

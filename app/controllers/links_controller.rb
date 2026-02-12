@@ -24,7 +24,6 @@ class LinksController < ApplicationController
 
   before_action :set_affiliate_cookie, only: [:show]
 
-  before_action :hide_layouts, only: %i[show]
   before_action :fetch_product, only: %i[increment_views track_user_action]
   before_action :ensure_seller_is_not_deleted, only: [:show]
   before_action :check_if_needs_redirect, only: [:show]
@@ -33,7 +32,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new, :cart_items_count]
+  layout "inertia", only: [:index, :new, :show, :cart_items_count]
 
   def index
     authorize Link
@@ -135,13 +134,13 @@ class LinksController < ApplicationController
         ).result
         code = discount_result&.dig(:code) if discount_result&.dig(:valid)
         redirect_params = params.permit!.except(:code, :offer_code)
-        redirect_to checkout_url(**redirect_params, host: DOMAIN, product: @product.unique_permalink,
-                                                    rent: cart_item[:rental], recurrence: cart_item[:recurrence],
-                                                    price: cart_item[:price],
-                                                    code: code,
-                                                    affiliate_id: params[:affiliate_id] || params[:a],
-                                                    referrer: params[:referrer] || request.referrer),
-                    allow_other_host: true
+        return redirect_to checkout_url(**redirect_params, host: DOMAIN, product: @product.unique_permalink,
+                                                           rent: cart_item[:rental], recurrence: cart_item[:recurrence],
+                                                           price: cart_item[:price],
+                                                           code: code,
+                                                           affiliate_id: params[:affiliate_id] || params[:a],
+                                                           referrer: params[:referrer] || request.referrer),
+                           allow_other_host: true
       end
     end
 
@@ -152,7 +151,6 @@ class LinksController < ApplicationController
     @pay_with_card_enabled = @product.user.pay_with_card_enabled?
     presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
     presenter_props = { recommended_by: params[:recommended_by], discount_code: params[:offer_code] || params[:code], quantity: (params[:quantity] || 1).to_i, layout: params[:layout], seller_custom_domain_url: }
-    @product_props = params[:embed] || params[:overlay] ? presenter.product_props(**presenter_props) : presenter.product_page_props(**presenter_props)
     @body_class = "iframe" if params[:overlay] || params[:embed]
 
     if ["search", "discover"].include?(params[:recommended_by])
@@ -163,13 +161,24 @@ class LinksController < ApplicationController
       )
     end
 
-    if params[:layout] == Product::Layout::DISCOVER
-      @discover_props = { taxonomy_path: @product.taxonomy&.ancestry_path&.join("/"), taxonomies_for_nav: }
-    end
-
     set_noindex_header if !@product.alive?
+
     respond_to do |format|
-      format.html
+      format.html do
+        case params[:layout]
+        when Product::Layout::PROFILE
+          render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
+        when Product::Layout::DISCOVER
+          discover_props = { taxonomy_path: @product.taxonomy&.ancestry_path&.join("/"), taxonomies_for_nav: }
+          render inertia: "Products/Discover/Show", props: presenter.discover_product_props(discover_props:, **presenter_props)
+        else
+          if params[:embed] || params[:overlay]
+            render inertia: "Products/Iframe/Show", props: presenter.iframe_product_props(**presenter_props)
+          else
+            render inertia: "Products/Show", props: presenter.product_page_props(**presenter_props)
+          end
+        end
+      end
       format.json { render json: @product.as_json }
       format.any { e404 }
     end
@@ -570,6 +579,7 @@ class LinksController < ApplicationController
       @user                  = @product.user
       set_meta_tag(title: @product.name)
       set_product_page_meta(@product)
+      set_meta_tag(tag_name: "style", inner_content: @product.user.seller_profile.custom_styles.to_s, head_key: "custom_styles")
       @body_id               = "product_page"
       @is_on_product_page    = true
       @debug                 = params[:debug] && !Rails.env.production?
