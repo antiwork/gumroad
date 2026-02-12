@@ -9,8 +9,6 @@ import CustomersFilterPopover from "$app/components/server-components/CustomersP
 import Discover from "$app/components/server-components/Discover";
 import DiscoverProductPage from "$app/components/server-components/Discover/ProductPage";
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
-import GenerateInvoiceConfirmationPage from "$app/components/server-components/GenerateInvoiceConfirmationPage";
-import GenerateInvoicePage from "$app/components/server-components/GenerateInvoicePage";
 import Nav from "$app/components/server-components/Nav";
 import ProductPage from "$app/components/server-components/Product";
 import ProductIframePage from "$app/components/server-components/Product/IframePage";
@@ -34,8 +32,6 @@ ReactOnRails.register({
   Discover,
   DiscoverProductPage,
   DownloadPageWithContent,
-  GenerateInvoiceConfirmationPage,
-  GenerateInvoicePage,
   Nav,
   Pill,
   ProductEditPage,

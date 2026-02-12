@@ -18,8 +18,8 @@ class PurchasesController < ApplicationController
   PARAMS_TO_REMOVE_IF_BLANK = [:full_name, :email]
 
   PUBLIC_ACTIONS = %i[
-    confirm subscribe unsubscribe send_invoice generate_invoice receipt resend_receipt
-    update_subscription charge_preorder confirm_generate_invoice confirm_receipt_email
+    confirm subscribe unsubscribe receipt resend_receipt
+    update_subscription charge_preorder confirm_receipt_email
   ].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
   after_action :verify_authorized, except: PUBLIC_ACTIONS
@@ -28,14 +28,12 @@ class PurchasesController < ApplicationController
   before_action :authenticate_preorder!, only: %i[charge_preorder]
   before_action :validate_purchase_request, only: [:update_subscription, :charge_preorder]
   before_action :set_purchase, only: %i[
-    update resend_receipt send_invoice generate_invoice change_can_contact cancel_preorder_by_seller receipt
+    update resend_receipt change_can_contact cancel_preorder_by_seller receipt
     revoke_access undo_revoke_access confirm_receipt_email
   ]
   before_action :verify_current_seller_is_seller_for_purchase, only: %i[update change_can_contact cancel_preorder_by_seller]
-  before_action :hide_layouts, only: %i[subscribe unsubscribe generate_invoice receipt confirm_receipt_email]
-  before_action :check_for_successful_purchase_for_vat_refund, only: [:send_invoice]
-  before_action :set_noindex_header, only: [:receipt, :generate_invoice, :confirm_generate_invoice, :confirm_receipt_email]
-  before_action :require_email_confirmation, only: [:generate_invoice, :send_invoice]
+  before_action :hide_layouts, only: %i[subscribe unsubscribe receipt confirm_receipt_email]
+  before_action :set_noindex_header, only: [:receipt, :confirm_receipt_email]
 
   def confirm
     ActiveRecord::Base.connection.stick_to_primary!
@@ -256,110 +254,6 @@ class PurchasesController < ApplicationController
     head :no_content
   end
 
-  def confirm_generate_invoice
-    @react_component_props = { invoice_url: generate_invoice_by_buyer_path(params[:id]) }
-  end
-
-  def generate_invoice
-    chargeable = Charge::Chargeable.find_by_purchase_or_charge!(purchase: @purchase)
-    @invoice_presenter = InvoicePresenter.new(chargeable)
-    set_meta_tag(title: "Generate invoice")
-  end
-
-  def send_invoice
-    @chargeable = Charge::Chargeable.find_by_purchase_or_charge!(purchase: @purchase)
-
-    address_fields = {
-      full_name: params["full_name"],
-      street_address: params["street_address"],
-      city: params["city"],
-      state: params["state"],
-      zip_code: params["zip_code"],
-      country: ISO3166::Country[params["country_code"]]&.common_name
-    }
-    additional_notes = params[:additional_notes]&.strip
-
-    raw_vat_id = params["vat_id"].present? ? params["vat_id"] : nil
-    if raw_vat_id
-      if @chargeable.purchase_sales_tax_info.present? &&
-         @chargeable.purchase_sales_tax_info.country_code == Compliance::Countries::AUS.alpha2
-        business_vat_id = AbnValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-      elsif @chargeable.purchase_sales_tax_info.present? &&
-            @chargeable.purchase_sales_tax_info.country_code == Compliance::Countries::SGP.alpha2
-        business_vat_id = GstValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-      elsif @chargeable.purchase_sales_tax_info.present? &&
-            @chargeable.purchase_sales_tax_info.country_code == Compliance::Countries::CAN.alpha2 &&
-            @chargeable.purchase_sales_tax_info.state_code == QUEBEC
-        business_vat_id = QstValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-      elsif @chargeable.purchase_sales_tax_info.present? &&
-            @chargeable.purchase_sales_tax_info.country_code == Compliance::Countries::NOR.alpha2
-        business_vat_id = MvaValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-      elsif @chargeable.purchase_sales_tax_info.present? &&
-            @chargeable.purchase_sales_tax_info.country_code == Compliance::Countries::BHR.alpha2
-        business_vat_id = TrnValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-      elsif @chargeable.purchase_sales_tax_info.present? &&
-            @chargeable.purchase_sales_tax_info.country_code == Compliance::Countries::KEN.alpha2
-        business_vat_id = KraPinValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-
-      elsif @chargeable.purchase_sales_tax_info.present? &&
-            @chargeable.purchase_sales_tax_info.country_code == Compliance::Countries::NGA.alpha2
-        business_vat_id = FirsTinValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-      elsif @chargeable.purchase_sales_tax_info.present? &&
-            @chargeable.purchase_sales_tax_info.country_code == Compliance::Countries::TZA.alpha2
-        business_vat_id = TraTinValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-      elsif @chargeable.purchase_sales_tax_info.present? &&
-            @chargeable.purchase_sales_tax_info.country_code == Compliance::Countries::OMN.alpha2
-        business_vat_id = OmanVatNumberValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-      elsif @chargeable.purchase_sales_tax_info.present? &&
-            (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(@chargeable.purchase_sales_tax_info.country_code) ||
-            Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS_WITH_TAX_ID_PRO_VALIDATION.include?(@chargeable.purchase_sales_tax_info.country_code))
-        business_vat_id = TaxIdValidationService.new(raw_vat_id, @chargeable.purchase_sales_tax_info.country_code).process ? raw_vat_id : nil
-      else
-        business_vat_id = VatValidationService.new(raw_vat_id).process ? raw_vat_id : nil
-      end
-    end
-
-    invoice_presenter = InvoicePresenter.new(@chargeable, address_fields:, additional_notes:, business_vat_id:)
-
-    begin
-      @chargeable.refund_gumroad_taxes!(refunding_user_id: logged_in_user&.id, note: address_fields.to_json, business_vat_id:) if business_vat_id
-
-      invoice_html = render_to_string(locals: { invoice_presenter: }, formats: [:pdf], layout: false)
-      pdf = PDFKit.new(invoice_html, page_size: "Letter").to_pdf
-      s3_obj = @chargeable.upload_invoice_pdf(pdf)
-
-      message = +"The invoice will be downloaded automatically."
-      if business_vat_id
-        notice =
-          if @chargeable.purchase_sales_tax_info.present? &&
-             (Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(@chargeable.purchase_sales_tax_info.country_code) ||
-             Compliance::Countries::IND.alpha2 == @chargeable.purchase_sales_tax_info.country_code)
-            "GST has also been refunded."
-          elsif @chargeable.purchase_sales_tax_info.present? &&
-                Compliance::Countries::CAN.alpha2 == @chargeable.purchase_sales_tax_info.country_code
-            "QST has also been refunded."
-          elsif @chargeable.purchase_sales_tax_info.present? &&
-            Compliance::Countries::MYS.alpha2 == @chargeable.purchase_sales_tax_info.country_code
-            "Service tax has also been refunded."
-          elsif @chargeable.purchase_sales_tax_info.present? &&
-            Compliance::Countries::JPN.alpha2 == @chargeable.purchase_sales_tax_info.country_code
-            "CT has also been refunded."
-          else
-            "VAT has also been refunded."
-          end
-        message << " " << notice
-      end
-      file_url = s3_obj.presigned_url(:get, expires_in: SignedUrlHelper::SIGNED_S3_URL_VALID_FOR_MAXIMUM.to_i)
-      render json: { success: true, message:, file_location: file_url }
-    rescue StandardError => e
-      Rails.logger.error("Chargeable #{@chargeable.class.name} (#{@chargeable.external_id}) invoice generation failed due to: #{e.inspect}")
-      Rails.logger.error(e.message)
-      Rails.logger.error(e.backtrace.join("\n"))
-
-      render json: { success: false, message: "Sorry, something went wrong." }
-    end
-  end
-
   def change_can_contact
     authorize [:audience, @purchase]
 
@@ -499,12 +393,6 @@ class PurchasesController < ApplicationController
       e404 if @preorder.blank?
     end
 
-    def check_for_successful_purchase_for_vat_refund
-      return if params["vat_id"].blank? || @purchase.successful?
-
-      render json: { success: false, message: "Your purchase has not been completed by PayPal yet. Please try again soon." }
-    end
-
     def skip_recaptcha?
       site_key = GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY")
 
@@ -524,17 +412,5 @@ class PurchasesController < ApplicationController
       payment_method&.card&.wallet&.type == params[:wallet_type]
     rescue Stripe::StripeError
       render_error("Sorry, something went wrong.")
-    end
-
-    def require_email_confirmation
-      return if ActiveSupport::SecurityUtils.secure_compare(@purchase.email, params[:email].to_s)
-
-      if params[:email].blank?
-        flash[:warning] = "Please enter the purchase's email address to generate the invoice."
-      else
-        flash[:alert] = "Incorrect email address. Please try again."
-      end
-
-      redirect_to confirm_generate_invoice_path(@purchase.external_id)
     end
 end

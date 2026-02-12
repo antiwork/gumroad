@@ -18,7 +18,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       check_out(@product2, error: "The price just changed! Refresh the page for the updated price.")
       expect(page).to have_content("Need an invoice for this? Generate")
       purchase = Purchase.last
-      expect(page).to have_link "Generate", href: generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      expect(page).to have_link "Generate", href: new_purchase_invoice_path(purchase.external_id, email: purchase.email)
     end
   end
 
@@ -39,7 +39,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
         check_out(@product2, error: "The price just changed! Refresh the page for the updated price.")
 
         purchase = Purchase.last
-        expect(page).to have_link "Generate", href: generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+        expect(page).to have_link "Generate", href: new_purchase_invoice_path(purchase.external_id, email: purchase.email)
       end.to change { Purchase.successful.count }.by(1)
     end
   end
@@ -54,7 +54,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "allows the user to customize and download invoice" do
       purchase = create(:physical_purchase, link: @physical_product)
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       # Form should be pre-filled with existing purchase info
       expect(find_field("Full name").value).to eq(purchase.full_name)
@@ -117,7 +117,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's VAT registration number for EU purchases" do
       purchase = create(:purchase, link: @product, country: "Italy", quantity: 2)
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -151,7 +151,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's ABN for Australian purchases" do
       purchase = create(:purchase, link: @product, country: "Australia")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -186,7 +186,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       purchase = create(:purchase, link: @product, country: "Canada", was_product_recommended: true)
       purchase.create_purchase_sales_tax_info!(country_code: "CA", state_code: "QC")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -224,7 +224,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's Norway VAT registration for Norwegian purchases" do
       purchase = create(:purchase, link: @product, country: "Norway")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -257,7 +257,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "does not show tax registration for Bahrain purchases" do
       purchase = create(:purchase, link: @product, country: "Bahrain")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -288,7 +288,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "does not show tax registration for Kenya purchases" do
       purchase = create(:purchase, link: @product, country: "Kenya")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -319,7 +319,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's FIRS TIN for Nigeria purchases" do
       purchase = create(:purchase, link: @product, country: "Nigeria")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -352,7 +352,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's UK VAT registration for United Kingdom purchases" do
       purchase = create(:purchase, link: @product, country: "United Kingdom")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -385,7 +385,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's GSTIN for India purchases" do
       purchase = create(:purchase, link: @product, country: "India")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -418,7 +418,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's JCT registration for Japan purchases" do
       purchase = create(:purchase, link: @product, country: "Japan")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -451,7 +451,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's Singapore GST for Singapore purchases" do
       purchase = create(:purchase, link: @product, country: "Singapore")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -484,7 +484,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's New Zealand GST for New Zealand purchases" do
       purchase = create(:purchase, link: @product, country: "New Zealand")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -517,7 +517,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's South Korea VAT for South Korea purchases" do
       purchase = create(:purchase, link: @product, country: "South Korea")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -550,7 +550,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's Switzerland VAT for Switzerland purchases" do
       purchase = create(:purchase, link: @product, country: "Switzerland")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -583,7 +583,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad's Thailand VAT for Thailand purchases" do
       purchase = create(:purchase, link: @product, country: "Thailand")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -616,7 +616,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "does not show tax registration for Tanzania purchases" do
       purchase = create(:purchase, link: @product, country: "Tanzania")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -647,7 +647,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "does not show tax registration for Oman purchases" do
       purchase = create(:purchase, link: @product, country: "Oman")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -678,7 +678,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "does not show tax registration for other countries that collect tax on all products" do
       purchase = create(:purchase, link: @product, country: "Iceland")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -709,7 +709,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "does not show tax registration for other countries that collect tax on digital products" do
       purchase = create(:purchase, link: @product, country: "Chile")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -740,7 +740,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad as the supplier for a physical product sale" do
       purchase = create(:physical_purchase, link: @physical_product, country: "Australia")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -772,7 +772,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad as the supplier for a non-physical product sale to the US" do
       purchase = create(:purchase, link: @product, country: "United States")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -802,7 +802,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad as the supplier for a sale via Gumroad Discover" do
       purchase = create(:purchase, link: @product, country: "United States", was_product_recommended: true, recommended_by: "discover")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -832,7 +832,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad as the supplier for a physical product sale" do
       purchase = create(:physical_purchase, link: @physical_product, country: "Australia")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
@@ -866,7 +866,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
     it "shows Gumroad as the supplier for a non-physical product sale to the US" do
       purchase = create(:purchase, link: @product, country: "United States")
 
-      visit generate_invoice_by_buyer_path(purchase.external_id, email: purchase.email)
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
 
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
