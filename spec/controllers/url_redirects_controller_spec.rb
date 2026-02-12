@@ -1728,23 +1728,24 @@ describe UrlRedirectsController do
     end
   end
 
-  describe "GET latest_media_locations" do
-    it "returns a 404 if the url redirect is not found" do
-      expect do
-        get :download_page, params: { id: "some non-existent id" }
-      end.to raise_error(ActionController::RoutingError)
+  describe "GET download_page latest_media_locations prop", inertia: true do
+    before do
+      request.headers["X-Inertia"] = "true"
+      request.headers["X-Inertia-Partial-Component"] = "UrlRedirects/DownloadPage"
+      request.headers["X-Inertia-Partial-Data"] = "latest_media_locations"
     end
 
-    it "returns a 404 if the url redirect is for an installment" do
+    it "returns empty hash if the url redirect is for an installment" do
       seller = create(:user)
       product = create(:product, user: seller)
       seller_installment = create(:installment, seller:, installment_type: "seller", link: nil)
       seller_installment.product_files.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
       url_redirect = create(:url_redirect, installment: seller_installment, purchase: nil, link: product)
 
-      expect do
-        get :latest_media_locations, params: { id: url_redirect.token }
-      end.to raise_error(ActionController::RoutingError)
+      get :download_page, params: { id: url_redirect.token }
+
+      expect(response).to be_successful
+      expect(inertia.props[:latest_media_locations]).to eq({})
     end
 
     it "returns latest media locations for the purchased product" do
@@ -1765,26 +1766,32 @@ describe UrlRedirectsController do
       create(:media_location, url_redirect_id: url_redirect.id, purchase_id: url_redirect.purchase.id, platform: Platform::ANDROID,
                               product_file_id: readable_document.id, product_id: url_redirect.referenced_link.id, location: 3, consumed_at: readable_document_consumption_timestamp)
 
-      get :latest_media_locations, params: { id: url_redirect.token }
+      get :download_page, params: { id: url_redirect.token }
 
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to eq(
-        "#{video.external_id}" => nil,
-        "#{audio.external_id}" => { "location" => 5, "timestamp" => audio_consumption_timestamp.as_json, "unit" => "seconds" },
-        "#{readable_document.external_id}" => { "location" => 3, "timestamp" => readable_document_consumption_timestamp.as_json, "unit" => "page_number" },
-        "#{non_readable_document.external_id}" => nil
+      expect(response).to be_successful
+      expect(inertia.props[:latest_media_locations]).to eq(
+        video.external_id => nil,
+        audio.external_id => { "location" => 5, "timestamp" => audio_consumption_timestamp.as_json, "unit" => "seconds" },
+        readable_document.external_id => { "location" => 3, "timestamp" => readable_document_consumption_timestamp.as_json, "unit" => "page_number" },
+        non_readable_document.external_id => nil
       )
     end
   end
 
-  describe "GET 'audio_durations'" do
-    it "returns empty hash if the 'file_ids' parameter is blank" do
+  describe "GET download_page audio_durations prop", inertia: true do
+    before do
+      request.headers["X-Inertia"] = "true"
+      request.headers["X-Inertia-Partial-Component"] = "UrlRedirects/DownloadPage"
+      request.headers["X-Inertia-Partial-Data"] = "audio_durations"
+    end
+
+    it "returns empty hash if the audio_duration_file_ids parameter is blank" do
       url_redirect = create(:url_redirect)
 
-      get :audio_durations, params: { id: url_redirect.token, file_ids: [] }
+      get :download_page, params: { id: url_redirect.token, audio_duration_file_ids: [] }
 
       expect(response).to be_successful
-      expect(response.parsed_body).to eq({})
+      expect(inertia.props[:audio_durations]).to eq({})
     end
 
     it "returns the audio durations for the given file ids" do
@@ -1795,19 +1802,19 @@ describe UrlRedirectsController do
       product.product_files << audio2
       product.save!
       purchase = create(:purchase, link: product)
-      url_redirect = create(:url_redirect, link: product, purchase: purchase)
+      url_redirect = create(:url_redirect, link: product, purchase:)
 
-      get :audio_durations, params: { id: url_redirect.token, file_ids: [audio1.external_id, audio2.external_id] }
+      get :download_page, params: { id: url_redirect.token, audio_duration_file_ids: [audio1.external_id, audio2.external_id] }
 
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("#{audio1.external_id}" => 100, "#{audio2.external_id}" => nil)
+      expect(inertia.props[:audio_durations]).to eq(audio1.external_id => 100, audio2.external_id => nil)
 
       audio2.update!(duration: 200)
 
-      get :audio_durations, params: { id: url_redirect.token, file_ids: [audio2.external_id] }
+      get :download_page, params: { id: url_redirect.token, audio_duration_file_ids: [audio2.external_id] }
 
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("#{audio2.external_id}" => 200)
+      expect(inertia.props[:audio_durations]).to eq(audio2.external_id => 200)
     end
   end
 
