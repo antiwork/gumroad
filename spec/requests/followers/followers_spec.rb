@@ -54,6 +54,12 @@ describe("Followers", js: true, type: :system) do
       expect(page).to_not have_button "Load more"
     end
 
+    it "autofocuses the search input when the popover is opened" do
+      select_disclosure "Toggle Search" do
+        expect_focused find_field("Search followers")
+      end
+    end
+
     it "supports search functionality" do
       expect(page).to_not have_selector(:table_row, text: "test@example.com")
       select_disclosure "Toggle Search" do
