@@ -12,42 +12,44 @@ class DiscoverController < ApplicationController
   before_action :set_affiliate_cookie, only: [:index]
 
   def index
-    format_search_params!
+    if params.key?(:autocomplete_query)
+      create_discover_search!(query: params[:autocomplete_query], autocomplete: true) if params[:autocomplete_query].present?
+    else
+      format_search_params!
 
-    if params[:sort].blank? && curated_products.present?
-      params[:sort] = ProductSortKey::CURATED
-      params[:curated_product_ids] = (curated_products[RECOMMENDED_PRODUCTS_COUNT..] || []).map { _1.product.id }
+      if params[:sort].blank? && curated_products.present?
+        params[:sort] = ProductSortKey::CURATED
+        params[:curated_product_ids] = (curated_products[RECOMMENDED_PRODUCTS_COUNT..] || []).map { _1.product.id }
+      end
+
+      if !show_curated_products? && params.except(:controller, :action, :format, :taxonomy).blank?
+        params[:from] = RECOMMENDED_PRODUCTS_COUNT + 1
+      end
+
+      if taxonomy
+        params[:taxonomy_id] = taxonomy.id
+        params[:include_taxonomy_descendants] = true
+      end
+
+      params[:include_rated_as_adult] = logged_in_user&.show_nsfw_products?
+      params[:size] = INITIAL_PRODUCTS_COUNT
+
+      search_results[:products] = search_products(params)[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).map do |product|
+        ProductPresenter.card_for_web(
+          product:,
+          request:,
+          recommended_by: RecommendationType::GUMROAD_SEARCH_RECOMMENDATION,
+          target: Product::Layout::DISCOVER,
+          compute_description: false,
+          query: params[:query],
+          offer_code: params[:offer_code]
+        )
+      end
+
+      create_discover_search!(query: params[:query], taxonomy: @taxonomy) if is_searching?
+
+      prepare_discover_page
     end
-
-    if !show_curated_products? && params.except(:controller, :action, :format, :taxonomy).blank?
-      params[:from] = RECOMMENDED_PRODUCTS_COUNT + 1
-    end
-
-    if taxonomy
-      params[:taxonomy_id] = taxonomy.id
-      params[:include_taxonomy_descendants] = true
-    end
-
-    params[:include_rated_as_adult] = logged_in_user&.show_nsfw_products?
-    params[:size] = INITIAL_PRODUCTS_COUNT
-
-    search_results = search_products(params)
-    @search_results = search_results
-    search_results[:products] = search_results[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).map do |product|
-      ProductPresenter.card_for_web(
-        product:,
-        request:,
-        recommended_by: RecommendationType::GUMROAD_SEARCH_RECOMMENDATION,
-        target: Product::Layout::DISCOVER,
-        compute_description: false,
-        query: params[:query],
-        offer_code: params[:offer_code]
-      )
-    end
-
-    create_discover_search!(query: params[:query], taxonomy: @taxonomy) if is_searching?
-
-    prepare_discover_page
 
     render inertia: "Discover/Index", props: {
       search_results:,
@@ -61,7 +63,16 @@ class DiscoverController < ApplicationController
       is_black_friday_page: params[:offer_code] == SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_offer_code: SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_stats: black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil,
+      autocomplete_results: -> { autocomplete_results },
     }
+  end
+
+  def delete_search_suggestion
+    DiscoverSearchSuggestion
+      .by_user_or_browser(user: logged_in_user, browser_guid: cookies[:_gumroad_guid])
+      .where(discover_searches: { query: params[:query] })
+      .each(&:mark_deleted!)
+    head :no_content
   end
 
   private
@@ -159,6 +170,14 @@ class DiscoverController < ApplicationController
         set_meta_tag(name: "description", content: description)
         set_meta_tag(property: "og:description", content: description)
       end
+    end
+
+    def autocomplete_results
+      Discover::AutocompletePresenter.new(
+        query: params[:autocomplete_query],
+        user: logged_in_user,
+        browser_guid: cookies[:_gumroad_guid]
+      ).props
     end
 
     def black_friday_feature_active?

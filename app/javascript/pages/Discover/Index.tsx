@@ -13,6 +13,7 @@ import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
+import { type AutocompleteSearchResults } from "$app/components/Discover/Search";
 import { Icon } from "$app/components/Icons";
 import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
@@ -42,6 +43,7 @@ type Props = {
     revenue_cents: number;
     average_discount_percentage: number;
   } | null;
+  autocomplete_results?: AutocompleteSearchResults;
 };
 
 const sortTitles = {

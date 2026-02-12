@@ -2,21 +2,30 @@
 
 require "spec_helper"
 
-describe Discover::SearchAutocompleteController do
+describe DiscoverController do
   render_views
 
-  describe "#search_autocomplete" do
+  describe "#autocomplete_results" do
     context "when query is blank" do
       it "returns empty array" do
         create(:product)
         index_model_records(Link)
-        get :search, params: { query: "", format: :json }
-        expect(response.parsed_body).to eq("products" => [], "recent_searches" => [], "viewed" => false)
+        get :index, params: { autocomplete_query: "" }, headers: {
+          "X-Inertia" => "true",
+          "X-Inertia-Partial-Data" => "autocomplete_results",
+          "X-Inertia-Partial-Component" => "Discover/Index",
+        }
+        autocomplete = response.parsed_body["props"]["autocomplete_results"]
+        expect(autocomplete).to eq("products" => [], "recent_searches" => [], "viewed" => false)
       end
 
       it "does not store the search query" do
         expect do
-          get :search, params: { query: "", format: :json }
+          get :index, params: { autocomplete_query: "" }, headers: {
+            "X-Inertia" => "true",
+            "X-Inertia-Partial-Data" => "autocomplete_results",
+            "X-Inertia-Partial-Component" => "Discover/Index",
+          }
         end.to not_change(DiscoverSearch, :count).and not_change(DiscoverSearchSuggestion, :count)
       end
     end
@@ -26,8 +35,13 @@ describe Discover::SearchAutocompleteController do
         user = create(:recommendable_user, name: "Sample User")
         @product = create(:product, :recommendable, name: "Sample Product", user:)
         Link.import(refresh: true, force: true)
-        get :search, params: { query: "prod", format: :json }
-        expect(response.parsed_body["products"][0]).to include(
+        get :index, params: { autocomplete_query: "prod" }, headers: {
+          "X-Inertia" => "true",
+          "X-Inertia-Partial-Data" => "autocomplete_results",
+          "X-Inertia-Partial-Component" => "Discover/Index",
+        }
+        autocomplete = response.parsed_body["props"]["autocomplete_results"]
+        expect(autocomplete["products"][0]).to include(
           "name" => "Sample Product",
           "url" => @product.long_url(recommended_by: "search", layout: "discover", autocomplete: "true", query: "prod"),
           "seller_name" => "Sample User",
@@ -40,7 +54,11 @@ describe Discover::SearchAutocompleteController do
         cookies[:_gumroad_guid] = "custom_guid"
 
         expect do
-          get :search, params: { query: "prod", format: :json }
+          get :index, params: { autocomplete_query: "prod" }, headers: {
+            "X-Inertia" => "true",
+            "X-Inertia-Partial-Data" => "autocomplete_results",
+            "X-Inertia-Partial-Component" => "Discover/Index",
+          }
         end.to change(DiscoverSearch, :count).by(1).and not_change(DiscoverSearchSuggestion, :count)
 
         expect(DiscoverSearch.last!.attributes).to include(
@@ -59,8 +77,13 @@ describe Discover::SearchAutocompleteController do
     cookies[:_gumroad_guid] = "custom_guid"
 
     create(:discover_search_suggestion, discover_search: create(:discover_search, browser_guid: "custom_guid", query: "recent search"))
-    get :search, params: { query: "", format: :json }
-    expect(response.parsed_body["recent_searches"]).to eq(["recent search"])
+    get :index, params: { autocomplete_query: "" }, headers: {
+      "X-Inertia" => "true",
+      "X-Inertia-Partial-Data" => "autocomplete_results",
+      "X-Inertia-Partial-Component" => "Discover/Index",
+    }
+    autocomplete = response.parsed_body["props"]["autocomplete_results"]
+    expect(autocomplete["recent_searches"]).to eq(["recent search"])
   end
 
   context "when a user is logged in" do
@@ -72,8 +95,13 @@ describe Discover::SearchAutocompleteController do
 
     it "returns recent searches for the user" do
       create(:discover_search_suggestion, discover_search: create(:discover_search, user:, query: "recent search"))
-      get :search, params: { query: "", format: :json }
-      expect(response.parsed_body["recent_searches"]).to eq(["recent search"])
+      get :index, params: { autocomplete_query: "" }, headers: {
+        "X-Inertia" => "true",
+        "X-Inertia-Partial-Data" => "autocomplete_results",
+        "X-Inertia-Partial-Component" => "Discover/Index",
+      }
+      autocomplete = response.parsed_body["props"]["autocomplete_results"]
+      expect(autocomplete["recent_searches"]).to eq(["recent search"])
     end
   end
 

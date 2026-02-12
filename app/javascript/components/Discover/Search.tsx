@@ -1,39 +1,46 @@
+import { router, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
-import { AutocompleteSearchResults, deleteAutocompleteSearch, getAutocompleteSearchResults } from "$app/data/discover";
 import { escapeRegExp } from "$app/utils";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { ComboBox } from "$app/components/ComboBox";
 import { Icon } from "$app/components/Icons";
-import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
 import thumbnailPlaceholder from "$assets/images/placeholders/product-cover.png";
 
+export type AutocompleteSearchResults = {
+  products: {
+    name: string;
+    url: string;
+    seller_name: string | null;
+    thumbnail_url: string | null;
+  }[];
+  recent_searches: string[];
+  viewed?: boolean;
+};
+
 export const Search = ({ query, setQuery }: { query?: string | undefined; setQuery: (query: string) => void }) => {
+  const { autocomplete_results } = usePage<{ autocomplete_results?: AutocompleteSearchResults }>().props;
+
   const [enteredQuery, setEnteredQuery] = React.useState(query ?? "");
   useOnChange(() => setEnteredQuery(query ?? ""), [query]);
 
-  const cancelAutocomplete = React.useRef<() => void>();
-  const fetchAutocomplete = useDebouncedCallback(
-    asyncVoid(async () => {
-      try {
-        const abortController = new AbortController();
-        cancelAutocomplete.current = () => abortController.abort();
-        setResults(await getAutocompleteSearchResults({ query: enteredQuery }, abortController.signal));
-      } catch (e) {
-        assertResponseError(e);
-        showAlert("Sorry, something went wrong. Please try again.", "error");
-      }
-    }),
-    300,
-  );
-  const [results, setResults] = React.useState<AutocompleteSearchResults | null>(null);
+  const fetchAutocomplete = useDebouncedCallback(() => {
+    router.reload({
+      only: ["autocomplete_results"],
+      data: { autocomplete_query: enteredQuery || undefined },
+      preserveUrl: true,
+    });
+  }, 300);
+  const [results, setResults] = React.useState<AutocompleteSearchResults | null>(autocomplete_results ?? null);
   const [autocompleteOpen, setAutocompleteOpen] = React.useState(false);
+
+  useOnChange(() => {
+    if (autocomplete_results) setResults(autocomplete_results);
+  }, [autocomplete_results]);
 
   useOnChange(() => fetchAutocomplete(), [enteredQuery]);
   useOnChange(() => {
@@ -52,9 +59,13 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
     );
   };
 
-  const deleteRecentSearch = (query: string) => {
-    void deleteAutocompleteSearch({ query });
-    if (results) setResults({ ...results, recent_searches: results.recent_searches.filter((q) => q !== query) });
+  const deleteRecentSearch = (searchQuery: string) => {
+    if (results) setResults({ ...results, recent_searches: results.recent_searches.filter((q) => q !== searchQuery) });
+    router.delete(Routes.discover_delete_search_suggestion_path({ query: searchQuery }), {
+      preserveScroll: true,
+      preserveState: true,
+      only: [],
+    });
   };
 
   const options = results ? [...results.recent_searches, ...results.products] : [];
@@ -79,7 +90,6 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
               if (e.key === "Enter") {
                 setQuery(enteredQuery);
                 fetchAutocomplete.cancel();
-                cancelAutocomplete.current?.();
               }
             }}
             onChange={(e) => {
