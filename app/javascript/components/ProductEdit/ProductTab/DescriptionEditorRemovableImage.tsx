@@ -1,3 +1,4 @@
+import * as React from "react";
 import { NodeViewWrapper, ReactNodeViewRenderer, NodeViewProps } from "@tiptap/react";
 import { Image as BaseImage } from "$app/components/TiptapExtensions/Image";
 import { RemoveButton } from "$app/components/RemoveButton";
