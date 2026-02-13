@@ -10,8 +10,6 @@ import Discover from "$app/components/server-components/Discover";
 import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import Nav from "$app/components/server-components/Nav";
 import ProductEditPage from "$app/components/server-components/ProductEditPage";
-import Profile from "$app/components/server-components/Profile";
-import SubscribePage from "$app/components/server-components/SubscribePage";
 import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
 import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
@@ -29,8 +27,6 @@ ReactOnRails.register({
   Nav,
   Pill,
   ProductEditPage,
-  Profile,
-  SubscribePage,
   TaxesCollectionModal,
   VideoStreamPlayer,
 });
