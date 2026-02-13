@@ -25,11 +25,13 @@ export const DateRangePicker = ({
   to,
   setFrom,
   setTo,
+  className,
 }: {
   from: Date;
   to: Date;
   setFrom: (from: Date) => void;
   setTo: (to: Date) => void;
+  className?: string;
 }) => {
   const today = new Date();
   const uid = React.useId();
@@ -52,7 +54,7 @@ export const DateRangePicker = ({
         setOpen(open);
       }}
     >
-      <PopoverTrigger>
+      <PopoverTrigger className={className}>
         <InputGroup className="whitespace-nowrap" aria-label="Date range selector">
           <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
           <Icon name="outline-cheveron-down" className="ml-auto" />
