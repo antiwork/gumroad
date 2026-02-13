@@ -17,8 +17,8 @@ describe "User Follow Page Scenario", type: :system, js: true do
       visit seller.subdomain_with_protocol
       submit_follow_form
       wait_for_ajax
+      expect(page).to have_alert(text: "You are now following #{seller.name_or_username}!")
       Follower.where(email: other_user.email).first.confirm!
-      expect(page).to have_button("Subscribed", disabled: true)
     end.to change { seller.followers.active.count }.by(1)
     expect(Follower.last.follower_user_id).to eq other_user.id
   end

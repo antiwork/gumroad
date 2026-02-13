@@ -178,10 +178,10 @@ describe "Purchasing power parity", type: :system, js: true do
           click_on "Manage"
         end
 
-        expect(page).to have_current_path(magic_link_subscription_path(purchase.subscription.external_id))
+        expect(page).to have_current_path(new_subscription_magic_link_path(purchase.subscription.external_id))
         expect(page).to have_text "Send magic link"
         click_on "Send magic link"
-        expect(page).to have_current_path(magic_link_subscription_path(purchase.subscription.external_id))
+        expect(page).to have_current_path(new_subscription_magic_link_path(purchase.subscription.external_id))
         expect(page).to have_text "We've sent a link to"
 
         visit manage_subscription_path(purchase.subscription.external_id, token: purchase.reload.subscription.token)
@@ -208,10 +208,10 @@ describe "Purchasing power parity", type: :system, js: true do
         click_on "Manage"
       end
 
-      expect(page).to have_current_path(magic_link_subscription_path(purchase.subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(purchase.subscription.external_id))
       expect(page).to have_text "Send magic link"
       click_on "Send magic link"
-      expect(page).to have_current_path(magic_link_subscription_path(purchase.subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(purchase.subscription.external_id))
       expect(page).to have_text "We've sent a link to"
 
       visit manage_subscription_path(purchase.subscription.external_id, token: purchase.reload.subscription.token)
