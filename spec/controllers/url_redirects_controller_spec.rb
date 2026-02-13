@@ -1986,6 +1986,16 @@ describe UrlRedirectsController do
         end.to change(ConsumptionEvent, :count).by(1)
           .and change { @url_redirect.reload.uses }.by(1)
       end
+
+      it "treats partial requests with non-polling props as full page loads" do
+        expect do
+          request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations,content"))
+          get :download_page, params: { id: @token }
+        end.to change(ConsumptionEvent, :count).by(1)
+          .and change { @url_redirect.reload.uses }.by(1)
+
+        expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
+      end
     end
   end
 

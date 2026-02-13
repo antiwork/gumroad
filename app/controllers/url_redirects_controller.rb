@@ -406,10 +406,15 @@ class UrlRedirectsController < ApplicationController
       end
     end
 
+    DOWNLOAD_PAGE_POLLING_PROPS = %w[audio_durations latest_media_locations].freeze
+
     def download_page_polling_request?
-      request.headers["X-Inertia"] == "true" &&
+      return false unless request.headers["X-Inertia"] == "true" &&
         request.headers["X-Inertia-Partial-Component"] == "UrlRedirects/DownloadPage" &&
         request.headers["X-Inertia-Partial-Data"].present?
+
+      requested = request.headers["X-Inertia-Partial-Data"].split(",")
+      (requested - DOWNLOAD_PAGE_POLLING_PROPS).empty?
     end
 
     def requested_download_page_polling_props
@@ -423,6 +428,7 @@ class UrlRedirectsController < ApplicationController
     def set_download_page_meta_tags
       set_favicon_meta_tags(@url_redirect.seller)
       set_meta_tag(title: @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name)
+      set_meta_tag(name: "apple-itunes-app", content: "app-id=#{IOS_APP_ID}, app-argument=#{@url_redirect.download_page_url}")
     end
 
     def create_download_page_view_consumption_event!
