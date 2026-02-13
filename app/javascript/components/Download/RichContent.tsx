@@ -19,7 +19,7 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 import { titleWithFallback } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { License, useContentFiles } from "$app/components/server-components/DownloadPage/WithContent";
+import { License, useContentFiles } from "$app/components/DownloadPage/WithContent";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
 import { LongAnswer } from "$app/components/TiptapExtensions/LongAnswer";

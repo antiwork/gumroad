@@ -20,12 +20,12 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { ProgressPie } from "$app/components/ProgressPie";
 import { showAlert } from "$app/components/server-components/Alert";
-import { AudioPlayerContainer } from "$app/components/server-components/DownloadPage/AudioPlayerContainer";
+import { AudioPlayerContainer } from "$app/components/DownloadPage/AudioPlayerContainer";
 import {
   useIsMobileAppView,
   useMediaUrls,
   usePurchaseInfo,
-} from "$app/components/server-components/DownloadPage/WithContent";
+} from "$app/components/DownloadPage/WithContent";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useRefToLatest } from "$app/components/useRefToLatest";

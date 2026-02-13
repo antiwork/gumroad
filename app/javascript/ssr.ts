@@ -6,7 +6,6 @@ import ReactOnRails from "react-on-rails";
 import Alert from "$app/components/server-components/Alert";
 import CustomersDownloadPopover from "$app/components/server-components/CustomersPage/DownloadPopover";
 import CustomersFilterPopover from "$app/components/server-components/CustomersPage/FilterPopover";
-import DownloadPageWithContent from "$app/components/server-components/DownloadPage/WithContent";
 import Nav from "$app/components/server-components/Nav";
 import ProductEditPage from "$app/components/server-components/ProductEditPage";
 import SupportHeader from "$app/components/server-components/support/Header";
@@ -20,7 +19,6 @@ ReactOnRails.register({
   CodeSnippet,
   CustomersDownloadPopover,
   CustomersFilterPopover,
-  DownloadPageWithContent,
   Nav,
   Pill,
   ProductEditPage,

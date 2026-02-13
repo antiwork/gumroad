@@ -1,13 +1,11 @@
 import * as React from "react";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastContentPage } from "$app/data/products";
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
-import { request } from "$app/utils/request";
 import { generatePageIcon } from "$app/utils/rich_content_page";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -34,11 +32,10 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { Layout, LayoutProps } from "./Layout";
+import { Layout, LayoutProps, PurchaseCustomField } from "./Layout";
 
-const LATEST_MEDIA_LOCATIONS_FETCH_INTERVAL_IN_MS = 10_000;
-const MISSING_AUDIO_DURATIONS_FETCH_INTERVAL_IN_MS = 5_000;
-const MAX_AUDIO_IDS_PER_FETCH = 25;
+export type { PurchaseCustomField };
+
 const PAGE_ICON_LABEL: Record<string, string> = {
   "file-arrow-down": "Page has various types of files",
   "file-music": "Page has audio files",
@@ -48,7 +45,7 @@ const PAGE_ICON_LABEL: Record<string, string> = {
 };
 
 const ContentFilesContext = React.createContext<FileItem[] | null>(null);
-const ContentFilesProvider = ContentFilesContext.Provider;
+export const ContentFilesProvider = ContentFilesContext.Provider;
 export const useContentFiles = () =>
   assertDefined(React.useContext(ContentFilesContext), "ContentFilesProvider is missing");
 
@@ -72,12 +69,6 @@ const MediaUrlsContext = React.createContext<
 export const MediaUrlsProvider = MediaUrlsContext.Provider;
 export const useMediaUrls = () => assertDefined(React.useContext(MediaUrlsContext), "MediaUrlsProvider is missing");
 
-export type PurchaseCustomField = {
-  custom_field_id: string;
-} & (
-  | { type: "shortAnswer" | "longAnswer"; value: string }
-  | { type: "fileUpload"; files: { name: string; size: number; extension: string }[] }
-);
 const PurchaseCustomFieldsContext = React.createContext<PurchaseCustomField[]>([]);
 export const PurchaseCustomFieldsProvider = PurchaseCustomFieldsContext.Provider;
 export const usePurchaseCustomFields = () =>
@@ -89,80 +80,54 @@ export type License = {
   seats: number;
 };
 
-const WithContent = ({
+export type ContentProps = {
+  rich_content_pages: RichContentPage[] | null;
+  last_content_page_id: string | null;
+  license: License | null;
+  content_items: (FileItem | FolderItem)[];
+  posts: Post[];
+  video_transcoding_info: { transcode_on_first_sale: boolean } | null;
+  custom_receipt: string | null;
+  discord: { connected: boolean } | null;
+  ios_app_url: string;
+  android_app_url: string;
+  download_all_button: { files: { url: string; filename: string | null }[] } | null;
+  community_chat_url: string | null;
+};
+
+export const WithContent = ({
   content,
   product_has_third_party_analytics,
+  audio_durations,
+  latest_media_locations,
   ...props
 }: LayoutProps & {
-  content: {
-    rich_content_pages: RichContentPage[] | null;
-    last_content_page_id: string | null;
-    license: License | null;
-    content_items: (FileItem | FolderItem)[];
-    posts: Post[];
-    video_transcoding_info: { transcode_on_first_sale: boolean } | null;
-    custom_receipt: string | null;
-    discord: { connected: boolean } | null;
-    ios_app_url: string;
-    android_app_url: string;
-    download_all_button: { files: { url: string; filename: string | null }[] } | null;
-    community_chat_url: string | null;
-  };
+  content: ContentProps;
   product_has_third_party_analytics: boolean | null;
+  audio_durations?: Record<string, FileItem["duration"]> | undefined;
+  latest_media_locations?: Record<string, FileItem["latest_media_location"]> | undefined;
 }) => {
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
-  const [contentFiles, setContentFiles] = React.useState(
-    content.content_items.filter((item): item is FileItem => item.type === "file"),
-  );
-  const mediaUrlsValue = React.useState<Record<string, string[]>>({});
-  const unprocessedAudioIds =
-    content.rich_content_pages !== null && props.is_mobile_app_web_view
-      ? contentFiles.flatMap((file) =>
-          FileUtils.isAudioExtension(file.extension) && file.duration === null ? [file.id] : [],
-        )
-      : [];
-  const missingAudioDurationsFetchIntevalRef = React.useRef<ReturnType<typeof setInterval>>();
-  React.useEffect(() => {
-    const fetchMissingAudioDurations = async () => {
-      try {
-        if (unprocessedAudioIds.length === 0) {
-          clearInterval(missingAudioDurationsFetchIntevalRef.current);
-          return;
+  const contentFiles = React.useMemo(() => {
+    const files = content.content_items.filter((item): item is FileItem => item.type === "file");
+    return files.map((file) => {
+      let updated = file;
+      if (audio_durations) {
+        const duration = audio_durations[file.id];
+        if (duration !== null && duration !== undefined) {
+          updated = { ...updated, duration, content_length: duration };
         }
-
-        const response = await request({
-          url: Routes.url_redirect_audio_durations_path(props.token, {
-            params: { file_ids: unprocessedAudioIds.slice(0, MAX_AUDIO_IDS_PER_FETCH) },
-          }),
-          method: "GET",
-          accept: "json",
-        });
-        if (!response.ok) return;
-        const durations = cast<Record<string, FileItem["duration"]>>(await response.json());
-        if (Object.keys(durations).length === 0) return;
-        setContentFiles((files) =>
-          files.map((file) => {
-            const duration = durations[file.id];
-            return duration !== null && duration !== undefined ? { ...file, duration, content_length: duration } : file;
-          }),
-        );
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error(e);
       }
-    };
+      if (latest_media_locations) {
+        updated = { ...updated, latest_media_location: latest_media_locations[file.id] ?? null };
+      }
+      return updated;
+    });
+  }, [content.content_items, audio_durations, latest_media_locations]);
 
-    missingAudioDurationsFetchIntevalRef.current = setInterval(() => {
-      void fetchMissingAudioDurations();
-    }, MISSING_AUDIO_DURATIONS_FETCH_INTERVAL_IN_MS);
+  const mediaUrlsValue = React.useState<Record<string, string[]>>({});
 
-    return () => {
-      clearInterval(missingAudioDurationsFetchIntevalRef.current);
-    };
-  }, [unprocessedAudioIds.length]);
-
-  const isFetchingLatestMediaLocationsRef = React.useRef(false);
   useRunOnce(() => {
     if (url.searchParams.get("receipt") === "true" && props.purchase?.email) {
       showAlert(`Your purchase was successful! We sent a receipt to ${props.purchase.email}.`, "success");
@@ -175,36 +140,6 @@ const WithContent = ({
           location: "receipt",
           purchaseId: props.purchase.id,
         });
-    }
-
-    const fetchLatestMediaLocations = async () => {
-      if (isFetchingLatestMediaLocationsRef.current) return;
-
-      isFetchingLatestMediaLocationsRef.current = true;
-      try {
-        const response = await request({
-          url: Routes.url_redirect_latest_media_locations_path(props.token),
-          method: "GET",
-          accept: "json",
-        });
-        if (!response.ok) return;
-        const latestMediaLocations = cast<Record<string, FileItem["latest_media_location"]>>(await response.json());
-        if (Object.keys(latestMediaLocations).length === 0) return;
-        setContentFiles((files) =>
-          files.map((file) => ({ ...file, latest_media_location: latestMediaLocations[file.id] ?? null })),
-        );
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error(e);
-      } finally {
-        isFetchingLatestMediaLocationsRef.current = false;
-      }
-    };
-
-    if (content.rich_content_pages != null && contentFiles.length > 0) {
-      setInterval(() => {
-        void fetchLatestMediaLocations();
-      }, LATEST_MEDIA_LOCATIONS_FETCH_INTERVAL_IN_MS);
     }
   });
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -269,7 +204,7 @@ const WithContent = ({
           allFiles: contentFiles,
         }),
       ),
-    [pages],
+    [pages, contentFiles],
   );
   const purchaseInfo = { purchaseId: props.purchase?.id ?? null, redirectId: props.redirect_id, token: props.token };
 
@@ -432,5 +367,3 @@ const COMMON_CONTAINER_NODE_TYPES = ["doc", "orderedList", "bulletList", "listIt
 const nodeHasLicense = (node: RichContent) =>
   node.type === LicenseKey.name ||
   ((COMMON_CONTAINER_NODE_TYPES.includes(node.type ?? "") && node.content?.some(nodeHasLicense)) ?? false);
-
-export default register({ component: WithContent, propParser: createCast() });
