@@ -32,7 +32,7 @@ describe SendMissedPostsForPurchaseJob do
     end
 
     it "respects the throttle period for recently sent posts" do
-      Rails.cache.write("post_email:#{post1.id}:#{purchase.id}", true, expires_in: 8.hours)
+      Rails.cache.write("post_email:#{post1.id}:#{purchase.id}", true, expires_in: MissedPostsDeliveryService::THROTTLE_PERIOD)
 
       described_class.new.perform(purchase.id)
 
@@ -81,11 +81,11 @@ describe SendMissedPostsForPurchaseJob do
     end
 
     it "does not clear the Redis lock directly" do
-      $redis.set(RedisKey.send_missed_posts(purchase.id), "1", ex: 3.days.to_i)
+      $redis.set(RedisKey.send_missed_posts(purchase.id, "all"), "1", ex: 3.days.to_i)
 
       described_class.new.perform(purchase.id)
 
-      expect($redis.get(RedisKey.send_missed_posts(purchase.id))).to eq("1")
+      expect($redis.get(RedisKey.send_missed_posts(purchase.id, "all"))).to eq("1")
     end
 
     it "enqueues CheckMissedPostsCompletionJob after processing" do

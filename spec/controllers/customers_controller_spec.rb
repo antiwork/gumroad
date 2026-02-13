@@ -399,13 +399,6 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
     let(:product) { create(:product, user: seller) }
     let(:purchase) { create(:purchase, link: product, seller:) }
 
-    it_behaves_like "authorize called for action", :post, :send_missed_posts do
-      let(:record) { Purchase }
-      let(:policy_klass) { Audience::PurchasePolicy }
-      let(:policy_method) { :index? }
-      let(:request_params) { { purchase_id: purchase.external_id } }
-    end
-
     before do
       allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
     end
@@ -418,14 +411,25 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(SendMissedPostsForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id, nil)
     end
 
+    it "checks authorization via Audience::PurchasePolicy" do
+      policy = instance_double(Audience::PurchasePolicy, send_missed_posts?: true)
+      allow(Pundit).to receive(:policy!).and_call_original
+      allow(Pundit).to receive(:policy!).with(anything, [:audience, purchase]).and_return(policy)
+
+      post :send_missed_posts, params: { purchase_id: purchase.external_id }
+
+      expect(response).to be_successful
+      expect(policy).to have_received(:send_missed_posts?)
+    end
+
     it "sets a Redis lock to prevent duplicate sends" do
       post :send_missed_posts, params: { purchase_id: purchase.external_id }
 
-      expect($redis.get(RedisKey.send_missed_posts(purchase.id))).to eq("1")
+      expect($redis.get(RedisKey.send_missed_posts(purchase.id, "all"))).to eq("1")
     end
 
     it "returns 422 when a send is already in progress" do
-      $redis.set(RedisKey.send_missed_posts(purchase.id), "1", ex: 10.minutes.to_i)
+      $redis.set(RedisKey.send_missed_posts(purchase.id, "all"), "1", ex: 10.minutes.to_i)
 
       post :send_missed_posts, params: { purchase_id: purchase.external_id }
 
@@ -475,12 +479,31 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
 
       expect(response).to be_successful
       expect(SendMissedPostsForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id, workflow.id)
+      expect($redis.get(RedisKey.send_missed_posts(purchase.id, workflow.id))).to eq("1")
     end
 
     it "returns 404 for an invalid workflow_id" do
       expect do
         post :send_missed_posts, params: { purchase_id: purchase.external_id, workflow_id: "invalid" }
       end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "returns 404 for a workflow belonging to another seller" do
+      other_workflow = create(:workflow, seller: create(:named_user))
+
+      expect do
+        post :send_missed_posts, params: { purchase_id: purchase.external_id, workflow_id: other_workflow.external_id }
+      end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "returns 422 when an all-posts send is already in progress for a workflow-specific request" do
+      workflow = create(:workflow, seller:, link: product)
+      $redis.set(RedisKey.send_missed_posts(purchase.id, "all"), "1", ex: 10.minutes.to_i)
+
+      post :send_missed_posts, params: { purchase_id: purchase.external_id, workflow_id: workflow.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(SendMissedPostsForPurchaseJob.jobs.size).to eq(0)
     end
 
     context "with accountant role" do

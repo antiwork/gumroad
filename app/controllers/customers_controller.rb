@@ -127,10 +127,15 @@ class CustomersController < Sellers::BaseController
 
     workflow_id = nil
     if params[:workflow_id].present?
-      workflow_id = Workflow.find_by_external_id!(params[:workflow_id]).id
+      workflow_id = current_seller.workflows.find_by_external_id!(params[:workflow_id]).id
     end
 
-    redis_key = RedisKey.send_missed_posts(purchase.id)
+    lock_suffix = workflow_id || "all"
+    if lock_suffix != "all" && $redis.exists?(RedisKey.send_missed_posts(purchase.id, "all"))
+      return render json: { success: false, message: "Missed posts are already being sent for this customer." }, status: :unprocessable_entity
+    end
+
+    redis_key = RedisKey.send_missed_posts(purchase.id, lock_suffix)
     unless $redis.set(redis_key, "1", nx: true, ex: 3.days.to_i)
       return render json: { success: false, message: "Missed posts are already being sent for this customer." }, status: :unprocessable_entity
     end

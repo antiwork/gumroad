@@ -50,6 +50,6 @@ class RedisKey
     def unreviewed_users_cutoff_date = "admin:unreviewed_users_cutoff_date"
     def paypal_topup_needed = "paypal:topup_needed"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"
-    def send_missed_posts(purchase_id) = "send_missed_posts:#{purchase_id}"
+    def send_missed_posts(purchase_id, workflow_id = "all") = "send_missed_posts:#{purchase_id}:#{workflow_id}"
   end
 end

@@ -9,13 +9,13 @@ describe CheckMissedPostsCompletionJob do
     let(:purchase) { create(:purchase, link: product, seller:) }
 
     before do
-      $redis.set(RedisKey.send_missed_posts(purchase.id), "1", ex: 3.days.to_i)
+      $redis.set(RedisKey.send_missed_posts(purchase.id, "all"), "1", ex: 3.days.to_i)
     end
 
     it "clears the Redis lock when no missed posts remain" do
       described_class.new.perform(purchase.id)
 
-      expect($redis.get(RedisKey.send_missed_posts(purchase.id))).to be_nil
+      expect($redis.get(RedisKey.send_missed_posts(purchase.id, "all"))).to be_nil
     end
 
     it "re-enqueues itself when missed posts still remain" do
@@ -31,7 +31,7 @@ describe CheckMissedPostsCompletionJob do
 
       described_class.new.perform(purchase.id, nil, 4)
 
-      expect($redis.get(RedisKey.send_missed_posts(purchase.id))).to be_nil
+      expect($redis.get(RedisKey.send_missed_posts(purchase.id, "all"))).to be_nil
       expect(CheckMissedPostsCompletionJob.jobs.size).to eq(0)
     end
 
@@ -46,21 +46,25 @@ describe CheckMissedPostsCompletionJob do
     context "with workflow_id filtering" do
       let(:workflow) { create(:workflow, seller:, link: product) }
 
+      before do
+        $redis.set(RedisKey.send_missed_posts(purchase.id, workflow.id), "1", ex: 3.days.to_i)
+      end
+
       it "only checks posts for the specified workflow" do
         create(:installment, link: product, seller:, published_at: 1.day.ago)
-        workflow_post = create(:installment, link: product, seller:, published_at: 1.day.ago, workflow:)
+        create(:installment, link: product, seller:, published_at: 1.day.ago, workflow:)
 
         described_class.new.perform(purchase.id, workflow.id)
 
         expect(CheckMissedPostsCompletionJob).to have_enqueued_sidekiq_job(purchase.id, workflow.id, 2)
       end
 
-      it "clears the lock when workflow-specific posts are all sent" do
+      it "clears the workflow-specific lock when those posts are all sent" do
         create(:installment, link: product, seller:, published_at: 1.day.ago)
 
         described_class.new.perform(purchase.id, workflow.id)
 
-        expect($redis.get(RedisKey.send_missed_posts(purchase.id))).to be_nil
+        expect($redis.get(RedisKey.send_missed_posts(purchase.id, workflow.id))).to be_nil
       end
     end
   end
