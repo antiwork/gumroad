@@ -257,4 +257,111 @@ describe UserComplianceInfo do
       end
     end
   end
+
+  describe "kana_fields_format" do
+    describe "for Japanese users" do
+      describe "name kana fields" do
+        it "allows valid katakana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { first_name_kana: "タナカ", last_name_kana: "サクラショウテン" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+
+        it "rejects full-width parenthesis in name kana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { business_name_kana: "カ）サクラショウテン" })
+          uci.valid?
+          expect(uci.errors[:base]).to include("Business name (Kana) may only contain katakana, spaces, dashes, and dots")
+        end
+
+        it "rejects kanji in name kana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { first_name_kana: "日本語" })
+          uci.valid?
+          expect(uci.errors[:base]).to include("First name (Kana) may only contain katakana, spaces, dashes, and dots")
+        end
+
+        it "rejects digits in name kana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { last_name_kana: "カタカナ123" })
+          uci.valid?
+          expect(uci.errors[:base]).to include("Last name (Kana) may only contain katakana, spaces, dashes, and dots")
+        end
+
+        it "allows blank name kana fields" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { first_name_kana: "", last_name_kana: nil })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+      end
+
+      describe "address kana fields" do
+        it "allows katakana with latin and digits" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { building_number_kana: "シブヤヒカリエ17F", street_address_kana: "チヨダ" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+
+        it "rejects kanji in address kana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { street_address_kana: "渋谷区" })
+          uci.valid?
+          expect(uci.errors[:base]).to include("Street address (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots")
+        end
+
+        it "rejects kanji in business address kana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { business_building_number_kana: "渋谷", business_street_address_kana: "千代田区" })
+          uci.valid?
+          expect(uci.errors[:base]).to include("Business building number (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots")
+          expect(uci.errors[:base]).to include("Business street address (Kana) may only contain katakana, latin characters, digits, spaces, dashes, and dots")
+        end
+
+        it "allows blank address kana fields" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { building_number_kana: nil, street_address_kana: "" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+      end
+    end
+
+    describe "for non-Japanese users" do
+      it "skips kana validation entirely" do
+        uci = build(:user_compliance_info, country: "United States", json_data: { first_name_kana: "invalid）data" })
+        uci.valid?
+        expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+      end
+    end
+  end
+
+  describe "business_name_romaji_format" do
+    describe "for Japanese business accounts" do
+      it "allows latin business name" do
+        uci = build(:user_compliance_info_business, country: "Japan", business_country: "Japan", business_name: "Sakura Shoten Co., Ltd.")
+        uci.valid?
+        expect(uci.errors[:base]).not_to include(a_string_matching(/romaji/))
+      end
+
+      it "rejects Japanese characters in business name" do
+        uci = build(:user_compliance_info_business, country: "Japan", business_country: "Japan", business_name: "カ）サクラショウテン")
+        uci.valid?
+        expect(uci.errors[:base]).to include("Legal business name must be in romaji (latin characters) for Japanese accounts")
+      end
+
+      it "skips validation for individual (non-business) accounts" do
+        uci = build(:user_compliance_info, country: "Japan", business_name: "カ）サクラショウテン")
+        uci.valid?
+        expect(uci.errors[:base]).not_to include(a_string_matching(/romaji/))
+      end
+
+      it "skips validation when business name is blank" do
+        uci = build(:user_compliance_info_business, country: "Japan", business_country: "Japan", business_name: "")
+        uci.valid?
+        expect(uci.errors[:base]).not_to include(a_string_matching(/romaji/))
+      end
+    end
+
+    describe "for non-Japanese business accounts" do
+      it "skips romaji validation" do
+        uci = build(:user_compliance_info_business, country: "United States", business_name: "カ）サクラショウテン")
+        uci.valid?
+        expect(uci.errors[:base]).not_to include(a_string_matching(/romaji/))
+      end
+    end
+  end
 end
