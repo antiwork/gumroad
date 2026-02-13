@@ -395,6 +395,111 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
     end
   end
 
+  describe "POST send_missed_posts" do
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product, seller:) }
+
+    it_behaves_like "authorize called for action", :post, :send_missed_posts do
+      let(:record) { Purchase }
+      let(:policy_klass) { Audience::PurchasePolicy }
+      let(:policy_method) { :index? }
+      let(:request_params) { { purchase_id: purchase.external_id } }
+    end
+
+    before do
+      allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(true)
+    end
+
+    it "enqueues SendMissedPostsForPurchaseJob and returns success" do
+      post :send_missed_posts, params: { purchase_id: purchase.external_id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+      expect(SendMissedPostsForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id, nil)
+    end
+
+    it "sets a Redis lock to prevent duplicate sends" do
+      post :send_missed_posts, params: { purchase_id: purchase.external_id }
+
+      expect($redis.get(RedisKey.send_missed_posts(purchase.id))).to eq("1")
+    end
+
+    it "returns 422 when a send is already in progress" do
+      $redis.set(RedisKey.send_missed_posts(purchase.id), "1", ex: 10.minutes.to_i)
+
+      post :send_missed_posts, params: { purchase_id: purchase.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("Missed posts are already being sent for this customer.")
+      expect(SendMissedPostsForPurchaseJob.jobs.size).to eq(0)
+    end
+
+    it "returns 422 when customer has opted out of emails" do
+      purchase.update!(can_contact: false)
+
+      post :send_missed_posts, params: { purchase_id: purchase.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("This customer has opted out of receiving emails.")
+      expect(SendMissedPostsForPurchaseJob.jobs.size).to eq(0)
+    end
+
+    it "returns 422 when seller is not eligible to send emails" do
+      allow_any_instance_of(User).to receive(:eligible_to_send_emails?).and_return(false)
+
+      post :send_missed_posts, params: { purchase_id: purchase.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("You are not eligible to send emails.")
+      expect(SendMissedPostsForPurchaseJob.jobs.size).to eq(0)
+    end
+
+    it "returns 404 for an invalid purchase" do
+      expect do
+        post :send_missed_posts, params: { purchase_id: "invalid" }
+      end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "returns 404 for a purchase belonging to another seller" do
+      other_purchase = create(:purchase)
+
+      expect do
+        post :send_missed_posts, params: { purchase_id: other_purchase.external_id }
+      end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "passes workflow_id to the job when provided" do
+      workflow = create(:workflow, seller:, link: product)
+
+      post :send_missed_posts, params: { purchase_id: purchase.external_id, workflow_id: workflow.external_id }
+
+      expect(response).to be_successful
+      expect(SendMissedPostsForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id, workflow.id)
+    end
+
+    it "returns 404 for an invalid workflow_id" do
+      expect do
+        post :send_missed_posts, params: { purchase_id: purchase.external_id, workflow_id: "invalid" }
+      end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    context "with accountant role" do
+      let(:accountant) { create(:user) }
+
+      before do
+        create(:team_membership, user: accountant, seller:, role: :accountant)
+        cookies.encrypted[:current_seller_id] = seller.id
+        sign_in accountant
+      end
+
+      it "denies access" do
+        post :send_missed_posts, params: { purchase_id: purchase.external_id }, format: :json
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+  end
+
   describe "GET product_purchases" do
     let(:purchase) { create(:purchase, link: create(:product, :bundle, user: seller), seller:) }
 

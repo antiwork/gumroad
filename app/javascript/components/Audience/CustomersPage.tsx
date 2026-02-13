@@ -38,6 +38,7 @@ import {
   resendPost,
   resendReceipt,
   revokeAccess,
+  sendAllMissedPosts,
   undoRevokeAccess,
   updateCallUrl,
   updateCommission,
@@ -684,6 +685,8 @@ const CustomerDrawer = ({
   const [emails, setEmails] = React.useState<CustomerEmail[] | null>(null);
   const [shownEmails, setShownEmails] = React.useState(PAGE_SIZE);
   const sentEmailIds = React.useRef<Set<string>>(new Set());
+  const [isSendingAll, setIsSendingAll] = React.useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = React.useState<string | null>(null);
   useRunOnce(() => {
     getMissedPosts(customer.id, customer.email).then(setMissedPosts, (e: unknown) => {
       assertResponseError(e);
@@ -694,6 +697,35 @@ const CustomerDrawer = ({
       showAlert(e.message, "error");
     });
   });
+
+  const workflowOptions = React.useMemo(() => {
+    if (!missedPosts) return [];
+    const seen = new Map<string, string>();
+    for (const post of missedPosts) {
+      if (post.workflow_id && post.workflow_name && !seen.has(post.workflow_id)) {
+        seen.set(post.workflow_id, post.workflow_name);
+      }
+    }
+    return Array.from(seen, ([id, label]) => ({ id, label }));
+  }, [missedPosts]);
+
+  const filteredMissedPosts = React.useMemo(() => {
+    if (!missedPosts) return null;
+    if (!selectedWorkflowId) return missedPosts;
+    return missedPosts.filter((post) => post.workflow_id === selectedWorkflowId);
+  }, [missedPosts, selectedWorkflowId]);
+
+  const onSendAll = async () => {
+    setIsSendingAll(true);
+    try {
+      await sendAllMissedPosts(customer.id, selectedWorkflowId ?? undefined);
+      showAlert("Missed posts are being sent.", "success");
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsSendingAll(false);
+  };
 
   const onSend = async (id: string, type: "receipt" | "post") => {
     setLoadingId(id);
@@ -1225,11 +1257,35 @@ const CustomerDrawer = ({
             <CardContent asChild>
               <header>
                 <h3 className="grow">Send missed posts</h3>
+                {filteredMissedPosts && filteredMissedPosts.length > 0 ? (
+                  <Button color="primary" disabled={isSendingAll || !!loadingId} onClick={() => void onSendAll()}>
+                    {isSendingAll ? "Sending..." : "Send all"}
+                  </Button>
+                ) : null}
               </header>
             </CardContent>
-            {missedPosts ? (
+            {workflowOptions.length > 0 ? (
+              <CardContent>
+                <Select
+                  options={[{ id: "", label: "All workflows" }, ...workflowOptions]}
+                  value={
+                    selectedWorkflowId
+                      ? (workflowOptions.find((o) => o.id === selectedWorkflowId) ?? null)
+                      : { id: "", label: "All workflows" }
+                  }
+                  onChange={(option) => {
+                    setSelectedWorkflowId(option && option.id !== "" ? option.id : null);
+                    setShownMissedPosts(PAGE_SIZE);
+                  }}
+                  isMulti={false}
+                  isClearable={false}
+                  placeholder="Filter by workflow"
+                />
+              </CardContent>
+            ) : null}
+            {filteredMissedPosts ? (
               <>
-                {missedPosts.slice(0, shownMissedPosts).map((post) => (
+                {filteredMissedPosts.slice(0, shownMissedPosts).map((post) => (
                   <CardContent asChild key={post.id}>
                     <section>
                       <div className="grow">
@@ -1242,7 +1298,7 @@ const CustomerDrawer = ({
                       </div>
                       <Button
                         color="primary"
-                        disabled={!!loadingId || sentEmailIds.current.has(post.id)}
+                        disabled={isSendingAll || !!loadingId || sentEmailIds.current.has(post.id)}
                         onClick={() => void onSend(post.id, "post")}
                       >
                         {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending...." : "Send"}
@@ -1250,7 +1306,7 @@ const CustomerDrawer = ({
                     </section>
                   </CardContent>
                 ))}
-                {shownMissedPosts < missedPosts.length ? (
+                {shownMissedPosts < filteredMissedPosts.length ? (
                   <CardContent asChild>
                     <section>
                       <Button
@@ -1328,7 +1384,7 @@ const CustomerDrawer = ({
                     </section>
                   </CardContent>
                 ))}
-                {shownMissedPosts < emails.length ? (
+                {shownEmails < emails.length ? (
                   <CardContent asChild>
                     <section>
                       <Button

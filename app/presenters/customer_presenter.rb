@@ -8,13 +8,15 @@ class CustomerPresenter
   end
 
   def missed_posts
-    posts = Installment.missed_for_purchase(purchase).order(published_at: :desc)
+    posts = Installment.missed_for_purchase(purchase).includes(:workflow).order(published_at: :desc)
     posts.map do |post|
       {
         id: post.external_id,
         name: post.name,
         url: post.full_url,
         published_at: post.published_at,
+        workflow_id: post.workflow&.external_id,
+        workflow_name: post.workflow&.name,
       }
     end
   end

@@ -194,6 +194,8 @@ export type MissedPost = {
   name: string;
   url: string;
   published_at: string;
+  workflow_id: string | null;
+  workflow_name: string | null;
 };
 export const getMissedPosts = (purchaseId: string, purchaseEmail: string) =>
   request({
@@ -237,6 +239,15 @@ export const resendPost = async (purchaseId: string, postId: string) => {
     method: "POST",
     accept: "json",
     url: Routes.send_for_purchase_path(postId, purchaseId),
+  });
+  if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
+};
+
+export const sendAllMissedPosts = async (purchaseId: string, workflowId?: string) => {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.send_missed_posts_path(purchaseId, workflowId ? { workflow_id: workflowId } : {}),
   });
   if (!response.ok) throw new ResponseError(cast<{ message: string }>(await response.json()).message);
 };

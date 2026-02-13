@@ -113,6 +113,33 @@ class CustomersController < Sellers::BaseController
     render json: CustomerPresenter.new(purchase:).missed_posts
   end
 
+  def send_missed_posts
+    purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
+    raise Pundit::NotAuthorizedError unless Pundit.policy!(pundit_user, [:audience, purchase]).send_missed_posts?
+
+    unless current_seller.eligible_to_send_emails?
+      return render json: { success: false, message: "You are not eligible to send emails." }, status: :unprocessable_entity
+    end
+
+    unless purchase.can_contact?
+      return render json: { success: false, message: "This customer has opted out of receiving emails." }, status: :unprocessable_entity
+    end
+
+    workflow_id = nil
+    if params[:workflow_id].present?
+      workflow_id = Workflow.find_by_external_id!(params[:workflow_id]).id
+    end
+
+    redis_key = RedisKey.send_missed_posts(purchase.id)
+    unless $redis.set(redis_key, "1", nx: true, ex: 3.days.to_i)
+      return render json: { success: false, message: "Missed posts are already being sent for this customer." }, status: :unprocessable_entity
+    end
+
+    SendMissedPostsForPurchaseJob.perform_async(purchase.id, workflow_id)
+
+    render json: { success: true }
+  end
+
   def product_purchases
     purchase = current_seller.sales.find_by_external_id!(params[:purchase_id]) if params[:purchase_id].present?
 

@@ -575,6 +575,7 @@ Rails.application.routes.draw do
     get "/customers/charges/:purchase_id", to: "customers#customer_charges", as: :customer_charges
     get "/customers/customer_emails/:purchase_id", to: "customers#customer_emails", as: :customer_emails
     get "/customers/missed_posts/:purchase_id", to: "customers#missed_posts", as: :missed_posts
+    post "/customers/send_missed_posts/:purchase_id", to: "customers#send_missed_posts", as: :send_missed_posts
     get "/customers/product_purchases/:purchase_id", to: "customers#product_purchases", as: :product_purchases
     # imported customers
     get "/imported_customers", to: "imported_customers#index", as: :imported_customers

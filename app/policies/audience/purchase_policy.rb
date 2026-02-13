@@ -49,4 +49,10 @@ class Audience::PurchasePolicy < ApplicationPolicy
     update? &&
     record.is_access_revoked
   end
+
+  def send_missed_posts?
+    user.role_admin_for?(seller) ||
+    user.role_marketing_for?(seller) ||
+    user.role_support_for?(seller)
+  end
 end
