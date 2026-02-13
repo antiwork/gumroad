@@ -12,7 +12,7 @@ describe "Membership magic link page", type: :system, js: true do
       sign_in @subscription.user
       visit "/subscriptions/#{@subscription.external_id}/manage"
 
-      expect(page).to_not have_current_path(magic_link_subscription_path(@subscription.external_id))
+      expect(page).to_not have_current_path(new_subscription_magic_link_path(@subscription.external_id))
     end
   end
 
@@ -22,7 +22,7 @@ describe "Membership magic link page", type: :system, js: true do
       sign_in admin
       visit "/subscriptions/#{@subscription.external_id}/manage"
 
-      expect(page).to_not have_current_path(magic_link_subscription_path(@subscription.external_id))
+      expect(page).to_not have_current_path(new_subscription_magic_link_path(@subscription.external_id))
     end
   end
 
@@ -34,7 +34,7 @@ describe "Membership magic link page", type: :system, js: true do
 
       # second visit without token, using the cookie
       visit "/subscriptions/#{@subscription.external_id}/manage"
-      expect(page).to_not have_current_path(magic_link_subscription_path(@subscription.external_id))
+      expect(page).to_not have_current_path(new_subscription_magic_link_path(@subscription.external_id))
     end
   end
 
@@ -43,7 +43,7 @@ describe "Membership magic link page", type: :system, js: true do
       sign_in @subscription.seller
       visit "/subscriptions/#{@subscription.external_id}/manage"
 
-      expect(page).to have_current_path(magic_link_subscription_path(@subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(@subscription.external_id))
     end
   end
 
@@ -52,7 +52,7 @@ describe "Membership magic link page", type: :system, js: true do
       setup_subscription_token
       visit "/subscriptions/#{@subscription.external_id}/manage?token=invalid"
 
-      expect(page).to have_current_path(magic_link_subscription_path(@subscription.external_id, invalid: true))
+      expect(page).to have_current_path(new_subscription_magic_link_path(@subscription.external_id, invalid: true))
       expect(page).to have_text "Your magic link has expired"
       expect(page).to have_text "Send magic link"
     end
@@ -62,7 +62,7 @@ describe "Membership magic link page", type: :system, js: true do
     it "asks to use a magic link to access the manage page" do
       visit "/subscriptions/#{@subscription.external_id}/manage"
 
-      expect(page).to have_current_path(magic_link_subscription_path(@subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(@subscription.external_id))
       expect(page).to have_text "You're currently not signed in"
       expect(page).to have_text @subscription.link.name
       expect(page).to_not have_text @subscription.email
@@ -74,9 +74,10 @@ describe "Membership magic link page", type: :system, js: true do
       expect(CustomerMailer).to receive(:subscription_magic_link).with(@subscription.id, @subscription.email).and_return(mail_double)
       click_on "Send magic link"
 
-      expect(page).to have_current_path(magic_link_subscription_path(@subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(@subscription.external_id, email_sent: "subscription"))
       expect(page).to have_text "We've sent a link to"
       expect(page).to have_text "Resend magic link"
+      expect(page).to have_alert "Magic link resent to"
     end
 
     it "resends the magic link" do
@@ -87,7 +88,7 @@ describe "Membership magic link page", type: :system, js: true do
       expect(CustomerMailer).to receive(:subscription_magic_link).with(@subscription.id, @subscription.email).and_return(mail_double)
       click_on "Send magic link"
 
-      expect(page).to have_current_path(magic_link_subscription_path(@subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(@subscription.external_id, email_sent: "subscription"))
       expect(page).to have_text "We've sent a link to"
       expect(page).to have_text "Resend magic link"
 
@@ -103,7 +104,7 @@ describe "Membership magic link page", type: :system, js: true do
         travel_to(2.day.from_now)
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
-        expect(page).to have_current_path(magic_link_subscription_path(@subscription.external_id, invalid: true))
+        expect(page).to have_current_path(new_subscription_magic_link_path(@subscription.external_id, invalid: true))
         expect(page).to have_text "Your magic link has expired"
         expect(page).to have_text "Send magic link"
       end
@@ -118,7 +119,7 @@ describe "Membership magic link page", type: :system, js: true do
     it "asks to use a magic link to access the manage page" do
       visit "/subscriptions/#{@subscription.external_id}/manage"
 
-      expect(page).to have_current_path(magic_link_subscription_path(@subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(@subscription.external_id))
       expect(page).to have_text "You're currently not signed in"
 
       expect(page).to have_text "choose one of the emails associated with your account to receive a magic link"
@@ -133,7 +134,7 @@ describe "Membership magic link page", type: :system, js: true do
     it "doesn't show the same email twice" do
       visit "/subscriptions/#{@subscription.external_id}/manage"
 
-      expect(page).to have_current_path(magic_link_subscription_path(@subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(@subscription.external_id))
       expect(page).to have_text "You're currently not signed in"
 
       expect(page).to have_text "choose one of the emails associated with your account to receive a magic link"
@@ -183,7 +184,7 @@ describe "Membership magic link page", type: :system, js: true do
       it "shows the magic link page with the right message" do
         visit "/subscriptions/#{@subscription.external_id}/manage?token=invalid"
 
-        expect(page).to have_current_path(magic_link_subscription_path(@subscription.external_id, invalid: true))
+        expect(page).to have_current_path(new_subscription_magic_link_path(@subscription.external_id, invalid: true))
         expect(page).to have_text "Your magic link has expired"
 
         expect(page).to have_text "choose one of the emails associated with your account to receive a magic link"

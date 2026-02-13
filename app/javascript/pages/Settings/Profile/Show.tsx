@@ -6,7 +6,7 @@ import { unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile, ProfileSettings } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
 import { classNames } from "$app/utils/classNames";
-import { getContrastColor } from "$app/utils/color";
+import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -16,9 +16,9 @@ import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { Profile, Props as ProfileProps } from "$app/components/Profile";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Profile, Props as ProfileProps } from "$app/components/server-components/Profile";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { ColorPicker } from "$app/components/ui/ColorPicker";
@@ -88,9 +88,6 @@ export default function SettingsPage() {
   });
 
   const subdomain = `${profileSettings.username}.${rootDomain}`;
-
-  const hexToRgb = (hex: string) =>
-    `${parseInt(hex.slice(1, 3), 16)} ${parseInt(hex.slice(3, 5), 16)} ${parseInt(hex.slice(5), 16)}`;
 
   return (
     <SettingsLayout currentPage="profile" pages={settings_pages} onSave={handleSave} canUpdate={canUpdate}>

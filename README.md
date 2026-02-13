@@ -163,22 +163,6 @@ npm install
 
 App can be booted without any custom credentials. But if you would like to use services that require custom credentials (e.g. S3, Stripe, Resend, etc.), you can copy the `.env.example` file to `.env` and fill in the values.
 
-#### Local SSL Certificates
-
-1. Install mkcert on macOS:
-
-```shell
-brew install mkcert
-```
-
-For other operating systems, see [mkcert installation instructions](https://github.com/FiloSottile/mkcert?tab=readme-ov-file#installation).
-
-2. Generate certificates by running:
-
-```shell
-bin/generate_ssl_certificates
-```
-
 ### Running Locally
 
 #### Start Docker services

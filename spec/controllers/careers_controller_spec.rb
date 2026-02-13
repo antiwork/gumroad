@@ -37,8 +37,8 @@ describe CareersController do
 
         expect(response).to be_successful
         expect(assigns(:job)[:slug]).to eq("senior-fullstack-engineer")
-        expect(assigns(:job)[:title]).to eq("Senior Full Stack Engineer")
-        expect(assigns(:title)).to eq("Senior Full Stack Engineer - Gumroad Careers")
+        expect(assigns(:job)[:title]).to eq("Senior Software Engineer")
+        expect(assigns(:title)).to eq("Senior Software Engineer - Gumroad Careers")
         expect(assigns(:hide_layouts)).to be(true)
       end
 

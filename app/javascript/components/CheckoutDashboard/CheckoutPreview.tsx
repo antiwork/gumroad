@@ -84,6 +84,7 @@ export const CheckoutPreview = ({
               items: [cartItem],
               discountCodes: [],
             }}
+            updateCart={() => {}}
             recommendedProducts={recommendedProduct ? [recommendedProduct] : []}
           />
           {children}

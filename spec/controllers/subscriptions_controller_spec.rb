@@ -66,9 +66,10 @@ describe SubscriptionsController do
         post :unsubscribe_by_user, params: { id: @subscription.external_id }
       end
 
-      it "returns json success" do
+      it "redirects to manage page with success notice" do
         post :unsubscribe_by_user, params: { id: @subscription.external_id }
-        expect(response.parsed_body["success"]).to be(true)
+        expect(response).to redirect_to(manage_subscription_path(@subscription.external_id))
+        expect(flash[:notice]).to eq("Your membership has been cancelled.")
       end
 
       it "is not allowed for installment plans" do
@@ -79,8 +80,8 @@ describe SubscriptionsController do
 
         post :unsubscribe_by_user, params: { id: subscription.external_id }
 
-        expect(response.parsed_body["success"]).to be(false)
-        expect(response.parsed_body["error"]).to include("Installment plans cannot be cancelled by the customer")
+        expect(response).to redirect_to(manage_subscription_path(subscription.external_id))
+        expect(flash[:alert]).to include("Installment plans cannot be cancelled by the customer")
       end
 
       context "when the encrypted cookie is not present" do
@@ -88,13 +89,12 @@ describe SubscriptionsController do
           cookies.encrypted[@subscription.cookie_key] = nil
         end
 
-        it "renders success false with redirect_to URL" do
+        it "redirects to magic link page" do
           expect do
-            post :unsubscribe_by_user, params: { id: @subscription.external_id }, format: :json
+            post :unsubscribe_by_user, params: { id: @subscription.external_id }
           end.to_not change { @subscription.reload.user_requested_cancellation_at }
 
-          expect(response.parsed_body["success"]).to be(false)
-          expect(response.parsed_body["redirect_to"]).to eq(magic_link_subscription_path(@subscription.external_id))
+          expect(response).to redirect_to(new_subscription_magic_link_path(@subscription.external_id))
         end
       end
     end
@@ -183,7 +183,7 @@ describe SubscriptionsController do
         it "redirects to the magic link page" do
           get :manage, params: { id: @subscription.external_id, token: "not_valid_token" }
 
-          expect(response).to redirect_to(magic_link_subscription_path(@subscription.external_id, invalid: true))
+          expect(response).to redirect_to(new_subscription_magic_link_path(@subscription.external_id, invalid: true))
         end
       end
 
@@ -192,7 +192,7 @@ describe SubscriptionsController do
           @subscription.update!(token: "valid_token", token_expires_at: 1.day.ago)
           get :manage, params: { id: @subscription.external_id, token: "valid_token" }
 
-          expect(response).to redirect_to(magic_link_subscription_path(@subscription.external_id, invalid: true))
+          expect(response).to redirect_to(new_subscription_magic_link_path(@subscription.external_id, invalid: true))
         end
       end
 
@@ -209,82 +209,6 @@ describe SubscriptionsController do
         get :manage, params: { id: @subscription.external_id }
 
         expect(response.headers["X-Robots-Tag"]).to eq "noindex"
-      end
-    end
-
-    describe "GET magic_link" do
-      it "renders the magic link page" do
-        get :magic_link, params: { id: @subscription.external_id }
-
-        expect(response).to be_successful
-      end
-    end
-
-    describe "POST send_magic_link" do
-      it "sets up the token in the subscription" do
-        expect(@subscription.token).to be_nil
-        post :send_magic_link, params: { id: @subscription.external_id, email_source: "user" }
-        expect(@subscription.reload.token).to_not be_nil
-      end
-
-      it "sets the token to expire in 24 hours" do
-        expect(@subscription.token_expires_at).to be_nil
-        post :send_magic_link, params: { id: @subscription.external_id, email_source: "user" }
-        expect(@subscription.reload.token_expires_at).to be_within(1.second).of(24.hours.from_now)
-      end
-
-      it "sends the magic link email" do
-        mail_double = double
-        allow(mail_double).to receive(:deliver_later)
-        expect(CustomerMailer).to receive(:subscription_magic_link).and_return(mail_double)
-        post :send_magic_link, params: { id: @subscription.external_id, email_source: "user" }
-        expect(response).to be_successful
-      end
-
-      describe "email_source param" do
-        before do
-          @original_purchasing_user_email = subscriber.email
-          @purchase.update!(email: "purchase@email.com")
-          subscriber.update!(email: "subscriber@email.com")
-        end
-
-        context "when the email source is `user`" do
-          it "sends the magic link email to the user's email" do
-            mail_double = double
-            allow(mail_double).to receive(:deliver_later)
-            expect(CustomerMailer).to receive(:subscription_magic_link).with(@subscription.id, @original_purchasing_user_email).and_return(mail_double)
-            post :send_magic_link, params: { id: @subscription.external_id, email_source: "user" }
-            expect(response).to be_successful
-          end
-        end
-
-        context "when the email source is `purchase`" do
-          it "sends the magic link email to the email associated to the original purchase" do
-            mail_double = double
-            allow(mail_double).to receive(:deliver_later)
-            expect(CustomerMailer).to receive(:subscription_magic_link).with(@subscription.id, "purchase@email.com").and_return(mail_double)
-            post :send_magic_link, params: { id: @subscription.external_id, email_source: "purchase" }
-            expect(response).to be_successful
-          end
-        end
-
-        context "when the email source is `subscription`" do
-          it "sends the magic link email to the email associated to the subscription" do
-            mail_double = double
-            allow(mail_double).to receive(:deliver_later)
-            expect(CustomerMailer).to receive(:subscription_magic_link).with(@subscription.id, "subscriber@email.com").and_return(mail_double)
-            post :send_magic_link, params: { id: @subscription.external_id, email_source: "subscription" }
-            expect(response).to be_successful
-          end
-        end
-
-        context "when the email source is not valid" do
-          it "raises a 404 error" do
-            expect do
-              post :send_magic_link, params: { id: @subscription.external_id, email_source: "invalid source" }
-            end.to raise_error(ActionController::RoutingError, "Not Found")
-          end
-        end
       end
     end
   end
