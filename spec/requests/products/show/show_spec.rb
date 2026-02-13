@@ -303,6 +303,12 @@ describe("ProductShowScenario", type: :system, js: true) do
         visit short_link_url(product.unique_permalink, host: product.user.subdomain_with_protocol)
         expect(page).to have_link("Edit product", href: edit_link_url(product, host: DOMAIN))
       end
+
+      it "keeps the product edit button clickable and not hidden behind the header" do
+        visit short_link_url(product.unique_permalink, host: product.user.subdomain_with_protocol)
+        click_link "Edit product"
+        expect(page).to have_current_path(edit_link_path(product))
+      end
     end
 
     shared_examples_for "without product edit button" do

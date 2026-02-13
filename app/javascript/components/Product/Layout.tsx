@@ -124,7 +124,7 @@ const SectionEditor = ({
             {section.id ? (
               <EditSection section={section} />
             ) : (
-              <div className="mx-auto w-full max-w-6xl">{children}</div>
+              <div className="relative mx-auto w-full max-w-6xl">{children}</div>
             )}
             {i === sections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
           </SectionLayout>
@@ -168,7 +168,7 @@ export const Layout = (
     <section className="border-b border-border">
       <div
         className={classNames(
-          "mx-auto w-full max-w-product-page lg:py-16",
+          "relative mx-auto w-full max-w-product-page lg:py-16",
           props.sections.length > 0 ? "px-4 py-8" : "p-4 lg:px-8",
         )}
       >
