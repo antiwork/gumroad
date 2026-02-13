@@ -61,6 +61,8 @@ describe TaxCenterController, type: :controller, inertia: true do
       before do
         seller.flag_for_tos_violation(author_id: admin_user.id, product_id: product.id)
         seller.suspend_for_tos_violation(author_id: admin_user.id)
+        sign_in seller
+        cookies.encrypted[:current_seller_id] = seller.id
         # NOTE: The invalidate_active_sessions! callback from suspending the user, interferes
         # with the login mechanism, this is a hack get the `sign_in user` method work correctly
         request.env["warden"].session["last_sign_in_at"] = DateTime.current.to_i
@@ -216,6 +218,8 @@ describe TaxCenterController, type: :controller, inertia: true do
       before do
         seller.flag_for_tos_violation(author_id: admin_user.id, product_id: product.id)
         seller.suspend_for_tos_violation(author_id: admin_user.id)
+        sign_in seller
+        cookies.encrypted[:current_seller_id] = seller.id
         # NOTE: The invalidate_active_sessions! callback from suspending the user, interferes
         # with the login mechanism, this is a hack get the `sign_in user` method work correctly
         request.env["warden"].session["last_sign_in_at"] = DateTime.current.to_i
