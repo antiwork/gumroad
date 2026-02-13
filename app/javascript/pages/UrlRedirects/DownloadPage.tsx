@@ -108,13 +108,8 @@ type DownloadPageProps = LayoutProps & {
 };
 
 const DownloadPage = () => {
-  const {
-    content,
-    product_has_third_party_analytics,
-    audio_durations,
-    latest_media_locations,
-    ...props
-  } = cast<DownloadPageProps>(usePage().props);
+  const { content, product_has_third_party_analytics, audio_durations, latest_media_locations, ...props } =
+    cast<DownloadPageProps>(usePage().props);
 
   const url = new URL(useOriginalLocation());
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
@@ -159,7 +154,8 @@ const DownloadPage = () => {
 
   const isFetchingAudioDurationsRef = React.useRef(false);
   React.useEffect(() => {
-    if (content.rich_content_pages === null || !props.is_mobile_app_web_view || unprocessedAudioIds.length === 0) return;
+    if (content.rich_content_pages === null || !props.is_mobile_app_web_view || unprocessedAudioIds.length === 0)
+      return;
 
     const intervalId = window.setInterval(() => {
       if (isFetchingAudioDurationsRef.current) return;
@@ -184,7 +180,12 @@ const DownloadPage = () => {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [content.rich_content_pages, props.is_mobile_app_web_view, unprocessedAudioIds.length, setAudioDurationsPollingData]);
+  }, [
+    content.rich_content_pages,
+    props.is_mobile_app_web_view,
+    unprocessedAudioIds.length,
+    setAudioDurationsPollingData,
+  ]);
 
   const isFetchingLatestMediaLocationsRef = React.useRef(false);
 
