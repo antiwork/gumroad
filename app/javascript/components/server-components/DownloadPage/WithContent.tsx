@@ -49,7 +49,7 @@ const PAGE_ICON_LABEL: Record<PageIconKey, string> = {
 
 const PageIcon = ({ iconKey }: { iconKey: PageIconKey }) => {
   const Component = PAGE_ICON_COMPONENTS[iconKey];
-  return <Component className="size-4" aria-label={PAGE_ICON_LABEL[iconKey]} />;
+  return <Component className="size-5" aria-label={PAGE_ICON_LABEL[iconKey]} />;
 };
 
 const ContentFilesContext = React.createContext<FileItem[] | null>(null);
@@ -360,7 +360,7 @@ const WithContent = ({
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Table of Contents" asChild>
                   <Button>
-                    <ListUl className="size-4" />
+                    <ListUl className="size-5" />
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
@@ -391,7 +391,7 @@ const WithContent = ({
               onClick={() => handlePageChange(activePageIndex - 1)}
               className="flex-1 lg:flex-none"
             >
-              <ArrowLeft className="size-4" />
+              <ArrowLeft className="size-5" />
               Previous
             </Button>
           </WithTooltip>
@@ -402,7 +402,7 @@ const WithContent = ({
               className="flex-1 lg:flex-none"
             >
               Next
-              <ArrowRight className="size-4" />
+              <ArrowRight className="size-5" />
             </Button>
           </WithTooltip>
         </div>

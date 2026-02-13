@@ -425,7 +425,7 @@ export const Product = ({
                       </CartItemTitle>
                       {bundleProduct.ratings ? (
                         <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
-                          <Star pack="filled" className="size-4" />
+                          <Star pack="filled" className="size-5" />
                           {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
                         </div>
                       ) : null}
@@ -778,7 +778,7 @@ const Reviews = ({
       <header className="flex items-center justify-between">
         <h3>Ratings</h3>
         <div className="flex shrink-0 items-center gap-1">
-          <Star pack="filled" className="size-4" />
+          <Star pack="filled" className="size-5" />
           <div className="rating-average">{ratings.average}</div>(
           {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "rating" : "ratings"}`})
         </div>

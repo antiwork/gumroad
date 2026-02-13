@@ -19,39 +19,39 @@ const Nav = () => {
       <NavSection>
         <InertiaNavLink
           text="Suspend users"
-          icon={<Shield className="size-4" />}
+          icon={<Shield className="size-5" />}
           href={Routes.admin_suspend_users_url(routeParams)}
           component={Link}
         />
         <InertiaNavLink
           text="Block emails"
-          icon={<Envelope pack="filled" className="size-4" />}
+          icon={<Envelope pack="filled" className="size-5" />}
           href={Routes.admin_block_email_domains_url(routeParams)}
           component={Link}
         />
         <InertiaNavLink
           text="Unblock emails"
-          icon={<EnvelopeOpen pack="filled" className="size-4" />}
+          icon={<EnvelopeOpen pack="filled" className="size-5" />}
           href={Routes.admin_unblock_email_domains_url(routeParams)}
           component={Link}
         />
-        <NavLink text="Sidekiq" icon={<LightBulb pack="filled" className="size-4" />} href={Routes.admin_sidekiq_web_url(routeParams)} />
-        <NavLink text="Features" icon={<Flag pack="filled" className="size-4" />} href={Routes.admin_flipper_ui_url(routeParams)} />
+        <NavLink text="Sidekiq" icon={<LightBulb pack="filled" className="size-5" />} href={Routes.admin_sidekiq_web_url(routeParams)} />
+        <NavLink text="Features" icon={<Flag pack="filled" className="size-5" />} href={Routes.admin_flipper_ui_url(routeParams)} />
         <InertiaNavLink
           text="Refund queue"
-          icon={<DollarCircle pack="filled" className="size-4" />}
+          icon={<DollarCircle pack="filled" className="size-5" />}
           href={Routes.admin_refund_queue_url(routeParams)}
           component={Link}
         />
         <InertiaNavLink
           text="Sales reports"
-          icon={<BarChart pack="filled" className="size-4" />}
+          icon={<BarChart pack="filled" className="size-5" />}
           href={Routes.admin_sales_reports_url(routeParams)}
           component={Link}
         />
         <InertiaNavLink
           text="Unreviewed users"
-          icon={<User pack="filled" className="size-4" />}
+          icon={<User pack="filled" className="size-5" />}
           href={Routes.admin_unreviewed_users_url(routeParams)}
           component={Link}
         />

@@ -89,7 +89,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
             <PopoverAnchor>
               <PopoverTrigger aria-label="Edit" asChild>
                 <Button>
-                  <Pencil className="size-4" />
+                  <Pencil className="size-5" />
                 </Button>
               </PopoverTrigger>
             </PopoverAnchor>

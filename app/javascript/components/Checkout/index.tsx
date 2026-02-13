@@ -314,7 +314,7 @@ export const Checkout = ({
                                 aria-label="Purchasing power parity discount"
                               >
                                 Purchasing power parity discount
-                                <X className="size-4 ml-2" />
+                                <X className="size-5 ml-2" />
                               </button>
                             </Pill>
                           </WithTooltip>
@@ -330,7 +330,7 @@ export const Checkout = ({
                             aria-label="Discount code"
                           >
                             {code.code}
-                            <X className="size-4 ml-2" />
+                            <X className="size-5 ml-2" />
                           </Pill>
                         ))}
                       </h4>

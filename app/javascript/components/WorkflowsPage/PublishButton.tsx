@@ -40,7 +40,7 @@ export const PublishButton = ({
         <PopoverTrigger disabled={isDisabled} asChild>
           <Button color="accent">
             Publish
-            <ChevronDown className="size-4" />
+            <ChevronDown className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>

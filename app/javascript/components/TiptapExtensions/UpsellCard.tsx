@@ -189,7 +189,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
               <ProductCardFooter className="lg:divide-x-0">
                 {product.review_count > 0 ? (
                   <div className="flex flex-[1_0_max-content] items-center gap-1 p-4 lg:p-0">
-                    <Star pack="filled" className="size-4" />
+                    <Star pack="filled" className="size-5" />
                     <span className="rating-average">{product.average_rating.toFixed(1)}</span>
                     <span>{`(${formatOrderOfMagnitude(product.review_count, 1)})`}</span>
                   </div>

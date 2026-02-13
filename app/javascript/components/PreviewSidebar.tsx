@@ -33,7 +33,7 @@ export const PreviewSidebar = ({
         <h2 id={`${uid}-title`}>Preview</h2>
         {previewLink ? (
           <WithTooltip tip="Preview">
-            {previewLink({ "aria-label": "Preview", children: <ArrowUpRight className="size-4" /> })}
+            {previewLink({ "aria-label": "Preview", children: <ArrowUpRight className="size-5" /> })}
           </WithTooltip>
         ) : null}
       </div>

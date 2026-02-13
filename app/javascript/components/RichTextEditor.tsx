@@ -379,13 +379,13 @@ export const RichTextEditorToolbar = ({
   }, [editor]);
 
   const textFormatOptions: { name: string; icon: React.ReactNode; type: string; attrs?: object }[] = [
-    { name: "Text", icon: <FontFamily className="size-4" />, type: "paragraph" },
-    { name: "Header", icon: <Heading1 className="size-4" />, type: "heading", attrs: { level: 1 } },
-    { name: "Title", icon: <Heading2 className="size-4" />, type: "heading", attrs: { level: 2 } },
-    { name: "Subtitle", icon: <Heading3 className="size-4" />, type: "heading", attrs: { level: 3 } },
-    { name: "Bulleted list", icon: <ListUl className="size-4" />, type: "bulletList" },
-    { name: "Numbered list", icon: <ListOl className="size-4" />, type: "orderedList" },
-    { name: "Code block", icon: <Code className="size-4" />, type: "codeBlock" },
+    { name: "Text", icon: <FontFamily className="size-5" />, type: "paragraph" },
+    { name: "Header", icon: <Heading1 className="size-5" />, type: "heading", attrs: { level: 1 } },
+    { name: "Title", icon: <Heading2 className="size-5" />, type: "heading", attrs: { level: 2 } },
+    { name: "Subtitle", icon: <Heading3 className="size-5" />, type: "heading", attrs: { level: 3 } },
+    { name: "Bulleted list", icon: <ListUl className="size-5" />, type: "bulletList" },
+    { name: "Numbered list", icon: <ListOl className="size-5" />, type: "orderedList" },
+    { name: "Code block", icon: <Code className="size-5" />, type: "codeBlock" },
   ];
   const activeFormatOption = [...textFormatOptions]
     .reverse()
@@ -409,7 +409,7 @@ export const RichTextEditorToolbar = ({
       >
         <Popover>
           <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
-            {activeFormatOption?.name ?? "Text"} <ChevronDown className="size-4" />
+            {activeFormatOption?.name ?? "Text"} <ChevronDown className="size-5" />
           </PopoverTrigger>
           <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
             <div role="menu">
@@ -437,31 +437,31 @@ export const RichTextEditorToolbar = ({
         <Separator aria-orientation="vertical" />
         <MenuItem
           name="Bold"
-          icon={<Bold className="size-4" />}
+          icon={<Bold className="size-5" />}
           active={editor.isActive("bold")}
           onClick={() => editor.chain().focus().toggleBold().run()}
         />
         <MenuItem
           name="Italic"
-          icon={<Italic className="size-4" />}
+          icon={<Italic className="size-5" />}
           active={editor.isActive("italic")}
           onClick={() => editor.chain().focus().toggleItalic().run()}
         />
         <MenuItem
           name="Underline"
-          icon={<UnderlineIcon className="size-4" />}
+          icon={<UnderlineIcon className="size-5" />}
           active={editor.isActive("underline")}
           onClick={() => editor.chain().focus().toggleUnderline().run()}
         />
         <MenuItem
           name="Strikethrough"
-          icon={<Strikethrough className="size-4" />}
+          icon={<Strikethrough className="size-5" />}
           active={editor.isActive("strike")}
           onClick={() => editor.chain().focus().toggleStrike().run()}
         />
         <MenuItem
           name="Quote"
-          icon={<Blockquote className="size-4" />}
+          icon={<Blockquote className="size-5" />}
           active={editor.isActive("blockquote")}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         />
@@ -473,7 +473,7 @@ export const RichTextEditorToolbar = ({
                 {extension.name === "horizontalRule" ? (
                   <MenuItem
                     name="Divider"
-                    icon={<Minus className="size-4" />}
+                    icon={<Minus className="size-5" />}
                     onClick={() => editor.chain().focus().setHorizontalRule().run()}
                   />
                 ) : (
@@ -487,7 +487,7 @@ export const RichTextEditorToolbar = ({
                 <Separator aria-orientation="vertical" />
                 <Popover>
                   <PopoverTrigger className="toolbar-item all-unset">
-                    Insert <ChevronDown className="size-4" />
+                    Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                     <div role="menu">
@@ -496,7 +496,7 @@ export const RichTextEditorToolbar = ({
                           {item.name === "horizontalRule" ? (
                             <PopoverClose asChild>
                               <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                                <Minus className="size-4" />
+                                <Minus className="size-5" />
                                 <span>Divider</span>
                               </div>
                             </PopoverClose>
@@ -509,14 +509,14 @@ export const RichTextEditorToolbar = ({
                       ))}
                       <PopoverClose asChild>
                         <div role="menuitem" onClick={() => setIsUpsellModalOpen(true)}>
-                          <CartPlus className="size-4" />
+                          <CartPlus className="size-5" />
                           <span>Upsell</span>
                         </div>
                       </PopoverClose>
                       {productId ? (
                         <PopoverClose asChild>
                           <div role="menuitem" onClick={() => setIsReviewModalOpen(true)}>
-                            <Star pack="filled" className="size-4" />
+                            <Star pack="filled" className="size-5" />
                             <span>Reviews</span>
                           </div>
                         </PopoverClose>
@@ -531,14 +531,14 @@ export const RichTextEditorToolbar = ({
         <div className="ml-auto flex">
           <MenuItem
             name="Undo last change"
-            icon={<Undo className="size-4" />}
+            icon={<Undo className="size-5" />}
             active={editor.isActive("undo")}
             disabled={undoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().undo().run()}
           />
           <MenuItem
             name="Redo last undone change"
-            icon={<Redo className="size-4" />}
+            icon={<Redo className="size-5" />}
             active={editor.isActive("redo")}
             disabled={redoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().redo().run()}

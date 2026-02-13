@@ -45,7 +45,7 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
       </header>
       <div className="flex flex-col gap-4">
         <div className="input read-only" aria-label="Saved credit card">
-          <CreditCard className="size-4" />
+          <CreditCard className="size-5" />
           <span>{card.number}</span>
           <span style={{ marginLeft: "auto" }}>{card.expiration_date}</span>
         </div>

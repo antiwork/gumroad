@@ -319,7 +319,7 @@ const TiptapButton = Node.create({
   },
   menuItem: (editor) => (
     <WithDialog editor={editor} type="button">
-      <MenuItem name="Insert button" icon={<ButtonIcon className="size-4" />} />
+      <MenuItem name="Insert button" icon={<ButtonIcon className="size-5" />} />
     </WithDialog>
   ),
   submenu: {
@@ -327,7 +327,7 @@ const TiptapButton = Node.create({
     item: (editor) => (
       <WithDialog editor={editor} type="button">
         <div role="menuitem">
-          <ButtonIcon className="size-4" />
+          <ButtonIcon className="size-5" />
           <span>Button</span>
         </div>
       </WithDialog>
@@ -340,7 +340,7 @@ export const LinkMenuItem = ({ editor }: { editor: Editor }) => (
   <WithDialog editor={editor} type="link">
     <MenuItem
       name="Insert link"
-      icon={<LinkIcon className="size-4" />}
+      icon={<LinkIcon className="size-5" />}
       active={editor.isActive("link") || !!editor.getAttributes("image").link}
     />
   </WithDialog>

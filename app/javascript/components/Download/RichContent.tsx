@@ -286,8 +286,8 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
       <Rows role="tree" ref={ref}>
         <Row role="treeitem" aria-expanded={expanded}>
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
-            {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-            <FolderOpen pack="filled" className="size-4 type-icon" />
+            {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+            <FolderOpen pack="filled" className="size-5 type-icon" />
             <div>
               <h4>{folderTitle}</h4>
             </div>
@@ -378,7 +378,7 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
         <PopoverTrigger disabled={isDownloading} contentEditable={false} asChild>
           <Button>
             Download all
-            <ChevronDown className="size-4" />
+            <ChevronDown className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
@@ -436,7 +436,7 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
               }
             })}
           >
-            <DropboxIcon pack="brands" className="size-4" />
+            <DropboxIcon pack="brands" className="size-5" />
             Save to Dropbox
           </Button>
         </div>

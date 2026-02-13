@@ -19,7 +19,7 @@ export const Tabs = ({
   <TabsComponent variant="buttons">
     <Tab onClick={() => setTab("overlay")} isSelected={tab === "overlay"} aria-controls={overlayTabpanelUID}>
       <TabIcon>
-        <NoteBook className="size-4" />
+        <NoteBook className="size-5" />
       </TabIcon>
       <div>
         <h4 className="font-bold">Modal Overlay</h4>
@@ -28,7 +28,7 @@ export const Tabs = ({
     </Tab>
     <Tab onClick={() => setTab("embed")} isSelected={tab === "embed"} aria-controls={embedTabpanelUID}>
       <TabIcon>
-        <CodeAlt className="size-4" />
+        <CodeAlt className="size-5" />
       </TabIcon>
       <div>
         <h4 className="font-bold">Embed</h4>

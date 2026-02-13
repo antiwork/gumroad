@@ -50,7 +50,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
       <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
         <RowContent className="content" contentEditable={false}>
-          <Key pack="filled" className="size-4 type-icon" />
+          <Key pack="filled" className="size-5 type-icon" />
           <div>
             <h4 className="text-singleline">{licenseKey}</h4>
             <ul className="inline">
@@ -68,7 +68,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
           ) : null}
           {editor.isEditable ? (
             <Button onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label={isDrawerOpen ? "Close drawer" : "Edit"}>
-              {isDrawerOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              {isDrawerOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}
         </RowActions>

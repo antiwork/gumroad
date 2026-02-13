@@ -93,7 +93,7 @@ const SearchPopover = () => {
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
           <Button>
-            <Search pack="filled" className="size-4" />
+            <Search pack="filled" className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
@@ -101,7 +101,7 @@ const SearchPopover = () => {
         <div className="grid w-96 max-w-full gap-3">
           <form onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")} className="flex gap-2">
             <InputGroup>
-              <User className="size-4" />
+              <User className="size-5" />
               <Input
                 autoFocus
                 name="query"
@@ -112,7 +112,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <Button color="primary" type="submit">
-              <Search pack="filled" className="size-4" />
+              <Search pack="filled" className="size-5" />
             </Button>
           </form>
 
@@ -121,7 +121,7 @@ const SearchPopover = () => {
             className="flex gap-2"
           >
             <InputGroup>
-              <DollarCircle pack="filled" className="size-4" />
+              <DollarCircle pack="filled" className="size-5" />
               <Input
                 name="query"
                 placeholder="Search purchases (email, IP, card, external ID)"
@@ -131,7 +131,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <Button color="primary" type="submit">
-              <Search pack="filled" className="size-4" />
+              <Search pack="filled" className="size-5" />
             </Button>
           </form>
 
@@ -140,7 +140,7 @@ const SearchPopover = () => {
             className="flex gap-2"
           >
             <InputGroup>
-              <User pack="filled" className="size-4" />
+              <User pack="filled" className="size-5" />
               <Input
                 name="query"
                 placeholder="Search affiliates (email, name, ID)"
@@ -150,7 +150,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <Button color="primary" type="submit">
-              <Search pack="filled" className="size-4" />
+              <Search pack="filled" className="size-5" />
             </Button>
           </form>
 
@@ -169,7 +169,7 @@ const SearchPopover = () => {
               ))}
             </Select>
             <InputGroup>
-              <Calendar className="size-4" />
+              <Calendar className="size-5" />
               <Input
                 name="transaction_date"
                 placeholder="Date (02/22/2022)"
@@ -179,7 +179,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <InputGroup>
-              <Lock pack="filled" className="size-4" />
+              <Lock pack="filled" className="size-5" />
               <Input
                 name="last_4"
                 placeholder="Last 4 (7890)"
@@ -191,7 +191,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <InputGroup>
-              <CreditCard className="size-4" />
+              <CreditCard className="size-5" />
               <Input
                 name="expiry_date"
                 placeholder="Expiry (02/22)"

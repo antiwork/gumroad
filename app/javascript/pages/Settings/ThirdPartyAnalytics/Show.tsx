@@ -52,7 +52,7 @@ export default function ThirdPartyAnalyticsPage() {
         })
       }
     >
-      <Plus className="size-4" />
+      <Plus className="size-5" />
       Add snippet
     </Button>
   );
@@ -256,7 +256,7 @@ const SnippetRow = ({
   return (
     <Row role="listitem">
       <RowContent>
-        <CodeAlt className="size-4 type-icon" />
+        <CodeAlt className="size-5 type-icon" />
         <div>
           <h4>{snippet.name || "Untitled"}</h4>
           <ul className="inline">
@@ -267,7 +267,7 @@ const SnippetRow = ({
       </RowContent>
       <RowActions>
         <Button onClick={() => setExpanded((prevExpanded) => !prevExpanded)} aria-label="Edit snippet">
-          {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
         </Button>
         <Button
           onClick={() =>
@@ -277,7 +277,7 @@ const SnippetRow = ({
           }
           aria-label="Delete snippet"
         >
-          <Trash className="size-4" />
+          <Trash className="size-5" />
         </Button>
       </RowActions>
       {expanded ? (

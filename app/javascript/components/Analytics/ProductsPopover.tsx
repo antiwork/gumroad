@@ -19,7 +19,7 @@ export const ProductsPopover = ({
     <PopoverTrigger>
       <span className="input whitespace-nowrap">
         <div className="fake-input">Select products...</div>
-        <ChevronDown className="size-4" />
+        <ChevronDown className="size-5" />
       </span>
     </PopoverTrigger>
     <PopoverContent matchTriggerWidth className="p-0">

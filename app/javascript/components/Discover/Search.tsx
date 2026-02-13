@@ -67,7 +67,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
       editable
       input={(props) => (
         <div className="input">
-          <SearchIcon pack="filled" className="size-4" />
+          <SearchIcon pack="filled" className="size-5" />
           <input
             {...props}
             type="search"
@@ -101,11 +101,11 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
           {typeof item === "string" ? (
             <div {...props}>
               <a href={Routes.discover_path({ query: item })} className="flex flex-1 items-center no-underline">
-                <Clock className="size-4 mr-2 text-muted" />
+                <Clock className="size-5 mr-2 text-muted" />
                 {highlightQuery(item)}
               </a>
               <button onClick={() => deleteRecentSearch(item)} aria-label="Remove" className="cursor-pointer all-unset">
-                <X className="size-4 text-muted" />
+                <X className="size-5 text-muted" />
               </button>
             </div>
           ) : (

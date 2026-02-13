@@ -27,7 +27,7 @@ const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
           {product.name}
         </Link>
         <a href={product.long_url} target="_blank" rel="noreferrer noopener">
-          <ArrowUpRightSquare className="size-4" />
+          <ArrowUpRightSquare className="size-5" />
         </a>
       </TableCell>
 

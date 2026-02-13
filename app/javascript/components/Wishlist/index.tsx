@@ -127,7 +127,7 @@ const WishlistItemCard = ({
                   onClick={() => void destroy()}
                   className="grid cursor-pointer p-4 all-unset"
                 >
-                  <Trash className="size-4" />
+                  <Trash className="size-5" />
                 </button>
               </WithTooltip>
             </div>
@@ -140,7 +140,7 @@ const WishlistItemCard = ({
                   href={Routes.checkout_index_url({ params: { gift_wishlist_product: item.id } })}
                   className="grid p-4"
                 >
-                  <Gift pack="filled" className="size-4" />
+                  <Gift pack="filled" className="size-5" />
                 </a>
               </WithTooltip>
             </div>
@@ -163,7 +163,7 @@ const WishlistItemCard = ({
                   })
                 }
               >
-                <Cart pack="filled" className="size-4" />
+                <Cart pack="filled" className="size-5" />
               </NavigationButton>
             </WithTooltip>
           </div>
@@ -228,12 +228,12 @@ export const Wishlist = ({
     <>
       <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
         <Button aria-label="Copy link">
-          <Link className="size-4" />
+          <Link className="size-5" />
         </Button>
       </CopyToClipboard>
       {can_edit ? (
         <Button onClick={() => setIsEditing(true)}>
-          <Pencil className="size-4" />
+          <Pencil className="size-5" />
           Edit
         </Button>
       ) : null}
@@ -244,7 +244,7 @@ export const Wishlist = ({
           href={Routes.checkout_index_url({ params: { wishlist: id } })}
           disabled={!checkout_enabled}
         >
-          <Cart pack="filled" className="size-4" />
+          <Cart pack="filled" className="size-5" />
           Buy this wishlist
         </NavigationButton>
       </WithTooltip>
@@ -295,7 +295,7 @@ export const Wishlist = ({
           {items.length === 0 ? (
             <Placeholder>
               <figure>
-                <Gift pack="filled" className="size-4" />
+                <Gift pack="filled" className="size-5" />
               </figure>
               {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
             </Placeholder>

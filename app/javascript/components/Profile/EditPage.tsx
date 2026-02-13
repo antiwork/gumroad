@@ -76,7 +76,7 @@ const EditTab = ({
       </RowContent>
       <RowActions>
         <Button small color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
-          <Trash className="size-4" />
+          <Trash className="size-5" />
         </Button>
       </RowActions>
       {confirmingDelete ? (
@@ -259,7 +259,7 @@ export const EditProfile = (props: Props) => {
             href={Routes.settings_profile_url({ host: appDomain })}
             aria-label="Edit profile"
           >
-            <Pencil className="size-4" />
+            <Pencil className="size-5" />
           </NavigationButton>
         </WithTooltip>
       </div>

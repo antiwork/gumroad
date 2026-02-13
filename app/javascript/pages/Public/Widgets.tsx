@@ -94,7 +94,7 @@ export default function PublicWidgets() {
                 tooltipPosition="bottom"
               >
                 <Button id={copyButtonUID} color="primary">
-                  <Link className="size-4" />
+                  <Link className="size-5" />
                   Copy link
                 </Button>
               </CopyToClipboard>

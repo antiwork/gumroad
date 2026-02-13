@@ -209,7 +209,7 @@ export const Image = TiptapNode.create({
       <>
         <MenuItem
           name="Insert image"
-          icon={<ImageIcon className="size-4" />}
+          icon={<ImageIcon className="size-5" />}
           active={editor.isActive("image")}
           onClick={() => inputRef.current?.click()}
         />

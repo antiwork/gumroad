@@ -149,7 +149,7 @@ export default function BundlesShareEdit() {
             <FacebookShareButton url={url} text={bundle.name} />
             <CopyToClipboard text={url} tooltipPosition="top">
               <Button color="primary">
-                <Link className="size-4" />
+                <Link className="size-5" />
                 Copy URL
               </Button>
             </CopyToClipboard>

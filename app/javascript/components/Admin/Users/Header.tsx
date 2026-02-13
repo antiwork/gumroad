@@ -48,7 +48,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
               <li className="space-x-1">
                 <span>Email: {user.form_email}</span>
                 <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy email" text={user.form_email}>
-                  <Copy className="size-4" />
+                  <Copy className="size-5" />
                 </CopyToClipboard>
                 <BlockedUserTooltip user={user} position="bottom" />
               </li>
@@ -57,7 +57,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
               <li className="space-x-1">
                 <span>Support email: {user.support_email}</span>
                 <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy support email" text={user.support_email}>
-                  <Copy className="size-4" />
+                  <Copy className="size-5" />
                 </CopyToClipboard>
               </li>
             ) : null}

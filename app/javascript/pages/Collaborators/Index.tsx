@@ -100,7 +100,7 @@ const CollaboratorsPage = () => {
                         {collaborator.setup_incomplete ? (
                           <WithTooltip tip="Not receiving payouts" position="top">
                             <Shield pack="filled" style={{ color: "rgb(var(--warning))" }}
-                              aria-label="Not receiving payouts" className="size-4" />
+                              aria-label="Not receiving payouts" className="size-5" />
                           </WithTooltip>
                         ) : null}
                       </div>
@@ -119,7 +119,7 @@ const CollaboratorsPage = () => {
                           aria-label="Edit"
                           disabled={disableActions}
                         >
-                          <Pencil className="size-4" />
+                          <Pencil className="size-5" />
                         </NavigationButtonInertia>
 
                         <Button
@@ -129,7 +129,7 @@ const CollaboratorsPage = () => {
                           aria-label="Delete"
                           disabled={disableActions}
                         >
-                          <Trash className="size-4" />
+                          <Trash className="size-5" />
                         </Button>
                       </div>
                     </TableCell>

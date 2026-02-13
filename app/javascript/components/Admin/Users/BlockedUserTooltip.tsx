@@ -34,7 +34,7 @@ const BlockedUserTooltip = ({ user, position = "bottom" }: Props) => {
 
   return (
     <WithTooltip tip={content()} position={position}>
-      <Shield pack="filled" className="size-4 text-warning" />
+      <Shield pack="filled" className="size-5 text-warning" />
     </WithTooltip>
   );
 };

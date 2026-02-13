@@ -26,7 +26,7 @@ export const RatingSelector = ({ currentRating, onChangeCurrentRating, disabled 
             onMouseOut={() => setHoveredRating(null)}
             onClick={() => onChangeCurrentRating(rating)}
           >
-            <Star {...(filled ? { pack: "filled" } : {})} className="size-4" />
+            <Star {...(filled ? { pack: "filled" } : {})} className="size-5" />
           </span>
         );
       })}

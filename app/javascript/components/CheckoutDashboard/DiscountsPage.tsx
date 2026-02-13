@@ -416,7 +416,7 @@ const DiscountsPage = ({
                               setView("edit");
                             }}
                           >
-                            <Pencil className="size-4" />
+                            <Pencil className="size-5" />
                           </Button>
                           <Popover
                             open={popoverOfferCodeId === offerCode.id}
@@ -426,7 +426,7 @@ const DiscountsPage = ({
                           >
                             <PopoverTrigger asChild>
                               <Button aria-label="Open discount action menu" onClick={(e) => e.stopPropagation()}>
-                                <DotsHorizontalRounded className="size-4" />
+                                <DotsHorizontalRounded className="size-5" />
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -440,7 +440,7 @@ const DiscountsPage = ({
                                     setView("create");
                                   }}
                                 >
-                                  <Copy className="size-4" />
+                                  <Copy className="size-5" />
                                   &ensp;Duplicate
                                 </div>
                                 <div
@@ -460,7 +460,7 @@ const DiscountsPage = ({
                                     setIsLoading(false);
                                   })}
                                 >
-                                  <Trash className="size-4" />
+                                  <Trash className="size-5" />
                                   &ensp;Delete
                                 </div>
                               </div>
@@ -585,7 +585,7 @@ const DiscountsPage = ({
                           text={`${product.url}/${selectedOfferCode.code}`}
                         >
                           <Button aria-label="Copy link with discount">
-                            <Link className="size-4" />
+                            <Link className="size-5" />
                           </Button>
                         </CopyToClipboard>
                       </CardContent>
@@ -862,7 +862,7 @@ const Form = ({
         actions={
           <>
             <Button onClick={cancel} disabled={isLoading}>
-              <XSquare className="size-4" />
+              <XSquare className="size-5" />
               Cancel
             </Button>
             <Button color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -924,7 +924,7 @@ const Form = ({
                 aria-label="Generate new discount"
                 disabled={readOnlyCode || isBlackFridayMode}
               >
-                <RefreshCcw className="size-4" />
+                <RefreshCcw className="size-5" />
               </Button>
             </div>
             {isBlackFridayMode ? (

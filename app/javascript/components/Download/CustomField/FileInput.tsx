@@ -83,7 +83,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
   const fileUpload = (
     <label className={buttonVariants({ size: "default", color: "primary" })}>
       <input type="file" onChange={handleFileChange} disabled={isUploading} multiple />
-      <ArrowUp pack="filled" className="size-4" />
+      <ArrowUp pack="filled" className="size-5" />
       Upload files
     </label>
   );

@@ -60,10 +60,10 @@ const IncomingCollaboratorsTableRow = ({
       {incomingCollaborator.invitation_accepted ? null : (
         <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
           <Button type="submit" aria-label="Accept" onClick={onAccept} disabled={disabled}>
-            <Check className="size-4" />
+            <Check className="size-5" />
           </Button>
           <Button type="submit" color="danger" aria-label="Decline" onClick={onReject} disabled={disabled}>
-            <X className="size-4" />
+            <X className="size-5" />
           </Button>
         </div>
       )}

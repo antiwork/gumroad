@@ -66,14 +66,14 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
             className="cursor-pointer all-unset"
             onClick={() => setActive((active + products.length - 1) % products.length)}
           >
-            <ArrowLeft className="size-4 text-xl" />
+            <ArrowLeft className="size-5 text-xl" />
           </button>
           {active + 1} / {products.length}
           <button
             className="cursor-pointer all-unset"
             onClick={() => setActive((active + products.length + 1) % products.length)}
           >
-            <ArrowRight className="size-4 text-xl" />
+            <ArrowRight className="size-5 text-xl" />
           </button>
         </div>
       </header>
@@ -477,7 +477,7 @@ const Discover = (props: Props) => {
                           className="flex cursor-pointer items-center justify-center all-unset"
                           aria-label="Remove offer code filter"
                         >
-                          <X className="size-4" />
+                          <X className="size-5" />
                         </button>
                       </div>
                     </details>

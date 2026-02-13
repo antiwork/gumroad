@@ -40,5 +40,5 @@ const FILE_KIND_ICONS: [React.ComponentType<BoxIconProps>, string[]][] = [
 export const FileKindIcon = ({ extension }: { extension: string | null }) => {
   const match = extension && FILE_KIND_ICONS.find(([, exts]) => exts.includes(extension));
   const Component = match ? match[0] : FileDetail;
-  return <Component pack="filled" className="type-icon size-4" />;
+  return <Component pack="filled" className="type-icon size-5" />;
 };

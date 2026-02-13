@@ -153,7 +153,7 @@ const CollaboratorForm = ({
       headerActions={
         <>
           <NavigationButtonInertia disabled={form.processing} href={Routes.collaborators_path()}>
-            <XSquare className="size-4" />
+            <XSquare className="size-5" />
             Cancel
           </NavigationButtonInertia>
           <WithTooltip position="bottom" tip={collaboratorsDisabledReason}>

@@ -105,7 +105,7 @@ export const EmailSheetActions = ({ installment, onDelete }: EmailSheetActionsPr
       {installment.send_emails ? <ViewEmailButton installment={installment} /> : null}
       {installment.shown_on_profile ? (
         <NavigationButton href={installment.full_url} target="_blank" rel="noopener noreferrer">
-          <FileDetail pack="filled" className="size-4" />
+          <FileDetail pack="filled" className="size-5" />
           View post
         </NavigationButton>
       ) : null}

@@ -197,7 +197,7 @@ export default function SettingsPage() {
                     style={{ fontFamily: font === "ABC Favorit" ? undefined : font }}
                     disabled={!canUpdate}
                   >
-                    <FontFamily className="size-4" />
+                    <FontFamily className="size-5" />
                     <div>
                       <h4>{font}</h4>
                       {FONT_DESCRIPTIONS[font]}

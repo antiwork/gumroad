@@ -258,7 +258,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
             {comment.is_editable || comment.is_deletable ? (
               <Popover>
                 <PopoverTrigger aria-label="Open comment action menu">
-                  <DotsHorizontalRounded className="size-4" />
+                  <DotsHorizontalRounded className="size-5" />
                 </PopoverTrigger>
                 <PopoverContent>
                   <div className="grid gap-3">

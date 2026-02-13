@@ -80,9 +80,9 @@ export const PageTab = ({
       role="tab"
     >
       {!disabled ? (
-        <Move className="invisible absolute left-0 size-4 text-muted group-hover/tab:visible" aria-grabbed={dragging} />
+        <Move className="invisible absolute left-0 size-5 text-muted group-hover/tab:visible" aria-grabbed={dragging} />
       ) : null}
-      <PageIcon className="size-4" aria-label={iconLabels[icon]} />
+      <PageIcon className="size-5" aria-label={iconLabels[icon]} />
       <span className="flex-1">
         {renaming ? <EditorContent editor={editor} className="cursor-text" /> : titleWithFallback(page.title)}
       </span>
@@ -90,15 +90,15 @@ export const PageTab = ({
         <span onClick={(e) => e.stopPropagation()}>
           <Popover>
             <PopoverTrigger>
-              <DotsHorizontalRounded className="size-4" />
+              <DotsHorizontalRounded className="size-5" />
             </PopoverTrigger>
             <PopoverContent className="border-0 p-0 shadow-none">
               <div role="menu">
                 <div role="menuitem" onClick={() => setRenaming(true)}>
-                  <Pencil className="size-4" /> Rename
+                  <Pencil className="size-5" /> Rename
                 </div>
                 <div className="danger" role="menuitem" onClick={onDelete}>
-                  <Trash className="size-4" /> Delete
+                  <Trash className="size-5" /> Delete
                 </div>
               </div>
             </PopoverContent>

@@ -50,7 +50,7 @@ export function SupportHeader({
           isHelpArticle ? (
             <Button asChild>
               <a href={Routes.help_center_root_path()} aria-label="Search" title="Search">
-                <Search pack="filled" className="size-4" />
+                <Search pack="filled" className="size-5" />
               </a>
             </Button>
           ) : isAnonymousUserOnHelpCenter ? (

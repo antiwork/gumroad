@@ -71,7 +71,7 @@ export default function EmailsPublished() {
                       tip="Views only apply to emails published on your profile."
                       className="whitespace-normal"
                     >
-                      <InfoCircle className="size-4" />
+                      <InfoCircle className="size-5" />
                     </WithTooltip>
                   </TableHead>
                 </TableRow>

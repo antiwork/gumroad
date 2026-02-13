@@ -88,19 +88,19 @@ export const Nav = (props: Props) => {
           {currentSeller?.isBuyer ? (
             <NavLink
               text="Start selling"
-              icon={<Store pack="filled" className="size-4" />}
+              icon={<Store pack="filled" className="size-5" />}
               href={Routes.dashboard_url(routeParams)}
             />
           ) : null}
           <NavLink
             text="Settings"
-            icon={<Gear pack="filled" className="size-4" />}
+            icon={<Gear pack="filled" className="size-5" />}
             href={Routes.settings_main_url(routeParams)}
           />
 
           <NavLink
             text="Help"
-            icon={<Book className="size-4" />}
+            icon={<Book className="size-5" />}
             href={Routes.help_center_root_url(routeParams)}
             badge={
               props.helper_host && props.helper_session ? (
@@ -122,17 +122,17 @@ export const Nav = (props: Props) => {
               ) : null}
               <NavLinkDropdownItem
                 text="Profile"
-                icon={<Store pack="filled" className="mr-3 ml-1 size-4" />}
+                icon={<Store pack="filled" className="mr-3 ml-1 size-5" />}
                 href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
               />
               <NavLinkDropdownItem
                 text="Affiliates"
-                icon={<Gift pack="filled" className="mr-3 ml-1 size-4" />}
+                icon={<Gift pack="filled" className="mr-3 ml-1 size-5" />}
                 href={Routes.affiliates_url(routeParams)}
               />
               <NavLinkDropdownItem
                 text="Logout"
-                icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-4" />}
+                icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-5" />}
                 href={Routes.logout_url(routeParams)}
               />
               {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
@@ -145,48 +145,48 @@ export const Nav = (props: Props) => {
       <NavSection>
         <NavLink
           text="Home"
-          icon={<Store pack="filled" className="size-4" />}
+          icon={<Store pack="filled" className="size-5" />}
           href={Routes.dashboard_url(routeParams)}
           exactHrefMatch
         />
         <NavLink
           text="Products"
-          icon={<Archive pack="filled" className="size-4" />}
+          icon={<Archive pack="filled" className="size-5" />}
           href={Routes.products_url(routeParams)}
           additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
           <NavLink
             text="Collaborators"
-            icon={<Tag pack="filled" className="size-4" />}
+            icon={<Tag pack="filled" className="size-5" />}
             href={Routes.collaborators_url(routeParams)}
           />
         ) : null}
         <NavLink
           text="Checkout"
-          icon={<Cart pack="filled" className="size-4" />}
+          icon={<Cart pack="filled" className="size-5" />}
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
         />
         <NavLink
           text="Emails"
-          icon={<Envelope pack="filled" className="size-4" />}
+          icon={<Envelope pack="filled" className="size-5" />}
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
         />
         <NavLink
           text="Workflows"
-          icon={<NetworkChart pack="filled" className="size-4" />}
+          icon={<NetworkChart pack="filled" className="size-5" />}
           href={Routes.workflows_url(routeParams)}
         />
         <NavLink
           text="Sales"
-          icon={<DollarCircle pack="filled" className="size-4" />}
+          icon={<DollarCircle pack="filled" className="size-5" />}
           href={Routes.customers_url(routeParams)}
         />
         <NavLink
           text="Analytics"
-          icon={<BarChart pack="filled" className="size-4" />}
+          icon={<BarChart pack="filled" className="size-5" />}
           href={Routes.sales_dashboard_url(routeParams)}
           additionalPatterns={[
             Routes.audience_dashboard_url(routeParams),
@@ -195,22 +195,22 @@ export const Nav = (props: Props) => {
           ]}
         />
         {loggedInUser?.policies.balance.index ? (
-          <NavLink text="Payouts" icon={<Bank className="size-4" />} href={Routes.balance_url(routeParams)} />
+          <NavLink text="Payouts" icon={<Bank className="size-5" />} href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
           <NavLink
             text="Community"
-            icon={<MessageBubble pack="filled" className="size-4" />}
+            icon={<MessageBubble pack="filled" className="size-5" />}
             href={Routes.community_path(routeParams)}
           />
         ) : null}
       </NavSection>
       <NavSection>
-        <NavLink text="Discover" icon={<Search pack="filled" className="size-4" />} href={discoverUrl} exactHrefMatch />
+        <NavLink text="Discover" icon={<Search pack="filled" className="size-5" />} href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <NavLink
             text="Library"
-            icon={<BookmarkHeart pack="filled" className="size-4" />}
+            icon={<BookmarkHeart pack="filled" className="size-5" />}
             href={Routes.library_url(routeParams)}
             additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
           />

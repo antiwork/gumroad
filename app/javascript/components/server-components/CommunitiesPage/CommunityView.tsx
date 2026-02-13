@@ -619,7 +619,7 @@ export const CommunityView = () => {
 
                     <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
                       <PopoverTrigger aria-label="Switch creator" className="flex h-8 w-8 justify-center">
-                        <ChevronDown className="size-4" />
+                        <ChevronDown className="size-5" />
                       </PopoverTrigger>
                       <PopoverContent className="shrink-0 border-0 p-0 shadow-none">
                         <div role="menu">
@@ -645,7 +645,7 @@ export const CommunityView = () => {
                           ))}
                           {sellersExceptSelected.length > 0 ? <hr className="my-1" /> : null}
                           <div role="menuitem" onClick={() => setShowNotificationsSettings(true)}>
-                            <Bell className="size-4" /> Notifications
+                            <Bell className="size-5" /> Notifications
                           </div>
                         </div>
                       </PopoverContent>
@@ -660,7 +660,7 @@ export const CommunityView = () => {
                   })}
                   aria-label="Close sidebar"
                 >
-                  <X className="size-4 text-sm" />
+                  <X className="size-5 text-sm" />
                 </button>
               </div>
 
@@ -829,7 +829,7 @@ const CommunityChatHeader = ({
       aria-label="Open sidebar"
       onClick={() => setSidebarOpen(true)}
     >
-      <ChevronLeft className="size-4 text-sm" />
+      <ChevronLeft className="size-5 text-sm" />
     </button>
     <h1 className="flex-1 truncate py-3 text-base font-bold">{community.name}</h1>
   </div>
@@ -851,7 +851,7 @@ const GoBackHeader = () => {
           onClick={handleGoBack}
           className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline all-unset"
         >
-          <ArrowLeft className="size-4 mr-1" /> Go back
+          <ArrowLeft className="size-5 mr-1" /> Go back
         </button>
       </div>
     </header>

@@ -107,7 +107,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
               onClick={handleRequestPayoutCSV}
               aria-label="Export"
             >
-              <ArrowDown className="size-4" />
+              <ArrowDown className="size-5" />
             </Button>
           </WithTooltip>
         ) : null}
@@ -350,9 +350,9 @@ const PeriodBankAccount = ({
     <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
       {bankAccount.arrival_date ? (
         bankAccount.status === "completed" ? (
-          <CheckCircle pack="filled" className="size-4" />
+          <CheckCircle pack="filled" className="size-5" />
         ) : (
-          <Clock className="size-4" />
+          <Clock className="size-5" />
         )
       ) : null}
       <h4>
@@ -496,7 +496,7 @@ export default function PayoutsIndex() {
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Gear pack="filled" className="size-4" />
+      <Gear pack="filled" className="size-5" />
       Settings
     </NavigationButton>
   ) : null;
@@ -590,7 +590,7 @@ export default function PayoutsIndex() {
               <fieldset>
                 <label htmlFor="instant-payout-date">Pay out balance up to</label>
                 <div className="input cursor-pointer">
-                  <Calendar className="size-4" />
+                  <Calendar className="size-5" />
                   <select
                     id="instant-payout-date"
                     value={instantPayoutId}
@@ -606,7 +606,7 @@ export default function PayoutsIndex() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="size-4" />
+                  <ChevronDown className="size-5" />
                 </div>
               </fieldset>
               <fieldset>

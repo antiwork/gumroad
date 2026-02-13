@@ -172,7 +172,7 @@ export const ChatMessage = ({
                     onClick={handleEdit}
                     aria-label="Edit message"
                   >
-                    <Pencil className="size-4" />
+                    <Pencil className="size-5" />
                   </button>
                 </WithTooltip>
                 <div className="flex border-r dark:border-[rgb(var(--parent-color)/var(--border-alpha))]" />
@@ -184,7 +184,7 @@ export const ChatMessage = ({
                 onClick={() => setDeleteConfirmation({ deleting: false })}
                 aria-label="Delete message"
               >
-                <Trash className="size-4" />
+                <Trash className="size-5" />
               </button>
             </WithTooltip>
           </div>

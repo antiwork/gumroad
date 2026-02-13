@@ -238,12 +238,12 @@ export const Layout = ({
               {saveButton}
               <CopyToClipboard text={url} copyTooltip="Copy product URL">
                 <Button>
-                  <LinkIcon className="size-4" />
+                  <LinkIcon className="size-5" />
                 </Button>
               </CopyToClipboard>
               <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
                 <Button>
-                  <CartPlus className="size-4" />
+                  <CartPlus className="size-5" />
                 </Button>
               </CopyToClipboard>
             </>

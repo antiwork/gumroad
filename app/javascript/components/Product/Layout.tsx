@@ -352,7 +352,7 @@ const EditButton = ({ product }: { product: Product }) => {
           href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
           aria-label="Edit product"
         >
-          <Pencil className="size-4" />
+          <Pencil className="size-5" />
         </NavigationButton>
       </WithTooltip>
     </div>

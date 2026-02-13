@@ -27,7 +27,7 @@ export const Checkbox = React.forwardRef<
       )}
       {...props}
     />
-    <Check className="size-4 pointer-events-none absolute hidden! text-accent-foreground peer-checked:block!" />
+    <Check className="size-5 pointer-events-none absolute hidden! text-accent-foreground peer-checked:block!" />
   </span>
 ));
 Checkbox.displayName = "Checkbox";

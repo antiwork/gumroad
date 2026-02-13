@@ -27,7 +27,7 @@ export const ViewEmailButton = (props: { installment: SavedInstallment }) => {
         }
       })}
     >
-      <Envelope pack="filled" className="size-4" />
+      <Envelope pack="filled" className="size-5" />
       {sendingPreviewEmail ? "Sending..." : "View email"}
     </Button>
   );

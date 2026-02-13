@@ -33,7 +33,7 @@ const MEDIA_EMBED_SUPPORTING_PROVIDERS = ["YouTube", "Vimeo", "Wistia, Inc.", "D
 const VideoEmbed = Extension.create({
   menuItem: (editor) => (
     <WithDialog editor={editor} type="embed">
-      <MenuItem name="Insert video" icon={<Iframe className="size-4" />} />
+      <MenuItem name="Insert video" icon={<Iframe className="size-5" />} />
     </WithDialog>
   ),
 });
@@ -80,7 +80,7 @@ export const Raw = TiptapNode.create({
   },
   menuItem: (editor) => (
     <WithDialog editor={editor} type="twitter">
-      <MenuItem name="Insert post" icon={<Twitter pack="brands" className="size-4" />} />
+      <MenuItem name="Insert post" icon={<Twitter pack="brands" className="size-5" />} />
     </WithDialog>
   ),
   submenu: {
@@ -88,7 +88,7 @@ export const Raw = TiptapNode.create({
     item: (editor) => (
       <WithDialog editor={editor} type="twitter">
         <div role="menuitem">
-          <Twitter pack="brands" className="size-4" />
+          <Twitter pack="brands" className="size-5" />
           <span>Twitter post</span>
         </div>
       </WithDialog>
@@ -249,7 +249,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
         <Row className="embed">
           <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }} />
           <RowContent className="content">
-            <PlayCircle pack="filled" className="type-icon size-4" />
+            <PlayCircle pack="filled" className="type-icon size-5" />
             <div>
               <h4 className="text-singleline">{node.attrs.title}</h4>
               {node.attrs.url ? (
@@ -264,7 +264,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
           {editor.isEditable ? (
             <RowActions>
               <Button color="danger" outline aria-label="Remove" onClick={deleteNode}>
-                <Trash className="size-4" />
+                <Trash className="size-5" />
               </Button>
             </RowActions>
           ) : null}

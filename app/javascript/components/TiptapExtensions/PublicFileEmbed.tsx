@@ -65,7 +65,7 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
           ) : null}
           {editor.isEditable && !isUploading ? (
             <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
-              {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}
           {FileUtils.isAudioExtension(file.extension) ? (
@@ -125,7 +125,7 @@ export const PublicFileEmbed = TiptapNode.create({
       <>
         <MenuItem
           name="Insert audio"
-          icon={<Music className="size-4" />}
+          icon={<Music className="size-5" />}
           active={editor.isActive("public-file-embed")}
           onClick={() => inputRef.current?.click()}
         />

@@ -286,7 +286,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         <>
           <Button asChild>
             <Link href={Routes.workflows_path()} inert={form.processing || undefined}>
-              <XSquare className="size-4" />
+              <XSquare className="size-5" />
               Cancel
             </Link>
           </Button>

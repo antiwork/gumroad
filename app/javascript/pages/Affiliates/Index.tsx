@@ -84,13 +84,13 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
           <Button>
-            <Search pack="filled" className="size-4" />
+            <Search pack="filled" className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent>
         <div className="input input-wrapper">
-          <Search pack="filled" className="size-4" />
+          <Search pack="filled" className="size-5" />
           <input
             ref={searchInputRef}
             value={inputValue}
@@ -383,7 +383,7 @@ export default function AffiliatesIndex() {
                               className={buttonVariants({ size: "default", color: "primary" })}
                               aria-label="Export"
                             >
-                              <ArrowDown className="size-4" />
+                              <ArrowDown className="size-5" />
                             </a>
                           </WithTooltip>
                         </div>
@@ -443,7 +443,7 @@ export default function AffiliatesIndex() {
                                   aria-label="Edit"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
-                                  <Pencil className="size-4" />
+                                  <Pencil className="size-5" />
                                 </NavigationButtonInertia>
 
                                 <Button
@@ -453,7 +453,7 @@ export default function AffiliatesIndex() {
                                   aria-label="Delete"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
-                                  <Trash className="size-4" />
+                                  <Trash className="size-5" />
                                 </Button>
                               </div>
                             </TableCell>

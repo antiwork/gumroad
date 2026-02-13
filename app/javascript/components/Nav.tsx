@@ -134,7 +134,7 @@ export const Nav = ({ title, children, footer }: Props) => {
           </a>
           <h1 className="w-full truncate text-center text-base">{title}</h1>
           <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
-            {open ? <X className="size-4" /> : <Menu className="size-4" />}
+            {open ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
         <header className="hidden p-6 lg:grid">
@@ -175,7 +175,7 @@ export const UnbecomeDropdownItem = () => {
   return (
     <NavLinkDropdownItem
       text="Unbecome"
-      icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-4" />}
+      icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-5" />}
       href="#"
       onClick={makeRequest}
     />
@@ -218,7 +218,7 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
       <span className="min-w-0 flex-1 truncate" title={teamMembership.seller_name}>
         {teamMembership.seller_name}
       </span>
-      {teamMembership.is_selected ? <CheckCircle pack="filled" className="size-4 h-5 shrink-0 text-accent" /> : null}
+      {teamMembership.is_selected ? <CheckCircle pack="filled" className="size-5 h-5 shrink-0 text-accent" /> : null}
     </a>
   );
 };

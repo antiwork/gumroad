@@ -16,7 +16,7 @@ export const DashboardNavProfilePopover = ({ children, user }: { children: React
         />
         {user?.name || user?.email}
       </div>
-      <ChevronDown className="size-4 group-data-[state=open]:rotate-180" />
+      <ChevronDown className="size-5 group-data-[state=open]:rotate-180" />
     </PopoverTrigger>
     <PopoverContent
       side="top"

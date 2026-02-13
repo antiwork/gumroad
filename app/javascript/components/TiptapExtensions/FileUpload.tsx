@@ -41,7 +41,7 @@ const FileUploadNodeView = ({ editor, node }: NodeViewProps) => (
     {editor.isEditable ? (
       <Placeholder>
         <Button color="primary">
-          <ArrowUp pack="filled" className="size-4" />
+          <ArrowUp pack="filled" className="size-5" />
           Upload files
         </Button>
       </Placeholder>

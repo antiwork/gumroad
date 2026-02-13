@@ -149,8 +149,8 @@ const FileEmbedGroupNodeView = ({
         <Row role="treeitem" aria-expanded={expanded} className={cx({ selected })}>
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
-            {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-            <FolderOpen pack="filled" className="size-4 type-icon" />
+            {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+            <FolderOpen pack="filled" className="size-5 type-icon" />
             {editing ? (
               <input
                 type="text"
@@ -180,7 +180,7 @@ const FileEmbedGroupNodeView = ({
                     <PopoverTrigger asChild>
                       <Button>
                         Download all
-                        <ChevronDown className="size-4" />
+                        <ChevronDown className="size-5" />
                       </Button>
                     </PopoverTrigger>
                   </PopoverAnchor>
@@ -204,7 +204,7 @@ const FileEmbedGroupNodeView = ({
                         <Button onClick={() => void download()}>Download as ZIP</Button>
                       )}
                       <Button disabled={downloading} onClick={() => void saveToDropbox()}>
-                        <DropboxIcon pack="brands" className="size-4" />
+                        <DropboxIcon pack="brands" className="size-5" />
                         Save to Dropbox
                       </Button>
                     </div>
@@ -226,7 +226,7 @@ const FileEmbedGroupNodeView = ({
                     requestAnimationFrame(() => inputRef.current?.focus());
                   }}
                 >
-                  {editing ? <Check className="size-4" /> : <Pencil className="size-4" />}
+                  {editing ? <Check className="size-5" /> : <Pencil className="size-5" />}
                 </Button>
               ) : null}
             </RowActions>

@@ -40,7 +40,7 @@ export function NewTicketModal({
       footer={
         <>
           <Button onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-            <Paperclip className="size-4" /> Attach files
+            <Paperclip className="size-5" /> Attach files
           </Button>
           <Button
             color="accent"
@@ -118,7 +118,7 @@ export function NewTicketModal({
                     aria-label="Remove"
                     onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
                   >
-                    <Trash className="size-4" />
+                    <Trash className="size-5" />
                   </Button>
                 </RowActions>
               </Row>

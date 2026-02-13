@@ -75,7 +75,7 @@ export default function WishlistsPage() {
                     }
                     position="top"
                   >
-                    <InfoCircle className="size-4" />
+                    <InfoCircle className="size-5" />
                   </WithTooltip>
                 </TableHead>
                 <TableHead />
@@ -108,7 +108,7 @@ export default function WishlistsPage() {
                         aria-label="Delete wishlist"
                         onClick={() => setConfirmingDeleteWishlist(wishlist)}
                       >
-                        <Trash className="size-4" />
+                        <Trash className="size-5" />
                       </Button>
                     </div>
                   </TableCell>

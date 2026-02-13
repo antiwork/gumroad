@@ -40,7 +40,7 @@ export const Modal = ({
             <Dialog.Title>{title}</Dialog.Title>
             {allowClose ? (
               <Dialog.Close className="cursor-pointer text-base all-unset" aria-label="Close">
-                <X className="size-4" />
+                <X className="size-5" />
               </Dialog.Close>
             ) : null}
           </div>

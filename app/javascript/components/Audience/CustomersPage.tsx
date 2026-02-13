@@ -266,7 +266,7 @@ const CustomersPage = ({
                 <WithTooltip tip="Filter">
                   <PopoverTrigger aria-label="Filter" asChild>
                     <Button>
-                      <Filter className="size-4" />
+                      <Filter className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -394,7 +394,7 @@ const CustomersPage = ({
                 <WithTooltip tip="Export">
                   <PopoverTrigger aria-label="Export" asChild>
                     <Button>
-                      <ArrowDown className="size-4" />
+                      <ArrowDown className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -462,7 +462,7 @@ const CustomersPage = ({
                       <TableCell>
                         {customer.shipping && !customer.shipping.tracking.shipped ? (
                           <WithTooltip tip="Not Shipped">
-                            <Truck style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" className="size-4" />
+                            <Truck style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" className="size-5" />
                           </WithTooltip>
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
@@ -774,7 +774,7 @@ const CustomerDrawer = ({
         <div className="flex gap-4">
           {onBack ? (
             <button onClick={onBack} aria-label="Return to bundle" className="cursor-pointer all-unset">
-              <ArrowLeft style={{ fontSize: "var(--big-icon-size)" }} className="size-4" />
+              <ArrowLeft style={{ fontSize: "var(--big-icon-size)" }} className="size-5" />
             </button>
           ) : null}
           <h2>{customer.product.name}</h2>
@@ -886,7 +886,7 @@ const CustomerDrawer = ({
                   aria-label="Transaction"
                   className="grow"
                 >
-                  <ArrowUpRightSquare className="size-4" />
+                  <ArrowUpRightSquare className="size-5" />
                 </a>
               ) : null}
             </h3>
@@ -2397,7 +2397,7 @@ const ChargeRow = ({
             rel="noreferrer"
             aria-label="Transaction"
           >
-            <ArrowUpRightSquare className="size-4" />
+            <ArrowUpRightSquare className="size-5" />
           </a>
           {purchase.partially_refunded ? (
             <Pill size="small">Partial refund</Pill>
@@ -2591,7 +2591,7 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
     <RowActions>
       {onDelete ? (
         <Button color="danger" onClick={onDelete} disabled={disabled} aria-label="Delete">
-          <Trash className="size-4" />
+          <Trash className="size-5" />
         </Button>
       ) : null}
       <NavigationButton
@@ -2601,7 +2601,7 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
         disabled={disabled}
         aria-label="Download"
       >
-        <ArrowDown pack="filled" className="size-4" />
+        <ArrowDown pack="filled" className="size-5" />
       </NavigationButton>
     </RowActions>
   </Row>
@@ -2728,7 +2728,7 @@ const CommissionSection = ({
                   multiple
                   style={{ display: "none" }}
                 />
-                <Paperclip className="size-4" /> Upload files
+                <Paperclip className="size-5" /> Upload files
               </label>
               {commission.status === "in_progress" ? (
                 <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()}>

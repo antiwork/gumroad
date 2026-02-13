@@ -52,7 +52,7 @@ export const ShippingDestinationsEditor = ({
           ))}
           <CardContent>
             <Button onClick={addShippingDestination} className="grow basis-0">
-              <Plus className="size-4" />
+              <Plus className="size-5" />
               Add shipping destination
             </Button>
           </CardContent>
@@ -62,7 +62,7 @@ export const ShippingDestinationsEditor = ({
           <h2>Add shipping destinations</h2>
           Choose where you're able to ship your physical product to
           <Button color="primary" onClick={addShippingDestination}>
-            <Box className="size-4" />
+            <Box className="size-5" />
             Add shipping destination
           </Button>
         </Placeholder>
@@ -114,7 +114,7 @@ const ShippingDestinationRow = ({
           </select>
           <WithTooltip position="bottom" tip="Remove">
             <Button color="danger" outline onClick={onRemove} aria-label="Remove shipping destination">
-              <Trash className="size-4" />
+              <Trash className="size-5" />
             </Button>
           </WithTooltip>
         </div>

@@ -283,7 +283,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const folderAction = {
     item: () => (
       <>
-        <FolderOpen pack="filled" className="size-4" />
+        <FolderOpen pack="filled" className="size-5" />
         <span>Move to folder...</span>
       </>
     ),
@@ -294,7 +294,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             onClick={() => editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: null })}
             role="menuitem"
           >
-            <FolderPlus className="size-4" />
+            <FolderPlus className="size-5" />
             <span>New folder</span>
           </div>
         )}
@@ -309,7 +309,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             }}
             role="menuitem"
           >
-            <FolderOpen pack="filled" className="size-4" />
+            <FolderOpen pack="filled" className="size-5" />
             <span>{name || "Untitled"}</span>
           </div>
         ))}
@@ -407,7 +407,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         aria-label="Replace thumbnail"
                       >
                         {thumbnailInput}
-                        <ArrowUp pack="filled" className="size-4" />
+                        <ArrowUp pack="filled" className="size-5" />
                       </label>
                     </WithTooltip>
                   </div>
@@ -418,7 +418,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                 <Placeholder>
                   <label className={buttonVariants({ size: "default", color: "primary" })}>
                     {thumbnailInput}
-                    <ArrowUp pack="filled" className="size-4" />
+                    <ArrowUp pack="filled" className="size-5" />
                     Upload a thumbnail
                   </label>
                   <div>
@@ -450,7 +450,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   {file.thumbnail ? <img src={file.thumbnail.url} /> : null}
                   <Placeholder>
                     {thumbnailInput}
-                    <ArrowUp pack="filled" className="size-4" />
+                    <ArrowUp pack="filled" className="size-5" />
                   </Placeholder>
                 </>
               )}
@@ -504,7 +504,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Thumbnail view" asChild>
                   <Button>
-                    {node.attrs.collapsed ? <Fullscreen className="size-4" /> : <FullscreenExit className="size-4" />}
+                    {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
@@ -517,7 +517,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         updateAttributes({ collapsed: !node.attrs.collapsed });
                       }}
                     >
-                      {node.attrs.collapsed ? <Fullscreen className="size-4" /> : <FullscreenExit className="size-4" />}
+                      {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
                       <span>{node.attrs.collapsed ? "Expand selected" : "Collapse selected"}</span>
                     </div>
                   </PopoverClose>
@@ -539,7 +539,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         });
                       }}
                     >
-                      {node.attrs.collapsed ? <Fullscreen className="size-4" /> : <FullscreenExit className="size-4" />}
+                      {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
                       <span>{node.attrs.collapsed ? "Expand all thumbnails" : "Collapse all thumbnails"}</span>
                     </div>
                   </PopoverClose>
@@ -550,7 +550,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
           {!file.is_streamable || isComplete ? (
             <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
-              {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}
 

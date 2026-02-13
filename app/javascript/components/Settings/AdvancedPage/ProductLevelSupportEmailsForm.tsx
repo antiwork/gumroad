@@ -18,7 +18,7 @@ type Product = {
 
 const AddProductLevelSupportEmailButton = React.memo(({ onClick }: { onClick: () => void }) => (
   <Button color="primary" onClick={onClick}>
-    <Plus className="size-4" />
+    <Plus className="size-5" />
     Add a product specific email
   </Button>
 ));
@@ -58,7 +58,7 @@ const ProductLevelSupportEmailRow = React.memo(
     return (
       <Row role="listitem">
         <RowContent>
-          <Envelope pack="filled" className="size-4 type-icon" />
+          <Envelope pack="filled" className="size-5 type-icon" />
           <div className="ml-1">
             <h4>{supportEmail.email || "No email set"}</h4>
             <span>
@@ -68,10 +68,10 @@ const ProductLevelSupportEmailRow = React.memo(
         </RowContent>
         <RowActions>
           <Button onClick={handleToggleExpandedState} aria-label="Edit email">
-            {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
           <Button onClick={handleRemove} aria-label="Delete email">
-            <Trash className="size-4" />
+            <Trash className="size-5" />
           </Button>
         </RowActions>
         {expanded ? (

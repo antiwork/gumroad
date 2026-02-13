@@ -517,15 +517,15 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             custom={
               <>
                 <LinkMenuItem editor={editor} />
-                <PopoverMenuItem name="Upload files" icon={<ArrowUp pack="filled" className="size-4" />}>
+                <PopoverMenuItem name="Upload files" icon={<ArrowUp pack="filled" className="size-5" />}>
                   <div role="menu" aria-label="Image and file uploader">
                     <div role="menuitem" onClick={() => setShowEmbedModal(true)}>
-                      <PlayCircle className="size-4" />
+                      <PlayCircle className="size-5" />
                       <span>Embed media</span>
                     </div>
                     <label role="menuitem">
                       <input type="file" name="file" multiple onChange={(e) => uploadFileInput(e.target)} />
-                      <Paperclip className="size-4" />
+                      <Paperclip className="size-5" />
                       <span>Computer files</span>
                     </label>
                     {existingFiles.length > 0 ? (
@@ -541,7 +541,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       </div>
                     ) : null}
                     <div role="menuitem" onClick={uploadFromDropbox}>
-                      <DropboxIcon pack="brands" className="size-4" />
+                      <DropboxIcon pack="brands" className="size-5" />
                       <span>Dropbox files</span>
                     </div>
                   </div>
@@ -623,7 +623,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <Tabs variant="buttons">
                     <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
                       <button type="button">
-                        <LinkIcon className="size-4" />
+                        <LinkIcon className="size-5" />
                         <h4>Embed link</h4>
                       </button>
                     </Tab>
@@ -645,7 +645,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             setShowEmbedModal(false);
                           }}
                         />
-                        <ArrowUp pack="filled" className="size-4" />
+                        <ArrowUp pack="filled" className="size-5" />
                         <h4>Upload</h4>
                       </label>
                     </Tab>
@@ -667,7 +667,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   onOpenChange={(open) => setInsertMenuState(open ? "open" : null)}
                 >
                   <PopoverTrigger className="toolbar-item all-unset">
-                    Insert <ChevronDown className="size-4" />
+                    Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                     <div role="menu" onClick={() => setInsertMenuState(null)}>
@@ -680,30 +680,30 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               setInsertMenuState("open");
                             }}
                           >
-                            <ChevronLeft className="size-4" />
+                            <ChevronLeft className="size-5" />
                             <span>Back</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
-                            <FileDetail className="size-4" />
+                            <FileDetail className="size-5" />
                             <span>Short answer</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
-                            <FileDetail className="size-4" />
+                            <FileDetail className="size-5" />
                             <span>Long answer</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
-                            <FolderPlus className="size-4" />
+                            <FolderPlus className="size-5" />
                             <span>Upload file</span>
                           </div>
                         </>
                       ) : (
                         <>
                           <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
-                            <ButtonIcon className="size-4" />
+                            <ButtonIcon className="size-5" />
                             <span>Button</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                            <Minus className="size-4" />
+                            <Minus className="size-5" />
                             <span>Divider</span>
                           </div>
                           <div
@@ -716,22 +716,22 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <Rename />
                             <span>Input</span>
-                            <ChevronRight className="ml-auto size-4" />
+                            <ChevronRight className="ml-auto size-5" />
                           </div>
                           <div role="menuitem" onClick={onInsertMoreLikeThis}>
-                            <Grid className="size-4" />
+                            <Grid className="size-5" />
                             <span>More like this</span>
                           </div>
                           <div role="menuitem" onClick={onInsertPosts}>
-                            <FileDetail className="size-4" />
+                            <FileDetail className="size-5" />
                             <span>List of posts</span>
                           </div>
                           <div role="menuitem" onClick={onInsertLicense}>
-                            <Key className="size-4" />
+                            <Key className="size-5" />
                             <span>License key</span>
                           </div>
                           <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
-                            <Twitter pack="brands" className="size-4" />
+                            <Twitter pack="brands" className="size-5" />
                             <span>Twitter post</span>
                           </div>
                           <div
@@ -741,7 +741,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               setShowUpsellModal(true);
                             }}
                           >
-                            <CartPlus className="size-4" />
+                            <CartPlus className="size-5" />
                             <span>Upsell</span>
                           </div>
                           <div
@@ -751,7 +751,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               setShowReviewModal(true);
                             }}
                           >
-                            <Star pack="filled" className="size-4" />
+                            <Star pack="filled" className="size-5" />
                             <span>Review</span>
                           </div>
                         </>
@@ -761,7 +761,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 </Popover>
                 <Separator aria-orientation="vertical" />
                 <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
-                  <Plus className="size-4" /> Page
+                  <Plus className="size-5" /> Page
                 </button>
               </>
             }
@@ -788,7 +788,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
                             </span>
 
-                            {pagesExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                            {pagesExpanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
                           </button>
                         </PageListItem>
                       )}
@@ -852,7 +852,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                 handleCreatePageClick();
                               }}
                             >
-                              <Plus className="size-4" />
+                              <Plus className="size-5" />
                               <span className="flex-1">Add another page</span>
                             </button>
                           </PageListItem>
@@ -1096,7 +1096,7 @@ export const ContentTab = () => {
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}
                           </span>
-                          <ChevronDown className="size-4" />
+                          <ChevronDown className="size-5" />
                         </div>
                       )}
                       options={product.variants}

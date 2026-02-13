@@ -968,7 +968,7 @@ export default function PaymentsPage() {
                     onClick={() => updatePayoutMethod("bank")}
                     disabled={props.is_form_disabled}
                   >
-                    <Bank className="size-4" />
+                    <Bank className="size-5" />
                     <div>
                       <h4>Bank Account</h4>
                     </div>
@@ -981,7 +981,7 @@ export default function PaymentsPage() {
                       onClick={() => updatePayoutMethod("card")}
                       disabled={props.is_form_disabled}
                     >
-                      <CreditCard className="size-4" />
+                      <CreditCard className="size-5" />
                       <div>
                         <h4>Debit Card</h4>
                       </div>
@@ -997,7 +997,7 @@ export default function PaymentsPage() {
                   onClick={() => updatePayoutMethod("paypal")}
                   disabled={props.is_form_disabled}
                 >
-                  <Store className="size-4" />
+                  <Store className="size-5" />
                   <div>
                     <h4>PayPal</h4>
                   </div>
@@ -1013,7 +1013,7 @@ export default function PaymentsPage() {
                   onClick={() => updatePayoutMethod("stripe")}
                   disabled={props.is_form_disabled}
                 >
-                  <Stripe pack="brands" className="size-4" />
+                  <Stripe pack="brands" className="size-5" />
                   <div>
                     <h4>Connect to Stripe</h4>
                   </div>

@@ -76,7 +76,7 @@ export const PriceInput = React.forwardRef<
               }))}
               className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
             />
-            <ChevronDown className="size-4 ml-auto" />
+            <ChevronDown className="size-5 ml-auto" />
           </Pill>
         ) : (
           <Pill className="-ml-2 shrink-0">{getLongCurrencySymbol(currencyCode)}</Pill>

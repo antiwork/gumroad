@@ -107,7 +107,7 @@ export const ShareSection = ({
                     ? "Adding to wishlist..."
                     : "Add to wishlist"}
               </span>
-              <ChevronDown className="size-4" />
+              <ChevronDown className="size-5" />
             </div>
           )}
           disabled={saveState.type === "saving"}
@@ -123,7 +123,7 @@ export const ShareSection = ({
                 }}
               >
                 <div>
-                  <FileDetail className="size-4" /> {wishlist.name}
+                  <FileDetail className="size-5" /> {wishlist.name}
                 </div>
               </div>
             ) : dropdownState.state === "creating" ? (
@@ -149,13 +149,13 @@ export const ShareSection = ({
                   aria-label="Wishlist name"
                 />
                 <Button type="submit" aria-label="Create wishlist" color="primary">
-                  <Check className="size-4" />
+                  <Check className="size-5" />
                 </Button>
               </form>
             ) : (
               <div {...props} onClick={() => setDropdownState({ state: "creating", newWishlistName: "" })}>
                 <div>
-                  <Plus className="size-4" /> New wishlist
+                  <Plus className="size-5" /> New wishlist
                 </div>
               </div>
             )
@@ -178,7 +178,7 @@ export const ShareSection = ({
           <PopoverAnchor>
             <PopoverTrigger aria-label="Share" asChild>
               <Button>
-                <Share className="size-4" />
+                <Share className="size-5" />
               </Button>
             </PopoverTrigger>
           </PopoverAnchor>
@@ -188,7 +188,7 @@ export const ShareSection = ({
               <FacebookShareButton url={product.long_url} text={product.name} />
               <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
                 <Button aria-label="Copy product URL">
-                  <Link className="size-4" /> Copy link
+                  <Link className="size-5" /> Copy link
                 </Button>
               </CopyToClipboard>
             </div>

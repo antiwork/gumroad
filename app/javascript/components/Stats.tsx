@@ -64,7 +64,7 @@ export const Stats = ({
         {title}
         {description ? (
           <WithTooltip tip={description} position="top">
-            <InfoCircle className="size-4" />
+            <InfoCircle className="size-5" />
           </WithTooltip>
         ) : null}
       </h2>

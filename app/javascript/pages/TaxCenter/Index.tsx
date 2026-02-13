@@ -119,7 +119,7 @@ const TaxCenterIndex = () => {
 
   const settingsAction = loggedInUser?.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Gear pack="filled" className="size-4" />
+      <Gear pack="filled" className="size-5" />
       Settings
     </NavigationButton>
   ) : null;

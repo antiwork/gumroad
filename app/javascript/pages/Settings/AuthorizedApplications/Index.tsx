@@ -140,7 +140,7 @@ export default function AuthorizedApplicationsPage() {
                   </TableCell>
                   <TableCell hideLabel>
                     <Button color="danger" outline onClick={() => setRevokingAccessForApp({ id: application.id })}>
-                      <XSquare className="size-4" />
+                      <XSquare className="size-5" />
                       Revoke access
                     </Button>
                   </TableCell>

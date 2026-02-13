@@ -42,7 +42,7 @@ export const SuggestedAmountsEditor = ({
       }}
       disabled={versions.length === 3}
     >
-      <Plus className="size-4" />
+      <Plus className="size-5" />
       Add amount
     </Button>
   );
@@ -93,7 +93,7 @@ const SuggestedAmountEditor = ({
         onBlur={onBlur}
       />
       <Button aria-label="Delete" onClick={onDelete ?? undefined} disabled={!onDelete}>
-        <Trash className="size-4" />
+        <Trash className="size-5" />
       </Button>
     </section>
   );

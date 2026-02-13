@@ -122,7 +122,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
 
 const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSProperties }) => (
   <div className="flex shrink-0 items-center gap-1" aria-label="Rating" style={style}>
-    <Star pack="filled" className="size-4" />
+    <Star pack="filled" className="size-5" />
     <span className="rating-average">{ratings.average.toFixed(1)}</span>
     <span title={`${ratings.average} ${ratings.average === 1 ? "rating" : "ratings"}`}>
       {`(${formatOrderOfMagnitude(ratings.count, 1)})`}

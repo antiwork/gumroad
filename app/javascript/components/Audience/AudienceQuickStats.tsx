@@ -19,7 +19,7 @@ export const AudienceQuickStats = ({
         className="total-followers"
         title={
           <>
-            <Circle pack="filled" className="size-4 text-accent" />
+            <Circle pack="filled" className="size-5 text-accent" />
             Lifetime followers
             <div className="legend" />
           </>
@@ -30,7 +30,7 @@ export const AudienceQuickStats = ({
         className="new-followers"
         title={
           <>
-            <Circle pack="filled" className="size-4 text-active-bg" />
+            <Circle pack="filled" className="size-5 text-active-bg" />
             New followers
             <div className="legend" />
           </>

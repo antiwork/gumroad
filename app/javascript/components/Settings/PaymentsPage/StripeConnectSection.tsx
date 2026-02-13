@@ -71,7 +71,7 @@ const StripeConnectSection = ({
               </legend>
               <div className="input input-wrapper">
                 <div className="fake-input">{stripeConnect.stripe_connect_account_id}</div>
-                <CheckCircle pack="filled" className="size-4 text-success" />
+                <CheckCircle pack="filled" className="size-5 text-success" />
               </div>
             </fieldset>
             <p>

@@ -44,7 +44,7 @@ export const ShareTab = () => {
               <FacebookShareButton url={url} text={product.name} />
               <CopyToClipboard text={url} tooltipPosition="top">
                 <Button color="primary">
-                  <Link className="size-4" />
+                  <Link className="size-5" />
                   Copy URL
                 </Button>
               </CopyToClipboard>
@@ -54,7 +54,7 @@ export const ShareTab = () => {
                 rel="noopener noreferrer"
                 color="accent"
               >
-                <Plus className="size-4" />
+                <Plus className="size-5" />
                 Create Gum
               </NavigationButton>
             </div>

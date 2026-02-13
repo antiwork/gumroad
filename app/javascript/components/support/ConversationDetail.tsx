@@ -44,7 +44,7 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
         onClick={() => setIsExpanded((v) => !v)}
       >
         <Button outline aria-expanded={isExpanded} aria-label={isExpanded ? "Collapse message" : "Expand message"}>
-          {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          {isExpanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
         </Button>
       </RowActions>
       {isExpanded ? (
@@ -118,7 +118,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
     <div>
       <header className="flex flex-col gap-4 border-b border-border p-4 md:p-8">
         <a className="no-underline" onClick={onBack}>
-          <ArrowLeft className="size-4" /> Go back to Support tickets
+          <ArrowLeft className="size-5" /> Go back to Support tickets
         </a>
         <h1 className="text-2xl">{conversation.subject}</h1>
       </header>
@@ -176,7 +176,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
                       aria-label="Remove"
                       onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
                     >
-                      <Trash className="size-4" />
+                      <Trash className="size-5" />
                     </Button>
                   </RowActions>
                 </Row>
@@ -185,7 +185,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
           ) : null}
           <div className="flex gap-2">
             <Button onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-              <Paperclip className="size-4" /> Attach files
+              <Paperclip className="size-5" /> Attach files
             </Button>
             <Button type="submit" color="primary" disabled={isSubmitting || !input.trim()}>
               {isSubmitting ? "Sending..." : "Send reply"}

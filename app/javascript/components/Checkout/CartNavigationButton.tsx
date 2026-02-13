@@ -10,7 +10,7 @@ export const CartNavigationButton = ({ className }: { className?: string }) => {
 
   return cartItemsCount ? (
     <NavigationButton className={className} color="filled" href={Routes.checkout_index_url({ host: appDomain })}>
-      <Cart pack="filled" className="size-4" />
+      <Cart pack="filled" className="size-5" />
       {cartItemsCount === "not-available" ? null : cartItemsCount}
     </NavigationButton>
   ) : null;

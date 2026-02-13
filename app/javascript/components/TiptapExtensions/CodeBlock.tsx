@@ -86,7 +86,7 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
               style={{ padding: "0 var(--spacer-1)" }}
               aria-label="Copy"
             >
-              <Copy className="size-4" />
+              <Copy className="size-5" />
             </button>
           </CopyToClipboard>
         )}

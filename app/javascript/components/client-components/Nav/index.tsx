@@ -122,44 +122,44 @@ export const Nav = (props: Props) => {
       <NavSection>
         <ClientNavLink
           text="Home"
-          icon={<Store pack="filled" className="size-4" />}
+          icon={<Store pack="filled" className="size-5" />}
           href={Routes.dashboard_url(routeParams)}
           exactHrefMatch
         />
         <ClientNavLink
           text="Products"
-          icon={<Archive pack="filled" className="size-4" />}
+          icon={<Archive pack="filled" className="size-5" />}
           href={Routes.products_url(routeParams)}
           additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
           <ClientNavLink
             text="Collaborators"
-            icon={<Tag pack="filled" className="size-4" />}
+            icon={<Tag pack="filled" className="size-5" />}
             href={Routes.collaborators_url(routeParams)}
           />
         ) : null}
         <ClientNavLink
           text="Checkout"
-          icon={<Cart pack="filled" className="size-4" />}
+          icon={<Cart pack="filled" className="size-5" />}
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
         />
         <ClientNavLink
           text="Emails"
-          icon={<Envelope pack="filled" className="size-4" />}
+          icon={<Envelope pack="filled" className="size-5" />}
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
         />
         <ClientNavLink
           text="Workflows"
-          icon={<NetworkChart pack="filled" className="size-4" />}
+          icon={<NetworkChart pack="filled" className="size-5" />}
           href={Routes.workflows_url(routeParams)}
         />
-        <ClientNavLink text="Sales" icon={<DollarCircle pack="filled" className="size-4" />} href={Routes.customers_url(routeParams)} />
+        <ClientNavLink text="Sales" icon={<DollarCircle pack="filled" className="size-5" />} href={Routes.customers_url(routeParams)} />
         <ClientNavLink
           text="Analytics"
-          icon={<BarChart pack="filled" className="size-4" />}
+          icon={<BarChart pack="filled" className="size-5" />}
           href={Routes.sales_dashboard_url(routeParams)}
           additionalPatterns={[
             Routes.audience_dashboard_url(routeParams),
@@ -168,18 +168,18 @@ export const Nav = (props: Props) => {
           ]}
         />
         {loggedInUser?.policies.balance.index ? (
-          <ClientNavLink text="Payouts" icon={<Bank className="size-4" />} href={Routes.balance_url(routeParams)} />
+          <ClientNavLink text="Payouts" icon={<Bank className="size-5" />} href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
-          <NavLink text="Community" icon={<MessageBubble pack="filled" className="size-4" />} href={Routes.community_path(routeParams)} />
+          <NavLink text="Community" icon={<MessageBubble pack="filled" className="size-5" />} href={Routes.community_path(routeParams)} />
         ) : null}
       </NavSection>
       <NavSection>
-        <NavLink text="Discover" icon={<Search pack="filled" className="size-4" />} href={discoverUrl} exactHrefMatch />
+        <NavLink text="Discover" icon={<Search pack="filled" className="size-5" />} href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <ClientNavLink
             text="Library"
-            icon={<BookmarkHeart pack="filled" className="size-4" />}
+            icon={<BookmarkHeart pack="filled" className="size-5" />}
             href={Routes.library_url(routeParams)}
             additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
           />

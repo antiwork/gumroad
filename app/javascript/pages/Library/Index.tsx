@@ -110,16 +110,16 @@ export const Card = ({
         <div className="p-4">
           <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
             <PopoverTrigger aria-label="Open product action menu">
-              <DotsHorizontalRounded className="size-4" />
+              <DotsHorizontalRounded className="size-5" />
             </PopoverTrigger>
             <PopoverContent className="border-0 p-0 shadow-none" usePortal>
               <div role="menu">
                 <div role="menuitem" onClick={toggleArchived}>
-                  <Archive className="size-4" />
+                  <Archive className="size-5" />
                   &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
                 </div>
                 <div className="danger" role="menuitem" onClick={() => onDelete()}>
-                  <Trash className="size-4" />
+                  <Trash className="size-5" />
                   &ensp;Delete permanently
                 </div>
               </div>
@@ -437,7 +437,7 @@ export default function LibraryPage() {
                 <>
                   <CardContent>
                     <div className="input input-wrapper product-search__wrapper grow">
-                      <Search pack="filled" className="size-4" />
+                      <Search pack="filled" className="size-5" />
                       <input
                         className="search-products"
                         placeholder="Search products"

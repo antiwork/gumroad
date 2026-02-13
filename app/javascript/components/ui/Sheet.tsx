@@ -32,7 +32,7 @@ export const SheetHeader = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-start gap-4">
     <Dialog.Title>{children}</Dialog.Title>
     <Dialog.Close className="ml-auto cursor-pointer all-unset" aria-label="Close">
-      <X className="size-4" />
+      <X className="size-5" />
     </Dialog.Close>
   </div>
 );

@@ -116,7 +116,7 @@ const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; 
       }}
       aria-label={direction === "previous" ? "Show previous cover" : "Show next cover"}
     >
-      {direction === "previous" ? <ArrowLeft className="size-4" /> : <ArrowRight className="size-4" />}
+      {direction === "previous" ? <ArrowLeft className="size-5" /> : <ArrowRight className="size-5" />}
     </button>
   );
 };

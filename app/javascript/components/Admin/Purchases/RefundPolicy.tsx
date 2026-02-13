@@ -13,7 +13,7 @@ export const RefundPolicyTitle = ({ refundPolicy }: { refundPolicy: RefundPolicy
     Refund policy: {refundPolicy.title}{" "}
     {refundPolicy.current_refund_policy ? (
       <WithTooltip tip={`Current refund policy: ${refundPolicy.current_refund_policy}`}>
-        <Shield pack="filled" className="size-4 text-warning" />
+        <Shield pack="filled" className="size-5 text-warning" />
       </WithTooltip>
     ) : null}
   </>

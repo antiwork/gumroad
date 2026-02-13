@@ -133,7 +133,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
       </Link>{" "}
       {purchase.variants_list}{" "}
       <Link href={purchase.product.long_url}>
-        <ArrowUpRightSquare className="size-4" />
+        <ArrowUpRightSquare className="size-5" />
       </Link>
     </h2>
     <ul className="inline">
@@ -157,7 +157,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dd>
             {purchase.seller.support_email}{" "}
             <CopyToClipboard text={purchase.seller.support_email}>
-              <Copy className="size-4" />
+              <Copy className="size-5" />
             </CopyToClipboard>
           </dd>
         </>
@@ -167,7 +167,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {purchase.seller.email}{" "}
         <CopyToClipboard text={purchase.seller.email}>
-          <Copy className="size-4" />
+          <Copy className="size-5" />
         </CopyToClipboard>
       </dd>
 

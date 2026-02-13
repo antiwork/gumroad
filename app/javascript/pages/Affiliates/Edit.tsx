@@ -136,7 +136,7 @@ export default function AffiliatesEdit() {
         actions={
           <>
             <NavigationButtonInertia href={Routes.affiliates_path()} disabled={processing}>
-              <XSquare className="size-4" />
+              <XSquare className="size-5" />
               Cancel
             </NavigationButtonInertia>
             <Button

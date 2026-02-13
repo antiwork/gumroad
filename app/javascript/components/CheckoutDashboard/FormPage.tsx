@@ -149,7 +149,7 @@ const FormPage = ({
                             outline
                             aria-label="Remove"
                           >
-                            <Trash className="size-4" />
+                            <Trash className="size-5" />
                           </Button>
                         </div>
                         {field.type !== "terms" ? (
@@ -247,7 +247,7 @@ const FormPage = ({
                   ])
                 }
               >
-                <Plus className="size-4" />
+                <Plus className="size-5" />
                 Add custom field
               </Button>
             </div>

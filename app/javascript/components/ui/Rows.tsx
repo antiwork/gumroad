@@ -53,7 +53,7 @@ export const RowDetails = ({
 export const RowDragHandle = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div ref={ref} className={classNames("order-first -ml-4 text-muted", className)} {...props}>
-      <Move className="size-4" />
+      <Move className="size-5" />
     </div>
   ),
 );

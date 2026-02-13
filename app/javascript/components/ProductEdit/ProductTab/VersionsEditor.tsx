@@ -52,7 +52,7 @@ export const VersionsEditor = ({
         ]);
       }}
     >
-      <Plus className="size-4" />
+      <Plus className="size-5" />
       Add version
     </Button>
   );
@@ -132,18 +132,18 @@ const VersionEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Layers pack="filled" className="size-4" />
+        <Layers pack="filled" className="size-5" />
         <h3>{version.name || "Untitled"}</h3>
       </RowContent>
       <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
-            {isOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
         </WithTooltip>
         <WithTooltip tip="Remove">
           <Button onClick={onDelete} aria-label="Remove version">
-            <Trash className="size-4" />
+            <Trash className="size-5" />
           </Button>
         </WithTooltip>
       </RowActions>

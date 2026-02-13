@@ -79,7 +79,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
               {
                 item: () => (
                   <>
-                    <Gear className="size-4" />
+                    <Gear className="size-5" />
                     <span>Settings</span>
                   </>
                 ),
@@ -147,7 +147,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
           </ProductCardGrid>
         ) : (
           <Placeholder>
-            <Archive pack="filled" className="size-4" />
+            <Archive pack="filled" className="size-5" />
             <p>No products found</p>
           </Placeholder>
         )}

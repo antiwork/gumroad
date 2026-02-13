@@ -179,7 +179,7 @@ const GettingStartedItem = ({
       <span className="mb-1 flex-1 text-left leading-tight font-semibold">{name}</span>
       <StatusIcon
         {...(statusIconPack ? { pack: statusIconPack } : {})}
-        className={cx("size-4 flex-none", iconClasses)}
+        className={cx("size-5 flex-none", iconClasses)}
       />
     </div>
   ) : (
@@ -188,7 +188,7 @@ const GettingStartedItem = ({
       <span className="leading-tight font-semibold">{name}</span>
       <StatusIcon
         {...(statusIconPack ? { pack: statusIconPack } : {})}
-        className={cx("absolute top-2 right-2 size-4", iconClasses)}
+        className={cx("absolute top-2 right-2 size-5", iconClasses)}
       />
       <p className="text-sm opacity-80">{description}</p>
     </div>
@@ -363,9 +363,9 @@ export const DashboardPage = ({
                 >
                   <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
                   {gettingStartedMinimized ? (
-                    <Fullscreen className="size-4" style={{ width: "20px", height: "20px" }} />
+                    <Fullscreen className="size-5" style={{ width: "20px", height: "20px" }} />
                   ) : (
-                    <FullscreenExit className="size-4" style={{ width: "20px", height: "20px" }} />
+                    <FullscreenExit className="size-5" style={{ width: "20px", height: "20px" }} />
                   )}
                 </a>
               </div>

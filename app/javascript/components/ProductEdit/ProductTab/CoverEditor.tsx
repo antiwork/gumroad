@@ -96,7 +96,7 @@ export const CoverEditor = ({
                 <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
                   <PopoverTrigger disabled={!canAddPreview || isUploading} asChild>
                     <Button aria-label="Add cover">
-                      <Plus className="size-4" />
+                      <Plus className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -189,7 +189,7 @@ const CoverUploader = ({
                 })}
               />
               <TabIcon>
-                <ArrowUp pack="filled" className="size-4" />
+                <ArrowUp pack="filled" className="size-5" />
               </TabIcon>
               Computer files
             </label>
@@ -203,7 +203,7 @@ const CoverUploader = ({
             aria-controls={`${uid}-url`}
           >
             <TabIcon>
-              <LinkIcon className="size-4" />
+              <LinkIcon className="size-5" />
             </TabIcon>
             External link
           </Tab>
@@ -232,7 +232,7 @@ const CoverUploader = ({
                 }}
                 aria-label="Upload"
               >
-                <ArrowUp pack="filled" className="size-4" />
+                <ArrowUp pack="filled" className="size-5" />
               </Button>
             </div>
           ) : null}
@@ -243,7 +243,7 @@ const CoverUploader = ({
   ) : (
     <>
       <Button color="primary" onClick={() => setIsSelecting(true)}>
-        <ArrowUp pack="filled" className="size-4" /> Upload images or videos
+        <ArrowUp pack="filled" className="size-5" /> Upload images or videos
       </Button>
       Images should be horizontal, at least 1280x720px, and 72 DPI (dots per inch).
     </>

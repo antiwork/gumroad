@@ -13,7 +13,7 @@ export const FilterPopover = ({ contentHTML }: Props) => (
   <Popover>
     <PopoverTrigger aria-label="Filter" className="js-toggle-filter-list" asChild>
       <Button>
-        <Filter className="size-4" />
+        <Filter className="size-5" />
       </Button>
     </PopoverTrigger>
     <PopoverContent sideOffset={4}>

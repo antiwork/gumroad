@@ -48,7 +48,7 @@ export const WishlistEditor = ({
       <SheetHeader>{newName || "Untitled"}</SheetHeader>
       {isDiscoverable ? (
         <small className="mt-1 text-muted">
-          <CheckCircle pack="filled" className="size-4" /> Discoverable
+          <CheckCircle pack="filled" className="size-5" /> Discoverable
         </small>
       ) : null}
 
