@@ -1,4 +1,5 @@
-import { Editor, Node as TiptapNode, Extension } from "@tiptap/core";
+import { Iframe, PlayCircle, Trash, Twitter } from "@boxicons/react";
+import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -15,7 +16,6 @@ import { MenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
-import { PlayCircle, Trash, Twitter } from "@boxicons/react";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -33,7 +33,7 @@ const MEDIA_EMBED_SUPPORTING_PROVIDERS = ["YouTube", "Vimeo", "Wistia, Inc.", "D
 const VideoEmbed = Extension.create({
   menuItem: (editor) => (
     <WithDialog editor={editor} type="embed">
-      <MenuItem name="Insert video" icon="embed" />
+      <MenuItem name="Insert video" icon={<Iframe className="size-4" />} />
     </WithDialog>
   ),
 });
@@ -80,7 +80,7 @@ export const Raw = TiptapNode.create({
   },
   menuItem: (editor) => (
     <WithDialog editor={editor} type="twitter">
-      <MenuItem name="Insert post" icon="twitter" />
+      <MenuItem name="Insert post" icon={<Twitter pack="brands" className="size-4" />} />
     </WithDialog>
   ),
   submenu: {
@@ -249,7 +249,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
         <Row className="embed">
           <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }} />
           <RowContent className="content">
-            <PlayCircle pack="filled" className="size-4 type-icon" />
+            <PlayCircle pack="filled" className="type-icon size-4" />
             <div>
               <h4 className="text-singleline">{node.attrs.title}</h4>
               {node.attrs.url ? (

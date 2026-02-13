@@ -1,3 +1,4 @@
+import { ArrowUp, ChevronDown, ChevronUp, FolderOpen, FolderPlus, Fullscreen, FullscreenExit } from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import { Editor, findChildren, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer, DOMParser as ProseMirrorDOMParser } from "@tiptap/pm/model";
@@ -19,8 +20,6 @@ import { Button, buttonVariants, NavigationButton } from "$app/components/Button
 import { connectedFileRowClassName } from "$app/components/Download/RichContent";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { ArrowUp, FolderOpen, FolderPlus } from "@boxicons/react";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -505,7 +504,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Thumbnail view" asChild>
                   <Button>
-                    <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
+                    {node.attrs.collapsed ? <Fullscreen className="size-4" /> : <FullscreenExit className="size-4" />}
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
@@ -518,7 +517,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         updateAttributes({ collapsed: !node.attrs.collapsed });
                       }}
                     >
-                      <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
+                      {node.attrs.collapsed ? <Fullscreen className="size-4" /> : <FullscreenExit className="size-4" />}
                       <span>{node.attrs.collapsed ? "Expand selected" : "Collapse selected"}</span>
                     </div>
                   </PopoverClose>
@@ -540,7 +539,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         });
                       }}
                     >
-                      <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
+                      {node.attrs.collapsed ? <Fullscreen className="size-4" /> : <FullscreenExit className="size-4" />}
                       <span>{node.attrs.collapsed ? "Expand all thumbnails" : "Collapse all thumbnails"}</span>
                     </div>
                   </PopoverClose>
@@ -551,7 +550,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
           {!file.is_streamable || isComplete ? (
             <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
-              <Icon name={expanded ? "outline-cheveron-up" : "outline-cheveron-down"} />
+              {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             </Button>
           ) : null}
 

@@ -7,8 +7,7 @@ import { classNames } from "$app/utils/classNames";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { getCssVariable } from "$app/utils/styles";
 
-import { Bookmark, FileDetail } from "@boxicons/react";
-import { Icon } from "$app/components/Icons";
+import { Bookmark, BookmarkPlus, BookmarkStar, FileDetail } from "@boxicons/react";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { ProductCard, ProductCardFigure, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { useFollowWishlist } from "$app/components/Wishlist/FollowButton";
@@ -128,7 +127,7 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
               role="button"
               aria-disabled={isLoading}
             >
-              <Icon name={isFollowing ? "bookmark-check-fill" : "bookmark-plus"} />
+              {isFollowing ? <BookmarkStar pack="filled" className="size-4" /> : <BookmarkPlus className="size-4" />}
             </a>
           ) : null}
         </footer>

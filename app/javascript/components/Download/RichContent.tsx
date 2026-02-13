@@ -1,4 +1,4 @@
-import { ChevronDown, Dropbox as DropboxIcon, FolderOpen } from "@boxicons/react";
+import { ChevronDown, ChevronRight, Dropbox as DropboxIcon, FolderOpen } from "@boxicons/react";
 import { Content, findParentNodeClosestToPos, Mark, Node as TiptapNode } from "@tiptap/core";
 import { LinkOptions as BaseLinkOptions } from "@tiptap/extension-link";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -14,7 +14,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
 import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { titleWithFallback } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
@@ -287,7 +286,7 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
       <Rows role="tree" ref={ref}>
         <Row role="treeitem" aria-expanded={expanded}>
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
-            <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+            {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
             <FolderOpen pack="filled" className="size-4 type-icon" />
             <div>
               <h4>{folderTitle}</h4>

@@ -1,4 +1,21 @@
-import { Archive, Bank, BarChart, Book, BookmarkHeart, Cart, DollarCircle, Envelope, Gear, MessageBubble, NetworkChart, Search, Store, Tag } from "@boxicons/react";
+import {
+  Archive,
+  ArrowRight,
+  Bank,
+  BarChart,
+  Book,
+  BookmarkHeart,
+  Cart,
+  DollarCircle,
+  Envelope,
+  Gear,
+  Gift,
+  MessageBubble,
+  NetworkChart,
+  Search,
+  Store,
+  Tag,
+} from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
@@ -13,9 +30,9 @@ import {
   Nav as NavFramework,
   NavLink,
   NavLinkDropdownItem,
-  UnbecomeDropdownItem,
   NavLinkDropdownMembershipItem,
   NavSection,
+  UnbecomeDropdownItem,
 } from "$app/components/Nav";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
@@ -69,9 +86,17 @@ export const Nav = (props: Props) => {
       footer={
         <>
           {currentSeller?.isBuyer ? (
-            <NavLink text="Start selling" icon={<Store pack="filled" className="size-4" />} href={Routes.dashboard_url(routeParams)} />
+            <NavLink
+              text="Start selling"
+              icon={<Store pack="filled" className="size-4" />}
+              href={Routes.dashboard_url(routeParams)}
+            />
           ) : null}
-          <NavLink text="Settings" icon={<Gear pack="filled" className="size-4" />} href={Routes.settings_main_url(routeParams)} />
+          <NavLink
+            text="Settings"
+            icon={<Gear pack="filled" className="size-4" />}
+            href={Routes.settings_main_url(routeParams)}
+          />
 
           <NavLink
             text="Help"
@@ -97,11 +122,19 @@ export const Nav = (props: Props) => {
               ) : null}
               <NavLinkDropdownItem
                 text="Profile"
-                icon="shop-window-fill"
+                icon={<Store pack="filled" className="mr-3 ml-1 size-4" />}
                 href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
               />
-              <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
-              <NavLinkDropdownItem text="Logout" icon="box-arrow-in-right-fill" href={Routes.logout_url(routeParams)} />
+              <NavLinkDropdownItem
+                text="Affiliates"
+                icon={<Gift pack="filled" className="mr-3 ml-1 size-4" />}
+                href={Routes.affiliates_url(routeParams)}
+              />
+              <NavLinkDropdownItem
+                text="Logout"
+                icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-4" />}
+                href={Routes.logout_url(routeParams)}
+              />
               {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
             </div>
           </DashboardNavProfilePopover>
@@ -110,7 +143,12 @@ export const Nav = (props: Props) => {
       {...props}
     >
       <NavSection>
-        <NavLink text="Home" icon={<Store pack="filled" className="size-4" />} href={Routes.dashboard_url(routeParams)} exactHrefMatch />
+        <NavLink
+          text="Home"
+          icon={<Store pack="filled" className="size-4" />}
+          href={Routes.dashboard_url(routeParams)}
+          exactHrefMatch
+        />
         <NavLink
           text="Products"
           icon={<Archive pack="filled" className="size-4" />}
@@ -118,7 +156,11 @@ export const Nav = (props: Props) => {
           additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
-          <NavLink text="Collaborators" icon={<Tag pack="filled" className="size-4" />} href={Routes.collaborators_url(routeParams)} />
+          <NavLink
+            text="Collaborators"
+            icon={<Tag pack="filled" className="size-4" />}
+            href={Routes.collaborators_url(routeParams)}
+          />
         ) : null}
         <NavLink
           text="Checkout"
@@ -132,8 +174,16 @@ export const Nav = (props: Props) => {
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
         />
-        <NavLink text="Workflows" icon={<NetworkChart pack="filled" className="size-4" />} href={Routes.workflows_url(routeParams)} />
-        <NavLink text="Sales" icon={<DollarCircle pack="filled" className="size-4" />} href={Routes.customers_url(routeParams)} />
+        <NavLink
+          text="Workflows"
+          icon={<NetworkChart pack="filled" className="size-4" />}
+          href={Routes.workflows_url(routeParams)}
+        />
+        <NavLink
+          text="Sales"
+          icon={<DollarCircle pack="filled" className="size-4" />}
+          href={Routes.customers_url(routeParams)}
+        />
         <NavLink
           text="Analytics"
           icon={<BarChart pack="filled" className="size-4" />}
@@ -148,7 +198,11 @@ export const Nav = (props: Props) => {
           <NavLink text="Payouts" icon={<Bank className="size-4" />} href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
-          <NavLink text="Community" icon={<MessageBubble pack="filled" className="size-4" />} href={Routes.community_path(routeParams)} />
+          <NavLink
+            text="Community"
+            icon={<MessageBubble pack="filled" className="size-4" />}
+            href={Routes.community_path(routeParams)}
+          />
         ) : null}
       </NavSection>
       <NavSection>

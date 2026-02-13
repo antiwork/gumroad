@@ -46,7 +46,6 @@ import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -518,7 +517,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             custom={
               <>
                 <LinkMenuItem editor={editor} />
-                <PopoverMenuItem name="Upload files" icon="upload-fill">
+                <PopoverMenuItem name="Upload files" icon={<ArrowUp pack="filled" className="size-4" />}>
                   <div role="menu" aria-label="Image and file uploader">
                     <div role="menuitem" onClick={() => setShowEmbedModal(true)}>
                       <PlayCircle className="size-4" />
@@ -717,7 +716,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <Rename />
                             <span>Input</span>
-                            <ChevronRight className="size-4 ml-auto" />
+                            <ChevronRight className="ml-auto size-4" />
                           </div>
                           <div role="menuitem" onClick={onInsertMoreLikeThis}>
                             <Grid className="size-4" />
@@ -789,7 +788,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
                             </span>
 
-                            <Icon name={pagesExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+                            {pagesExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                           </button>
                         </PageListItem>
                       )}

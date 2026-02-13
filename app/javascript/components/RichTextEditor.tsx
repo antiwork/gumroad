@@ -1,3 +1,23 @@
+import {
+  Blockquote,
+  Bold,
+  CartPlus,
+  ChevronDown,
+  Code,
+  FontFamily,
+  Heading1,
+  Heading2,
+  Heading3,
+  Italic,
+  ListOl,
+  ListUl,
+  Minus,
+  Redo,
+  Star,
+  Strikethrough,
+  Underline as UnderlineIcon,
+  Undo,
+} from "@boxicons/react";
 import { Content, createDocument, Editor, isList } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
@@ -14,8 +34,6 @@ import * as React from "react";
 import { assertDefined } from "$app/utils/assert";
 
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
-import { CartPlus, ChevronDown, Minus, Star } from "@boxicons/react";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Separator } from "$app/components/Separator";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
@@ -82,7 +100,7 @@ export const MenuItem = ({
   onClick,
 }: {
   name: string;
-  icon: IconName;
+  icon: React.ReactNode;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
@@ -96,7 +114,7 @@ export const MenuItem = ({
       aria-label={name}
       onClick={onClick}
     >
-      <Icon name={icon} />
+      {icon}
     </button>
   </MenuItemTooltip>
 );
@@ -107,15 +125,13 @@ export const PopoverMenuItem = ({
   children,
 }: {
   name: string;
-  icon: IconName;
+  icon: React.ReactNode;
   children: React.ReactNode;
 }) => (
   <Popover>
     <PopoverTrigger aria-label={name} className="all-unset">
       <MenuItemTooltip tip={name}>
-        <div className="toolbar-item">
-          <Icon name={icon} />
-        </div>
+        <div className="toolbar-item">{icon}</div>
       </MenuItemTooltip>
     </PopoverTrigger>
     <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -362,14 +378,14 @@ export const RichTextEditorToolbar = ({
     return () => void editor.off("transaction", handleTransaction);
   }, [editor]);
 
-  const textFormatOptions: { name: string; icon: IconName; type: string; attrs?: object }[] = [
-    { name: "Text", icon: "fonts", type: "paragraph" },
-    { name: "Header", icon: "h1", type: "heading", attrs: { level: 1 } },
-    { name: "Title", icon: "h2", type: "heading", attrs: { level: 2 } },
-    { name: "Subtitle", icon: "h3", type: "heading", attrs: { level: 3 } },
-    { name: "Bulleted list", icon: "unordered-list", type: "bulletList" },
-    { name: "Numbered list", icon: "ordered-list", type: "orderedList" },
-    { name: "Code block", icon: "code", type: "codeBlock" },
+  const textFormatOptions: { name: string; icon: React.ReactNode; type: string; attrs?: object }[] = [
+    { name: "Text", icon: <FontFamily className="size-4" />, type: "paragraph" },
+    { name: "Header", icon: <Heading1 className="size-4" />, type: "heading", attrs: { level: 1 } },
+    { name: "Title", icon: <Heading2 className="size-4" />, type: "heading", attrs: { level: 2 } },
+    { name: "Subtitle", icon: <Heading3 className="size-4" />, type: "heading", attrs: { level: 3 } },
+    { name: "Bulleted list", icon: <ListUl className="size-4" />, type: "bulletList" },
+    { name: "Numbered list", icon: <ListOl className="size-4" />, type: "orderedList" },
+    { name: "Code block", icon: <Code className="size-4" />, type: "codeBlock" },
   ];
   const activeFormatOption = [...textFormatOptions]
     .reverse()
@@ -410,7 +426,7 @@ export const RichTextEditorToolbar = ({
                       commands.focus().run();
                     }}
                   >
-                    <Icon name={option.icon} />
+                    {option.icon}
                     <span>{option.name}</span>
                   </div>
                 </PopoverClose>
@@ -421,31 +437,31 @@ export const RichTextEditorToolbar = ({
         <Separator aria-orientation="vertical" />
         <MenuItem
           name="Bold"
-          icon="bold"
+          icon={<Bold className="size-4" />}
           active={editor.isActive("bold")}
           onClick={() => editor.chain().focus().toggleBold().run()}
         />
         <MenuItem
           name="Italic"
-          icon="italic"
+          icon={<Italic className="size-4" />}
           active={editor.isActive("italic")}
           onClick={() => editor.chain().focus().toggleItalic().run()}
         />
         <MenuItem
           name="Underline"
-          icon="underline"
+          icon={<UnderlineIcon className="size-4" />}
           active={editor.isActive("underline")}
           onClick={() => editor.chain().focus().toggleUnderline().run()}
         />
         <MenuItem
           name="Strikethrough"
-          icon="strikethrough"
+          icon={<Strikethrough className="size-4" />}
           active={editor.isActive("strike")}
           onClick={() => editor.chain().focus().toggleStrike().run()}
         />
         <MenuItem
           name="Quote"
-          icon="quote"
+          icon={<Blockquote className="size-4" />}
           active={editor.isActive("blockquote")}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         />
@@ -457,7 +473,7 @@ export const RichTextEditorToolbar = ({
                 {extension.name === "horizontalRule" ? (
                   <MenuItem
                     name="Divider"
-                    icon="horizontal-rule"
+                    icon={<Minus className="size-4" />}
                     onClick={() => editor.chain().focus().setHorizontalRule().run()}
                   />
                 ) : (
@@ -515,14 +531,14 @@ export const RichTextEditorToolbar = ({
         <div className="ml-auto flex">
           <MenuItem
             name="Undo last change"
-            icon="undo"
+            icon={<Undo className="size-4" />}
             active={editor.isActive("undo")}
             disabled={undoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().undo().run()}
           />
           <MenuItem
             name="Redo last undone change"
-            icon="redo"
+            icon={<Redo className="size-4" />}
             active={editor.isActive("redo")}
             disabled={redoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().redo().run()}

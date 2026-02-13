@@ -1,4 +1,4 @@
-import { ChevronDown, Dropbox as DropboxIcon, FolderOpen } from "@boxicons/react";
+import { Check, ChevronDown, ChevronRight, Dropbox as DropboxIcon, FolderOpen, Pencil } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
@@ -14,7 +14,6 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -150,7 +149,7 @@ const FileEmbedGroupNodeView = ({
         <Row role="treeitem" aria-expanded={expanded} className={cx({ selected })}>
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
-            <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+            {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
             <FolderOpen pack="filled" className="size-4 type-icon" />
             {editing ? (
               <input
@@ -227,7 +226,7 @@ const FileEmbedGroupNodeView = ({
                     requestAnimationFrame(() => inputRef.current?.focus());
                   }}
                 >
-                  <Icon name={editing ? "outline-check" : "pencil"} />
+                  {editing ? <Check className="size-4" /> : <Pencil className="size-4" />}
                 </Button>
               ) : null}
             </RowActions>

@@ -8,8 +8,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { ArrowDown, Calendar, ChevronDown, Gear } from "@boxicons/react";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
@@ -20,9 +18,10 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { ArrowDown, Calendar, CheckCircle, ChevronDown, Clock, Gear } from "@boxicons/react";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
 
@@ -580,7 +579,11 @@ const PeriodBankAccount = ({
   <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacer-2)" }}>
     <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
       {bankAccount.arrival_date ? (
-        <Icon name={bankAccount.status === "completed" ? "solid-check-circle" : "outline-clock"} />
+        bankAccount.status === "completed" ? (
+          <CheckCircle pack="filled" className="size-4" />
+        ) : (
+          <Clock className="size-4" />
+        )
       ) : null}
       <h4>
         {bankAccount.arrival_date ? (

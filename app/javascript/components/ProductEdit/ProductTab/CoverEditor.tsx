@@ -1,3 +1,4 @@
+import { ArrowUp, Link as LinkIcon, Plus } from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import classNames from "classnames";
 import * as React from "react";
@@ -20,7 +21,6 @@ import { Placeholder } from "$app/components/ui/Placeholder";
 import { Tab, TabIcon, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { ArrowUp, Plus } from "@boxicons/react";
 const MAX_PREVIEW_COUNT = 8;
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "mov", "m4v", "mpeg", "mpg", "mp4", "wmv"];
@@ -188,7 +188,9 @@ const CoverUploader = ({
                   setIsSelecting(false);
                 })}
               />
-              <TabIcon name="upload-fill" />
+              <TabIcon>
+                <ArrowUp pack="filled" className="size-4" />
+              </TabIcon>
               Computer files
             </label>
           </Tab>
@@ -200,7 +202,9 @@ const CoverUploader = ({
             isSelected={uploader?.type === "url"}
             aria-controls={`${uid}-url`}
           >
-            <TabIcon name="link" />
+            <TabIcon>
+              <LinkIcon className="size-4" />
+            </TabIcon>
             External link
           </Tab>
         </Tabs>

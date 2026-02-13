@@ -1,4 +1,4 @@
-import { ArrowRight, Book, Gear, Store } from "@boxicons/react";
+import { ArrowRight, Book, Gear, Gift, Store } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -6,7 +6,7 @@ import { ClientNavLink } from "$app/components/client-components/Nav";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavLink, NavLinkDropdownItem, UnbecomeDropdownItem, NavLinkDropdownMembershipItem } from "$app/components/Nav";
+import { NavLink, NavLinkDropdownItem, NavLinkDropdownMembershipItem, UnbecomeDropdownItem } from "$app/components/Nav";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 
 function NavbarFooter() {
@@ -18,9 +18,17 @@ function NavbarFooter() {
   return (
     <>
       {currentSeller?.isBuyer ? (
-        <NavLink text="Start selling" icon={<Store pack="filled" className="size-4" />} href={Routes.dashboard_url(routeParams)} />
+        <NavLink
+          text="Start selling"
+          icon={<Store pack="filled" className="size-4" />}
+          href={Routes.dashboard_url(routeParams)}
+        />
       ) : null}
-      <ClientNavLink text="Settings" icon={<Gear pack="filled" className="size-4" />} href={Routes.settings_main_url(routeParams)} />
+      <ClientNavLink
+        text="Settings"
+        icon={<Gear pack="filled" className="size-4" />}
+        href={Routes.settings_main_url(routeParams)}
+      />
       <ClientNavLink text="Help" icon={<Book className="size-4" />} href={Routes.help_center_root_url(routeParams)} />
       <DashboardNavProfilePopover user={currentSeller}>
         <div role="menu" className="flex flex-col border-0! shadow-none! dark:border!">
@@ -34,12 +42,16 @@ function NavbarFooter() {
           ) : null}
           <NavLinkDropdownItem
             text="Profile"
-            icon="shop-window-fill"
+            icon={<Store pack="filled" className="mr-3 ml-1 size-4" />}
             href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
           />
-          <NavLinkDropdownItem text="Affiliates" icon="gift-fill" href={Routes.affiliates_url(routeParams)} />
+          <NavLinkDropdownItem
+            text="Affiliates"
+            icon={<Gift pack="filled" className="mr-3 ml-1 size-4" />}
+            href={Routes.affiliates_url(routeParams)}
+          />
           <Link role="menuitem" href={Routes.logout_url(routeParams)} method="delete" className="all-unset">
-            <ArrowRight pack="filled" className="size-4 mr-3 ml-1" />
+            <ArrowRight pack="filled" className="mr-3 ml-1 size-4" />
             Logout
           </Link>
           {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}

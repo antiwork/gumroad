@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, Layers, Plus, Trash } from "@boxicons/react";
 import { Editor } from "@tiptap/core";
 import cx from "classnames";
 import { format } from "date-fns";
@@ -8,8 +9,8 @@ import { getIsSingleUnitCurrency } from "$app/utils/currency";
 import { priceCentsToUnit } from "$app/utils/price";
 import {
   numberOfMonthsInRecurrence,
-  RecurrenceId,
   perRecurrenceLabels,
+  RecurrenceId,
   recurrenceNames,
 } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
@@ -18,8 +19,6 @@ import { Button } from "$app/components/Button";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Layers, Plus, Trash } from "@boxicons/react";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
@@ -207,7 +206,7 @@ const TierEditor = ({
       <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
-            <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
+            {isOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
           </Button>
         </WithTooltip>
         <WithTooltip tip="Remove">

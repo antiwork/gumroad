@@ -7,8 +7,7 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Key } from "@boxicons/react";
-import { Icon } from "$app/components/Icons";
+import { ChevronDown, ChevronUp, Key } from "@boxicons/react";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
@@ -69,7 +68,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
           ) : null}
           {editor.isEditable ? (
             <Button onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label={isDrawerOpen ? "Close drawer" : "Edit"}>
-              <Icon name={isDrawerOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
+              {isDrawerOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             </Button>
           ) : null}
         </RowActions>

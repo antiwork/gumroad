@@ -1,9 +1,8 @@
+import { CheckCircle, InfoCircle, Shield, XCircle, type BoxIconProps } from "@boxicons/react";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-
-import { Icon } from "$app/components/Icons";
 
 const alertVariants = cva("flex items-start gap-2 rounded border border-border p-3", {
   variants: {
@@ -19,12 +18,12 @@ const alertVariants = cva("flex items-start gap-2 rounded border border-border p
 
 type AlertVariant = NonNullable<VariantProps<typeof alertVariants>["variant"]>;
 
-const iconNames: Record<Exclude<AlertVariant, "accent">, IconName> = {
-  success: "solid-check-circle",
-  danger: "x-circle-fill",
-  warning: "solid-shield-exclamation",
-  info: "info-circle-fill",
-};
+const alertIcons = {
+  success: CheckCircle,
+  danger: XCircle,
+  warning: Shield,
+  info: InfoCircle,
+} satisfies Record<Exclude<AlertVariant, "accent">, React.ComponentType<BoxIconProps>>;
 
 const iconColorVariants = cva("size-[1lh]!", {
   variants: {
@@ -46,9 +45,12 @@ export interface AlertProps extends React.HTMLProps<HTMLDivElement> {
 export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
   ({ className, children, role = "alert", variant, ...props }, ref) => (
     <div ref={ref} role={role} className={classNames(alertVariants({ variant }), className)} {...props}>
-      {variant && variant !== "accent" ? (
-        <Icon name={iconNames[variant]} className={iconColorVariants({ variant })} aria-hidden="true" />
-      ) : null}
+      {variant && variant !== "accent"
+        ? (() => {
+            const AlertIcon = alertIcons[variant];
+            return <AlertIcon pack="filled" className={iconColorVariants({ variant })} aria-hidden="true" />;
+          })()
+        : null}
       <div className="flex-1">{children}</div>
     </div>
   ),

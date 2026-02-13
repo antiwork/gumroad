@@ -1,4 +1,4 @@
-import { Button as ButtonIcon } from "@boxicons/react";
+import { Button as ButtonIcon, Link as LinkIcon } from "@boxicons/react";
 import { Editor, Node } from "@tiptap/core";
 import { Link as BaseLink } from "@tiptap/extension-link";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
@@ -319,7 +319,7 @@ const TiptapButton = Node.create({
   },
   menuItem: (editor) => (
     <WithDialog editor={editor} type="button">
-      <MenuItem name="Insert button" icon="button" />
+      <MenuItem name="Insert button" icon={<ButtonIcon className="size-4" />} />
     </WithDialog>
   ),
   submenu: {
@@ -338,7 +338,11 @@ export { TiptapButton as Button };
 
 export const LinkMenuItem = ({ editor }: { editor: Editor }) => (
   <WithDialog editor={editor} type="link">
-    <MenuItem name="Insert link" icon="link" active={editor.isActive("link") || !!editor.getAttributes("image").link} />
+    <MenuItem
+      name="Insert link"
+      icon={<LinkIcon className="size-4" />}
+      active={editor.isActive("link") || !!editor.getAttributes("image").link}
+    />
   </WithDialog>
 );
 

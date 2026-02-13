@@ -1,8 +1,6 @@
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Clock, Plus, Trash } from "@boxicons/react";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
@@ -12,6 +10,7 @@ import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { ChevronDown, ChevronUp, Clock, Plus, Trash } from "@boxicons/react";
 
 let newDurationId = 0;
 
@@ -133,7 +132,7 @@ const DurationEditor = ({
       <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
           <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
-            <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
+            {isOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
           </Button>
         </WithTooltip>
         <WithTooltip tip="Remove">
