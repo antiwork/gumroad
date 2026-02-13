@@ -15,9 +15,11 @@ export default function SubscribePage() {
   const { creator_profile } = cast<Props>(usePage().props);
 
   return (
+    <>
       <Layout hideFollowForm creatorProfile={creator_profile}>
         <FollowFormBlock creatorProfile={creator_profile} className="px-4" />
       </Layout>
+    </>
   );
 }
 

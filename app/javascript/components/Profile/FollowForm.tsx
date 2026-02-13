@@ -5,7 +5,6 @@ import { useForm } from "@inertiajs/react";
 import { CreatorProfile } from "$app/parsers/profile";
 import { classNames } from "$app/utils/classNames";
 import { isValidEmail } from "$app/utils/email";
-import * as Routes from "$app/utils/routes";
 
 import { Button } from "$app/components/Button";
 import { ButtonColor } from "$app/components/design";
@@ -55,7 +54,7 @@ export const FollowForm = ({ creatorProfile, buttonColor, buttonLabel }: FollowF
       return;
     }
 
-   post(Routes.follow_user_path(), {
+    post("/follow", {
       onSuccess: () => setFormStatus("success"),
     });
   };

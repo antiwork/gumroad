@@ -10,8 +10,9 @@ export default function ShowPage() {
   const { ...profileProps } = cast<Props>(usePage().props);
 
   return (
-
+    <>
       <Profile {...profileProps} />
+    </>
   );
 }
 

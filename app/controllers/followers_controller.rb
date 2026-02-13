@@ -47,19 +47,19 @@ class FollowersController < ApplicationController
   def create
     follower = create_follower(params)
 
-    return redirect_to(custom_domain_subscribe_path, alert: "Sorry, something went wrong.") if follower.nil?
+    return redirect_to(custom_domain_subscribe_path, alert: "Sorry, something went wrong.", allow_other_host: true, status: :see_other) if follower.nil?
 
     if follower.errors.present?
-      return redirect_to(custom_domain_subscribe_path, alert: follower.errors.full_messages.to_sentence)
+      return redirect_to(custom_domain_subscribe_path, alert: follower.errors.full_messages.to_sentence, allow_other_host: true, status: :see_other)
     end
 
     message = if follower.confirmed?
-      "You are now following #{follower.user.name_or_username}!"
-    else
-      "Check your inbox to confirm your follow request."
-    end
+                "You are now following #{follower.user.name_or_username}!"
+              else
+                "Check your inbox to confirm your follow request."
+              end
 
-    redirect_to custom_domain_subscribe_path, notice: message, status: :see_other
+    redirect_to custom_domain_subscribe_path, notice: message, allow_other_host: true, status: :see_other
   end
 
   def new
@@ -76,7 +76,7 @@ class FollowersController < ApplicationController
       e404 unless user.try(:username)
       redirect_to user.profile_url, allow_other_host: true
     else
-      render inertia: "Followers/FromEmbedForm"
+      redirect_to @follower.user.profile_url, notice: "Followed!", allow_other_host: true
     end
   end
 
@@ -85,7 +85,7 @@ class FollowersController < ApplicationController
 
     @follower.confirm!
 
-  
+    # Redirect to the followed user's profile
     redirect_to @follower.user.profile_url, notice: "Thanks for the follow!", allow_other_host: true
   end
 
