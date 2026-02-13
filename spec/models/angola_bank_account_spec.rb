@@ -53,12 +53,12 @@ describe AngolaBankAccount do
       expect(build(:angola_bank_account, account_number: "AO06004400006729503010102")).to be_valid
     end
 
-    it "accepts a valid 21-digit NIB" do
-      expect(build(:angola_bank_account, account_number: "004400006729503010102")).to be_valid
-    end
-
     it "accepts an IBAN with whitespace" do
       expect(build(:angola_bank_account, account_number: "AO06 0044 0000 6729 5030 10102")).to be_valid
+    end
+
+    it "rejects a 21-digit NIB (Stripe requires 25-character IBAN)" do
+      expect(build(:angola_bank_account, account_number: "004400006729503010102")).not_to be_valid
     end
 
     it "rejects an invalid account number" do
