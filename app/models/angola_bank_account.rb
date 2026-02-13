@@ -51,7 +51,8 @@ class AngolaBankAccount < BankAccount
 
     def validate_account_number
       return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
-      return if Ibandit::IBAN.new(account_number_decrypted).valid?
+      iban = Ibandit::IBAN.new(account_number_decrypted)
+      return if iban.valid? && iban.country_code == "AO"
       errors.add :base, "The account number is invalid."
     end
 end
