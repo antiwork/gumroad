@@ -890,7 +890,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         >
           <div className="relative h-full flex-1">
             {editor?.isEmpty && (
-              <div className="pointer-events-none absolute inset-0 flex items-start p-2">
+              <div className="pointer-events-none absolute inset-0 flex items-start">
                 <p className="flex flex-wrap items-center gap-1 text-muted">
                   <span>Enter the content you want to sell.</span>
                   <Popover>
