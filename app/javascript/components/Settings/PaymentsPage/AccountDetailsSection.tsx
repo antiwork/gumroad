@@ -454,7 +454,9 @@ const AccountDetailsSection = ({
           >
             <Fieldset state={errorFieldNames.has("business_name") ? "danger" : undefined}>
               <FieldsetTitle>
-                <Label htmlFor={`${uid}-business-legal-name`}>Legal business name</Label>
+                <Label htmlFor={`${uid}-business-legal-name`}>
+                  {complianceInfo.business_country === "JP" ? "Legal business name (Romaji)" : "Legal business name"}
+                </Label>
               </FieldsetTitle>
               <Input
                 id={`${uid}-business-legal-name`}
@@ -529,7 +531,7 @@ const AccountDetailsSection = ({
                 <Input
                   id={`${uid}-business-name-kana`}
                   type="text"
-                  placeholder="Business Name (Kana)"
+                  placeholder="カタカナ"
                   value={complianceInfo.business_name_kana || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_name_kana")}
@@ -849,7 +851,7 @@ const AccountDetailsSection = ({
                 <Input
                   id={`${uid}-creator-first-name-kana`}
                   type="text"
-                  placeholder="First name (Kana)"
+                  placeholder="カタカナ"
                   value={complianceInfo.first_name_kana || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("first_name_kana")}
@@ -864,7 +866,7 @@ const AccountDetailsSection = ({
                 <Input
                   id={`${uid}-creator-last-name-kana`}
                   type="text"
-                  placeholder="Last name (Kana)"
+                  placeholder="カタカナ"
                   value={complianceInfo.last_name_kana || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("last_name_kana")}
