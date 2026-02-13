@@ -10,7 +10,6 @@ import Nav from "$app/components/server-components/Nav";
 import ProductEditPage from "$app/components/server-components/ProductEditPage";
 import SupportHeader from "$app/components/server-components/support/Header";
 import TaxesCollectionModal from "$app/components/server-components/TaxesCollectionModal";
-import VideoStreamPlayer from "$app/components/server-components/VideoStreamPlayer";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Pill } from "$app/components/ui/Pill";
 
@@ -24,5 +23,4 @@ ReactOnRails.register({
   Pill,
   ProductEditPage,
   TaxesCollectionModal,
-  VideoStreamPlayer,
 });

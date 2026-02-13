@@ -729,17 +729,29 @@ describe UrlRedirectsController do
         expect(response).to redirect_to(url_redirect_rental_expired_page_path(id: @url_redirect.token))
       end
 
-      context "when 'product_file_id' is missing from the params" do
+      context "when 'product_file_id' is missing from the params", inertia: true do
         before do
           @product.product_files << create(:product_file, link: @product)
           stub_const("UrlRedirect::GUID_GETTER_FROM_S3_URL_REGEX", /(specs)/)
         end
 
-        it "assigns the first streamable product file to '@product_file' and renders the stream page correctly" do
+        it "renders the stream page with the first streamable product file" do
           get :stream, params: { id: @url_redirect.token }
 
           expect(response).to have_http_status(:ok)
-          expect(assigns(:product_file)).to eq(@product.product_files.first)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
+          expect(inertia.props[:url_redirect_id]).to eq(@url_redirect.external_id)
+          expect(inertia.props[:purchase_id]).to be_nil
+          expect(inertia.props[:should_show_transcoding_notice]).to eq(false)
+          expect(inertia.props[:transcode_on_first_sale]).to eq(false)
+
+          playlist = inertia.props.fetch(:playlist)
+          expect(playlist).to be_present
+          expect(inertia.props[:index_to_play]).to eq(0)
+
+          streamable_product_file = @product.product_files.find(&:streamable?)
+          first_external_id = playlist.first[:external_id] || playlist.first["external_id"]
+          expect(first_external_id).to eq(streamable_product_file.external_id)
         end
       end
 
@@ -752,6 +764,31 @@ describe UrlRedirectsController do
           expect do
             get :stream, params: { id: @url_redirect.token, product_file_id: @product.product_files.first.external_id }
           end.to raise_error(ActionController::RoutingError)
+        end
+      end
+
+      context "when 'product_file_id' points to a non-streamable file" do
+        it "raises 404 error" do
+          non_streamable_product_file = create(:product_file, link: @product)
+
+          expect do
+            get :stream, params: { id: @url_redirect.token, product_file_id: non_streamable_product_file.external_id }
+          end.to raise_error(ActionController::RoutingError)
+        end
+      end
+
+      context "when url redirect has a purchase", inertia: true do
+        before do
+          @url_redirect.update!(purchase: create(:purchase, link: @product))
+          stub_const("UrlRedirect::GUID_GETTER_FROM_S3_URL_REGEX", /(specs)/)
+        end
+
+        it "includes purchase_id in stream props" do
+          get :stream, params: { id: @url_redirect.token }
+
+          expect(response).to have_http_status(:ok)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
+          expect(inertia.props[:purchase_id]).to eq(@url_redirect.purchase.external_id)
         end
       end
 
@@ -769,6 +806,81 @@ describe UrlRedirectsController do
         expect(event.purchase_id).not_to be_nil
         expect(event.link_id).to eq @product.id
         expect(event.platform).to eq Platform::WEB
+      end
+
+      context "with custom domain route", type: :request do
+        let!(:custom_domain) { create(:custom_domain, user: @product.user) }
+
+        it "renders stream page via custom domain" do
+          stub_const("UrlRedirect::GUID_GETTER_FROM_S3_URL_REGEX", /(specs)/)
+
+          get "/s/#{@url_redirect.token}",
+              headers: { "HOST" => custom_domain.domain }
+
+          expect(response).to have_http_status(:ok)
+          expect(response.body).to include("data-page=")
+
+          page_data_match = response.body.match(/data-page=\"([^\"]*)\"/)
+          expect(page_data_match).to be_present, "Expected Inertia.js data-page attribute"
+
+          page_data = JSON.parse(CGI.unescapeHTML(page_data_match[1]))
+          expect(page_data.fetch("component")).to eq("UrlRedirects/Stream")
+
+          props = page_data.fetch("props")
+          expect(props).to include(
+            "playlist",
+            "index_to_play",
+            "url_redirect_id",
+            "purchase_id",
+            "should_show_transcoding_notice",
+            "transcode_on_first_sale",
+          )
+
+          expect(props.fetch("url_redirect_id")).to eq(@url_redirect.external_id)
+          expect(props.fetch("purchase_id")).to be_nil
+          expect(props.fetch("should_show_transcoding_notice")).to eq(false)
+          expect(props.fetch("transcode_on_first_sale")).to eq(false)
+
+          playlist = props.fetch("playlist")
+          expect(playlist).to be_present
+          expect(props.fetch("index_to_play")).to eq(0)
+
+          streamable_product_file = @product.product_files.find(&:streamable?)
+          expect(playlist.first.fetch("external_id")).to eq(streamable_product_file.external_id)
+        end
+      end
+
+      context "with custom subdomain", inertia: true do
+        before do
+          stub_const("UrlRedirect::GUID_GETTER_FROM_S3_URL_REGEX", /(specs)/)
+          @request.host = URI.parse(@product.user.subdomain_with_protocol).host
+        end
+
+        it "renders stream page via custom subdomain" do
+          get :stream, params: { id: @url_redirect.token }
+
+          expect(response).to have_http_status(:ok)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
+          expect(inertia.props[:playlist]).to be_present
+          expect(inertia.props[:index_to_play]).to eq(0)
+          expect(inertia.props[:url_redirect_id]).to eq(@url_redirect.external_id)
+          expect(inertia.props[:purchase_id]).to be_nil
+          expect(inertia.props[:should_show_transcoding_notice]).to eq(false)
+          expect(inertia.props[:transcode_on_first_sale]).to eq(false)
+        end
+
+        it "renders stream page with product_file_id via custom subdomain" do
+          get :stream, params: { id: @url_redirect.token, product_file_id: @product.product_files.first.external_id }
+
+          expect(response).to have_http_status(:ok)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
+          expect(inertia.props[:playlist]).to be_present
+          expect(inertia.props[:index_to_play]).to eq(0)
+          expect(inertia.props[:url_redirect_id]).to eq(@url_redirect.external_id)
+          expect(inertia.props[:purchase_id]).to be_nil
+          expect(inertia.props[:should_show_transcoding_notice]).to eq(false)
+          expect(inertia.props[:transcode_on_first_sale]).to eq(false)
+        end
       end
     end
 
@@ -1155,7 +1267,7 @@ describe UrlRedirectsController do
         end
       end
 
-      describe "hls" do
+      describe "hls", inertia: true do
         before do
           @multifile_product = create(:product)
           @video_file_1 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4", is_transcoded_for_hls: true, display_name: "Chapter 2", position: 2)
@@ -1169,27 +1281,27 @@ describe UrlRedirectsController do
 
         it "sets the m3u8 playlist url and the original video url in sources for hls-transcoded video" do
           get :stream, params: { id: @multifile_url_redirect.token, product_file_id: @video_file_1.external_id }
-          video_urls = assigns(:videos_playlist)[:playlist]
+          video_urls = inertia.props[:playlist]
 
           expect(response).to be_successful
-          expect(assigns(:hide_layouts)).to eq(true)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
           expect(video_urls.size).to eq 1
           expect(video_urls[0][:sources][0]).to include "index.m3u8"
           expect(video_urls[0][:sources][1]).to include @video_file_1.s3_filename
-          expect(assigns(:videos_playlist)[:index_to_play]).to eq 0
+          expect(inertia.props[:index_to_play]).to eq 0
         end
 
         it "sets the smil url and the original video url in sources if the video is not HLS-transcoded yet" do
           @video_file_1.update(is_transcoded_for_hls: false)
           get :stream, params: { id: @multifile_url_redirect.token }
-          video_urls = assigns(:videos_playlist)[:playlist]
+          video_urls = inertia.props[:playlist]
 
           expect(response).to be_successful
-          expect(assigns(:hide_layouts)).to eq(true)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
           expect(video_urls.size).to eq 1
           expect(video_urls[0][:sources][0]).to include "stream.smil"
           expect(video_urls[0][:sources][1]).to include @video_file_1.s3_filename
-          expect(assigns(:videos_playlist)[:index_to_play]).to eq 0
+          expect(inertia.props[:index_to_play]).to eq 0
         end
 
         context "when the product has rich content" do
@@ -1210,7 +1322,7 @@ describe UrlRedirectsController do
 
             get :stream, params: { id: @multifile_url_redirect.token, product_file_id: video_file_2.external_id }
 
-            video_urls = assigns(:videos_playlist)[:playlist]
+            video_urls = inertia.props[:playlist]
             expect(response).to be_successful
             expect(video_urls.size).to eq 3
             expect(video_urls[0][:sources][0]).to include "stream.smil"
@@ -1225,7 +1337,7 @@ describe UrlRedirectsController do
             expect(video_urls[2][:sources][0]).to include "stream.smil"
             expect(video_urls[2][:sources][1]).to include video_file_3.s3_filename
             expect(video_urls[2][:title]).to eq "chapter3"
-            expect(assigns(:videos_playlist)[:index_to_play]).to eq 0
+            expect(inertia.props[:index_to_play]).to eq 0
           end
         end
 
@@ -1241,9 +1353,9 @@ describe UrlRedirectsController do
           installment.product_files << video_file_1 << video_file_2 << pdf_file << video_file_3 << mp3_file
           url_redirect = create(:installment_url_redirect, installment:)
           get :stream, params: { id: url_redirect.token, product_file_id: video_file_3.external_id }
-          video_urls = assigns(:videos_playlist)[:playlist]
+          video_urls = inertia.props[:playlist]
           expect(response).to be_successful
-          expect(assigns(:hide_layouts)).to eq(true)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
           expect(video_urls.size).to eq(3)
           expect(video_urls[2][:sources][0]).to include "index.m3u8"
           expect(video_urls[2][:sources][1]).to include video_file_1.s3_filename
@@ -1257,7 +1369,7 @@ describe UrlRedirectsController do
           expect(video_urls[0][:sources][0]).to include "stream.smil"
           expect(video_urls[0][:sources][1]).to include video_file_3.s3_filename
           expect(video_urls[0][:title]).to eq video_file_3.display_name
-          expect(assigns(:videos_playlist)[:index_to_play]).to eq 0
+          expect(inertia.props[:index_to_play]).to eq 0
         end
       end
 
