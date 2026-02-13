@@ -15,12 +15,12 @@ describe CheckPaymentAddressWorker do
       expect(@user.reload.flagged?).to be(false)
     end
 
-    it "flags the user for fraud if there are other banned users with the same payment address" do
+    it "flags the user for fraud if there are other fraud-suspended users with the same payment address" do
       @user = create(:user, payment_address: "tuhins@gmail.com")
 
       CheckPaymentAddressWorker.new.perform(@user.id)
 
-      expect(@user.reload.flagged?).to be(true)
+      expect(@user.reload.flagged_for_fraud?).to be(true)
     end
 
     it "flags the user for fraud if a blocked email object exists for their payment address" do
@@ -28,7 +28,28 @@ describe CheckPaymentAddressWorker do
 
       CheckPaymentAddressWorker.new.perform(@user.id)
 
-      expect(@user.reload.flagged?).to be(true)
+      expect(@user.reload.flagged_for_fraud?).to be(true)
+    end
+
+    it "probates the user if matching account is suspended for TOS violation" do
+      tos_user = create(:user, user_risk_state: "suspended_for_tos_violation", payment_address: "tos_violator@gmail.com")
+      user = create(:user, payment_address: "tos_violator@gmail.com")
+
+      CheckPaymentAddressWorker.new.perform(user.id)
+
+      expect(user.reload.on_probation?).to be(true)
+      expect(user.comments.where(comment_type: "on").last.content).to include("suspended for TOS violation")
+      expect(user.comments.where(comment_type: "on").last.content).to include("User##{tos_user.id}")
+    end
+
+    it "flags for fraud instead of probation when both fraud and TOS matches exist" do
+      tos_user = create(:user, user_risk_state: "suspended_for_tos_violation", payment_address: "shared@gmail.com")
+      fraud_user = create(:user, user_risk_state: "suspended_for_fraud", payment_address: "shared@gmail.com")
+      user = create(:user, payment_address: "shared@gmail.com")
+
+      CheckPaymentAddressWorker.new.perform(user.id)
+
+      expect(user.reload.flagged_for_fraud?).to be(true)
     end
   end
 
@@ -45,7 +66,7 @@ describe CheckPaymentAddressWorker do
       expect(user.reload.flagged?).to be(false)
     end
 
-    it "flags the user for fraud if a suspended user has the same stripe fingerprint" do
+    it "flags the user for fraud if a fraud-suspended user has the same stripe fingerprint" do
       suspended_user = create(:user, user_risk_state: "suspended_for_fraud")
       create(:ach_account, user: suspended_user, stripe_fingerprint: "same_fingerprint_123")
 
@@ -54,10 +75,10 @@ describe CheckPaymentAddressWorker do
 
       CheckPaymentAddressWorker.new.perform(user.id)
 
-      expect(user.reload.flagged?).to be(true)
+      expect(user.reload.flagged_for_fraud?).to be(true)
     end
 
-    it "flags the user for fraud if a suspended_for_tos_violation user has the same stripe fingerprint" do
+    it "probates the user if a TOS-suspended user has the same stripe fingerprint" do
       suspended_user = create(:user, user_risk_state: "suspended_for_tos_violation")
       create(:ach_account, user: suspended_user, stripe_fingerprint: "same_fingerprint_456")
 
@@ -66,7 +87,8 @@ describe CheckPaymentAddressWorker do
 
       CheckPaymentAddressWorker.new.perform(user.id)
 
-      expect(user.reload.flagged?).to be(true)
+      expect(user.reload.on_probation?).to be(true)
+      expect(user.comments.where(comment_type: "on").last.content).to include("suspended for TOS violation")
     end
 
     it "flags the user for fraud if a blocked fingerprint object exists" do
@@ -76,7 +98,7 @@ describe CheckPaymentAddressWorker do
 
       CheckPaymentAddressWorker.new.perform(user.id)
 
-      expect(user.reload.flagged?).to be(true)
+      expect(user.reload.flagged_for_fraud?).to be(true)
     end
 
     it "flags the user even if the suspended user's bank account is deleted (fraud history is preserved)" do
@@ -89,7 +111,7 @@ describe CheckPaymentAddressWorker do
 
       CheckPaymentAddressWorker.new.perform(user.id)
 
-      expect(user.reload.flagged?).to be(true)
+      expect(user.reload.flagged_for_fraud?).to be(true)
     end
 
     it "does not flag if the new user's bank account is deleted" do
@@ -124,7 +146,7 @@ describe CheckPaymentAddressWorker do
 
       CheckPaymentAddressWorker.new.perform(user.id)
 
-      expect(user.reload.flagged?).to be(true)
+      expect(user.reload.flagged_for_fraud?).to be(true)
     end
 
     it "flags if any of the user's fingerprints is blocked" do
@@ -135,7 +157,7 @@ describe CheckPaymentAddressWorker do
 
       CheckPaymentAddressWorker.new.perform(user.id)
 
-      expect(user.reload.flagged?).to be(true)
+      expect(user.reload.flagged_for_fraud?).to be(true)
     end
   end
 
@@ -150,6 +172,28 @@ describe CheckPaymentAddressWorker do
       CheckPaymentAddressWorker.new.perform(already_flagged_user.id)
 
       expect(already_flagged_user.reload.user_risk_state).to eq("flagged_for_fraud")
+    end
+
+    it "does not probate a user who is already on probation" do
+      tos_user = create(:user, user_risk_state: "suspended_for_tos_violation", payment_address: "tos@example.com")
+      user = create(:user, user_risk_state: "on_probation", payment_address: "tos@example.com")
+      initial_comment_count = user.comments.count
+
+      CheckPaymentAddressWorker.new.perform(user.id)
+
+      expect(user.reload.on_probation?).to be(true)
+      expect(user.comments.count).to eq(initial_comment_count)
+    end
+
+    it "does not probate a suspended user" do
+      tos_user = create(:user, user_risk_state: "suspended_for_tos_violation", payment_address: "tos@example.com")
+      user = create(:user, user_risk_state: "suspended_for_fraud", payment_address: "tos@example.com")
+      initial_comment_count = user.comments.count
+
+      CheckPaymentAddressWorker.new.perform(user.id)
+
+      expect(user.reload.suspended_for_fraud?).to be(true)
+      expect(user.comments.count).to eq(initial_comment_count)
     end
 
     it "does not raise error if user is not found" do

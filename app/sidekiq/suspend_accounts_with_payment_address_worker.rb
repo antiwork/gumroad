@@ -40,6 +40,21 @@ class SuspendAccountsWithPaymentAddressWorker
     end
 
     def flag_and_suspend_user(user, suspended_user, identifier_type, identifier_value)
+      if suspended_user.suspended_for_tos_violation?
+        probate_user(user, suspended_user, identifier_type, identifier_value)
+      else
+        suspend_user_for_fraud(user, suspended_user, identifier_type, identifier_value)
+      end
+    end
+
+    def probate_user(user, suspended_user, identifier_type, identifier_value)
+      user.put_on_probation(
+        author_name: "suspend_sellers_other_accounts",
+        content: "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of #{identifier_type} #{identifier_value} (from suspended for TOS violation User##{suspended_user.id})"
+      )
+    end
+
+    def suspend_user_for_fraud(user, suspended_user, identifier_type, identifier_value)
       user.flag_for_fraud(
         author_name: "suspend_sellers_other_accounts",
         content: "Flagged for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of #{identifier_type} #{identifier_value} (from User##{suspended_user.id})"
