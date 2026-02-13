@@ -59,7 +59,7 @@ function Audience() {
                 <ExportSubscribersPopover />
               </PopoverContent>
             </Popover>
-            <DateRangePicker {...dateRange} className="w-full flex-1" />
+            <DateRangePicker {...dateRange} className="flex-1" />
           </div>
         ) : null
       }
