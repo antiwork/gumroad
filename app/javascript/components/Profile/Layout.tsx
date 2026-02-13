@@ -8,9 +8,8 @@ import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
+import { FollowForm } from "$app/components/Profile/FollowForm";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
-
-import { FollowForm } from "./FollowForm";
 
 type LayoutProps = {
   creatorProfile: CreatorProfile;

@@ -128,8 +128,13 @@ const AccountDetailsSection = ({
   };
 
   const getBusinessTaxIdConfig = (): TaxIdConfig => {
-    const configs: Record<string, { label: string; placeholder: string }> = {
-      US: { label: "Business Tax ID (EIN, or SSN for sole proprietors)", placeholder: "12-3456789" },
+    const configs: Record<string, { label: string; placeholder: string; minLength?: number; maxLength?: number }> = {
+      US: {
+        label: "Business Tax ID (EIN, or SSN for sole proprietors)",
+        placeholder: "12-3456789",
+        minLength: 9,
+        maxLength: 10,
+      },
       CA: { label: "Business Number (BN)", placeholder: "123456789" },
       AU: { label: "Australian Business Number (ABN)", placeholder: "12 123 456 789" },
       GB: { label: "Company Number (CRN)", placeholder: "12345678" },
@@ -140,6 +145,8 @@ const AccountDetailsSection = ({
     return {
       label: config?.label ?? "Company tax ID",
       placeholder: config?.placeholder ?? "12345678",
+      ...(config?.minLength != null && { minLength: config.minLength }),
+      ...(config?.maxLength != null && { maxLength: config.maxLength }),
       idSuffix: "business-tax-id",
     };
   };
@@ -718,6 +725,8 @@ const AccountDetailsSection = ({
                 id={`${uid}-${businessTaxIdConfig.idSuffix}`}
                 type="text"
                 placeholder={user.business_tax_id_entered ? "Hidden for security" : businessTaxIdConfig.placeholder}
+                minLength={businessTaxIdConfig.minLength}
+                maxLength={businessTaxIdConfig.maxLength}
                 required={complianceInfo.is_business}
                 disabled={isFormDisabled}
                 aria-invalid={errorFieldNames.has("business_tax_id")}
