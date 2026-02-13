@@ -218,7 +218,7 @@ class UserComplianceInfo < ApplicationRecord
     end
 
     def business_name_romaji_format
-      return if country_code != Compliance::Countries::JPN.alpha2
+      return if business_country_code != Compliance::Countries::JPN.alpha2
       return if !is_business?
       return if business_name.blank?
       return if business_name.match?(ROMAJI_REGEX)
