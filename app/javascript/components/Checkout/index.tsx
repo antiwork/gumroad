@@ -1,7 +1,6 @@
 import * as React from "react";
 
 import { computeOfferDiscount } from "$app/data/offer_code";
-import { getRecommendedProducts } from "$app/data/recommended_products";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { classNames } from "$app/utils/classNames";
@@ -9,9 +8,7 @@ import { formatUSDCentsWithExpandedCurrencySymbol } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
-import { asyncVoid } from "$app/utils/promise";
 import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels } from "$app/utils/recurringPricing";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import {
@@ -50,11 +47,11 @@ import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import {
-  CartState,
+  type CartState,
   convertToUSD,
   hasFreeTrial,
   getDiscountedPrice,
-  CartItem as CartItemProps,
+  type CartItem as CartItemProps,
   findCartItem,
 } from "./cartState";
 import {
@@ -97,21 +94,18 @@ const nameOfSalesTaxForCountry = (countryCode: string) => {
 export const Checkout = ({
   discoverUrl,
   cart,
-  setCart,
+  updateCart,
   recommendedProducts,
-  setRecommendedProducts,
 }: {
   discoverUrl: string;
   cart: CartState;
-  setCart?: (prev: React.SetStateAction<CartState>) => void;
+  updateCart: (updated: Partial<CartState>) => void;
   recommendedProducts?: CardProduct[] | null;
-  setRecommendedProducts?: (prev: React.SetStateAction<CardProduct[] | null>) => void;
 }) => {
   const [state] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
 
-  const updateCart = (updated: Partial<CartState>) => setCart?.((prevCart) => ({ ...prevCart, ...updated }));
   const isGift = state.gift != null;
 
   async function applyDiscount(code: string, fromUrl = false) {
@@ -202,21 +196,6 @@ export const Checkout = ({
       ),
   );
 
-  const isMobile = !useIsAboveBreakpoint("sm");
-  const productIds = cart.items.map(({ product }) => product.id);
-  React.useEffect(() => {
-    if (state.status.type !== "input") return;
-    if (!productIds.length) return;
-    asyncVoid(async () => {
-      try {
-        setRecommendedProducts?.(await getRecommendedProducts(productIds, isMobile ? 2 : 6));
-      } catch (e) {
-        assertResponseError(e);
-        showAlert(e.message, "error");
-      }
-    })();
-  }, [isMobile, productIds.join(",")]);
-
   const commissionTotal = cart.items
     .filter((item) => item.product.native_type === "commission")
     .reduce((sum, item) => sum + getDiscountedPrice(cart, item).price, 0);
@@ -270,11 +249,11 @@ export const Checkout = ({
               </CartItemList>
               <CartItemList>
                 {displayTipSelector ? (
-                  <div className="p-3 sm:p-5">
+                  <div className="p-4 sm:p-5">
                     <TipSelector />
                   </div>
                 ) : null}
-                <div className={classNames("grid gap-4 p-4", displayTipSelector && "border-t border-border")}>
+                <div className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}>
                   {state.surcharges.type === "loaded" ? (
                     <>
                       <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
@@ -360,7 +339,7 @@ export const Checkout = ({
                 </div>
                 {total != null ? (
                   <>
-                    <footer className="grid gap-4 border-t border-border p-4">
+                    <footer className="grid gap-4 border-t border-border p-4 sm:px-5">
                       <CartPriceItem title="Total" price={formatPrice(total)} variant="large" />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (

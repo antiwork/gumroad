@@ -14,6 +14,7 @@ class MerchantAccount < ApplicationRecord
   has_many :charges
 
   attr_json_data_accessor :meta
+  attr_json_data_accessor :unclaimed_balance_collection_transfer_id
 
   validates :charge_processor_id, presence: true
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }

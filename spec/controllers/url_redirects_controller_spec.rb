@@ -856,7 +856,7 @@ describe UrlRedirectsController do
         get :download_product_files, format: :html, params: { id: @token, product_file_ids: [product_file.external_id] }
 
         expect(response).to redirect_to(url_redirect.download_page_url)
-        expect(flash[:alert]).to eq("We are preparing the file for download. You will receive an email when it is ready.")
+        expect(flash[:warning]).to eq("We are preparing the file for download. You will receive an email when it is ready.")
         expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(url_redirect.purchase_id, true).on("critical")
       end
     end
