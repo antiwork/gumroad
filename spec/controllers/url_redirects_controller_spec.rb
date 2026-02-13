@@ -3,7 +3,7 @@
 require "spec_helper"
 require "inertia_rails/rspec"
 
-describe UrlRedirectsController do
+describe UrlRedirectsController, inertia: true do
   render_views
 
   before do
@@ -1862,7 +1862,7 @@ describe UrlRedirectsController do
         get :download_page, params: { id: url_redirect.token }
 
         expect(response).to be_successful
-        expect(inertia.props[:audio_durations]).to eq(audio1.external_id => 100, audio2.external_id => nil)
+        expect(inertia.props["audio_durations"]).to eq(audio1.external_id => 100, audio2.external_id => nil)
       end
 
       it "returns updated durations for processing files" do
@@ -1875,13 +1875,13 @@ describe UrlRedirectsController do
 
         request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations"))
         get :download_page, params: { id: url_redirect.token }
-        expect(inertia.props[:audio_durations]).to eq(audio.external_id => nil)
+        expect(inertia.props["audio_durations"]).to eq(audio.external_id => nil)
 
         audio.update!(duration: 200)
 
         request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations"))
         get :download_page, params: { id: url_redirect.token }
-        expect(inertia.props[:audio_durations]).to eq(audio.external_id => 200)
+        expect(inertia.props["audio_durations"]).to eq(audio.external_id => 200)
       end
     end
 
@@ -1908,7 +1908,7 @@ describe UrlRedirectsController do
         get :download_page, params: { id: url_redirect.token }
 
         expect(response).to be_successful
-        expect(inertia.props[:latest_media_locations]).to eq(
+        expect(inertia.props["latest_media_locations"]).to eq(
           video.external_id => nil,
           audio.external_id => { "location" => 5, "timestamp" => audio_consumption_timestamp.as_json, "unit" => "seconds" },
           readable_document.external_id => { "location" => 3, "timestamp" => readable_document_consumption_timestamp.as_json, "unit" => "page_number" },
@@ -1927,7 +1927,7 @@ describe UrlRedirectsController do
         get :download_page, params: { id: url_redirect.token }
 
         expect(response).to be_successful
-        expect(inertia.props[:latest_media_locations]).to eq({})
+        expect(inertia.props["latest_media_locations"]).to eq({})
       end
     end
 
@@ -1944,8 +1944,8 @@ describe UrlRedirectsController do
         get :download_page, params: { id: url_redirect.token }
 
         expect(response).to be_successful
-        expect(inertia.props[:audio_durations]).to eq(audio.external_id => 120)
-        expect(inertia.props[:latest_media_locations]).to eq(audio.external_id => nil)
+        expect(inertia.props["audio_durations"]).to eq(audio.external_id => 120)
+        expect(inertia.props["latest_media_locations"]).to eq(audio.external_id => nil)
       end
     end
 
@@ -1968,7 +1968,7 @@ describe UrlRedirectsController do
         request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations"))
         get :download_page, params: { id: @token }
 
-        expect(inertia.props).not_to have_key(:dropbox_api_key)
+        expect(inertia.props).not_to have_key("dropbox_api_key")
       end
     end
 
