@@ -8,6 +8,7 @@ import { cast } from "ts-safe-cast";
 import { assertDefined } from "$app/utils/assert";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { RemoveButton } from "$app/components/RemoveButton";
 import {
   getInsertAtFromSelection,
   ImageUploadSettings,
@@ -79,6 +80,11 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
     }
   }, [editor, getPos]);
 
+  const handleRemove = React.useCallback(() => {
+    const pos = getPos();
+    editor.view.dispatch(editor.state.tr.deleteRange(pos, pos + node.nodeSize));
+  }, [editor, getPos, node.nodeSize]);
+
   useOnOutsideClick([nodeRef], () => setHasFocus(false));
 
   const [isImageLoaded, setIsImageLoaded] = React.useState(false);
@@ -95,11 +101,7 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
-      <figure
-        ref={nodeRef}
-        data-has-focus={hasFocus || undefined}
-        style={isUploading ? { position: "relative" } : undefined}
-      >
+      <figure ref={nodeRef} data-has-focus={hasFocus || undefined} style={{ position: "relative" }}>
         {attrs.link ? (
           <a href={cast(attrs.link)} target="_blank" rel="noopener noreferrer nofollow">
             {imageMarkup}
@@ -109,6 +111,17 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
         )}
         {hasFocus || node.content.size > 0 ? (
           <NodeViewContent as="p" className="figcaption" data-placeholder="Add a caption" />
+        ) : null}
+
+        {hasFocus && editor.isEditable && !isUploading ? (
+          <RemoveButton
+            onClick={(evt) => {
+              evt.stopPropagation();
+              handleRemove();
+            }}
+            style={{ position: "absolute", top: 0, right: 0, transform: "translate(50%, -50%)" }}
+            aria-label="Remove image"
+          />
         ) : null}
 
         {isUploading ? (
