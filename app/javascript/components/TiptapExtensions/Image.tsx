@@ -8,6 +8,7 @@ import { cast } from "ts-safe-cast";
 import { assertDefined } from "$app/utils/assert";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { RemoveButton } from "$app/components/RemoveButton";
 import {
   getInsertAtFromSelection,
   ImageUploadSettings,
@@ -66,8 +67,11 @@ export const uploadImages = ({
   }
 };
 
+const THUMBNAIL_HEIGHT = 50;
+
 const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
   const [hasFocus, setHasFocus] = React.useState(false);
+  const [isThumbnailHovered, setIsThumbnailHovered] = React.useState(false);
   const nodeRef = React.useRef(null);
 
   const { attrs } = node;
@@ -79,10 +83,23 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
     }
   }, [editor, getPos]);
 
+  const handleRemoveImage = React.useCallback(
+    (evt: React.MouseEvent) => {
+      evt.stopPropagation();
+      const pos = getPos();
+      const nodeAtPos = editor.state.doc.nodeAt(pos);
+      if (nodeAtPos) {
+        editor.view.dispatch(editor.state.tr.deleteRange(pos, pos + nodeAtPos.nodeSize));
+      }
+    },
+    [editor, getPos],
+  );
+
   useOnOutsideClick([nodeRef], () => setHasFocus(false));
 
   const [isImageLoaded, setIsImageLoaded] = React.useState(false);
   const isUploading = editor.isEditable && cast(attrs.uploading) && isImageLoaded;
+  const showThumbnail = editor.isEditable && !isUploading;
   const imageMarkup = (
     <img
       {...{ ...attrs, uploading: undefined }}
@@ -95,6 +112,54 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
+      {showThumbnail ? (
+        <div
+          contentEditable={false}
+          style={{
+            position: "relative",
+            display: "inline-block",
+            paddingTop: "var(--spacer-3)",
+            paddingRight: "var(--spacer-3)",
+            paddingBottom: "var(--spacer-3)",
+            paddingLeft: "var(--spacer-1)",
+            userSelect: "none",
+          }}
+          onMouseEnter={() => setIsThumbnailHovered(true)}
+          onMouseLeave={() => setIsThumbnailHovered(false)}
+        >
+          <div
+            style={{
+              display: "inline-block",
+              borderRadius: "var(--border-radius-1)",
+              border: "1px solid rgb(var(--color) / var(--gray-3))",
+              cursor: "pointer",
+              overflow: "hidden",
+              background: "rgb(var(--background))",
+              boxShadow: isThumbnailHovered ? "var(--shadow)" : undefined,
+              transform: isThumbnailHovered ? "translate(-1px, -1px)" : undefined,
+              transition: "transform 0.15s, box-shadow 0.15s",
+            }}
+          >
+            <img
+              src={cast(attrs.src)}
+              style={{
+                display: "block",
+                height: THUMBNAIL_HEIGHT,
+                width: "auto",
+                objectFit: "cover",
+              }}
+              contentEditable={false}
+            />
+          </div>
+          {isThumbnailHovered ? (
+            <RemoveButton
+              onClick={handleRemoveImage}
+              style={{ position: "absolute", top: "var(--spacer-3)", right: "var(--spacer-3)", transform: "translate(50%, -50%)" }}
+              aria-label="Remove image"
+            />
+          ) : null}
+        </div>
+      ) : null}
       <figure
         ref={nodeRef}
         data-has-focus={hasFocus || undefined}
