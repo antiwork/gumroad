@@ -1,3 +1,4 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import * as React from "react";
 import { CSSProperties } from "react";
 
@@ -330,8 +331,12 @@ const OverlayMenu = ({
         open={menuOpen}
         onOpenChange={setMenuOpen}
         modal
-        className="right-auto w-80 max-w-80 border-l-0 p-0 md:left-0 md:border-r"
+        className="bg-backdrop p-0 pr-12 md:left-0 md:w-full md:border-l-0"
       >
+        <Dialog.Close className="absolute top-4 right-4 z-40 bg-transparent" aria-label="Close Menu">
+          <Icon name="x" className="text-xl text-white" />
+        </Dialog.Close>
+
         <ItemsList
           key={`${overlayMenuUID}-${menuOpen}`}
           menuId={overlayMenuUID}
@@ -375,7 +380,7 @@ const ItemsList = ({
       style={displayedItem.css}
       role="menu"
       aria-label={displayedItem.label}
-      className={classNames("overflow-hidden border-none! p-0! shadow-none!", className)}
+      className={classNames("w-80 overflow-hidden border-none! p-0! shadow-none!", className)}
     >
       {footer}
       {displayedItem.key !== initialMenuItem.key ? (
