@@ -6,6 +6,10 @@ class AngolaBankAccount < BankAccount
   BANK_CODE_FORMAT_REGEX = /^([0-9a-zA-Z]){8,11}$/
   private_constant :BANK_CODE_FORMAT_REGEX
 
+  # Angola NIB (legacy): 21 numeric digits
+  ACCOUNT_NUMBER_NIB_REGEX = /\A\d{21}\z/
+  private_constant :ACCOUNT_NUMBER_NIB_REGEX
+
   alias_attribute :bank_code, :bank_number
 
   validate :validate_bank_code
@@ -46,7 +50,10 @@ class AngolaBankAccount < BankAccount
     end
 
     def validate_account_number
-      return if Ibandit::IBAN.new(account_number_decrypted).valid?
+      sanitized = account_number_decrypted.gsub(/\s/, "")
+      return if ACCOUNT_NUMBER_NIB_REGEX.match?(sanitized)
+      iban = Ibandit::IBAN.new(sanitized)
+      return if iban.valid? && iban.country_code == "AO"
       errors.add :base, "The account number is invalid."
     end
 end
