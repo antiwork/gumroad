@@ -44,6 +44,7 @@ export const PopoverContent = React.forwardRef<
       collisionPadding = 16,
       matchTriggerWidth = false,
       usePortal = false,
+      onOpenAutoFocus,
       ...props
     },
     ref,
@@ -53,9 +54,8 @@ export const PopoverContent = React.forwardRef<
         ref={ref}
         align={align}
         collisionPadding={collisionPadding}
-        autoFocus={false}
         forceMount
-        onOpenAutoFocus={(e: Event) => e.preventDefault()}
+        onOpenAutoFocus={onOpenAutoFocus ?? ((e: Event) => e.preventDefault())}
         className={classNames(
           "z-30 w-max max-w-[calc(100vw-2rem)] rounded-sm border border-border bg-background p-4 text-foreground shadow outline-none focus-visible:outline-none data-[state=closed]:hidden",
           { "w-[var(--radix-popover-trigger-width)] min-w-[var(--radix-popover-trigger-width)]": matchTriggerWidth },
