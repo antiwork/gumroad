@@ -1207,8 +1207,19 @@ const AccountDetailsSection = ({
               required
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("individual_tax_id")}
-              onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
+              onChange={(evt) => {
+                let value = evt.target.value;
+                if (complianceInfo.country === "PE") {
+                  const digits = value.replace(/\D/g, "");
+                  value = digits.length > 8 ? `${digits.slice(0, 8)}-${digits.slice(8, 9)}` : digits;
+                }
+                updateComplianceInfo({ individual_tax_id: value });
+              }}
+              value={complianceInfo.individual_tax_id ?? ""}
             />
+            {complianceInfo.country === "PE" ? (
+              <FieldsetDescription>Enter your full 10-character DNI (e.g. 12345678-9).</FieldsetDescription>
+            ) : null}
           </div>
         </Fieldset>
       ) : null}
