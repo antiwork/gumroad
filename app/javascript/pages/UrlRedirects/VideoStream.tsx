@@ -41,7 +41,14 @@ type Props = {
 const fakeVideoUrlGuidForObfuscation = "ef64f2fef0d6c776a337050020423fc0";
 
 function VideoStream() {
-  const { playlist: initialPlaylist, index_to_play, url_redirect_id, purchase_id, should_show_transcoding_notice, transcode_on_first_sale } = cast<Props>(usePage().props);
+  const {
+    playlist: initialPlaylist,
+    index_to_play,
+    url_redirect_id,
+    purchase_id,
+    should_show_transcoding_notice,
+    transcode_on_first_sale,
+  } = cast<Props>(usePage().props);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   useRunOnce(() => {
