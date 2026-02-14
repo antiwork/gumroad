@@ -29,6 +29,7 @@ module RenderingExtension
       feature_flags: {
         require_email_typo_acknowledgment: Feature.active?(:require_email_typo_acknowledgment),
         disable_stripe_signup: Feature.active?(:disable_stripe_signup),
+        career_pages: Feature.active?(:career_pages),
       }
     }
   end

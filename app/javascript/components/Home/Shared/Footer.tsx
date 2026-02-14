@@ -2,6 +2,7 @@ import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import logoG from "$assets/images/logo-g.svg";
+import { useFeatureFlags } from "$app/components/FeatureFlags";
 
 const FooterLink = ({
   href,
@@ -37,7 +38,10 @@ const SocialLink = ({ href, children }: { href: string; children: React.ReactNod
   </a>
 );
 
-export const HomeFooter = () => (
+export const HomeFooter = () => {
+  const { career_pages } = useFeatureFlags();
+
+  return (
   <div className="flex flex-col justify-between gap-16 bg-black px-8 py-16 leading-relaxed text-white lg:flex-row lg:px-[4vw] lg:py-24">
     <div className="flex w-full max-w-3xl flex-col gap-16">
       <div className="flex flex-col gap-8">
@@ -78,6 +82,7 @@ export const HomeFooter = () => (
           <FooterLink href={Routes.pricing_path()}>Pricing</FooterLink>
           <FooterLink href={Routes.features_path()}>Features</FooterLink>
           <FooterLink href={Routes.about_path()}>About</FooterLink>
+          {career_pages ? <FooterLink href={Routes.careers_path()}>Careers</FooterLink> : null}
           <FooterLink href={Routes.small_bets_path()}>Small Bets</FooterLink>
         </div>
         <div className="flex flex-1 flex-col gap-3">
@@ -142,4 +147,5 @@ export const HomeFooter = () => (
       </div>
     </div>
   </div>
-);
+  );
+};
