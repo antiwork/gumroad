@@ -2,12 +2,12 @@ import { usePoll, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
+import { useDropbox } from "$app/hooks/useDropbox";
 import FileUtils from "$app/utils/file";
 
 import { FileItem } from "$app/components/Download/FileList";
-import { ContentProps, WithContent } from "$app/components/DownloadPage/WithContent";
 import { LayoutProps } from "$app/components/DownloadPage/Layout";
-import { useDropbox } from "$app/hooks/useDropbox";
+import { ContentProps, WithContent } from "$app/components/DownloadPage/WithContent";
 
 type PageProps = LayoutProps & {
   content: ContentProps;
@@ -27,8 +27,7 @@ function DownloadPage() {
   const hasRichContent = content.rich_content_pages !== null;
 
   const hasUnprocessedAudio =
-    hasRichContent &&
-    contentFiles.some((file) => FileUtils.isAudioExtension(file.extension) && file.duration === null);
+    hasRichContent && contentFiles.some((file) => FileUtils.isAudioExtension(file.extension) && file.duration === null);
 
   const hasMediaFiles = hasRichContent && contentFiles.length > 0;
 
@@ -47,11 +46,7 @@ function DownloadPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <WithContent
-        {...props}
-        audio_durations={audio_durations}
-        latest_media_locations={latest_media_locations}
-      />
+      <WithContent {...props} audio_durations={audio_durations} latest_media_locations={latest_media_locations} />
     </div>
   );
 }
