@@ -82,7 +82,7 @@ export const HomeFooter = () => {
           <FooterLink href={Routes.pricing_path()}>Pricing</FooterLink>
           <FooterLink href={Routes.features_path()}>Features</FooterLink>
           <FooterLink href={Routes.about_path()}>About</FooterLink>
-          {career_pages ? <FooterLink href={Routes.careers_path()}>Careers</FooterLink> : null}
+          {career_pages && <FooterLink href={Routes.careers_path()}>Careers</FooterLink>}
           <FooterLink href={Routes.small_bets_path()}>Small Bets</FooterLink>
         </div>
         <div className="flex flex-1 flex-col gap-3">
