@@ -4,6 +4,7 @@ import * as React from "react";
 import { LoggedInUser } from "$app/types/user";
 import { classNames } from "$app/utils/classNames";
 import { request } from "$app/utils/request";
+import { useFeatureFlags } from "$app/components/FeatureFlags";
 
 import arrowDiagonalIcon from "$assets/images/icons/arrow-diagonal-up-right.svg";
 import starIcon from "$assets/images/icons/solid-star.svg";
@@ -137,6 +138,7 @@ export const HomeNav = () => {
   const [stars, setStars] = React.useState<string | null>(null);
   const { url, props } = usePage<PageProps>();
   const user = props.current_user;
+  const { career_pages } = useFeatureFlags();
 
   const toggleMobileMenu = () => setMobileMenuOpen((prev) => !prev);
   const closeMobileMenu = () => setMobileMenuOpen(false);
@@ -171,6 +173,7 @@ export const HomeNav = () => {
     { href: Routes.pricing_path(), label: "Pricing" },
     { href: Routes.features_path(), label: "Features" },
     { href: Routes.about_path(), label: "About" },
+    ...(career_pages ? [{ href: Routes.careers_path(), label: "Careers" }] : []),
   ];
 
   return (
