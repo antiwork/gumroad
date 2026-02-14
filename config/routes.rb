@@ -883,8 +883,6 @@ Rails.application.routes.draw do
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :url_redirect_download_subtitle_file
     get "/s/:id", to: "url_redirects#stream", as: :url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :url_redirect_stream_page_for_product_file
-    get "/latest_media_locations/:id", to: "url_redirects#latest_media_locations", as: :url_redirect_latest_media_locations
-    get "/audio_durations/:id", to: "url_redirects#audio_durations", as: :url_redirect_audio_durations
     get "/media_urls/:id", to: "url_redirects#media_urls", as: :url_redirect_media_urls
 
     get "/read", to: "library#index"

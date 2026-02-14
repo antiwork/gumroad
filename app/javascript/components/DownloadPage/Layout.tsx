@@ -15,10 +15,16 @@ import { Modal } from "$app/components/Modal";
 import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
-import { PurchaseCustomField } from "$app/components/server-components/DownloadPage/WithContent";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+
+export type PurchaseCustomField = {
+  custom_field_id: string;
+} & (
+  | { type: "shortAnswer" | "longAnswer"; value: string }
+  | { type: "fileUpload"; files: { name: string; size: number; extension: string }[] }
+);
 
 type ContentUnavailabilityReasonCode =
   | "inactive_membership"
