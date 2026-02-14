@@ -185,6 +185,8 @@ describe("ProductShowScenario", type: :system, js: true) do
       expect(page).to have_selector("[aria-label='Discount code']", text:  @offer_code.code)
       click_on "Remove"
 
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.last.cart_products.alive.count == 0 }
+
       visit "#{@product.long_url}?wanted=true&quantity=3"
 
       within "[role='listitem']" do
