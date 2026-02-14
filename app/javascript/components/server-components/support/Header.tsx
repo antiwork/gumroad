@@ -64,7 +64,7 @@ export function SupportHeader({
                 rel="noopener noreferrer"
                 className="flex items-center gap-2"
               >
-                <GitHubIcon aria-hidden />
+                <GitHubIcon />
                 Report a bug
               </NavigationButton>
               <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
@@ -81,7 +81,7 @@ export function SupportHeader({
                 rel="noopener noreferrer"
                 className="flex items-center gap-2"
               >
-                <GitHubIcon aria-hidden />
+                <GitHubIcon />
                 Report a bug
               </NavigationButton>
               <Button color="accent" onClick={onOpenNewTicket}>

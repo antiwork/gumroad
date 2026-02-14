@@ -39,7 +39,7 @@ function ReportBugButton() {
       rel="noopener noreferrer"
       className="flex items-center gap-2"
     >
-      <GitHubIcon className="h-4 w-4" aria-hidden />
+      <GitHubIcon className="h-4 w-4" />
       Report a bug
     </NavigationButton>
   );
