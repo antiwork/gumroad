@@ -140,6 +140,14 @@ const CoverUploader = ({
 
   const uid = React.useId();
 
+  const isMountedRef = React.useRef(true);
+  React.useEffect(
+    () => () => {
+      isMountedRef.current = false;
+    },
+    [],
+  );
+
   const saveCover = async (coverPayload: CoverPayload) => {
     setIsUploading(true);
     try {
@@ -192,8 +200,10 @@ const CoverUploader = ({
                       });
                     });
                   }
-                  setIsUploading(false);
-                  setIsSelecting(false);
+                  if (isMountedRef.current) {
+                    setIsUploading(false);
+                    setIsSelecting(false);
+                  }
                 })}
               />
               <TabIcon name="upload-fill" />
@@ -230,9 +240,11 @@ const CoverUploader = ({
                 color="primary"
                 onClick={() => {
                   void saveCover({ type: "url", url: uploader.value }).finally(() => {
-                    setIsUploading(false);
-                    setIsSelecting(false);
-                    setUploader(null);
+                    if (isMountedRef.current) {
+                      setIsUploading(false);
+                      setIsSelecting(false);
+                      setUploader(null);
+                    }
                   });
                 }}
                 aria-label="Upload"
