@@ -93,9 +93,11 @@ function HelpCenterHeader({
   const renderActions = () => {
     if (showSearchButton) {
       return (
-        <Link href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
-          <Icon name="solid-search" />
-        </Link>
+        <Button asChild>
+          <Link href={Routes.help_center_root_path()} aria-label="Search" title="Search">
+            <Icon name="solid-search" />
+          </Link>
+        </Button>
       );
     }
 
