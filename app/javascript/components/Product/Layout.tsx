@@ -253,92 +253,92 @@ const CtaBar = ({
 
   return (
     <>
-    <section
-      aria-label="Product information bar"
-      className="border-0 bg-background"
-      style={{
-        overflow: "hidden",
-        padding: 0,
-        height: visible ? height : 0,
-        transition: "var(--transition-duration)",
-        flexShrink: 0,
-        order: isDesktop ? undefined : 1,
-        boxShadow: visible
-          ? "0 var(--border-width) rgb(var(--color)), 0 calc(-1 * var(--border-width)) rgb(var(--color))"
-          : undefined,
-        position: "fixed",
-        top: isDesktop ? 0 : undefined,
-        bottom: isDesktop ? undefined : 0,
-        left: 0,
-        right: 0,
-        // Render above the product edit button
-        zIndex: "var(--z-index-menubar)",
-        marginTop: hasHero ? "var(--border-width)" : undefined,
-      }}
-    >
-      <div
-        ref={ref}
-        className={classNames(
-          "mx-auto flex max-w-product-page items-center justify-between gap-4 p-4 lg:pr-8",
-          product.can_edit ? "lg:pl-18" : "lg:pl-8",
-        )}
+      <section
+        aria-label="Product information bar"
+        className="border-0 bg-background"
         style={{
-          transition: "var(--transition-duration)",
-          marginTop: visible || !isDesktop ? undefined : -height,
-        }}
-      >
-        <PriceTag
-          currencyCode={product.currency_code}
-          oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
-          price={discountedPriceCents}
-          url={product.long_url}
-          recurrence={
-            product.recurrences
-              ? {
-                  id: selection.recurrence ?? product.recurrences.default,
-                  duration_in_months: product.duration_in_months,
-                }
-              : undefined
-          }
-          isPayWhatYouWant={isPWYW}
-          isSalesLimited={product.is_sales_limited}
-          creatorName={product.seller?.name}
-        />
-        <h3 className="hidden flex-1 lg:block">{product.name}</h3>
-        {product.ratings != null && product.ratings.count > 0 ? (
-          <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
-        ) : null}
-        <CtaButton
-          product={product}
-          purchase={purchase}
-          discountCode={discountCode ?? null}
-          selection={selection}
-          label={ctaLabel}
-          onClick={(evt) => {
-            if (
-              isPWYW ||
-              product.options.length > 1 ||
-              hasRentOption ||
-              hasMultipleRecurrences ||
-              hasConfigurableQuantity
-            ) {
-              evt.preventDefault();
-              ctaButtonRef.current?.scrollIntoView(false);
-              configurationSelectorRef.current?.focusRequiredInput();
-              if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
-            }
-          }}
-        />
-      </div>
-    </section>
-    {isDesktop ? (
-      <div
-        style={{
+          overflow: "hidden",
+          padding: 0,
           height: visible ? height : 0,
           transition: "var(--transition-duration)",
+          flexShrink: 0,
+          order: isDesktop ? undefined : 1,
+          boxShadow: visible
+            ? "0 var(--border-width) rgb(var(--color)), 0 calc(-1 * var(--border-width)) rgb(var(--color))"
+            : undefined,
+          position: "fixed",
+          top: isDesktop ? 0 : undefined,
+          bottom: isDesktop ? undefined : 0,
+          left: 0,
+          right: 0,
+          // Render above the profile header
+          zIndex: "var(--z-index-menubar)",
+          marginTop: hasHero ? "var(--border-width)" : undefined,
         }}
-      />
-    ) : null}
+      >
+        <div
+          ref={ref}
+          className={classNames(
+            "mx-auto flex max-w-product-page items-center justify-between gap-4 p-4 lg:pr-8",
+            product.can_edit ? "lg:pl-18" : "lg:pl-8",
+          )}
+          style={{
+            transition: "var(--transition-duration)",
+            marginTop: visible || !isDesktop ? undefined : -height,
+          }}
+        >
+          <PriceTag
+            currencyCode={product.currency_code}
+            oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
+            price={discountedPriceCents}
+            url={product.long_url}
+            recurrence={
+              product.recurrences
+                ? {
+                    id: selection.recurrence ?? product.recurrences.default,
+                    duration_in_months: product.duration_in_months,
+                  }
+                : undefined
+            }
+            isPayWhatYouWant={isPWYW}
+            isSalesLimited={product.is_sales_limited}
+            creatorName={product.seller?.name}
+          />
+          <h3 className="hidden flex-1 lg:block">{product.name}</h3>
+          {product.ratings != null && product.ratings.count > 0 ? (
+            <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
+          ) : null}
+          <CtaButton
+            product={product}
+            purchase={purchase}
+            discountCode={discountCode ?? null}
+            selection={selection}
+            label={ctaLabel}
+            onClick={(evt) => {
+              if (
+                isPWYW ||
+                product.options.length > 1 ||
+                hasRentOption ||
+                hasMultipleRecurrences ||
+                hasConfigurableQuantity
+              ) {
+                evt.preventDefault();
+                ctaButtonRef.current?.scrollIntoView(false);
+                configurationSelectorRef.current?.focusRequiredInput();
+                if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
+              }
+            }}
+          />
+        </div>
+      </section>
+      {isDesktop ? (
+        <div
+          style={{
+            height: visible ? height : 0,
+            transition: "var(--transition-duration)",
+          }}
+        />
+      ) : null}
     </>
   );
 };
