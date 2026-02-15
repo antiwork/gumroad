@@ -233,19 +233,42 @@ const CtaBar = ({
 
   const [visible, setVisible] = React.useState(false);
   const ref = React.useRef<null | HTMLDivElement>(null);
+  const scrollThresholdRef = React.useRef<number | null>(null);
   const isDesktop = useIsAboveBreakpoint("lg");
 
   React.useEffect(() => {
-    if (!ctaButtonRef.current) return;
-    new IntersectionObserver(
+    const ctaButton = ctaButtonRef.current;
+    if (!ctaButton) return;
+
+    const updateScrollThreshold = () => {
+      scrollThresholdRef.current = ctaButton.getBoundingClientRect().bottom + window.scrollY;
+    };
+
+    updateScrollThreshold();
+    window.addEventListener("resize", updateScrollThreshold);
+
+    const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry) return;
 
-        setVisible(!entry.isIntersecting);
+        const scrollThreshold = scrollThresholdRef.current ?? 0;
+        const hasScrolledPastButton = window.scrollY > scrollThreshold;
+
+        if (!entry.isIntersecting) {
+          setVisible(true);
+        } else if (entry.isIntersecting && !hasScrolledPastButton) {
+          setVisible(false);
+        }
       },
       { threshold: 0.5 },
-    ).observe(ctaButtonRef.current);
-  }, [ctaButtonRef.current]);
+    );
+    observer.observe(ctaButton);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateScrollThreshold);
+    };
+  }, [ctaButtonRef]);
 
   const height = ref.current?.getBoundingClientRect().height ?? 0;
 
@@ -271,7 +294,7 @@ const CtaBar = ({
           bottom: isDesktop ? undefined : 0,
           left: 0,
           right: 0,
-          // Render above the profile header
+          // Render above the product edit button
           zIndex: "var(--z-index-menubar)",
           marginTop: hasHero ? "var(--border-width)" : undefined,
         }}
