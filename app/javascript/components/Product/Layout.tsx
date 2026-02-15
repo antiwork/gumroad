@@ -124,7 +124,7 @@ const SectionEditor = ({
             {section.id ? (
               <EditSection section={section} />
             ) : (
-              <div className="mx-auto w-full max-w-6xl">{children}</div>
+              <div className={classNames("mx-auto w-full max-w-6xl", product.can_edit && "lg:pl-18")}>{children}</div>
             )}
             {i === sections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
           </SectionLayout>
@@ -170,6 +170,7 @@ export const Layout = (
         className={classNames(
           "mx-auto w-full max-w-product-page lg:py-16",
           props.sections.length > 0 ? "px-4 py-8" : "p-4 lg:px-8",
+          product.can_edit && "lg:pl-18",
         )}
       >
         {productView}
@@ -251,6 +252,7 @@ const CtaBar = ({
   if (product.bundle_products.length) priceCents = getStandalonePrice(product);
 
   return (
+    <>
     <section
       aria-label="Product information bar"
       className="border-0 bg-background"
@@ -276,7 +278,10 @@ const CtaBar = ({
     >
       <div
         ref={ref}
-        className="mx-auto flex max-w-product-page items-center justify-between gap-4 p-4 lg:px-8"
+        className={classNames(
+          "mx-auto flex max-w-product-page items-center justify-between gap-4 p-4 lg:pr-8",
+          product.can_edit ? "lg:pl-18" : "lg:pl-8",
+        )}
         style={{
           transition: "var(--transition-duration)",
           marginTop: visible || !isDesktop ? undefined : -height,
@@ -326,6 +331,15 @@ const CtaBar = ({
         />
       </div>
     </section>
+    {isDesktop ? (
+      <div
+        style={{
+          height: visible ? height : 0,
+          transition: "var(--transition-duration)",
+        }}
+      />
+    ) : null}
+    </>
   );
 };
 
@@ -338,12 +352,11 @@ const EditButton = ({ product }: { product: Product }) => {
   return (
     <div
       style={{
-        position: "absolute",
+        position: "fixed",
         top: isDesktop ? "var(--spacer-3)" : "var(--spacer-4)",
         right: isDesktop ? undefined : "var(--spacer-4)",
         left: isDesktop ? "var(--spacer-3)" : undefined,
-        // Render above the product `article`
-        zIndex: "var(--z-index-overlay)",
+        zIndex: "var(--z-index-tooltip)",
       }}
     >
       <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
