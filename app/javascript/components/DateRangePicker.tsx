@@ -14,7 +14,7 @@ import * as React from "react";
 
 import { DateInput } from "$app/components/DateInput";
 import { Icon } from "$app/components/Icons";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
@@ -52,12 +52,14 @@ export const DateRangePicker = ({
         setOpen(open);
       }}
     >
-      <PopoverTrigger>
-        <InputGroup className="whitespace-nowrap" aria-label="Date range selector">
-          <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
-          <Icon name="outline-cheveron-down" className="ml-auto" />
-        </InputGroup>
-      </PopoverTrigger>
+      <PopoverAnchor>
+        <PopoverTrigger>
+          <InputGroup aria-label="Date range selector" className="whitespace-nowrap">
+            <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
+            <Icon name="outline-cheveron-down" className="ml-auto" />
+          </InputGroup>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent matchTriggerWidth className={isCustom ? "" : "border-0 p-0 shadow-none"}>
         {isCustom ? (
           <div className="flex flex-col gap-4">

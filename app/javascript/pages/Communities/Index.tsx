@@ -203,7 +203,9 @@ function CommunitiesIndex() {
     if (selectedCommunity) {
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.has("notifications")) {
-        router.reload({ only: [], replace: true });
+        searchParams.delete("notifications");
+        const newUrl = `${window.location.pathname}${searchParams.size ? `?${searchParams.toString()}` : ""}`;
+        router.replace({ url: newUrl, preserveState: true });
         setShowNotificationsSettings(true);
       }
     }
@@ -218,6 +220,7 @@ function CommunitiesIndex() {
           { message_id: messageId },
           {
             preserveScroll: true,
+            preserveUrl: true,
             async: true,
             only: ["communities"],
             onSuccess: () => {
@@ -321,13 +324,15 @@ function CommunitiesIndex() {
       },
     }));
 
+    scrollTo({ target: "bottom" });
+    setShowScrollToBottomButton(false);
+
     messageForm.post(Routes.community_chat_messages_path(selectedCommunity.id), {
       preserveScroll: true,
-      only: [],
+      except: ["messages"],
+      showProgress: false,
       onSuccess: () => {
         updateCommunityDraft(selectedCommunity.id, { content: "", isSending: false });
-        scrollTo({ target: "bottom" });
-        setShowScrollToBottomButton(false);
       },
       onError: () => {
         updateCommunityDraft(selectedCommunity.id, { isSending: false });
@@ -463,7 +468,8 @@ function CommunitiesIndex() {
           { community_chat_message: { content } },
           {
             preserveScroll: true,
-            only: [],
+            except: ["messages"],
+            showProgress: false,
             onSuccess: () => resolve(),
             onError: () => {
               reject(new Error("Failed to update message."));
@@ -480,8 +486,10 @@ function CommunitiesIndex() {
         router.delete(Routes.community_chat_message_path(communityId, messageId), {
           preserveState: true,
           preserveScroll: true,
-          only: [],
+          except: ["messages"],
+          showProgress: false,
           onSuccess: () => {
+            removeMessage(messageId, communityId);
             resolve();
           },
           onError: () => {
@@ -490,7 +498,7 @@ function CommunitiesIndex() {
           },
         });
       }),
-    [],
+    [removeMessage],
   );
 
   const contextValue = React.useMemo(
@@ -691,6 +699,7 @@ const NotificationsSettingsModal = ({
   const saveNotificationSettings = () => {
     form.put(Routes.community_notification_settings_path(community.id), {
       preserveScroll: true,
+      except: ["messages"],
       onSuccess: () => {
         onClose();
       },
