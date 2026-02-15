@@ -103,7 +103,7 @@ export default function SettingsPage() {
         ))}
       </Head>
       <WithPreviewSidebar>
-        <form>
+        <form className="min-w-0">
           <section className="grid gap-8 p-4! md:p-8!">
             <header>
               <h2>Profile</h2>
