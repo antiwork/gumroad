@@ -149,7 +149,6 @@ export const Layout = (
 
   const productView = (
     <>
-      <EditButton product={product} />
       <Product
         product={product}
         purchase={purchase}
@@ -165,7 +164,7 @@ export const Layout = (
   );
 
   const mainSection = (
-    <section className="relative border-b border-border">
+    <section className="border-b border-border">
       <div
         className={classNames(
           "mx-auto w-full max-w-product-page lg:py-16",
@@ -179,6 +178,7 @@ export const Layout = (
 
   return (
     <>
+      <EditButton product={product} />
       <CtaBar
         product={product}
         purchase={purchase}
@@ -260,6 +260,7 @@ const CtaBar = ({
 
   const height = ref.current?.getBoundingClientRect().height ?? 0;
 
+
   if (product.bundle_products.length) priceCents = getStandalonePrice(product);
 
   return (
@@ -292,6 +293,7 @@ const CtaBar = ({
           style={{
             transition: "var(--transition-duration)",
             marginTop: visible || !isDesktop ? undefined : -height,
+            paddingLeft: product.can_edit && isDesktop ? "5.5rem" : undefined,
           }}
         >
           <PriceTag
@@ -354,7 +356,7 @@ const EditButton = ({ product }: { product: Product }) => {
   return (
     <div
       style={{
-        position: "absolute",
+        position: "fixed",
         top: isDesktop ? "var(--spacer-3)" : "var(--spacer-4)",
         right: isDesktop ? undefined : "var(--spacer-4)",
         left: isDesktop ? "var(--spacer-3)" : undefined,
