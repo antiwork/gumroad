@@ -41,7 +41,7 @@ const ProductsPage = ({
       />
     ) : null}
 
-    {products.length > 0 ? (
+    {products.length > 0 || query ? (
       <ProductsPageProductsTable
         query={query}
         entries={products}

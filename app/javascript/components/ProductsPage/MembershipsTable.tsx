@@ -80,7 +80,12 @@ export const ProductsPageMembershipsTable = (props: {
 
   const reloadMemberships = () => loadMemberships(pagination.page);
 
-  if (!memberships.length) return null;
+  if (!memberships.length) {
+    if (props.query) {
+      return <p>No memberships found matching your search.</p>;
+    }
+    return null;
+  }
 
   return (
     <section className="flex flex-col gap-4">
