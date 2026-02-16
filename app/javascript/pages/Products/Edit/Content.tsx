@@ -110,10 +110,9 @@ type ContentPageProps = {
   id: string;
   unique_permalink: string;
   existing_files: ExistingFileEntry[];
-  aws_access_key_id: string;
+  aws_key: string;
   s3_url: string;
   dropbox_picker_app_key: string;
-  user_id: string;
   ratings: {
     count: number;
     average: number;
@@ -185,7 +184,9 @@ const ContentTabContent = ({
   selectedVariantId,
   product,
   updateProduct,
+  updateFiles,
   existingFiles,
+  setExistingFiles,
   save,
   filesById,
   dropbox_picker_app_key,
@@ -197,7 +198,9 @@ const ContentTabContent = ({
   selectedVariantId: string | null;
   product: ProductType;
   updateProduct: UpdateProductKV;
+  updateFiles: (updater: (files: FileEntry[]) => FileEntry[]) => void;
   existingFiles: ExistingFileEntry[];
+  setExistingFiles: React.Dispatch<React.SetStateAction<ExistingFileEntry[]>>;
   save: () => void;
   filesById: Map<string, FileEntry>;
   dropbox_picker_app_key: string;
@@ -215,6 +218,11 @@ const ContentTabContent = ({
 
   const pages: (Page & { chosen?: boolean })[] = selectedVariant ? selectedVariant.rich_content : product.rich_content;
   const pagesRef = useRefToLatest(pages);
+  const productRef = useRefToLatest(product);
+
+  const replaceFiles = (updater: (files: FileEntry[]) => FileEntry[]) => {
+    updateFiles(updater);
+  };
 
   const updatePages = (pages: Page[]) => {
     if (selectedVariant) {
@@ -266,20 +274,29 @@ const ContentTabContent = ({
   const [insertMenuState, setInsertMenuState] = React.useState<"open" | "inputs" | null>(null);
   const initialValue = React.useMemo(() => selectedPage?.description ?? "", [selectedPageId]);
 
-  const onSelectFiles = (ids: string[]) => {
-    if (!editor) return;
+  const pendingSelectedFileIdsRef = React.useRef<string[] | null>(null);
+
+  const insertSelectedFiles = (editorInstance: NonNullable<typeof editor>, ids: string[]) => {
     if (ids.length > 1) {
-      const fileEmbedSchema = assertDefined(editor.view.state.schema.nodes[FileEmbed.name]);
-      editor.commands.insertFileEmbedGroup({
+      const fileEmbedSchema = assertDefined(editorInstance.view.state.schema.nodes[FileEmbed.name]);
+      editorInstance.commands.insertFileEmbedGroup({
         content: ids.map((id) => fileEmbedSchema.create({ id, uid: GuidGenerator.generate() })),
-        pos: getInsertAtFromSelection(editor.state.selection),
+        pos: getInsertAtFromSelection(editorInstance.state.selection),
       });
     } else if (ids[0]) {
-      editor.commands.insertContentAt(getInsertAtFromSelection(editor.state.selection), {
+      editorInstance.commands.insertContentAt(getInsertAtFromSelection(editorInstance.state.selection), {
         type: FileEmbed.name,
         attrs: { id: ids[0], uid: GuidGenerator.generate() },
       });
     }
+  };
+
+  const onSelectFiles = (ids: string[]) => {
+    if (!editor) {
+      pendingSelectedFileIdsRef.current = ids;
+      return;
+    }
+    insertSelectedFiles(editor, ids);
   };
 
   const uploader = assertDefined(useEvaporateUploader());
@@ -291,11 +308,6 @@ const ContentTabContent = ({
       const { s3key, fileUrl } = s3UploadConfig.generateS3KeyForUpload(id, file.name);
       const mimeType = getMimeType(file.name);
       const extension = FileUtils.getFileExtension(file.name).toUpperCase();
-      const fileStatus: FileEntry["status"] = {
-        type: "unsaved",
-        uploadStatus: { type: "uploading", progress: { percent: 0, bitrate: 0 } },
-        url: URL.createObjectURL(file),
-      };
       const fileEntry: FileEntry = {
         display_name: FileUtils.getFileNameWithoutExtension(file.name),
         extension,
@@ -309,7 +321,11 @@ const ContentTabContent = ({
         id,
         subtitle_files: [],
         url: fileUrl,
-        status: fileStatus,
+        status: {
+          type: "unsaved",
+          uploadStatus: { type: "uploading", progress: { percent: 0, bitrate: 0 } },
+          url: URL.createObjectURL(file),
+        },
         thumbnail: null,
       };
 
@@ -319,12 +335,46 @@ const ContentTabContent = ({
         file,
         mimeType,
         onComplete: () => {
-          fileStatus.uploadStatus = { type: "uploaded" };
-          updateProduct("files", [...product.files]);
+          if (fileEntry.status.type === "unsaved") {
+            fileEntry.status = {
+              ...fileEntry.status,
+              uploadStatus: { type: "uploaded" },
+            };
+          }
+          replaceFiles((files) =>
+            files.map((existingFile) =>
+              existingFile.id === id && existingFile.status.type === "unsaved"
+                ? {
+                    ...existingFile,
+                    status: {
+                      ...existingFile.status,
+                      uploadStatus: { type: "uploaded" },
+                    },
+                  }
+                : existingFile,
+            ),
+          );
         },
         onProgress: (progress) => {
-          fileStatus.uploadStatus = { type: "uploading", progress };
-          updateProduct("files", [...product.files]);
+          if (fileEntry.status.type === "unsaved") {
+            fileEntry.status = {
+              ...fileEntry.status,
+              uploadStatus: { type: "uploading", progress },
+            };
+          }
+          replaceFiles((files) =>
+            files.map((existingFile) =>
+              existingFile.id === id && existingFile.status.type === "unsaved"
+                ? {
+                    ...existingFile,
+                    status: {
+                      ...existingFile.status,
+                      uploadStatus: { type: "uploading", progress },
+                    },
+                  }
+                : existingFile,
+            ),
+          );
         },
       });
 
@@ -334,8 +384,10 @@ const ContentTabContent = ({
       return fileEntry;
     });
 
-    updateProduct("files", [...product.files, ...fileEntries]);
-    onSelectFiles(fileEntries.map((file) => file.id));
+    const uploadedIds = fileEntries.map((file) => file.id);
+    replaceFiles((files) => [...files, ...fileEntries]);
+    // Insert embeds after React applies files state, so node views can resolve filesById on first render.
+    requestAnimationFrame(() => onSelectFiles(uploadedIds));
   };
 
   const uploadFileInput = (input: HTMLInputElement) => {
@@ -354,8 +406,14 @@ const ContentTabContent = ({
   const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({
     id,
     updateProduct: (updater) => {
-      updater(product);
-      updateProduct("files", [...product.files]);
+      replaceFiles((files) => {
+        const currentProduct = {
+          ...productRef.current,
+          files: files.map((file) => ({ ...file, subtitle_files: [...file.subtitle_files] })),
+        };
+        updater(currentProduct);
+        return [...currentProduct.files];
+      });
     },
     filesById,
   });
@@ -371,6 +429,13 @@ const ContentTabContent = ({
     extensions: contentEditorExtensions,
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
+
+  React.useEffect(() => {
+    if (!editor || !pendingSelectedFileIdsRef.current) return;
+    const pendingIds = pendingSelectedFileIdsRef.current;
+    pendingSelectedFileIdsRef.current = null;
+    insertSelectedFiles(editor, pendingIds);
+  }, [editor]);
 
   const updateContentRef = useRefToLatest(() => {
     if (!editor) return;
@@ -392,7 +457,7 @@ const ContentTabContent = ({
       }
     });
     if (newFiles.length > 0) {
-      updateProduct("files", [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles]);
+      replaceFiles((files) => [...files.filter((f) => !newFiles.includes(f)), ...newFiles]);
     }
     const description = generateJSON(
       new XMLSerializer().serializeToString(fragment),
@@ -502,9 +567,8 @@ const ContentTabContent = ({
         new Promise((resolve) => setTimeout(resolve, 250)),
       ]);
       if (!response.ok) throw new ResponseError();
-      await response.json();
-      // Force a re-render so file states reflect latest server data
-      updateProduct("files", [...product.files]);
+      const parsedResponse = cast<{ existing_files: ExistingFileEntry[] }>(await response.json());
+      setExistingFiles(parsedResponse.existing_files);
     } catch (error) {
       assertResponseError(error);
       showAlert(error.message, "error");
@@ -514,32 +578,34 @@ const ContentTabContent = ({
   };
 
   const addDropboxFiles = (files: ResponseDropboxFile[]) => {
-    const [updatedFiles, nonModifiedFiles] = partition(product.files, (file) =>
-      files.some(({ external_id }) => file.id === external_id),
-    );
-    updateProduct("files", [
-      ...nonModifiedFiles,
-      ...files.map((file) => {
-        const existing = updatedFiles.find(({ id }) => id === file.external_id);
-        const extension = FileUtils.getFileExtension(file.name).toUpperCase();
-        return {
-          display_name: existing?.display_name ?? FileUtils.getFileNameWithoutExtension(file.name),
-          extension,
-          description: existing?.description ?? null,
-          file_size: file.bytes,
-          is_pdf: extension === "PDF",
-          pdf_stamp_enabled: false,
-          is_streamable: FileUtils.isFileNameStreamable(file.name),
-          stream_only: false,
-          is_transcoding_in_progress: false,
-          id: file.external_id,
-          subtitle_files: [],
-          url: file.s3_url,
-          status: { type: "dropbox", externalId: file.external_id, uploadState: file.state } as const,
-          thumbnail: existing?.thumbnail ?? null,
-        };
-      }),
-    ]);
+    replaceFiles((existingFilesInState) => {
+      const [updatedFiles, nonModifiedFiles] = partition(existingFilesInState, (file) =>
+        files.some(({ external_id }) => file.id === external_id),
+      );
+      return [
+        ...nonModifiedFiles,
+        ...files.map((file) => {
+          const existing = updatedFiles.find(({ id }) => id === file.external_id);
+          const extension = FileUtils.getFileExtension(file.name).toUpperCase();
+          return {
+            display_name: existing?.display_name ?? FileUtils.getFileNameWithoutExtension(file.name),
+            extension,
+            description: existing?.description ?? null,
+            file_size: file.bytes,
+            is_pdf: extension === "PDF",
+            pdf_stamp_enabled: false,
+            is_streamable: FileUtils.isFileNameStreamable(file.name),
+            stream_only: false,
+            is_transcoding_in_progress: false,
+            id: file.external_id,
+            subtitle_files: [],
+            url: file.s3_url,
+            status: { type: "dropbox", externalId: file.external_id, uploadState: file.state } as const,
+            thumbnail: existing?.thumbnail ?? null,
+          };
+        }),
+      ];
+    });
   };
 
   const uploadFromDropbox = () => {
@@ -667,7 +733,7 @@ const ContentTabContent = ({
                         <Button
                           color="primary"
                           onClick={() => {
-                            updateProduct("files", [...product.files, ...selectingExistingFiles.selected]);
+                            replaceFiles((files) => [...files, ...selectingExistingFiles.selected]);
                             onSelectFiles(selectingExistingFiles.selected.map((file) => file.id));
                             setSelectingExistingFiles(null);
                           }}
@@ -1139,12 +1205,16 @@ export default function ContentPage() {
   const currentSeller = useCurrentSeller();
   if (!currentSeller) return null;
 
-  const { product, existing_files, aws_access_key_id, s3_url, user_id, id, unique_permalink } = props;
+  const { product, existing_files, aws_key, s3_url, id, unique_permalink } = props;
 
   const form = useForm<ProductType>({
     ...product,
     files: product.files,
   });
+  const [existingFiles, setExistingFiles] = React.useState(existing_files);
+  React.useEffect(() => {
+    setExistingFiles(existing_files);
+  }, [existing_files]);
 
   const [contentUpdates, setContentUpdates] = React.useState<{ uniquePermalinkOrVariantIds: string[] } | null>(null);
 
@@ -1242,8 +1312,18 @@ export default function ContentPage() {
     };
     setters[key](value);
   };
+  const updateFiles = React.useCallback(
+    (updater: (files: FileEntry[]) => FileEntry[]) => {
+      form.setData((data) => ({ ...data, files: updater(data.files) }));
+    },
+    [form],
+  );
 
-  const { s3UploadConfig, evaporateUploader } = useConfigureEvaporate({ aws_access_key_id, s3_url, user_id });
+  const { s3UploadConfig, evaporateUploader } = useConfigureEvaporate({
+    aws_access_key_id: aws_key,
+    s3_url,
+    user_id: currentSeller.id,
+  });
   const imageSettings = useImageUploadSettings();
 
   const loadedPostsData = React.useRef(
@@ -1402,7 +1482,9 @@ export default function ContentPage() {
                 selectedVariantId={selectedVariantId}
                 product={form.data}
                 updateProduct={updateProductKV}
-                existingFiles={existing_files}
+                updateFiles={updateFiles}
+                existingFiles={existingFiles}
+                setExistingFiles={setExistingFiles}
                 save={handleSave}
                 filesById={filesById}
                 dropbox_picker_app_key={props.dropbox_picker_app_key}

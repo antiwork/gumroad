@@ -70,6 +70,9 @@ const FileEmbedNodeView = ({
   const uid = React.useId();
   const ref = React.useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = React.useState(false);
+  const [nameDraft, setNameDraft] = React.useState("");
+  const [descriptionDraft, setDescriptionDraft] = React.useState("");
+  const [isbnDraft, setIsbnDraft] = React.useState("");
   const [isDropZone, setIsDropZone] = React.useState(false);
   const [loadingVideo, setLoadingVideo] = React.useState(false);
   const [showingVideoPlayer, setShowingVideoPlayer] = React.useState(false);
@@ -186,6 +189,20 @@ const FileEmbedNodeView = ({
       const existing: FileEntry | undefined = product.files.find((existing) => existing.id === file.id);
       if (existing) Object.assign(existing, data);
     });
+  React.useEffect(() => {
+    if (!expanded) return;
+    setNameDraft(file.display_name);
+    setDescriptionDraft(file.description ?? "");
+    setIsbnDraft(file.isbn ?? "");
+  }, [expanded, file.id]);
+
+  const commitDrafts = () => {
+    const updates: Partial<FileEntry> = {};
+    if (nameDraft !== file.display_name) updates.display_name = nameDraft;
+    if (descriptionDraft !== (file.description ?? "")) updates.description = descriptionDraft;
+    if (isbnDraft !== (file.isbn ?? "")) updates.isbn = isbnDraft;
+    if (Object.keys(updates).length > 0) updateFile(updates);
+  };
   const isComplete = !(
     (file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading") ||
     (file.status.type === "dropbox" && file.status.uploadState === "in_progress")
@@ -275,12 +292,26 @@ const FileEmbedNodeView = ({
         file: subtitleFile,
         mimeType,
         onComplete: () => {
-          subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploaded" } };
-          updateFile({});
+          updateProduct((product) => {
+            const existingFile = product.files.find((existing) => existing.id === file.id);
+            if (!existingFile) return;
+            existingFile.subtitle_files = existingFile.subtitle_files.map((subtitle) =>
+              subtitle.url === subtitleEntry.url
+                ? { ...subtitle, status: { type: "unsaved", uploadStatus: { type: "uploaded" } } }
+                : subtitle,
+            );
+          });
         },
         onProgress: (progress) => {
-          subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploading", progress } };
-          updateFile({});
+          updateProduct((product) => {
+            const existingFile = product.files.find((existing) => existing.id === file.id);
+            if (!existingFile) return;
+            existingFile.subtitle_files = existingFile.subtitle_files.map((subtitle) =>
+              subtitle.url === subtitleEntry.url
+                ? { ...subtitle, status: { type: "unsaved", uploadStatus: { type: "uploading", progress } } }
+                : subtitle,
+            );
+          });
         },
       });
 
@@ -560,7 +591,13 @@ const FileEmbedNodeView = ({
           ) : null}
 
           {!file.is_streamable || isComplete ? (
-            <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
+            <Button
+              onClick={() => {
+                if (expanded) commitDrafts();
+                setExpanded(!expanded);
+              }}
+              aria-label={expanded ? "Close drawer" : "Edit"}
+            >
               <Icon name={expanded ? "outline-cheveron-up" : "outline-cheveron-down"} />
             </Button>
           ) : null}
@@ -608,8 +645,11 @@ const FileEmbedNodeView = ({
               <input
                 type="text"
                 id={`${uid}name`}
-                value={file.display_name}
-                onChange={(evt) => updateFile({ display_name: evt.target.value })}
+                value={nameDraft}
+                onChange={(evt) => setNameDraft(evt.target.value)}
+                onBlur={() => {
+                  if (nameDraft !== file.display_name) updateFile({ display_name: nameDraft });
+                }}
                 placeholder="Name"
               />
             </fieldset>
@@ -622,8 +662,11 @@ const FileEmbedNodeView = ({
                 id={`${uid}description`}
                 rows={3}
                 maxLength={65_535}
-                value={file.description ?? ""}
-                onChange={(evt) => updateFile({ description: evt.target.value })}
+                value={descriptionDraft}
+                onChange={(evt) => setDescriptionDraft(evt.target.value)}
+                onBlur={() => {
+                  if (descriptionDraft !== (file.description ?? "")) updateFile({ description: descriptionDraft });
+                }}
                 placeholder="Description"
               />
             </fieldset>
@@ -636,8 +679,11 @@ const FileEmbedNodeView = ({
                 <input
                   type="text"
                   id={`${uid}isbn`}
-                  value={file.isbn ?? ""}
-                  onChange={(evt) => updateFile({ isbn: evt.target.value })}
+                  value={isbnDraft}
+                  onChange={(evt) => setIsbnDraft(evt.target.value)}
+                  onBlur={() => {
+                    if (isbnDraft !== (file.isbn ?? "")) updateFile({ isbn: isbnDraft });
+                  }}
                   placeholder="ISBN"
                 />
               </fieldset>

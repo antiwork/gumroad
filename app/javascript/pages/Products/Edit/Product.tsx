@@ -490,26 +490,17 @@ export default function ProductEditPage() {
                       ) : null}
                       <Switch
                         checked={form.data.should_include_last_post}
-                        onChange={(should_include_last_post) =>
-                          form.setData("should_include_last_post", !should_include_last_post)
-                        }
+                        onChange={(e) => form.setData("should_include_last_post", e.target.checked)}
                         label="New members will be emailed this product's last published post"
                       />
                       <Switch
                         checked={form.data.should_show_all_posts}
-                        onChange={(should_show_all_posts) =>
-                          form.setData("should_show_all_posts", !should_show_all_posts)
-                        }
+                        onChange={(e) => form.setData("should_show_all_posts", e.target.checked)}
                         label="New members will get access to all posts you have published"
                       />
                       <Switch
                         checked={form.data.block_access_after_membership_cancellation}
-                        onChange={(block_access_after_membership_cancellation) =>
-                          form.setData(
-                            "block_access_after_membership_cancellation",
-                            !block_access_after_membership_cancellation,
-                          )
-                        }
+                        onChange={(e) => form.setData("block_access_after_membership_cancellation", e.target.checked)}
                         label="Members will lose access when their memberships end"
                       />
                       <DurationEditor product={form.data} updateProduct={updateProductPartial} />

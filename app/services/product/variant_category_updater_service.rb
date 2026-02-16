@@ -86,7 +86,7 @@ class Product::VariantCategoryUpdaterService
 
   private
     def create_or_update_variant!(external_id, params)
-      return Variant.create!(params.slice(*ALLOWED_ATTRIBUTES)) if external_id.blank?
+      return Variant.create!(params.slice(*ALLOWED_ATTRIBUTES)) if external_id.blank? || temporary_variant_id?(external_id)
 
       variant = product.variants.find_by_external_id!(external_id)
       variant.assign_attributes(params.slice(*ALLOWED_ATTRIBUTES))
@@ -105,6 +105,10 @@ class Product::VariantCategoryUpdaterService
       end
 
       variant
+    end
+
+    def temporary_variant_id?(external_id)
+      external_id.to_s.match?(/\A\d+\z/)
     end
 
     def has_variant_recurrences?

@@ -21,8 +21,23 @@ class Products::Edit::BaseController < ApplicationController
     end
 
   protected
+    def tab_permitted_attributes
+      case controller_name
+      when "product"
+        policy(@product).product_tab_permitted_attributes
+      when "content"
+        policy(@product).content_tab_permitted_attributes
+      when "receipt"
+        policy(@product).receipt_tab_permitted_attributes
+      when "share"
+        policy(@product).share_tab_permitted_attributes
+      else
+        policy(@product).product_permitted_attributes
+      end
+    end
+
     def product_permitted_params
-      @_product_permitted_params ||= params.permit(policy(@product).product_permitted_attributes)
+      @_product_permitted_params ||= params.permit(tab_permitted_attributes)
     end
 
     def set_product_title
