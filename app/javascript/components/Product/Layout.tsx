@@ -365,7 +365,7 @@ const EditButton = ({ product }: { product: Product }) => {
   return (
     <div
       style={{
-        position: "fixed",
+        position: isDesktop ? "fixed" : "absolute",
         top: isDesktop ? "var(--spacer-3)" : "var(--spacer-4)",
         right: isDesktop ? undefined : "var(--spacer-4)",
         left: isDesktop ? "var(--spacer-3)" : undefined,
