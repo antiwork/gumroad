@@ -15,24 +15,24 @@ class Checkout::FormController < Sellers::BaseController
 
   def update
     authorize [:checkout, :form]
-    begin
-      ActiveRecord::Base.transaction do
-        current_seller.update!(permitted_params[:user]) if permitted_params[:user]
-        if permitted_params[:custom_fields]
-          all_fields = current_seller.custom_fields.to_a
-          permitted_params[:custom_fields].each do |field|
-            existing = all_fields.extract! { _1.external_id == field[:id] }[0] || current_seller.custom_fields.build
-            existing.update!(field.except(:id, :products))
-            existing.products = field[:global] ? [] : current_seller.products.by_external_ids(field[:products])
-          end
-          all_fields.each(&:destroy)
-          current_seller.custom_fields.reload
+
+    ActiveRecord::Base.transaction do
+      current_seller.update!(permitted_params[:user]) if permitted_params[:user]
+      if permitted_params[:custom_fields]
+        all_fields = current_seller.custom_fields.to_a
+        permitted_params[:custom_fields].each do |field|
+          existing = all_fields.extract! { _1.external_id == field[:id] }[0] || current_seller.custom_fields.build
+          existing.update!(field.except(:id, :products))
+          existing.products = field[:global] ? [] : current_seller.products.by_external_ids(field[:products])
         end
+        all_fields.each(&:destroy)
+        current_seller.custom_fields.reload
       end
-      render json: Checkout::FormPresenter.new(pundit_user:).form_props
-    rescue ActiveRecord::RecordInvalid => e
-      render json: { error_message: e.record.errors.full_messages.to_sentence }, status: :unprocessable_entity
     end
+
+    redirect_to checkout_form_path, status: :see_other, notice: "Changes saved!"
+  rescue ActiveRecord::RecordInvalid => e
+    redirect_to checkout_form_path, inertia: { errors: { base: e.record.errors.full_messages } }, alert: e.record.errors.full_messages.to_sentence
   end
 
   private

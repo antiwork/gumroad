@@ -155,7 +155,6 @@ Rails.application.routes.draw do
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address"
 
     # discover/autocomplete_search
-    get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
     delete "/discover_search_autocomplete", to: "discover/search_autocomplete#delete_search_suggestion"
 
     put "/links/:id/sections", to: "links#update_sections"
@@ -165,10 +164,6 @@ Rails.application.routes.draw do
     get "/", to: "home#about"
 
     get "/discover", to: "discover#index"
-    get "/discover/recommended_products", to: "discover#recommended_products", as: :discover_recommended_products
-    namespace :discover do
-      resources :recommended_wishlists, only: [:index]
-    end
 
     product_info_and_purchase_routes
 
@@ -888,8 +883,6 @@ Rails.application.routes.draw do
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :url_redirect_download_subtitle_file
     get "/s/:id", to: "url_redirects#stream", as: :url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :url_redirect_stream_page_for_product_file
-    get "/latest_media_locations/:id", to: "url_redirects#latest_media_locations", as: :url_redirect_latest_media_locations
-    get "/audio_durations/:id", to: "url_redirects#audio_durations", as: :url_redirect_audio_durations
     get "/media_urls/:id", to: "url_redirects#media_urls", as: :url_redirect_media_urls
 
     get "/read", to: "library#index"
@@ -965,7 +958,6 @@ Rails.application.routes.draw do
     get "/blackfriday", to: redirect("/discover?offer_code=BLACKFRIDAY2025"), as: :blackfriday
     get "/discover", to: "discover#index"
     get "/discover/categories",          to: "discover#categories"
-    get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
 
     root to: "public#home"
 

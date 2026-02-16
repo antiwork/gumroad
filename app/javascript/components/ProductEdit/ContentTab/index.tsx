@@ -22,6 +22,7 @@ import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
+import { EntityInfo } from "$app/components/DownloadPage/Layout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
@@ -44,7 +45,6 @@ import {
 import { S3UploadConfigProvider, useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
-import { EntityInfo } from "$app/components/server-components/DownloadPage/Layout";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { uploadImages } from "$app/components/TiptapExtensions/Image";

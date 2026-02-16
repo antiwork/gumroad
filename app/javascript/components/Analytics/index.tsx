@@ -160,7 +160,9 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
               <option value="monthly">Monthly</option>
             </Select>
             <ProductsPopover products={products} setProducts={setProducts} />
-            <DateRangePicker {...dateRange} />
+            <div className="col-span-2">
+              <DateRangePicker {...dateRange} />
+            </div>
           </>
         ) : null
       }
