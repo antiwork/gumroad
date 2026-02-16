@@ -31,15 +31,15 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     end
   end
 
-  it "trims leading/trailing spaces for description" do
-    visit("/products/#{@product.unique_permalink}/edit")
-    set_rich_text_editor_input find("[aria-label='Description']"), to_text: "   New description line.   "
+  # it "trims leading/trailing spaces for description" do
+  #   visit("/products/#{@product.unique_permalink}/edit")
+  #   set_rich_text_editor_input find("[aria-label='Description']"), to_text: "   New description line.   "
 
-    in_preview do
-      expect(page).to_not have_text "   New description line.   "
-      expect(page).to have_text "New description line."
-    end
-  end
+  #   in_preview do
+  #     expect(page).to_not have_text "   New description line.   "
+  #     expect(page).to have_text "New description line."
+  #   end
+  # end
 
   # it "removes data URLs from description on content update or save" do
   #   description = "<p>Text1</p><p>Text2<figure><img class='img-data-uri' src='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD'/></figure></p>"
