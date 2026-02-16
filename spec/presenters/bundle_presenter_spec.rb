@@ -12,6 +12,7 @@ describe BundlePresenter do
                                                               price_cents: 100,
                                                               quantity: 2,
                                                               url: product.long_url,
+                                                              created_at: product.created_at.iso8601,
                                                               variants: {
                                                                 selected_id: product.alive_variants.first.external_id,
                                                                 list: [
