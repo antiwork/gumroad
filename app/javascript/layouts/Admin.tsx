@@ -2,15 +2,12 @@ import { usePage } from "@inertiajs/react";
 import React from "react";
 
 import MetaTags, { type MetaTag } from "$app/layouts/components/MetaTags";
-import { classNames } from "$app/utils/classNames";
 
 import AdminNav from "$app/components/Admin/Nav";
 import AdminNewSalesReportPopover from "$app/components/Admin/SalesReports/NewSalesReportPopover";
 import AdminSearchPopover from "$app/components/Admin/SearchPopover";
-import LoadingSkeleton from "$app/components/LoadingSkeleton";
 import Alert, { type AlertPayload } from "$app/components/server-components/Alert";
 import { useFlashMessage } from "$app/components/useFlashMessage";
-import useRouteLoading from "$app/components/useRouteLoading";
 
 type PageProps = {
   _inertia_meta?: MetaTag[];
@@ -18,10 +15,8 @@ type PageProps = {
   flash?: AlertPayload;
 };
 
-const Admin = ({ children }: { children: React.ReactNode }) => {
+export default function Admin({ children }: { children: React.ReactNode }) {
   const { title, flash } = usePage<PageProps>().props;
-  const isRouteLoading = useRouteLoading();
-
   useFlashMessage(flash);
 
   return (
@@ -37,11 +32,8 @@ const Admin = ({ children }: { children: React.ReactNode }) => {
             {window.location.pathname === Routes.admin_sales_reports_path() ? <AdminNewSalesReportPopover /> : null}
           </div>
         </header>
-        {isRouteLoading ? <LoadingSkeleton /> : null}
-        <div className={classNames("p-4 md:p-8", { hidden: isRouteLoading })}>{children}</div>
+        <div className="p-4 md:p-8">{children}</div>
       </main>
     </div>
   );
-};
-
-export default Admin;
+}

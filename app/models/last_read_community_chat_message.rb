@@ -25,9 +25,12 @@ class LastReadCommunityChatMessage < ApplicationRecord
 
     if community_chat_message_id
       message = CommunityChatMessage.find(community_chat_message_id)
-      CommunityChatMessage.where(community_id:).alive.where("created_at > ?", message.created_at).count
+      CommunityChatMessage.where(community_id:).alive
+        .where("created_at > ?", message.created_at)
+        .where.not(user_id: user_id)
+        .count
     else
-      CommunityChatMessage.where(community_id:).alive.count
+      CommunityChatMessage.where(community_id:).alive.where.not(user_id: user_id).count
     end
   end
 end

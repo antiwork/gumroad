@@ -169,6 +169,15 @@ class LinksController < ApplicationController
         when Product::Layout::PROFILE
           render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
         when Product::Layout::DISCOVER
+          if request.headers["X-Inertia-Partial-Data"] == "autocomplete_results"
+            return render inertia: "Products/Discover/Show", props: {
+              autocomplete_results: Discover::AutocompletePresenter.new(
+                query: params[:query],
+                user: logged_in_user,
+                browser_guid: cookies[:_gumroad_guid]
+              ).props
+            }
+          end
           discover_props = { taxonomy_path: @product.taxonomy&.ancestry_path&.join("/"), taxonomies_for_nav: }
           render inertia: "Products/Discover/Show", props: presenter.discover_product_props(discover_props:, **presenter_props)
         else

@@ -57,6 +57,8 @@ bin/dist
 # Local SSL certificates
 docker/local-nginx/certs/*.crt
 docker/local-nginx/certs/*.key
+!docker/local-nginx/certs/gumroad_dev.crt
+!docker/local-nginx/certs/gumroad_dev.key
 lib/GeoIP2-City.mmdb
 nomad/
 docs/ssh.md
