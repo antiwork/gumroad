@@ -8,12 +8,12 @@
 %>
 
 <div class="flex gap-<%= gap %> justify-end mt-5">
-  <button type="button" aria-label="Previous" data-<%= data_prefix %>-prev class="w-10 h-10 rounded-full flex items-center justify-center <%= btn_classes %>">
+  <button type="button" aria-label="Previous" data-<%= data_prefix %>-prev class="w-10 h-10 rounded-full flex items-center justify-center cursor-pointer <%= btn_classes %>">
     <svg class="w-5 h-5 <%= icon_classes %>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
     </svg>
   </button>
-  <button type="button" aria-label="Next" data-<%= data_prefix %>-next class="w-10 h-10 rounded-full flex items-center justify-center <%= btn_classes %>">
+  <button type="button" aria-label="Next" data-<%= data_prefix %>-next class="w-10 h-10 rounded-full flex items-center justify-center cursor-pointer <%= btn_classes %>">
     <svg class="w-5 h-5 <%= icon_classes %>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
     </svg>

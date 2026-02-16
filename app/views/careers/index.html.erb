@@ -25,35 +25,35 @@
         ]
       %>
     </div>
-  </div>
 
-<div class="bg-dark-gray text-white pt-16 sm:pt-24 pb-32">
-  <div class="flex flex-col justify-center gap-4 sm:gap-6 mx-auto text-center max-w-5xl mb-12 sm:mb-16 px-8 md:mb-28">
-    <h2 class="text-4xl md:text-6xl lg:text-7xl">How we build</h2>
-    <p class="text-lg md:text-2xl">We give you what you need to ship your best work.</p>
+  <div class="text-white pt-16 sm:pt-24 pb-32">
+    <div class="flex flex-col justify-center gap-4 sm:gap-6 mx-auto text-center max-w-5xl mb-12 sm:mb-16 px-8 md:mb-28">
+      <h2 class="text-4xl md:text-6xl lg:text-7xl">How we build</h2>
+      <p class="text-lg md:text-2xl">We give you what you need to ship your best work.</p>
+    </div>
+    <%= render "home/shared/how_we_build",
+      cards: [
+        {
+          icon: image_path("careers/flag.svg"),
+          icon_bg: "pink",
+          title: "Dumbo HQ, NYC",
+          description: "High-bandwidth work from our office overlooking the Brooklyn Bridge. A seat in the city’s most iconic neighborhood."
+        },
+        {
+          icon: image_path("careers/audience.svg"),
+          icon_bg: "yellow",
+          title: "Ownership",
+          description: "Own what you build. Every team member has the option to purchase stock at least once a year."
+        },
+        {
+          icon: image_path("careers/launch.svg"),
+          icon_bg: "purple",
+          title: "Open source",
+          description: "Our code is public. We believe in transparency and hire people who share that mindset."
+        }
+      ]
+    %>
   </div>
-  <%= render "home/shared/how_we_build",
-    cards: [
-      {
-        icon: image_path("careers/flag.svg"),
-        icon_bg: "pink",
-        title: "Dumbo HQ, NYC",
-        description: "High-bandwidth work from our office overlooking the Brooklyn Bridge. A seat in the city’s most iconic neighborhood."
-      },
-      {
-        icon: image_path("careers/audience.svg"),
-        icon_bg: "yellow",
-        title: "Ownership",
-        description: "Own what you build. Every team member has the option to purchase stock at least once a year."
-      },
-      {
-        icon: image_path("careers/launch.svg"),
-        icon_bg: "purple",
-        title: "Open source",
-        description: "Our code is public. We believe in transparency and hire people who share that mindset."
-      }
-    ]
-  %>
   </div>
 
   <%= render "home/shared/office_carousel",
