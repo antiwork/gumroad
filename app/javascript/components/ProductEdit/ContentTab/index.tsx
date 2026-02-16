@@ -889,7 +889,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           }
         >
           <div className="relative h-full flex-1">
-            {editor?.isEmpty && (
+            {editor?.isEmpty ? (
               <div className="pointer-events-none absolute inset-0 flex items-start">
                 <p className="flex flex-wrap items-center gap-1 text-muted">
                   <span>Enter the content you want to sell.</span>
@@ -938,7 +938,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <span>or start typing.</span>
                 </p>
               </div>
-            )}
+            ) : null}
             <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
           </div>
         </PageListLayout>
