@@ -332,6 +332,11 @@ const OverlayMenu = ({
         modal
         className="right-auto w-80 max-w-80 border-l-0 p-0 md:left-0 md:border-r"
       >
+        <div className="flex justify-end px-4 pt-4">
+          <Button onClick={() => setMenuOpen(false)} aria-label="Close menu">
+            <Icon name="x" />
+          </Button>
+        </div>
         <ItemsList
           key={`${overlayMenuUID}-${menuOpen}`}
           menuId={overlayMenuUID}
