@@ -107,39 +107,37 @@ const FileUploadMenu = ({
   onUploadFile: (target: HTMLInputElement) => void;
   onSelectExistingFiles: () => void;
   onUploadFromDropbox: () => void;
-}) => {
-  return (
-    <div role="menu" aria-label="Image and file uploader">
+}) => (
+  <div role="menu" aria-label="Image and file uploader">
+    <PopoverClose asChild>
+      <div role="menuitem" onClick={onEmbedMedia}>
+        <Icon name="media" />
+        <span>Embed media</span>
+      </div>
+    </PopoverClose>
+    <PopoverClose asChild>
+      <label role="menuitem">
+        <input type="file" name="file" multiple onChange={(e) => onUploadFile(e.target)} />
+        <Icon name="paperclip" />
+        <span>Computer files</span>
+      </label>
+    </PopoverClose>
+    {existingFiles.length > 0 ? (
       <PopoverClose asChild>
-        <div role="menuitem" onClick={onEmbedMedia}>
-          <Icon name="media" />
-          <span>Embed media</span>
+        <div role="menuitem" onClick={onSelectExistingFiles}>
+          <Icon name="files-earmark" />
+          <span>Existing product files</span>
         </div>
       </PopoverClose>
-      <PopoverClose asChild>
-        <label role="menuitem">
-          <input type="file" name="file" multiple onChange={(e) => onUploadFile(e.target)} />
-          <Icon name="paperclip" />
-          <span>Computer files</span>
-        </label>
-      </PopoverClose>
-      {existingFiles.length > 0 ? (
-        <PopoverClose asChild>
-          <div role="menuitem" onClick={onSelectExistingFiles}>
-            <Icon name="files-earmark" />
-            <span>Existing product files</span>
-          </div>
-        </PopoverClose>
-      ) : null}
-      <PopoverClose asChild>
-        <div role="menuitem" onClick={onUploadFromDropbox}>
-          <Icon name="dropbox" />
-          <span>Dropbox files</span>
-        </div>
-      </PopoverClose>
-    </div>
-  );
-};
+    ) : null}
+    <PopoverClose asChild>
+      <div role="menuitem" onClick={onUploadFromDropbox}>
+        <Icon name="dropbox" />
+        <span>Dropbox files</span>
+      </div>
+    </PopoverClose>
+  </div>
+);
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
   const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
