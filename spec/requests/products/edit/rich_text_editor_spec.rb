@@ -243,7 +243,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       ]
     )
     Feature.activate(:product_edit_react)
-    visit("#{edit_link_path(@product)}/content")
+    visit products_edit_content_path(@product)
     within find("[aria-label='Content editor']") do
       expect(page).to have_link("Gumroad", href: "https://gumroad.com")
       expect(page).to have_link("Google", href: "https://google.com")
@@ -476,7 +476,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
 
     it "shows empty state prompt with upload button when content editor is empty" do
       product = create(:product, user: seller)
-      visit edit_link_path(product) + "/content"
+      visit products_edit_content_path(product)
 
       expect(page).to have_text("Enter the content you want to sell.")
       expect(page).to have_text("or start typing.")
@@ -866,7 +866,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     end
 
     it "supports moving and deleting input nodes with the actions menu" do
-      visit "#{edit_link_path(@product)}/content"
+      visit products_edit_content_path(@product)
 
       expect(page).to have_field("Title", with: "Long answer")
       expect(page).to have_field("Title", with: "Short answer")
@@ -1389,7 +1389,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     end
 
     it "shows the last edited time for each version" do
-      visit products_edit_content_path(product)
+      visit products_edit_product_path(product)
 
       find(:combo_box, "Select a version").click
       expect(page).to have_selector("[role='option']", text: "Version 1 Editing", normalize_ws: true)
