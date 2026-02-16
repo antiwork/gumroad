@@ -238,28 +238,37 @@ const CtaBar = ({
   React.useEffect(() => {
     const button = ctaButtonRef.current;
     if (!button) return;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry) return;
         const shouldBeVisible = !entry.isIntersecting;
 
-        // Safety net for browsers without scroll anchoring: when the desktop spacer pushes the CTA button back into the viewport
-        if (!shouldBeVisible && visibleRef.current && isDesktop) {
+        // Ignore spacer-induced layout shift for 150ms after each toggle to prevent yoyo
+        if (settleTimer && !shouldBeVisible && visibleRef.current && isDesktop) {
           const barHeight = ref.current?.getBoundingClientRect().height ?? 0;
           if (button.getBoundingClientRect().top - barHeight < 0) return;
         }
 
         visibleRef.current = shouldBeVisible;
         setVisible(shouldBeVisible);
+        if (isDesktop) {
+          if (settleTimer) clearTimeout(settleTimer);
+          settleTimer = setTimeout(() => {
+            settleTimer = null;
+          }, 150);
+        }
       },
       { threshold: 0.5 },
     );
     observer.observe(button);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (settleTimer) clearTimeout(settleTimer);
+    };
   }, [ctaButtonRef.current, isDesktop]);
 
   const height = ref.current?.getBoundingClientRect().height ?? 0;
-
 
   if (product.bundle_products.length) priceCents = getStandalonePrice(product);
 
@@ -341,7 +350,7 @@ const CtaBar = ({
         </div>
       </section>
       {isDesktop ? (
-        <div aria-hidden style={{ height: visible ? height : 0, transition: "height var(--transition-duration)" }} />
+        <div aria-hidden style={{ height: visible ? height : 0, overflowAnchor: "none" }} />
       ) : null}
     </>
   );
