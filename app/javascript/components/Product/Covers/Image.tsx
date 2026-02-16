@@ -7,9 +7,10 @@ import { DEFAULT_IMAGE_WIDTH } from "./";
 type Props = { cover: AssetPreview; dimensions: { height: number; width: number } | null };
 const Image = ({ cover, dimensions }: Props) => (
   <img
-    className="w-full"
+    className="preview"
     src={dimensions == null || dimensions.width > DEFAULT_IMAGE_WIDTH ? cover.original_url : cover.url}
     itemProp="image"
+    style={{ maxWidth: "100%" }}
   />
 );
 
