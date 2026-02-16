@@ -124,7 +124,7 @@ const SectionEditor = ({
             {section.id ? (
               <EditSection section={section} />
             ) : (
-              <div className={classNames("mx-auto w-full max-w-6xl", product.can_edit && "lg:pl-18")}>{children}</div>
+              <div className="mx-auto w-full max-w-6xl">{children}</div>
             )}
             {i === sections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
           </SectionLayout>
@@ -165,12 +165,11 @@ export const Layout = (
   );
 
   const mainSection = (
-    <section className="border-b border-border">
+    <section className="relative border-b border-border">
       <div
         className={classNames(
           "mx-auto w-full max-w-product-page lg:py-16",
           props.sections.length > 0 ? "px-4 py-8" : "p-4 lg:px-8",
-          product.can_edit && "lg:pl-18",
         )}
       >
         {productView}
@@ -232,43 +231,32 @@ const CtaBar = ({
     selectionAttributes;
 
   const [visible, setVisible] = React.useState(false);
+  const visibleRef = React.useRef(false);
   const ref = React.useRef<null | HTMLDivElement>(null);
-  const scrollThresholdRef = React.useRef<number | null>(null);
   const isDesktop = useIsAboveBreakpoint("lg");
 
   React.useEffect(() => {
-    const ctaButton = ctaButtonRef.current;
-    if (!ctaButton) return;
-
-    const updateScrollThreshold = () => {
-      scrollThresholdRef.current = ctaButton.getBoundingClientRect().bottom + window.scrollY;
-    };
-
-    updateScrollThreshold();
-    window.addEventListener("resize", updateScrollThreshold);
-
+    const button = ctaButtonRef.current;
+    if (!button) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry) return;
+        const shouldBeVisible = !entry.isIntersecting;
 
-        const scrollThreshold = scrollThresholdRef.current ?? 0;
-        const hasScrolledPastButton = window.scrollY > scrollThreshold;
-
-        if (!entry.isIntersecting) {
-          setVisible(true);
-        } else if (entry.isIntersecting && !hasScrolledPastButton) {
-          setVisible(false);
+        // Safety net for browsers without scroll anchoring: when the desktop spacer pushes the CTA button back into the viewport
+        if (!shouldBeVisible && visibleRef.current && isDesktop) {
+          const barHeight = ref.current?.getBoundingClientRect().height ?? 0;
+          if (button.getBoundingClientRect().top - barHeight < 0) return;
         }
+
+        visibleRef.current = shouldBeVisible;
+        setVisible(shouldBeVisible);
       },
       { threshold: 0.5 },
     );
-    observer.observe(ctaButton);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateScrollThreshold);
-    };
-  }, [ctaButtonRef]);
+    observer.observe(button);
+    return () => observer.disconnect();
+  }, [ctaButtonRef.current, isDesktop]);
 
   const height = ref.current?.getBoundingClientRect().height ?? 0;
 
@@ -294,17 +282,13 @@ const CtaBar = ({
           bottom: isDesktop ? undefined : 0,
           left: 0,
           right: 0,
-          // Render above the product edit button
           zIndex: "var(--z-index-menubar)",
           marginTop: hasHero ? "var(--border-width)" : undefined,
         }}
       >
         <div
           ref={ref}
-          className={classNames(
-            "mx-auto flex max-w-product-page items-center justify-between gap-4 p-4 lg:pr-8",
-            product.can_edit ? "lg:pl-18" : "lg:pl-8",
-          )}
+          className="mx-auto flex max-w-product-page items-center justify-between gap-4 p-4 lg:px-8"
           style={{
             transition: "var(--transition-duration)",
             marginTop: visible || !isDesktop ? undefined : -height,
@@ -355,12 +339,7 @@ const CtaBar = ({
         </div>
       </section>
       {isDesktop ? (
-        <div
-          style={{
-            height: visible ? height : 0,
-            transition: "var(--transition-duration)",
-          }}
-        />
+        <div aria-hidden style={{ height: visible ? height : 0, transition: "height var(--transition-duration)" }} />
       ) : null}
     </>
   );
@@ -375,10 +354,11 @@ const EditButton = ({ product }: { product: Product }) => {
   return (
     <div
       style={{
-        position: "fixed",
+        position: "absolute",
         top: isDesktop ? "var(--spacer-3)" : "var(--spacer-4)",
         right: isDesktop ? undefined : "var(--spacer-4)",
         left: isDesktop ? "var(--spacer-3)" : undefined,
+        // Render above the profile header (z-20) and CTA bar (z-10)
         zIndex: "var(--z-index-tooltip)",
       }}
     >
