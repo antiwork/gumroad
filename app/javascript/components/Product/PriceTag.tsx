@@ -64,7 +64,7 @@ export const PriceTag = ({
       <WithTooltip position={tooltipPosition} tip={priceTag}>
         <div className="relative grid grid-flow-col border border-r-0 border-border">
           <div
-            className="bg-accent px-2 py-1 whitespace-nowrap text-accent-foreground"
+            className="bg-accent px-2 py-1 text-accent-foreground"
             itemProp="price"
             content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
           >
