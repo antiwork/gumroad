@@ -844,6 +844,56 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       expect(new_short_answer.reload.name).to eq("Newer short answer")
       expect(new_long_answer.reload.name).to eq("Newer long answer")
     end
+
+    it "supports moving and deleting input nodes with the actions menu" do
+      visit "#{edit_link_path(@product)}/content"
+
+      expect(page).to have_field("Title", with: "Long answer")
+      expect(page).to have_field("Title", with: "Short answer")
+      expect(page).to have_button("Upload files")
+
+      within find_input_embed("Short answer").hover do
+        select_disclosure "Actions" do
+          click_on "Move down"
+        end
+      end
+
+      within find_input_embed("Short answer").hover do
+        select_disclosure "Actions" do
+          click_on "Delete"
+        end
+      end
+
+      expect(page).to_not have_field("Title", with: "Short answer")
+      expect(page).to have_field("Title", with: "Long answer")
+      expect(page).to have_button("Upload files")
+
+      within find_input_embed("Upload files").hover do
+        select_disclosure "Actions" do
+          click_on "Move up"
+        end
+      end
+
+      save_change
+
+      expect(@product.reload.rich_contents.first.description).to eq(
+        [
+          {
+            "type" => RichContent::FILE_UPLOAD_NODE_TYPE,
+            "attrs" => {
+              "id" => file_upload.external_id
+            }
+          },
+          {
+            "type" => RichContent::LONG_ANSWER_NODE_TYPE,
+            "attrs" => {
+              "id" => long_answer.external_id,
+              "label" => "Long answer"
+            }
+          },
+        ]
+      )
+    end
   end
 
   describe "moving nodes" do
