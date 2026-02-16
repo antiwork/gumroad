@@ -14,7 +14,7 @@ describe("Product Edit Receipt Tab", type: :system, js: true) do
 
   describe "Receipt customization" do
     it "allows updating custom view content button text" do
-      visit "#{edit_link_path(product.unique_permalink)}/receipt"
+      visit products_edit_receipt_path(product.unique_permalink)
 
       fill_in "Button text", with: "Download Now!"
 
@@ -27,7 +27,7 @@ describe("Product Edit Receipt Tab", type: :system, js: true) do
     end
 
     it "allows updating custom receipt text" do
-      visit "#{edit_link_path(product.unique_permalink)}/receipt"
+      visit products_edit_receipt_path(product.unique_permalink)
 
       custom_text = "Thank you for your purchase! Please check your email for download instructions."
 
@@ -44,7 +44,7 @@ describe("Product Edit Receipt Tab", type: :system, js: true) do
 
   describe "Receipt preview" do
     it "shows live preview when the user makes changes", :js do
-      visit "#{edit_link_path(product.unique_permalink)}/receipt"
+      visit products_edit_receipt_path(product.unique_permalink)
 
       fill_in "Button text", with: "Access Content Now!"
       fill_in "Custom message", with: "Thank you for your purchase, we hope you enjoy it!"

@@ -91,7 +91,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
   it "allows users to edit their physical product's content" do
     product.update!(is_physical: true, require_shipping: true)
 
-    visit edit_link_path(product.unique_permalink) + "/content"
+    visit products_edit_content_path(product.unique_permalink)
 
     select_disclosure "Upload files" do
       attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
@@ -358,7 +358,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     video_file = product.product_files.first
     create(:rich_content, entity: product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => video_file.external_id, "uid" => SecureRandom.uuid } }])
     create(:transcoded_video, streamable: video_file, original_video_key: video_file.s3_key, state: "processing")
-    visit edit_link_path(product) + "/content"
+    visit products_edit_content_path(product)
     within find_embed(name: video_file.display_name) do
       expect(page).to have_text("Transcoding in progress")
     end
@@ -491,14 +491,12 @@ describe("Product Edit Scenario", type: :system, js: true) do
   it "does not allow publishing when creator's email is empty" do
     allow_any_instance_of(User).to receive(:email).and_return("")
     product = create(:product, user: seller, draft: true, purchase_disabled_at: Time.current)
-    visit edit_link_path(product.unique_permalink) + "/content"
+    visit products_edit_content_path(product.unique_permalink)
 
     click_on "Publish and continue"
 
-    within :alert, text: "To publish a product, we need you to have an email. Set an email to continue." do
-      expect(page).to have_link("Set an email", href: settings_main_url(host: UrlService.domain_with_protocol))
-    end
-    expect(page).to have_current_path(edit_link_path(product.unique_permalink) + "/content")
+    expect(page).to have_alert(text: "To publish a product, we need you to have an email. Set an email in your settings to continue.")
+    expect(page).to have_current_path(edit_link_path(product.unique_permalink))
     expect(page).to have_button "Publish and continue"
     expect(product.reload.alive?).to be(false)
   end
@@ -656,19 +654,19 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
     it "shows eligibility notice until dismissed and success notice if recommendable product" do
       expect(product.recommendable?).to be(false)
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
       expect(page).not_to have_status(text: "#{product.name} is listed on Gumroad Discover.")
 
       click_on "Close"
       expect(page).not_to have_status(text: "To appear on Gumroad Discover, make sure to meet all the")
 
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
       expect(page).not_to have_status(text: "To appear on Gumroad Discover, make sure to meet all the")
 
       login_as(recommendable_seller)
 
       expect(recommendable_product.recommendable?).to be(true)
-      visit edit_link_path(recommendable_product.unique_permalink) + "/share"
+      visit products_edit_share_path(recommendable_product.unique_permalink)
       expect(page).to have_status(text: "#{recommendable_product.name} is listed on Gumroad Discover.")
 
       within(:status, text: "#{recommendable_product.name} is listed on Gumroad Discover.") do
@@ -681,7 +679,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
   describe "changing product tags" do
     it "allows user to add a tag" do
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
 
       within :fieldset, "Tags" do
         select_combo_box_option search: "Test1", from: "Tags"
@@ -698,7 +696,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     it "allows to add no more than five tags" do
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
 
       expect(page).to have_combo_box "Tags"
 
@@ -723,7 +721,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
       create(:product, tags: [tag])
       create(:product, tags: [tag])
 
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
 
       fill_in("Tags", with: "oth")
       expect(page).to have_combo_box "Tags", expanded: true, with_options: ["other-product-tag (2)"]
@@ -733,7 +731,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
       product.tags.create(name: "test1")
       product.tags.create(name: "test2")
 
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
 
       expect(page).to have_combo_box "Tags"
       within :fieldset, "Tags" do
@@ -746,7 +744,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
       product.tags.create(name: "test1")
       product.tags.create(name: "test2")
 
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
 
       expect(page).to have_combo_box "Tags"
       within :fieldset, "Tags" do
@@ -765,7 +763,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
   describe "changing discover taxonomy settings" do
     it "shows previously selected category, shows all available categories, and saves a newly selected category" do
       product.update_attribute(:taxonomy, Taxonomy.find_by(slug: "design"))
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
       within :fieldset, "Category" do
         expect(page).to have_text("Design")
       end
@@ -790,7 +788,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end
 
     it "searches for category by partial text regardless of hierarchy" do
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
       within :fieldset, "Category" do
         select_combo_box_option search: "Entertainment", from: "Category"
       end
@@ -802,7 +800,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
     it "unsets category when value is cleared" do
       product.update_attribute(:taxonomy, Taxonomy.find_by(slug: "design"))
-      visit edit_link_path(product.unique_permalink) + "/share"
+      visit products_edit_share_path(product.unique_permalink)
       within :fieldset, "Category" do
         click_on "Clear value"
       end
@@ -822,7 +820,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
         section1 = create(:seller_profile_products_section, seller:, header: "Section 1", add_new_products: false, shown_products: [product, product2, product3].map(&:id))
         section2 = create(:seller_profile_products_section, seller:, header: "Section 2", hide_header: true, shown_products: [product.id])
         section3 = create(:seller_profile_products_section, seller:, add_new_products: false, shown_products: [product2.id])
-        visit edit_link_path(product.unique_permalink) + "/share"
+        visit products_edit_share_path(product.unique_permalink)
         expect(page).to_not have_text "You currently have no sections in your profile to display this"
         within_section "Profile", section_element: :section do
           expect(page).to have_selector(:checkbox, count: 3)
@@ -849,7 +847,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
       end
 
       it "shows an info message when none exists" do
-        visit edit_link_path(product.unique_permalink) + "/share"
+        visit products_edit_share_path(product.unique_permalink)
         expect(page).to have_text "You currently have no sections in your profile to display this"
         expect(page).to have_link "create one here", href: root_url(host: seller.subdomain)
       end

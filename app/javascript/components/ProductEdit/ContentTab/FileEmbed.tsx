@@ -708,7 +708,11 @@ const FileEmbedNodeView = ({
   );
 };
 
-export type FileEmbedConfig = { filesById: Map<string, FileEntry> };
+export type FileEmbedConfig = {
+  id: string;
+  updateProduct: (updater: (product: Product) => void) => void;
+  filesById: Map<string, FileEntry>;
+};
 
 export const FileEmbed = TiptapNode.create<{ getConfig?: () => FileEmbedConfig }>({
   name: "fileEmbed",
@@ -723,7 +727,16 @@ export const FileEmbed = TiptapNode.create<{ getConfig?: () => FileEmbedConfig }
   renderHTML: ({ HTMLAttributes }) => ["file-embed", HTMLAttributes],
 
   addNodeView() {
-    return ReactNodeViewRenderer(FileEmbedNodeView);
+    return ReactNodeViewRenderer((props: NodeViewProps) => {
+      const config = this.options.getConfig?.();
+      if (!config) return null;
+      return FileEmbedNodeView({
+        ...props,
+        id: config.id,
+        updateProduct: config.updateProduct,
+        filesById: config.filesById,
+      });
+    });
   },
 
   addProseMirrorPlugins() {

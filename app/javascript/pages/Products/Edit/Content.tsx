@@ -112,6 +112,7 @@ type ContentPageProps = {
   existing_files: ExistingFileEntry[];
   aws_access_key_id: string;
   s3_url: string;
+  dropbox_picker_app_key: string;
   user_id: string;
   ratings: {
     count: number;
@@ -143,6 +144,7 @@ const ContentTabContent = ({
   existingFiles,
   save,
   filesById,
+  dropbox_picker_app_key,
   seller,
   imageSettings,
   id,
@@ -154,6 +156,7 @@ const ContentTabContent = ({
   existingFiles: ExistingFileEntry[];
   save: () => void;
   filesById: Map<string, FileEntry>;
+  dropbox_picker_app_key: string;
   seller: SellerType;
   imageSettings: ImageUploadSettings | null;
   id: string;
@@ -304,7 +307,14 @@ const ContentTabContent = ({
     filesById,
   });
 
-  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ filesById });
+  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({
+    id,
+    updateProduct: (updater) => {
+      updater(product);
+      updateProduct("files", [...product.files]);
+    },
+    filesById,
+  });
   const uploadFilesRef = useRefToLatest(uploadFiles);
   const contentEditorExtensions = extensions(id, [
     FileEmbedGroup.configure({ getConfig: () => fileEmbedGroupConfig.current }),
@@ -429,7 +439,7 @@ const ContentTabContent = ({
     query: string;
     isLoading?: boolean;
   } | null>(null);
-  const dropbox = useDropbox();
+  useDropbox(dropbox_picker_app_key);
 
   const filteredExistingFiles = React.useMemo(() => {
     if (!selectingExistingFiles) return [];
@@ -507,7 +517,7 @@ const ContentTabContent = ({
       window.___dropbox_files_picked = null;
       return;
     }
-    dropbox.choose({ linkType: "direct", multiselect: true, success: (files) => void uploadFiles(files) });
+    window.Dropbox?.choose({ linkType: "direct", multiselect: true, success: (files) => void uploadFiles(files) });
   };
 
   React.useEffect(() => {
@@ -1263,7 +1273,6 @@ export default function ContentPage() {
                       input={(props) => (
                         <InputGroup {...props} className="cursor-pointer py-3" aria-label="Select a version">
                           <span className="text-singleline flex-1">
-
                             {selectedVariant && !form.data.has_same_rich_content_for_all_variants
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}
@@ -1341,6 +1350,7 @@ export default function ContentPage() {
                 existingFiles={existing_files}
                 save={handleSave}
                 filesById={filesById}
+                dropbox_picker_app_key={props.dropbox_picker_app_key}
                 seller={{
                   id: currentSeller.id,
                   name: currentSeller.name || "",
@@ -1380,4 +1390,4 @@ export default function ContentPage() {
       </LicenseProvider>
     </PostsProvider>
   );
-};
+}

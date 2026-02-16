@@ -523,7 +523,7 @@ export default function ProductEditPage() {
                       />
                       <Switch
                         checked={form.data.quantity_enabled}
-                        onChange={(quantity_enabled) => form.setData("quantity_enabled", !quantity_enabled)}
+                        onChange={(e) => form.setData("quantity_enabled", e.target.checked)}
                         label="Allow customers to choose a quantity"
                       />
                     </>
@@ -531,17 +531,13 @@ export default function ProductEditPage() {
                   {form.data.variants.length > 0 ? (
                     <Switch
                       checked={form.data.hide_sold_out_variants}
-                      onChange={(hide_sold_out_variants) =>
-                        form.setData("hide_sold_out_variants", !hide_sold_out_variants)
-                      }
+                      onChange={(e) => form.setData("hide_sold_out_variants", e.target.checked)}
                       label="Hide sold out versions"
                     />
                   ) : null}
                   <Switch
                     checked={form.data.should_show_sales_count}
-                    onChange={(should_show_sales_count) =>
-                      form.setData("should_show_sales_count", !should_show_sales_count)
-                    }
+                    onChange={(e) => form.setData("should_show_sales_count", e.target.checked)}
                     label={
                       productData.native_type === "membership"
                         ? "Publicly show the number of members on your product page"
@@ -550,7 +546,7 @@ export default function ProductEditPage() {
                   />
                   <Switch
                     checked={form.data.is_epublication}
-                    onChange={(is_epublication) => form.setData("is_epublication", !is_epublication)}
+                    onChange={(e) => form.setData("is_epublication", e.target.checked)}
                     label={
                       <>
                         Mark product as e-publication for VAT purposes{" "}
@@ -572,7 +568,7 @@ export default function ProductEditPage() {
                   ) : null}
                   <Switch
                     checked={form.data.require_shipping}
-                    onChange={(require_shipping) => form.setData("require_shipping", !require_shipping)}
+                    onChange={(e) => form.setData("require_shipping", e.target.checked)}
                     label="Require shipping information"
                   />
                 </fieldset>

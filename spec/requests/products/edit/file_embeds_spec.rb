@@ -19,7 +19,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
   include_context "with switching account to user as admin for seller"
 
   it "allows to mark PDF files as stampable" do
-    visit edit_link_path(@product.unique_permalink) + "/content"
+    visit products_edit_content_path(@product.unique_permalink)
     select_disclosure "Upload files" do
       attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     end
@@ -43,7 +43,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
     expect(@product.has_stampable_pdfs?).to eq(true)
     expect(@product.product_files.last.pdf_stamp_enabled?).to eq(true)
 
-    visit edit_link_path(@product.unique_permalink) + "/content"
+    visit products_edit_content_path(@product.unique_permalink)
     within find_embed(name: "Alice's Adventures in Wonderland") do
       click_on "Edit"
       uncheck("Stamp this PDF with buyer information")
@@ -56,7 +56,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
   end
 
   it "allows to mark video files as stream-only" do
-    visit edit_link_path(@product.unique_permalink) + "/content"
+    visit products_edit_content_path(@product.unique_permalink)
     select_disclosure "Upload files" do
       attach_product_file(file_fixture("sample.mov"))
     end
@@ -74,7 +74,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
     visit @product.long_url
     expect(page).to have_text("Watch link provided after purchase")
 
-    visit edit_link_path(@product.unique_permalink) + "/content"
+    visit products_edit_content_path(@product.unique_permalink)
     within find_embed(name: "sample") do
       click_on "Edit"
       uncheck("Disable file downloads (stream only)")
@@ -91,7 +91,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "displays file size after save properly" do
     @product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
-    visit edit_link_path(@product.unique_permalink) + "/content"
+    visit products_edit_content_path(@product.unique_permalink)
     select_disclosure "Upload files" do
       attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     end
@@ -108,7 +108,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
     @product.product_files << create(:listenable_audio, display_name: "Music")
     @product.product_files << create(:streamable_video, display_name: "Video")
     create(:rich_content, entity: @product, description: @product.product_files.alive.map { { "type" => "fileEmbed", "attrs" => { "id" => _1.external_id, "uid" => SecureRandom.uuid } } })
-    visit edit_link_path(@product.unique_permalink) + "/content"
+    visit products_edit_content_path(@product.unique_permalink)
 
     within find_embed(name: "Book") do
       expect(page).to have_text("PDF")
@@ -152,7 +152,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
       product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
       @product.product_files << product_file
       @rich_content = create(:rich_content, entity: @product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }])
-      visit edit_link_path(@product.unique_permalink) + "/content"
+      visit products_edit_content_path(@product.unique_permalink)
     end
 
     context "when uploading a valid subtitle file type" do
@@ -213,7 +213,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
         allow(@s3_object_double).to receive(:content_length).times.and_return(1)
         allow(@s3_object_double).to receive(:presigned_url).times.and_return(video_uri)
 
-        visit edit_link_path(@product.unique_permalink) + "/content"
+        visit products_edit_content_path(@product.unique_permalink)
         within find_embed(name: "chapter2") do
           click_on "Edit"
           expect(page).to have_subtitle_row(name: "test")
@@ -238,9 +238,11 @@ describe("File embeds in product content editor", type: :system, js: true) do
     product = create(:product, user: seller)
     product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/jimbo.pdf")
     create(:rich_content, entity: product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product.product_files.first.external_id, "uid" => SecureRandom.uuid } }])
-    visit edit_link_path(product.unique_permalink) + "/content"
+    visit products_edit_content_path(product.unique_permalink)
     expect(product.product_files.first.name_displayable).to eq "jimbo"
+    sleep 5
     rename_file_embed from: "jimbo", to: "jimmy"
+    sleep 5
     within find_embed(name: "jimmy") do
       click_on "Edit"
       fill_in "Description", with: "brand-new jimmy"
@@ -263,7 +265,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
     product = create(:product, user: seller)
     product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/jimbo.pdf")
     create(:rich_content, entity: product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product.product_files.first.external_id, "uid" => SecureRandom.uuid } }])
-    visit edit_link_path(product.unique_permalink) + "/content"
+    visit products_edit_content_path(product.unique_permalink)
     within find_embed(name: "jimbo") do
       click_on "Edit"
       fill_in "ISBN", with: "invalid isbn"
@@ -275,7 +277,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "allows setting ISBN on newly uploaded PDF files" do
     product = create(:product, user: seller)
-    visit edit_link_path(product.unique_permalink) + "/content"
+    visit products_edit_content_path(product.unique_permalink)
     select_disclosure "Upload files" do
       attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     end
@@ -290,7 +292,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
   end
 
   it "allows to rename files multiple times", :sidekiq_inline do
-    visit edit_link_path(@product.unique_permalink) + "/content"
+    visit products_edit_content_path(@product.unique_permalink)
     select_disclosure "Upload files" do
       attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     end
@@ -326,7 +328,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
     product_file = create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
     create(:rich_content, entity: @product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }])
-    visit edit_link_path(@product.unique_permalink) + "/content"
+    visit products_edit_content_path(@product.unique_permalink)
 
     rename_file_embed(from: "[]&+", to: "[]&+new")
     save_change
@@ -495,7 +497,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
     it_behaves_like "a product with 'Download all' buttons on file embed groups" do
       let!(:product) { @product }
       let!(:url_redirect) { nil }
-      let!(:url) { edit_link_path(@product.unique_permalink) + "/content" }
+      let!(:url) { products_edit_content_path(@product.unique_permalink) }
     end
 
     it "displays download buttons for video embeds before and after saving" do

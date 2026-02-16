@@ -12,7 +12,7 @@ describe "Dropbox uploads", type: :system, js: true do
   include_context "with switching account to user as admin for seller"
 
   before do
-    visit edit_link_path(product.unique_permalink) + "/content"
+    visit products_edit_content_path(product.unique_permalink)
   end
 
   it "embeds dropbox files successfully" do

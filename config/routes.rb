@@ -699,7 +699,7 @@ Rails.application.routes.draw do
         resource :share, only: [:show, :update], path: ":id/share", controller: "share"
       end
     end
-    get "/products/:id/edit", to: "products/edit/content#show", as: :edit_link
+    get "/products/:id/edit", to: "products/edit/product#show", as: :edit_link
 
 
     get "/products/:id/card", to: "links#card", as: :product_card

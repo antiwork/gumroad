@@ -58,16 +58,10 @@ describe LinksController, :vcr, inertia: true do
         let(:request_params) { { id: @disabled_link.unique_permalink } }
       end
 
-      it_behaves_like "collaborator can access", :post, :publish do
-        let(:product) { @disabled_link }
-        let(:request_params) { { id: @disabled_link.unique_permalink } }
-        let(:response_attributes) { { "success" => true } }
-      end
-
       it "enables a disabled link" do
         post :publish, params: { id: @disabled_link.unique_permalink }
 
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to redirect_to(products_edit_share_path(@disabled_link.unique_permalink))
         expect(@disabled_link.reload.purchase_disabled_at).to be_nil
       end
 
@@ -76,16 +70,16 @@ describe LinksController, :vcr, inertia: true do
           allow_any_instance_of(Link).to receive(:publishable?) { false }
         end
 
-        it "returns an error message" do
+        it "redirects with an error message" do
           post :publish, params: { id: @disabled_link.unique_permalink }
 
-          expect(response.parsed_body["error_message"]).to eq("You must connect at least one payment method before you can publish this product for sale.")
+          expect(response).to redirect_to(edit_link_path(@disabled_link))
+          expect(flash[:alert]).to eq("You must connect at least one payment method before you can publish this product for sale.")
         end
 
         it "does not publish the link" do
           post :publish, params: { id: @disabled_link.unique_permalink }
 
-          expect(response.parsed_body["success"]).to eq(false)
           expect(@disabled_link.reload.purchase_disabled_at).to be_present
         end
       end
@@ -96,15 +90,16 @@ describe LinksController, :vcr, inertia: true do
           @unpublished_product = create(:physical_product, purchase_disabled_at: Time.current, user: seller)
         end
 
-        it "returns an error message" do
+        it "redirects with an error message" do
           post :publish, params: { id: @unpublished_product.unique_permalink }
-          expect(response.parsed_body["error_message"]).to eq("You have to confirm your email address before you can do that.")
+
+          expect(response).to redirect_to(edit_link_path(@unpublished_product))
+          expect(flash[:alert]).to eq("You have to confirm your email address before you can do that.")
         end
 
         it "does not publish the link" do
           post :publish, params: { id: @unpublished_product.unique_permalink }
 
-          expect(response.parsed_body["success"]).to eq(false)
           expect(@unpublished_product.reload.purchase_disabled_at).to be_present
         end
       end
@@ -120,26 +115,29 @@ describe LinksController, :vcr, inertia: true do
           post :publish, params: { id: @disabled_link.unique_permalink }
         end
 
-        it "returns an error message" do
+        it "redirects with an error message" do
           post :publish, params: { id: @disabled_link.unique_permalink }
 
-          expect(response.parsed_body["error_message"]).to eq("Something broke. We're looking into what happened. Sorry about this!")
+          expect(response).to redirect_to(edit_link_path(@disabled_link))
+          expect(flash[:alert]).to eq("Something broke. We're looking into what happened. Sorry about this!")
         end
 
         it "does not publish the link" do
           post :publish, params: { id: @disabled_link.unique_permalink }
 
-          expect(response.parsed_body["success"]).to eq(false)
           expect(@disabled_link.reload.purchase_disabled_at).to be_present
         end
       end
     end
 
     describe "POST unpublish" do
-      it_behaves_like "collaborator can access", :post, :unpublish do
-        let(:product) { create(:product, user: seller) }
-        let(:request_params) { { id: product.unique_permalink } }
-        let(:response_attributes) { { "success" => true } }
+      it "unpublishes the product and redirects" do
+        product = create(:product, user: seller)
+
+        post :unpublish, params: { id: product.unique_permalink }
+
+        expect(response).to redirect_to(edit_link_path(product))
+        expect(product.reload.purchase_disabled_at).to be_present
       end
     end
 
@@ -259,6 +257,8 @@ describe LinksController, :vcr, inertia: true do
       end
 
       describe "wanted=true parameter" do
+        let(:product) { create(:product, user: @user) }
+
         it "passes pay_in_installments parameter to checkout when wanted=true" do
           get :show, params: { id: product.to_param, wanted: "true", pay_in_installments: "true" }
 
@@ -276,9 +276,9 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "doesn't redirect to checkout for PWYW products without price" do
-          product = create(:product, user: @user, customizable_price: true, price_cents: 1000)
+          pwyw_product = create(:product, user: @user, customizable_price: true, price_cents: 1000)
 
-          get :show, params: { id: product.to_param, wanted: "true" }
+          get :show, params: { id: pwyw_product.to_param, wanted: "true" }
 
           expect(response).to be_successful
           expect(response).not_to be_redirect
@@ -410,6 +410,7 @@ describe LinksController, :vcr, inertia: true do
 
       context "with user signed in" do
         let(:visitor) { create(:user) }
+        let(:product) { create(:product, user: @user) }
         let!(:purchase) { create(:purchase, purchaser: visitor, link: product) }
 
         before do
@@ -948,6 +949,8 @@ describe LinksController, :vcr, inertia: true do
       end
 
       describe "Discover tracking" do
+        let(:product) { create(:product, user: @user) }
+
         it "stores click when coming from discover" do
           cookies[:_gumroad_guid] = "custom_guid"
 
@@ -1004,16 +1007,16 @@ describe LinksController, :vcr, inertia: true do
       end
 
       it "returns cart props when the user has a cart with items" do
-        sign_in @user
+        sign_in seller
         product = create(:product)
-        cart = create(:cart, user: @user, email: @user.email)
+        cart = create(:cart, user: seller, email: seller.email)
         create(:cart_product, cart:, product:)
 
         get :cart_items_count
 
         expect(inertia.component).to eq("Products/CartItemsCount")
         expect(inertia.props[:cart]).to match(
-          email: @user.email,
+          email: seller.email,
           returnUrl: "",
           rejectPppDiscount: false,
           discountCodes: [],
@@ -1043,7 +1046,7 @@ describe LinksController, :vcr, inertia: true do
 
       context "with a logged out visitor" do
         before do
-          sign_out @user
+          sign_out seller
         end
 
         include_examples "records page view"
@@ -1070,7 +1073,7 @@ describe LinksController, :vcr, inertia: true do
         before do
           recreate_model_index(ProductPageView)
           travel_to Time.utc(2021, 1, 1)
-          sign_in @user
+          sign_in seller
         end
 
         it "sets basic data" do
@@ -1082,7 +1085,7 @@ describe LinksController, :vcr, inertia: true do
             state: nil,
             referrer_domain: "direct",
             timestamp: "2021-01-01T00:00:00Z",
-            user_id: @user.id,
+            user_id: seller.id,
             ip_address: "0.0.0.0",
             url: "/links/#{@product.unique_permalink}/increment_views",
             browser_guid: cookies[:_gumroad_guid],
@@ -1137,7 +1140,7 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "sets user_id to nil when the user is signed out" do
-          sign_out @user
+          sign_out seller
           post :increment_views, params: { id: @product.to_param }
           expect(last_page_view_data[:user_id]).to eq(nil)
         end
@@ -1175,16 +1178,16 @@ describe LinksController, :vcr, inertia: true do
         expect(ElasticsearchIndexerWorker.jobs.size).to eq(0)
       end
 
-      context "with user signed in as admin for seller" do
-        include_context "with user signed in as admin for seller" do
-          let(:seller) { @product.user }
-        end
+      it "does not record page view for a team admin" do
+        admin_user = create(:user)
+        product_user = @product.user
+        create(:team_membership, user: admin_user, seller: product_user, role: TeamMembership::ROLE_ADMIN)
+        sign_in admin_user
+        cookies.encrypted[:current_seller_id] = product_user.id
 
-        it "does not record page view" do
-          post :increment_views, params: { id: @product.to_param }
+        post :increment_views, params: { id: @product.to_param }
 
-          expect(ElasticsearchIndexerWorker.jobs.size).to eq(0)
-        end
+        expect(ElasticsearchIndexerWorker.jobs.size).to eq(0)
       end
 
       it "does not record page view for bots" do
@@ -1196,7 +1199,7 @@ describe LinksController, :vcr, inertia: true do
 
       it "does not record page view for an admin becoming user" do
         sign_in create(:admin_user)
-        controller.impersonate_user(@user)
+        controller.impersonate_user(seller)
         post :increment_views, params: { id: @product.to_param }
 
         expect(ElasticsearchIndexerWorker.jobs.size).to eq(0)
@@ -1206,7 +1209,7 @@ describe LinksController, :vcr, inertia: true do
     describe "POST track_user_action" do
       context "with signed in user" do
         before do
-          sign_in @user
+          sign_in seller
         end
 
         shared_examples "creates an event" do
@@ -1462,7 +1465,7 @@ describe LinksController, :vcr, inertia: true do
       describe "Discover tracking" do
         it "stores the search query along with useful metadata" do
           cookies[:_gumroad_guid] = "custom_guid"
-          sign_in @user
+          sign_in seller
 
           expect do
             get :search, params: { query: "something", taxonomy: "3d" }
@@ -1470,7 +1473,7 @@ describe LinksController, :vcr, inertia: true do
 
           expect(DiscoverSearch.last!.attributes).to include(
             "query" => "something",
-            "user_id" => @user.id,
+            "user_id" => seller.id,
             "taxonomy_id" => Taxonomy.find_by_path(["3d"]).id,
             "ip_address" => "0.0.0.0",
             "browser_guid" => "custom_guid",
@@ -1480,7 +1483,7 @@ describe LinksController, :vcr, inertia: true do
 
         it "does not store search when querying user products" do
           expect do
-            get :search, params: { query: "something", user_id: @user.id }
+            get :search, params: { query: "something", user_id: seller.id }
           end.not_to change(DiscoverSearch, :count)
         end
       end
