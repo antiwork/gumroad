@@ -276,6 +276,24 @@ describe("Bundle edit page", type: :system, js: true) do
       expect(page).to have_field("Product 8")
     end
 
+    it "shows creation date and URL for all products" do
+      test_product = create(:product, name: "Test Product", user: seller, created_at: 2.days.ago)
+
+      index_model_records(Link)
+
+      visit edit_bundle_content_path(bundle.external_id)
+
+      fill_in "Search products", with: "Test Product"
+      wait_for_ajax
+
+      within "[aria-label='Product selector']" do
+        within_cart_item "Test Product" do
+          expect(page).to have_text(2.days.ago.strftime("%b %-d, %Y"))
+          expect(page).to have_link(href: test_product.long_url)
+        end
+      end
+    end
+
     it "allows selecting and unselecting all products" do
       visit edit_bundle_content_path(bundle.external_id)
       check "All products", unchecked: true

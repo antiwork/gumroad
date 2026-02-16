@@ -28,7 +28,7 @@ import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
@@ -94,6 +94,50 @@ export const extensions = (productId: string, extraExtensions: TiptapNode[] = []
     MoreLikeThis.configure({ productId }),
   ].filter((ext) => !extraExtensions.some((existing) => existing.name === ext.name)),
 ];
+
+const FileUploadMenu = ({
+  existingFiles,
+  onEmbedMedia,
+  onUploadFile,
+  onSelectExistingFiles,
+  onUploadFromDropbox,
+}: {
+  existingFiles: ExistingFileEntry[];
+  onEmbedMedia: () => void;
+  onUploadFile: (target: HTMLInputElement) => void;
+  onSelectExistingFiles: () => void;
+  onUploadFromDropbox: () => void;
+}) => (
+  <div role="menu" aria-label="Image and file uploader">
+    <PopoverClose asChild>
+      <div role="menuitem" onClick={onEmbedMedia}>
+        <Icon name="media" />
+        <span>Embed media</span>
+      </div>
+    </PopoverClose>
+    <PopoverClose asChild>
+      <label role="menuitem">
+        <input type="file" name="file" multiple onChange={(e) => onUploadFile(e.target)} />
+        <Icon name="paperclip" />
+        <span>Computer files</span>
+      </label>
+    </PopoverClose>
+    {existingFiles.length > 0 ? (
+      <PopoverClose asChild>
+        <div role="menuitem" onClick={onSelectExistingFiles}>
+          <Icon name="files-earmark" />
+          <span>Existing product files</span>
+        </div>
+      </PopoverClose>
+    ) : null}
+    <PopoverClose asChild>
+      <div role="menuitem" onClick={onUploadFromDropbox}>
+        <Icon name="dropbox" />
+        <span>Dropbox files</span>
+      </div>
+    </PopoverClose>
+  </div>
+);
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
   const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
@@ -224,7 +268,6 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   ]);
   const editor = useRichTextEditor({
     ariaLabel: "Content editor",
-    placeholder: "Enter the content you want to sell. Upload your files or start typing.",
     initialValue,
     editable: true,
     extensions: contentEditorExtensions,
@@ -500,33 +543,16 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
               <>
                 <LinkMenuItem editor={editor} />
                 <PopoverMenuItem name="Upload files" icon="upload-fill">
-                  <div role="menu" aria-label="Image and file uploader">
-                    <div role="menuitem" onClick={() => setShowEmbedModal(true)}>
-                      <Icon name="media" />
-                      <span>Embed media</span>
-                    </div>
-                    <label role="menuitem">
-                      <input type="file" name="file" multiple onChange={(e) => uploadFileInput(e.target)} />
-                      <Icon name="paperclip" />
-                      <span>Computer files</span>
-                    </label>
-                    {existingFiles.length > 0 ? (
-                      <div
-                        role="menuitem"
-                        onClick={() => {
-                          setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
-                          void fetchLatestExistingFiles();
-                        }}
-                      >
-                        <Icon name="files-earmark" />
-                        <span>Existing product files</span>
-                      </div>
-                    ) : null}
-                    <div role="menuitem" onClick={uploadFromDropbox}>
-                      <Icon name="dropbox" />
-                      <span>Dropbox files</span>
-                    </div>
-                  </div>
+                  <FileUploadMenu
+                    existingFiles={existingFiles}
+                    onEmbedMedia={() => setShowEmbedModal(true)}
+                    onUploadFile={uploadFileInput}
+                    onSelectExistingFiles={() => {
+                      setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
+                      void fetchLatestExistingFiles();
+                    }}
+                    onUploadFromDropbox={uploadFromDropbox}
+                  />
                 </PopoverMenuItem>
                 {selectingExistingFiles ? (
                   <Modal
@@ -889,7 +915,36 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             )
           }
         >
-          <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
+          <div className="relative h-full flex-1">
+            {editor?.isEmpty ? (
+              <div className="pointer-events-none absolute inset-0 flex items-start">
+                <p className="flex flex-wrap items-center gap-1 text-muted">
+                  <span>Enter the content you want to sell.</span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button small className="pointer-events-auto">
+                        Upload your files
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent sideOffset={4} className="pointer-events-auto border-0 p-0 shadow-none">
+                      <FileUploadMenu
+                        existingFiles={existingFiles}
+                        onEmbedMedia={() => setShowEmbedModal(true)}
+                        onUploadFile={uploadFileInput}
+                        onSelectExistingFiles={() => {
+                          setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
+                          void fetchLatestExistingFiles();
+                        }}
+                        onUploadFromDropbox={uploadFromDropbox}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <span>or start typing.</span>
+                </p>
+              </div>
+            ) : null}
+            <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
+          </div>
         </PageListLayout>
       </div>
       {confirmingDeletePage !== null ? (
