@@ -270,7 +270,7 @@ const b = 2;</code></pre>
     let(:installment) { workflow.installments.first }
 
     before do
-      installment.update!(message: "<p>hello, <code>world</code>!<p>We saved the following items in your cart, so when you're ready to buy, simply <a href='#{checkout_index_url(host: UrlService.domain_with_protocol)}'>complete checking out</a>.</p><product-list-placeholder />")
+      installment.update!(message: "<p>hello, <code>world</code>!<p>We saved the following items in your cart, so when you're ready to buy, simply <a href='#{checkout_url(host: UrlService.domain_with_protocol)}'>complete checking out</a>.</p><product-list-placeholder />")
     end
 
     context "when products are missing" do
@@ -283,7 +283,7 @@ const b = 2;</code></pre>
       let!(:products) { create_list(:product, 4, user: @creator) }
 
       it "returns the message with the products" do
-        checkout_url = checkout_index_url(host: UrlService.domain_with_protocol)
+        checkout_url = checkout_url(host: UrlService.domain_with_protocol)
         message = installment.message_with_inline_abandoned_cart_products(products: workflow.abandoned_cart_products)
 
         expect(message).to include(@creator.avatar_url)
@@ -301,7 +301,7 @@ const b = 2;</code></pre>
 
       context "when a custom checkout_url is provided" do
         it "returns the message with the custom checkout_url" do
-          checkout_url = checkout_index_url(host: UrlService.domain_with_protocol, cart_id: "abc123")
+          checkout_url = checkout_url(host: UrlService.domain_with_protocol, cart_id: "abc123")
           message = installment.message_with_inline_abandoned_cart_products(products: workflow.abandoned_cart_products, checkout_url:)
           expect(message).to include("cart_id=abc123")
           parsed_message = Nokogiri::HTML(message)

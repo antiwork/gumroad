@@ -22,6 +22,7 @@ import { Button } from "$app/components/Button";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
+import { EntityInfo } from "$app/components/DownloadPage/Layout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { Icon } from "$app/components/Icons";
@@ -44,7 +45,6 @@ import {
 import { S3UploadConfigProvider, useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
-import { EntityInfo } from "$app/components/server-components/DownloadPage/Layout";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { uploadImages } from "$app/components/TiptapExtensions/Image";
@@ -58,6 +58,9 @@ import { Posts, PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
@@ -247,7 +250,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         node.remove();
       }
     });
-    updateProduct({ files: [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles] });
+    if (newFiles.length > 0) {
+      updateProduct({ files: [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles] });
+    }
     const description = generateJSON(
       new XMLSerializer().serializeToString(fragment),
       baseEditorOptions(contentEditorExtensions).extensions,
@@ -1064,17 +1069,15 @@ export const ContentTab = () => {
                   <>
                     <hr className="relative left-1/2 my-2 w-screen max-w-none -translate-x-1/2 border-border lg:hidden" />
                     <ComboBox<Variant>
-                      // TODO: Currently needed to get the icon on the selected option even though this is not multiple select. We should fix this in the design system
-                      multiple
                       input={(props) => (
-                        <div {...props} className="input h-full min-h-auto" aria-label="Select a version">
-                          <span className="fake-input text-singleline">
+                        <InputGroup {...props} className="cursor-pointer py-3" aria-label="Select a version">
+                          <span className="text-singleline flex-1">
                             {selectedVariant && !product.has_same_rich_content_for_all_variants
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}
                           </span>
                           <Icon name="outline-cheveron-down" />
-                        </div>
+                        </InputGroup>
                       )}
                       options={product.variants}
                       option={(item, props, index) => (
@@ -1088,7 +1091,7 @@ export const ContentTab = () => {
                             aria-selected={item.id === selectedVariantId}
                             inert={product.has_same_rich_content_for_all_variants}
                           >
-                            <div>
+                            <div className="flex-1">
                               <h4>{item.name || "Untitled"}</h4>
                               {item.id === selectedVariant?.id ? (
                                 <small>Editing</small>
@@ -1109,12 +1112,14 @@ export const ContentTab = () => {
                                 <small className="text-muted">No content yet</small>
                               )}
                             </div>
+                            {item.id === selectedVariant?.id && (
+                              <Icon name="solid-check-circle" className="ml-auto text-success" />
+                            )}
                           </div>
                           {index === product.variants.length - 1 ? (
-                            <div className="option">
-                              <label style={{ alignItems: "center" }}>
-                                <input
-                                  type="checkbox"
+                            <div className="flex cursor-pointer items-center px-4 py-2">
+                              <Label className="items-center">
+                                <Checkbox
                                   checked={product.has_same_rich_content_for_all_variants}
                                   onChange={() => {
                                     if (!product.has_same_rich_content_for_all_variants && product.variants.length > 1)
@@ -1123,7 +1128,7 @@ export const ContentTab = () => {
                                   }}
                                 />
                                 <small>Use the same content for all versions</small>
-                              </label>
+                              </Label>
                             </div>
                           ) : null}
                         </>

@@ -4247,7 +4247,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_select("Country", selected: "Austria")
 
       fill_in("Your email address", with: "test@test.com")
-      fill_cc_details
+      fill_in_credit_card
 
       expect(page).to have_text("VAT US$20", normalize_ws: true)
 

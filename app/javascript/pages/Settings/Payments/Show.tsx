@@ -1,5 +1,4 @@
 import { useForm, usePage } from "@inertiajs/react";
-import cx from "classnames";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -31,12 +30,24 @@ import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmai
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import logo from "$assets/images/logo-g.svg";
+
+const KANA_NAME_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\-.]*$/u;
+const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=Latin}\d\s\-.]*$/u;
+
+const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
+const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
+
+const HAS_JAPANESE_CHARS = /[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF65-\uFF9F]/u;
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
 type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
@@ -74,6 +85,7 @@ type PaymentsPageProps = {
     ae: { code: string; name: string }[];
     ir: { code: string; name: string }[];
     br: { code: string; name: string }[];
+    jp: { value: string; label: string; kana: string }[];
   };
   saved_card: SavedCreditCard | null;
   formatted_balance_to_forfeit_on_country_change: string | null;
@@ -84,6 +96,7 @@ type PaymentsPageProps = {
   payouts_paused_by_user: boolean;
   payout_threshold_cents: number;
   minimum_payout_threshold_cents: number;
+  payout_country_name: string | null;
   payout_frequency: PayoutFrequency;
   payout_frequency_daily_supported: boolean;
   errors?: {
@@ -110,7 +123,14 @@ export default function PaymentsPage() {
   const [isUpdateCountryConfirmed, setIsUpdateCountryConfirmed] = React.useState(false);
   const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
 
-  const form = useForm({
+  const form = useForm<{
+    user: ComplianceInfo;
+    payouts_paused_by_user: boolean;
+    payout_threshold_cents: number | null;
+    payout_frequency: PayoutFrequency;
+    bank_account: Partial<BankAccount> | null;
+    payment_address: string | null;
+  }>({
     user: props.compliance_info,
     payouts_paused_by_user: props.payouts_paused_by_user,
     payout_threshold_cents: props.payout_threshold_cents,
@@ -218,6 +238,19 @@ export default function PaymentsPage() {
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
     const countryCode: CountryCode = cast(country_code);
     return input && parsePhoneNumberFromString(input, countryCode)?.isValid();
+  };
+
+  const validateKanaField = (
+    fieldName: FormFieldName,
+    value: string | null | undefined,
+    regex: RegExp,
+    label: string,
+    errorSuffix: string,
+  ) => {
+    if (value && !regex.test(value)) {
+      markFieldInvalid(fieldName);
+      setClientErrorMessage({ message: `${label} ${errorSuffix}` });
+    }
   };
 
   const validateBankAccountFields = () => {
@@ -505,6 +538,34 @@ export default function PaymentsPage() {
       if (!form.data.user.street_address_kana) {
         markFieldInvalid("street_address_kana");
       }
+      validateKanaField(
+        "first_name_kana",
+        form.data.user.first_name_kana,
+        KANA_NAME_REGEX,
+        "First name (Kana)",
+        KANA_NAME_ERROR,
+      );
+      validateKanaField(
+        "last_name_kana",
+        form.data.user.last_name_kana,
+        KANA_NAME_REGEX,
+        "Last name (Kana)",
+        KANA_NAME_ERROR,
+      );
+      validateKanaField(
+        "building_number_kana",
+        form.data.user.building_number_kana,
+        KANA_ADDRESS_REGEX,
+        "Building number (Kana)",
+        KANA_ADDRESS_ERROR,
+      );
+      validateKanaField(
+        "street_address_kana",
+        form.data.user.street_address_kana,
+        KANA_ADDRESS_REGEX,
+        "Street address (Kana)",
+        KANA_ADDRESS_ERROR,
+      );
     } else if (
       !form.data.user.street_address ||
       (form.data.user.country === "US" && isStreetAddressPOBox(form.data.user.street_address))
@@ -516,7 +577,7 @@ export default function PaymentsPage() {
         });
       }
     }
-    if (!form.data.user.city) {
+    if (form.data.user.country !== "JP" && !form.data.user.city) {
       markFieldInvalid("city");
     }
     if (
@@ -581,6 +642,33 @@ export default function PaymentsPage() {
         if (!form.data.user.business_street_address_kana) {
           markFieldInvalid("business_street_address_kana");
         }
+        validateKanaField(
+          "business_name_kana",
+          form.data.user.business_name_kana,
+          KANA_NAME_REGEX,
+          "Business name (Kana)",
+          KANA_NAME_ERROR,
+        );
+        validateKanaField(
+          "business_building_number_kana",
+          form.data.user.business_building_number_kana,
+          KANA_ADDRESS_REGEX,
+          "Business building number (Kana)",
+          KANA_ADDRESS_ERROR,
+        );
+        validateKanaField(
+          "business_street_address_kana",
+          form.data.user.business_street_address_kana,
+          KANA_ADDRESS_REGEX,
+          "Business street address (Kana)",
+          KANA_ADDRESS_ERROR,
+        );
+        if (form.data.user.business_name && HAS_JAPANESE_CHARS.test(form.data.user.business_name)) {
+          markFieldInvalid("business_name");
+          setClientErrorMessage({
+            message: "Legal business name must be in romaji (latin characters) for Japanese accounts.",
+          });
+        }
       } else if (
         !form.data.user.business_street_address ||
         (form.data.user.business_country === "US" && isStreetAddressPOBox(form.data.user.business_street_address))
@@ -623,6 +711,8 @@ export default function PaymentsPage() {
   };
 
   const validateForm = () => {
+    setClientErrorMessage(null);
+
     if (isUpdateCountryConfirmed) {
       return true;
     }
@@ -725,10 +815,17 @@ export default function PaymentsPage() {
     }
   }, [isPayoutMethodChangeConfirmed]);
 
-  const payoutThresholdError = form.data.payout_threshold_cents < props.minimum_payout_threshold_cents;
+  const payoutThresholdError =
+    form.data.payout_threshold_cents != null && form.data.payout_threshold_cents < props.minimum_payout_threshold_cents;
+
+  const handlePayoutThresholdBlur = () => {
+    if (!form.data.payout_threshold_cents) {
+      form.setData("payout_threshold_cents", props.minimum_payout_threshold_cents);
+    }
+  };
 
   const payoutsPausedToggle = (
-    <fieldset>
+    <Fieldset>
       <Switch
         checked={form.data.payouts_paused_by_user || props.payouts_paused_internally}
         onChange={(e) => form.setData("payouts_paused_by_user", e.target.checked)}
@@ -736,11 +833,11 @@ export default function PaymentsPage() {
         disabled={props.is_form_disabled || props.payouts_paused_internally}
         label="Pause payouts"
       />
-      <small>
+      <FieldsetDescription>
         By pausing payouts, they won't be processed until you decide to resume them, and your balance will remain in
         your account until then.
-      </small>
-    </fieldset>
+      </FieldsetDescription>
+    </Fieldset>
   );
 
   return (
@@ -794,10 +891,7 @@ export default function PaymentsPage() {
           </Alert>
         ) : null}
 
-        <section className="p-4! md:p-8!">
-          <header>
-            <h2>Verification</h2>
-          </header>
+        <FormSection header={<h2>Verification</h2>}>
           {props.show_verification_section ? (
             <StripeConnectEmbeddedNotificationBanner />
           ) : (
@@ -818,7 +912,7 @@ export default function PaymentsPage() {
               </div>
             </div>
           )}
-        </section>
+        </FormSection>
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
           <AusBackTaxesSection
@@ -848,13 +942,23 @@ export default function PaymentsPage() {
             </Alert>
           </div>
         ) : null}
-        <section className="p-4! md:p-8!">
-          <header>
-            <h2>Payout schedule</h2>
-          </header>
+        <FormSection
+          header={
+            <>
+              <h2>Payout schedule</h2>
+              <p>
+                Payouts will only happen on your chosen schedule once the minimum balance of{" "}
+                {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
+                  symbolFormat: "long",
+                })}{" "}
+                is reached.
+              </p>
+            </>
+          }
+        >
           <section className="flex flex-col gap-4">
-            <fieldset>
-              <label htmlFor="payout_frequency">Schedule</label>
+            <Fieldset>
+              <Label htmlFor="payout_frequency">Schedule</Label>
               <TypeSafeOptionSelect
                 id="payout_frequency"
                 name="Schedule"
@@ -866,11 +970,11 @@ export default function PaymentsPage() {
                   disabled: frequency === "daily" && !props.payout_frequency_daily_supported,
                 }))}
               />
-              <small>
+              <FieldsetDescription>
                 Daily payouts are only available for US users with eligible bank accounts and more than 4 previous
                 payouts.
-              </small>
-            </fieldset>
+              </FieldsetDescription>
+            </Fieldset>
             {form.data.payout_frequency === "daily" && props.payout_frequency_daily_supported ? (
               <Alert variant="info" role="status">
                 <div>
@@ -884,32 +988,27 @@ export default function PaymentsPage() {
                 <div>Your account is no longer eligible for daily payouts. Please update your schedule.</div>
               </Alert>
             )}
-            <fieldset className={cx({ danger: payoutThresholdError })}>
-              <label htmlFor="payout_threshold_cents">Minimum payout threshold</label>
+            <Fieldset state={payoutThresholdError ? "danger" : undefined}>
+              <Label htmlFor="payout_threshold_cents">Minimum payout threshold</Label>
               <PriceInput
                 id="payout_threshold_cents"
                 currencyCode="usd"
                 cents={form.data.payout_threshold_cents}
                 disabled={props.is_form_disabled}
-                onChange={(value) => {
-                  form.setData("payout_threshold_cents", value !== null ? value : props.minimum_payout_threshold_cents);
-                }}
+                onChange={(value) => form.setData("payout_threshold_cents", value)}
+                onBlur={handlePayoutThresholdBlur}
                 placeholder={formatPriceCentsWithoutCurrencySymbol("usd", props.minimum_payout_threshold_cents)}
                 ariaLabel="Minimum payout threshold"
                 hasError={!!payoutThresholdError}
               />
-              {payoutThresholdError ? (
-                <small>
-                  Your payout threshold must be at least{" "}
-                  {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
-                    symbolFormat: "long",
-                  })}
-                  .
-                </small>
-              ) : (
-                <small>Payouts will only be issued once your balance reaches this amount.</small>
-              )}
-            </fieldset>
+              <FieldsetDescription>
+                The minimum payout threshold for {props.payout_country_name ?? "your country"} is{" "}
+                {formatPriceCentsWithCurrencySymbol("usd", props.minimum_payout_threshold_cents, {
+                  symbolFormat: "long",
+                })}
+                .
+              </FieldsetDescription>
+            </Fieldset>
             {props.payouts_paused_internally ? (
               <WithTooltip
                 tip={
@@ -928,80 +1027,91 @@ export default function PaymentsPage() {
               payoutsPausedToggle
             )}
           </section>
-        </section>
+        </FormSection>
 
-        <section className="p-4! md:p-8!">
-          <header>
-            <h2>Payout method</h2>
-            <div>
-              <a href="/help/article/260-your-payout-settings-page" target="_blank" rel="noreferrer">
-                Any questions about these payout settings?
-              </a>
-            </div>
-          </header>
+        <FormSection
+          header={
+            <>
+              <h2>Payout method</h2>
+              <div>
+                <a href="/help/article/260-your-payout-settings-page" target="_blank" rel="noreferrer">
+                  Any questions about these payout settings?
+                </a>
+              </div>
+            </>
+          }
+        >
           <section className="grid gap-8">
-            <div className="radio-buttons" role="radiogroup">
+            <Tabs variant="buttons" className="gap-4" role="radiogroup">
               {props.bank_account_details.show_bank_account ? (
                 <>
-                  <Button
-                    role="radio"
-                    key="bank"
-                    aria-checked={selectedPayoutMethod === "bank"}
-                    onClick={() => updatePayoutMethod("bank")}
-                    disabled={props.is_form_disabled}
-                  >
-                    <Icon name="bank" />
-                    <div>
-                      <h4>Bank Account</h4>
-                    </div>
-                  </Button>
-                  {props.user.country_code === "US" ? (
+                  <Tab key="bank" isSelected={selectedPayoutMethod === "bank"} asChild>
                     <Button
                       role="radio"
-                      key="card"
-                      aria-checked={selectedPayoutMethod === "card"}
-                      onClick={() => updatePayoutMethod("card")}
+                      aria-checked={selectedPayoutMethod === "bank"}
+                      onClick={() => updatePayoutMethod("bank")}
                       disabled={props.is_form_disabled}
+                      className="items-start justify-start text-left"
                     >
-                      <Icon name="card" />
+                      <Icon name="bank" />
                       <div>
-                        <h4>Debit Card</h4>
+                        <h4 className="font-bold">Bank Account</h4>
                       </div>
                     </Button>
+                  </Tab>
+                  {props.user.country_code === "US" ? (
+                    <Tab key="card" isSelected={selectedPayoutMethod === "card"} asChild>
+                      <Button
+                        role="radio"
+                        aria-checked={selectedPayoutMethod === "card"}
+                        onClick={() => updatePayoutMethod("card")}
+                        disabled={props.is_form_disabled}
+                        className="items-start justify-start text-left"
+                      >
+                        <Icon name="card" />
+                        <div>
+                          <h4 className="font-bold">Debit Card</h4>
+                        </div>
+                      </Button>
+                    </Tab>
                   ) : null}
                 </>
               ) : null}
               {props.bank_account_details.show_paypal ? (
-                <Button
-                  role="radio"
-                  key="paypal"
-                  aria-checked={selectedPayoutMethod === "paypal"}
-                  onClick={() => updatePayoutMethod("paypal")}
-                  disabled={props.is_form_disabled}
-                >
-                  <Icon name="shop-window" />
-                  <div>
-                    <h4>PayPal</h4>
-                  </div>
-                </Button>
+                <Tab key="paypal" isSelected={selectedPayoutMethod === "paypal"} asChild>
+                  <Button
+                    role="radio"
+                    aria-checked={selectedPayoutMethod === "paypal"}
+                    onClick={() => updatePayoutMethod("paypal")}
+                    disabled={props.is_form_disabled}
+                    className="items-start justify-start text-left"
+                  >
+                    <Icon name="shop-window" />
+                    <div>
+                      <h4 className="font-bold">PayPal</h4>
+                    </div>
+                  </Button>
+                </Tab>
               ) : null}
               {props.user.country_code === "BR" ||
               props.user.can_connect_stripe ||
               props.stripe_connect.has_connected_stripe ? (
-                <Button
-                  role="radio"
-                  key="stripe"
-                  aria-checked={selectedPayoutMethod === "stripe"}
-                  onClick={() => updatePayoutMethod("stripe")}
-                  disabled={props.is_form_disabled}
-                >
-                  <Icon name="stripe" />
-                  <div>
-                    <h4>Connect to Stripe</h4>
-                  </div>
-                </Button>
+                <Tab key="stripe" isSelected={selectedPayoutMethod === "stripe"} asChild>
+                  <Button
+                    role="radio"
+                    aria-checked={selectedPayoutMethod === "stripe"}
+                    onClick={() => updatePayoutMethod("stripe")}
+                    disabled={props.is_form_disabled}
+                    className="items-start justify-start text-left"
+                  >
+                    <Icon name="stripe" />
+                    <div>
+                      <h4 className="font-bold">Connect to Stripe</h4>
+                    </div>
+                  </Button>
+                </Tab>
               ) : null}
-            </div>
+            </Tabs>
             {selectedPayoutMethod === "bank" ? (
               <BankAccountSection
                 bankAccountDetails={props.bank_account_details}
@@ -1059,7 +1169,7 @@ export default function PaymentsPage() {
               />
             )}
           </section>
-        </section>
+        </FormSection>
         {props.paypal_connect.show_paypal_connect ? (
           <PayPalConnectSection
             paypalConnect={props.paypal_connect}
