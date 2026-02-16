@@ -17,28 +17,5 @@ function check_command() {
 }
 
 check_command "foreman" "Installing foreman..." "gem install foreman"
-check_command "mkcert" "mkcert is not installed. Please refer to the README.md for installation instructions"
-
-# Check if SSL certificates exist
-if [ ! -f "docker/local-nginx/certs/gumroad_dev.crt" ] || [ ! -f "docker/local-nginx/certs/gumroad_dev.key" ]; then
-  echo "SSL certificates not found. Please generate them by running:"
-  echo "  bin/generate_ssl_certificates"
-  echo "See README.md for more information on SSL certificate setup."
-  exit 1
-fi
-
-default_cert_file=$(ruby -ropenssl -e 'puts OpenSSL::X509::DEFAULT_CERT_FILE')
-mkcert_root_ca_file="$(mkcert -CAROOT)/rootCA.pem"
-combined_cert_file="tmp/combined_ca_certs.pem"
-
-if [ -f "$default_cert_file" ] && [ -f "$mkcert_root_ca_file" ]; then
-  cat "$default_cert_file" "$mkcert_root_ca_file" > "$combined_cert_file"
-  echo "Combined certificates created at $combined_cert_file"
-  export SSL_CERT_FILE="$combined_cert_file"
-else
-  echo "Warning: Could not create combined cert file. Using default certificates."
-fi
-
-export NODE_EXTRA_CA_CERTS="$mkcert_root_ca_file"
 
 foreman start -f Procfile.dev "$@"
