@@ -4,6 +4,8 @@ import { COFFEE_CUSTOM_BUTTON_TEXT_OPTIONS, CUSTOM_BUTTON_TEXT_OPTIONS } from "$
 import { currencyCodeList } from "$app/utils/currency";
 import { recurrenceLabels, recurrenceIds } from "$app/utils/recurringPricing";
 
+import { Link } from "react-router-dom";
+
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import CustomDomain from "$app/components/CustomDomain";
@@ -147,6 +149,15 @@ export const ProductTab = () => {
                   uniquePermalink={uniquePermalink}
                   url={url}
                 />
+                <fieldset>
+                  <label>Product files</label>
+                  <p className="text-muted">
+                    <Link to={`/products/${uniquePermalink}/edit/content`} className="underline">
+                      Go to the Content tab
+                    </Link>
+                    {" "}to upload and manage the files your customers will receive.
+                  </p>
+                </fieldset>
               </>
             )}
           </section>
