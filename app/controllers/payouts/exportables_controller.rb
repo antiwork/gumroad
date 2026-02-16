@@ -2,6 +2,7 @@
 
 class Payouts::ExportablesController < Sellers::BaseController
   include PayoutsHelper
+  skip_before_action :check_suspended
 
   before_action :load_years_with_payouts
 
