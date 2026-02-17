@@ -3,7 +3,7 @@
 require "spec_helper"
 require "inertia_rails/rspec"
 
-describe UrlRedirectsController do
+describe UrlRedirectsController, inertia: true do
   render_views
 
   before do
@@ -13,7 +13,7 @@ describe UrlRedirectsController do
     @url = @url_redirect.referenced_link.product_files.alive.first.url
   end
 
-  describe "GET 'download_page'" do
+  describe "GET 'download_page'", inertia: true do
     before do
       # TODO: Uncomment after removing the :custom_domain_download feature flag (curtiseinsmann)
       # @request.host = URI.parse(@product.user.subdomain_with_protocol).host
@@ -27,19 +27,18 @@ describe UrlRedirectsController do
     it "renders correctly" do
       get :download_page, params: { id: @token }
       expect(response).to be_successful
-      expect(assigns(:hide_layouts)).to eq(true)
-      expect(
-        assigns(:react_component_props)
-      ).to eq(
-        UrlRedirectPresenter.new(
-          url_redirect: @url_redirect,
-          logged_in_user: nil
-        ).download_page_with_content_props.merge(
-          is_mobile_app_web_view: false,
-          content_unavailability_reason_code: nil,
-          add_to_library_option: "signup_form"
-        )
+      expect_inertia.to render_component("UrlRedirects/DownloadPage")
+
+      expected_props = UrlRedirectPresenter.new(
+        url_redirect: @url_redirect,
+        logged_in_user: nil
+      ).download_page_with_content_props.merge(
+        is_mobile_app_web_view: false,
+        content_unavailability_reason_code: nil,
+        add_to_library_option: "signup_form",
+        dropbox_api_key: DROPBOX_PICKER_API_KEY,
       )
+      expect(inertia.props).to include(expected_props)
     end
 
     context "with access revoked for purchase" do
@@ -75,12 +74,7 @@ describe UrlRedirectsController do
       it "renders correctly" do
         get :download_page, params: { id: @token, display: "mobile_app" }
         expect(response).to be_successful
-        expect(assigns(:react_component_props)[:is_mobile_app_web_view]).to eq(true)
-
-        assert_select "h1", { text: @product.name, count: 0 }
-        assert_select "h4", { text: "Liked it? Give it a rating:", count: 0 }
-        assert_select "h4", { text: "Display Name", count: 1 }
-        assert_select "a", { text: "Download", count: 1 }
+        expect(inertia.props[:is_mobile_app_web_view]).to eq(true)
       end
     end
 
@@ -95,14 +89,14 @@ describe UrlRedirectsController do
 
       it "displays the license key for the purchase" do
         get :download_page, params: { id: @token }
-        expect(response.body).to include @purchase.license.serial
+        expect(inertia.props.dig(:content, :license, :license_key)).to eq @purchase.license.serial
       end
     end
 
     context "posts" do
       let(:url_redirect) { create(:url_redirect, purchase:) }
       let(:token) { url_redirect.token }
-      let(:subject) { assigns(:react_component_props).dig(:content, :posts) }
+      let(:subject) { inertia.props.dig(:content, :posts) }
 
       context "for products" do
         let(:seller) { create(:named_seller) }
@@ -119,7 +113,8 @@ describe UrlRedirectsController do
           get :download_page, params: { id: token }
 
           expect(response).to be_successful
-          expect(response.body).to include(installment_1.displayed_name)
+          post_names = inertia.props.dig(:content, :posts).map { |p| p[:name] }
+          expect(post_names).to include(installment_1.displayed_name)
         end
 
         it "returns updates from those other purchases if they've bought the same product multiple times" do
@@ -135,9 +130,10 @@ describe UrlRedirectsController do
           get :download_page, params: { id: token }
 
           expect(response).to be_successful
-          expect(response.body).to include(installment_1.displayed_name)
-          expect(response.body).to include(installment_2.displayed_name)
-          expect(response.body).to include(installment_3.displayed_name)
+          post_names = inertia.props.dig(:content, :posts).map { |p| p[:name] }
+          expect(post_names).to include(installment_1.displayed_name)
+          expect(post_names).to include(installment_2.displayed_name)
+          expect(post_names).to include(installment_3.displayed_name)
         end
 
         it "does not break if the user has been sent a post for a product they have not purchased" do
@@ -321,7 +317,7 @@ describe UrlRedirectsController do
       describe "with purchase purchaser is nil" do
         it "renders add to library" do
           get :download_page, params: { id: @token }
-          expect(response.body).to include "Add to library"
+          expect(inertia.props[:add_to_library_option]).to eq "add_to_library_button"
         end
       end
 
@@ -333,7 +329,7 @@ describe UrlRedirectsController do
 
         it "does not render add to library" do
           get :download_page, params: { id: @token }
-          expect(response.body).to_not include "Add to library"
+          expect(inertia.props[:add_to_library_option]).to eq "none"
         end
       end
 
@@ -348,8 +344,7 @@ describe UrlRedirectsController do
     describe "when user does not exist with purchase email" do
       it "renders signup form" do
         get :download_page, params: { id: @token }
-        expect(response.body).to_not include "Access this product from anywhere, forever:"
-        expect(response.body).to include "Create an account to access all of your purchases"
+        expect(inertia.props[:add_to_library_option]).to eq "signup_form"
       end
     end
 
@@ -373,8 +368,8 @@ describe UrlRedirectsController do
 
       it "renders the download page properly for a product installment with files" do
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_url = url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
+        expect(inertia.props.dig(:content, :content_items).any? { |item| item[:download_url] == download_url }).to be true
       end
 
       it "renders the download page properly for a variant installment with files" do
@@ -384,32 +379,32 @@ describe UrlRedirectsController do
         @seller_installment.update!(installment_type: Installment::VARIANT_TYPE, base_variant_id: variant.id)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_url = url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
+        expect(inertia.props.dig(:content, :content_items).any? { |item| item[:download_url] == download_url }).to be true
       end
 
       it "renders the download page properly for a follower installment with files" do
         @seller_installment.update!(installment_type: Installment::FOLLOWER_TYPE)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_url = url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
+        expect(inertia.props.dig(:content, :content_items).any? { |item| item[:download_url] == download_url }).to be true
       end
 
       it "renders the download page properly for an affiliate installment with files" do
         @seller_installment.update!(installment_type: Installment::AFFILIATE_TYPE)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_url = url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
+        expect(inertia.props.dig(:content, :content_items).any? { |item| item[:download_url] == download_url }).to be true
       end
 
       it "renders the download page properly for an audience installment with files" do
         @seller_installment.update!(installment_type: Installment::AUDIENCE_TYPE)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        download_url = url_redirect_download_product_files_path(@url_redirect.token, { product_file_ids: [ProductFile.last.external_id] })
+        expect(inertia.props.dig(:content, :content_items).any? { |item| item[:download_url] == download_url }).to be true
       end
 
       it "renders the download page properly for a membership installment that used to have files and now does not" do
@@ -418,8 +413,8 @@ describe UrlRedirectsController do
         @seller_installment.product_files.last.mark_deleted!
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_page_path(@token)
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        expect(response).to be_successful
+        expect_inertia.to render_component("UrlRedirects/DownloadPage")
       end
 
       it "returns a 404 if the url redirect is not found" do
@@ -458,8 +453,8 @@ describe UrlRedirectsController do
         @seller_installment.update!(installment_type: Installment::PRODUCT_TYPE, link: @product)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_page_path(@token)
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        expect(response).to be_successful
+        expect_inertia.to render_component("UrlRedirects/DownloadPage")
       end
 
       it "renders the download page properly for a variant installment without files that was purchased" do
@@ -470,8 +465,8 @@ describe UrlRedirectsController do
         @seller_installment.update!(installment_type: Installment::VARIANT_TYPE, base_variant_id: variant.id)
 
         get :download_page, params: { id: @token }
-        expect(response.body).to include url_redirect_download_page_path(@token)
-        expect(response.body).to_not have_selector(".product-related .preview-container")
+        expect(response).to be_successful
+        expect_inertia.to render_component("UrlRedirects/DownloadPage")
       end
 
       it "returns 404 error if the url redirect is for a product installment without files and was not purchased" do
@@ -557,17 +552,29 @@ describe UrlRedirectsController do
         expect(response).to redirect_to(url_redirect_rental_expired_page_path(id: @url_redirect.token))
       end
 
-      context "when 'product_file_id' is missing from the params" do
+      context "when 'product_file_id' is missing from the params", inertia: true do
         before do
           @product.product_files << create(:product_file, link: @product)
           stub_const("UrlRedirect::GUID_GETTER_FROM_S3_URL_REGEX", /(specs)/)
         end
 
-        it "assigns the first streamable product file to '@product_file' and renders the stream page correctly" do
+        it "renders the stream page with the first streamable product file" do
           get :stream, params: { id: @url_redirect.token }
 
           expect(response).to have_http_status(:ok)
-          expect(assigns(:product_file)).to eq(@product.product_files.first)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
+          expect(inertia.props[:url_redirect_id]).to eq(@url_redirect.external_id)
+          expect(inertia.props[:purchase_id]).to be_nil
+          expect(inertia.props[:should_show_transcoding_notice]).to eq(false)
+          expect(inertia.props[:transcode_on_first_sale]).to eq(false)
+
+          playlist = inertia.props.fetch(:playlist)
+          expect(playlist).to be_present
+          expect(inertia.props[:index_to_play]).to eq(0)
+
+          streamable_product_file = @product.product_files.find(&:streamable?)
+          first_external_id = playlist.first[:external_id] || playlist.first["external_id"]
+          expect(first_external_id).to eq(streamable_product_file.external_id)
         end
       end
 
@@ -580,6 +587,31 @@ describe UrlRedirectsController do
           expect do
             get :stream, params: { id: @url_redirect.token, product_file_id: @product.product_files.first.external_id }
           end.to raise_error(ActionController::RoutingError)
+        end
+      end
+
+      context "when 'product_file_id' points to a non-streamable file" do
+        it "raises 404 error" do
+          non_streamable_product_file = create(:product_file, link: @product)
+
+          expect do
+            get :stream, params: { id: @url_redirect.token, product_file_id: non_streamable_product_file.external_id }
+          end.to raise_error(ActionController::RoutingError)
+        end
+      end
+
+      context "when url redirect has a purchase", inertia: true do
+        before do
+          @url_redirect.update!(purchase: create(:purchase, link: @product))
+          stub_const("UrlRedirect::GUID_GETTER_FROM_S3_URL_REGEX", /(specs)/)
+        end
+
+        it "includes purchase_id in stream props" do
+          get :stream, params: { id: @url_redirect.token }
+
+          expect(response).to have_http_status(:ok)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
+          expect(inertia.props[:purchase_id]).to eq(@url_redirect.purchase.external_id)
         end
       end
 
@@ -597,6 +629,81 @@ describe UrlRedirectsController do
         expect(event.purchase_id).not_to be_nil
         expect(event.link_id).to eq @product.id
         expect(event.platform).to eq Platform::WEB
+      end
+
+      context "with custom domain route", type: :request do
+        let!(:custom_domain) { create(:custom_domain, user: @product.user) }
+
+        it "renders stream page via custom domain" do
+          stub_const("UrlRedirect::GUID_GETTER_FROM_S3_URL_REGEX", /(specs)/)
+
+          get "/s/#{@url_redirect.token}",
+              headers: { "HOST" => custom_domain.domain }
+
+          expect(response).to have_http_status(:ok)
+          expect(response.body).to include("data-page=")
+
+          page_data_match = response.body.match(/data-page="([^"]*)"/)
+          expect(page_data_match).to be_present, "Expected Inertia.js data-page attribute"
+
+          page_data = JSON.parse(CGI.unescapeHTML(page_data_match[1]))
+          expect(page_data.fetch("component")).to eq("UrlRedirects/Stream")
+
+          props = page_data.fetch("props")
+          expect(props).to include(
+            "playlist",
+            "index_to_play",
+            "url_redirect_id",
+            "purchase_id",
+            "should_show_transcoding_notice",
+            "transcode_on_first_sale",
+          )
+
+          expect(props.fetch("url_redirect_id")).to eq(@url_redirect.external_id)
+          expect(props.fetch("purchase_id")).to be_nil
+          expect(props.fetch("should_show_transcoding_notice")).to eq(false)
+          expect(props.fetch("transcode_on_first_sale")).to eq(false)
+
+          playlist = props.fetch("playlist")
+          expect(playlist).to be_present
+          expect(props.fetch("index_to_play")).to eq(0)
+
+          streamable_product_file = @product.product_files.find(&:streamable?)
+          expect(playlist.first.fetch("external_id")).to eq(streamable_product_file.external_id)
+        end
+      end
+
+      context "with custom subdomain", inertia: true do
+        before do
+          stub_const("UrlRedirect::GUID_GETTER_FROM_S3_URL_REGEX", /(specs)/)
+          @request.host = URI.parse(@product.user.subdomain_with_protocol).host
+        end
+
+        it "renders stream page via custom subdomain" do
+          get :stream, params: { id: @url_redirect.token }
+
+          expect(response).to have_http_status(:ok)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
+          expect(inertia.props[:playlist]).to be_present
+          expect(inertia.props[:index_to_play]).to eq(0)
+          expect(inertia.props[:url_redirect_id]).to eq(@url_redirect.external_id)
+          expect(inertia.props[:purchase_id]).to be_nil
+          expect(inertia.props[:should_show_transcoding_notice]).to eq(false)
+          expect(inertia.props[:transcode_on_first_sale]).to eq(false)
+        end
+
+        it "renders stream page with product_file_id via custom subdomain" do
+          get :stream, params: { id: @url_redirect.token, product_file_id: @product.product_files.first.external_id }
+
+          expect(response).to have_http_status(:ok)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
+          expect(inertia.props[:playlist]).to be_present
+          expect(inertia.props[:index_to_play]).to eq(0)
+          expect(inertia.props[:url_redirect_id]).to eq(@url_redirect.external_id)
+          expect(inertia.props[:purchase_id]).to be_nil
+          expect(inertia.props[:should_show_transcoding_notice]).to eq(false)
+          expect(inertia.props[:transcode_on_first_sale]).to eq(false)
+        end
       end
     end
 
@@ -983,7 +1090,7 @@ describe UrlRedirectsController do
         end
       end
 
-      describe "hls" do
+      describe "hls", inertia: true do
         before do
           @multifile_product = create(:product)
           @video_file_1 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4", is_transcoded_for_hls: true, display_name: "Chapter 2", position: 2)
@@ -997,27 +1104,27 @@ describe UrlRedirectsController do
 
         it "sets the m3u8 playlist url and the original video url in sources for hls-transcoded video" do
           get :stream, params: { id: @multifile_url_redirect.token, product_file_id: @video_file_1.external_id }
-          video_urls = assigns(:videos_playlist)[:playlist]
+          video_urls = inertia.props[:playlist]
 
           expect(response).to be_successful
-          expect(assigns(:hide_layouts)).to eq(true)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
           expect(video_urls.size).to eq 1
           expect(video_urls[0][:sources][0]).to include "index.m3u8"
           expect(video_urls[0][:sources][1]).to include @video_file_1.s3_filename
-          expect(assigns(:videos_playlist)[:index_to_play]).to eq 0
+          expect(inertia.props[:index_to_play]).to eq 0
         end
 
         it "sets the smil url and the original video url in sources if the video is not HLS-transcoded yet" do
           @video_file_1.update(is_transcoded_for_hls: false)
           get :stream, params: { id: @multifile_url_redirect.token }
-          video_urls = assigns(:videos_playlist)[:playlist]
+          video_urls = inertia.props[:playlist]
 
           expect(response).to be_successful
-          expect(assigns(:hide_layouts)).to eq(true)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
           expect(video_urls.size).to eq 1
           expect(video_urls[0][:sources][0]).to include "stream.smil"
           expect(video_urls[0][:sources][1]).to include @video_file_1.s3_filename
-          expect(assigns(:videos_playlist)[:index_to_play]).to eq 0
+          expect(inertia.props[:index_to_play]).to eq 0
         end
 
         context "when the product has rich content" do
@@ -1038,7 +1145,7 @@ describe UrlRedirectsController do
 
             get :stream, params: { id: @multifile_url_redirect.token, product_file_id: video_file_2.external_id }
 
-            video_urls = assigns(:videos_playlist)[:playlist]
+            video_urls = inertia.props[:playlist]
             expect(response).to be_successful
             expect(video_urls.size).to eq 3
             expect(video_urls[0][:sources][0]).to include "stream.smil"
@@ -1053,7 +1160,7 @@ describe UrlRedirectsController do
             expect(video_urls[2][:sources][0]).to include "stream.smil"
             expect(video_urls[2][:sources][1]).to include video_file_3.s3_filename
             expect(video_urls[2][:title]).to eq "chapter3"
-            expect(assigns(:videos_playlist)[:index_to_play]).to eq 0
+            expect(inertia.props[:index_to_play]).to eq 0
           end
         end
 
@@ -1069,9 +1176,9 @@ describe UrlRedirectsController do
           installment.product_files << video_file_1 << video_file_2 << pdf_file << video_file_3 << mp3_file
           url_redirect = create(:installment_url_redirect, installment:)
           get :stream, params: { id: url_redirect.token, product_file_id: video_file_3.external_id }
-          video_urls = assigns(:videos_playlist)[:playlist]
+          video_urls = inertia.props[:playlist]
           expect(response).to be_successful
-          expect(assigns(:hide_layouts)).to eq(true)
+          expect(inertia.component).to eq("UrlRedirects/Stream")
           expect(video_urls.size).to eq(3)
           expect(video_urls[2][:sources][0]).to include "index.m3u8"
           expect(video_urls[2][:sources][1]).to include video_file_1.s3_filename
@@ -1085,7 +1192,7 @@ describe UrlRedirectsController do
           expect(video_urls[0][:sources][0]).to include "stream.smil"
           expect(video_urls[0][:sources][1]).to include video_file_3.s3_filename
           expect(video_urls[0][:title]).to eq video_file_3.display_name
-          expect(assigns(:videos_playlist)[:index_to_play]).to eq 0
+          expect(inertia.props[:index_to_play]).to eq 0
         end
       end
 
@@ -1227,8 +1334,9 @@ describe UrlRedirectsController do
       it "show the proper download page for multiple files" do
         get :download_page, params: { id: @url_redirect.token }
         expect(response).to be_successful
-        expect(response.body).to include "chapter1"
-        expect(response.body).to include "chapter2"
+        file_names = inertia.props.dig(:content, :content_items).map { |item| item[:file_name] }
+        expect(file_names).to include("chapter1")
+        expect(file_names).to include("chapter2")
       end
 
       it "redirects to the correct url for downloading a specific file" do
@@ -1269,9 +1377,10 @@ describe UrlRedirectsController do
         it "displays license information" do
           get :download_page, params: { id: @url_redirect.token }
           expect(response).to be_successful
-          expect(response.body).to include "chapter1"
-          expect(response.body).to include "chapter2"
-          expect(response.body).to include @purchase.license.serial
+          file_names = inertia.props.dig(:content, :content_items).map { |item| item[:file_name] }
+          expect(file_names).to include("chapter1")
+          expect(file_names).to include("chapter2")
+          expect(inertia.props.dig(:content, :license, :license_key)).to eq @purchase.license.serial
         end
       end
     end
@@ -1536,11 +1645,12 @@ describe UrlRedirectsController do
       end
 
       context "when user is not signed in" do
-        it "sets hide_layouts to true" do
+        it "renders the download page with read url" do
           get :download_page, params: { id: @token }
           expect(response).to be_successful
-          expect(assigns(:hide_layouts)).to eq(true)
-          expect(response.body).to have_link(href: url_redirect_read_for_product_file_path(@token, @product.product_files.first.external_id))
+          expect_inertia.to render_component("UrlRedirects/DownloadPage")
+          read_url = url_redirect_read_for_product_file_path(@token, @product.product_files.first.external_id)
+          expect(inertia.props.dig(:content, :content_items).any? { |item| item[:read_url] == read_url }).to be true
         end
       end
 
@@ -1552,8 +1662,9 @@ describe UrlRedirectsController do
         it "has a a read button for a PDF product file" do
           get :download_page, params: { id: @token }
           expect(response).to be_successful
-          expect(assigns(:hide_layouts)).to eq(true)
-          expect(response.body).to have_link(href: url_redirect_read_for_product_file_path(@token, @product.product_files.first.external_id))
+          expect_inertia.to render_component("UrlRedirects/DownloadPage")
+          read_url = url_redirect_read_for_product_file_path(@token, @product.product_files.first.external_id)
+          expect(inertia.props.dig(:content, :content_items).any? { |item| item[:read_url] == read_url }).to be true
         end
 
         it "can be read with proper file download URL" do
@@ -1631,8 +1742,8 @@ describe UrlRedirectsController do
 
       it "has a readable Product File for a PDF installment with no associated product" do
         get :download_page, params: { id: @token }
-        url = url_redirect_read_for_product_file_path(@token, @post.product_files.first.external_id)
-        expect(response.body).to have_link(href: url)
+        read_url = url_redirect_read_for_product_file_path(@token, @post.product_files.first.external_id)
+        expect(inertia.props.dig(:content, :content_items).any? { |item| item[:read_url] == read_url }).to be true
       end
 
       it "can be read" do
@@ -1728,86 +1839,163 @@ describe UrlRedirectsController do
     end
   end
 
-  describe "GET latest_media_locations" do
-    it "returns a 404 if the url redirect is not found" do
-      expect do
-        get :download_page, params: { id: "some non-existent id" }
-      end.to raise_error(ActionController::RoutingError)
+  describe "download_page polling", inertia: true do
+    let(:polling_headers) do
+      {
+        "X-Inertia" => "true",
+        "X-Inertia-Partial-Component" => "UrlRedirects/DownloadPage",
+      }
     end
 
-    it "returns a 404 if the url redirect is for an installment" do
-      seller = create(:user)
-      product = create(:product, user: seller)
-      seller_installment = create(:installment, seller:, installment_type: "seller", link: nil)
-      seller_installment.product_files.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
-      url_redirect = create(:url_redirect, installment: seller_installment, purchase: nil, link: product)
+    describe "audio_durations partial prop" do
+      it "returns audio durations via Inertia partial request" do
+        product = create(:product)
+        audio1 = create(:listenable_audio, duration: 100)
+        audio2 = create(:listenable_audio, duration: nil)
+        product.product_files << audio1
+        product.product_files << audio2
+        product.save!
+        purchase = create(:purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
 
-      expect do
-        get :latest_media_locations, params: { id: url_redirect.token }
-      end.to raise_error(ActionController::RoutingError)
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations"))
+        get :download_page, params: { id: url_redirect.token }
+
+        expect(response).to be_successful
+        expect(inertia.props["audio_durations"]).to eq(audio1.external_id => 100, audio2.external_id => nil)
+      end
+
+      it "returns updated durations for processing files" do
+        product = create(:product)
+        audio = create(:listenable_audio, duration: nil)
+        product.product_files << audio
+        product.save!
+        purchase = create(:purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
+
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations"))
+        get :download_page, params: { id: url_redirect.token }
+        expect(inertia.props["audio_durations"]).to eq(audio.external_id => nil)
+
+        audio.update!(duration: 200)
+
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations"))
+        get :download_page, params: { id: url_redirect.token }
+        expect(inertia.props["audio_durations"]).to eq(audio.external_id => 200)
+      end
     end
 
-    it "returns latest media locations for the purchased product" do
-      product = create(:product)
-      video = create(:streamable_video)
-      audio = create(:listenable_audio)
-      readable_document = create(:readable_document)
-      non_readable_document = create(:non_readable_document)
-      product.product_files = [video, audio, readable_document, non_readable_document]
-      product.save!
-      purchase = create(:purchase, link: product)
-      url_redirect = create(:url_redirect, link: product, purchase:)
+    describe "latest_media_locations partial prop" do
+      it "returns latest media locations via Inertia partial request" do
+        product = create(:product)
+        video = create(:streamable_video)
+        audio = create(:listenable_audio)
+        readable_document = create(:readable_document)
+        non_readable_document = create(:non_readable_document)
+        product.product_files = [video, audio, readable_document, non_readable_document]
+        product.save!
+        purchase = create(:purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
 
-      audio_consumption_timestamp = Time.current.change(usec: 0)
-      create(:media_location, url_redirect_id: url_redirect.id, purchase_id: url_redirect.purchase.id,
-                              product_file_id: audio.id, product_id: url_redirect.referenced_link.id, location: 5, consumed_at: audio_consumption_timestamp)
-      readable_document_consumption_timestamp = Time.current.change(usec: 0) + 5.minutes
-      create(:media_location, url_redirect_id: url_redirect.id, purchase_id: url_redirect.purchase.id, platform: Platform::ANDROID,
-                              product_file_id: readable_document.id, product_id: url_redirect.referenced_link.id, location: 3, consumed_at: readable_document_consumption_timestamp)
+        audio_consumption_timestamp = Time.current.change(usec: 0)
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: url_redirect.purchase.id,
+                                product_file_id: audio.id, product_id: url_redirect.referenced_link.id, location: 5, consumed_at: audio_consumption_timestamp)
+        readable_document_consumption_timestamp = Time.current.change(usec: 0) + 5.minutes
+        create(:media_location, url_redirect_id: url_redirect.id, purchase_id: url_redirect.purchase.id, platform: Platform::ANDROID,
+                                product_file_id: readable_document.id, product_id: url_redirect.referenced_link.id, location: 3, consumed_at: readable_document_consumption_timestamp)
 
-      get :latest_media_locations, params: { id: url_redirect.token }
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+        get :download_page, params: { id: url_redirect.token }
 
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to eq(
-        "#{video.external_id}" => nil,
-        "#{audio.external_id}" => { "location" => 5, "timestamp" => audio_consumption_timestamp.as_json, "unit" => "seconds" },
-        "#{readable_document.external_id}" => { "location" => 3, "timestamp" => readable_document_consumption_timestamp.as_json, "unit" => "page_number" },
-        "#{non_readable_document.external_id}" => nil
-      )
+        expect(response).to be_successful
+        expect(inertia.props["latest_media_locations"]).to eq(
+          video.external_id => nil,
+          audio.external_id => { "location" => 5, "timestamp" => audio_consumption_timestamp.as_json, "unit" => "seconds" },
+          readable_document.external_id => { "location" => 3, "timestamp" => readable_document_consumption_timestamp.as_json, "unit" => "page_number" },
+          non_readable_document.external_id => nil
+        )
+      end
+
+      it "returns empty hash for installment url redirects" do
+        seller = create(:user)
+        product = create(:product, user: seller)
+        seller_installment = create(:installment, seller:, installment_type: "seller", link: nil)
+        seller_installment.product_files.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
+        url_redirect = create(:url_redirect, installment: seller_installment, purchase: nil, link: product)
+
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "latest_media_locations"))
+        get :download_page, params: { id: url_redirect.token }
+
+        expect(response).to be_successful
+        expect(inertia.props["latest_media_locations"]).to eq({})
+      end
     end
-  end
 
-  describe "GET 'audio_durations'" do
-    it "returns empty hash if the 'file_ids' parameter is blank" do
-      url_redirect = create(:url_redirect)
+    describe "combined polling" do
+      it "returns both props when both are requested" do
+        product = create(:product)
+        audio = create(:listenable_audio, duration: 120)
+        product.product_files << audio
+        product.save!
+        purchase = create(:purchase, link: product)
+        url_redirect = create(:url_redirect, link: product, purchase:)
 
-      get :audio_durations, params: { id: url_redirect.token, file_ids: [] }
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations,latest_media_locations"))
+        get :download_page, params: { id: url_redirect.token }
 
-      expect(response).to be_successful
-      expect(response.parsed_body).to eq({})
+        expect(response).to be_successful
+        expect(inertia.props["audio_durations"]).to eq(audio.external_id => 120)
+        expect(inertia.props["latest_media_locations"]).to eq(audio.external_id => nil)
+      end
     end
 
-    it "returns the audio durations for the given file ids" do
-      product = create(:product)
-      audio1 = create(:listenable_audio, duration: 100)
-      audio2 = create(:listenable_audio, duration: nil)
-      product.product_files << audio1
-      product.product_files << audio2
-      product.save!
-      purchase = create(:purchase, link: product)
-      url_redirect = create(:url_redirect, link: product, purchase: purchase)
+    describe "side effects" do
+      it "does not create consumption events during polling" do
+        expect do
+          request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations"))
+          get :download_page, params: { id: @token }
+        end.not_to change(ConsumptionEvent, :count)
+      end
 
-      get :audio_durations, params: { id: url_redirect.token, file_ids: [audio1.external_id, audio2.external_id] }
+      it "does not increment usage count during polling" do
+        expect do
+          request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations"))
+          get :download_page, params: { id: @token }
+        end.not_to change { @url_redirect.reload.uses }
+      end
 
-      expect(response).to be_successful
-      expect(response.parsed_body).to eq("#{audio1.external_id}" => 100, "#{audio2.external_id}" => nil)
+      it "does not include dropbox_api_key during polling" do
+        request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations"))
+        get :download_page, params: { id: @token }
 
-      audio2.update!(duration: 200)
+        expect(inertia.props).not_to have_key("dropbox_api_key")
+      end
+    end
 
-      get :audio_durations, params: { id: url_redirect.token, file_ids: [audio2.external_id] }
+    describe "non-polling requests" do
+      it "includes dropbox_api_key on full load" do
+        get :download_page, params: { id: @token }
 
-      expect(response).to be_successful
-      expect(response.parsed_body).to eq("#{audio2.external_id}" => 200)
+        expect(response).to be_successful
+        expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
+      end
+
+      it "creates consumption events and increments usage on full load" do
+        expect do
+          get :download_page, params: { id: @token }
+        end.to change(ConsumptionEvent, :count).by(1)
+          .and change { @url_redirect.reload.uses }.by(1)
+      end
+
+      it "treats partial requests with non-polling props as full page loads" do
+        expect do
+          request.headers.merge!(polling_headers.merge("X-Inertia-Partial-Data" => "audio_durations,content"))
+          get :download_page, params: { id: @token }
+        end.to change(ConsumptionEvent, :count).by(1)
+          .and change { @url_redirect.reload.uses }.by(1)
+
+        expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
+      end
     end
   end
 

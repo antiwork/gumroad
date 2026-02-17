@@ -528,7 +528,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(compliance_info.business_state).to eq "CA"
           expect(compliance_info.business_zip_code).to eq "94107"
           expect(compliance_info.business_type).to eq "llc"
-          expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123-123-123"
+          expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123123123"
         end
       end
 
@@ -606,7 +606,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(compliance_info.business_state).to eq "CA"
         expect(compliance_info.business_zip_code).to eq "94107"
         expect(compliance_info.business_type).to eq "llc"
-        expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123-123-123"
+        expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123123123"
 
         expect(response).to redirect_to(settings_payments_path)
         expect(response).to have_http_status :see_other
@@ -653,7 +653,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(compliance_info.business_state).to eq "CA"
         expect(compliance_info.business_zip_code).to eq "94107"
         expect(compliance_info.business_type).to eq "llc"
-        expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123-123-123"
+        expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123123123"
       end
     end
 

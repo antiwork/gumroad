@@ -4,7 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { StandaloneLayout } from "$app/inertia/layout";
 
-import { Layout, LayoutProps } from "$app/components/server-components/DownloadPage/Layout";
+import { Layout, LayoutProps } from "$app/components/DownloadPage/Layout";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 
 import placeholderImage from "$assets/images/placeholders/comic-stars.png";

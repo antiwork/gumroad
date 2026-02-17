@@ -166,7 +166,7 @@ export const HomeNav = () => {
   };
 
   const LINKS = [
-    { href: Routes.discover_path(), label: "Discover" },
+    { href: Routes.discover_path(), label: "Discover", isInertia: true },
     { href: Routes.gumroad_blog_root_path(), label: "Blog", isInertia: true },
     { href: Routes.pricing_path(), label: "Pricing" },
     { href: Routes.features_path(), label: "Features" },
