@@ -15,6 +15,9 @@ export type CurrentSeller = {
   timeZone: TimeZone;
   has_published_products: boolean;
   isNameInvalidForEmailDelivery: boolean;
+  profileBackgroundColor: string;
+  profileHighlightColor: string;
+  profileFont: string;
 };
 
 const Context = React.createContext<CurrentSeller | null | undefined>(undefined);
@@ -30,6 +33,9 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     time_zone: TimeZone;
     has_published_products: boolean;
     is_name_invalid_for_email_delivery: boolean;
+    profile_background_color: string;
+    profile_highlight_color: string;
+    profile_font: string;
   } | null>(data);
   if (parsed == null) return null;
   return {
@@ -42,6 +48,9 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     timeZone: parsed.time_zone,
     has_published_products: parsed.has_published_products,
     isNameInvalidForEmailDelivery: parsed.is_name_invalid_for_email_delivery,
+    profileBackgroundColor: parsed.profile_background_color,
+    profileHighlightColor: parsed.profile_highlight_color,
+    profileFont: parsed.profile_font,
   };
 };
 

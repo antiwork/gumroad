@@ -48,7 +48,6 @@ const SuspendUsers = () => {
   return (
     <form onSubmit={handleSubmit}>
       <FormSection
-        className="p-4 md:p-8"
         header={
           <>
             To suspend users for terms of service violations, please enter IDs of those users separated by comma or

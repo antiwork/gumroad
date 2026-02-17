@@ -187,7 +187,8 @@ describe("Offer-code usage from product page", type: :system, js: true) do
       add_to_cart(product, offer_code:)
       offer_code.update!(amount_cents: 200)
       check_out(product, error: "The price just changed! Refresh the page for the updated price.")
-      visit checkout_index_path
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(email: "test@gumroad.com").exists? }
+      visit checkout_path
       check_out(product)
     end
   end
@@ -201,7 +202,8 @@ describe("Offer-code usage from product page", type: :system, js: true) do
       add_to_cart(product, offer_code:)
       offer_code.mark_deleted!
       check_out(product, error: "Sorry, the discount code you wish to use is invalid.")
-      visit checkout_index_path
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(email: "test@gumroad.com").exists? }
+      visit checkout_path
       expect(page).to_not have_selector("[aria-label='Discount code']", text: offer_code.code)
       expect(page).to have_text("Total US$10", normalize_ws: true)
       check_out(product)

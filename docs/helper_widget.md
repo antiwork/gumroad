@@ -10,7 +10,7 @@ Once you have Helper working, you can run it alongside Gumroad by doing the foll
    # If you aren't using the default seeds for Helper, change this to your own widgetHMACSecret.
    HELPER_WIDGET_SECRET=9cff9d28-7333-4e29-8f01-c2945f1a887f
    ```
-2. Re-run `bin/generate_ssl_certificates` in Gumroad.
+2. Run `bin/generate_ssl_certificates` in Gumroad.
 3. Run `make local` in Gumroad. (It's important to run this **before** starting either Gumroad or Helper.)
    - If you get errors, try running `pnpm nginx:stop` in Helper first.
 4. Run `bin/dev` in Gumroad.
