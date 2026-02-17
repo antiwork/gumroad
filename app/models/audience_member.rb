@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class AudienceMember < ApplicationRecord
+  include AudienceMember::Searchable
+
   VALID_FILTER_TYPES = %w[customer follower affiliate].freeze
 
   belongs_to :seller, class_name: "User"
