@@ -211,10 +211,10 @@ const ContentTabContent = ({
   const uid = React.useId();
   const isDesktop = useIsAboveBreakpoint("lg");
 
-  const selectedVariant = product.has_same_rich_content_for_all_variants
-    || product.variants.length <= 1
-    ? null
-    : product.variants.find((variant) => variant.id === selectedVariantId);
+  const selectedVariant =
+    product.has_same_rich_content_for_all_variants || product.variants.length <= 1
+      ? null
+      : product.variants.find((variant) => variant.id === selectedVariantId);
 
   const pages: (Page & { chosen?: boolean })[] = selectedVariant ? selectedVariant.rich_content : product.rich_content;
   const pagesRef = useRefToLatest(pages);
