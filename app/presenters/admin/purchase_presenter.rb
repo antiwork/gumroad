@@ -85,6 +85,7 @@ class Admin::PurchasePresenter
                        subscription: purchase.subscription ? {
                          id: purchase.subscription.id,
                          external_id: purchase.subscription.external_id,
+                         user_requested_cancellation_at: purchase.subscription.user_requested_cancellation_at,
                          cancelled_at: purchase.subscription.cancelled_at,
                          cancelled_by_buyer: purchase.subscription.cancelled_by_buyer,
                          ended_at: purchase.subscription.ended_at,

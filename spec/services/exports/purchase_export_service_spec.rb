@@ -159,6 +159,19 @@ describe Exports::PurchaseExportService do
         expect(field_value(row, "Recurrence")).to eq("monthly")
         expect(field_value(row, "Subscription End Date")).to eq(@subscription.cancelled_at.to_date.to_s)
       end
+
+      it "includes the date of cancellation when subscription is cancelled" do
+        cancellation_time = 2.days.ago
+        @subscription.update!(user_requested_cancellation_at: cancellation_time, cancelled_at: 1.day.from_now)
+
+        row = last_data_row
+        expect(field_value(row, "Date of Cancellation")).to eq(cancellation_time.to_s)
+      end
+
+      it "does not include date of cancellation when subscription is not cancelled" do
+        row = last_data_row
+        expect(field_value(row, "Date of Cancellation")).to eq(nil)
+      end
     end
 
     describe "preorders" do

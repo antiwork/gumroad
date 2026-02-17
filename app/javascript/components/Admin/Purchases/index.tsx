@@ -83,6 +83,7 @@ export type Purchase = PurchaseStatesInfo & {
   subscription: {
     id: number;
     external_id: string;
+    user_requested_cancellation_at: string | null;
     cancelled_at: string | null;
     cancelled_by_buyer: boolean | null;
     ended_at: string | null;
@@ -404,11 +405,18 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Cancelled</dt>
           <dd>
-            <BooleanIcon value={!!purchase.subscription.cancelled_at} />
-            {purchase.subscription.cancelled_at
-              ? ` (on ${purchase.subscription.cancelled_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
+            <BooleanIcon value={!!purchase.subscription.user_requested_cancellation_at} />
+            {purchase.subscription.user_requested_cancellation_at
+              ? ` (on ${purchase.subscription.user_requested_cancellation_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
               : null}
           </dd>
+
+          {purchase.subscription.cancelled_at ? (
+            <>
+              <dt>Subscription End Date</dt>
+              <dd>{purchase.subscription.cancelled_at}</dd>
+            </>
+          ) : null}
 
           <dt>Ended</dt>
           <dd>
