@@ -2,6 +2,7 @@ import { Editor } from "@tiptap/core";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
@@ -19,7 +20,7 @@ export const NodeActionsMenu = ({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <div className="actions-menu">
+      <div className={classNames("actions-menu", { "z-0!": !open })}>
         <PopoverAnchor>
           <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
             <Button small color="filled">
