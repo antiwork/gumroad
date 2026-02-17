@@ -226,6 +226,14 @@ describe "UTM links", :js, type: :system do
         expect(page).to_not have_table_row({ "Link" => "A Link", "Conversion" => "66.67%" })
       end
 
+      it "autofocuses the search input when the popover is opened" do
+        create(:utm_link, seller:)
+        visit dashboard_utm_links_path
+        select_disclosure "Toggle Search" do
+          expect_focused find_field("Search")
+        end
+      end
+
       it "filters UTM links by search query by adhering to the current column sort order" do
         stub_const("PaginatedUtmLinksPresenter::PER_PAGE", 1)
 

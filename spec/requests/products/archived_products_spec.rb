@@ -14,6 +14,14 @@ describe "Archived Products", type: :system, js: true do
     let(:url) { products_archived_index_path }
   end
 
+  it "autofocuses the search input when the popover is opened" do
+    create(:product, user: seller, archived: true)
+    visit products_archived_index_path
+    select_disclosure "Toggle Search" do
+      expect_focused find_field("Search products")
+    end
+  end
+
   describe "pagination" do
     before do
       stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)

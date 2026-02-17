@@ -15,6 +15,17 @@ describe "Affiliated Products", type: :system, js: true do
     let(:url) { products_affiliated_index_path }
   end
 
+  it "autofocuses the search input when the popover is opened" do
+    creator = create(:named_user)
+    product = create(:product, user: creator)
+    direct_affiliate = create(:direct_affiliate, affiliate_user:, seller: creator)
+    create(:product_affiliate, affiliate: direct_affiliate, product:)
+    visit products_affiliated_index_path
+    select_disclosure "Toggle Search" do
+      expect_focused find_field("Search")
+    end
+  end
+
   shared_examples "accesses global affiliates page" do
     it "provides details about the program" do
       visit products_affiliated_index_path

@@ -264,6 +264,13 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
     end
 
     describe "search" do
+      it "autofocuses the search input when the popover is opened" do
+        visit "#{emails_path}/published"
+        select_disclosure "Toggle Search" do
+          expect_focused find_field("Search emails")
+        end
+      end
+
       it "displays filtered and paginated emails for the search query" do
         stub_const("PaginatedInstallmentsPresenter::PER_PAGE", 1)
 

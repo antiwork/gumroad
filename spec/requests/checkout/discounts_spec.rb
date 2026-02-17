@@ -886,6 +886,13 @@ describe("Checkout discounts page", type: :system, js: true) do
       stub_const("Checkout::DiscountsController::PER_PAGE", 2)
     end
 
+    it "autofocuses the search input when the popover is opened" do
+      visit checkout_discounts_path
+      select_disclosure "Toggle Search" do
+        expect_focused find_field("Search")
+      end
+    end
+
     it "searches the offer codes" do
       visit checkout_discounts_path
 

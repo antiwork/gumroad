@@ -119,6 +119,13 @@ describe("Checkout upsells page", type: :system, js: true) do
       end
     end
 
+    it "autofocuses the search input when the popover is opened" do
+      visit checkout_upsells_path
+      select_disclosure "Toggle Search" do
+        expect_focused find_field("Search")
+      end
+    end
+
     describe "sorting and pagination" do
       before do
         stub_const("Checkout::UpsellsController::PER_PAGE", 1)

@@ -79,6 +79,14 @@ describe "Sales page", type: :system, js: true do
       expect(page).to have_nth_table_row_record(3, "Customer 6")
     end
 
+    it "autofocuses the search input when the popover is opened" do
+      login_as seller
+      visit customers_path
+      select_disclosure "Toggle Search" do
+        expect_focused find_field("Search sales")
+      end
+    end
+
     it "allows searching the table" do
       create(:purchase, link: product1, full_name: "Customer 11", email: "customer11@gumroad.com", created_at: 11.days.ago, seller:)
       index_model_records(Purchase)

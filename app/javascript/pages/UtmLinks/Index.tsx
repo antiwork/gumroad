@@ -161,7 +161,7 @@ export default function UtmLinksIndex() {
       selectedTab="utm_links"
       actions={
         <>
-          <Search value={query} onSearch={onSearch} />
+          {utmLinks.length > 0 || query ? <Search value={query} onSearch={onSearch} /> : null}
           <NavigationButtonInertia href={Routes.new_dashboard_utm_link_path()} color="accent">
             Create link
           </NavigationButtonInertia>

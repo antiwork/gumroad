@@ -22,6 +22,11 @@ const SearchPopover = () => {
   const currentUrl = useOriginalLocation();
   const searchParams = new URL(currentUrl).searchParams;
   const [open, setOpen] = React.useState(false);
+  const userQueryRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (open) userQueryRef.current?.focus();
+  }, [open]);
 
   const getInitialQuery = () => {
     const queryValue = searchParams.get("query") || "";
@@ -103,7 +108,7 @@ const SearchPopover = () => {
             <InputGroup>
               <Icon name="person" />
               <Input
-                autoFocus
+                ref={userQueryRef}
                 name="query"
                 placeholder="Search users (email, name, ID)"
                 type="text"
