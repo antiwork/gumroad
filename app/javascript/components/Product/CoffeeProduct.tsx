@@ -5,6 +5,7 @@ import { classNames } from "$app/utils/classNames";
 import { Product, Purchase } from "$app/components/Product";
 import { ConfigurationSelector, PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { CtaButton, getCtaName } from "$app/components/Product/CtaButton";
+import { Fieldset } from "$app/components/ui/Fieldset";
 
 export const CoffeeProduct = ({
   product,
@@ -62,14 +63,14 @@ export const CoffeeProduct = ({
         }}
       >
         {product.options.length === 1 ? (
-          <fieldset
+          <Fieldset
             style={{
               display: "grid",
               gridTemplateColumns: "1fr auto",
             }}
           >
             {configurationSelector}
-          </fieldset>
+          </Fieldset>
         ) : (
           <section className="flex flex-col gap-4">{configurationSelector}</section>
         )}

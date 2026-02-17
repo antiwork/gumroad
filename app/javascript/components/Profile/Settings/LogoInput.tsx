@@ -3,6 +3,8 @@ import * as React from "react";
 
 import { ImageUploader } from "$app/components/ImageUploader";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png"];
 
@@ -20,10 +22,10 @@ export const LogoInput = ({
   const id = React.useId();
 
   return (
-    <fieldset>
-      <legend>
-        <label htmlFor={id}>Logo</label>
-      </legend>
+    <Fieldset>
+      <FieldsetTitle>
+        <Label htmlFor={id}>Logo</Label>
+      </FieldsetTitle>
       <ImageUploader
         id={id}
         helpText="Your logo will be visible next to your name in your Gumroad profile and product pages. Your image should be at least 200x200px and must be in JPG or PNG format."
@@ -52,6 +54,6 @@ export const LogoInput = ({
         imageAlt="Current logo"
         disabled={disabled}
       />
-    </fieldset>
+    </Fieldset>
   );
 };
