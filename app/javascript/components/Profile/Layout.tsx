@@ -58,7 +58,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
             {!isDesktop ? headerButtons : null}
           </div>
           {!hideFollowForm ? (
-            <div className="flex basis-full items-center gap-3 border-b border-border px-4 py-8 lg:basis-auto lg:border-0 lg:p-0">
+            <div className="flex basis-full items-center gap-3 border-b border-border p-4 lg:basis-auto lg:border-0 lg:p-0">
               <FollowForm creatorProfile={creatorProfile} />
             </div>
           ) : null}
