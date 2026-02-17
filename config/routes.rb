@@ -67,13 +67,30 @@ Rails.application.routes.draw do
           post :resend_receipt
         end
       end
-      resources :payouts, only: [:index, :show]
+      resources :payouts, only: [:index, :show] do
+        collection do
+          get :upcoming
+        end
+      end
       resources :subscribers, only: [:show]
 
       put "/resource_subscriptions", to: "resource_subscriptions#create"
       delete "/resource_subscriptions/:id", to: "resource_subscriptions#destroy"
       get "/resource_subscriptions", to: "resource_subscriptions#index"
     end
+  end
+
+  def purchases_invoice_routes
+    scope module: :purchases do
+      resources :purchases, only: [] do
+        resource :invoice, only: [:create, :new] do
+          get :confirm
+          post :confirm, action: :confirm_email
+        end
+      end
+    end
+
+    get "/purchases/:purchase_id/generate_invoice", to: redirect { |path_params, request| "/purchases/#{path_params[:purchase_id]}/invoice/new#{request.query_string.present? ? "?#{request.query_string}" : ""}" }
   end
 
   def product_tracking_routes(named_routes: true)
@@ -94,20 +111,15 @@ Rails.application.routes.draw do
 
   def product_info_and_purchase_routes(named_routes: true)
     product_tracking_routes(named_routes:)
+    purchases_invoice_routes
 
     get "/offer_codes/compute_discount", to: "offer_codes#compute_discount"
     get "/products/search", to: "links#search"
 
     if named_routes
       get "/braintree/client_token", to: "braintree#client_token", as: :braintree_client_token
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice", as: :generate_invoice_by_buyer
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice", as: :confirm_generate_invoice
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice", as: :send_invoice
     else
       get "/braintree/client_token", to: "braintree#client_token"
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice"
     end
 
     post "/braintree/generate_transient_customer_token", to: "braintree#generate_transient_customer_token"
@@ -143,7 +155,6 @@ Rails.application.routes.draw do
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address"
 
     # discover/autocomplete_search
-    get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
     delete "/discover_search_autocomplete", to: "discover/search_autocomplete#delete_search_suggestion"
 
     put "/links/:id/sections", to: "links#update_sections"
@@ -153,10 +164,6 @@ Rails.application.routes.draw do
     get "/", to: "home#about"
 
     get "/discover", to: "discover#index"
-    get "/discover/recommended_products", to: "discover#recommended_products", as: :discover_recommended_products
-    namespace :discover do
-      resources :recommended_wishlists, only: [:index]
-    end
 
     product_info_and_purchase_routes
 
@@ -404,7 +411,6 @@ Rails.application.routes.draw do
       end
     end
 
-    get "/communities/*other", to: "communities#index" # route handled by react-router
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
     get "/a/:affiliate_id/:unique_permalink", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_product
@@ -508,7 +514,6 @@ Rails.application.routes.draw do
         post :confirm
         post :change_can_contact
         post :resend_receipt
-        post :send_invoice
         put :refund
         put :revoke_access
         put :undo_revoke_access
@@ -579,7 +584,7 @@ Rails.application.routes.draw do
     get "/purchases" => redirect("/library")
     get "/purchases/search", to: "purchases#search"
 
-    resources :checkout, only: [:index]
+    resource :checkout, only: [:show, :update], controller: :checkout
 
     resources :licenses, only: [:update]
 
@@ -770,8 +775,7 @@ Rails.application.routes.draw do
     get "/dashboard/consumption" => redirect("/dashboard/audience")
 
     # invoices
-    get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-    get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
+    purchases_invoice_routes
 
     # preorder
     post "/purchases/:id/cancel_preorder_by_seller", to: "purchases#cancel_preorder_by_seller", as: :cancel_preorder_by_seller
@@ -783,11 +787,12 @@ Rails.application.routes.draw do
     resources :subscriptions, only: [] do
       member do
         get :manage
-        get :magic_link
-        post :send_magic_link
         post :unsubscribe_by_user
         post :unsubscribe_by_seller
         put :update, to: "purchases#update_subscription"
+      end
+      scope module: "subscriptions" do
+        resource :magic_link, only: %i[new create]
       end
     end
 
@@ -796,7 +801,14 @@ Rails.application.routes.draw do
     post "/posts/:id/send_for_purchase/:purchase_id", to: "posts#send_for_purchase", as: :send_for_purchase
 
     # communities
-    get "/communities(/:seller_id/:community_id)", to: "communities#index", as: :community
+    resources :communities, only: %i[index] do
+      scope module: "communities" do
+        resources :chat_messages, only: [:create, :update, :destroy]
+        resource :last_read_chat_message, only: [:create]
+        resource :notification_settings, only: [:update]
+      end
+    end
+    get "/communities/:seller_id/:community_id", to: "communities#show", as: :community
 
     # emails
     resources :emails, only: [:index, :new, :create, :edit, :update, :destroy] do
@@ -871,8 +883,6 @@ Rails.application.routes.draw do
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :url_redirect_download_subtitle_file
     get "/s/:id", to: "url_redirects#stream", as: :url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :url_redirect_stream_page_for_product_file
-    get "/latest_media_locations/:id", to: "url_redirects#latest_media_locations", as: :url_redirect_latest_media_locations
-    get "/audio_durations/:id", to: "url_redirects#audio_durations", as: :url_redirect_audio_durations
     get "/media_urls/:id", to: "url_redirects#media_urls", as: :url_redirect_media_urls
 
     get "/read", to: "library#index"
@@ -911,18 +921,12 @@ Rails.application.routes.draw do
             resource :recipient_count, only: [:show], controller: "installments/recipient_counts", as: :installment_recipient_count
           end
         end
-        resource :cart, only: [:update]
         resources :products, only: [:show] do
           resources :product_posts, only: [:index]
           resources :existing_product_files, only: [:index]
           resource :receipt_preview, only: [:show]
         end
         resources :product_public_files, only: [:create]
-        resources :communities, only: [:index] do
-          resources :chat_messages, only: [:index, :create, :update, :destroy], controller: "communities/chat_messages", as: "chat_messages"
-          resource :last_read_chat_message, only: [:create], controller: "communities/last_read_chat_messages"
-          resource :notification_setting, only: [:update], controller: "communities/notification_settings", as: "notification_setting"
-        end
 
         resources :product_review_videos, only: [] do
           scope module: :product_review_videos do
@@ -954,7 +958,6 @@ Rails.application.routes.draw do
     get "/blackfriday", to: redirect("/discover?offer_code=BLACKFRIDAY2025"), as: :blackfriday
     get "/discover", to: "discover#index"
     get "/discover/categories",          to: "discover#categories"
-    get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
 
     root to: "public#home"
 

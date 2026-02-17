@@ -69,7 +69,9 @@ export const HomeFooter = () => (
     <div className="flex w-full max-w-3xl flex-col gap-16">
       <div className="flex flex-1 gap-16">
         <div className="flex flex-1 flex-col gap-3">
-          <FooterLink href={Routes.discover_path()}>Discover</FooterLink>
+          <FooterLink href={Routes.discover_path()} isInertia>
+            Discover
+          </FooterLink>
           <FooterLink href={Routes.gumroad_blog_root_path()} isInertia>
             Blog
           </FooterLink>

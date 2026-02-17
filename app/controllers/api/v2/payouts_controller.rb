@@ -34,17 +34,9 @@ class Api::V2::PayoutsController < Api::V2::BaseController
     paginated_payouts = paginated_payouts.limit(RESULTS_PER_PAGE + 1).to_a
 
     if params[:page_key].blank? && params[:include_upcoming] != "false"
-      current_resource_owner.upcoming_payout_amounts.filter { end_date.nil? || end_date >= _1 }.each do |payout_date, payout_amount|
+      current_resource_owner.upcoming_payouts.filter { end_date.nil? || end_date >= _1.created_at }.each do |payout|
         paginated_payouts.unshift(
-          Payment.new(
-            amount_cents: payout_amount,
-            currency: Currency::USD,
-            state: current_resource_owner.payouts_status,
-            created_at: payout_date,
-            processor: current_resource_owner.current_payout_processor,
-            bank_account: (current_resource_owner.active_bank_account if current_resource_owner.current_payout_processor == PayoutProcessorType::STRIPE),
-            payment_address: (current_resource_owner.paypal_payout_email if current_resource_owner.current_payout_processor == PayoutProcessorType::PAYPAL),
-          ).as_json.merge(id: nil)
+          payout.as_json.merge(id: nil)
         )
       end
     end
@@ -59,11 +51,22 @@ class Api::V2::PayoutsController < Api::V2::BaseController
   def show
     payout = current_resource_owner.payments.find_by_external_id(params[:id])
     if payout
-      include_sales = doorkeeper_token.scopes.include?("view_sales")
-      success_with_payout(payout.as_json(include_sales: include_sales))
+      include_sales = doorkeeper_token.scopes.include?("view_sales") && params[:include_sales] != "false"
+      include_transactions = params[:include_transactions] == "true"
+      success_with_payout(payout.as_json(include_sales:, include_transactions:))
     else
       error_with_payout
     end
+  end
+
+  def upcoming
+    payouts_json = []
+    current_resource_owner.upcoming_payouts.each do |payout|
+      include_sales = doorkeeper_token.scopes.include?("view_sales") && params[:include_sales] != "false"
+      include_transactions = params[:include_transactions] == "true"
+      payouts_json << payout.as_json(include_sales:, include_transactions:).merge(id: nil)
+    end
+    success_with_object(:payouts, payouts_json)
   end
 
   private

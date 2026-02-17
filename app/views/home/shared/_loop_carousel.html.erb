@@ -1,4 +1,4 @@
-<%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request) do %>
+<%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request), data: { cfasync: "false" } do %>
   document.addEventListener('DOMContentLoaded', function() {
     const slidesContainer = document.querySelector('[data-office-carousel-slides]');
     const prevBtn = document.querySelector('[data-office-carousel-prev]');

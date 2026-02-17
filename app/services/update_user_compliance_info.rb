@@ -44,7 +44,9 @@ class UpdateUserComplianceInfo
         new_compliance_info.is_business =             compliance_params[:is_business]             unless compliance_params[:is_business].nil?
         new_compliance_info.individual_tax_id =       compliance_params[:ssn_last_four]           if compliance_params[:ssn_last_four].present?
         new_compliance_info.individual_tax_id =       compliance_params[:individual_tax_id]       if compliance_params[:individual_tax_id].present?
-        new_compliance_info.business_tax_id =         compliance_params[:business_tax_id]         if compliance_params[:business_tax_id].present?
+        if compliance_params[:business_tax_id].present?
+          new_compliance_info.business_tax_id = compliance_params[:business_tax_id].gsub(/\D/, "")
+        end
         new_compliance_info.birthday = Date.new(compliance_params[:dob_year].to_i, compliance_params[:dob_month].to_i, compliance_params[:dob_day].to_i) if compliance_params[:dob_year].present? && compliance_params[:dob_year].to_i > 0
         new_compliance_info.skip_stripe_job_on_create = true
         new_compliance_info.phone =                   compliance_params[:phone]                   if compliance_params[:phone].present?
@@ -55,6 +57,11 @@ class UpdateUserComplianceInfo
       end
 
       return { success: false, error_message: new_compliance_info.errors.full_messages.to_sentence } unless saved
+
+      if new_compliance_info.is_business && new_compliance_info.legal_entity_country_code == "US" &&
+          new_compliance_info.business_tax_id.present? && new_compliance_info.business_tax_id.length != 9
+        return { success: false, error_message: "US business tax IDs (EIN) must have 9 digits." }
+      end
 
       begin
         StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info)

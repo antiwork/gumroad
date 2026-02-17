@@ -3,8 +3,8 @@ import * as React from "react";
 import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
+import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
 import { showAlert } from "$app/components/server-components/Alert";
-import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/server-components/DownloadPage/WithContent";
 
 export const TextInput = ({
   customFieldId,
