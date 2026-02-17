@@ -1,13 +1,11 @@
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { Tab } from "$app/parsers/profile";
 import GuidGenerator from "$app/utils/guid_generator";
-import { register } from "$app/utils/serverComponentUtil";
 
 import AutoLink from "$app/components/AutoLink";
 import { EditProfile, Props as EditProps } from "$app/components/Profile/EditPage";
-import { FollowFormBlock } from "$app/components/Profile/FollowForm";
+import { FollowUserFormBlock } from "$app/components/Profile/FollowUserForm";
 import { Layout } from "$app/components/Profile/Layout";
 import { PageProps as SectionsProps, Section, SectionLayout } from "$app/components/Profile/Sections";
 import { Tabs as UITabs, Tab as UITab } from "$app/components/ui/Tabs";
@@ -22,6 +20,7 @@ export type ProfileProps = {
 export type Props = SectionsProps & ProfileProps;
 
 export type TabWithId = Tab & { id: string };
+
 export function useTabs(initial: Tab[]) {
   const [tabs, setTabs] = React.useState(() => initial.map((tab) => ({ ...tab, id: GuidGenerator.generate() })));
 
@@ -86,7 +85,7 @@ const PublicProfile = (props: Props) => {
         sections.map((section) => <Section key={section.id} section={section} {...props} />)
       ) : (
         <SectionLayout className="grid flex-1">
-          <FollowFormBlock creatorProfile={props.creator_profile} />
+          <FollowUserFormBlock creatorProfile={props.creator_profile} />
         </SectionLayout>
       )}
     </>
@@ -98,5 +97,3 @@ export const Profile = (props: Props | EditProps) => (
     {"products" in props ? <EditProfile {...props} /> : <PublicProfile {...props} />}
   </Layout>
 );
-
-export default register({ component: Profile, propParser: createCast() });

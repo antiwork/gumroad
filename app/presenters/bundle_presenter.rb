@@ -67,6 +67,7 @@ class BundlePresenter
         is_quantity_enabled: product.quantity_enabled,
         quantity:,
         price_cents: product.price_cents,
+        created_at: product.created_at.iso8601,
         variants: variants.present? ? {
           selected_id: selected_variant_id || variants.first.external_id,
           list: variants.map do |variant|
