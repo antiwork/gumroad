@@ -51,32 +51,25 @@ router.on("invalid", (event) => {
   }
 });
 
+function assignLayout(page) {
+  if (page.publicLayout) {
+    page.layout ||= (page) => createElement(PublicLayout, { children: page });
+  } else if (page.loggedInUserLayout) {
+    page.layout ||= (page) => createElement(LoggedInUserLayout, { children: page });
+  } else {
+    page.layout ||= (page) => createElement(Layout, { children: page });
+  }
+  return page;
+}
+
 async function resolvePageComponent(name) {
   try {
     const module = await import(`../pages/${name}.tsx`);
-    const page = module.default;
-    if (page.publicLayout) {
-      page.layout ||= (page) => createElement(PublicLayout, { children: page });
-      return page;
-    } else if (page.loggedInUserLayout) {
-      page.layout ||= (page) => createElement(LoggedInUserLayout, { children: page });
-      return page;
-    }
-    page.layout ||= (page) => createElement(Layout, { children: page });
-    return page;
+    return assignLayout(module.default);
   } catch {
     try {
       const module = await import(`../pages/${name}.jsx`);
-      const page = module.default;
-      if (page.publicLayout) {
-        page.layout ||= (page) => createElement(PublicLayout, { children: page });
-        return page;
-      } else if (page.loggedInUserLayout) {
-        page.layout ||= (page) => createElement(LoggedInUserLayout, { children: page });
-        return page;
-      }
-      page.layout ||= (page) => createElement(Layout, { children: page });
-      return page;
+      return assignLayout(module.default);
     } catch {
       throw new Error(`Page component not found: ${name}`);
     }
@@ -84,9 +77,9 @@ async function resolvePageComponent(name) {
 }
 
 createInertiaApp({
-  progress: false,
-  resolve: (name) => resolvePageComponent(name),
-  title: (title) => (title ? `${title}` : "Gumroad"),
+  progress: { delay: 100, color: "#FF90E8" },
+  resolve: resolvePageComponent,
+  title: (title) => title || "Gumroad",
   setup({ el, App, props }) {
     if (!el) return;
 

@@ -54,7 +54,7 @@ describe Checkout::FormController do
         put :update, params: {
           user: { display_offer_code_field: true, recommendation_type: User::RecommendationType::NO_RECOMMENDATIONS, tipping_enabled: true },
           custom_fields: [{ id: nil, type: "text", name: "Field", required: true, global: true }]
-        }, as: :json
+        }
         seller.reload
       end.to change { seller.display_offer_code_field }.from(false).to(true)
       .and change { seller.tipping_enabled? }.from(false).to(true)
@@ -66,7 +66,8 @@ describe Checkout::FormController do
       expect(field.required).to eq true
       expect(field.global).to eq true
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(checkout_form_path)
+      expect(flash[:notice]).to eq("Changes saved!")
     end
 
     it "updates custom fields and deletes ones that aren't included" do
@@ -75,11 +76,27 @@ describe Checkout::FormController do
       expect do
         put :update, params: {
           custom_fields: [{ id: field.external_id, name: "New name" }]
-        }, as: :json
+        }
         field.reload
       end.to change { seller.custom_fields.count }.from(2).to(1).and change { field.name }.to("New name")
 
-      expect(response).to be_successful
+      expect(response).to redirect_to(checkout_form_path)
+      expect(flash[:notice]).to eq("Changes saved!")
+    end
+
+    context "when validation fails" do
+      it "redirects with error flash and inertia errors" do
+        allow_any_instance_of(CustomField).to receive(:update!).and_raise(
+          ActiveRecord::RecordInvalid.new(CustomField.new.tap { |cf| cf.errors.add(:name, "can't be blank") })
+        )
+
+        put :update, params: {
+          custom_fields: [{ id: nil, type: "text", name: "", required: true, global: true }]
+        }
+
+        expect(response).to redirect_to(checkout_form_path)
+        expect(flash[:alert]).to eq("Name can't be blank")
+      end
     end
   end
 end

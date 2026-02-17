@@ -19,7 +19,7 @@ describe ReceiptPresenter::PaymentInfo do
   end
   let(:payment_info) { described_class.new(purchase) }
   let(:invoice_url) do
-    Rails.application.routes.url_helpers.generate_invoice_by_buyer_url(
+    Rails.application.routes.url_helpers.new_purchase_invoice_url(
       purchase.external_id,
       email: purchase.email,
       host: UrlService.domain_with_protocol
@@ -552,7 +552,7 @@ describe ReceiptPresenter::PaymentInfo do
       let(:charge) { create(:charge) }
       let(:invoice_url) do
         purchase = charge.send(:purchase_as_chargeable)
-        Rails.application.routes.url_helpers.generate_invoice_by_buyer_url(
+        Rails.application.routes.url_helpers.new_purchase_invoice_url(
           purchase.external_id,
           email: purchase.email,
           host: UrlService.domain_with_protocol

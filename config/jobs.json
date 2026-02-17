@@ -7,6 +7,8 @@
       "type": "Full-time",
       "location": "New York",
       "category": "Engineering",
+      "intro": "Gumroad is a profitable, independent, and venture-debt-free tool for creators. We've paid out over $1 billion. Now, we're growing a high-density team in New York to reclaim our spot as the #1 creator economy tool. To get there, our core engine the path from a customer's \"Buy\" button to a creator's bank account must be the most reliable and frictionless infrastructure on the internet.",
+      "role_summary": "You will own the integrity of the Gumroad economy. We process millions of dollars a week across every time zone. Your job is to ensure that code is fast, math is perfect, and money moves without fail.",
       "responsibilities": [
         {
           "title": "Full Stack development",
@@ -57,6 +59,8 @@
       "type": "Full-time",
       "location": "New York",
       "category": "Design",
+      "intro": "Gumroad is a profitable, independent, and venture-debt-free tool for creators. We've paid out over $1 billion. Now, we're growing a high-density team in New York to reclaim our spot as the #1 creator economy tool. To get there, we need world-class design that makes every creator interaction intuitive, delightful, and effortless.",
+      "role_summary": "You will own the look, feel, and usability of Gumroad. Every screen a creator touches, every flow a buyer completes — that's your canvas. Your job is to ensure the experience is clear, beautiful, and gets out of the way.",
       "responsibilities": [
         {
           "title": "End-to-end product design",
@@ -106,6 +110,8 @@
       "type": "Full-time",
       "location": "New York",
       "category": "Support",
+      "intro": "Gumroad is a profitable, independent, and venture-debt-free tool for creators. We've paid out over $1 billion. Now, we're growing a high-density team in New York to reclaim our spot as the #1 creator economy tool. To get there, we need creators to feel supported, heard, and empowered to succeed on our platform.",
+      "role_summary": "You will be the voice of Gumroad to our creators. We serve thousands of creators across every time zone. Your job is to ensure that every creator gets the help they need, when they need it, so they can focus on what they do best.",
       "responsibilities": [
         {
           "title": "Creator support",

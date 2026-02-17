@@ -11,6 +11,9 @@ class UserComplianceInfo < ApplicationRecord
   stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, on: :create
 
   MINIMUM_DATE_OF_BIRTH_AGE = 13
+  KANA_NAME_REGEX = /\A[\p{Katakana}\s\-.]*\z/
+  KANA_ADDRESS_REGEX = /\A[\p{Katakana}\p{Latin}\d\s\-.]*\z/
+  ROMAJI_REGEX = /\A[^\p{Han}\p{Hiragana}\p{Katakana}]*\z/
 
   belongs_to :user, optional: true
   validates_presence_of :user
@@ -28,6 +31,8 @@ class UserComplianceInfo < ApplicationRecord
   serialize :verticals, type: Array, coder: YAML
 
   validate :birthday_is_over_minimum_age
+  validate :kana_fields_format
+  validate :business_name_romaji_format
 
   after_create_commit :handle_stripe_compliance_info
   after_create_commit :handle_compliance_info_request
@@ -180,6 +185,45 @@ class UserComplianceInfo < ApplicationRecord
 
     def handle_compliance_info_request
       UserComplianceInfoRequest.handle_new_user_compliance_info(self)
+    end
+
+    def kana_fields_format
+      return if country_code != Compliance::Countries::JPN.alpha2
+
+      validate_kana_fields(
+        { first_name_kana: "First name (Kana)",
+          last_name_kana: "Last name (Kana)",
+          business_name_kana: "Business name (Kana)" },
+        KANA_NAME_REGEX,
+        "katakana, spaces, dashes, and dots"
+      )
+
+      validate_kana_fields(
+        { building_number_kana: "Building number (Kana)",
+          street_address_kana: "Street address (Kana)",
+          business_building_number_kana: "Business building number (Kana)",
+          business_street_address_kana: "Business street address (Kana)" },
+        KANA_ADDRESS_REGEX,
+        "katakana, latin characters, digits, spaces, dashes, and dots"
+      )
+    end
+
+    def validate_kana_fields(fields, regex, allowed_description)
+      fields.each do |field, label|
+        value = send(field)
+        next if value.blank?
+        next if value.match?(regex)
+        errors.add(:base, "#{label} may only contain #{allowed_description}")
+      end
+    end
+
+    def business_name_romaji_format
+      return if business_country_code != Compliance::Countries::JPN.alpha2
+      return if !is_business?
+      return if business_name.blank?
+      return if business_name.match?(ROMAJI_REGEX)
+
+      errors.add(:base, "Legal business name must be in romaji (latin characters) for Japanese accounts")
     end
 
     def birthday_is_over_minimum_age

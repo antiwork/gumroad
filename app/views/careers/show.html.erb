@@ -14,7 +14,7 @@
     <div class="mx-auto max-w-2xl px-8">
       <div class="prose prose-lg max-w-none">
         <p class="text-lg md:text-xl leading-relaxed">
-          Gumroad is a profitable, independent, and venture-debt-free tool for creators. We've paid out over $1 billion. Now, we're growing a high-density team in New York to reclaim our spot as the #1 creator economy tool. To get there, our core engine the path from a customer's "Buy" button to a creator's bank account must be the most reliable and frictionless infrastructure on the internet.
+          <%= job[:intro] %>
         </p>
         <p class="text-lg md:text-xl leading-relaxed">
           This is a full-time, in-person role in New York. If you'd prefer to contribute remotely, check out our <a href="https://antiwork.com/bounties" class="underline hover:text-pink">open-source bounties</a>.
@@ -22,7 +22,7 @@
 
         <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">What you'll do</h2>
         <p class="text-lg">
-          You will own the integrity of the Gumroad economy. We process millions of dollars a week across every time zone. Your job is to ensure that code is fast, math is perfect, and money moves without fail.
+          <%= job[:role_summary] %>
         </p>
         <ul class="mt-6 space-y-3">
           <% job[:responsibilities]&.each do |item| %>
@@ -30,13 +30,15 @@
           <% end %>
         </ul>
 
-        <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">The stack</h2>
-        <p class="text-lg mb-4">We ship with tools that work.</p>
-        <ul class="space-y-2">
-          <% job[:stack]&.each do |item| %>
-            <li class="text-lg"><strong><%= item[:name] %>:</strong> <%= item[:tech] %></li>
-          <% end %>
-        </ul>
+        <% if job[:stack].present? %>
+          <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">The stack</h2>
+          <p class="text-lg mb-4">We ship with tools that work.</p>
+          <ul class="space-y-2">
+            <% job[:stack].each do |item| %>
+              <li class="text-lg"><strong><%= item[:name] %>:</strong> <%= item[:tech] %></li>
+            <% end %>
+          </ul>
+        <% end %>
 
         <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">What we offer</h2>
         <p class="text-lg mb-4">
