@@ -384,7 +384,7 @@ export const DashboardPage = ({
         </div>
       ) : null}
 
-      <div className="p-4 md:p-8">
+      <div className={cx({ "p-4 md:p-8": sales.length > 0 })}>
         <ProductsTable sales={sales} />
       </div>
 
