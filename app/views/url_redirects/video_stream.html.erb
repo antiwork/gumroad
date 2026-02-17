@@ -1,8 +1,0 @@
-<%= load_pack("video_stream") %>
-
-<%= react_component "VideoStreamPlayer", props: { playlist: @videos_playlist[:playlist],
-    index_to_play: @videos_playlist[:index_to_play].to_i,
-    url_redirect_id: @url_redirect_id,
-    purchase_id: @purchase_id,
-    should_show_transcoding_notice: @should_show_transcoding_notice,
-    transcode_on_first_sale: @product_file.link&.transcode_videos_on_purchase.present? } %>

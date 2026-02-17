@@ -5,7 +5,7 @@ import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
-import { useMediaUrls, usePurchaseInfo } from "$app/components/server-components/DownloadPage/WithContent";
+import { useMediaUrls, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
 
 const LOCATION_TRACK_EVENT_DELAY = 10000;
 
