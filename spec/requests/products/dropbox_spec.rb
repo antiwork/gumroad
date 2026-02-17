@@ -119,7 +119,6 @@ describe "Dropbox uploads", type: :system, js: true do
         click_on "Delete"
       end
     end
-    sleep 0.5 # wait for the editor to update the content
     save_change
     expect(page).to have_embed(name: "GumroadCreatorFAQ")
     expect(page).not_to have_embed(name: "Download-Card")

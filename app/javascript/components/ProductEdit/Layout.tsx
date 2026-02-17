@@ -294,16 +294,24 @@ export const Layout = ({
               </CopyToClipboard>
             </>
           ) : currentTab === "product" && !isCoffee ? (
-            <Button
-              color="primary"
-              disabled={isBusy}
-              onClick={() => {
-                onSave();
-                setTimeout(() => router.visit(Routes.products_edit_content_path(uniquePermalink)), 0);
-              }}
-            >
-              {isSaving ? "Saving changes..." : "Save and continue"}
-            </Button>
+            <>
+              <Button
+                color="primary"
+                disabled={isBusy}
+                onClick={() => {
+                  const targetUrl = Routes.products_edit_content_path(uniquePermalink);
+                  const handled = onBeforeNavigate?.(targetUrl) ?? false;
+                  if (!handled) router.visit(targetUrl);
+                }}
+              >
+                {isSaving ? "Saving changes..." : "Save and continue"}
+              </Button>
+              <WithTooltip tip={saveButtonTooltip}>
+                <Button color="accent" disabled={isBusy} onClick={() => setPublished(true)}>
+                  {isPublishing ? "Publishing..." : "Publish and continue"}
+                </Button>
+              </WithTooltip>
+            </>
           ) : (
             <>
               {saveButton}

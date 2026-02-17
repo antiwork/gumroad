@@ -478,6 +478,7 @@ const FileEmbedNodeView = ({
         ) : null}
         <NodeActionsMenu
           editor={editor}
+          onDelete={onCancel}
           actions={!isInGroup || fileEmbedGroups.length > 0 || parentNode.childCount > 1 ? [folderAction] : []}
         />
         <RowContent className="content">

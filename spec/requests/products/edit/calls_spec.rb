@@ -54,14 +54,14 @@ describe "Calls Edit", type: :system, js: true do
     click_on "Save changes"
     expect(page).to have_alert(text: "Changes saved!")
 
-    thirty_minutes = call.alive_variants.first
+    refresh
+
+    thirty_minutes = call.reload.alive_variants.first
     expect(thirty_minutes.name).to eq("30 minutes")
     expect(thirty_minutes.duration_in_minutes).to eq(30)
     expect(thirty_minutes.description).to eq("An epic call with me!")
     expect(thirty_minutes.price_difference_cents).to eq(10000)
     expect(thirty_minutes.max_purchase_count).to eq(10)
-
-    refresh
 
     within "[role='listitem']", text: "30 minutes" do
       expect(page).to have_field("Duration", with: 30)

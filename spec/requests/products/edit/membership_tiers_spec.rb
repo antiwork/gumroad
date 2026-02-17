@@ -11,10 +11,6 @@ describe("Product Edit Memberships", type: :system, js: true) do
     row.find("[aria-grabbed='false']").drag_to place_before
   end
 
-  def save_change(expect_alert: true, expect_message: "Changes saved successfully!")
-    super
-  end
-
   let(:seller) { create(:named_seller) }
 
   include_context "with switching account to user as admin for seller"

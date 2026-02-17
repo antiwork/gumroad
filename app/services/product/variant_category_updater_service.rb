@@ -49,21 +49,29 @@ class Product::VariantCategoryUpdaterService
       validate_variant_recurrences!(category_params[:options])
       category_params[:options].each_with_index do |option, index|
         begin
-          variant = create_or_update_variant!(option[:id],
-                                              name: option[:name],
-                                              description: option[:description],
-                                              duration_in_minutes: option[:duration_in_minutes],
-                                              price_difference_cents: string_to_price_cents(
-                                                price_currency_type.to_sym,
-                                                option[:price_difference].to_s
-                                              ),
-                                              customizable_price: option[:customizable_price],
-                                              max_purchase_count: option[:max_purchase_count],
-                                              position_in_category: index,
-                                              variant_category:,
-                                              apply_price_changes_to_existing_memberships: !!option[:apply_price_changes_to_existing_memberships],
-                                              subscription_price_change_effective_date: option[:subscription_price_change_effective_date],
-                                              subscription_price_change_message: option[:subscription_price_change_message])
+          params = {
+            position_in_category: index,
+            variant_category:,
+          }
+          params[:name] = option[:name] if option_has_key?(option, :name)
+          params[:description] = option[:description] if option_has_key?(option, :description)
+          params[:duration_in_minutes] = option[:duration_in_minutes] if option_has_key?(option, :duration_in_minutes)
+          if option_has_key?(option, :price_difference)
+            params[:price_difference_cents] = string_to_price_cents(price_currency_type.to_sym, option[:price_difference].to_s)
+          end
+          params[:customizable_price] = option[:customizable_price] if option_has_key?(option, :customizable_price)
+          params[:max_purchase_count] = option[:max_purchase_count] if option_has_key?(option, :max_purchase_count)
+          if option_has_key?(option, :apply_price_changes_to_existing_memberships)
+            params[:apply_price_changes_to_existing_memberships] = !!option[:apply_price_changes_to_existing_memberships]
+          end
+          if option_has_key?(option, :subscription_price_change_effective_date)
+            params[:subscription_price_change_effective_date] = option[:subscription_price_change_effective_date]
+          end
+          if option_has_key?(option, :subscription_price_change_message)
+            params[:subscription_price_change_message] = option[:subscription_price_change_message]
+          end
+
+          variant = create_or_update_variant!(option[:id], params)
           save_integrations(variant, option)
           save_rich_content(variant, option)
           variant.product_files = ProductFile.find(variant.alive_rich_contents.flat_map { _1.embedded_product_file_ids_in_order }.uniq)
@@ -109,6 +117,10 @@ class Product::VariantCategoryUpdaterService
 
     def temporary_variant_id?(external_id)
       external_id.to_s.match?(/\A\d+\z/)
+    end
+
+    def option_has_key?(option, key)
+      option.key?(key) || option.key?(key.to_s)
     end
 
     def has_variant_recurrences?

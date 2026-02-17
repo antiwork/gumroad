@@ -10,9 +10,11 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 export const NodeActionsMenu = ({
   editor,
   actions,
+  onDelete,
 }: {
   editor: Editor;
   actions?: { item: () => React.ReactNode; menu: (close: () => void) => React.ReactNode }[];
+  onDelete?: () => void;
 }) => {
   const [open, setOpen] = React.useState(false);
   const [selectedActionIndex, setSelectedActionIndex] = React.useState<number | null>(null);
@@ -58,7 +60,10 @@ export const NodeActionsMenu = ({
                 ))}
                 <div
                   style={{ color: "rgb(var(--danger))" }}
-                  onClick={() => editor.commands.deleteSelection()}
+                  onClick={() => {
+                    if (onDelete) onDelete();
+                    else editor.commands.deleteSelection();
+                  }}
                   role="menuitem"
                 >
                   <Icon name="trash2" />

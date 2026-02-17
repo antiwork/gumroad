@@ -57,7 +57,7 @@ describe Products::Edit::ContentController, inertia: true do
         end.to change { product.name }.to("New Product Name")
 
         expect(response).to redirect_to(products_edit_content_path(product.unique_permalink))
-        expect(flash[:notice]).to eq("Changes saved successfully!")
+        expect(flash[:notice]).to eq("Changes saved!")
       end
     end
 

@@ -138,9 +138,9 @@ class Products::Edit::ProductController < Products::Edit::BaseController
     end
 
     if params[:redirect_to].present?
-      redirect_to params[:redirect_to], notice: "Changes saved successfully!", status: :see_other
+      redirect_to params[:redirect_to], notice: "Changes saved!", status: :see_other
     else
-      redirect_to products_edit_product_path(@product.unique_permalink), notice: "Changes saved successfully!", status: :see_other
+      redirect_to products_edit_product_path(@product.unique_permalink), notice: "Changes saved!", status: :see_other
     end
   end
 end

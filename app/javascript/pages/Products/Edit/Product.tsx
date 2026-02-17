@@ -115,15 +115,14 @@ export default function ProductEditPage() {
   const handleSave = () => {
     form.transform((data) => ({
       ...data,
-      currency_type: currencyType,
+      price_currency_type: currencyType,
+      installment_plan: data.allow_installment_plan ? data.installment_plan : null,
     }));
 
     form.patch(Routes.products_edit_product_path(props.unique_permalink), {
       preserveScroll: true,
       onSuccess: () => {
-        setContentUpdates({
-          uniquePermalinkOrVariantIds: [props.unique_permalink],
-        });
+        setContentUpdates(null);
       },
     });
   };
@@ -132,10 +131,13 @@ export default function ProductEditPage() {
     if (!form.isDirty) return false;
     form.transform((data) => ({
       ...data,
-      currency_type: currencyType,
+      price_currency_type: currencyType,
+      installment_plan: data.allow_installment_plan ? data.installment_plan : null,
       redirect_to: targetUrl,
     }));
-    form.patch(Routes.products_edit_product_path(props.unique_permalink), { preserveScroll: true });
+    form.patch(Routes.products_edit_product_path(props.unique_permalink), {
+      preserveScroll: true,
+    });
     return true;
   };
 
@@ -387,13 +389,23 @@ export default function ProductEditPage() {
                       eligibleForInstallmentPlans={props.product.eligible_for_installment_plans}
                       allowInstallmentPlan={form.data.allow_installment_plan}
                       numberOfInstallments={form.data.installment_plan?.number_of_installments ?? null}
-                      onAllowInstallmentPlanChange={(allowed) => form.setData("allow_installment_plan", allowed)}
+                      onAllowInstallmentPlanChange={(allowed) =>
+                        form.setData((data) => ({
+                          ...data,
+                          allow_installment_plan: allowed,
+                          installment_plan: allowed ? data.installment_plan : null,
+                        }))
+                      }
                       onNumberOfInstallmentsChange={(value) =>
                         form.setData("installment_plan", {
                           ...form.data.installment_plan,
                           number_of_installments: value,
                         })
                       }
+                      showDefaultDiscountCodeSelector
+                      product={form.data}
+                      updateProduct={updateProductPartial}
+                      uniquePermalink={props.unique_permalink}
                     />
                     {productData.native_type === "commission" ? (
                       <p

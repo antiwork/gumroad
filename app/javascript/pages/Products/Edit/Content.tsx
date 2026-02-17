@@ -37,7 +37,6 @@ import { FileEmbed, FileEmbedConfig, getDownloadUrl } from "$app/components/Prod
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { Page, PageTab, titleWithFallback } from "$app/components/ProductEdit/ContentTab/PageTab";
 import { Layout } from "$app/components/ProductEdit/Layout";
-import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import {
   type ExistingFileEntry,
   type FileEntry,
@@ -213,6 +212,7 @@ const ContentTabContent = ({
   const isDesktop = useIsAboveBreakpoint("lg");
 
   const selectedVariant = product.has_same_rich_content_for_all_variants
+    || product.variants.length <= 1
     ? null
     : product.variants.find((variant) => variant.id === selectedVariantId);
 
@@ -1211,6 +1211,16 @@ export default function ContentPage() {
     ...product,
     files: product.files,
   });
+  React.useEffect(() => {
+    const hasNoVariantSpecificContent = form.data.variants.every((variant) => variant.rich_content.length === 0);
+    if (
+      !form.data.has_same_rich_content_for_all_variants &&
+      form.data.rich_content.length === 0 &&
+      hasNoVariantSpecificContent
+    ) {
+      form.setData("has_same_rich_content_for_all_variants", true);
+    }
+  }, []);
   const [existingFiles, setExistingFiles] = React.useState(existing_files);
   React.useEffect(() => {
     setExistingFiles(existing_files);
@@ -1286,8 +1296,14 @@ export default function ContentPage() {
     form.patch(Routes.products_edit_content_path(unique_permalink), {
       preserveScroll: true,
       onSuccess: () => {
+        const uniquePermalinkOrVariantIds =
+          form.data.has_same_rich_content_for_all_variants || form.data.variants.length <= 1
+            ? [unique_permalink]
+            : selectedVariantId
+              ? [selectedVariantId]
+              : [unique_permalink];
         setContentUpdates({
-          uniquePermalinkOrVariantIds: [unique_permalink],
+          uniquePermalinkOrVariantIds,
         });
       },
     });
@@ -1383,17 +1399,6 @@ export default function ContentPage() {
         <EvaporateUploaderProvider value={evaporateUploader}>
           <S3UploadConfigProvider value={s3UploadConfig}>
             <Layout
-              preview={
-                <ProductPreview
-                  product={form.data}
-                  id={id}
-                  uniquePermalink={unique_permalink}
-                  currencyType={props.currency_type}
-                  ratings={props.ratings}
-                  seller_refund_policy_enabled={props.seller_refund_policy_enabled}
-                  seller_refund_policy={props.seller_refund_policy}
-                />
-              }
               currentTab="content"
               onSave={handleSave}
               isSaving={form.processing}
