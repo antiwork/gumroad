@@ -19,12 +19,11 @@ describe DashboardProductsPagePresenter do
 
     it "returns has_products false when seller has no visible non-archived products" do
       presenter = described_class.new(pundit_user:)
-
-      expect(presenter.page_props).to eq({
-                                           has_products: false,
-                                           archived_products_count: 1,
-                                           can_create_product: true
-                                         })
+      expect(presenter.page_props).to eq(
+        has_products: false,
+        archived_products_count: 1,
+        can_create_product: true
+      )
     end
 
     context "when seller has visible non-archived products" do
@@ -32,13 +31,11 @@ describe DashboardProductsPagePresenter do
 
       it "returns has_products true" do
         presenter = described_class.new(pundit_user:)
-
         expect(presenter.page_props).to include(has_products: true)
       end
 
       it "keeps has_products true even when query has no matches" do
         presenter = described_class.new(pundit_user:, query: "no-match")
-
         expect(presenter.page_props).to include(has_products: true)
       end
     end
