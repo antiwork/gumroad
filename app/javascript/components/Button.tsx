@@ -49,7 +49,7 @@ export const buttonVariants = cva(
         discord: "bg-[#7289da] text-white border-[#7289da]",
         stripe: "bg-[#625bf6] text-white border-[#625bf6]",
         facebook: "bg-[#4267b2] text-white border-[#4267b2]",
-        twitter: "bg-black text-white border-black",
+        twitter: "bg-black text-white",
         apple: "bg-black text-white",
         android: "bg-[#142f40] text-white",
         kindle: "bg-[#f3a642] text-black border-[#f3a642]",

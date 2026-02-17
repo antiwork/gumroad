@@ -304,7 +304,9 @@ export default function Churn() {
               <option value="monthly">Monthly</option>
             </select>
             <ProductsPopover products={products} setProducts={setProducts} />
-            <DateRangePicker {...dateRange} />
+            <div className="col-span-2">
+              <DateRangePicker {...dateRange} />
+            </div>
           </>
         ) : null
       }

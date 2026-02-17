@@ -6,6 +6,7 @@ import { TextInput } from "$app/components/Download/CustomField/TextInput";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Textarea } from "$app/components/ui/Textarea";
+import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 
 export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewProps) => {
   const label = cast<string | null>(node.attrs.label);
@@ -18,26 +19,31 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
   };
 
   return (
-    <NodeViewWrapper data-drag-handle>
+    <NodeViewWrapper data-drag-handle data-input-embed>
       <Fieldset>
         {editor.isEditable ? (
           <>
-            <Input
-              value={label ?? ""}
-              placeholder="Title"
-              onChange={(evt) => updateAttributes({ label: evt.target.value })}
-              className="border-0"
-              style={{
-                background: "none",
-                padding: 0,
-                margin: 0,
-                font: "inherit",
-                color: "inherit",
-                outline: "none",
-                borderRadius: 0,
-              }}
-            />
-            {type === "shortAnswer" ? <Input {...sharedProps} /> : <Textarea {...sharedProps} />}
+            <NodeActionsMenu editor={editor} />
+
+            <fieldset className="m-0 min-w-0 flex-1 border-0 p-0">
+              <Input
+                value={label ?? ""}
+                placeholder="Title"
+                onChange={(evt) => updateAttributes({ label: evt.target.value })}
+                className="border-0"
+                style={{
+                  background: "none",
+                  padding: 0,
+                  margin: 0,
+                  font: "inherit",
+                  color: "inherit",
+                  outline: "none",
+                  border: "none",
+                  borderRadius: 0,
+                }}
+              />
+              {type === "shortAnswer" ? <Input {...sharedProps} /> : <Textarea {...sharedProps} />}
+            </fieldset>
           </>
         ) : (
           <TextInput customFieldId={customFieldId ?? ""} type={type} label={label ?? ""} />

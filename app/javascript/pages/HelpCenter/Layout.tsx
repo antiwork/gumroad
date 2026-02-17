@@ -11,8 +11,6 @@ import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
-import githubIcon from "$assets/images/help-center/github-icon.svg";
-
 type HelperSession = {
   email?: string | null;
   emailHash?: string | null;
@@ -40,7 +38,7 @@ function ReportBugButton() {
       rel="noopener noreferrer"
       className="flex items-center gap-2"
     >
-      <img src={githubIcon} alt="" className="h-4 w-4" />
+      <span className="brand-icon brand-icon-github" />
       Report a bug
     </NavigationButton>
   );
@@ -94,9 +92,11 @@ function HelpCenterHeader({
   const renderActions = () => {
     if (showSearchButton) {
       return (
-        <Link href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
-          <Icon name="solid-search" />
-        </Link>
+        <Button asChild>
+          <Link href={Routes.help_center_root_path()} aria-label="Search" title="Search">
+            <Icon name="solid-search" />
+          </Link>
+        </Button>
       );
     }
 
