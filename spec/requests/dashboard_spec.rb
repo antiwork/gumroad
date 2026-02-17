@@ -56,6 +56,26 @@ describe "Dashboard", js: true, type: :system do
     end
   end
 
+  describe "Best selling" do
+    context "when seller has no products" do
+      it "does not render the best selling section" do
+        visit dashboard_path
+
+        expect(page).not_to have_text("Best selling")
+      end
+    end
+
+    context "when seller has products" do
+      before { create(:product, user: seller) }
+
+      it "renders the best selling section" do
+        visit dashboard_path
+
+        expect(page).to have_text("Best selling")
+      end
+    end
+  end
+
   describe "Greeter" do
     context "with switching account to user as admin for seller" do
       include_context "with switching account to user as admin for seller"
