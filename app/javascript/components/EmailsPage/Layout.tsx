@@ -40,8 +40,8 @@ export const EmailsLayout = ({ selectedTab, children, hasPosts, query, onQueryCh
         <Tab asChild isSelected={selectedTab === "drafts"}>
           <Link href={Routes.drafts_emails_path()}>Drafts</Link>
         </Tab>
-        <Tab href={Routes.followers_path()} isSelected={false}>
-          Subscribers
+        <Tab asChild isSelected={false}>
+          <Link href={Routes.followers_path()}>Subscribers</Link>
         </Tab>
       </Tabs>
     </PageHeader>

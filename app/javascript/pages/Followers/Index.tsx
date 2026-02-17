@@ -1,4 +1,4 @@
-import { router, useForm, usePage } from "@inertiajs/react";
+import { Link, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -38,21 +38,21 @@ const Layout = ({
     <div>
       <PageHeader title={title} actions={actions}>
         <Tabs>
-          <Tab href={Routes.published_emails_path()} isSelected={false}>
-            Published
+          <Tab asChild isSelected={false}>
+            <Link href={Routes.published_emails_path()}>Published</Link>
           </Tab>
           {loggedInUser?.policies.installment.create ? (
             <>
-              <Tab href={Routes.scheduled_emails_path()} isSelected={false}>
-                Scheduled
+              <Tab asChild isSelected={false}>
+                <Link href={Routes.scheduled_emails_path()}>Scheduled</Link>
               </Tab>
-              <Tab href={Routes.drafts_emails_path()} isSelected={false}>
-                Drafts
+              <Tab asChild isSelected={false}>
+                <Link href={Routes.drafts_emails_path()}>Drafts</Link>
               </Tab>
             </>
           ) : null}
-          <Tab href={Routes.followers_path()} isSelected>
-            Subscribers
+          <Tab asChild isSelected>
+            <Link href={Routes.followers_path()}>Subscribers</Link>
           </Tab>
         </Tabs>
       </PageHeader>
