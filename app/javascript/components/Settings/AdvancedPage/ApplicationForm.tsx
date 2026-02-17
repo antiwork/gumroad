@@ -10,6 +10,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -138,7 +139,21 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
           <Label>Application icon</Label>
         </FieldsetTitle>
         <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "flex-start" }}>
-          <img className="application-icon" src={icon?.url || placeholderAppIcon} width={80} height={80} />
+          <div className="relative inline-block">
+            <img className="application-icon" src={icon?.url || placeholderAppIcon} width={80} height={80} />
+            {icon ? (
+              <Button
+                color="primary"
+                small
+                className="absolute top-2 right-2 p-0.5 leading-none text-xs"
+                aria-label="Remove icon"
+                onClick={() => setIcon(null)}
+                disabled={isUploadingIcon || isSubmitting}
+              >
+                <Icon name="trash2" />
+              </Button>
+            ) : null}
+          </div>
           <Button onClick={() => iconInputRef.current?.click()} disabled={isUploadingIcon || isSubmitting}>
             {isUploadingIcon ? "Uploading..." : "Upload icon"}
           </Button>
