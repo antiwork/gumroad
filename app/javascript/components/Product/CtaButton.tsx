@@ -142,9 +142,8 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       style: { alignItems: "unset" },
     };
 
-    const { installment_plan: installmentPlan } = product;
-    const hasInstallments = installmentPlan != null && installmentPlan.number_of_installments > 1;
-    const compactOnMobile = hasInstallments ? "max-lg:text-sm max-lg:p-2" : undefined;
+    const hasInstallments = product.installment_plan != null && product.installment_plan.number_of_installments > 1;
+    const compactOnMobile = hasInstallments ? "max-lg:text-sm max-lg:px-2 max-lg:py-3 max-lg:gap-2" : undefined;
 
     return (
       <>
@@ -167,7 +166,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
                     : "I want this!")}
         </NavigationButton>
 
-        {hasInstallments ? (
+        {product.installment_plan && product.installment_plan.number_of_installments > 1 ? (
           <>
             <NavigationButton
               color="black"
@@ -175,14 +174,14 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
               className={compactOnMobile}
               {...buttonCommonProps}
             >
-              Pay in {installmentPlan.number_of_installments} installments
+              Pay in {product.installment_plan.number_of_installments} installments
             </NavigationButton>
             {showInstallmentPlanNotes ? (
               <small className="text-center">
                 {formatInstallmentPaymentSchedule(
                   discountedPriceCents,
                   product.currency_code,
-                  installmentPlan.number_of_installments,
+                  product.installment_plan.number_of_installments,
                 )}
               </small>
             ) : null}
