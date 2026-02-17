@@ -22,7 +22,7 @@ describe DefaultAbandonedCartWorkflowGeneratorService do
         expect(workflow.bought_variants).to be_nil
         installment = workflow.installments.alive.sole
         expect(installment.name).to eq("You left something in your cart")
-        expect(installment.message).to eq(%Q(<p>When you're ready to buy, <a href="#{checkout_index_url(host: DOMAIN)}" target="_blank" rel="noopener noreferrer nofollow">complete checking out</a>.</p><product-list-placeholder />))
+        expect(installment.message).to eq(%Q(<p>When you're ready to buy, <a href="#{checkout_url(host: DOMAIN)}" target="_blank" rel="noopener noreferrer nofollow">complete checking out</a>.</p><product-list-placeholder />))
         expect(installment.abandoned_cart_type?).to be(true)
         expect(installment.installment_rule.displayable_time_duration).to eq(24)
         expect(installment.installment_rule.time_period).to eq("hour")

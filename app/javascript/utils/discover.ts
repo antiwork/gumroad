@@ -7,7 +7,12 @@ const categoryImages = require.context("$assets/images/discover/");
 export type Taxonomy = { key: string; slug: string; label: string; parent_key: string | null };
 
 export function getRootTaxonomyCss(slug: RootTaxonomySlug) {
-  return { backgroundColor: `var(--${rootTaxonomies[slug].color})`, color: "black", "--color": "0 0 0" };
+  return {
+    backgroundColor: `var(--${rootTaxonomies[slug].color})`,
+    color: "black",
+    "--color": "0 0 0",
+    "--color-border": "rgb(0 0 0 / 1)",
+  };
 }
 
 export function getRootTaxonomyImage(slug: RootTaxonomySlug) {

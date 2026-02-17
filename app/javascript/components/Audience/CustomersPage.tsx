@@ -524,6 +524,7 @@ const CustomersPage = ({
                           hour: "numeric",
                           minute: "numeric",
                           hour12: true,
+                          timeZone: currentSeller.timeZone.name,
                         })}
                       </TableCell>
                       <TableCell>
@@ -677,6 +678,7 @@ const CustomerDrawer = ({
   showRefundFeeNotice: boolean;
 }) => {
   const userAgentInfo = useUserAgentInfo();
+  const currentSeller = useCurrentSeller();
 
   const [loadingId, setLoadingId] = React.useState<string | null>(null);
   const [missedPosts, setMissedPosts] = React.useState<MissedPost[] | null>(null);
@@ -766,6 +768,7 @@ const CustomerDrawer = ({
       day: "numeric",
       month: "short",
       year: date.getFullYear() !== year ? "numeric" : undefined,
+      timeZone: currentSeller?.timeZone.name,
     });
 
   return (
@@ -2375,10 +2378,11 @@ const ChargeRow = ({
 }) => {
   const [isRefunding, setIsRefunding] = React.useState(false);
   const userAgentInfo = useUserAgentInfo();
+  const currentSeller = useCurrentSeller();
 
   return (
     <section className={className}>
-      <section key={purchase.id}>
+      <div className="grow">
         <section style={{ display: "flex", gap: "var(--spacer-1)", alignItems: "center" }}>
           <h5>
             {formatPrice(purchase.amount_refundable, purchase.currency_type)} on{" "}
@@ -2386,6 +2390,7 @@ const ChargeRow = ({
               year: "numeric",
               month: "numeric",
               day: "numeric",
+              timeZone: currentSeller?.timeZone.name,
             })}
           </h5>
 
@@ -2416,8 +2421,8 @@ const ChargeRow = ({
             Refund Options
           </button>
         ) : null}
-        {canPing ? <PingButton purchaseId={purchase.id} /> : null}
-      </section>
+      </div>
+      {canPing ? <PingButton purchaseId={purchase.id} /> : null}
       {isRefunding ? (
         <RefundForm
           purchaseId={purchase.id}

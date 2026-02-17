@@ -22,6 +22,8 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { ProductToAdd, CartItem } from "$app/components/Checkout/cartState";
+import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
+import { UpsellModal } from "$app/components/Checkout/UpsellModal";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
@@ -36,7 +38,6 @@ import { applySelection } from "$app/components/Product/ConfigurationSelector";
 import { Search } from "$app/components/Search";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -228,7 +229,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
       pages={props.pages}
       actions={
         <>
-          {upsells.length > 0 && (
+          {upsells.length > 0 || searchQuery ? (
             <Search
               onSearch={(query) => {
                 setSearchQuery(query);
@@ -236,7 +237,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
               }}
               value={searchQuery ?? ""}
             />
-          )}
+          ) : null}
           <Button color="accent" onClick={() => setView("create")} disabled={isReadOnly}>
             New upsell
           </Button>

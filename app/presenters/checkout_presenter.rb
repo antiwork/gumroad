@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class CheckoutPresenter
+  CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS = 0.1.seconds
+
   include Rails.application.routes.url_helpers
   include ActionView::Helpers::SanitizeHelper
   include CardParamsHelper
@@ -38,8 +40,8 @@ class CheckoutPresenter
       **add_single_product_props(params:, user:),
       **checkout_wishlist_props(params:),
       **checkout_wishlist_gift_props(params:),
-      cart: CartPresenter.new(logged_in_user:, ip:, browser_guid:).cart_props,
       max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
+      cart_save_debounce_ms: CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
       tip_options: TipOptionsService.get_tip_options,
       default_tip_option: TipOptionsService.get_default_tip_option,
     }

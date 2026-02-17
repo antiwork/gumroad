@@ -8,9 +8,8 @@ import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
+import { FollowForm } from "$app/components/Profile/FollowForm";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
-
-import { FollowForm } from "./FollowForm";
 
 type LayoutProps = {
   creatorProfile: CreatorProfile;
@@ -36,7 +35,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
     ) : null;
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-screen flex-col">
       <header className="z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap lg:flex-nowrap lg:items-center lg:gap-6">
           <div className="relative flex grow items-center gap-3 border-b border-border px-4 py-8 lg:flex-1 lg:border-0 lg:p-0">

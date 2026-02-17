@@ -1,8 +1,0 @@
-<%= render("shared/load_dropbox_dropins_js", async: false) %>
-<%= load_pack("url_redirect_download") %>
-
-<% content_for :smart_app_banner do %>
-  <meta name="apple-itunes-app" content="app-id=<%= IOS_APP_ID %>, app-argument=<%= @url_redirect.download_page_url %>">
-<% end %>
-
-<%= react_component "DownloadPageWithContent", props: @react_component_props, prerender: true %>

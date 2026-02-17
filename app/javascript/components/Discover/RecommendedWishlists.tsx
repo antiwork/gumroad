@@ -1,49 +1,32 @@
 import * as React from "react";
 
-import { fetchRecommendedWishlists } from "$app/data/wishlists";
-import { assertResponseError } from "$app/utils/request";
-
-import { showAlert } from "$app/components/server-components/Alert";
-import { useRunOnce } from "$app/components/useRunOnce";
 import { CardWishlist, CardGrid, Card, DummyCardGrid } from "$app/components/Wishlist/Card";
 
-export const RecommendedWishlists = ({
-  title,
-  ...props
-}: {
-  title: string;
-  curatedProductIds?: string[];
-  taxonomy?: string | null;
-}) => {
-  const [wishlists, setWishlists] = React.useState<CardWishlist[] | null>(null);
+export const RecommendedWishlists = ({ title, wishlists }: { title: string; wishlists?: CardWishlist[] | null }) => {
+  if (wishlists === undefined || wishlists === null) {
+    return (
+      <section className="flex flex-col gap-4">
+        <header>
+          <h2>{title}</h2>
+        </header>
+        <DummyCardGrid count={2} />
+      </section>
+    );
+  }
 
-  useRunOnce(() => {
-    const loadWishlists = async () => {
-      try {
-        setWishlists(await fetchRecommendedWishlists(props));
-      } catch (e) {
-        assertResponseError(e);
-        showAlert(e.message, "error");
-      }
-    };
-    void loadWishlists();
-  });
+  if (!wishlists.length) return null;
 
-  return wishlists === null || wishlists.length > 0 ? (
+  return (
     <section className="flex flex-col gap-4">
       <header>
         <h2>{title}</h2>
       </header>
-      {wishlists ? (
-        <CardGrid>
-          {wishlists.map((wishlist) => (
-            // recommended wishlists are in the bottom of the page (off-screen), so we can use lazy loading
-            <Card key={wishlist.id} wishlist={wishlist} eager={false} />
-          ))}
-        </CardGrid>
-      ) : (
-        <DummyCardGrid count={2} />
-      )}
+      <CardGrid>
+        {wishlists.map((wishlist) => (
+          // recommended wishlists are in the bottom of the page (off-screen), so we can use lazy loading
+          <Card key={wishlist.id} wishlist={wishlist} eager={false} />
+        ))}
+      </CardGrid>
     </section>
-  ) : null;
+  );
 };
