@@ -144,7 +144,13 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
     return (
       <>
-        <NavigationButton ref={ref} href={url.toString()} color="accent" {...buttonCommonProps}>
+        <NavigationButton
+          ref={ref}
+          href={url.toString()}
+          color="accent"
+          {...buttonCommonProps}
+          className={product.installment_plan && product.installment_plan.number_of_installments > 1 ? "max-lg:text-sm max-lg:px-2 max-lg:py-2" : undefined}
+        >
           {label ??
             (purchase
               ? "Purchase again"
@@ -159,7 +165,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 ? (
           <>
-            <NavigationButton color="black" href={urlWithInstallments.toString()} {...buttonCommonProps}>
+            <NavigationButton color="black" href={urlWithInstallments.toString()} {...buttonCommonProps} className="max-lg:text-sm max-lg:px-2 max-lg:py-2">
               Pay in {product.installment_plan.number_of_installments} installments
             </NavigationButton>
             {showInstallmentPlanNotes ? (

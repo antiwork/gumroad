@@ -60,7 +60,7 @@ export const PriceTag = ({
   const borderClasses = "border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1";
 
   return (
-    <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
+    <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex shrink-0 items-center whitespace-nowrap">
       <WithTooltip position={tooltipPosition} tip={priceTag}>
         <div className="relative grid grid-flow-col border border-r-0 border-border">
           <div
