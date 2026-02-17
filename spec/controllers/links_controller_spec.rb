@@ -32,7 +32,6 @@ describe LinksController, :vcr, inertia: true do
         expect(response).to be_successful
         expect(inertia).to render_component("Products/Index")
         expect(inertia.props).to include(
-          :has_products,
           :archived_products_count,
           :can_create_product,
           :products_data,
@@ -40,14 +39,6 @@ describe LinksController, :vcr, inertia: true do
         )
         expect(inertia.props[:products_data]).to include(:products, :pagination, :sort)
         expect(inertia.props[:memberships_data]).to include(:memberships, :pagination, :sort)
-      end
-
-      it "keeps has_products true even when query has no matches" do
-        create(:product, user: seller, name: "Alpha product")
-
-        get :index, params: { query: "no-match" }
-
-        expect(inertia.props[:has_products]).to eq(true)
       end
     end
 

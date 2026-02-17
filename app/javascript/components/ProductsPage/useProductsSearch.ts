@@ -4,10 +4,6 @@ import React from "react";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
-/**
- * Custom hook for products search functionality.
- * Handles URL query parameter, state management, and debounced search.
- */
 export const useProductsSearch = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const initialQuery = urlParams.get("query") || "";
