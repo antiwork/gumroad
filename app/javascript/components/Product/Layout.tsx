@@ -303,27 +303,29 @@ const CtaBar = ({
         {product.ratings != null && product.ratings.count > 0 ? (
           <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
         ) : null}
-        <CtaButton
-          product={product}
-          purchase={purchase}
-          discountCode={discountCode ?? null}
-          selection={selection}
-          label={ctaLabel}
-          onClick={(evt) => {
-            if (
-              isPWYW ||
-              product.options.length > 1 ||
-              hasRentOption ||
-              hasMultipleRecurrences ||
-              hasConfigurableQuantity
-            ) {
-              evt.preventDefault();
-              ctaButtonRef.current?.scrollIntoView(false);
-              configurationSelectorRef.current?.focusRequiredInput();
-              if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
-            }
-          }}
-        />
+        <div className="flex items-center gap-4">
+          <CtaButton
+            product={product}
+            purchase={purchase}
+            discountCode={discountCode ?? null}
+            selection={selection}
+            label={ctaLabel}
+            onClick={(evt) => {
+              if (
+                isPWYW ||
+                product.options.length > 1 ||
+                hasRentOption ||
+                hasMultipleRecurrences ||
+                hasConfigurableQuantity
+              ) {
+                evt.preventDefault();
+                ctaButtonRef.current?.scrollIntoView(false);
+                configurationSelectorRef.current?.focusRequiredInput();
+                if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
+              }
+            }}
+          />
+        </div>
       </div>
     </section>
   );
