@@ -28,9 +28,14 @@ const ProductsPage = ({
   query: string | null;
   setEnableArchiveTab?: (enable: boolean) => void;
   type?: Tab;
-}) => (
-  <div className="grid gap-12">
-    {memberships.length > 0 ? (
+}) => {
+  const hasResults = memberships.length > 0 || products.length > 0;
+
+  return (
+    <div className="grid gap-12">
+      {/* Always render table components so their useOnChange search effects
+          keep running even when the query returns zero results. The tables
+          internally return null when their entries are empty. */}
       <ProductsPageMembershipsTable
         query={query}
         entries={memberships}
@@ -39,9 +44,6 @@ const ProductsPage = ({
         selectedTab={type}
         setEnableArchiveTab={setEnableArchiveTab}
       />
-    ) : null}
-
-    {products.length > 0 ? (
       <ProductsPageProductsTable
         query={query}
         entries={products}
@@ -50,8 +52,12 @@ const ProductsPage = ({
         selectedTab={type}
         setEnableArchiveTab={setEnableArchiveTab}
       />
-    ) : null}
-  </div>
-);
+
+      {!hasResults && query ? (
+        <p className="text-muted text-center">No products found matching &ldquo;{query}&rdquo;</p>
+      ) : null}
+    </div>
+  );
+};
 
 export default ProductsPage;

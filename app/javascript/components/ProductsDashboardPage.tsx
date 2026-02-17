@@ -36,6 +36,10 @@ export const ProductsDashboardPage = ({
 }: ProductsDashboardPageProps) => {
   const [enableArchiveTab, setEnableArchiveTab] = React.useState(archivedProductsCount > 0);
   const [query, setQuery] = React.useState("");
+  // Track whether products existed on initial load so the search bar stays visible
+  // even when a search query filters all products out (fixes #3262).
+  // useRef avoids unnecessary re-renders since this value never changes.
+  const hadInitialItems = React.useRef(products.length > 0 || memberships.length > 0);
 
   return (
     <ProductsLayout
@@ -44,7 +48,9 @@ export const ProductsDashboardPage = ({
       archivedTabVisible={enableArchiveTab}
       ctaButton={
         <>
-          {products.length > 0 ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
+          {hadInitialItems.current || query ? (
+            <Search value={query} onSearch={setQuery} placeholder="Search products" />
+          ) : null}
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
           </NavigationButtonInertia>
@@ -52,7 +58,7 @@ export const ProductsDashboardPage = ({
       }
     >
       <section className="p-4 md:p-8">
-        {memberships.length === 0 && products.length === 0 ? (
+        {!hadInitialItems.current && memberships.length === 0 && products.length === 0 ? (
           <Placeholder>
             <PlaceholderImage src={placeholder} />
             <h2>We’ve never met an idea we didn’t like.</h2>
