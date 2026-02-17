@@ -143,7 +143,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     };
 
     const hasInstallments = product.installment_plan != null && product.installment_plan.number_of_installments > 1;
-    const compactOnMobile = hasInstallments ? "max-lg:text-sm max-lg:px-2 max-lg:py-3 max-lg:gap-2" : undefined;
+    const compactOnMobile = hasInstallments ? "max-lg:text-xs max-lg:px-2 max-lg:py-3 max-lg:gap-2" : undefined;
 
     return (
       <>
