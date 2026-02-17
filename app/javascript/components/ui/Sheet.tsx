@@ -29,11 +29,14 @@ export const Sheet = ({
     </Dialog.Portal>
   </Dialog.Root>
 );
+export const SheetCloseButton = ({ className }: { className?: string }) => (
+  <Dialog.Close className={classNames("cursor-pointer all-unset", className)} aria-label="Close">
+    <Icon name="x" />
+  </Dialog.Close>
+);
 export const SheetHeader = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-start gap-4">
     <Dialog.Title>{children}</Dialog.Title>
-    <Dialog.Close className="ml-auto cursor-pointer all-unset" aria-label="Close">
-      <Icon name="x" />
-    </Dialog.Close>
+    <SheetCloseButton className="ml-auto" />
   </div>
 );

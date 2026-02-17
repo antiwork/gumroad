@@ -57,7 +57,6 @@ export const Nav = ({
           if (item.href) onClickTaxonomy(item.href.replace(/^\//u, ""));
         }}
         footer={footer}
-        menuTop="0px"
       />
     </div>
   );
