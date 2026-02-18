@@ -5,26 +5,7 @@ import {
   StripeErrorParams,
   serializeCardParamsIntoQueryParamsObject,
 } from "$app/data/payment_method_params";
-import { request, ResponseError } from "$app/utils/request";
-
-export const cancelSubscriptionByUser = async (subscriptionId: string): Promise<void> => {
-  const response = await request({
-    url: Routes.unsubscribe_by_user_subscription_path(subscriptionId),
-    method: "POST",
-    accept: "json",
-  });
-  if (response.ok) {
-    const responseData = cast<{ success: boolean; redirect_to?: string }>(await response.json());
-    if (responseData.success) {
-      return;
-    } else if (responseData.redirect_to) {
-      window.location.href = responseData.redirect_to;
-    } else {
-      throw new ResponseError();
-    }
-  }
-  throw new ResponseError();
-};
+import { request } from "$app/utils/request";
 
 export type UpdateSubscriptionPayload = {
   cardParams: AnyPaymentMethodParams | StripeErrorParams | null;

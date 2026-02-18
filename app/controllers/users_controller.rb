@@ -10,7 +10,6 @@ class UsersController < ApplicationController
 
   after_action :verify_authorized, only: %i[deactivate]
 
-  before_action :hide_layouts, only: %i[show subscribe]
   before_action :set_as_modal, only: %i[show]
   before_action :set_user_and_custom_domain_config, only: %i[show coffee subscribe subscribe_preview]
   before_action :set_page_attributes, only: %i[show]
@@ -18,7 +17,7 @@ class UsersController < ApplicationController
   before_action :check_if_needs_redirect, only: %i[show]
   before_action :set_affiliate_cookie, only: %i[show]
 
-  layout "inertia", only: [:coffee, :subscribe_preview]
+  layout "inertia", only: %i[show subscribe coffee subscribe_preview]
 
   def show
     format_search_params!
@@ -27,11 +26,7 @@ class UsersController < ApplicationController
       format.html do
         set_user_page_meta(@user)
         set_favicon_meta_tags(@user)
-        @profile_props = ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
-        @card_data_handling_mode = CardDataHandlingMode.get_card_data_handling_mode(@user)
-        @paypal_merchant_currency = @user.native_paypal_payment_enabled? ?
-                                      @user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
-                                      ChargeProcessor::DEFAULT_CURRENCY_CODE
+        render inertia: "Users/Show", props: ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
       end
       format.json { render json: @user.as_json }
       format.any { e404 }
@@ -45,6 +40,7 @@ class UsersController < ApplicationController
     end
 
     set_favicon_meta_tags(@user)
+    set_user_page_meta(@user)
     product = @user.products.visible_and_not_archived.find_by(native_type: Link::NATIVE_TYPE_COFFEE)
     e404 if product.nil?
 
@@ -56,24 +52,24 @@ class UsersController < ApplicationController
 
     render inertia: "Users/Coffee", props: {
       **product_props,
-      creator_profile: profile_presenter.creator_profile,
-      custom_styles: @user.seller_profile.custom_styles
+      creator_profile: profile_presenter.creator_profile
     }
   end
 
   def subscribe
+    set_user_page_meta(@user)
     set_meta_tag(title: "Subscribe to #{@user.name.presence || @user.username}")
-    @profile_presenter = ProfilePresenter.new(
-      pundit_user:,
-      seller: @user
-    )
+    render inertia: "Users/Subscribe", props: {
+      creator_profile: ProfilePresenter.new(pundit_user:, seller: @user).creator_profile
+    }
   end
 
   def subscribe_preview
+    set_user_page_meta(@user)
+
     render inertia: "Users/SubscribePreview", props: {
       avatar_url: @user.resized_avatar_url(size: 240),
       title: @user.name_or_username,
-      custom_styles: @user.seller_profile.custom_styles,
     }
   end
 

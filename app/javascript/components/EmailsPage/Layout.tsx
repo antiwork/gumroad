@@ -15,39 +15,51 @@ type LayoutProps = {
   query?: string;
   onQueryChange?: (query: string) => void;
   hideNewButton?: boolean;
+  actions?: React.ReactNode;
 };
 
-export const EmailsLayout = ({ selectedTab, children, hasPosts, query, onQueryChange, hideNewButton }: LayoutProps) => (
-  <div>
-    <PageHeader
-      title="Emails"
-      actions={
-        <>
-          {hasPosts && onQueryChange ? (
-            <Search value={query ?? ""} onSearch={onQueryChange} placeholder="Search emails" />
-          ) : null}
-          {!hideNewButton && <NewEmailButton />}
-        </>
-      }
-    >
-      <Tabs>
-        <Tab asChild isSelected={selectedTab === "published"}>
-          <Link href={Routes.published_emails_path()}>Published</Link>
-        </Tab>
-        <Tab asChild isSelected={selectedTab === "scheduled"}>
-          <Link href={Routes.scheduled_emails_path()}>Scheduled</Link>
-        </Tab>
-        <Tab asChild isSelected={selectedTab === "drafts"}>
-          <Link href={Routes.drafts_emails_path()}>Drafts</Link>
-        </Tab>
-        <Tab href={Routes.followers_path()} isSelected={false}>
-          Subscribers
-        </Tab>
-      </Tabs>
-    </PageHeader>
-    {children}
-  </div>
-);
+export const EmailsLayout = ({
+  selectedTab,
+  children,
+  hasPosts,
+  query,
+  onQueryChange,
+  hideNewButton,
+  actions,
+}: LayoutProps) => {
+  const title = selectedTab === "subscribers" ? "Subscribers" : "Emails";
+
+  const defaultActions = (
+    <>
+      {hasPosts && onQueryChange ? (
+        <Search value={query ?? ""} onSearch={onQueryChange} placeholder="Search emails" />
+      ) : null}
+      {!hideNewButton && <NewEmailButton />}
+    </>
+  );
+
+  return (
+    <div>
+      <PageHeader title={title} actions={actions ?? defaultActions}>
+        <Tabs>
+          <Tab asChild isSelected={selectedTab === "published"}>
+            <Link href={Routes.published_emails_path()}>Published</Link>
+          </Tab>
+          <Tab asChild isSelected={selectedTab === "scheduled"}>
+            <Link href={Routes.scheduled_emails_path()}>Scheduled</Link>
+          </Tab>
+          <Tab asChild isSelected={selectedTab === "drafts"}>
+            <Link href={Routes.drafts_emails_path()}>Drafts</Link>
+          </Tab>
+          <Tab asChild isSelected={selectedTab === "subscribers"}>
+            <Link href={Routes.followers_path()}>Subscribers</Link>
+          </Tab>
+        </Tabs>
+      </PageHeader>
+      {children}
+    </div>
+  );
+};
 
 export const NewEmailButton = ({ copyFrom }: { copyFrom?: string } = {}) => {
   const href = copyFrom ? Routes.new_email_path({ copy_from: copyFrom }) : Routes.new_email_path();

@@ -44,7 +44,7 @@ function Audience() {
       selectedTab="following"
       actions={
         hasContent ? (
-          <>
+          <div className="flex w-full gap-2">
             <Popover>
               <PopoverAnchor>
                 <WithTooltip tip="Export" position="bottom">
@@ -59,8 +59,10 @@ function Audience() {
                 <ExportSubscribersPopover />
               </PopoverContent>
             </Popover>
-            <DateRangePicker {...dateRange} />
-          </>
+            <div className="flex-1">
+              <DateRangePicker {...dateRange} />
+            </div>
+          </div>
         ) : null
       }
     >
