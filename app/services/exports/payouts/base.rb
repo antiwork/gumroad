@@ -4,14 +4,14 @@ class Exports::Payouts::Base
   PAYPAL_PAYOUTS_HEADING = "PayPal Payouts"
   STRIPE_CONNECT_PAYOUTS_HEADING = "Stripe Connect Payouts"
 
-  def initialize(payment_id)
-    @payment_id = payment_id
+  def initialize(payment)
+    @payment = payment
     @running_total = 0
   end
 
   private
     def payout_data
-      payout = Payment.find(@payment_id)
+      payout = @payment
       @running_total = 0
       data = []
 
@@ -126,7 +126,7 @@ class Exports::Payouts::Base
     end
 
     def merge_paypal_sales_data(data)
-      payout = Payment.find(@payment_id)
+      payout = @payment
       user = payout.user
       previous_payout = payout.user.payments.completed.where("created_at < ?", payout.created_at).order(:payout_period_end_date).last
       payout_start_date = previous_payout&.payout_period_end_date.try(:next)
@@ -159,7 +159,7 @@ class Exports::Payouts::Base
     end
 
     def merge_stripe_connect_sales_data(data)
-      payout = Payment.find(@payment_id)
+      payout = @payment
       user = payout.user
       previous_payout = payout.user.payments.completed.where("created_at < ?", payout.created_at).order(:payout_period_end_date).last
       payout_start_date = previous_payout&.payout_period_end_date.try(:next)

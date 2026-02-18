@@ -137,7 +137,7 @@ const WishlistItemCard = ({
               <WithTooltip position="top" tip="Gift this product">
                 <a
                   aria-label="Gift this product"
-                  href={Routes.checkout_index_url({ params: { gift_wishlist_product: item.id } })}
+                  href={Routes.checkout_url({ params: { gift_wishlist_product: item.id } })}
                   className="grid p-4"
                 >
                   <Icon name="gift-fill" />
@@ -241,7 +241,7 @@ export const Wishlist = ({
       <WithTooltip tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}>
         <NavigationButton
           color="accent"
-          href={Routes.checkout_index_url({ params: { wishlist: id } })}
+          href={Routes.checkout_url({ params: { wishlist: id } })}
           disabled={!checkout_enabled}
         >
           <Icon name="cart3-fill" />

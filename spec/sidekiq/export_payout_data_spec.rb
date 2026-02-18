@@ -13,13 +13,13 @@ describe ExportPayoutData do
     let(:csv_data2) { "Payment2,CSV,data\n" }
 
     before do
-      allow(Exports::Payouts::Csv).to receive(:new).with(payment_id: payment1.id).and_return(double(perform: csv_data1))
-      allow(Exports::Payouts::Csv).to receive(:new).with(payment_id: payment2.id).and_return(double(perform: csv_data2))
+      allow(Exports::Payouts::Csv).to receive(:new).with(payment: payment1).and_return(double(perform: csv_data1))
+      allow(Exports::Payouts::Csv).to receive(:new).with(payment: payment2).and_return(double(perform: csv_data2))
     end
 
     it "generates CSV files for each payment" do
-      expect(Exports::Payouts::Csv).to receive(:new).with(payment_id: payment1.id)
-      expect(Exports::Payouts::Csv).to receive(:new).with(payment_id: payment2.id)
+      expect(Exports::Payouts::Csv).to receive(:new).with(payment: payment1)
+      expect(Exports::Payouts::Csv).to receive(:new).with(payment: payment2)
 
       ExportPayoutData.new.perform(payment_ids, seller.id)
     end
@@ -92,7 +92,7 @@ describe ExportPayoutData do
       another_seller = create(:user)
       payment3 = create(:payment, user: another_seller)
 
-      allow(Exports::Payouts::Csv).to receive(:new).with(payment_id: payment3.id).and_return(double(perform: "Payment3,CSV,data\n"))
+      allow(Exports::Payouts::Csv).to receive(:new).with(payment: payment3).and_return(double(perform: "Payment3,CSV,data\n"))
 
       expect(ContactingCreatorMailer).not_to receive(:payout_data)
 

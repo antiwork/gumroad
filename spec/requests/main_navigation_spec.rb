@@ -44,13 +44,13 @@ describe "Main Navigation", type: :system, js: true do
       it "renders the Community link if the logged in seller has an active community" do
         Feature.activate_user(:communities, user)
 
-        product = create(:product, user:, community_chat_enabled: true)
+        product = create(:product, user: user, community_chat_enabled: true)
         create(:community, seller: user, resource: product)
 
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Community", href: community_path)
+          expect(page).to have_link("Community", href: communities_path)
         end
       end
 
@@ -59,24 +59,24 @@ describe "Main Navigation", type: :system, js: true do
         Feature.activate_user(:communities, seller)
 
         product = create(:product, user: seller, community_chat_enabled: true)
-        create(:community, resource: product, seller:)
-        create(:purchase, seller:, link: product, purchaser: user)
+        create(:community, resource: product, seller: seller)
+        create(:purchase, seller: seller, link: product, purchaser: user)
 
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).to have_link("Community", href: community_path)
+          expect(page).to have_link("Community", href: communities_path)
         end
       end
 
       it "renders the Community link if the logged in user is a seller but has no active communities" do
         Feature.activate_user(:communities, user)
-        create(:product, user:)
+        create(:product, user: user)
 
         visit library_path
 
         within "nav[aria-label='Main']" do
-          expect(page).not_to have_link("Community", href: community_path)
+          expect(page).not_to have_link("Community")
         end
       end
     end

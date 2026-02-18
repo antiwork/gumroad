@@ -20,7 +20,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 enableMapSet();
 
 export type PaymentMethodType = "paypal" | "stripePaymentRequest" | "card";
-export type PaymentMethod = { type: PaymentMethodType; button: React.ReactElement };
+export type PaymentMethod = { type: PaymentMethodType; button: React.ReactElement | null };
 
 export type Product = {
   permalink: string;
@@ -405,8 +405,11 @@ export function createReducer(initial: {
   const [state, dispatch] = reducer;
   useRunOnce(() => {
     const url = new URL(window.location.href);
+    if (url.pathname.startsWith(Routes.checkout_path())) return;
     const searchParams = new URLSearchParams([...url.searchParams].filter(([key]) => key === "_gl"));
     url.search = searchParams.toString();
+    // TODO (sm17p) Replace with Inertia's router.replace once subscription manager page is migrated to Inertia
+    // then remove the checkout-path early return above so this runs on checkout too.
     window.history.replaceState(window.history.state, "", url.toString());
   });
 

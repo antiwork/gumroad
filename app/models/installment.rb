@@ -347,7 +347,7 @@ class Installment < ApplicationRecord
           assigns: {
             product: product,
             offer_code: upsell.offer_code,
-            upsell_url: checkout_index_url(accepted_offer_id: upsell.external_id, product: product.unique_permalink, host: DOMAIN)
+            upsell_url: checkout_url(accepted_offer_id: upsell.external_id, product: product.unique_permalink, host: DOMAIN)
           }
         )
       )
@@ -369,7 +369,7 @@ class Installment < ApplicationRecord
   def message_with_inline_abandoned_cart_products(products:, checkout_url: nil)
     return message if message.blank? || products.blank?
 
-    default_checkout_url = Rails.application.routes.url_helpers.checkout_index_url(host: UrlService.domain_with_protocol)
+    default_checkout_url = Rails.application.routes.url_helpers.checkout_url(host: UrlService.domain_with_protocol)
     checkout_url ||= default_checkout_url
 
     doc = Nokogiri::HTML.fragment(message_with_inline_syntax_highlighting_and_upsells)

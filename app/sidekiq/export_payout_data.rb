@@ -66,7 +66,7 @@ class ExportPayoutData
       Payment.where(id: payment_ids).find_each do |payment|
         tempfile = create_tempfile(["payout", ".csv"])
 
-        content = Exports::Payouts::Csv.new(payment_id: payment.id).perform
+        content = Exports::Payouts::Csv.new(payment: payment).perform
         tempfile.write(content)
         tempfile.rewind
 
