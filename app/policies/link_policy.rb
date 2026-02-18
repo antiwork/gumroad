@@ -64,6 +64,7 @@ class LinkPolicy < ApplicationPolicy
     attributes = [
       :name,
       :description,
+      :lock_version,
       :custom_permalink,
       :price_currency_type,
       :price_cents,

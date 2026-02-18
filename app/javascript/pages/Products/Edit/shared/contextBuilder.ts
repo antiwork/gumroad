@@ -27,8 +27,18 @@ export interface TabContextState {
 }
 
 export const buildContextValue = (props: EditPageProps, state: TabContextState) => {
-  const { product, setProduct, existingFiles, setExistingFiles, currencyType, setCurrencyType,
-          contentUpdates, setContentUpdates, saving, setSaving } = state;
+  const {
+    product,
+    setProduct,
+    existingFiles,
+    setExistingFiles,
+    currencyType,
+    setCurrencyType,
+    contentUpdates,
+    setContentUpdates,
+    saving,
+    setSaving,
+  } = state;
 
   const updateProduct = (update: Partial<Product> | ((p: Product) => void)) =>
     setProduct((prev) => {
@@ -89,9 +99,7 @@ export const buildContextValue = (props: EditPageProps, state: TabContextState) 
     cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
     contentUpdates,
     setContentUpdates,
-    filesById: new Map(
-      props.product.files.map((f) => [f.id, { ...f, url: getDownloadUrl(props.id, f) }])
-    ),
+    filesById: new Map(props.product.files.map((f) => [f.id, { ...f, url: getDownloadUrl(props.id, f) }])),
     aiGenerated: props.ai_generated,
   };
 };

@@ -316,6 +316,7 @@ class LinksController < ApplicationController
     authorize @product
     begin
       ActiveRecord::Base.transaction do
+        @product.lock_version = product_permitted_params[:lock_version] if product_permitted_params[:lock_version]
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
@@ -407,6 +408,10 @@ class LinksController < ApplicationController
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
         @product.generate_product_files_archives!
       end
+
+    rescue ActiveRecord::StaleObjectError
+      return render json: { error: "conflict", message: "This product was modified in another tab. Please refresh." }, status: :conflict
+
     rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
       if @product.errors.details[:custom_fields].present?
         error_message = "You must add titles to all of your inputs"
@@ -440,7 +445,7 @@ class LinksController < ApplicationController
       }
     end
 
-    head :no_content
+    render json: { warning_message: "", lock_version: @product.reload.lock_version }
   end
 
   def unpublish

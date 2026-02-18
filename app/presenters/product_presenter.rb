@@ -103,6 +103,7 @@ class ProductPresenter
       product: {
         name: product.name,
         custom_permalink: product.custom_permalink,
+        lock_version: product.lock_version,
         description: product.description || "",
         price_cents: product.price_cents,
         customizable_price: !!product.customizable_price,

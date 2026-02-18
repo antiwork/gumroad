@@ -28,13 +28,17 @@ class Products::BaseTabController < ApplicationController
       ActiveRecord::Base.transaction do
         yield
       end
-      render json: { success: true }
-    rescue ActiveRecord::StaleObjectError
+      # @product.reload ensures we grab the incremented lock_version from the DB
       render json: {
-        error: "conflict",
-        message: "This product was modified elsewhere. Please refresh."
-      }, status: :conflict
-    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => e
-      render json: { error: e.message }, status: :unprocessable_entity
+        success: true,
+        lock_version: @product.reload.lock_version
+      }, status: :ok
+      rescue ActiveRecord::StaleObjectError
+        render json: {
+          error: "conflict",
+          message: "This product was modified elsewhere. Please refresh."
+        }, status: :conflict
+      rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => e
+        render json: { error: e.message }, status: :unprocessable_entity
     end
 end

@@ -1,5 +1,4 @@
 import { Editor, findChildren } from "@tiptap/core";
-import { cast } from "ts-safe-cast";
 
 import { CurrencyCode } from "$app/utils/currency";
 import { ResponseError, request } from "$app/utils/request";
@@ -42,7 +41,10 @@ export const saveProduct = async (permalink: string, id: string, product: Produc
       installment_plan: product.allow_installment_plan ? product.installment_plan : null,
     },
   });
-  if (!response.ok) throw new ResponseError(cast<{ error_message: string }>(await response.json()).error_message);
+  if (response.status === 409) {
+    throw new ResponseError("This product was modified in another tab. Please refresh the page.");
+  }
   if (response.status === 204) return {};
-  return cast<{ warning_message?: string }>(await response.json());
-};
+  const json = await response.json();
+  return { warning_message: json.warning_message ?? undefined, lock_version: json.lock_version };
+}

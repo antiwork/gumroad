@@ -5,6 +5,7 @@ import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { FeatureFlags, FeatureFlagsProvider } from "$app/components/FeatureFlags";
 import { SSRLocationProvider } from "$app/components/useOriginalLocation";
 import { UserAgentProvider } from "$app/components/UserAgent";
+import ToastAlert from "$app/components/server-components/Alert";
 
 type GlobalProps = {
   design_settings: DesignSettings;
@@ -46,7 +47,10 @@ export default function AppWrapper({ children, global }: { children: React.React
           }}
         >
           <FeatureFlagsProvider value={global.feature_flags}>
-            <SSRLocationProvider value={global.href}>{children}</SSRLocationProvider>
+            <SSRLocationProvider value={global.href}>
+              <ToastAlert initial={null} />
+              {children}
+            </SSRLocationProvider>
           </FeatureFlagsProvider>
         </UserAgentProvider>
       </DomainSettingsProvider>
