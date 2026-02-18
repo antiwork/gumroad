@@ -1,4 +1,4 @@
-import { Head, usePage } from "@inertiajs/react";
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -12,21 +12,15 @@ type Props = {
   product: Product;
   purchase: Purchase | null;
   creator_profile: CreatorProfile;
-  custom_styles: string;
 };
 
 export default function CoffeePage() {
-  const { product, purchase, creator_profile, custom_styles } = cast<Props>(usePage().props);
+  const { product, purchase, creator_profile } = cast<Props>(usePage().props);
 
   return (
-    <>
-      <Head>
-        <style>{custom_styles}</style>
-      </Head>
-      <ProfileLayout creatorProfile={creator_profile} hideFollowForm>
-        <CoffeeProduct product={product} purchase={purchase} className="mx-auto w-full max-w-6xl lg:px-0" />
-      </ProfileLayout>
-    </>
+    <ProfileLayout creatorProfile={creator_profile} hideFollowForm>
+      <CoffeeProduct product={product} purchase={purchase} className="mx-auto w-full max-w-6xl lg:px-0" />
+    </ProfileLayout>
   );
 }
 CoffeePage.loggedInUserLayout = true;

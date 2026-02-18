@@ -79,6 +79,8 @@ const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
 
 export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
   ({ product, purchase, discountCode, selection, label, onClick, showInstallmentPlanNotes = false }, ref) => {
+    const hasInstallments = product.installment_plan != null && product.installment_plan.number_of_installments > 1;
+    const compactOnMobile = hasInstallments ? "max-lg:text-sm max-lg:px-2 max-lg:py-3" : undefined;
     const { searchParams } = new URL(useOriginalLocation());
 
     const [referrer, setReferrer] = React.useState("");
@@ -90,7 +92,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       selection,
     );
 
-    const url = new URL(Routes.checkout_index_url());
+    const url = new URL(Routes.checkout_url());
 
     const transformations: Record<string, string> = { a: "affiliate_id" };
 
@@ -144,7 +146,13 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
     return (
       <>
-        <NavigationButton ref={ref} href={url.toString()} color="accent" {...buttonCommonProps}>
+        <NavigationButton
+          ref={ref}
+          href={url.toString()}
+          color="accent"
+          className={compactOnMobile}
+          {...buttonCommonProps}
+        >
           {label ??
             (purchase
               ? "Purchase again"
@@ -159,7 +167,12 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 ? (
           <>
-            <NavigationButton color="black" href={urlWithInstallments.toString()} {...buttonCommonProps}>
+            <NavigationButton
+              color="black"
+              href={urlWithInstallments.toString()}
+              className={compactOnMobile}
+              {...buttonCommonProps}
+            >
               Pay in {product.installment_plan.number_of_installments} installments
             </NavigationButton>
             {showInstallmentPlanNotes ? (

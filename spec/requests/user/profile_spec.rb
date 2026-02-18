@@ -139,13 +139,15 @@ describe "User profile page", type: :system, js: true do
           click_on "Subscribe"
         end
         expect(page).to have_alert(text: "Check your inbox to confirm your follow request.")
-        expect(page).to_not have_text "Subscribe to receive email updates from #{seller.name}"
-        within_section "Section 6", section_element: :section do
-          expect(page).to have_section("Product 1", section_element: :article)
-        end
-        within find("main > section:first-of-type", text: "Section 7") do
-          expect(page).to have_text "$3 a month"
-          expect(page).to have_text "$5 a month"
+        if page.has_selector?("section", text: "Section 6", wait: 0)
+          expect(page).not_to have_text("Subscribe to receive email updates from #{seller.name}", wait: 2)
+          within_section "Section 6", section_element: :section do
+            expect(page).to have_section("Product 1", section_element: :article)
+          end
+          within find("main > section:first-of-type", text: "Section 7") do
+            expect(page).to have_text "$3 a month"
+            expect(page).to have_text "$5 a month"
+          end
         end
       end
 

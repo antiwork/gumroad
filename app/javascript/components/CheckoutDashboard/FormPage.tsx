@@ -1,13 +1,11 @@
+import { useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
-import { CustomField, updateCheckoutForm } from "$app/data/checkout_form";
 import { RecommendationType } from "$app/data/recommended_products";
 import { CardProduct } from "$app/parsers/product";
 import { assertDefined } from "$app/utils/assert";
 import { PLACEHOLDER_CARD_PRODUCT, PLACEHOLDER_CART_ITEM } from "$app/utils/cart";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
@@ -23,6 +21,27 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { Switch } from "$app/components/ui/Switch";
 
 export type SimpleProduct = { id: string; name: string; archived: boolean };
+
+type CustomField = {
+  id: string | null;
+  type: "text" | "checkbox" | "terms";
+  name: string;
+  required: boolean;
+  global: boolean;
+  collect_per_product: boolean;
+  products: string[];
+};
+
+type CustomFieldWithKey = CustomField & { key: string };
+
+type FormData = {
+  user: {
+    display_offer_code_field: boolean;
+    recommendation_type: RecommendationType;
+    tipping_enabled: boolean;
+  };
+  custom_fields: CustomFieldWithKey[];
+};
 
 let lastKey = 0;
 
@@ -49,64 +68,102 @@ const FormPage = ({
   const cardProduct = card_product ?? PLACEHOLDER_CARD_PRODUCT;
 
   const key = () => (--lastKey).toString();
-  const addKey = (field: CustomField) => ({ ...field, key: field.id ? field.id : key() });
+  const addKey = (field: CustomField): CustomFieldWithKey => ({ ...field, key: field.id ? field.id : key() });
   const uid = React.useId();
-  const [displayOfferCodeField, setDisplayOfferCodeField] = React.useState(display_offer_code_field);
-  const [recommendationType, setRecommendationType] = React.useState(recommendation_type);
-  const [tippingEnabled, setTippingEnabled] = React.useState(tipping_enabled);
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [customFields, setCustomFields] = React.useState<(CustomField & { key: string })[]>(() =>
-    custom_fields.map(addKey),
-  );
+  const [invalidFields, setInvalidFields] = React.useState<Set<string>>(() => new Set());
+
+  const form = useForm<FormData>({
+    user: {
+      display_offer_code_field,
+      recommendation_type,
+      tipping_enabled,
+    },
+    custom_fields: custom_fields.map(addKey),
+  });
+
+  const customFields = form.data.custom_fields;
+
+  const setCustomFields = (fields: CustomFieldWithKey[]) => form.setData("custom_fields", fields);
+
   const updateCustomField = (index: number, value: Partial<CustomField>) => {
+    const fieldKey = customFields[index]?.key;
+    setInvalidFields((prev) => {
+      const next = new Set(prev);
+      if (fieldKey) {
+        if ("name" in value) next.delete(`custom_fields.${fieldKey}.name`);
+        if ("products" in value || "global" in value) next.delete(`custom_fields.${fieldKey}.products`);
+      }
+      return next;
+    });
+
     const newValue = [...customFields];
     newValue[index] = { ...assertDefined(customFields[index], "Invalid index"), ...value };
     setCustomFields(newValue);
   };
-  const [errors, setErrors] = React.useState<Map<string, Set<string>>>(new Map());
 
-  const handleSave = asyncVoid(async () => {
-    const errors = new Map<string, Set<string>>();
-    for (const field of customFields) {
-      const fieldErrors = new Set<string>();
-      if (!field.name) fieldErrors.add("name");
+  const updateUserData = (update: Partial<FormData["user"]>) => form.setData("user", { ...form.data.user, ...update });
+
+  const submitForm = () => {
+    const newInvalidFields = new Set<string>();
+
+    customFields.forEach((field) => {
+      if (!field.name) {
+        newInvalidFields.add(`custom_fields.${field.key}.name`);
+      }
       if (field.type === "terms") {
         try {
           new URL(field.name);
         } catch {
-          fieldErrors.add("name");
+          newInvalidFields.add(`custom_fields.${field.key}.name`);
         }
       }
-      if (!field.global && !field.products.length) fieldErrors.add("products");
-      if (fieldErrors.size) errors.set(field.key, fieldErrors);
-    }
-    setErrors(errors);
-    if (errors.size) {
+      if (!field.global && !field.products.length) {
+        newInvalidFields.add(`custom_fields.${field.key}.products`);
+      }
+    });
+
+    setInvalidFields(newInvalidFields);
+
+    if (newInvalidFields.size > 0) {
       showAlert("Please complete all required fields.", "error");
       return;
     }
-    try {
-      setIsSaving(true);
-      const response = await updateCheckoutForm({
-        user: { displayOfferCodeField, recommendationType, tippingEnabled },
-        customFields,
-      });
-      setCustomFields(response.custom_fields.map(addKey));
-      showAlert("Changes saved!", "success");
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-    setIsSaving(false);
-  });
+
+    form.transform((data) => ({
+      user: data.user,
+      custom_fields: data.custom_fields.map(({ key, ...field }) => field),
+    }));
+
+    form.put(Routes.checkout_form_path(), {
+      preserveScroll: true,
+      onError: (errors: Record<string, string | string[]>) => {
+        const baseError = errors.base;
+        const message = (Array.isArray(baseError) ? baseError[0] : baseError) ?? "Failed to save changes";
+        showAlert(message, "error");
+      },
+    });
+  };
+
+  const displayOfferCodeField = form.data.user.display_offer_code_field;
+  const recommendationType = form.data.user.recommendation_type;
+  const tippingEnabled = form.data.user.tipping_enabled;
+
+  const productOptions = React.useMemo(
+    () => products.filter((product) => !product.archived).map((product) => ({ id: product.id, label: product.name })),
+    [products],
+  );
 
   return (
     <Layout
       currentPage="form"
       pages={pages}
       actions={
-        <Button color="accent" onClick={handleSave} disabled={!loggedInUser?.policies.checkout_form.update || isSaving}>
-          {isSaving ? "Saving changes..." : "Save changes"}
+        <Button
+          color="accent"
+          onClick={submitForm}
+          disabled={!loggedInUser?.policies.checkout_form.update || form.processing}
+        >
+          {form.processing ? "Saving changes..." : "Save changes"}
         </Button>
       }
     >
@@ -164,7 +221,7 @@ const FormPage = ({
                           </label>
                         ) : null}
                       </fieldset>
-                      <fieldset className={cx({ danger: errors.get(field.key)?.has("name") })}>
+                      <fieldset className={cx({ danger: invalidFields.has(`custom_fields.${field.key}.name`) })}>
                         <legend>
                           <label htmlFor={`${uid}-${field.key}-name`}>
                             {field.type === "terms" ? "Terms URL" : "Label"}
@@ -173,24 +230,22 @@ const FormPage = ({
                         <input
                           id={`${uid}-${field.key}-name`}
                           value={field.name}
-                          aria-invalid={errors.get(field.key)?.has("name") ?? false}
+                          aria-invalid={invalidFields.has(`custom_fields.${field.key}.name`)}
                           onChange={(e) => updateCustomField(i, { name: e.target.value })}
                         />
                       </fieldset>
-                      <fieldset className={cx({ danger: errors.get(field.key)?.has("products") })}>
+                      <fieldset className={cx({ danger: invalidFields.has(`custom_fields.${field.key}.products`) })}>
                         <legend>
                           <label htmlFor={`${uid}-${field.key}-products`}>Products</label>
                         </legend>
                         <Select
                           inputId={`${uid}-${field.key}-products`}
                           instanceId={`${uid}-${field.key}-products`}
-                          options={products
-                            .filter((product) => !product.archived)
-                            .map((product) => ({ id: product.id, label: product.name }))}
+                          options={productOptions}
                           value={products
                             .filter((product) => field.global || field.products.includes(product.id))
                             .map((product) => ({ id: product.id, label: product.name }))}
-                          aria-invalid={errors.get(field.key)?.has("products") ?? false}
+                          aria-invalid={invalidFields.has(`custom_fields.${field.key}.products`)}
                           isMulti
                           isClearable
                           onChange={(items) =>
@@ -265,7 +320,7 @@ const FormPage = ({
                 <input
                   type="radio"
                   checked={displayOfferCodeField}
-                  onChange={(evt) => setDisplayOfferCodeField(evt.target.checked)}
+                  onChange={(evt) => updateUserData({ display_offer_code_field: evt.target.checked })}
                   disabled={!loggedInUser?.policies.checkout_form.update}
                 />
                 Only if a discount is available
@@ -274,7 +329,7 @@ const FormPage = ({
                 <input
                   type="radio"
                   checked={!displayOfferCodeField}
-                  onChange={(evt) => setDisplayOfferCodeField(!evt.target.checked)}
+                  onChange={(evt) => updateUserData({ display_offer_code_field: !evt.target.checked })}
                   disabled={!loggedInUser?.policies.checkout_form.update}
                 />
                 Never
@@ -295,7 +350,7 @@ const FormPage = ({
                   type="radio"
                   checked={recommendationType === "no_recommendations"}
                   onChange={(evt) => {
-                    if (evt.target.checked) setRecommendationType("no_recommendations");
+                    if (evt.target.checked) updateUserData({ recommendation_type: "no_recommendations" });
                   }}
                 />
                 Don't recommend any products
@@ -305,7 +360,7 @@ const FormPage = ({
                   type="radio"
                   checked={recommendationType === "own_products"}
                   onChange={(evt) => {
-                    if (evt.target.checked) setRecommendationType("own_products");
+                    if (evt.target.checked) updateUserData({ recommendation_type: "own_products" });
                   }}
                 />
                 Recommend my products
@@ -315,7 +370,7 @@ const FormPage = ({
                   type="radio"
                   checked={recommendationType === "directly_affiliated_products"}
                   onChange={(evt) => {
-                    if (evt.target.checked) setRecommendationType("directly_affiliated_products");
+                    if (evt.target.checked) updateUserData({ recommendation_type: "directly_affiliated_products" });
                   }}
                 />
                 <span>Recommend my products and products I'm an affiliate of</span>
@@ -325,7 +380,7 @@ const FormPage = ({
                   type="radio"
                   checked={recommendationType === "gumroad_affiliates_products"}
                   onChange={(evt) => {
-                    if (evt.target.checked) setRecommendationType("gumroad_affiliates_products");
+                    if (evt.target.checked) updateUserData({ recommendation_type: "gumroad_affiliates_products" });
                   }}
                 />
                 <span>
@@ -346,7 +401,7 @@ const FormPage = ({
             </header>
             <Switch
               checked={tippingEnabled}
-              onChange={(e) => setTippingEnabled(e.target.checked)}
+              onChange={(e) => updateUserData({ tipping_enabled: e.target.checked })}
               label="Allow customers to add tips to their orders"
             />
           </section>

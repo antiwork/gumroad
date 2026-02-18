@@ -13,11 +13,11 @@ export const FormSection = ({
 }) => (
   <section
     className={classNames(
-      "grid gap-8 border-t border-border py-12 first:border-t-0 first:pt-0 lg:grid-cols-[25%_1fr] lg:gap-x-16 lg:gap-y-0 lg:pb-4",
+      "grid gap-8 border-t border-border p-4! first:border-t-0 md:p-8! lg:grid-cols-[25%_1fr] lg:gap-x-16 lg:gap-y-0",
       className,
     )}
   >
     {header ? <header className="grid content-start gap-3 lg:col-span-1">{header}</header> : null}
-    <div className="grid gap-8 lg:col-start-2 lg:gap-0 [&>*]:lg:mb-8">{children}</div>
+    <div className="grid gap-8 lg:col-start-2 lg:mb-8">{children}</div>
   </section>
 );

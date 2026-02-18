@@ -3161,6 +3161,52 @@ describe LinksController, :vcr, inertia: true do
         end
       end
 
+      describe "layout variants" do
+        it "renders Products/Show with product props for default layout" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Show")
+          expect(inertia.props[:product]).to be_present
+          expect(inertia.props[:product][:name]).to eq(link.name)
+        end
+
+        it "renders Products/Profile/Show with creator_profile for profile layout" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, layout: "profile" }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Profile/Show")
+          expect(inertia.props[:creator_profile]).to be_present
+          expect(inertia.props[:product]).to be_present
+        end
+
+        it "renders Products/Discover/Show with taxonomy props for discover layout" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, layout: "discover" }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Discover/Show")
+          expect(inertia.props).to have_key(:taxonomy_path)
+          expect(inertia.props).to have_key(:taxonomies_for_nav)
+          expect(inertia.props[:product]).to be_present
+        end
+
+        it "renders Products/Iframe/Show with product props for embed param" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, embed: "true" }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Iframe/Show")
+          expect(inertia.props[:product]).to be_present
+        end
+
+        it "renders Products/Iframe/Show with product props for overlay param" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, overlay: "true" }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Iframe/Show")
+          expect(inertia.props[:product]).to be_present
+        end
+      end
+
       describe "wanted=true parameter" do
         it "passes pay_in_installments parameter to checkout when wanted=true" do
           get :show, params: { id: product.to_param, wanted: "true", pay_in_installments: "true" }
@@ -3186,6 +3232,129 @@ describe LinksController, :vcr, inertia: true do
           expect(response).to be_successful
           expect(response).not_to be_redirect
         end
+
+        describe "discount code selection" do
+          let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 200, currency_type: product.price_currency_type) }
+          let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 300, currency_type: product.price_currency_type) }
+
+          before do
+            product.update!(default_offer_code: default_offer_code)
+          end
+
+          context "when URL code has better discount than default code" do
+            let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 400, currency_type: product.price_currency_type) }
+            let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 200, currency_type: product.price_currency_type) }
+
+            it "uses the URL code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(url_offer_code.code)
+            end
+          end
+
+          context "when default code has better discount than URL code" do
+            let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 200, currency_type: product.price_currency_type) }
+            let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 400, currency_type: product.price_currency_type) }
+
+            it "uses the default code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          context "when only URL code is provided" do
+            before do
+              product.update!(default_offer_code: nil)
+            end
+
+            it "uses the URL code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(url_offer_code.code)
+            end
+          end
+
+          context "when only default code is provided" do
+            it "uses the default code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true" }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          context "when URL code is invalid and default code is valid" do
+            it "uses the default code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: "INVALID" }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          context "when both codes are invalid" do
+            before do
+              product.update!(default_offer_code: nil)
+            end
+
+            it "does not include code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: "INVALID" }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to be_nil
+            end
+          end
+
+          context "when discount code is passed as offer_code param (embed/legacy URLs)" do
+            it "picks up offer_code and uses the better of URL code and default in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", offer_code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              # Default (300) is better than URL code (200), so redirect uses default
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          it "includes code exactly once in redirect query string when code param is passed" do
+            get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            query_string = redirect_url.query
+
+            code_param_count = query_string.split("&").count { |param| param.start_with?("code=") }
+            expect(code_param_count).to eq(1), "Expected code to appear exactly once in query string, got: #{query_string}"
+          end
+
+          it "includes code exactly once in redirect query string when offer_code param is passed" do
+            get :show, params: { id: product.to_param, wanted: "true", offer_code: url_offer_code.code }
+
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            query_string = redirect_url.query
+
+            code_param_count = query_string.split("&").count { |param| param.start_with?("code=") }
+            expect(code_param_count).to eq(1), "Expected code to appear exactly once in query string, got: #{query_string}"
+          end
+        end
       end
 
       context "with user signed in" do
@@ -3200,9 +3369,8 @@ describe LinksController, :vcr, inertia: true do
           get :show, params: { id: product.to_param }
 
           expect(response).to be_successful
-          product_props = assigns(:product_props)
-          expect(product_props[:product][:id]).to eq(product.external_id)
-          expect(product_props[:purchase][:id]).to eq(purchase.external_id)
+          expect(inertia.props[:product][:id]).to eq(product.external_id)
+          expect(inertia.props[:purchase][:id]).to eq(purchase.external_id)
         end
       end
 
@@ -3247,21 +3415,12 @@ describe LinksController, :vcr, inertia: true do
           @product = create(:product_with_file_and_preview, user: @user)
         end
 
-        it "renders the preview container" do
+        it "includes asset preview data in Inertia props" do
           get(:show, params: { id: @product.to_param })
 
           expect(response).to be_successful
-          expect(response.body).to have_selector("[role=tabpanel][id='#{@product.asset_previews.first.guid}']")
-        end
-
-        it "shows preview navigation controls when there is more than one preview" do
-          get(:show, params: { id: @product.to_param })
-          expect(response.body).to_not have_button("Show next cover")
-          expect(response.body).to_not have_tablist("Select a cover")
-          create(:asset_preview, link: @product)
-          get(:show, params: { id: @product.to_param })
-          expect(response.body).to have_tablist("Select a cover")
-          expect(response.body).to have_button("Show next cover")
+          expect(inertia.component).to eq("Products/Show")
+          expect(inertia.props[:product]).to be_present
         end
       end
 
@@ -3384,97 +3543,76 @@ describe LinksController, :vcr, inertia: true do
       end
 
       describe "product information markup" do
-        it "renders schema.org item props for classic product" do
+        it "sets server-side meta tags for classic product" do
           product = create(:product, user: @user, price_currency_type: "usd", price_cents: 525)
-          purchase = create(:purchase, link: product)
-          create(:product_review, purchase:)
           create(:asset_preview, link: product, unsplash_url: "https://images.unsplash.com/example.jpeg", attach: false)
 
           get :show, params: { id: product.unique_permalink }
 
           expect(response).to be_successful
-          expect(response.body).to have_selector("[itemprop='offers'][itemtype='https://schema.org/Offer']")
-          expect(response.body).to have_selector("link[itemprop='url'][href='#{product.long_url}']")
-          expect(response.body).to have_selector("[itemprop='availability']", text: "https://schema.org/InStock", visible: false)
-          expect(response.body).to have_selector("[itemprop='reviewCount']", text: product.reviews_count, visible: false)
-          expect(response.body).to have_selector("[itemprop='ratingValue']", text: "1", visible: false)
-          expect(response.body).to have_selector("[itemprop='price']", text: product.price_formatted_without_dollar_sign, visible: false)
-          expect(response.body).to have_selector("[itemprop='seller'][itemtype='https://schema.org/Person']", visible: false)
-          expect(response.body).to have_selector("[itemprop='name']", text: @user.name, visible: false)
-          # Can't use assert_selector, it doesn't work for tags in head
           html_doc = Nokogiri::HTML(response.body)
           expect(html_doc.css("meta[content='#{product.long_url}'][property='og:url']")).to be_present
           expect(html_doc.css("meta[property='product:retailer_item_id'][content='#{product.unique_permalink}']")).to be_present
           expect(html_doc.css("meta[property='product:price:amount'][content='5.25']")).to be_present
           expect(html_doc.css("meta[property='product:price:currency'][content='USD']")).to be_present
           expect(html_doc.css("meta[content='#{product.preview_url}'][property='og:image']")).to be_present
+          expect(html_doc.css("link[rel='canonical'][href='#{product.long_url}']")).to be_present
         end
 
-        it "renders schema.org item props for product over $1000" do
+        it "sets server-side meta tags for product over $1000" do
           product = create(:product, user: @user, price_cents: 1_000_00)
-          purchase = create(:purchase, link: product)
-          create(:product_review, purchase:)
 
           get :show, params: { id: product.unique_permalink }
 
           expect(response).to be_successful
-          expect(response.body).to have_selector("[itemprop='offers'][itemtype='https://schema.org/Offer']")
-          expect(response.body).to have_selector("link[itemprop='url'][href='#{product.long_url}']")
-          expect(response.body).to have_selector("[itemprop='availability']", text: "https://schema.org/InStock", visible: false)
-          expect(response.body).to have_selector("[itemprop='reviewCount']", text: product.reviews_count, visible: false)
-          expect(response.body).to have_selector("[itemprop='ratingValue']", text: "1", visible: false)
-          expect(response.body).to have_selector("[itemprop='price'][content='1000']")
-          expect(response.body).to have_selector("[itemprop='priceCurrency']", text: product.price_currency_type, visible: false)
-          # Can't use assert_selector, it doesn't work for tags in head
           html_doc = Nokogiri::HTML(response.body)
           expect(html_doc.css("meta[property='product:retailer_item_id'][content='#{product.unique_permalink}']")).to_not be_empty
           expect(html_doc.css("meta[content='#{product.long_url}'][property='og:url']")).to_not be_empty
+          expect(html_doc.css("meta[property='product:price:amount'][content='1000.0']")).to_not be_empty
+          expect(html_doc.css("meta[property='product:price:currency'][content='USD']")).to_not be_empty
         end
 
-        it "does not render product review count and rating markup if product has no review" do
+        it "sets canonical and og:url meta tags for product without reviews" do
           product = create(:product, user: @user)
           get :show, params: { id: product.unique_permalink }
-          expect(response.body).to have_selector("link[itemprop='url'][href='#{product.long_url}']")
-          expect(response.body).to_not have_selector("div[itemprop='reviewCount']")
-          expect(response.body).to_not have_selector("div[itemprop='ratingValue']")
-          expect(response.body).to_not have_selector("div[itemprop='aggregateRating']")
+
+          expect(response).to be_successful
           html_doc = Nokogiri::HTML(response.body)
           expect(html_doc.css("meta[content='#{product.long_url}'][property='og:url']")).to_not be_empty
+          expect(html_doc.css("link[rel='canonical'][href='#{product.long_url}']")).to_not be_empty
         end
 
-        it "renders schema.org item props for single-tier membership product" do
-          recurrence_price_values = {
-            BasePrice::Recurrence::MONTHLY => { enabled: true, price: 2.5 },
-            BasePrice::Recurrence::BIANNUALLY => { enabled: true, price: 15 },
-            BasePrice::Recurrence::YEARLY => { enabled: true, price: 30 },
-          }
+        it "sets server-side meta tags for membership product" do
           product = create(:membership_product, user: @user)
-          product.default_tier.save_recurring_prices!(recurrence_price_values)
           get :show, params: { id: product.unique_permalink }
+
           expect(response).to be_successful
-          expect(response.body).to have_selector("div[itemprop='offers'][itemtype='https://schema.org/AggregateOffer']")
-          expect(response.body).to have_selector("div[itemprop='offerCount']", text: "1", visible: false)
-          expect(response.body).to have_selector("div[itemprop='lowPrice']", text: "2.50", visible: false)
-          expect(response.body).to have_selector("div[itemprop='priceCurrency']", text: product.price_currency_type, visible: false)
-          expect(response.body).to have_selector("[itemprop='offer'][itemtype='https://schema.org/Offer']", count: 1)
-          expect(response.body).to have_selector("div[itemprop='price']", text: "2.50", count: 2, visible: false)
+          html_doc = Nokogiri::HTML(response.body)
+          expect(html_doc.css("meta[property='product:retailer_item_id'][content='#{product.unique_permalink}']")).to be_present
+          expect(html_doc.css("meta[content='#{product.long_url}'][property='og:url']")).to be_present
+          expect(html_doc.css("link[rel='canonical'][href='#{product.long_url}']")).to be_present
         end
 
-        it "renders schema.org item props for multi-tier membership product" do
-          recurrence_price_values = [
-            { BasePrice::Recurrence::MONTHLY => { enabled: true, price: 2.5 } },
-            { BasePrice::Recurrence::MONTHLY => { enabled: true, price: 5 } }
-          ]
-          product = create(:membership_product_with_preset_tiered_pricing, recurrence_price_values:, user: @user)
+        it "includes product data in Inertia props" do
+          product = create(:product, user: @user, price_currency_type: "usd", price_cents: 525)
           get :show, params: { id: product.unique_permalink }
+
           expect(response).to be_successful
-          expect(response.body).to have_selector("div[itemprop='offers'][itemtype='https://schema.org/AggregateOffer']")
-          expect(response.body).to have_selector("div[itemprop='offerCount']", text: "2", visible: false)
-          expect(response.body).to have_selector("div[itemprop='lowPrice']", text: "2.50", visible: false)
-          expect(response.body).to have_selector("div[itemprop='priceCurrency']", text: product.price_currency_type, visible: false)
-          expect(response.body).to have_selector("[itemprop='offer'][itemtype='https://schema.org/Offer']", count: 2)
-          expect(response.body).to have_selector("div[itemprop='price']", exact_text: "2.50", count: 1, visible: false)
-          expect(response.body).to have_selector("div[itemprop='price']", exact_text: "5", count: 1, visible: false)
+          expect(inertia.props[:product]).to be_present
+          expect(inertia.props[:product][:name]).to eq(product.name)
+        end
+
+        it "renders seller custom_styles in the head as a style tag" do
+          @user.seller_profile.update!(highlight_color: "#00ff00", background_color: "#0000ff")
+          product = create(:product, user: @user)
+
+          get :show, params: { id: product.unique_permalink }
+
+          expect(response).to be_successful
+          html_doc = Nokogiri::HTML(response.body)
+          style_tags = html_doc.css("head style")
+          # Custom styles include CSS variables and background-color from seller profile
+          expect(style_tags.any? { |tag| tag.text.include?("--accent:") && tag.text.include?("background-color:") }).to be(true)
         end
       end
 
@@ -3525,11 +3663,11 @@ describe LinksController, :vcr, inertia: true do
         end
 
         context "when the custom domain matches a product's custom domain" do
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show
             expect(response).to be_successful
             expect(assigns[:product]).to eq(product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
 
@@ -3549,11 +3687,11 @@ describe LinksController, :vcr, inertia: true do
             create(:custom_domain, domain: "www.example1.com", user: nil, product:)
           end
 
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show
             expect(response).to be_successful
             expect(assigns[:product]).to eq(product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
 
@@ -3572,11 +3710,11 @@ describe LinksController, :vcr, inertia: true do
             custom_domain.update!(domain: "example1.com")
           end
 
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show
             expect(response).to be_successful
             expect(assigns[:product]).to eq(product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
       end
@@ -3593,11 +3731,11 @@ describe LinksController, :vcr, inertia: true do
             @product = create(:product, user: @user)
           end
 
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show, params: { id: @product.unique_permalink }
             expect(response).to be_successful
             expect(assigns[:product]).to eq(@product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
 
@@ -3617,11 +3755,11 @@ describe LinksController, :vcr, inertia: true do
             @product = create(:product, user: @user, custom_permalink: "test-link")
           end
 
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show, params: { id: @product.custom_permalink }
             expect(response).to be_successful
             expect(assigns[:product]).to eq(@product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
 

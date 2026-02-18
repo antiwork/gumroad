@@ -22,7 +22,7 @@ import {
   UpdateOfferCode,
   DeleteOfferCode,
 } from "$app/components/ApiDocumentation/Endpoints/OfferCodes";
-import { GetPayouts, GetPayout } from "$app/components/ApiDocumentation/Endpoints/Payouts";
+import {GetPayouts, GetPayout, GetUpcomingPayouts} from "$app/components/ApiDocumentation/Endpoints/Payouts";
 import {
   GetProducts,
   GetProduct,
@@ -160,6 +160,7 @@ export default function Api() {
               <ApiResource name="Payouts" id="payouts">
                 <GetPayouts />
                 <GetPayout />
+                <GetUpcomingPayouts />
               </ApiResource>
             </article>
           </div>

@@ -474,6 +474,26 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       end
     end
 
+    it "shows empty state prompt with upload button when content editor is empty" do
+      product = create(:product, user: seller)
+      visit edit_link_path(product) + "/content"
+
+      expect(page).to have_text("Enter the content you want to sell.")
+      expect(page).to have_text("or start typing.")
+      expect(page).to have_button("Upload your files")
+
+      select_disclosure "Upload your files" do
+        expect(page).to have_text("Embed media")
+        expect(page).to have_text("Computer files")
+        expect(page).to have_text("Dropbox files")
+      end
+
+      set_rich_text_editor_input(find("[aria-label='Content editor']"), to_text: "Some content")
+
+      expect(page).not_to have_text("Enter the content you want to sell.")
+      expect(page).not_to have_button("Upload your files")
+    end
+
     it "supports embedding tweets" do
       tweet_url = "https://x.com/gumroad/status/1743053631640006693"
       product = create(:product, user: seller)
@@ -843,6 +863,56 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       )
       expect(new_short_answer.reload.name).to eq("Newer short answer")
       expect(new_long_answer.reload.name).to eq("Newer long answer")
+    end
+
+    it "supports moving and deleting input nodes with the actions menu" do
+      visit "#{edit_link_path(@product)}/content"
+
+      expect(page).to have_field("Title", with: "Long answer")
+      expect(page).to have_field("Title", with: "Short answer")
+      expect(page).to have_button("Upload files")
+
+      within find_input_embed("Short answer").hover do
+        select_disclosure "Actions" do
+          click_on "Move down"
+        end
+      end
+
+      within find_input_embed("Short answer").hover do
+        select_disclosure "Actions" do
+          click_on "Delete"
+        end
+      end
+
+      expect(page).to_not have_field("Title", with: "Short answer")
+      expect(page).to have_field("Title", with: "Long answer")
+      expect(page).to have_button("Upload files")
+
+      within find_input_embed("Upload files").hover do
+        select_disclosure "Actions" do
+          click_on "Move up"
+        end
+      end
+
+      save_change
+
+      expect(@product.reload.rich_contents.first.description).to eq(
+        [
+          {
+            "type" => RichContent::FILE_UPLOAD_NODE_TYPE,
+            "attrs" => {
+              "id" => file_upload.external_id
+            }
+          },
+          {
+            "type" => RichContent::LONG_ANSWER_NODE_TYPE,
+            "attrs" => {
+              "id" => long_answer.external_id,
+              "label" => "Long answer"
+            }
+          },
+        ]
+      )
     end
   end
 
