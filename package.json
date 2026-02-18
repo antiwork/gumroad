@@ -12,7 +12,6 @@
   },
   "packageManager": "npm@10.8.2",
   "dependencies": {
-    "@ai-sdk/react": "^2.0.8",
     "@anycable/web": "^1.1.0",
     "@helperai/client": "^0.4.5",
     "@helperai/react": "^0.9.5",
@@ -48,7 +47,6 @@
     "dompurify": "^3.2.6",
     "fast-average-color": "^9.4.0",
     "immer": "^10.0.0",
-    "jquery": "^3.6.3",
     "js-yaml": "^4.1.0",
     "json-schema-to-ts": "^3.0.0",
     "libphonenumber-js": "^1.12.23",
@@ -81,7 +79,6 @@
     "@types/google.analytics": "^0.0.46",
     "@types/grecaptcha": "^3.0.4",
     "@types/gtag.js": "^0.0.20",
-    "@types/jquery": "^3.5.16",
     "@types/jwplayer": "^8.28.1",
     "@types/mailcheck": "^1.1.33",
     "@types/node": "^20.0.0",

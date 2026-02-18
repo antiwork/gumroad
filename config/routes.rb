@@ -691,8 +691,15 @@ Rails.application.routes.draw do
       end
     end
 
-    get "/products/:id/edit", to: "links#edit", as: :edit_link
-    get "/products/:id/edit/*other", to: "links#edit"
+    get   "/products/:id/edit/content",  to: "products/content_tab#edit",   as: :edit_product_content_tab
+    patch "/products/:id/edit/content",  to: "products/content_tab#update"
+    get   "/products/:id/edit/receipt",  to: "products/receipt_tab#edit",   as: :edit_product_receipt_tab
+    patch "/products/:id/edit/receipt",  to: "products/receipt_tab#update"
+    get   "/products/:id/edit/share",    to: "products/share_tab#edit",     as: :edit_product_share_tab
+    patch "/products/:id/edit/share",    to: "products/share_tab#update"
+    get   "/products/:id/edit",          to: "products/product_tab#edit",   as: :edit_link
+    patch "/products/:id/edit",          to: "products/product_tab#update",  as: :update_product_tab
+
     get "/products/:id/card", to: "links#card", as: :product_card
     get "/products/search", to: "links#search"
 

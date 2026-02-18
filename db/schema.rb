@@ -1126,6 +1126,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.integer "discover_fee_per_thousand", default: 100, null: false
     t.string "support_email"
     t.integer "default_offer_code_id"
+    t.integer "lock_version", default: 0, null: false
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
     t.index ["default_offer_code_id"], name: "index_links_on_default_offer_code_id"
