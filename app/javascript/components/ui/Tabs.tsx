@@ -9,7 +9,7 @@ import { Icon } from "$app/components/Icons";
 const tabsVariants = cva("", {
   variants: {
     variant: {
-      pills: "flex gap-3 overflow-x-auto",
+      pills: "flex min-w-0 flex-wrap gap-8.5",
       buttons: "grid gap-3 md:auto-cols-fr md:grid-flow-col",
     },
   },
