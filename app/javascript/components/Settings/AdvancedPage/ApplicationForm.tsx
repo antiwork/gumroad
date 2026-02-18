@@ -10,6 +10,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -79,8 +80,13 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
           showAlert("Application updated.", "success");
           setIsSubmitting(false);
         },
-        onError: () => {
-          showAlert("Sorry, something went wrong. Please try again.", "error");
+        onError: (errors: Record<string, string | string[]>) => {
+          const message = errors.base
+            ? Array.isArray(errors.base)
+              ? errors.base[0]
+              : errors.base
+            : "Sorry, something went wrong. Please try again.";
+          if (message) showAlert(message, "error");
           setIsSubmitting(false);
         },
       });
@@ -90,8 +96,13 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
           showAlert("Application created.", "success");
           setIsSubmitting(false);
         },
-        onError: () => {
-          showAlert("Sorry, something went wrong. Please try again.", "error");
+        onError: (errors: Record<string, string | string[]>) => {
+          const message = errors.base
+            ? Array.isArray(errors.base)
+              ? errors.base[0]
+              : errors.base
+            : "Sorry, something went wrong. Please try again.";
+          if (message) showAlert(message, "error");
           setIsSubmitting(false);
         },
       });
@@ -138,7 +149,21 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
           <Label>Application icon</Label>
         </FieldsetTitle>
         <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "flex-start" }}>
-          <img className="application-icon" src={icon?.url || placeholderAppIcon} width={80} height={80} />
+          <div className="relative">
+            <img className="application-icon" src={icon?.url || placeholderAppIcon} width={80} height={80} />
+            {icon ? (
+              <Button
+                color="primary"
+                small
+                className="absolute top-2 right-2"
+                aria-label="Remove icon"
+                onClick={() => setIcon(null)}
+                disabled={isUploadingIcon || isSubmitting}
+              >
+                <Icon name="trash2" />
+              </Button>
+            ) : null}
+          </div>
           <Button onClick={() => iconInputRef.current?.click()} disabled={isUploadingIcon || isSubmitting}>
             {isUploadingIcon ? "Uploading..." : "Upload icon"}
           </Button>
