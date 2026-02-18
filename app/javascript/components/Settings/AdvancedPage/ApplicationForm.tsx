@@ -79,8 +79,13 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
           showAlert("Application updated.", "success");
           setIsSubmitting(false);
         },
-        onError: () => {
-          showAlert("Sorry, something went wrong. Please try again.", "error");
+        onError: (errors: Record<string, string | string[]>) => {
+          const message = errors.base
+            ? Array.isArray(errors.base)
+              ? errors.base[0]
+              : errors.base
+            : "Sorry, something went wrong. Please try again.";
+          if (message) showAlert(message, "error");
           setIsSubmitting(false);
         },
       });
@@ -90,8 +95,13 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
           showAlert("Application created.", "success");
           setIsSubmitting(false);
         },
-        onError: () => {
-          showAlert("Sorry, something went wrong. Please try again.", "error");
+        onError: (errors: Record<string, string | string[]>) => {
+          const message = errors.base
+            ? Array.isArray(errors.base)
+              ? errors.base[0]
+              : errors.base
+            : "Sorry, something went wrong. Please try again.";
+          if (message) showAlert(message, "error");
           setIsSubmitting(false);
         },
       });

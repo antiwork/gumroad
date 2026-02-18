@@ -73,6 +73,21 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
       expect { post(:create, params:) }.to change { OauthApplication.count }.by 1
       expect(OauthApplication.last.affiliate_basis_points).to eq nil
     end
+
+    describe "bad create params" do
+      let(:params) do {
+        oauth_application: {
+          name: "appname",
+          redirect_uri: "foo"
+        }
+      } end
+
+      it "does not create application and redirects with error message" do
+        expect { post(:create, params:) }.not_to change { OauthApplication.count }
+        expect(response).to redirect_to(settings_advanced_path)
+        expect(session[:inertia_errors][:base]).to eq(["Redirect URI must be an absolute URI."])
+      end
+    end
   end
 
   describe "GET edit" do
@@ -197,7 +212,7 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
           put(:update, params:)
 
           expect(response).to redirect_to(edit_oauth_application_path(app.external_id))
-          expect(flash[:alert]).to eq("Redirect URI must be an absolute URI.")
+          expect(session[:inertia_errors][:base]).to eq(["Redirect URI must be an absolute URI."])
         end
       end
     end
