@@ -201,7 +201,7 @@ export const Nav = (props: Props) => {
           <NavLink
             text="Community"
             icon={<MessageBubble pack="filled" className="size-5" />}
-            href={Routes.community_path(routeParams)}
+            href={Routes.communities_path()}
           />
         ) : null}
       </NavSection>

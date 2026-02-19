@@ -392,6 +392,21 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(product.reload.suggested_price_cents).to be_nil
   end
 
+  it "persists default discount code on save without changes" do
+    offer_code = create(:offer_code, user: seller, products: [product], code: "PERSIST10")
+    product.update!(default_offer_code: offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
+
+    save_change
+
+    expect(product.reload.default_offer_code).to eq(offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
+  end
+
   it "allows user to update name and price", :sidekiq_inline, :elasticsearch_wait_for_refresh do
     visit edit_link_path(product.unique_permalink)
     new_name = "Slot machine"

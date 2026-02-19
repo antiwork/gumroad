@@ -92,7 +92,7 @@ export const PageTab = ({
             <PopoverTrigger>
               <DotsHorizontalRounded className="size-5" />
             </PopoverTrigger>
-            <PopoverContent className="border-0 p-0 shadow-none">
+            <PopoverContent usePortal className="border-0 p-0 shadow-none">
               <div role="menu">
                 <div role="menuitem" onClick={() => setRenaming(true)}>
                   <Pencil className="size-5" /> Rename

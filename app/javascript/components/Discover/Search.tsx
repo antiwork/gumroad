@@ -1,43 +1,40 @@
 import { Clock, Search as SearchIcon, X } from "@boxicons/react";
+import { router, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
-import { AutocompleteSearchResults, deleteAutocompleteSearch, getAutocompleteSearchResults } from "$app/data/discover";
+import { AutocompleteSearchResults, deleteAutocompleteSearch } from "$app/data/discover";
 import { escapeRegExp } from "$app/utils";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { ComboBox } from "$app/components/ComboBox";
-import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
 import thumbnailPlaceholder from "$assets/images/placeholders/product-cover.png";
 
 export const Search = ({ query, setQuery }: { query?: string | undefined; setQuery: (query: string) => void }) => {
+  const { autocomplete_results: autocompleteResults } = usePage<{
+    autocomplete_results?: AutocompleteSearchResults | null;
+  }>().props;
   const [enteredQuery, setEnteredQuery] = React.useState(query ?? "");
   useOnChange(() => setEnteredQuery(query ?? ""), [query]);
 
-  const cancelAutocomplete = React.useRef<() => void>();
-  const fetchAutocomplete = useDebouncedCallback(
-    asyncVoid(async () => {
-      try {
-        const abortController = new AbortController();
-        cancelAutocomplete.current = () => abortController.abort();
-        setResults(await getAutocompleteSearchResults({ query: enteredQuery }, abortController.signal));
-      } catch (e) {
-        assertResponseError(e);
-        showAlert("Sorry, something went wrong. Please try again.", "error");
-      }
-    }),
-    300,
-  );
-  const [results, setResults] = React.useState<AutocompleteSearchResults | null>(null);
   const [autocompleteOpen, setAutocompleteOpen] = React.useState(false);
 
-  useOnChange(() => fetchAutocomplete(), [enteredQuery]);
+  const fetchAutocomplete = useDebouncedCallback(() => {
+    router.reload({
+      only: ["autocomplete_results"],
+      data: { query: enteredQuery },
+      replace: true,
+    });
+  }, 300);
+
   useOnChange(() => {
-    if (autocompleteOpen && !results) fetchAutocomplete();
+    if (enteredQuery) fetchAutocomplete();
+    else fetchAutocomplete.cancel();
+  }, [enteredQuery]);
+  useOnChange(() => {
+    if (autocompleteOpen && !autocompleteResults) fetchAutocomplete();
   }, [autocompleteOpen]);
 
   const highlightQuery = (text: string) => {
@@ -52,12 +49,21 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
     );
   };
 
-  const deleteRecentSearch = (query: string) => {
-    void deleteAutocompleteSearch({ query });
-    if (results) setResults({ ...results, recent_searches: results.recent_searches.filter((q) => q !== query) });
+  const [deletedSearches, setDeletedSearches] = React.useState<string[]>([]);
+
+  const deleteRecentSearch = (searchQuery: string) => {
+    void deleteAutocompleteSearch({ query: searchQuery });
+    setDeletedSearches((prev) => [...prev, searchQuery]);
   };
 
-  const options = results ? [...results.recent_searches, ...results.products] : [];
+  const filteredResults = autocompleteResults
+    ? {
+        ...autocompleteResults,
+        recent_searches: autocompleteResults.recent_searches.filter((q) => !deletedSearches.includes(q)),
+      }
+    : null;
+
+  const options = filteredResults ? [...filteredResults.recent_searches, ...filteredResults.products] : [];
 
   return (
     <ComboBox
@@ -79,7 +85,6 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
               if (e.key === "Enter") {
                 setQuery(enteredQuery);
                 fetchAutocomplete.cancel();
-                cancelAutocomplete.current?.();
               }
             }}
             onChange={(e) => {
@@ -93,15 +98,15 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
       options={options}
       option={(item, props, index) => (
         <>
-          {index === results?.recent_searches.length ? (
+          {index === filteredResults?.recent_searches.length ? (
             <h3 className="px-4 py-2">
-              {enteredQuery ? "Products" : results.viewed ? "Keep shopping for" : "Trending"}
+              {enteredQuery ? "Products" : filteredResults.viewed ? "Keep shopping for" : "Trending"}
             </h3>
           ) : null}
           {typeof item === "string" ? (
             <div {...props}>
               <a href={Routes.discover_path({ query: item })} className="flex flex-1 items-center no-underline">
-                <Clock className="size-5 mr-2 text-muted" />
+                <Clock className="mr-2 size-5 text-muted" />
                 {highlightQuery(item)}
               </a>
               <button onClick={() => deleteRecentSearch(item)} aria-label="Remove" className="cursor-pointer all-unset">

@@ -15,6 +15,7 @@ class Subscription < ApplicationRecord
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
+  extend Restartable
 
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
   ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE = 5.days
@@ -248,7 +249,21 @@ class Subscription < ApplicationRecord
     purchase = Purchase.new(purchase_params)
     purchase.variant_attributes = original_purchase.variant_attributes
 
-    purchase.offer_code = original_purchase.offer_code if discount_applies_to_next_charge?
+    if discount_applies_to_next_charge?
+      if original_purchase.purchase_offer_code_discount.present?
+        original_discount = original_purchase.purchase_offer_code_discount
+        purchase.offer_code = original_purchase.offer_code
+        purchase.build_purchase_offer_code_discount(
+          offer_code: original_discount.offer_code,
+          offer_code_amount: original_discount.offer_code_amount,
+          offer_code_is_percent: original_discount.offer_code_is_percent,
+          pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
+          duration_in_months: original_discount.duration_in_months
+        )
+      elsif original_purchase.offer_code.present?
+        purchase.offer_code = original_purchase.offer_code
+      end
+    end
 
     purchase.purchaser = user
     purchase.link = link

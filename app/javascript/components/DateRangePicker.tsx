@@ -1,24 +1,24 @@
+import { ChevronDown } from "@boxicons/react";
 import {
   endOfMonth,
+  endOfQuarter,
   endOfYear,
   startOfMonth,
+  startOfQuarter,
   startOfYear,
   subDays,
   subMonths,
-  subYears,
-  endOfQuarter,
-  startOfQuarter,
   subQuarters,
+  subYears,
 } from "date-fns";
 import * as React from "react";
 
 import { DateInput } from "$app/components/DateInput";
-import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 import { useUserAgentInfo } from "$app/components/UserAgent";
-import { ChevronDown } from "@boxicons/react";
 
 export const DateRangePicker = ({
   from,
@@ -52,12 +52,14 @@ export const DateRangePicker = ({
         setOpen(open);
       }}
     >
-      <PopoverTrigger>
-        <InputGroup className="whitespace-nowrap" aria-label="Date range selector">
-          <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
-          <ChevronDown className="size-5 ml-auto" />
-        </InputGroup>
-      </PopoverTrigger>
+      <PopoverAnchor>
+        <PopoverTrigger>
+          <InputGroup aria-label="Date range selector" className="whitespace-nowrap">
+            <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
+            <ChevronDown className="ml-auto size-5" />
+          </InputGroup>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent matchTriggerWidth className={isCustom ? "" : "border-0 p-0 shadow-none"}>
         {isCustom ? (
           <div className="flex flex-col gap-4">

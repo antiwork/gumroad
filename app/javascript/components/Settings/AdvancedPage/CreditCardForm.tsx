@@ -7,6 +7,8 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { FormSection } from "$app/components/ui/FormSection";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { WithTooltip } from "$app/components/WithTooltip";
 import { CreditCard } from "@boxicons/react";
 
@@ -36,19 +38,27 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
   });
 
   return status === "removed" ? null : (
-    <section className="p-4! md:p-8!">
-      <header>
-        <h2>Saved credit card</h2>
-        <a href="/help/article/216-delete-credit-card-information" target="_blank" rel="noreferrer">
-          Learn more.
-        </a>
-      </header>
+    <FormSection
+      header={
+        <>
+          <h2>Saved credit card</h2>
+          <a href="/help/article/216-delete-credit-card-information" target="_blank" rel="noreferrer">
+            Learn more.
+          </a>
+        </>
+      }
+    >
       <div className="flex flex-col gap-4">
+<<<<<<< HEAD
         <div className="input read-only" aria-label="Saved credit card">
           <CreditCard className="size-5" />
+=======
+        <InputGroup readOnly aria-label="Saved credit card">
+          <Icon name="outline-credit-card" />
+>>>>>>> main
           <span>{card.number}</span>
           <span style={{ marginLeft: "auto" }}>{card.expiration_date}</span>
-        </div>
+        </InputGroup>
         {read_only ? null : (
           <WithTooltip
             tip={
@@ -64,7 +74,7 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
           </WithTooltip>
         )}
       </div>
-    </section>
+    </FormSection>
   );
 };
 

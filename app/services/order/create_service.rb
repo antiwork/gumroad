@@ -46,18 +46,42 @@ class Order::CreateService
           common_params
             .except(
               :billing_agreement_id, :paypal_order_id, :visual, :stripe_payment_method_id, :stripe_customer_id,
-              :stripe_error, :braintree_transient_customer_store_key, :braintree_device_data,
-              :use_existing_card, :paymentToken
+              :stripe_setup_intent_id, :stripe_error, :braintree_transient_customer_store_key,
+              :braintree_device_data, :use_existing_card, :paymentToken
             )
             .merge(line_item_params.except(:uid, :permalink))
             .merge({ cart_items: })
         )
 
-        purchase, error = Purchase::CreateService.new(
+        # Card params are excluded from build_purchase_params (charging is handled by
+        # Charge::CreateService), but RestartAtCheckoutService needs them for UpdaterService
+        card_params = common_params.slice(
+          :card_data_handling_mode, :stripe_payment_method_id, :paypal_order_id,
+          :stripe_customer_id, :stripe_setup_intent_id
+        ).compact
+
+        purchase, error, sca_response = Purchase::CreateService.new(
           product:,
-          params: purchase_params.merge(is_part_of_combined_charge: true),
+          params: purchase_params.merge(is_part_of_combined_charge: true).merge(card_params),
           buyer:
         ).perform
+
+        if sca_response
+          # Subscription restart SCA: add the upgrade purchase to the order so the
+          # confirm endpoint can find it, and use the `order` key the frontend expects
+          if sca_response[:purchase].is_a?(Hash) && (upgrade_purchase = Purchase.find_by_external_id(sca_response[:purchase][:id]))
+            order.purchases << upgrade_purchase
+            order.save!
+            sca_response = sca_response.except(:purchase).merge(
+              order: {
+                id: order.external_id,
+                stripe_connect_account_id: sca_response.dig(:purchase, :stripe_connect_account_id)
+              }
+            )
+          end
+          purchase_responses[line_item_uid] = sca_response
+          next
+        end
 
         if error
           purchase_responses[line_item_uid] = error_response(error, purchase:)
@@ -68,8 +92,13 @@ class Order::CreateService
         end
 
         if purchase&.persisted?
-          order.purchases << purchase
-          order.save!
+          if Purchase::ALL_SUCCESS_STATES.include?(purchase.purchase_state)
+            # Pre-existing purchase from subscription restart — don't add to order
+            purchase_responses[line_item_uid] = purchase.purchase_response
+          else
+            order.purchases << purchase
+            order.save!
+          end
           if buyer.present? && buyer.email.blank? && !User.where(email: purchase.email).or(User.where(unconfirmed_email: purchase.email)).exists?
             buyer.update!(email: purchase.email)
           end
@@ -77,9 +106,15 @@ class Order::CreateService
       end
     end
 
-    if order.persisted? && (cart = Cart.fetch_by(user: buyer, browser_guid: params[:browser_guid]))
-      cart.order = order
-      cart.mark_deleted!
+    if (cart = Cart.fetch_by(user: buyer, browser_guid: params[:browser_guid]))
+      all_items_handled = purchase_responses.any? && purchase_responses.values.all? { _1[:success] }
+
+      if order.persisted?
+        cart.order = order
+        cart.mark_deleted!
+      elsif all_items_handled
+        cart.mark_deleted!
+      end
     end
 
     offer_codes = offer_codes

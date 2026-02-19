@@ -10,6 +10,7 @@ import { assertResponseError } from "$app/utils/request";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import {
   type BankAccount,
   type CurrentPayoutsDataAndPaymentMethodWithUserPayable,
@@ -495,10 +496,15 @@ export default function PayoutsIndex() {
   if (!loggedInUser) return null;
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
+<<<<<<< HEAD
     <NavigationButton href={Routes.settings_payments_path()}>
       <Gear pack="filled" className="size-5" />
+=======
+    <NavigationButtonInertia href={Routes.settings_payments_path()}>
+      <Icon name="gear-fill" />
+>>>>>>> main
       Settings
-    </NavigationButton>
+    </NavigationButtonInertia>
   ) : null;
 
   const bulkExportAction = loggedInUser.policies.balance.export ? <ExportPayoutsPopover /> : null;

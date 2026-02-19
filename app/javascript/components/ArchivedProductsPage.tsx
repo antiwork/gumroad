@@ -6,6 +6,7 @@ import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { PaginationProps } from "$app/components/Pagination";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import ProductsPage from "$app/components/ProductsPage";
+import { useProductsSearch } from "$app/components/ProductsPage/useProductsSearch";
 import { Search } from "$app/components/Search";
 import { Sort } from "$app/components/useSortingTableDriver";
 
@@ -28,7 +29,7 @@ export const ArchivedProductsPage = ({
   memberships_data: { memberships, pagination: membershipsPagination, sort: membershipsSort },
   can_create_product: canCreateProduct,
 }: ArchivedProductsPageProps) => {
-  const [query, setQuery] = React.useState<string | null>(null);
+  const { query, setQuery } = useProductsSearch();
 
   return (
     <ProductsLayout
@@ -37,7 +38,7 @@ export const ArchivedProductsPage = ({
       archivedTabVisible
       ctaButton={
         <>
-          <Search value={query ?? ""} onSearch={setQuery} placeholder="Search products" />
+          <Search value={query} onSearch={setQuery} placeholder="Search products" />
           <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
             New product
           </NavigationButtonInertia>

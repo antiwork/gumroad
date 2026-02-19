@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { createAccount, CreateAccountPayload } from "$app/data/account";
-import { ErrorLineItemResult, LineItemResult, SuccessfulLineItemResult } from "$app/data/purchase";
+import type { ErrorLineItemResult, LineItemResult, SuccessfulLineItemResult } from "$app/data/purchase";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
@@ -148,7 +148,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
                 Need an invoice for this?{" "}
                 <a
                   target="_blank"
-                  href={Routes.generate_invoice_by_buyer_path(result.id, { email: result.email })}
+                  href={Routes.new_purchase_invoice_path(result.id, { email: result.email })}
                   rel="noreferrer"
                 >
                   Generate

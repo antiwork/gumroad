@@ -32,7 +32,7 @@ import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Nav as NavFramework, NavLink, NavSection } from "$app/components/Nav";
+import { Nav as NavFramework, NavSection } from "$app/components/Nav";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -156,7 +156,11 @@ export const Nav = (props: Props) => {
           icon={<NetworkChart pack="filled" className="size-5" />}
           href={Routes.workflows_url(routeParams)}
         />
-        <ClientNavLink text="Sales" icon={<DollarCircle pack="filled" className="size-5" />} href={Routes.customers_url(routeParams)} />
+        <ClientNavLink
+          text="Sales"
+          icon={<DollarCircle pack="filled" className="size-5" />}
+          href={Routes.customers_url(routeParams)}
+        />
         <ClientNavLink
           text="Analytics"
           icon={<BarChart pack="filled" className="size-5" />}
@@ -171,11 +175,23 @@ export const Nav = (props: Props) => {
           <ClientNavLink text="Payouts" icon={<Bank className="size-5" />} href={Routes.balance_url(routeParams)} />
         ) : null}
         {loggedInUser?.policies.community.index ? (
-          <NavLink text="Community" icon={<MessageBubble pack="filled" className="size-5" />} href={Routes.community_path(routeParams)} />
+          <ClientNavLink
+            text="Community"
+            icon={<MessageBubble pack="filled" className="size-5" />}
+            href={Routes.communities_path()}
+            onClick={() => {
+              sessionStorage.setItem("communities:referrer", window.location.pathname + window.location.search);
+            }}
+          />
         ) : null}
       </NavSection>
       <NavSection>
-        <NavLink text="Discover" icon={<Search pack="filled" className="size-5" />} href={discoverUrl} exactHrefMatch />
+        <ClientNavLink
+          text="Discover"
+          icon={<Search pack="filled" className="size-5" />}
+          href={discoverUrl}
+          exactHrefMatch
+        />
         {currentSeller?.id === loggedInUser?.id ? (
           <ClientNavLink
             text="Library"

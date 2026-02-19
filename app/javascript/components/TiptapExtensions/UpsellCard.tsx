@@ -112,7 +112,7 @@ export const UpsellCard = TiptapNode.create({
 });
 
 const getUpsellUrl = (id: string, permalink: string) => {
-  const url = new URL(Routes.checkout_index_url());
+  const url = new URL(Routes.checkout_url());
   const searchParams = new URLSearchParams();
   searchParams.append("product", permalink);
   searchParams.append("accepted_offer_id", id);

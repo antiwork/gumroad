@@ -17,7 +17,7 @@
 </div>
 <% if @products.size > Installment::MAX_ABANDONED_CART_PRODUCTS_TO_SHOW_IN_EMAIL %>
   <div>
-    <%= link_to "and #{pluralize(@products.size - Installment::MAX_ABANDONED_CART_PRODUCTS_TO_SHOW_IN_EMAIL, 'more product')}", checkout_index_url(host: UrlService.domain_with_protocol), target: "_blank" %>
+    <%= link_to "and #{pluralize(@products.size - Installment::MAX_ABANDONED_CART_PRODUCTS_TO_SHOW_IN_EMAIL, 'more product')}", checkout_url(host: UrlService.domain_with_protocol), target: "_blank" %>
   </div>
 <% end %>
-<%= link_to "Complete checkout", checkout_index_url(host: UrlService.domain_with_protocol), target: "_blank", class: "button primary" %>
+<%= link_to "Complete checkout", checkout_url(host: UrlService.domain_with_protocol), target: "_blank", class: "button primary" %>

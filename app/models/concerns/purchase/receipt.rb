@@ -46,7 +46,7 @@ module Purchase::Receipt
   end
 
   def invoice_url
-    Rails.application.routes.url_helpers.generate_invoice_by_buyer_url(
+    Rails.application.routes.url_helpers.new_purchase_invoice_url(
       external_id,
       email: email,
       host: UrlService.domain_with_protocol

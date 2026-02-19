@@ -14,12 +14,12 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
 import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
+import { License, useContentFiles } from "$app/components/DownloadPage/WithContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { titleWithFallback } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { License, useContentFiles } from "$app/components/server-components/DownloadPage/WithContent";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
 import { LongAnswer } from "$app/components/TiptapExtensions/LongAnswer";
@@ -287,7 +287,7 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
         <Row role="treeitem" aria-expanded={expanded}>
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
             {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
-            <FolderOpen pack="filled" className="size-5 type-icon" />
+            <FolderOpen pack="filled" className="type-icon size-5" />
             <div>
               <h4>{folderTitle}</h4>
             </div>
