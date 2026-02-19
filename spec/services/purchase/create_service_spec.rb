@@ -3579,7 +3579,7 @@ describe Purchase::CreateService, :vcr do
         purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params).perform
 
         expect(purchase).to be_nil
-        expect(error).to eq("Sorry, something went wrong. Please try again.")
+        expect(error).to eq("Sorry, something went wrong. Please contact support@gumroad.com if the problem persists.")
       end
     end
 

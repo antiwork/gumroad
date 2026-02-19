@@ -203,7 +203,7 @@ class Purchase::CreateService < Purchase::BaseService
                                   email: purchase_params[:email]
                                 })
           end
-          "Sorry, something went wrong. Please try again."
+          "Sorry, something went wrong. Please contact support@gumroad.com if the problem persists."
         end
 
         return nil, error_message
