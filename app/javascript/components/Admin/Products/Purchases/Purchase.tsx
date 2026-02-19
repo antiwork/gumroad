@@ -1,5 +1,7 @@
 import React from "react";
 
+import { Checkbox } from "$app/components/ui/Checkbox";
+
 export type ProductPurchase = {
   email: string;
   created: string;
@@ -47,8 +49,7 @@ const AdminProductPurchase = ({
   return (
     <div className={className}>
       <div className="flex grow items-start gap-2">
-        <input
-          type="checkbox"
+        <Checkbox
           aria-label={`Select purchase ${external_id}`}
           checked={isSelected}
           onChange={(event) => onToggleSelection(external_id, event.target.checked)}

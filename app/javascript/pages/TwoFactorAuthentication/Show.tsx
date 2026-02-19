@@ -80,5 +80,5 @@ function TwoFactorAuthentication() {
   );
 }
 
-TwoFactorAuthentication.authenticationLayout = true;
+TwoFactorAuthentication.publicLayout = true;
 export default TwoFactorAuthentication;

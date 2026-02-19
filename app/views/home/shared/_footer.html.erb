@@ -23,6 +23,9 @@
         <%= link_to "Pricing", pricing_path, class: "no-underline hover:text-pink" %>
         <%= link_to "Features", features_path, class: "no-underline hover:text-pink" %>
         <%= link_to "About", about_path, class: "no-underline hover:text-pink" %>
+        <% if Feature.active?(:career_pages) %>
+          <%= link_to "Careers", careers_path, class: "no-underline hover:text-pink" %>
+        <% end %>
         <%= link_to "Small Bets", small_bets_path, class: "no-underline hover:text-pink" %>
       </div>
       <div class="flex-1 flex flex-col gap-3">

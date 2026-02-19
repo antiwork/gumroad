@@ -276,7 +276,7 @@ const CtaBar = ({
     >
       <div
         ref={ref}
-        className="mx-auto flex max-w-product-page items-center justify-between gap-4 p-4 lg:px-8"
+        className="mx-auto flex max-w-product-page items-center justify-between gap-2 p-4 lg:gap-4 lg:px-8"
         style={{
           transition: "var(--transition-duration)",
           marginTop: visible || !isDesktop ? undefined : -height,
@@ -303,27 +303,29 @@ const CtaBar = ({
         {product.ratings != null && product.ratings.count > 0 ? (
           <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
         ) : null}
-        <CtaButton
-          product={product}
-          purchase={purchase}
-          discountCode={discountCode ?? null}
-          selection={selection}
-          label={ctaLabel}
-          onClick={(evt) => {
-            if (
-              isPWYW ||
-              product.options.length > 1 ||
-              hasRentOption ||
-              hasMultipleRecurrences ||
-              hasConfigurableQuantity
-            ) {
-              evt.preventDefault();
-              ctaButtonRef.current?.scrollIntoView(false);
-              configurationSelectorRef.current?.focusRequiredInput();
-              if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
-            }
-          }}
-        />
+        <div className="flex items-center gap-2">
+          <CtaButton
+            product={product}
+            purchase={purchase}
+            discountCode={discountCode ?? null}
+            selection={selection}
+            label={ctaLabel}
+            onClick={(evt) => {
+              if (
+                isPWYW ||
+                product.options.length > 1 ||
+                hasRentOption ||
+                hasMultipleRecurrences ||
+                hasConfigurableQuantity
+              ) {
+                evt.preventDefault();
+                ctaButtonRef.current?.scrollIntoView(false);
+                configurationSelectorRef.current?.focusRequiredInput();
+                if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
+              }
+            }}
+          />
+        </div>
       </div>
     </section>
   );

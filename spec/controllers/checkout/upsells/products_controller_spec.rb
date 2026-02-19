@@ -27,6 +27,7 @@ describe Checkout::Upsells::ProductsController do
             review_count: 1,
             average_rating: 5.0,
             native_type: "digital",
+            thumbnail_url: nil,
             options: []
           },
           {
@@ -38,6 +39,7 @@ describe Checkout::Upsells::ProductsController do
             review_count: 0,
             average_rating: 0.0,
             native_type: "physical",
+            thumbnail_url: nil,
             options: []
           },
           {
@@ -49,6 +51,7 @@ describe Checkout::Upsells::ProductsController do
             review_count: 0,
             average_rating: 0.0,
             native_type: "digital",
+            thumbnail_url: nil,
             options: [
               {
                 id: versioned_product.variants.first.external_id,
@@ -97,6 +100,7 @@ describe Checkout::Upsells::ProductsController do
               review_count: 1,
               average_rating: 5.0,
               native_type: "digital",
+              thumbnail_url: nil,
               options: []
             },
             {
@@ -108,6 +112,7 @@ describe Checkout::Upsells::ProductsController do
               review_count: 0,
               average_rating: 0.0,
               native_type: "physical",
+              thumbnail_url: nil,
               options: []
             },
             {
@@ -119,6 +124,7 @@ describe Checkout::Upsells::ProductsController do
               review_count: 0,
               average_rating: 0.0,
               native_type: "digital",
+              thumbnail_url: nil,
               options: [
                 {
                   id: versioned_product.variants.first.external_id,
@@ -164,9 +170,19 @@ describe Checkout::Upsells::ProductsController do
           review_count: 1,
           average_rating: 5.0,
           native_type: "digital",
+          thumbnail_url: nil,
           options: []
         }
       )
+    end
+
+    it "returns thumbnail_url when product has a thumbnail" do
+      thumbnail = create(:thumbnail, product: product1)
+      sign_in seller
+      get :show, params: { id: product1.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.deep_symbolize_keys[:thumbnail_url]).to eq(thumbnail.url)
     end
 
     it "raises ActiveRecord::RecordNotFound for an archived product" do

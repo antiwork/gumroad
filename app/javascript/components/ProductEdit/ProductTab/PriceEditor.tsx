@@ -8,8 +8,8 @@ import { PriceInput } from "$app/components/PriceInput";
 import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeSelector";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
 import { ProductEditContext } from "$app/components/ProductEdit/state";
-import { Toggle } from "$app/components/Toggle";
 import { Alert } from "$app/components/ui/Alert";
+import { Switch } from "$app/components/ui/Switch";
 
 export const PriceEditor = ({
   priceCents,
@@ -59,11 +59,16 @@ export const PriceEditor = ({
         className="toggle"
         open={isPWYW}
         summary={
-          <Toggle value={isPWYW} onChange={setIsPWYW} disabled={isFreeProduct}>
-            <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
-              Allow customers to pay what they want
-            </a>
-          </Toggle>
+          <Switch
+            checked={isPWYW}
+            onChange={(e) => setIsPWYW(e.target.checked)}
+            disabled={isFreeProduct}
+            label={
+              <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
+                Allow customers to pay what they want
+              </a>
+            }
+          />
         }
       >
         <Dropdown className="gap-4 lg:grid-cols-2">

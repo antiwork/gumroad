@@ -514,7 +514,7 @@ describe("Email Creation Flow", :js, type: :system) do
       expect(page).to have_text("New email")
       expect(page).to have_radio_button("Customers only", checked: true)
       expect(page).to have_checked_field("Send email")
-      expect(page).to have_unchecked_field("Post to profile")
+      expect(page).to_not have_field("Post to profile")
       find(:combo_box, "Bought").click
       within(:fieldset, "Bought") do
         expect(page).to have_button("Bundle Product 1")

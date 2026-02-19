@@ -1,0 +1,31 @@
+<%
+  jobs = local_assigns[:jobs] || []
+%>
+
+<div id="open-roles" class="bg-white pb-24 md:pb-32 job-listings">
+  <div class="mx-auto max-w-4xl md:px-8">
+    <h2 class="text-4xl md:text-7xl font-medium text-center mb-8 px-8 md:px-0">
+      We have <%= jobs.length %> open roles
+    </h2>
+
+
+    <div>
+      <% jobs.each do |job| %>
+        <a href="<%= job[:url] %>" data-category="<%= job[:category].downcase %>" class="job-item block py-8 hover:bg-gray-50 px-4 md:px-8 md:-mx-4 transition-colors no-underline border-t border-gray-200">
+          <div class="flex items-center gap-4 text-sm text-gray-500 mb-2">
+            <span><%= job[:type] %></span>
+            <span><%= job[:location] %></span>
+          </div>
+          <h3 class="text-2xl md:text-3xl font-medium mb-2"><%= job[:title] %></h3>
+          <div class="relative inline-grid grid-flow-col items-center border border-r-0 border-black">
+            <div class="bg-black px-2 py-1 text-white text-base leading-none self-stretch flex items-center"><%= job[:salary] %></div>
+            <div class="border-black border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1"></div>
+            <div class="absolute top-0 right-px bottom-0 border-black border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1"></div>
+          </div>
+        </a>
+      <% end %>
+      <div class="border-t border-gray-200 md:-mx-4"></div>
+    </div>
+  </div>
+</div>
+

@@ -35,6 +35,15 @@ module RichTextEditorHelpers
     have_selector("[role=treeitem] h4", text: name)
   end
 
+  def find_input_embed(label_or_text)
+    content_editor = find("[aria-label='Content editor']")
+    if label_or_text == "Upload files"
+      content_editor.find(:button, "Upload files", match: :first).ancestor("[data-input-embed]")
+    else
+      content_editor.find(:field, "Title", with: label_or_text, match: :first).ancestor("[data-input-embed]")
+    end
+  end
+
   def ctrl_key
     page.driver.browser.capabilities.platform_name.include?("mac") ? :command : :control
   end

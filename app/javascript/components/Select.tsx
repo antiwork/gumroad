@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 import ReactSelect, {
   components,
@@ -15,6 +14,7 @@ import ReactSelect, {
 } from "react-select";
 
 import { escapeRegExp } from "$app/utils";
+import { classNames } from "$app/utils/classNames";
 
 import { Icon } from "$app/components/Icons";
 import { Pill } from "$app/components/ui/Pill";
@@ -89,7 +89,7 @@ const SelectInner = <IsMulti extends boolean>(
         ref={ref}
         isOptionDisabled={(option) => option.disabled ?? false}
         instanceId={props.inputId ?? menuListId}
-        className={cx("combobox", props.className)}
+        className={classNames("relative", "[&_[aria-expanded=true]]:rounded-b-none", props.className)}
         components={{
           ClearIndicator,
           Control,
@@ -191,7 +191,17 @@ const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProp
   );
 
 const Control = <IsMulti extends boolean>(props: ControlProps<Option, IsMulti>) => (
-  <components.Control className={cx("input", props.isDisabled ? "disabled" : null)} {...props}>
+  <components.Control
+    className={classNames(
+      "relative inline-flex min-h-12 w-full items-center gap-2 rounded border border-border px-4 py-0",
+      props.menuIsOpen && "rounded-b-none",
+      "bg-background text-foreground",
+      "focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
+      "[&>.icon]:text-muted",
+      props.isDisabled && "cursor-not-allowed opacity-30 [&_input]:opacity-100",
+    )}
+    {...props}
+  >
     {props.children}
   </components.Control>
 );
@@ -205,6 +215,9 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
       ref={props.innerRef as React.Ref<HTMLDataListElement>}
       style={{ maxHeight: props.maxHeight }}
       id={menuListId ?? undefined}
+      className={classNames(
+        "absolute top-full left-0 z-10 block w-full overflow-auto rounded-b border border-border bg-background py-2 shadow",
+      )}
     >
       {props.children}
     </datalist>
@@ -229,6 +242,7 @@ const Input = <IsMulti extends boolean>(props: InputProps<Option, IsMulti>) => {
   return (
     <components.Input
       {...props}
+      className="-mx-4 max-w-none flex-1 border-none bg-transparent shadow-none outline-none"
       aria-owns={customProps.menuListId ?? undefined}
       aria-controls={customProps.menuListId ?? undefined}
       aria-haspopup="listbox"
@@ -248,7 +262,12 @@ const Option = <IsMulti extends boolean>(props: OptionProps<Option, IsMulti>) =>
 
   return (
     <div
-      className={cx({ focused: props.isFocused })}
+      className={classNames(
+        "flex items-center",
+        "px-4 py-2",
+        "cursor-pointer",
+        props.isFocused && "bg-primary text-primary-foreground",
+      )}
       ref={props.innerRef}
       id={innerProps.id}
       key={innerProps.key}

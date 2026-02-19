@@ -22,8 +22,8 @@ import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/Prof
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
 import { ProfileSection, PublicFileWithStatus } from "$app/components/ProductEdit/state";
-import { Toggle } from "$app/components/Toggle";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
+import { Switch } from "$app/components/ui/Switch";
 
 type SharePageProps = {
   bundle: {
@@ -192,15 +192,16 @@ export default function BundlesShareEdit() {
           />
           <TagSelector tags={form.data.tags} onChange={(tags) => form.setData("tags", tags)} />
           <fieldset>
-            <Toggle
-              value={form.data.display_product_reviews}
-              onChange={(newValue) => form.setData("display_product_reviews", newValue)}
-            >
-              Display your product's 1-5 star rating to prospective customers
-            </Toggle>
-            <Toggle value={form.data.is_adult} onChange={(newValue) => form.setData("is_adult", newValue)}>
-              This product contains content meant only for adults, including the preview
-            </Toggle>
+            <Switch
+              checked={form.data.display_product_reviews}
+              onChange={(e) => form.setData("display_product_reviews", e.target.checked)}
+              label="Display your product's 1-5 star rating to prospective customers"
+            />
+            <Switch
+              checked={form.data.is_adult}
+              onChange={(e) => form.setData("is_adult", e.target.checked)}
+              label="This product contains content meant only for adults, including the preview"
+            />
           </fieldset>
         </section>
       </form>

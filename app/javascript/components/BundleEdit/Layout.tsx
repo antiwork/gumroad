@@ -1,6 +1,8 @@
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
+import { getContrastColor, hexToRgb } from "$app/utils/color";
+
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -71,6 +73,7 @@ export const BundleEditLayout = ({
   onBeforeNavigate,
 }: BundleEditLayoutProps) => {
   const tab = useCurrentTab();
+  const currentSeller = useCurrentSeller();
 
   const url = useProductUrl(uniquePermalink, customPermalink);
 
@@ -88,6 +91,20 @@ export const BundleEditLayout = ({
       : isBusy
         ? "Please wait..."
         : undefined;
+
+  const profileColors = currentSeller
+    ? {
+        "--accent": hexToRgb(currentSeller.profileHighlightColor),
+        "--contrast-accent": hexToRgb(getContrastColor(currentSeller.profileHighlightColor)),
+        "--filled": hexToRgb(currentSeller.profileBackgroundColor),
+        "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
+      }
+    : {};
+
+  const fontUrl =
+    currentSeller?.profileFont && currentSeller.profileFont !== "ABC Favorit"
+      ? `https://fonts.googleapis.com/css2?family=${currentSeller.profileFont}:wght@400;600&display=swap`
+      : null;
 
   const saveButton = onSave ? (
     <WithTooltip tip={saveButtonTooltip}>
@@ -194,9 +211,34 @@ export const BundleEditLayout = ({
               scaleFactor={0.4}
               style={{
                 border: "var(--border)",
+                borderRadius: "var(--border-radius-2)",
+                fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+                ...profileColors,
+                "--primary": "var(--color)",
+                "--body-bg": "rgb(var(--filled))",
+                "--contrast-primary": "var(--filled)",
+                "--contrast-filled": "var(--color)",
+                "--color-body": "var(--body-bg)",
+                "--color-background": "rgb(var(--filled))",
+                "--color-foreground": "rgb(var(--color))",
+                "--color-border": "rgb(var(--color) / var(--border-alpha))",
+                "--color-accent": "rgb(var(--accent))",
+                "--color-accent-foreground": "rgb(var(--contrast-accent))",
+                "--color-primary": "rgb(var(--primary))",
+                "--color-primary-foreground": "rgb(var(--contrast-primary))",
+                "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
+                "--color-muted": "rgb(var(--color) / var(--gray-3))",
                 backgroundColor: "rgb(var(--filled))",
+                color: "rgb(var(--color))",
               }}
             >
+              {fontUrl ? (
+                <>
+                  <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+                  <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                  <link rel="stylesheet" href={fontUrl} />
+                </>
+              ) : null}
               {preview}
             </Preview>
           </PreviewSidebar>

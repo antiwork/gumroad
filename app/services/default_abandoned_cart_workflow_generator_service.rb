@@ -14,7 +14,7 @@ class DefaultAbandonedCartWorkflowGeneratorService
       workflow = seller.workflows.abandoned_cart_type.create!(name: "Abandoned cart")
       installment = workflow.installments.create!(
         name: "You left something in your cart",
-        message: "<p>When you're ready to buy, <a href=\"#{checkout_index_url(host: DOMAIN)}\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">complete checking out</a>.</p><#{Installment::PRODUCT_LIST_PLACEHOLDER_TAG_NAME} />",
+        message: "<p>When you're ready to buy, <a href=\"#{checkout_url(host: DOMAIN)}\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">complete checking out</a>.</p><#{Installment::PRODUCT_LIST_PLACEHOLDER_TAG_NAME} />",
         installment_type: workflow.workflow_type,
         json_data: workflow.json_data,
         seller_id: workflow.seller_id,

@@ -5,24 +5,24 @@ http_interactions:
     uri: https://api.stripe.com/v1/payment_methods
     body:
       encoding: UTF-8
-      string: type=card&card[number]=4242+4242+4242+4242&card[exp_month]=12&card[exp_year]=2023&card[cvc]=123
+      string: type=card&card[token]=tok_visa
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.4.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_vqbHozMTC5i5oK","request_duration_ms":983}}'
+      - '{"last_request_metrics":{"request_id":"req_4xnReGoKO84HBj","request_duration_ms":840}}'
       Idempotency-Key:
-      - cfb3f271-50a7-46b5-80ff-b01a2a662381
+      - 1fd51762-7a8b-4224-a711-7135a751da4a
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.4.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
-        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Emmanuels-MacBook-Pro.local 24.5.0 Darwin Kernel Version 24.5.0: Tue Apr 22
+        19:54:49 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T6000 arm64","hostname":"Emmanuels-MacBook-Pro.local"}'
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -35,17 +35,17 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 29 Dec 2023 12:17:16 GMT
+      - Tue, 10 Feb 2026 13:35:26 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '931'
+      - '1082'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -56,31 +56,36 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Fpayment_methods; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=PSjWq9O0kI-PSUGQGlaBSDDw-Vh--cl8RVQy0V8eSGSarCEEk7H00Hl2RmlpJjnL2zMFgc31HHZAW9h3
       Idempotency-Key:
-      - cfb3f271-50a7-46b5-80ff-b01a2a662381
+      - 1fd51762-7a8b-4224-a711-7135a751da4a
       Original-Request:
-      - req_iAYbYI5CZrdzRZ
+      - req_udevZTksyKoKNM
       Request-Id:
-      - req_iAYbYI5CZrdzRZ
+      - req_udevZTksyKoKNM
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - ABGHIJ
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_0OSf049e1RjUNIyY7BlrTTls",
+          "id": "pm_1SzH6AIBOqvOFDrfOGVCJ9BN",
           "object": "payment_method",
+          "allow_redisplay": "unspecified",
           "billing_details": {
             "address": {
               "city": null,
@@ -92,7 +97,8 @@ http_interactions:
             },
             "email": null,
             "name": null,
-            "phone": null
+            "phone": null,
+            "tax_id": null
           },
           "card": {
             "brand": "visa",
@@ -102,9 +108,10 @@ http_interactions:
               "cvc_check": "unchecked"
             },
             "country": "US",
-            "exp_month": 12,
-            "exp_year": 2023,
-            "fingerprint": "W691J2Ye3VDoq6Ij",
+            "display_brand": "visa",
+            "exp_month": 2,
+            "exp_year": 2027,
+            "fingerprint": "hsksJCaNjbEGzjqP",
             "funding": "credit",
             "generated_from": null,
             "last4": "4242",
@@ -114,41 +121,43 @@ http_interactions:
               ],
               "preferred": null
             },
+            "regulated_status": "unregulated",
             "three_d_secure_usage": {
               "supported": true
             },
             "wallet": null
           },
-          "created": 1703852236,
+          "created": 1770730526,
           "customer": null,
+          "customer_account": null,
           "livemode": false,
           "metadata": {},
           "type": "card"
         }
-  recorded_at: Fri, 29 Dec 2023 12:17:16 GMT
+  recorded_at: Tue, 10 Feb 2026 13:35:26 GMT
 - request:
     method: post
     uri: https://api.stripe.com/v1/payment_intents
     body:
       encoding: UTF-8
-      string: amount=1500&currency=usd&description=Gumroad+Charge+wsXB5D7zVXrZumFMMSTK6Q%3D%3D&metadata[0gK25I2vTHhaNe_zz7kNPw%3D%3D]=%7B%3Aprice_cents%3D%3E500%2C+%3Afee_cents%3D%3E75%2C+%3Aaffiliate_credit_cents%3D%3E0%2C+%3Agumroad_tax_cents%3D%3E0%2C+%3Atotal_transaction_cents%3D%3E500%7D&metadata[1P4aHrL_eETCOSXy-SvQDQ%3D%3D]=%7B%3Aprice_cents%3D%3E1000%2C+%3Afee_cents%3D%3E120%2C+%3Aaffiliate_credit_cents%3D%3E0%2C+%3Agumroad_tax_cents%3D%3E0%2C+%3Atotal_transaction_cents%3D%3E1000%7D&transfer_group=CH-30&payment_method_types[0]=card&off_session=false&payment_method=pm_0OSf049e1RjUNIyY7BlrTTls&statement_descriptor_suffix=edgar4a15724d48
+      string: amount=1500&currency=usd&description=Gumroad+Charge+rR3RsI0CGzjy23A1Ej0Wzg%3D%3D&metadata[purchases%7B0%7D]=V56BQzVKswyhlxJhqacGiQ%3D%3D%2CraGMgvAl56ng-S9FHcqYLg%3D%3D&transfer_group=CH-786&payment_method_types[0]=card&off_session=false&payment_method=pm_1SzH6AIBOqvOFDrfOGVCJ9BN&statement_descriptor_suffix=edgar97e3fa4851
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.4.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_iAYbYI5CZrdzRZ","request_duration_ms":581}}'
+      - '{"last_request_metrics":{"request_id":"req_udevZTksyKoKNM","request_duration_ms":282}}'
       Idempotency-Key:
-      - 1b722e32-66b1-4ad8-871a-9ab0261560cc
+      - 2f5e775d-c266-4f16-b017-eff50dc1dba7
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.4.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
-        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Emmanuels-MacBook-Pro.local 24.5.0 Darwin Kernel Version 24.5.0: Tue Apr 22
+        19:54:49 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T6000 arm64","hostname":"Emmanuels-MacBook-Pro.local"}'
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -161,17 +170,17 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 29 Dec 2023 12:17:17 GMT
+      - Tue, 10 Feb 2026 13:35:27 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '1711'
+      - '1545'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -182,30 +191,34 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Fpayment_intents; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=PSjWq9O0kI-PSUGQGlaBSDDw-Vh--cl8RVQy0V8eSGSarCEEk7H00Hl2RmlpJjnL2zMFgc31HHZAW9h3
       Idempotency-Key:
-      - 1b722e32-66b1-4ad8-871a-9ab0261560cc
+      - 2f5e775d-c266-4f16-b017-eff50dc1dba7
       Original-Request:
-      - req_wAI3MpQV5UQ0H7
+      - req_OwefhDbdIdAMLz
       Request-Id:
-      - req_wAI3MpQV5UQ0H7
+      - req_OwefhDbdIdAMLz
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - ABGHIJ
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "pi_2OSf059e1RjUNIyY1solAJ46",
+          "id": "pi_3SzH6BIBOqvOFDrf1CZmX13W",
           "object": "payment_intent",
           "amount": 1500,
           "amount_capturable": 0,
@@ -219,23 +232,24 @@ http_interactions:
           "canceled_at": null,
           "cancellation_reason": null,
           "capture_method": "automatic",
-          "client_secret": "pi_2OSf059e1RjUNIyY1solAJ46_secret_hN7EGiSpV5erAMNRkJVa0isbn",
+          "client_secret": "pi_3SzH6BIBOqvOFDrf1CZmX13W_secret_iM2RwHc97XUxSA8irCuXMckDD",
           "confirmation_method": "automatic",
-          "created": 1703852237,
+          "created": 1770730527,
           "currency": "usd",
           "customer": null,
-          "description": "Gumroad Charge wsXB5D7zVXrZumFMMSTK6Q==",
+          "customer_account": null,
+          "description": "Gumroad Charge rR3RsI0CGzjy23A1Ej0Wzg==",
+          "excluded_payment_method_types": null,
           "invoice": null,
           "last_payment_error": null,
           "latest_charge": null,
           "livemode": false,
           "metadata": {
-            "0gK25I2vTHhaNe_zz7kNPw==": "{:price_cents=>500, :fee_cents=>75, :affiliate_credit_cents=>0, :gumroad_tax_cents=>0, :total_transaction_cents=>500}",
-            "1P4aHrL_eETCOSXy-SvQDQ==": "{:price_cents=>1000, :fee_cents=>120, :affiliate_credit_cents=>0, :gumroad_tax_cents=>0, :total_transaction_cents=>1000}"
+            "purchases{0}": "V56BQzVKswyhlxJhqacGiQ==,raGMgvAl56ng-S9FHcqYLg=="
           },
           "next_action": null,
           "on_behalf_of": null,
-          "payment_method": "pm_0OSf049e1RjUNIyY7BlrTTls",
+          "payment_method": "pm_1SzH6AIBOqvOFDrfOGVCJ9BN",
           "payment_method_configuration_details": null,
           "payment_method_options": {
             "card": {
@@ -255,35 +269,35 @@ http_interactions:
           "shipping": null,
           "source": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar4a15724d48",
+          "statement_descriptor_suffix": "edgar97e3fa4851",
           "status": "requires_confirmation",
           "transfer_data": null,
-          "transfer_group": "CH-30"
+          "transfer_group": "CH-786"
         }
-  recorded_at: Fri, 29 Dec 2023 12:17:17 GMT
+  recorded_at: Tue, 10 Feb 2026 13:35:27 GMT
 - request:
     method: post
-    uri: https://api.stripe.com/v1/payment_intents/pi_2OSf059e1RjUNIyY1solAJ46/confirm
+    uri: https://api.stripe.com/v1/payment_intents/pi_3SzH6BIBOqvOFDrf1CZmX13W/confirm
     body:
       encoding: US-ASCII
       string: ''
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.4.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_wAI3MpQV5UQ0H7","request_duration_ms":514}}'
+      - '{"last_request_metrics":{"request_id":"req_OwefhDbdIdAMLz","request_duration_ms":331}}'
       Idempotency-Key:
-      - f58a2550-9232-4b9e-bd89-d7fff998ad3c
+      - ebc544c6-c8d8-43be-ac9a-983620c09357
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.4.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
-        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Emmanuels-MacBook-Pro.local 24.5.0 Darwin Kernel Version 24.5.0: Tue Apr 22
+        19:54:49 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T6000 arm64","hostname":"Emmanuels-MacBook-Pro.local"}'
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -296,17 +310,17 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 29 Dec 2023 12:17:18 GMT
+      - Tue, 10 Feb 2026 13:35:28 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '1727'
+      - '1561'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -317,31 +331,34 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Fpayment_intents%2F%3Aintent%2Fconfirm;
-        block-all-mixed-content; default-src 'none'; base-uri 'none'; form-action
-        'none'; frame-ancestors 'none'; img-src 'self'; script-src 'self' 'report-sample';
-        style-src 'self'
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=PSjWq9O0kI-PSUGQGlaBSDDw-Vh--cl8RVQy0V8eSGSarCEEk7H00Hl2RmlpJjnL2zMFgc31HHZAW9h3
       Idempotency-Key:
-      - f58a2550-9232-4b9e-bd89-d7fff998ad3c
+      - ebc544c6-c8d8-43be-ac9a-983620c09357
       Original-Request:
-      - req_7Urb2xLJgXMKsG
+      - req_OUXp7rqDSGia7J
       Request-Id:
-      - req_7Urb2xLJgXMKsG
+      - req_OUXp7rqDSGia7J
       Stripe-Should-Retry:
       - 'false'
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - ABGHIJ
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "pi_2OSf059e1RjUNIyY1solAJ46",
+          "id": "pi_3SzH6BIBOqvOFDrf1CZmX13W",
           "object": "payment_intent",
           "amount": 1500,
           "amount_capturable": 0,
@@ -355,23 +372,24 @@ http_interactions:
           "canceled_at": null,
           "cancellation_reason": null,
           "capture_method": "automatic",
-          "client_secret": "pi_2OSf059e1RjUNIyY1solAJ46_secret_hN7EGiSpV5erAMNRkJVa0isbn",
+          "client_secret": "pi_3SzH6BIBOqvOFDrf1CZmX13W_secret_iM2RwHc97XUxSA8irCuXMckDD",
           "confirmation_method": "automatic",
-          "created": 1703852237,
+          "created": 1770730527,
           "currency": "usd",
           "customer": null,
-          "description": "Gumroad Charge wsXB5D7zVXrZumFMMSTK6Q==",
+          "customer_account": null,
+          "description": "Gumroad Charge rR3RsI0CGzjy23A1Ej0Wzg==",
+          "excluded_payment_method_types": null,
           "invoice": null,
           "last_payment_error": null,
-          "latest_charge": "ch_2OSf059e1RjUNIyY1DNWop25",
+          "latest_charge": "ch_3SzH6BIBOqvOFDrf1oM7omWm",
           "livemode": false,
           "metadata": {
-            "0gK25I2vTHhaNe_zz7kNPw==": "{:price_cents=>500, :fee_cents=>75, :affiliate_credit_cents=>0, :gumroad_tax_cents=>0, :total_transaction_cents=>500}",
-            "1P4aHrL_eETCOSXy-SvQDQ==": "{:price_cents=>1000, :fee_cents=>120, :affiliate_credit_cents=>0, :gumroad_tax_cents=>0, :total_transaction_cents=>1000}"
+            "purchases{0}": "V56BQzVKswyhlxJhqacGiQ==,raGMgvAl56ng-S9FHcqYLg=="
           },
           "next_action": null,
           "on_behalf_of": null,
-          "payment_method": "pm_0OSf049e1RjUNIyY7BlrTTls",
+          "payment_method": "pm_1SzH6AIBOqvOFDrfOGVCJ9BN",
           "payment_method_configuration_details": null,
           "payment_method_options": {
             "card": {
@@ -391,33 +409,33 @@ http_interactions:
           "shipping": null,
           "source": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar4a15724d48",
+          "statement_descriptor_suffix": "edgar97e3fa4851",
           "status": "succeeded",
           "transfer_data": null,
-          "transfer_group": "CH-30"
+          "transfer_group": "CH-786"
         }
-  recorded_at: Fri, 29 Dec 2023 12:17:18 GMT
+  recorded_at: Tue, 10 Feb 2026 13:35:28 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/charges/ch_2OSf059e1RjUNIyY1DNWop25?expand%5B%5D=application_fee.balance_transaction&expand%5B%5D=balance_transaction
+    uri: https://api.stripe.com/v1/charges/ch_3SzH6BIBOqvOFDrf1oM7omWm?expand%5B%5D=application_fee.balance_transaction&expand%5B%5D=balance_transaction
     body:
       encoding: US-ASCII
       string: ''
     headers:
       User-Agent:
-      - Stripe/v1 RubyBindings/10.4.0
+      - Stripe/v1 RubyBindings/12.5.0
       Authorization:
       - Bearer <STRIPE_API_KEY>
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_7Urb2xLJgXMKsG","request_duration_ms":1203}}'
+      - '{"last_request_metrics":{"request_id":"req_OUXp7rqDSGia7J","request_duration_ms":1115}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"10.4.0","lang":"ruby","lang_version":"3.2.2 p53 (2023-03-30)","platform":"arm64-darwin20","engine":"ruby","publisher":"stripe","uname":"Darwin
-        Harbakshs-MacBook-Air.local 20.5.0 Darwin Kernel Version 20.5.0: Sat May  8
-        05:10:31 PDT 2021; root:xnu-7195.121.3~9/RELEASE_ARM64_T8101 arm64","hostname":"Harbakshs-MacBook-Air.local"}'
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin24","engine":"ruby","publisher":"stripe","uname":"Darwin
+        Emmanuels-MacBook-Pro.local 24.5.0 Darwin Kernel Version 24.5.0: Tue Apr 22
+        19:54:49 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T6000 arm64","hostname":"Emmanuels-MacBook-Pro.local"}'
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -430,7 +448,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Fri, 29 Dec 2023 12:17:20 GMT
+      - Tue, 10 Feb 2026 13:35:28 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -440,7 +458,7 @@ http_interactions:
       Access-Control-Allow-Credentials:
       - 'true'
       Access-Control-Allow-Methods:
-      - GET,HEAD,PUT,PATCH,POST,DELETE
+      - GET, HEAD, PUT, PATCH, POST, DELETE
       Access-Control-Allow-Origin:
       - "*"
       Access-Control-Expose-Headers:
@@ -451,54 +469,58 @@ http_interactions:
       Cache-Control:
       - no-cache, no-store
       Content-Security-Policy:
-      - report-uri https://q.stripe.com/csp-report?p=v1%2Fcharges%2F%3Acharge; block-all-mixed-content;
-        default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=PSjWq9O0kI-PSUGQGlaBSDDw-Vh--cl8RVQy0V8eSGSarCEEk7H00Hl2RmlpJjnL2zMFgc31HHZAW9h3
       Request-Id:
-      - req_kswL9awv8iP0MX
+      - req_nQmSoeM387p2nC
       Stripe-Version:
       - '2023-10-16'
       Vary:
       - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
+      X-Wc:
+      - ABGHIJ
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
       encoding: UTF-8
       string: |-
         {
-          "id": "ch_2OSf059e1RjUNIyY1DNWop25",
+          "id": "ch_3SzH6BIBOqvOFDrf1oM7omWm",
           "object": "charge",
           "amount": 1500,
           "amount_captured": 1500,
           "amount_refunded": 0,
-          "amount_updates": [],
           "application": null,
           "application_fee": null,
           "application_fee_amount": null,
           "balance_transaction": {
-            "id": "txn_2OSf059e1RjUNIyY1tBwji3S",
+            "id": "txn_3SzH6BIBOqvOFDrf1HIQIewB",
             "object": "balance_transaction",
             "amount": 1500,
-            "available_on": 1704240000,
-            "created": 1703852238,
+            "available_on": 1771286400,
+            "balance_type": "payments",
+            "created": 1770730527,
             "currency": "usd",
-            "description": "Gumroad Charge wsXB5D7zVXrZumFMMSTK6Q==",
+            "description": "Gumroad Charge rR3RsI0CGzjy23A1Ej0Wzg==",
             "exchange_rate": null,
-            "fee": 60,
+            "fee": 74,
             "fee_details": [
               {
-                "amount": 60,
+                "amount": 74,
                 "application": null,
                 "currency": "usd",
                 "description": "Stripe processing fees",
                 "type": "stripe_fee"
               }
             ],
-            "net": 1440,
+            "net": 1426,
             "reporting_category": "charge",
-            "source": "ch_2OSf059e1RjUNIyY1DNWop25",
+            "source": "ch_3SzH6BIBOqvOFDrf1oM7omWm",
             "status": "pending",
             "type": "charge"
           },
@@ -513,14 +535,15 @@ http_interactions:
             },
             "email": null,
             "name": null,
-            "phone": null
+            "phone": null,
+            "tax_id": null
           },
-          "calculated_statement_descriptor": "GUMRD.COM* EDGAR4A1572",
+          "calculated_statement_descriptor": "STRIPE* EDGAR97E3FA485",
           "captured": true,
-          "created": 1703852238,
+          "created": 1770730527,
           "currency": "usd",
           "customer": null,
-          "description": "Gumroad Charge wsXB5D7zVXrZumFMMSTK6Q==",
+          "description": "Gumroad Charge rR3RsI0CGzjy23A1Ej0Wzg==",
           "destination": null,
           "dispute": null,
           "disputed": false,
@@ -531,25 +554,28 @@ http_interactions:
           "invoice": null,
           "livemode": false,
           "metadata": {
-            "0gK25I2vTHhaNe_zz7kNPw==": "{:price_cents=>500, :fee_cents=>75, :affiliate_credit_cents=>0, :gumroad_tax_cents=>0, :total_transaction_cents=>500}",
-            "1P4aHrL_eETCOSXy-SvQDQ==": "{:price_cents=>1000, :fee_cents=>120, :affiliate_credit_cents=>0, :gumroad_tax_cents=>0, :total_transaction_cents=>1000}"
+            "purchases{0}": "V56BQzVKswyhlxJhqacGiQ==,raGMgvAl56ng-S9FHcqYLg=="
           },
           "on_behalf_of": null,
           "order": null,
           "outcome": {
+            "advice_code": null,
+            "network_advice_code": null,
+            "network_decline_code": null,
             "network_status": "approved_by_network",
             "reason": null,
             "risk_level": "normal",
-            "risk_score": 2,
+            "risk_score": 58,
             "seller_message": "Payment complete.",
             "type": "authorized"
           },
           "paid": true,
-          "payment_intent": "pi_2OSf059e1RjUNIyY1solAJ46",
-          "payment_method": "pm_0OSf049e1RjUNIyY7BlrTTls",
+          "payment_intent": "pi_3SzH6BIBOqvOFDrf1CZmX13W",
+          "payment_method": "pm_1SzH6AIBOqvOFDrfOGVCJ9BN",
           "payment_method_details": {
             "card": {
               "amount_authorized": 1500,
+              "authorization_code": "025428",
               "brand": "visa",
               "checks": {
                 "address_line1_check": null,
@@ -557,12 +583,12 @@ http_interactions:
                 "cvc_check": "pass"
               },
               "country": "US",
-              "exp_month": 12,
-              "exp_year": 2023,
+              "exp_month": 2,
+              "exp_year": 2027,
               "extended_authorization": {
                 "status": "disabled"
               },
-              "fingerprint": "W691J2Ye3VDoq6Ij",
+              "fingerprint": "hsksJCaNjbEGzjqP",
               "funding": "credit",
               "incremental_authorization": {
                 "status": "unavailable"
@@ -577,10 +603,12 @@ http_interactions:
               "network_token": {
                 "used": false
               },
+              "network_transaction_id": "104115107115746",
               "overcapture": {
                 "maximum_amount_capturable": 1500,
                 "status": "unavailable"
               },
+              "regulated_status": "unregulated",
               "three_d_secure": null,
               "wallet": null
             },
@@ -589,17 +617,17 @@ http_interactions:
           "radar_options": {},
           "receipt_email": null,
           "receipt_number": null,
-          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaIgogOWUxUmpVTkl5WUdwQTlDZmgzUm1ReHhUemIxYWFrcEUoz_G6rAYyBvYe4QqH7zosFr2Z_qfainI9mceHxEYdt4gDdNWeP1BRoKDfKz7BbvmgSP5X_MROykpCRR8",
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xU05FZ3NJQk9xdk9GRHJmKKDorMwGMgaqC3kim5A6LBaui4e9FbhjSY9CTpSqMuMAcj1UDvfoyhqLnzUdAVGaRrmVKVRVYkOECkor",
           "refunded": false,
           "review": null,
           "shipping": null,
           "source": null,
           "source_transfer": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar4a15724d48",
+          "statement_descriptor_suffix": "edgar97e3fa4851",
           "status": "succeeded",
           "transfer_data": null,
-          "transfer_group": "CH-30"
+          "transfer_group": "CH-786"
         }
-  recorded_at: Fri, 29 Dec 2023 12:17:19 GMT
+  recorded_at: Tue, 10 Feb 2026 13:35:28 GMT
 recorded_with: VCR 6.2.0

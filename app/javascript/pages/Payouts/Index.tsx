@@ -11,6 +11,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import {
   type PayoutsProps,
   type CurrentPayoutsDataAndPaymentMethodWithUserPayable,
@@ -305,19 +306,16 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
   );
 };
 
-const PeriodEmpty = ({ minimumPayoutAmountCents }: { minimumPayoutAmountCents: number }) => (
+const PeriodEmpty = () => (
   <div className="period period-empty full column">
     <Placeholder>
       <PlaceholderImage src={placeholder} />
       <h2>Let's get you paid.</h2>
-      Reach a balance of at least{" "}
-      {formatPriceCentsWithCurrencySymbol("usd", minimumPayoutAmountCents, {
-        symbolFormat: "short",
-      })}{" "}
-      to be paid out for your sales.
-      <NavigationButton color="accent" href="/help/article/269-balance-page">
-        Learn about payouts
+      Reach your minimum payout threshold to be paid out.
+      <NavigationButton color="accent" href="/settings/payments">
+        View payout threshold
       </NavigationButton>
+      <a href="/help/article/269-balance-page">Learn about payouts</a>
     </Placeholder>
   </div>
 );
@@ -494,10 +492,10 @@ export default function PayoutsIndex() {
   if (!loggedInUser) return null;
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
-    <NavigationButton href={Routes.settings_payments_path()}>
+    <NavigationButtonInertia href={Routes.settings_payments_path()}>
       <Icon name="gear-fill" />
       Settings
-    </NavigationButton>
+    </NavigationButtonInertia>
   ) : null;
 
   const bulkExportAction = loggedInUser.policies.balance.export ? <ExportPayoutsPopover /> : null;
@@ -713,7 +711,7 @@ export default function PayoutsIndex() {
                     </p>
                   </Alert>
                 ) : (
-                  <PeriodEmpty minimumPayoutAmountCents={next_payout_period_data.minimum_payout_amount_cents} />
+                  <PeriodEmpty />
                 )
               ) : (
                 <Period payoutPeriodData={next_payout_period_data} />

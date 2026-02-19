@@ -3456,4 +3456,174 @@ describe Purchase::CreateService, :vcr do
       expect(error).to eq("Gift purchases cannot be on installment plans.")
     end
   end
+
+  describe "existing subscription handling" do
+    let(:membership_product) { create(:membership_product, user:, price_cents: price) }
+    let(:membership_params) do
+      bp = base_params.deep_dup
+      bp[:purchase].delete(:perceived_price_cents)
+      bp[:price_id] = membership_product.prices.alive.first.external_id
+      bp[:purchase].merge!(
+        card_data_handling_mode: "stripejs.0",
+        credit_card_zipcode: zip_code,
+        chargeable: successful_card_chargeable
+      )
+      bp
+    end
+
+    def create_subscription_for(product:, purchaser:, email:, **attrs)
+      subscription = create(:subscription, link: product, user: purchaser)
+      create(:purchase,
+             link: product,
+             purchaser: purchaser,
+             email: email,
+             subscription: subscription,
+             is_original_subscription_purchase: true,
+             price_cents: product.price_cents,
+             variant_attributes: product.tiers.to_a
+      )
+      subscription.update!(attrs) if attrs.present?
+      subscription
+    end
+
+    context "when buyer has an active subscription" do
+      before do
+        create_subscription_for(product: membership_product, purchaser: buyer, email: email)
+      end
+
+      it "returns an error and does not create a new purchase" do
+        expect do
+          purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:).perform
+
+          expect(purchase).to be_nil
+          expect(error).to eq("You already have an active subscription to this membership. Visit your Library to manage it.")
+        end.not_to change(Purchase, :count)
+      end
+    end
+
+    context "when buyer has a restartable subscription" do
+      let!(:subscription) do
+        create_subscription_for(
+          product: membership_product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "restarts the subscription and returns the original purchase" do
+        updater_service = instance_double(Subscription::UpdaterService)
+        allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+        allow(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
+
+        purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:).perform
+
+        expect(error).to be_nil
+        expect(purchase).to eq(subscription.original_purchase)
+      end
+
+      it "returns SCA data when the restart requires card action" do
+        updater_service = instance_double(Subscription::UpdaterService)
+        allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+        allow(updater_service).to receive(:perform).and_return({
+                                                                 success: true,
+                                                                 requires_card_action: true,
+                                                                 client_secret: "pi_123_secret_456",
+                                                                 purchase: { id: "ext_id", stripe_connect_account_id: "acct_123" }
+                                                               })
+
+        purchase, error, sca_response = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:).perform
+
+        expect(purchase).to be_nil
+        expect(error).to be_nil
+        expect(sca_response).to include(
+          requires_card_action: true,
+          client_secret: "pi_123_secret_456",
+          purchase: { id: "ext_id", stripe_connect_account_id: "acct_123" }
+        )
+      end
+    end
+
+    context "when purchase is a gift" do
+      let!(:subscription) do
+        create_subscription_for(
+          product: membership_product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "skips subscription check" do
+        membership_params[:is_gift] = "true"
+        membership_params[:gift] = {
+          giftee_email: "giftee@gumroad.com",
+          gift_note: "Happy birthday!",
+        }
+
+        service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:)
+        expect(service.send(:should_check_for_restartable_subscription?)).to be false
+      end
+    end
+
+    context "when logged-out user with email matching an active subscription" do
+      before do
+        create_subscription_for(product: membership_product, purchaser: create(:user), email: email)
+      end
+
+      it "returns a generic error" do
+        purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params).perform
+
+        expect(purchase).to be_nil
+        expect(error).to eq("Sorry, something went wrong. Please contact support@gumroad.com if the problem persists.")
+      end
+    end
+
+    context "when logged-out user with email matching a restartable subscription" do
+      let!(:subscription) do
+        sub = create_subscription_for(
+          product: membership_product,
+          purchaser: create(:user),
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+        sub
+      end
+
+      it "restarts the subscription" do
+        updater_service = instance_double(Subscription::UpdaterService)
+        allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+        allow(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
+
+        purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params).perform
+
+        expect(error).to be_nil
+        expect(purchase).to eq(subscription.original_purchase)
+      end
+    end
+
+    context "when subscription was cancelled by seller" do
+      before do
+        create_subscription_for(
+          product: membership_product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_admin: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "does not find a restartable subscription" do
+        restartable = Subscription.restartable_for_product_and_buyer(product: membership_product, buyer:)
+        expect(restartable).to be_nil
+      end
+    end
+  end
 end
