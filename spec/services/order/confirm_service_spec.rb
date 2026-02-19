@@ -5,6 +5,12 @@ describe Order::ConfirmService, :vcr do
     let(:seller) { create(:user) }
     let(:product_1) { create(:product, user: seller, price_cents: 5_00) }
     let(:product_2) { create(:product, user: seller, price_cents: 10_00) }
+
+    before do
+      MerchantAccount.find_or_create_by!(user_id: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) do |ma|
+        ma.charge_processor_alive_at = Time.current
+      end
+    end
     let(:browser_guid) { SecureRandom.uuid }
 
     let(:common_order_params_without_payment) do

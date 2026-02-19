@@ -5,6 +5,9 @@ require "timeout"
 
 describe("Purchase from a product page with SCA (Strong Customer Authentication)", type: :system, js: true) do
   before do
+    MerchantAccount.find_or_create_by!(user_id: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) do |ma|
+      ma.charge_processor_alive_at = Time.current
+    end
     @creator = create(:named_user)
     @product = create(:product, user: @creator)
   end

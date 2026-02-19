@@ -82,6 +82,52 @@ describe "PurchaseInstallments", :vcr do
 
         expect(Purchase.product_installments(purchase_ids: [enabled_purchase.id, enabled_purchase_with_variant.id])).to eq []
       end
+
+      context "with a restarted subscription" do
+        let(:product) { create(:membership_product, should_show_all_posts: true) }
+        let(:purchase) { create(:membership_purchase, link: product, created_at: 30.days.ago) }
+        let(:subscription) { purchase.subscription }
+        let(:workflow) { create(:product_workflow, seller: product.user, link: product, published_at: 2.months.ago) }
+
+        let!(:regular_post) { create(:installment, link: product, published_at: 1.week.ago) }
+
+        let!(:emailed_workflow_installment) do
+          installment = create(:workflow_installment, workflow:, link: product, published_at: 2.months.ago)
+          installment.installment_rule.update!(delayed_delivery_time: 1.day.to_i)
+          create(:creator_contacting_customers_email_info_sent, purchase:, installment:)
+          installment
+        end
+
+        let!(:non_emailed_workflow_installment) do
+          installment = create(:workflow_installment, workflow:, link: product, published_at: 2.months.ago)
+          installment.installment_rule.update!(delayed_delivery_time: 60.days.to_i)
+          installment
+        end
+
+        let(:deactivated_at) { 10.days.ago }
+        let(:resubscribed_at) { 2.days.ago }
+
+        before do
+          subscription.update!(deactivated_at: nil)
+          create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: deactivated_at)
+          create(:subscription_event, subscription:, event_type: :restarted, occurred_at: resubscribed_at)
+        end
+
+        it "shows non-workflow posts for restarted subscriptions" do
+          installments = Purchase.product_installments(purchase_ids: [purchase.id])
+          expect(installments.map(&:id)).to include(regular_post.id)
+        end
+
+        it "shows workflow installments that were already emailed" do
+          installments = Purchase.product_installments(purchase_ids: [purchase.id])
+          expect(installments.map(&:id)).to include(emailed_workflow_installment.id)
+        end
+
+        it "does not show workflow installments that have not been emailed" do
+          installments = Purchase.product_installments(purchase_ids: [purchase.id])
+          expect(installments.map(&:id)).not_to include(non_emailed_workflow_installment.id)
+        end
+      end
     end
   end
 
