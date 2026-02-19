@@ -110,7 +110,6 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   );
   const updateEmail = (id: string, value: Partial<EditableEmailFormState>) => {
     setEmails((prev) => prev.map((email) => (email.id === id ? { ...email, ...value } : email)));
-    setFocusedFieldInfo({ emailId: id, fieldName: Object.keys(value)[0] ?? null });
     if (value.name !== undefined && invalidFields.some((invalidField) => invalidField.emailId === id)) {
       setInvalidFields((prev) => prev.filter((invalidField) => !(invalidField.emailId === id)));
     }
@@ -170,9 +169,11 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
       },
     ]);
     setExpandedEmailIds((prev) => new Set(prev).add(id));
+    scrollRequestId.current += 1;
     setFocusedFieldInfo({ emailId: id, fieldName: "name" });
   };
   const [focusedFieldInfo, setFocusedFieldInfo] = React.useState<FocusedFieldInfo | null>(null);
+  const scrollRequestId = React.useRef(0);
   const [invalidFields, setInvalidFields] = React.useState<InvalidField[]>([]);
   const [deletingEmailId, setDeletingEmailId] = React.useState<null | string>(null);
   const [shownProductCount, setShownProductCount] = React.useState(ABANDONED_CART_PRODUCTS_TO_LOAD_PER_PAGE);
@@ -198,13 +199,16 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
       updated.delete(emailId);
       return updated;
     });
-    if (focusedFieldInfo?.emailId === emailId) setFocusedFieldInfo(null);
+    if (focusedFieldInfo?.emailId === emailId) {
+      setFocusedFieldInfo(null);
+    }
   };
   const validate = () => {
     const invalidFields = new Array<InvalidField>();
     emails.forEach((email) => {
       if (email.name.trim() === "") {
         invalidFields.push({ emailId: email.id, fieldName: "name" });
+        scrollRequestId.current += 1;
         setFocusedFieldInfo({ emailId: email.id, fieldName: "name" });
         setExpandedEmailIds((prev) => new Set(prev).add(email.id));
       }
@@ -216,8 +220,6 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
     sendPreviewForEmailId,
     saveActionName = "save",
   }: { sendPreviewForEmailId?: string; saveActionName?: SaveActionName } = {}) => {
-    setFocusedFieldInfo(null);
-
     if (!validate()) return;
 
     form.transform(() => ({
@@ -304,7 +306,6 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
             <EmailPreview
               key={email.id}
               email={email}
-              isEditing={focusedFieldInfo?.emailId === email.id}
               workflowTrigger={workflowTrigger}
               gumroadAddress={context.gumroad_address}
             />
@@ -338,15 +339,20 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                                 invalidField.emailId === email.id ? invalidField.fieldName : [],
                               )}
                               toggleExpanded={() => {
-                                setFocusedFieldInfo(
-                                  expandedEmailIds.has(email.id) ? null : { emailId: email.id, fieldName: null },
-                                );
+                                const isCurrentlyExpanded = expandedEmailIds.has(email.id);
                                 setExpandedEmailIds((prev) => {
                                   const updated = new Set(prev);
                                   updated[updated.has(email.id) ? "delete" : "add"](email.id);
                                   return updated;
                                 });
+                                if (!isCurrentlyExpanded) {
+                                  scrollRequestId.current += 1;
+                                  setFocusedFieldInfo({ emailId: email.id, fieldName: null });
+                                } else {
+                                  setFocusedFieldInfo(null);
+                                }
                               }}
+                              scrollRequestId={scrollRequestId.current}
                               onFocus={(fieldName: FocusedFieldInfo["fieldName"]) =>
                                 setFocusedFieldInfo({ emailId: email.id, fieldName })
                               }
@@ -405,6 +411,7 @@ type EmailRowProps = {
   workflowTrigger: WorkflowTrigger;
   expanded: boolean;
   focusedFieldInfo: FocusedFieldInfo | null;
+  scrollRequestId: number;
   invalidFieldNames: InvalidFieldNames[];
   toggleExpanded: () => void;
   onChange: (value: Partial<EditableEmailFormState>) => void;
@@ -419,6 +426,7 @@ const EmailRow = ({
   workflowTrigger,
   expanded,
   focusedFieldInfo,
+  scrollRequestId,
   invalidFieldNames,
   toggleExpanded,
   onChange,
@@ -433,16 +441,22 @@ const EmailRow = ({
   const selfRef = React.useRef<HTMLDivElement>(null);
   const nameInputRef = React.useRef<null | HTMLInputElement>(null);
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
+  const lastScrollRequestId = React.useRef(scrollRequestId);
+
   React.useEffect(() => {
+    if (scrollRequestId === lastScrollRequestId.current) return;
+    lastScrollRequestId.current = scrollRequestId;
+
     if (focusedFieldInfo?.emailId !== email.id) return;
 
     const { fieldName } = focusedFieldInfo;
     if (fieldName === "name") nameInputRef.current?.focus();
     if (fieldName !== "message" && fieldName !== "stream_only") selfRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [focusedFieldInfo]);
+  }, [scrollRequestId, focusedFieldInfo, email.id]);
+
   React.useEffect(() => {
     if (expanded) setEditorContent(email.message);
-  }, [expanded]);
+  }, [expanded, email.message]);
   const isAbandonedCartWorkflow = workflowTrigger === "abandoned_cart";
   const isBusy =
     isSaving ||
@@ -557,12 +571,10 @@ const EmailRow = ({
 
 const EmailPreview = ({
   email,
-  isEditing,
   workflowTrigger,
   gumroadAddress,
 }: {
   email: EmailFormState;
-  isEditing: boolean;
   workflowTrigger: WorkflowTrigger;
   gumroadAddress: string;
 }) => {
@@ -574,15 +586,10 @@ const EmailPreview = ({
     editable: false,
     extensions: [...(workflowTrigger === "abandoned_cart" ? [AbandonedCartProductList] : [])],
   });
-  const selfRef = React.useRef<HTMLDivElement>(null);
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
 
-  React.useEffect(() => {
-    if (isEditing) setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth" }), 500);
-  });
-
   return (
-    <section className="flex flex-col gap-4" ref={selfRef}>
+    <section className="flex flex-col gap-4">
       <Separator>
         <div className="flex gap-2">
           <Icon name="outline-clock" />
