@@ -1625,6 +1625,37 @@ describe("Workflows", js: true, type: :system) do
       expect(@workflow.installments.alive.first.name).to eq("Thank you! (edited)")
     end
 
+    it "does not scroll the page while typing in the email editor" do
+      installment = create(:installment, workflow: @workflow, name: "Test email", message: "<p>Original message</p>")
+      create(:installment_rule, installment:, time_period: "hour", delayed_delivery_time: 3600)
+
+      visit workflow_emails_path(@workflow.external_id)
+
+      within find_email_row("Test email") do
+        click_on "Edit"
+      end
+
+      message_editor = find("[aria-label='Email message']")
+      message_editor.click
+
+      initial_scroll_position = page.evaluate_script("window.pageYOffset")
+
+      message_editor.base.send_keys(" Additional text")
+
+      sleep 0.1
+
+      current_scroll_position = page.evaluate_script("window.pageYOffset")
+      expect(current_scroll_position).to eq(initial_scroll_position)
+
+      # Type more to ensure continuous typing doesn't trigger scroll
+      message_editor.base.send_keys(" and more text")
+
+      sleep 0.1
+
+      final_scroll_position = page.evaluate_script("window.pageYOffset")
+      expect(final_scroll_position).to eq(initial_scroll_position)
+    end
+
     context "when seller name is invalid for email delivery" do
       it "displays warning and prompts user to update the name" do
         # Create a seller with colon in name (simulating legacy data)
