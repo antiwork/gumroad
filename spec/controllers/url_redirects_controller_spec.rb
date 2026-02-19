@@ -1994,7 +1994,7 @@ describe UrlRedirectsController, inertia: true do
         end.to change(ConsumptionEvent, :count).by(1)
           .and change { @url_redirect.reload.uses }.by(1)
 
-        expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
+        expect(inertia.props[:dropbox_api_key]).to be_nil
       end
     end
   end
