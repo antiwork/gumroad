@@ -17,13 +17,27 @@ describe DashboardProductsPagePresenter do
   describe "#page_props" do
     let!(:archived_product) { create(:product, user: seller, archived: true) }
 
-    it "returns archived_products_count and can_create_product" do
+    it "returns has_products false when seller has no visible non-archived products" do
       presenter = described_class.new(pundit_user:)
+      expect(presenter.page_props).to eq(
+        has_products: false,
+        archived_products_count: 1,
+        can_create_product: true
+      )
+    end
 
-      expect(presenter.page_props).to eq({
-                                           archived_products_count: 1,
-                                           can_create_product: true
-                                         })
+    context "when seller has visible non-archived products" do
+      let!(:product) { create(:product, user: seller, name: "Active product") }
+
+      it "returns has_products true" do
+        presenter = described_class.new(pundit_user:)
+        expect(presenter.page_props).to include(has_products: true)
+      end
+
+      it "keeps has_products true even when query has no matches" do
+        presenter = described_class.new(pundit_user:, query: "no-match")
+        expect(presenter.page_props).to include(has_products: true)
+      end
     end
   end
 
