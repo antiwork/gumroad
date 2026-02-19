@@ -2122,7 +2122,7 @@ class Purchase < ApplicationRecord
           next false unless post.targeted_at_purchased_item?(purchase)
           next false unless post.passes_member_cancellation_checks?(purchase)
 
-          post.workflow_delivery_due?(purchase)
+          post.delivery_due?(purchase)
         end
       end
     end
