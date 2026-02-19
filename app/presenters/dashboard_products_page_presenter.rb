@@ -23,7 +23,7 @@ class DashboardProductsPagePresenter
 
   def empty?
     return nil unless archived?
-    products_table_props[:products].empty? && memberships_table_props[:memberships].empty?
+    !seller.products.visible.archived.exists?
   end
 
   def page_props

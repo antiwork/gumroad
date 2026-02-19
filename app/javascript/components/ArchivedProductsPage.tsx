@@ -8,7 +8,10 @@ import { ProductsLayout } from "$app/components/ProductsLayout";
 import ProductsPage from "$app/components/ProductsPage";
 import { useProductsSearch } from "$app/components/ProductsPage/useProductsSearch";
 import { Search } from "$app/components/Search";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sort } from "$app/components/useSortingTableDriver";
+
+import placeholder from "$assets/images/product_nudge.svg";
 
 export type ArchivedProductsPageProps = {
   products_data: {
@@ -30,6 +33,7 @@ export const ArchivedProductsPage = ({
   can_create_product: canCreateProduct,
 }: ArchivedProductsPageProps) => {
   const { query, setQuery } = useProductsSearch();
+  const hasNoResults = products.length === 0 && memberships.length === 0;
 
   return (
     <ProductsLayout
@@ -46,16 +50,24 @@ export const ArchivedProductsPage = ({
       }
     >
       <section className="p-4 md:p-8">
-        <ProductsPage
-          memberships={memberships}
-          membershipsPagination={membershipsPagination}
-          membershipsSort={membershipsSort}
-          products={products}
-          productsPagination={productsPagination}
-          productsSort={productsSort}
-          query={query}
-          type="archived"
-        />
+        {hasNoResults ? (
+          <Placeholder>
+            <PlaceholderImage src={placeholder} />
+            <h2>No products found</h2>
+            {query ? <p>No archived products matched your search.</p> : null}
+          </Placeholder>
+        ) : (
+          <ProductsPage
+            memberships={memberships}
+            membershipsPagination={membershipsPagination}
+            membershipsSort={membershipsSort}
+            products={products}
+            productsPagination={productsPagination}
+            productsSort={productsSort}
+            query={query}
+            type="archived"
+          />
+        )}
       </section>
     </ProductsLayout>
   );
