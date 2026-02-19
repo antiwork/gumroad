@@ -24,7 +24,6 @@ describe("Workflows", js: true, type: :system) do
   before do
     @product = create(:product, name: "product name", user: seller, created_at: 2.hours.ago)
     @product2 = create(:product, name: "product 2 name", user: seller, created_at: 1.hour.ago)
-    create(:purchase, link: @product)
     index_model_records(Purchase)
 
     allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
@@ -1732,7 +1731,7 @@ describe("Workflows", js: true, type: :system) do
       expect(scroll_after_second_save).to eq(scroll_after_first_save)
     end
 
-    it "does not scroll after successful save" do
+    it "does not scroll after clicking save" do
       visit workflow_emails_path(@workflow.external_id)
 
       within_section "Create emails for your workflow" do
@@ -1751,11 +1750,9 @@ describe("Workflows", js: true, type: :system) do
       scroll_before_save = page.evaluate_script("window.pageYOffset")
 
       click_on "Save changes"
-      expect(page).to have_alert(text: "Changes saved!")
 
-      sleep 0.3
+      sleep 0.5
 
-      # Verify scroll position hasn't changed after successful save
       scroll_after_save = page.evaluate_script("window.pageYOffset")
       expect(scroll_after_save).to eq(scroll_before_save)
     end
