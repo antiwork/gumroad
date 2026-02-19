@@ -110,7 +110,6 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   );
   const updateEmail = (id: string, value: Partial<EditableEmailFormState>) => {
     setEmails((prev) => prev.map((email) => (email.id === id ? { ...email, ...value } : email)));
-    setFocusedFieldInfo({ emailId: id, fieldName: Object.keys(value)[0] ?? null });
     if (value.name !== undefined && invalidFields.some((invalidField) => invalidField.emailId === id)) {
       setInvalidFields((prev) => prev.filter((invalidField) => !(invalidField.emailId === id)));
     }
@@ -173,6 +172,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
     setFocusedFieldInfo({ emailId: id, fieldName: "name" });
   };
   const [focusedFieldInfo, setFocusedFieldInfo] = React.useState<FocusedFieldInfo | null>(null);
+  const isSavingRef = React.useRef(false);
   const [invalidFields, setInvalidFields] = React.useState<InvalidField[]>([]);
   const [deletingEmailId, setDeletingEmailId] = React.useState<null | string>(null);
   const [shownProductCount, setShownProductCount] = React.useState(ABANDONED_CART_PRODUCTS_TO_LOAD_PER_PAGE);
@@ -202,23 +202,33 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   };
   const validate = () => {
     const invalidFields = new Array<InvalidField>();
+    let firstInvalidEmailId: string | null = null;
     emails.forEach((email) => {
       if (email.name.trim() === "") {
         invalidFields.push({ emailId: email.id, fieldName: "name" });
-        setFocusedFieldInfo({ emailId: email.id, fieldName: "name" });
+        if (!firstInvalidEmailId) firstInvalidEmailId = email.id;
         setExpandedEmailIds((prev) => new Set(prev).add(email.id));
       }
     });
     setInvalidFields(invalidFields);
+
+    if (firstInvalidEmailId && focusedFieldInfo?.emailId !== firstInvalidEmailId) {
+      setFocusedFieldInfo({ emailId: firstInvalidEmailId, fieldName: "name" });
+    }
+
     return invalidFields.length === 0;
   };
   const handleSave = ({
     sendPreviewForEmailId,
     saveActionName = "save",
   }: { sendPreviewForEmailId?: string; saveActionName?: SaveActionName } = {}) => {
+    isSavingRef.current = true;
     setFocusedFieldInfo(null);
 
-    if (!validate()) return;
+    if (!validate()) {
+      isSavingRef.current = false;
+      return;
+    }
 
     form.transform(() => ({
       workflow: {
@@ -250,6 +260,15 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
       only: ["workflow", "flash"],
     });
   };
+
+  React.useEffect(() => {
+    if (!form.processing && isSavingRef.current) {
+      const timer = setTimeout(() => {
+        isSavingRef.current = false;
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [form.processing]);
 
   const isBusy =
     form.processing ||
@@ -305,6 +324,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
               key={email.id}
               email={email}
               isEditing={focusedFieldInfo?.emailId === email.id}
+              isSavingRef={isSavingRef}
               workflowTrigger={workflowTrigger}
               gumroadAddress={context.gumroad_address}
             />
@@ -334,22 +354,28 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                               workflowTrigger={workflowTrigger}
                               expanded={expandedEmailIds.has(email.id)}
                               focusedFieldInfo={focusedFieldInfo}
+                              isSavingRef={isSavingRef}
                               invalidFieldNames={invalidFields.flatMap((invalidField) =>
                                 invalidField.emailId === email.id ? invalidField.fieldName : [],
                               )}
                               toggleExpanded={() => {
-                                setFocusedFieldInfo(
-                                  expandedEmailIds.has(email.id) ? null : { emailId: email.id, fieldName: null },
-                                );
+                                const isExpanding = !expandedEmailIds.has(email.id);
+                                if (isExpanding && focusedFieldInfo?.emailId !== email.id) {
+                                  setFocusedFieldInfo({ emailId: email.id, fieldName: null });
+                                } else if (!isExpanding && focusedFieldInfo?.emailId === email.id) {
+                                  setFocusedFieldInfo(null);
+                                }
                                 setExpandedEmailIds((prev) => {
                                   const updated = new Set(prev);
                                   updated[updated.has(email.id) ? "delete" : "add"](email.id);
                                   return updated;
                                 });
                               }}
-                              onFocus={(fieldName: FocusedFieldInfo["fieldName"]) =>
-                                setFocusedFieldInfo({ emailId: email.id, fieldName })
-                              }
+                              onFocus={(fieldName: FocusedFieldInfo["fieldName"]) => {
+                                if (focusedFieldInfo?.emailId !== email.id || focusedFieldInfo?.fieldName !== fieldName) {
+                                  setFocusedFieldInfo({ emailId: email.id, fieldName });
+                                }
+                              }}
                               onDelete={() => setDeletingEmailId(email.id)}
                               onChange={(value) => updateEmail(email.id, value)}
                               onSendPreviewEmail={() => handleSave({ sendPreviewForEmailId: email.id })}
@@ -405,6 +431,7 @@ type EmailRowProps = {
   workflowTrigger: WorkflowTrigger;
   expanded: boolean;
   focusedFieldInfo: FocusedFieldInfo | null;
+  isSavingRef: React.MutableRefObject<boolean>;
   invalidFieldNames: InvalidFieldNames[];
   toggleExpanded: () => void;
   onChange: (value: Partial<EditableEmailFormState>) => void;
@@ -419,6 +446,7 @@ const EmailRow = ({
   workflowTrigger,
   expanded,
   focusedFieldInfo,
+  isSavingRef,
   invalidFieldNames,
   toggleExpanded,
   onChange,
@@ -433,13 +461,25 @@ const EmailRow = ({
   const selfRef = React.useRef<HTMLDivElement>(null);
   const nameInputRef = React.useRef<null | HTMLInputElement>(null);
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
+  const prevFocusedFieldRef = React.useRef<FocusedFieldInfo | null>(null);
+
   React.useEffect(() => {
     if (focusedFieldInfo?.emailId !== email.id) return;
 
     const { fieldName } = focusedFieldInfo;
+
+    const isNewFocus =
+      !prevFocusedFieldRef.current ||
+      prevFocusedFieldRef.current.emailId !== focusedFieldInfo.emailId ||
+      prevFocusedFieldRef.current.fieldName !== focusedFieldInfo.fieldName;
+
+    prevFocusedFieldRef.current = focusedFieldInfo;
+
     if (fieldName === "name") nameInputRef.current?.focus();
-    if (fieldName !== "message" && fieldName !== "stream_only") selfRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [focusedFieldInfo]);
+    if (fieldName !== "message" && fieldName !== "stream_only" && isNewFocus && !isSavingRef.current) {
+      setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  }, [focusedFieldInfo, email.id]);
   React.useEffect(() => {
     if (expanded) setEditorContent(email.message);
   }, [expanded]);
@@ -558,11 +598,13 @@ const EmailRow = ({
 const EmailPreview = ({
   email,
   isEditing,
+  isSavingRef,
   workflowTrigger,
   gumroadAddress,
 }: {
   email: EmailFormState;
   isEditing: boolean;
+  isSavingRef: React.MutableRefObject<boolean>;
   workflowTrigger: WorkflowTrigger;
   gumroadAddress: string;
 }) => {
@@ -576,9 +618,16 @@ const EmailPreview = ({
   });
   const selfRef = React.useRef<HTMLDivElement>(null);
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
+  const isInitialMount = React.useRef(true);
 
   React.useEffect(() => {
-    if (isEditing) setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth" }), 500);
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (isEditing && !isSavingRef.current) {
+      setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth" }), 500);
+    }
   }, [isEditing]);
 
   return (

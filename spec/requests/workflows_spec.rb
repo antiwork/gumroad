@@ -1656,6 +1656,110 @@ describe("Workflows", js: true, type: :system) do
       expect(final_scroll_position).to eq(initial_scroll_position)
     end
 
+    it "does not scroll on initial page load" do
+      installment = create(:installment, workflow: @workflow, name: "Existing email", message: "<p>Message</p>")
+      create(:installment_rule, installment:, time_period: "hour", delayed_delivery_time: 3600)
+
+      visit workflow_emails_path(@workflow.external_id)
+
+      initial_scroll_position = page.evaluate_script("window.pageYOffset")
+
+      sleep 0.3
+
+      # Verify no automatic scrolling occurred on page load
+      current_scroll_position = page.evaluate_script("window.pageYOffset")
+      expect(current_scroll_position).to eq(initial_scroll_position)
+    end
+
+    it "does not cause erratic scrolling when creating a new email" do
+      visit workflow_emails_path(@workflow.external_id)
+
+      initial_scroll_position = page.evaluate_script("window.pageYOffset")
+
+      within_section "Create emails for your workflow" do
+        click_on "Create email"
+      end
+
+      sleep 0.2
+
+      # After creating a new email, verify we haven't scrolled multiple times erratically
+      # (one controlled scroll to the new email is expected, but not continuous scrolling)
+      scroll_after_create = page.evaluate_script("window.pageYOffset")
+
+      # Fill in the name field
+      within find_email_row("Untitled") do
+        fill_in "Subject", with: "New email"
+      end
+
+      sleep 0.2
+
+      # Verify scrolling hasn't continued after the initial positioning
+      final_scroll_position = page.evaluate_script("window.pageYOffset")
+      expect(final_scroll_position).to eq(scroll_after_create)
+    end
+
+    it "does not scroll erratically when validation fails on save" do
+      visit workflow_emails_path(@workflow.external_id)
+
+      within_section "Create emails for your workflow" do
+        click_on "Create email"
+      end
+
+      within find_email_row("Untitled") do
+        fill_in "Duration", with: "1"
+        select "hour after purchase", from: "Period"
+        # Leave Subject empty to trigger validation error
+      end
+
+      sleep 0.2
+      scroll_position_before_save = page.evaluate_script("window.pageYOffset")
+
+      # Try to save with invalid data (empty subject)
+      click_on "Save changes"
+
+      sleep 0.2
+
+      # Verify we scrolled to the error once (if needed), but not continuously
+      scroll_after_first_save = page.evaluate_script("window.pageYOffset")
+
+      # Try to save again without fixing the error
+      click_on "Save changes"
+
+      sleep 0.2
+
+      # Verify scroll position hasn't changed from the first validation error
+      scroll_after_second_save = page.evaluate_script("window.pageYOffset")
+      expect(scroll_after_second_save).to eq(scroll_after_first_save)
+    end
+
+    it "does not scroll after successful save" do
+      visit workflow_emails_path(@workflow.external_id)
+
+      within_section "Create emails for your workflow" do
+        click_on "Create email"
+      end
+
+      within find_email_row("Untitled") do
+        fill_in "Duration", with: "1"
+        select "hour after purchase", from: "Period"
+        fill_in "Subject", with: "Test Email"
+        message_editor = find("[aria-label='Email message']")
+        set_rich_text_editor_input(message_editor, to_text: "Test message")
+      end
+
+      sleep 0.2
+      scroll_before_save = page.evaluate_script("window.pageYOffset")
+
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
+
+      sleep 0.3
+
+      # Verify scroll position hasn't changed after successful save
+      scroll_after_save = page.evaluate_script("window.pageYOffset")
+      expect(scroll_after_save).to eq(scroll_before_save)
+    end
+
     context "when seller name is invalid for email delivery" do
       it "displays warning and prompts user to update the name" do
         # Create a seller with colon in name (simulating legacy data)
