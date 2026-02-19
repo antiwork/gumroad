@@ -4,53 +4,49 @@ require "spec_helper"
 
 describe "Checkout with Payment Request API", :js, type: :system do
   def mock_payment_request_availability(apple_pay: false, google_pay: false)
-    mock_script = <<~JS
+    @payment_request_mock_script = <<~JS
       (function() {
-        const OriginalStripe = window.Stripe;
+        window.__mockStripe = function(OriginalStripe) {
+          return function(...args) {
+            const stripe = OriginalStripe.apply(this, args);
+            if (!stripe) return null;
 
-        window.Stripe = function(...args) {
-          const stripe = OriginalStripe ? OriginalStripe.apply(this, args) : this;
-          if (!stripe) return this;
+            const originalPaymentRequest = stripe.paymentRequest.bind(stripe);
 
-          const originalPaymentRequest = stripe.paymentRequest ? stripe.paymentRequest.bind(stripe) : null;
-
-          if (originalPaymentRequest) {
             stripe.paymentRequest = function(options) {
               const pr = originalPaymentRequest(options);
-              const originalCanMakePayment = pr.canMakePayment ? pr.canMakePayment.bind(pr) : null;
-              const originalShow = pr.show ? pr.show.bind(pr) : null;
+              const originalCanMakePayment = pr.canMakePayment.bind(pr);
+              const originalShow = pr.show.bind(pr);
 
-              if (originalCanMakePayment) {
-                pr.canMakePayment = function() {
-                  return Promise.resolve({
-                    applePay: #{apple_pay},
-                    googlePay: #{google_pay}
-                  });
-                };
-              }
+              pr.canMakePayment = function() {
+                return Promise.resolve({
+                  applePay: #{apple_pay},
+                  googlePay: #{google_pay}
+                });
+              };
 
-              if (originalShow) {
-                pr.show = function() {
-                  return originalShow().catch((error) => {
-                    if (error.message.includes('not supported') || error.message.includes('Not available')) {
-                      setTimeout(() => {
-                        const cancelEvent = new Event('cancel');
-                        if (pr.emit) pr.emit('cancel', cancelEvent);
-                      }, 100);
-                    }
-                    throw error;
-                  });
-                };
-              }
+              pr.show = function() {
+                return originalShow().catch((error) => {
+                  if (error.message.includes('not supported') || error.message.includes('Not available')) {
+                    setTimeout(() => {
+                      const cancelEvent = new Event('cancel');
+                      if (pr.emit) pr.emit('cancel', cancelEvent);
+                    }, 100);
+                  }
+                  throw error;
+                });
+              };
 
               return pr;
             };
-          }
 
-          return stripe;
+            return stripe;
+          };
         };
 
-        if (OriginalStripe) {
+        if (window.Stripe) {
+          const OriginalStripe = window.Stripe;
+          window.Stripe = window.__mockStripe(OriginalStripe);
           Object.setPrototypeOf(window.Stripe, OriginalStripe);
           Object.keys(OriginalStripe).forEach(key => {
             window.Stripe[key] = OriginalStripe[key];
@@ -60,13 +56,14 @@ describe "Checkout with Payment Request API", :js, type: :system do
         #{apple_pay ? mock_apple_pay_session : ''}
       })();
     JS
+  end
 
-    page.driver.browser.execute_cdp(
-      'Page.addScriptToEvaluateOnNewDocument',
-      source: mock_script
-    )
+  def inject_payment_request_mock
+    return unless @payment_request_mock_script
+
+    page.execute_script(@payment_request_mock_script)
   rescue StandardError => e
-    warn "Warning: CDP mocking unavailable: #{e.message}"
+    warn "Warning: Payment request mock injection failed: #{e.message}"
   end
 
   def mock_apple_pay_session
@@ -109,7 +106,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
     it "allows selecting Apple Pay" do
       visit product.long_url
+      inject_payment_request_mock
       add_to_cart(product)
+      inject_payment_request_mock
 
       expect(page).to have_field("Apple Pay", type: "radio", wait: 10)
 
@@ -188,7 +187,7 @@ describe "Checkout with Payment Request API", :js, type: :system do
     end
 
     it "works with subscriptions" do
-      subscription_product = create(:product, :membership, price_cents: 1500, recurrence: "monthly")
+      subscription_product = create(:product, :membership, price_cents: 1500, subscription_duration: "monthly")
 
       visit subscription_product.long_url
       add_to_cart(subscription_product)
@@ -287,7 +286,7 @@ describe "Checkout with Payment Request API", :js, type: :system do
     end
 
     it "works with subscriptions" do
-      subscription_product = create(:product, :membership, price_cents: 1500, recurrence: "monthly")
+      subscription_product = create(:product, :membership, price_cents: 1500, subscription_duration: "monthly")
 
       visit subscription_product.long_url
       add_to_cart(subscription_product)
