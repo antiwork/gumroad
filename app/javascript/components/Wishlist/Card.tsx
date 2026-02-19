@@ -10,6 +10,7 @@ import { getCssVariable } from "$app/utils/styles";
 import { Icon } from "$app/components/Icons";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { ProductCard, ProductCardFigure, ProductCardHeader } from "$app/components/ui/ProductCard";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useFollowWishlist } from "$app/components/Wishlist/FollowButton";
 
 const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbnails/");
@@ -95,9 +96,9 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
       </ProductCardFigure>
       <section className="flex flex-1 flex-col lg:flex-2 lg:gap-8 lg:px-6 lg:py-4">
         <ProductCardHeader className="lg:border-b-0 lg:p-0">
-          <a className="stretched-link no-underline" href={wishlist.url}>
+          <StretchedLink href={wishlist.url}>
             <h3 className="truncate">{wishlist.name}</h3>
-          </a>
+          </StretchedLink>
           {wishlist.description ? (
             <small className="hidden truncate text-muted lg:block">{wishlist.description}</small>
           ) : null}

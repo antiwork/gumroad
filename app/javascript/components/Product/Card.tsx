@@ -9,7 +9,8 @@ import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
-import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
+import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 
 export const Card = ({
   product,
@@ -28,11 +29,11 @@ export const Card = ({
     </ProductCardFigure>
     {product.quantity_remaining != null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
     <ProductCardHeader>
-      <a href={product.url} className="stretched-link">
+      <StretchedLink href={product.url}>
         <h4 itemProp="name" className="line-clamp-4 lg:text-xl">
           {product.name}
         </h4>
-      </a>
+      </StretchedLink>
       {product.seller ? (
         <AuthorByline
           name={product.seller.name}
@@ -71,7 +72,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
     {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
     <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">
       <ProductCardHeader className="lg:border-b-0 lg:p-0">
-        <a href={product.url} className="stretched-link" draggable="false">
+        <StretchedLink href={product.url} draggable="false">
           {big ? (
             <h2 itemProp="name" className="line-clamp-3 gap-3">
               {product.name}
@@ -81,7 +82,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
               {product.name}
             </h3>
           )}
-        </a>
+        </StretchedLink>
         <small className={classNames("hidden truncate text-muted lg:block", big && "lg:line-clamp-4")}>
           {product.description}
         </small>

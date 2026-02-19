@@ -13,7 +13,8 @@ import { Icon } from "$app/components/Icons";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
-import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
+import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 declare module "@tiptap/core" {
@@ -182,9 +183,9 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
               {isEditable ? (
                 <UpsellCardHeader product={product} variant={variant} />
               ) : (
-                <a href={getUpsellUrl(id ?? "", product.permalink)} className="stretched-link">
+                <StretchedLink href={getUpsellUrl(id ?? "", product.permalink)}>
                   <UpsellCardHeader product={product} variant={variant} />
-                </a>
+                </StretchedLink>
               )}
               <ProductCardFooter className="lg:divide-x-0">
                 {product.review_count > 0 ? (
