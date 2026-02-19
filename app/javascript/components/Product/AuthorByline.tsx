@@ -10,6 +10,8 @@ const TopCreatorBadge = () => (
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className="top-creator-badge shrink-0"
+    aria-hidden="true"
+    focusable="false"
   >
     <path
       d="M12.6895 14.4967C12.2571 14.7205 11.7429 14.7205 11.3105 14.4967L5.31055 11.3903C4.81285 11.1326 4.50011 10.6187 4.5 10.0582L4.5 7.41662C4.5 6.5882 5.17157 5.91662 6 5.91662L18 5.91663C18.8284 5.91663 19.5 6.5882 19.5 7.41663L19.5 10.0582C19.4999 10.6187 19.1872 11.1326 18.6895 11.3903L12.6895 14.4967Z"
@@ -39,6 +41,7 @@ export const AuthorByline = ({
     {topCreator ? (
       <WithTooltip tip="Top creator" position="top">
         <TopCreatorBadge />
+        <span className="sr-only">Top creator</span>
       </WithTooltip>
     ) : null}
   </a>
