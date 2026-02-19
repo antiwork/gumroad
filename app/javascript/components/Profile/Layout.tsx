@@ -38,7 +38,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
     <div className="flex min-h-screen flex-col">
       <header className="z-20 border-border bg-background text-lg lg:border-b lg:px-4 lg:py-6">
         <div className="mx-auto flex max-w-6xl flex-wrap lg:flex-nowrap lg:items-center lg:gap-6">
-          <div className="relative flex grow items-center gap-3 border-b border-border px-4 py-8 lg:flex-1 lg:border-0 lg:p-0">
+          <div className="relative flex grow items-center gap-3 border-b border-border p-4 lg:flex-1 lg:border-0 lg:p-0">
             {(loggedInUser?.isGumroadAdmin || loggedInUser?.isImpersonating) &&
             creatorProfile.external_id !== loggedInUser.id ? (
               <NavigationButton
@@ -58,7 +58,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
             {!isDesktop ? headerButtons : null}
           </div>
           {!hideFollowForm ? (
-            <div className="flex basis-full items-center gap-3 border-b border-border px-4 py-8 lg:basis-auto lg:border-0 lg:p-0">
+            <div className="flex basis-full items-center gap-3 border-b border-border p-4 lg:basis-auto lg:border-0 lg:p-0">
               <FollowForm creatorProfile={creatorProfile} />
             </div>
           ) : null}

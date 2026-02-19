@@ -78,6 +78,43 @@ describe StripeChargeablePaymentMethod, :vcr do
       expect(chargeable.stripe_charge_params[:payment_method]).to eq(stripe_payment_method_id)
     end
 
+    context "when customer_id is provided from a prior SetupIntent authentication" do
+      let(:payment_method_id) { "pm_test_123" }
+      let(:stripe_payment_method_object) { OpenStruct.new(id: payment_method_id, customer: "cus_other", card: { last4: "4242", brand: "visa", funding: "credit", fingerprint: "fp_123", exp_month: 12, exp_year: 2050, country: "US" }, billing_details: { address: { postal_code: "12345" } }) }
+      let(:chargeable) do
+        StripeChargeablePaymentMethod.new(payment_method_id,
+                                          customer_id: "cus_authenticated",
+                                          stripe_setup_intent_id: "seti_123",
+                                          zip_code:, product_permalink: "xx")
+      end
+
+      before do
+        allow(Stripe::PaymentMethod).to receive(:retrieve).with(payment_method_id).and_return(stripe_payment_method_object)
+      end
+
+      it "includes the authenticated customer in charge params so Stripe can skip SCA" do
+        allow_any_instance_of(StripeChargeablePaymentMethod).to receive(:get_merchant_account).and_return(create(:merchant_account))
+
+        chargeable.prepare!
+
+        # The explicitly-provided customer_id takes precedence over the payment method's customer
+        expect(chargeable.stripe_charge_params).to eq(customer: "cus_authenticated", payment_method: payment_method_id)
+      end
+
+      it "uses the authenticated customer when cloning the payment method for Connect direct charges" do
+        allow_any_instance_of(StripeChargeablePaymentMethod).to receive(:get_merchant_account).and_return(create(:merchant_account_stripe_connect))
+
+        # prepare_for_direct_charge calls reusable_token!(nil) which should return the
+        # existing customer_id instead of creating a new Stripe customer
+        expect(Stripe::Customer).not_to receive(:create)
+        allow(Stripe::PaymentMethod).to receive(:create).and_return(OpenStruct.new(id: "pm_cloned_456"))
+
+        chargeable.prepare!
+
+        expect(chargeable.reusable_token!(nil)).to eq("cus_authenticated")
+      end
+    end
+
     it "returns the cloned payment method details if merchant account is a stripe connect account" do
       allow_any_instance_of(StripeChargeablePaymentMethod).to receive(:get_merchant_account).and_return(create(:merchant_account_stripe_connect))
       expect(Stripe::PaymentMethod).to receive(:retrieve).with(stripe_payment_method_id).and_call_original

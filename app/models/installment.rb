@@ -829,6 +829,14 @@ class Installment < ApplicationRecord
     tags.map { normalize_tag(it) }.uniq
   end
 
+  def delivery_due?(purchase)
+    return true if installment_rule.blank?
+    return true if workflow.blank?
+    return true unless purchase.subscription&.resubscribed?
+
+    Time.current >= expected_delivery_time(purchase)
+  end
+
   class InstallmentInvalid < StandardError
   end
 

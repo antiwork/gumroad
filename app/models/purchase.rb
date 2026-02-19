@@ -2115,7 +2115,14 @@ class Purchase < ApplicationRecord
     check_filters_for_past_posts = lambda do |posts|
       posts.select do |post|
         purchases.reduce(false) do |select_post, purchase|
-          select_post || (purchase.link.should_show_all_posts? && post.purchase_passes_filters(purchase) && post.targeted_at_purchased_item?(purchase) && post.passes_member_cancellation_checks?(purchase))
+          next true if select_post
+
+          next false unless purchase.link.should_show_all_posts?
+          next false unless post.purchase_passes_filters(purchase)
+          next false unless post.targeted_at_purchased_item?(purchase)
+          next false unless post.passes_member_cancellation_checks?(purchase)
+
+          post.delivery_due?(purchase)
         end
       end
     end
