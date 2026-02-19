@@ -59,6 +59,17 @@ describe Products::ArchivedController, inertia: true do
         expect(response).to redirect_to(products_url)
       end
     end
+
+    context "when a search query matches no archived products" do
+      it "renders the archived page with empty results" do
+        get :index, params: { query: "nonexistent" }
+
+        expect(response).to have_http_status(:ok)
+        expect(inertia).to render_component("Products/Archived/Index")
+        expect(inertia.props[:products_data][:products]).to be_empty
+        expect(inertia.props[:memberships_data][:memberships]).to be_empty
+      end
+    end
   end
 
   describe "POST create" do
