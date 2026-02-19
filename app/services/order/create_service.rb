@@ -46,8 +46,8 @@ class Order::CreateService
           common_params
             .except(
               :billing_agreement_id, :paypal_order_id, :visual, :stripe_payment_method_id, :stripe_customer_id,
-              :stripe_error, :braintree_transient_customer_store_key, :braintree_device_data,
-              :use_existing_card, :paymentToken
+              :stripe_setup_intent_id, :stripe_error, :braintree_transient_customer_store_key,
+              :braintree_device_data, :use_existing_card, :paymentToken
             )
             .merge(line_item_params.except(:uid, :permalink))
             .merge({ cart_items: })
@@ -56,7 +56,8 @@ class Order::CreateService
         # Card params are excluded from build_purchase_params (charging is handled by
         # Charge::CreateService), but RestartAtCheckoutService needs them for UpdaterService
         card_params = common_params.slice(
-          :card_data_handling_mode, :stripe_payment_method_id, :paypal_order_id
+          :card_data_handling_mode, :stripe_payment_method_id, :paypal_order_id,
+          :stripe_customer_id, :stripe_setup_intent_id
         ).compact
 
         purchase, error, sca_response = Purchase::CreateService.new(

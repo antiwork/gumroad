@@ -90,6 +90,28 @@ describe Subscription::RestartAtCheckoutService do
         expect(transformed_params[:use_existing_card]).to be true
       end
 
+      it "forwards stripe_customer_id and stripe_setup_intent_id to UpdaterService" do
+        params_with_stripe = base_params.merge(
+          stripe_payment_method_id: "pm_123",
+          stripe_customer_id: "cus_123",
+          stripe_setup_intent_id: "seti_123",
+          card_data_handling_mode: "stripe_elements"
+        )
+
+        service = described_class.new(
+          subscription: subscription,
+          product: product,
+          params: params_with_stripe,
+          buyer: buyer
+        )
+
+        transformed_params = service.send(:updater_service_params)
+
+        expect(transformed_params[:stripe_customer_id]).to eq("cus_123")
+        expect(transformed_params[:stripe_setup_intent_id]).to eq("seti_123")
+        expect(transformed_params[:stripe_payment_method_id]).to eq("pm_123")
+      end
+
       it "uses default variants when not provided in params" do
         params_without_variants = base_params.except(:variants)
 

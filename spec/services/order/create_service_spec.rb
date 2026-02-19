@@ -237,6 +237,55 @@ describe Order::CreateService, :vcr do
         }.merge(common_order_params_without_payment)
       end
 
+      it "passes stripe_customer_id and stripe_setup_intent_id through to the subscription restart in a multi-seller cart" do
+        # In a multi-seller cart, prepareFutureCharges() creates a SetupIntent and the
+        # customer completes SCA upfront. The resulting stripe_customer_id and
+        # stripe_setup_intent_id must reach UpdaterService so the restart charge can
+        # reference the prior authentication and avoid a second SCA prompt.
+        multi_seller_params = {
+          line_items: [
+            {
+              uid: "unique-id-0",
+              permalink: membership_product.unique_permalink,
+              perceived_price_cents: membership_product.price_cents,
+              quantity: 1,
+              price_id: membership_product.prices.alive.first.external_id
+            },
+            {
+              uid: "unique-id-1",
+              permalink: product_4.unique_permalink,
+              perceived_price_cents: product_4.price_cents,
+              quantity: 1
+            }
+          ],
+          stripe_payment_method_id: "pm_123",
+          stripe_customer_id: "cus_123",
+          stripe_setup_intent_id: "seti_123",
+          card_data_handling_mode: "stripe_elements"
+        }.merge(common_order_params_without_payment)
+
+        updater_service = instance_double(Subscription::UpdaterService)
+        expect(Subscription::UpdaterService).to receive(:new).with(
+          subscription: subscription,
+          params: hash_including(
+            stripe_customer_id: "cus_123",
+            stripe_setup_intent_id: "seti_123",
+            stripe_payment_method_id: "pm_123"
+          ),
+          logged_in_user: buyer,
+          gumroad_guid: browser_guid,
+          remote_ip: anything
+        ).and_return(updater_service)
+        allow(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
+
+        order, purchase_responses, _ = Order::CreateService.new(params: multi_seller_params, buyer:).perform
+
+        expect(purchase_responses["unique-id-0"]).to include(success: true)
+        # The regular product from seller_2 should still be in the order
+        expect(order.purchases.in_progress.count).to eq(1)
+        expect(order.purchases.first.link).to eq(product_4)
+      end
+
       it "does not add the restarted subscription's original purchase to the order" do
         updater_service = instance_double(Subscription::UpdaterService)
         allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)

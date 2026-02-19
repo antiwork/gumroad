@@ -42,6 +42,8 @@ class Subscription::RestartAtCheckoutService
         card_data_handling_mode: params[:card_data_handling_mode],
         stripe_payment_method_id: params[:stripe_payment_method_id],
         paypal_order_id: params[:paypal_order_id],
+        stripe_customer_id: params[:stripe_customer_id],
+        stripe_setup_intent_id: params[:stripe_setup_intent_id],
       }.compact
     end
 
