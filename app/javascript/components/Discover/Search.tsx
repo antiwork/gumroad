@@ -25,10 +25,14 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
     router.reload({
       only: ["autocomplete_results"],
       data: { query: enteredQuery },
+      replace: true,
     });
   }, 300);
 
-  useOnChange(() => fetchAutocomplete(), [enteredQuery]);
+  useOnChange(() => {
+    if (enteredQuery) fetchAutocomplete();
+    else fetchAutocomplete.cancel();
+  }, [enteredQuery]);
   useOnChange(() => {
     if (autocompleteOpen && !autocompleteResults) fetchAutocomplete();
   }, [autocompleteOpen]);
