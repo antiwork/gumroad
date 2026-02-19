@@ -247,7 +247,7 @@ class SettingsPresenter
         country_supports_iban: seller.country_supports_iban?,
         need_full_ssn: seller.has_ever_been_requested_for_user_compliance_info_field?(UserComplianceInfoFields::Individual::TAX_ID),
         country_code: user_compliance_info.legal_entity_country_code,
-        payout_currency: Country.new(user_compliance_info.country_code).payout_currency,
+        payout_currency: Country.new(user_compliance_info.legal_entity_country_code).payout_currency,
         is_from_europe: seller.signed_up_from_europe?,
         individual_tax_id_needed_countries: [Compliance::Countries::USA.alpha2,
                                              Compliance::Countries::CAN.alpha2,

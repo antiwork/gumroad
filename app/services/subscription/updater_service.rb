@@ -257,12 +257,19 @@ class Subscription::UpdaterService
         )
       end
 
-      purchase_params.merge!(setup_future_charges: true) if subscription.credit_card_to_charge&.requires_mandate?
+      # When a SetupIntent already completed SCA (e.g. multi-seller cart checkout),
+      # force off_session: true so the charge references the prior authentication
+      # and Stripe doesn't prompt for SCA again.
+      setup_intent_authenticated = params[:stripe_setup_intent_id].present?
+
+      if !setup_intent_authenticated && subscription.credit_card_to_charge&.requires_mandate?
+        purchase_params.merge!(setup_future_charges: true)
+      end
 
       self.upgrade_purchase = subscription.charge!(
         override_params: purchase_params,
         from_failed_charge_email: ActiveModel::Type::Boolean.new.cast(params[:declined]),
-        off_session: !subscription.credit_card_to_charge&.requires_mandate?
+        off_session: setup_intent_authenticated || !subscription.credit_card_to_charge&.requires_mandate?
       )
 
       subscription.unsubscribe_and_fail! if is_resubscribing && !(upgrade_purchase.successful? ||
