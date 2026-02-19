@@ -1,3 +1,4 @@
+import { CreditCard } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -10,7 +11,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { FormSection } from "$app/components/ui/FormSection";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { CreditCard } from "@boxicons/react";
 
 type Props = {
   card: SavedCreditCard;
@@ -49,13 +49,8 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
       }
     >
       <div className="flex flex-col gap-4">
-<<<<<<< HEAD
-        <div className="input read-only" aria-label="Saved credit card">
-          <CreditCard className="size-5" />
-=======
         <InputGroup readOnly aria-label="Saved credit card">
-          <Icon name="outline-credit-card" />
->>>>>>> main
+          <CreditCard className="size-5" />
           <span>{card.number}</span>
           <span style={{ marginLeft: "auto" }}>{card.expiration_date}</span>
         </InputGroup>

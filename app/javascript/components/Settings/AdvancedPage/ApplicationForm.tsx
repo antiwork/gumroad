@@ -10,12 +10,12 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { WithTooltip } from "$app/components/WithTooltip";
+import { Trash } from "@boxicons/react";
 
 export type Application = {
   id: string;
@@ -160,7 +160,7 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
                 onClick={() => setIcon(null)}
                 disabled={isUploadingIcon || isSubmitting}
               >
-                <Icon name="trash2" />
+                <Trash className="size-5" />
               </Button>
             ) : null}
           </div>

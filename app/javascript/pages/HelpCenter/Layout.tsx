@@ -1,3 +1,4 @@
+import { Search } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
@@ -10,12 +11,6 @@ import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
-<<<<<<< HEAD
-import githubIcon from "$assets/images/help-center/github-icon.svg";
-import { Search } from "@boxicons/react";
-
-=======
->>>>>>> main
 type HelperSession = {
   email?: string | null;
   emailHash?: string | null;
@@ -97,17 +92,11 @@ function HelpCenterHeader({
   const renderActions = () => {
     if (showSearchButton) {
       return (
-<<<<<<< HEAD
-        <Link href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
-          <Search pack="filled" className="size-5" />
-        </Link>
-=======
         <Button asChild>
           <Link href={Routes.help_center_root_path()} aria-label="Search" title="Search">
-            <Icon name="solid-search" />
+            <Search pack="filled" className="size-5" />
           </Link>
         </Button>
->>>>>>> main
       );
     }
 

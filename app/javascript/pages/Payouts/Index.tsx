@@ -1,3 +1,4 @@
+import { ArrowDown, Calendar, CheckCircle, ChevronDown, Clock, Gear } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
@@ -29,7 +30,6 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import useRouteLoading from "$app/components/useRouteLoading";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { ArrowDown, Calendar, CheckCircle, ChevronDown, Clock, Gear } from "@boxicons/react";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
 
@@ -496,13 +496,8 @@ export default function PayoutsIndex() {
   if (!loggedInUser) return null;
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
-<<<<<<< HEAD
-    <NavigationButton href={Routes.settings_payments_path()}>
-      <Gear pack="filled" className="size-5" />
-=======
     <NavigationButtonInertia href={Routes.settings_payments_path()}>
-      <Icon name="gear-fill" />
->>>>>>> main
+      <Gear pack="filled" className="size-5" />
       Settings
     </NavigationButtonInertia>
   ) : null;
