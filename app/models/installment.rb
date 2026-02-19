@@ -829,7 +829,7 @@ class Installment < ApplicationRecord
     tags.map { normalize_tag(it) }.uniq
   end
 
-  def workflow_delivery_due?(purchase)
+  def delivery_due?(purchase)
     return true if installment_rule.blank?
     return true if workflow.blank?
     return true unless purchase.subscription&.resubscribed?
