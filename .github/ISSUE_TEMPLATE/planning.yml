@@ -1,0 +1,10 @@
+name: Planning
+description: Create a planning issue
+labels: ["planning"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true
