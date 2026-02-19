@@ -50,6 +50,7 @@ describe("Product edit multiple-preview Scenario", type: :system, js: true) do
         upload_image
         expect(page).to have_selector("[role='progressbar']")
       end
+      expect(page).to have_no_selector("[role='progressbar']")
       wait_for_ajax
     end.to change { product.reload.asset_previews.alive.count }.by(1)
   end
