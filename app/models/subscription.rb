@@ -15,6 +15,7 @@ class Subscription < ApplicationRecord
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
+  extend Restartable
 
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
   ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE = 5.days
