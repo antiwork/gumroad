@@ -32,6 +32,7 @@ describe LinksController, :vcr, inertia: true do
         expect(response).to be_successful
         expect(inertia).to render_component("Products/Index")
         expect(inertia.props).to include(
+          :has_products,
           :archived_products_count,
           :can_create_product,
           :products_data,
