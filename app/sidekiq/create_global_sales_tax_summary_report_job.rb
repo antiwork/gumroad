@@ -62,6 +62,7 @@ class CreateGlobalSalesTaxSummaryReportJob
       s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.week.to_i).to_s
 
       AccountingMailer.global_sales_tax_summary_report(month, year, s3_signed_url).deliver_now
+      SlackMessageWorker.perform_async("payments", "Global Sales Tax Summary Report", "Global sales tax summary report for #{year}-#{month} is ready - #{s3_signed_url}", "green")
     ensure
       temp_file.close
     end
@@ -98,12 +99,14 @@ class CreateGlobalSalesTaxSummaryReportJob
       GeoIp.lookup(purchase.ip_address)&.region_name || ""
     end
 
-    def resolve_canada_province(purchase)
-      valid_provinces = Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first)
+    def valid_canada_provinces
+      @valid_canada_provinces ||= Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first)
+    end
 
-      if purchase.state.present? && purchase.state.in?(valid_provinces)
+    def resolve_canada_province(purchase)
+      if purchase.state.present? && purchase.state.in?(valid_canada_provinces)
         purchase.state
-      elsif purchase.ip_state.present? && purchase.ip_state.in?(valid_provinces)
+      elsif purchase.ip_state.present? && purchase.ip_state.in?(valid_canada_provinces)
         purchase.ip_state
       else
         ""
