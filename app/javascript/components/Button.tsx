@@ -108,11 +108,9 @@ export const buttonVariants = cva(
   },
 );
 
-// Legacy props for backward compatibility
 type ButtonVariation = {
   color?: ButtonColor | BrandName | undefined;
   outline?: boolean | undefined;
-  small?: boolean | undefined;
 };
 
 export interface ButtonProps extends Omit<React.ComponentPropsWithoutRef<"button">, "color">, ButtonVariation {
@@ -137,12 +135,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 
 export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutRef<"a">, "color">, ButtonVariation {
+  size?: VariantProps<typeof buttonVariants>["size"];
   disabled?: boolean | undefined;
 }
 
 export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
-  ({ className, color, outline, small, disabled, children, ...props }, ref) => (
-    <Button asChild className={className} color={color} outline={outline} small={small} disabled={disabled}>
+  ({ className, color, outline, size, disabled, children, ...props }, ref) => (
+    <Button asChild className={className} color={color} outline={outline} size={size} disabled={disabled}>
       <a
         ref={ref}
         inert={disabled}

@@ -154,7 +154,7 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
             {icon ? (
               <Button
                 color="primary"
-                small
+                size="sm"
                 className="absolute top-2 right-2"
                 aria-label="Remove icon"
                 onClick={() => setIcon(null)}

@@ -150,7 +150,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
               ))}
               {hasMorePosts && fetchMorePosts ? (
                 <div>
-                  <Button small outline color="primary" disabled={isLoading} onClick={() => void fetchMorePosts()}>
+                  <Button size="sm" outline color="primary" disabled={isLoading} onClick={() => void fetchMorePosts()}>
                     Load more
                   </Button>
                 </div>
