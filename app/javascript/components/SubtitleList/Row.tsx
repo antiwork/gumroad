@@ -54,7 +54,7 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
             </div>
           </RowContent>
           <RowActions>
-            <Button onClick={onCancel} color="danger" outline aria-label="Remove">
+            <Button size="icon" onClick={onCancel} color="danger" outline aria-label="Remove">
               <XCircle pack="filled" className="size-5" />
             </Button>
           </RowActions>
@@ -70,7 +70,7 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
           </RowContent>
           <RowActions>
             <SubtitleLanguageSelect currentLanguage={subtitleFile.language} onChange={onChangeLanguage} />
-            <Button onClick={onRemove} color="danger" outline aria-label="Remove">
+            <Button size="icon" onClick={onRemove} color="danger" outline aria-label="Remove">
               <Trash className="size-5" />
             </Button>
           </RowActions>

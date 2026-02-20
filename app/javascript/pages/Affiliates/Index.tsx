@@ -83,7 +83,7 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
     <Popover open={searchBoxOpen} onOpenChange={setSearchBoxOpen}>
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
-          <Button>
+          <Button size="icon">
             <Search className="size-5" />
           </Button>
         </PopoverTrigger>
@@ -440,6 +440,7 @@ export default function AffiliatesIndex() {
 
                                 <NavigationButtonInertia
                                   href={Routes.edit_affiliate_path(affiliate.id)}
+                                  size="icon"
                                   aria-label="Edit"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
@@ -448,6 +449,7 @@ export default function AffiliatesIndex() {
 
                                 <Button
                                   type="submit"
+                                  size="icon"
                                   color="danger"
                                   onClick={() => remove(affiliate.id)}
                                   aria-label="Delete"

@@ -75,7 +75,7 @@ const EditTab = ({
         </h4>
       </RowContent>
       <RowActions>
-        <Button size="sm" color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
+        <Button size="icon" color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
           <Trash className="size-5" />
         </Button>
       </RowActions>
@@ -256,6 +256,7 @@ export const EditProfile = (props: Props) => {
         <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
           <NavigationButton
             color="filled"
+            size="icon"
             href={Routes.settings_profile_url({ host: appDomain })}
             aria-label="Edit profile"
           >

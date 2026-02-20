@@ -103,6 +103,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {payoutPeriodData.status === "completed" && payoutPeriodData.payment_external_id ? (
           <WithTooltip position="top" tip="Export" className="shrink-0">
             <Button
+              size="icon"
               color="primary"
               disabled={isCSVDownloadInProgress}
               onClick={handleRequestPayoutCSV}

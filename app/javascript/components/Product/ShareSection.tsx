@@ -148,7 +148,7 @@ export const ShareSection = ({
                   className="input"
                   aria-label="Wishlist name"
                 />
-                <Button type="submit" aria-label="Create wishlist" color="primary">
+                <Button type="submit" size="icon" aria-label="Create wishlist" color="primary">
                   <Check className="size-5" />
                 </Button>
               </form>
@@ -177,7 +177,7 @@ export const ShareSection = ({
         <Popover>
           <PopoverAnchor>
             <PopoverTrigger aria-label="Share" asChild>
-              <Button>
+              <Button size="icon">
                 <Share className="size-5" />
               </Button>
             </PopoverTrigger>

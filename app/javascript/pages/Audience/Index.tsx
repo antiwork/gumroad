@@ -49,7 +49,7 @@ function Audience() {
               <PopoverAnchor>
                 <WithTooltip tip="Export" position="bottom">
                   <PopoverTrigger aria-label="Export" asChild>
-                    <Button>
+                    <Button size="icon">
                       <ArrowInDownSquareHalf aria-label="Download" className="size-5" />
                     </Button>
                   </PopoverTrigger>

@@ -88,7 +88,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
           <Popover open={isEditing} onOpenChange={setIsEditing}>
             <PopoverAnchor>
               <PopoverTrigger aria-label="Edit" asChild>
-                <Button>
+                <Button size="icon">
                   <Pencil className="size-5" />
                 </Button>
               </PopoverTrigger>

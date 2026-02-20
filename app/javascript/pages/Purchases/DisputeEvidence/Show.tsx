@@ -408,6 +408,7 @@ const Files = ({
             </NavigationButton>
             {blob.signed_id ? (
               <Button
+                size="icon"
                 color="danger"
                 outline
                 aria-label="Remove"

@@ -265,7 +265,7 @@ const CustomersPage = ({
               <PopoverAnchor>
                 <WithTooltip tip="Filter">
                   <PopoverTrigger aria-label="Filter" asChild>
-                    <Button>
+                    <Button size="icon">
                       <MenuFilter className="size-5" />
                     </Button>
                   </PopoverTrigger>
@@ -393,7 +393,7 @@ const CustomersPage = ({
               <PopoverAnchor>
                 <WithTooltip tip="Export">
                   <PopoverTrigger aria-label="Export" asChild>
-                    <Button>
+                    <Button size="icon">
                       <ArrowInDownSquareHalf className="size-5" />
                     </Button>
                   </PopoverTrigger>

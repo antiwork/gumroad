@@ -203,10 +203,10 @@ const Read = () => {
               <fieldset>
                 <legend>Appearance</legend>
                 <div>
-                  <Button className="mr-2" onClick={zoomOut}>
+                  <Button size="icon" className="mr-2" onClick={zoomOut}>
                     <SearchMinus className="size-5" />
                   </Button>
-                  <Button onClick={zoomIn}>
+                  <Button size="icon" onClick={zoomIn}>
                     <SearchPlus className="size-5" />
                   </Button>
                 </div>

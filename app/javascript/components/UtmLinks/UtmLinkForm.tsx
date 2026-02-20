@@ -336,13 +336,14 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                   copyTooltip="Copy short link"
                   text={`${shortUrlProtocol}//${shortUrlPrefix}${isEditing ? permalink : data.utm_link.permalink}`}
                 >
-                  <Button type="button" aria-label="Copy short link">
+                  <Button type="button" size="icon" aria-label="Copy short link">
                     <Link className="size-5" />
                   </Button>
                 </CopyToClipboard>
                 {!isEditing && (
                   <WithTooltip tip="Generate new short link">
                     <Button
+                      size="icon"
                       onClick={generateNewPermalink}
                       disabled={isLoadingNewPermalink}
                       aria-label="Generate new short link"
@@ -466,7 +467,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                   onChange={() => {}}
                 />
                 <CopyToClipboard copyTooltip="Copy UTM link" text={finalUrl}>
-                  <Button type="button" aria-label="Copy UTM link">
+                  <Button type="button" size="icon" aria-label="Copy UTM link">
                     <Link className="size-5" />
                   </Button>
                 </CopyToClipboard>

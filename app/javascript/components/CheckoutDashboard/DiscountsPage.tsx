@@ -409,6 +409,7 @@ const DiscountsPage = ({
                       <TableCell>
                         <div className="flex flex-wrap gap-3 lg:justify-end">
                           <Button
+                            size="icon"
                             aria-label="Edit"
                             disabled={!offerCode.can_update || isLoading}
                             onClick={() => {
@@ -425,7 +426,7 @@ const DiscountsPage = ({
                             }}
                           >
                             <PopoverTrigger asChild>
-                              <Button aria-label="Open discount action menu" onClick={(e) => e.stopPropagation()}>
+                              <Button size="icon" aria-label="Open discount action menu" onClick={(e) => e.stopPropagation()}>
                                 <DotsHorizontalRounded className="size-5" />
                               </Button>
                             </PopoverTrigger>
@@ -584,7 +585,7 @@ const DiscountsPage = ({
                           copyTooltip="Copy link with discount"
                           text={`${product.url}/${selectedOfferCode.code}`}
                         >
-                          <Button aria-label="Copy link with discount">
+                          <Button size="icon" aria-label="Copy link with discount">
                             <Link className="size-5" />
                           </Button>
                         </CopyToClipboard>

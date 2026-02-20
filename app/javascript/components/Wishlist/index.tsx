@@ -227,7 +227,7 @@ export const Wishlist = ({
   const headerActions = (
     <>
       <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
-        <Button aria-label="Copy link">
+        <Button size="icon" aria-label="Copy link">
           <Link className="size-5" />
         </Button>
       </CopyToClipboard>

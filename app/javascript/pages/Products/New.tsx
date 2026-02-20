@@ -260,7 +260,7 @@ const NewProductPage = () => {
               <Popover open={aiPopoverOpen} onOpenChange={setAiPopoverOpen}>
                 <PopoverAnchor>
                   <PopoverTrigger aria-label="Create a product with AI" asChild>
-                    <Button color="primary" outline>
+                    <Button size="icon" color="primary" outline>
                       <Sparkle className="size-5" />
                     </Button>
                   </PopoverTrigger>

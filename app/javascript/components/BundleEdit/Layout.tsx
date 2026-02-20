@@ -151,7 +151,7 @@ export const BundleEditLayout = ({
                 copyTooltip="Copy product URL"
                 tooltipPosition={isDesktop ? "left" : "bottom"}
               >
-                <Button>
+                <Button size="icon">
                   <LinkIcon className="size-5" />
                 </Button>
               </CopyToClipboard>

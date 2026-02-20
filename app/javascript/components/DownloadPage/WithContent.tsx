@@ -294,7 +294,7 @@ export const WithContent = ({
             <Popover>
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Table of Contents" asChild>
-                  <Button>
+                  <Button size="icon">
                     <ListUl className="size-5" />
                   </Button>
                 </PopoverTrigger>

@@ -116,6 +116,7 @@ const CollaboratorsPage = () => {
                       <div className="flex flex-wrap gap-3 lg:justify-end">
                         <NavigationButtonInertia
                           href={Routes.edit_collaborator_path(collaborator.id)}
+                          size="icon"
                           aria-label="Edit"
                           disabled={disableActions}
                         >
@@ -124,6 +125,7 @@ const CollaboratorsPage = () => {
 
                         <Button
                           type="submit"
+                          size="icon"
                           color="danger"
                           onClick={() => remove(collaborator.id)}
                           aria-label="Delete"

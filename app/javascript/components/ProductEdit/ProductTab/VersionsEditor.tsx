@@ -137,12 +137,12 @@ const VersionEditor = ({
       </RowContent>
       <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
-          <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
+          <Button size="icon" onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
             {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
         </WithTooltip>
         <WithTooltip tip="Remove">
-          <Button onClick={onDelete} aria-label="Remove version">
+          <Button size="icon" onClick={onDelete} aria-label="Remove version">
             <Trash className="size-5" />
           </Button>
         </WithTooltip>

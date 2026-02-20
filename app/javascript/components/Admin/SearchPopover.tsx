@@ -92,7 +92,7 @@ const SearchPopover = () => {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
-          <Button>
+          <Button size="icon">
             <Search className="size-5" />
           </Button>
         </PopoverTrigger>
@@ -111,7 +111,7 @@ const SearchPopover = () => {
                 onChange={(e) => setData("user_query", e.target.value)}
               />
             </InputGroup>
-            <Button color="primary" type="submit">
+            <Button color="primary" size="icon" type="submit">
               <Search className="size-5" />
             </Button>
           </form>
@@ -130,7 +130,7 @@ const SearchPopover = () => {
                 onChange={(e) => setData("purchase_query", e.target.value)}
               />
             </InputGroup>
-            <Button color="primary" type="submit">
+            <Button color="primary" size="icon" type="submit">
               <Search className="size-5" />
             </Button>
           </form>
@@ -149,7 +149,7 @@ const SearchPopover = () => {
                 onChange={(e) => setData("affiliate_query", e.target.value)}
               />
             </InputGroup>
-            <Button color="primary" type="submit">
+            <Button color="primary" size="icon" type="submit">
               <Search className="size-5" />
             </Button>
           </form>

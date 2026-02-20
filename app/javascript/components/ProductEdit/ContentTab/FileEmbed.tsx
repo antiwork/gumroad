@@ -503,7 +503,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             <Popover>
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Thumbnail view" asChild>
-                  <Button>
+                  <Button size="icon">
                     {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
                   </Button>
                 </PopoverTrigger>
@@ -549,7 +549,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           ) : null}
 
           {!file.is_streamable || isComplete ? (
-            <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
+            <Button size="icon" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
               {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}

@@ -468,13 +468,13 @@ const EmailRow = ({
           </Button>
         )}
         <WithTooltip tip="Send email preview">
-          <Button outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
+          <Button size="icon" outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
             <Eye pack="filled" className="size-5" />
           </Button>
         </WithTooltip>
         {isAbandonedCartWorkflow ? null : (
           <WithTooltip tip="Delete">
-            <Button outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
+            <Button size="icon" outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
               <Trash className="size-5" />
             </Button>
           </WithTooltip>

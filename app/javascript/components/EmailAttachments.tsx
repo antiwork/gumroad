@@ -121,12 +121,13 @@ export const FileRow = ({ file }: { file: FileState }) => {
       </RowContent>
       <RowActions>
         {file.is_streamable ? (
-          <Button onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label="Edit">
+          <Button size="icon" onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label="Edit">
             <Pencil className="size-5" />
           </Button>
         ) : null}
         <WithTooltip tip={uploadProgress === null ? "Remove" : "Cancel"} position="left">
           <Button
+            size="icon"
             outline
             color="danger"
             aria-label="Remove"

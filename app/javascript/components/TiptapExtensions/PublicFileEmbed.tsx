@@ -64,7 +64,7 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
             </Button>
           ) : null}
           {editor.isEditable && !isUploading ? (
-            <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
+            <Button size="icon" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
               {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}

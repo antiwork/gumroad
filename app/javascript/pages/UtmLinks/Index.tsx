@@ -320,14 +320,14 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
   return (
     <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
       <CopyToClipboard copyTooltip="Copy short link" text={link.short_url}>
-        <Button aria-label="Copy link">
+        <Button size="icon" aria-label="Copy link">
           <LinkIcon className="size-5" />
         </Button>
       </CopyToClipboard>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverAnchor>
           <PopoverTrigger aria-label="Open action menu" asChild>
-            <Button>
+            <Button size="icon">
               <DotsHorizontalRounded className="size-5" />
             </Button>
           </PopoverTrigger>

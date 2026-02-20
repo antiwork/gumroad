@@ -70,10 +70,10 @@ const ProductLevelSupportEmailRow = React.memo(
           </div>
         </RowContent>
         <RowActions>
-          <Button onClick={handleToggleExpandedState} aria-label="Edit email">
+          <Button size="icon" onClick={handleToggleExpandedState} aria-label="Edit email">
             {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
-          <Button onClick={handleRemove} aria-label="Delete email">
+          <Button size="icon" onClick={handleRemove} aria-label="Delete email">
             <Trash className="size-5" />
           </Button>
         </RowActions>

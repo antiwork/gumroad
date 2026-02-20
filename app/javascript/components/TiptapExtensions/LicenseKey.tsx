@@ -67,7 +67,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
             </CopyToClipboard>
           ) : null}
           {editor.isEditable ? (
-            <Button onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label={isDrawerOpen ? "Close drawer" : "Edit"}>
+            <Button size="icon" onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label={isDrawerOpen ? "Close drawer" : "Edit"}>
               {isDrawerOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}
