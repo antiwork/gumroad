@@ -133,7 +133,7 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
   def clear_payment_request_mocks
     if @cdp_script_identifier
-      page.driver.browser.execute_cdp("Page.removeScriptToEvaluateOnNewDocument", identifier: id)
+      page.driver.browser.execute_cdp("Page.removeScriptToEvaluateOnNewDocument", identifier: @cdp_script_identifier)
     end
   rescue StandardError => e
     warn "Warning: Payment request mock cleanup failed: #{e.message}"
