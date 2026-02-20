@@ -40,23 +40,24 @@ class LinksController < ApplicationController
     set_meta_tag(title: "Products")
 
     render inertia: "Products/Index", props: {
+      query: products_page_presenter.query,
       has_products: -> { products_page_presenter.page_props[:has_products] },
       archived_products_count: -> { products_page_presenter.page_props[:archived_products_count] },
       can_create_product: -> { products_page_presenter.page_props[:can_create_product] },
-      products_data: -> {
+      products_data: InertiaRails.defer(group: "data") do
         {
           products: products_page_presenter.products_table_props[:products],
           pagination: products_page_presenter.products_table_props[:products_pagination],
           sort: products_page_presenter.products_sort,
         }
-      },
-      memberships_data: -> {
+      end,
+      memberships_data: InertiaRails.defer(group: "data") do
         {
           memberships: products_page_presenter.memberships_table_props[:memberships],
           pagination: products_page_presenter.memberships_table_props[:memberships_pagination],
           sort: products_page_presenter.memberships_sort,
         }
-      },
+      end,
     }
   end
 

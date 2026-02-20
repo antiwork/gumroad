@@ -536,7 +536,7 @@ describe DashboardProductsPagePresenter do
     describe "#page_props" do
       it "returns only can_create_product (no archived_products_count)" do
         presenter = described_class.new(pundit_user:, archived: true)
-        expect(presenter.page_props).to eq({ can_create_product: true })
+        expect(presenter.page_props).to eq({ has_products: false, can_create_product: true })
       end
     end
 
