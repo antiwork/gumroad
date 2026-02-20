@@ -22,6 +22,7 @@ import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbe
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const MAX_ALLOWED_PUBLIC_FILE_SIZE_IN_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_ALLOWED_IMAGE_SIZE_IN_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_ALLOWED_PUBLIC_FILES_COUNT = 5;
 
 export const useImageUpload = () => {
@@ -332,6 +333,7 @@ export const DescriptionEditor = ({
         });
       },
       allowedExtensions: ALLOWED_EXTENSIONS,
+      maxFileSize: MAX_ALLOWED_IMAGE_SIZE_IN_BYTES,
     }),
     [],
   );

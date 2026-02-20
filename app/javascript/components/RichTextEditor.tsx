@@ -40,6 +40,7 @@ export type ImageUploadSettings = {
   allowedExtensions: string[];
   onUpload: (file: File, src?: string) => Promise<string> | undefined;
   isUploading?: boolean;
+  maxFileSize?: number;
 };
 
 const ToolbarTooltipContext = React.createContext<null | [boolean, (show: boolean) => void]>(null);

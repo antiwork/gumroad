@@ -389,6 +389,7 @@ describe WishlistPresenter do
           name: "Wishlister",
           avatar_url: wishlist.user.avatar_url,
           profile_url: wishlist.user.profile_url,
+          is_verified: false,
         },
         thumbnails: [
           { url: product_with_thumbnail.thumbnail_alive.url, native_type: "digital" },

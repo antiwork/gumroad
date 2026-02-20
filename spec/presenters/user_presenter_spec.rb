@@ -84,10 +84,18 @@ describe UserPresenter do
         id: seller.external_id,
         name: seller.name,
         avatar_url: seller.avatar_url,
-        profile_url: seller.profile_url(recommended_by: nil)
+        profile_url: seller.profile_url(recommended_by: nil),
+        is_verified: false,
       )
     end
 
+    context "when the seller is verified" do
+      before { seller.update!(verified: true) }
+
+      it "sets verified to true" do
+        expect(presenter.author_byline_props[:is_verified]).to eq(true)
+      end
+    end
     context "when given a custom domain" do
       it "uses the custom domain for the profile url" do
         expect(presenter.author_byline_props(custom_domain_url: "https://example.com")[:profile_url]).to eq("https://example.com")
