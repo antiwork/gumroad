@@ -1,3 +1,4 @@
+import { Calendar, CreditCard, DollarCircle, Lock, Search, User } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
@@ -8,7 +9,6 @@ import { InputGroup } from "$app/components/ui/InputGroup";
 import { Pill } from "$app/components/ui/Pill";
 import { Select } from "$app/components/ui/Select";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { Calendar, CreditCard, DollarCircle, Lock, Search, User } from "@boxicons/react";
 
 type CardType = {
   id: string;
@@ -93,7 +93,7 @@ const SearchPopover = () => {
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
           <Button>
-            <Search pack="filled" className="size-5" />
+            <Search className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
@@ -112,7 +112,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <Button color="primary" type="submit">
-              <Search pack="filled" className="size-5" />
+              <Search className="size-5" />
             </Button>
           </form>
 
@@ -131,7 +131,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <Button color="primary" type="submit">
-              <Search pack="filled" className="size-5" />
+              <Search className="size-5" />
             </Button>
           </form>
 
@@ -150,7 +150,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <Button color="primary" type="submit">
-              <Search pack="filled" className="size-5" />
+              <Search className="size-5" />
             </Button>
           </form>
 

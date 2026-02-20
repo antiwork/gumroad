@@ -1,3 +1,4 @@
+import { Plus, Search } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -16,7 +17,6 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnScrollToBottom } from "$app/components/useOnScrollToBottom";
-import { Plus, Search } from "@boxicons/react";
 
 type ContentPageProps = {
   bundle: {
@@ -266,7 +266,7 @@ export default function BundlesContentEdit() {
                 aria-label="Product selector"
               >
                 <div className="input">
-                  <Search pack="filled" className="size-5" />
+                  <Search className="size-5" />
                   <input
                     type="text"
                     value={query}

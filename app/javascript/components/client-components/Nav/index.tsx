@@ -192,7 +192,7 @@ export const Nav = (props: Props) => {
       <NavSection>
         <ClientNavLink
           text="Discover"
-          icon={<Search pack="filled" className="size-5" />}
+          icon={<Search className="size-5" />}
           href={discoverUrl}
           exactHrefMatch
         />

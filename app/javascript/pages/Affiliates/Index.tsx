@@ -84,13 +84,13 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
           <Button>
-            <Search pack="filled" className="size-5" />
+            <Search className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent>
         <div className="input input-wrapper">
-          <Search pack="filled" className="size-5" />
+          <Search className="size-5" />
           <input
             ref={searchInputRef}
             value={inputValue}

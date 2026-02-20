@@ -1,3 +1,4 @@
+import { ArrowUpRightSquare, Copy, Search } from "@boxicons/react";
 import { Link, useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
@@ -12,7 +13,6 @@ import { Input } from "$app/components/ui/Input";
 import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { ArrowUpRightSquare, Copy, Search } from "@boxicons/react";
 
 type Purchase = {
   external_id: string;
@@ -75,7 +75,7 @@ export default function Purchases() {
               <option value="failed">Failed</option>
             </Select>
             <Button type="submit" color="primary">
-              <Search pack="filled" className="size-5" />
+              <Search className="size-5" />
             </Button>
             {data.product_title_query || data.purchase_status ? (
               <Button asChild>

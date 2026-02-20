@@ -19,13 +19,13 @@ export const Search = ({ onSearch, value: initialValue, placeholder = "Search" }
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
           <Button>
-            <SearchIcon pack="filled" className="size-5" />
+            <SearchIcon className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent sideOffset={4} onOpenAutoFocus={() => searchInputRef.current?.focus()}>
         <div className="input input-wrapper">
-          <SearchIcon pack="filled" className="size-5" />
+          <SearchIcon className="size-5" />
           <input
             ref={searchInputRef}
             value={searchQuery}

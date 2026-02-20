@@ -1,3 +1,4 @@
+import { Link, Search } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -12,7 +13,6 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Pill } from "$app/components/ui/Pill";
-import { Link, Search } from "@boxicons/react";
 
 const DiscoverLinkSection = ({
   globalAffiliateId,
@@ -227,7 +227,7 @@ const ProductEligibilitySection = ({
               }
             })}
           />
-          <Search pack="filled" className="size-5" />
+          <Search className="size-5" />
         </div>
       </fieldset>
       {result.isLoading ? <LoadingSpinner /> : null}
