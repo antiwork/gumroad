@@ -1,11 +1,11 @@
-import { BarChart, DollarCircle, Envelope, EnvelopeOpen, Flag, LightBulb, Shield, User } from "@boxicons/react";
+import { BarChartBig, DollarCircle, Envelope, EnvelopeOpen, Flag, LightBulb, Shield, User } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import AdminNavFooter from "$app/components/Admin/Nav/Footer";
 import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Nav as NavFramework, NavLink, InertiaNavLink, NavSection } from "$app/components/Nav";
+import { InertiaNavLink, Nav as NavFramework, NavLink, NavSection } from "$app/components/Nav";
 
 type PageProps = { title: string };
 
@@ -19,7 +19,7 @@ const Nav = () => {
       <NavSection>
         <InertiaNavLink
           text="Suspend users"
-          icon={<Shield className="size-5" />}
+          icon={<Shield pack="filled" className="size-5" />}
           href={Routes.admin_suspend_users_url(routeParams)}
           component={Link}
         />
@@ -35,8 +35,16 @@ const Nav = () => {
           href={Routes.admin_unblock_email_domains_url(routeParams)}
           component={Link}
         />
-        <NavLink text="Sidekiq" icon={<LightBulb pack="filled" className="size-5" />} href={Routes.admin_sidekiq_web_url(routeParams)} />
-        <NavLink text="Features" icon={<Flag pack="filled" className="size-5" />} href={Routes.admin_flipper_ui_url(routeParams)} />
+        <NavLink
+          text="Sidekiq"
+          icon={<LightBulb pack="filled" className="size-5" />}
+          href={Routes.admin_sidekiq_web_url(routeParams)}
+        />
+        <NavLink
+          text="Features"
+          icon={<Flag pack="filled" className="size-5" />}
+          href={Routes.admin_flipper_ui_url(routeParams)}
+        />
         <InertiaNavLink
           text="Refund queue"
           icon={<DollarCircle pack="filled" className="size-5" />}
@@ -45,7 +53,7 @@ const Nav = () => {
         />
         <InertiaNavLink
           text="Sales reports"
-          icon={<BarChart pack="filled" className="size-5" />}
+          icon={<BarChartBig pack="filled" className="size-5" />}
           href={Routes.admin_sales_reports_url(routeParams)}
           component={Link}
         />

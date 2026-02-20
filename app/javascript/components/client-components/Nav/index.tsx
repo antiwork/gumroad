@@ -7,18 +7,18 @@
 */
 
 import {
-  Archive,
+  ArchiveAlt,
   Bank,
-  BarChart,
+  BarChartBig,
   BookmarkHeart,
   Cart,
   DollarCircle,
   Envelope,
+  Handshake,
+  Home,
   MessageBubble,
-  NetworkChart,
   Search,
-  Store,
-  Tag,
+  WorkflowAlt,
 } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import * as React from "react";
@@ -122,20 +122,20 @@ export const Nav = (props: Props) => {
       <NavSection>
         <ClientNavLink
           text="Home"
-          icon={<Store pack="filled" className="size-5" />}
+          icon={<Home pack="filled" className="size-5" />}
           href={Routes.dashboard_url(routeParams)}
           exactHrefMatch
         />
         <ClientNavLink
           text="Products"
-          icon={<Archive pack="filled" className="size-5" />}
+          icon={<ArchiveAlt pack="filled" className="size-5" />}
           href={Routes.products_url(routeParams)}
           additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
           <ClientNavLink
             text="Collaborators"
-            icon={<Tag pack="filled" className="size-5" />}
+            icon={<Handshake pack="filled" className="size-5" />}
             href={Routes.collaborators_url(routeParams)}
           />
         ) : null}
@@ -153,7 +153,7 @@ export const Nav = (props: Props) => {
         />
         <ClientNavLink
           text="Workflows"
-          icon={<NetworkChart pack="filled" className="size-5" />}
+          icon={<WorkflowAlt pack="filled" className="size-5" />}
           href={Routes.workflows_url(routeParams)}
         />
         <ClientNavLink
@@ -163,7 +163,7 @@ export const Nav = (props: Props) => {
         />
         <ClientNavLink
           text="Analytics"
-          icon={<BarChart pack="filled" className="size-5" />}
+          icon={<BarChartBig pack="filled" className="size-5" />}
           href={Routes.sales_dashboard_url(routeParams)}
           additionalPatterns={[
             Routes.audience_dashboard_url(routeParams),
@@ -172,7 +172,11 @@ export const Nav = (props: Props) => {
           ]}
         />
         {loggedInUser?.policies.balance.index ? (
-          <ClientNavLink text="Payouts" icon={<Bank className="size-5" />} href={Routes.balance_url(routeParams)} />
+          <ClientNavLink
+            text="Payouts"
+            icon={<Bank pack="filled" className="size-5" />}
+            href={Routes.balance_url(routeParams)}
+          />
         ) : null}
         {loggedInUser?.policies.community.index ? (
           <ClientNavLink

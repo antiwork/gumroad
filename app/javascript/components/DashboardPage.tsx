@@ -1,4 +1,4 @@
-import { CheckCircle, Circle, Fullscreen, FullscreenExit } from "@boxicons/react";
+import { CheckCircle, ChevronsDownUp, ChevronsUpDown, Circle } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -363,9 +363,9 @@ export const DashboardPage = ({
                 >
                   <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
                   {gettingStartedMinimized ? (
-                    <Fullscreen className="size-5" style={{ width: "20px", height: "20px" }} />
+                    <ChevronsUpDown className="size-5" style={{ width: "20px", height: "20px" }} />
                   ) : (
-                    <FullscreenExit className="size-5" style={{ width: "20px", height: "20px" }} />
+                    <ChevronsDownUp className="size-5" style={{ width: "20px", height: "20px" }} />
                   )}
                 </a>
               </div>
