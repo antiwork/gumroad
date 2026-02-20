@@ -70,7 +70,7 @@ class UpdateUserComplianceInfo
           country = new_compliance_info.legal_entity_country
           return { success: false, error_message: "The postal code you entered is not valid for #{country}." }
         end
-        return { success: false, error_message: e.message.split("Please contact us").first.strip, error_code: "stripe_error" }
+        return { success: false, error_message: e.message.split("Please contact us").first.strip }
       end
     end
 
