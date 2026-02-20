@@ -101,7 +101,6 @@ type PaymentsPageProps = {
   payout_frequency_daily_supported: boolean;
   errors?: {
     base?: string[];
-    error_code?: string[];
   };
 };
 
@@ -113,7 +112,7 @@ type ErrorMessageInfo = {
 export default function PaymentsPage() {
   const page = usePage();
   const props = cast<PaymentsPageProps>(page.props);
-  const errors = cast<{ base?: string[]; error_code?: string[] } | undefined>(page.props.errors);
+  const errors = cast<{ base?: string[] } | undefined>(page.props.errors);
 
   const userAgentInfo = useUserAgentInfo();
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
@@ -930,15 +929,7 @@ export default function PaymentsPage() {
         {(errors?.base && errors.base.length > 0) || clientErrorMessage ? (
           <div className="mb-12 px-8">
             <Alert variant="danger" role="status">
-              {errors?.base && errors.base.length > 0 ? (
-                errors.error_code?.[0] === "stripe_error" ? (
-                  <div>Your account could not be updated due to an error with Stripe.</div>
-                ) : (
-                  errors.base[0]
-                )
-              ) : clientErrorMessage ? (
-                clientErrorMessage.message
-              ) : null}
+              {errors?.base?.[0] ?? clientErrorMessage?.message}
             </Alert>
           </div>
         ) : null}

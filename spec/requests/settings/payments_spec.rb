@@ -478,7 +478,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("First name", with: "barny")
         click_on("Update settings")
 
-        within(:alert, text: "Your account could not be updated.")
+        within(:alert, text: "You cannot change legal_entity[first_name] via API if an account is verified.")
 
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
