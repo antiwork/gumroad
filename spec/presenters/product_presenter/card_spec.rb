@@ -24,7 +24,7 @@ describe ProductPresenter::Card do
               name: "Testy",
               profile_url: creator.profile_url(recommended_by: "discover"),
               avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
-              verified: false,
+              is_verified: false,
             },
             description: product.plaintext_description.truncate(100),
             ratings: { count: 0, average: 0 },

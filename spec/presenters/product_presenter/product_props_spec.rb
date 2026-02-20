@@ -76,7 +76,7 @@ describe ProductPresenter::ProductProps do
                 id: seller.external_id,
                 name: "Testy",
                 profile_url: seller.profile_url(recommended_by: "discover"),
-                verified: false,
+                is_verified: false,
               },
               collaborating_user: nil,
               is_compliance_blocked: false,
@@ -309,7 +309,7 @@ describe ProductPresenter::ProductProps do
                 id: seller.external_id,
                 name: "Testy",
                 profile_url: seller.profile_url(recommended_by: "profile"),
-                verified: false,
+                is_verified: false,
               },
               collaborating_user: nil,
               is_compliance_blocked: false,
@@ -509,7 +509,7 @@ describe ProductPresenter::ProductProps do
                 id: collaborator.affiliate_user.external_id,
                 name: collaborator.affiliate_user.username,
                 profile_url: collaborator.affiliate_user.profile_url,
-                verified: false,
+                is_verified: false,
               }
             )
           end
@@ -535,7 +535,7 @@ describe ProductPresenter::ProductProps do
                 id: collaborator.affiliate_user.external_id,
                 name: collaborator.affiliate_user.username,
                 profile_url: collaborator.affiliate_user.profile_url,
-                verified: false,
+                is_verified: false,
               }
             )
           end

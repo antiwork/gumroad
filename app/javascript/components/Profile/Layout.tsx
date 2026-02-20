@@ -56,7 +56,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
             <img className="user-avatar" src={creatorProfile.avatar_url} alt="Profile Picture" />
             <a href={Routes.root_path()} className="flex items-center gap-2 no-underline">
               {creatorProfile.name}
-              {creatorProfile.verified ? (
+              {creatorProfile.is_verified ? (
                 <WithTooltip tip="Top creator" position="bottom">
                   <TopCreatorBadge />
                 </WithTooltip>

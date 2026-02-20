@@ -50,7 +50,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       name: currentSeller.name ?? "",
       avatar_url: currentSeller.avatarUrl,
       profile_url: Routes.root_url({ host: currentSeller.subdomain }),
-      verified: seller.verified,
+      is_verified: seller.is_verified,
     },
     collaborating_user: product.collaborating_user,
     covers: product.covers,
@@ -162,7 +162,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         name: currentSeller.name ?? "",
         subdomain: currentSeller.subdomain,
         twitter_handle: "",
-        verified: seller.verified,
+        is_verified: seller.is_verified,
       }}
       hideFollowForm
     >

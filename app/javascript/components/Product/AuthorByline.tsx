@@ -28,17 +28,17 @@ export const AuthorByline = ({
   name,
   profileUrl,
   avatarUrl,
-  topCreator,
+  isTopCreator,
 }: {
   name: string;
   profileUrl: string;
   avatarUrl?: string | undefined;
-  topCreator?: boolean | undefined;
+  isTopCreator?: boolean | undefined;
 }) => (
   <a href={profileUrl} target="_blank" className="relative flex items-center gap-2" rel="noreferrer">
     {avatarUrl ? <img className="user-avatar" src={avatarUrl} /> : null}
     {name}
-    {topCreator ? (
+    {isTopCreator ? (
       <WithTooltip tip="Top creator" position="top">
         <TopCreatorBadge />
         <span className="sr-only">Top creator</span>

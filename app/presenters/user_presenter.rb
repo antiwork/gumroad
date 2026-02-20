@@ -57,7 +57,7 @@ class UserPresenter
       name: user.name_or_username,
       avatar_url: user.avatar_url,
       profile_url: user.profile_url(custom_domain_url:, recommended_by:),
-      verified: !!user.verified,
+      is_verified: !!user.verified,
     }
   end
 end
