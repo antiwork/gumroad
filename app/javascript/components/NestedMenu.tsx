@@ -12,7 +12,7 @@ import { Sheet } from "$app/components/ui/Sheet";
 import { useIsOnTouchDevice } from "$app/components/useIsOnTouchDevice";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useWindowDimensions } from "$app/components/useWindowDimensions";
-import { ChevronDown, ChevronLeft, ChevronRight, Filter } from "@boxicons/react";
+import { ChevronDown, ChevronLeft, ChevronRight, MenuFilter } from "@boxicons/react";
 
 type MenuItemKey = string;
 export type MenuItem = {
@@ -324,7 +324,7 @@ const OverlayMenu = ({
         aria-label={buttonLabel ?? "Open Menu"}
         {...extraAriaAttrs}
       >
-        <Filter className="size-5" />
+        <MenuFilter className="size-5" />
       </Button>
       <Sheet
         open={menuOpen}

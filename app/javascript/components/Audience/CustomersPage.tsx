@@ -93,7 +93,7 @@ import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
-import { ArrowDown, ArrowLeft, ArrowUpRightSquare, Filter, Paperclip, Trash, Truck } from "@boxicons/react";
+import { ArrowDown, ArrowInDownSquareHalf, ArrowLeft, ArrowUpRightSquare, MenuFilter, Paperclip, Trash, Truck } from "@boxicons/react";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
@@ -266,7 +266,7 @@ const CustomersPage = ({
                 <WithTooltip tip="Filter">
                   <PopoverTrigger aria-label="Filter" asChild>
                     <Button>
-                      <Filter className="size-5" />
+                      <MenuFilter className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -394,7 +394,7 @@ const CustomersPage = ({
                 <WithTooltip tip="Export">
                   <PopoverTrigger aria-label="Export" asChild>
                     <Button>
-                      <ArrowDown className="size-5" />
+                      <ArrowInDownSquareHalf className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>

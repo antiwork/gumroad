@@ -1,4 +1,4 @@
-import { ArrowDown, Link } from "@boxicons/react";
+import { ArrowInDownSquareHalf, Link } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -96,7 +96,7 @@ export default function FollowersPage() {
               <WithTooltip tip="Export" position="bottom">
                 <PopoverTrigger aria-label="Export" asChild>
                   <Button>
-                    <ArrowDown aria-label="Download" className="size-5" />
+                    <ArrowInDownSquareHalf aria-label="Download" className="size-5" />
                   </Button>
                 </PopoverTrigger>
               </WithTooltip>

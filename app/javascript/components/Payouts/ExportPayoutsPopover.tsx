@@ -9,7 +9,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { ArrowDown } from "@boxicons/react";
+import { ArrowInDownSquareHalf } from "@boxicons/react";
 
 const ExportPayoutsPopoverContent = () => {
   const currentYear = new Date().getFullYear();
@@ -152,7 +152,7 @@ export const ExportPayoutsPopover = () => (
     <PopoverAnchor>
       <PopoverTrigger aria-label="Bulk export" asChild>
         <Button>
-          <ArrowDown className="size-5" />
+          <ArrowInDownSquareHalf className="size-5" />
         </Button>
       </PopoverTrigger>
     </PopoverAnchor>

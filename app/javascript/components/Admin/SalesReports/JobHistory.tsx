@@ -7,7 +7,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { ArrowDown, Plus } from "@boxicons/react";
+import { ArrowInDownSquareHalf, Plus } from "@boxicons/react";
 
 export type JobHistoryItem = {
   job_id: string;
@@ -105,7 +105,7 @@ const AdminSalesReportsJobHistory = ({ countries, sales_types, jobHistory, authe
                 {job.status === "completed" && job.download_url ? (
                   <a href={job.download_url} target="_blank" rel="noopener noreferrer">
                     <div className="grid grid-cols-[auto_1fr] gap-2">
-                      <ArrowDown className="size-5" />
+                      <ArrowInDownSquareHalf className="size-5" />
                       {countryCodeToName[job.country_code]}_{job.sales_type}_report_{job.start_date}_{job.end_date}
                     </div>
                   </a>

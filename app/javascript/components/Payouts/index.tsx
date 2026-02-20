@@ -21,7 +21,7 @@ import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { ArrowDown, Calendar, CheckCircle, ChevronDown, Clock, Gear } from "@boxicons/react";
+import { ArrowInDownSquareHalf, Calendar, CheckCircle, ChevronDown, Clock, Cog } from "@boxicons/react";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
 
@@ -352,7 +352,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
               onClick={handleRequestPayoutCSV}
               aria-label="Export"
             >
-              <ArrowDown className="size-5" />
+              <ArrowInDownSquareHalf className="size-5" />
             </Button>
           </WithTooltip>
         ) : null}
@@ -710,7 +710,7 @@ const Payouts = ({
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Gear pack="filled" className="size-5" />
+      <Cog pack="filled" className="size-5" />
       Settings
     </NavigationButton>
   ) : null;

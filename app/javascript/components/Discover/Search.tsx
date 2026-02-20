@@ -73,7 +73,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
       editable
       input={(props) => (
         <div className="input">
-          <SearchIcon pack="filled" className="size-5" />
+          <SearchIcon className="size-5" />
           <input
             {...props}
             type="search"

@@ -1,4 +1,4 @@
-import { ArrowDown, Calendar, CheckCircle, ChevronDown, Clock, Gear } from "@boxicons/react";
+import { ArrowInDownSquareHalf, Calendar, CheckCircle, ChevronDown, Clock, Cog } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
@@ -108,7 +108,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
               onClick={handleRequestPayoutCSV}
               aria-label="Export"
             >
-              <ArrowDown className="size-5" />
+              <ArrowInDownSquareHalf className="size-5" />
             </Button>
           </WithTooltip>
         ) : null}
@@ -497,7 +497,7 @@ export default function PayoutsIndex() {
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
     <NavigationButtonInertia href={Routes.settings_payments_path()}>
-      <Gear pack="filled" className="size-5" />
+      <Cog pack="filled" className="size-5" />
       Settings
     </NavigationButtonInertia>
   ) : null;

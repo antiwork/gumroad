@@ -30,7 +30,7 @@ import { Sort, useClientSortingTableDriver, useSortingTableDriver } from "$app/c
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
-import { ArrowDown, Pencil, Search, Trash } from "@boxicons/react";
+import { ArrowInDownSquareHalf, Pencil, Search, Trash } from "@boxicons/react";
 
 type SortKey = "affiliate_user_name" | "products" | "fee_percent" | "volume_cents";
 
@@ -90,7 +90,7 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       </PopoverAnchor>
       <PopoverContent>
         <div className="input input-wrapper">
-          <Search className="size-5" />
+          <Search className="size-5 text-muted" />
           <input
             ref={searchInputRef}
             value={inputValue}
@@ -383,7 +383,7 @@ export default function AffiliatesIndex() {
                               className={buttonVariants({ size: "default", color: "primary" })}
                               aria-label="Export"
                             >
-                              <ArrowDown className="size-5" />
+                              <ArrowInDownSquareHalf className="size-5" />
                             </a>
                           </WithTooltip>
                         </div>

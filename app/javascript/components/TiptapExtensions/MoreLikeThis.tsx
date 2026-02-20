@@ -11,7 +11,7 @@ import { Card } from "$app/components/Product/Card";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
-import { Archive, Gear } from "@boxicons/react";
+import { Archive, Cog } from "@boxicons/react";
 
 export const MoreLikeThis = TiptapNode.create<{ productId: string }>({
   name: "moreLikeThis",
@@ -79,7 +79,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
               {
                 item: () => (
                   <>
-                    <Gear className="size-5" />
+                    <Cog className="size-5" />
                     <span>Settings</span>
                   </>
                 ),

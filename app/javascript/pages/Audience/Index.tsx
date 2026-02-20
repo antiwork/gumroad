@@ -1,4 +1,4 @@
-import { ArrowDown } from "@boxicons/react";
+import { ArrowInDownSquareHalf } from "@boxicons/react";
 import { Deferred, router, usePage } from "@inertiajs/react";
 import { lightFormat } from "date-fns";
 import * as React from "react";
@@ -50,7 +50,7 @@ function Audience() {
                 <WithTooltip tip="Export" position="bottom">
                   <PopoverTrigger aria-label="Export" asChild>
                     <Button>
-                      <ArrowDown aria-label="Download" className="size-5" />
+                      <ArrowInDownSquareHalf aria-label="Download" className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>

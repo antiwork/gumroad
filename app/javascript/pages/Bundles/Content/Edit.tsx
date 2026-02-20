@@ -266,7 +266,7 @@ export default function BundlesContentEdit() {
                 aria-label="Product selector"
               >
                 <div className="input">
-                  <Search className="size-5" />
+                  <Search className="size-5 text-muted" />
                   <input
                     type="text"
                     value={query}

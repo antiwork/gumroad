@@ -227,7 +227,7 @@ const ProductEligibilitySection = ({
               }
             })}
           />
-          <Search className="size-5" />
+          <Search className="size-5 text-muted" />
         </div>
       </fieldset>
       {result.isLoading ? <LoadingSpinner /> : null}

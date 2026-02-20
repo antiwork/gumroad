@@ -3,7 +3,7 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ArrowDown } from "@boxicons/react";
+import { ArrowInDownSquareHalf } from "@boxicons/react";
 
 type Props = {
   taxForms: Record<number, string>;
@@ -45,7 +45,7 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
         <PopoverTrigger aria-label="Tax forms" asChild>
           <Button>
             Tax forms
-            <ArrowDown className="size-5" />
+            <ArrowInDownSquareHalf className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>

@@ -8,7 +8,7 @@ import {
   Cart,
   DollarCircle,
   Envelope,
-  Gear,
+  Cog,
   Gift,
   MessageBubble,
   NetworkChart,
@@ -94,7 +94,7 @@ export const Nav = (props: Props) => {
           ) : null}
           <NavLink
             text="Settings"
-            icon={<Gear pack="filled" className="size-5" />}
+            icon={<Cog pack="filled" className="size-5" />}
             href={Routes.settings_main_url(routeParams)}
           />
 

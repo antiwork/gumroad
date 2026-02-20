@@ -437,7 +437,7 @@ export default function LibraryPage() {
                 <>
                   <CardContent>
                     <div className="input input-wrapper product-search__wrapper grow">
-                      <Search className="size-5" />
+                      <Search className="size-5 text-muted" />
                       <input
                         className="search-products"
                         placeholder="Search products"
