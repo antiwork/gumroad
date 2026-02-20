@@ -32,7 +32,7 @@ export const buttonVariants = cva(
         destructive: "",
       },
       size: {
-        default: "px-4 py-3 text-base leading-[1.4]",
+        default: "px-4 py-3 text-base leading-snug",
         sm: "p-2 text-sm leading-[1.3]",
       },
       color: {

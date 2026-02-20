@@ -2,6 +2,7 @@
 
 class TaxCenterController < Sellers::BaseController
   layout "inertia", only: [:index]
+  skip_before_action :check_suspended
   before_action :ensure_tax_center_enabled
 
   def index

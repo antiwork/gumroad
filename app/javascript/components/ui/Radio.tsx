@@ -15,7 +15,7 @@ export const Radio = React.forwardRef<
         "size-[calc(1lh+0.125rem)]",
         "border border-border",
         "bg-background",
-        "text-base leading-[1.4]",
+        "text-base leading-snug",
         "shrink-0 cursor-pointer",
         "disabled:cursor-not-allowed disabled:opacity-30",
         "checked:bg-accent",

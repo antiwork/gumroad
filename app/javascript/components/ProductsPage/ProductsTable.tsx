@@ -19,8 +19,6 @@ import {
   TableHeader,
   TableRow,
 } from "$app/components/ui/Table";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
-import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -46,7 +44,7 @@ export const ProductsPageProductsTable = (props: {
         products_sort_direction: newSort?.direction,
         products_page: undefined,
       },
-      only: ["products_data"],
+      only: ["products_data", "has_products"],
       onBefore: () => setSort(newSort),
       onStart: () => setIsLoading(true),
       onFinish: () => setIsLoading(false),
@@ -63,7 +61,7 @@ export const ProductsPageProductsTable = (props: {
         products_sort_direction: sort?.direction,
         query: props.query || undefined,
       },
-      only: ["products_data"],
+      only: ["products_data", "has_products"],
       onStart: () => setIsLoading(true),
       onFinish: () => {
         setIsLoading(false);
@@ -71,12 +69,6 @@ export const ProductsPageProductsTable = (props: {
       },
     });
   };
-
-  const debouncedLoadProducts = useDebouncedCallback(() => loadProducts(1), 300);
-
-  useOnChange(() => {
-    if (props.query !== null) debouncedLoadProducts();
-  }, [props.query]);
 
   const reloadProducts = () => loadProducts(pagination.page);
 
