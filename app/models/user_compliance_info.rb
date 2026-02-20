@@ -11,8 +11,8 @@ class UserComplianceInfo < ApplicationRecord
   stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, on: :create
 
   MINIMUM_DATE_OF_BIRTH_AGE = 13
-  KANA_NAME_REGEX = /\A[\p{Katakana}\s\-.]*\z/
-  KANA_ADDRESS_REGEX = /\A[\p{Katakana}\p{Latin}\d\s\-.]*\z/
+  KANA_NAME_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\s\u3000\-.]*\z/
+  KANA_ADDRESS_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\p{Latin}\d\s\u3000\-.]*\z/
   ROMAJI_REGEX = /\A[^\p{Han}\p{Hiragana}\p{Katakana}]*\z/
 
   belongs_to :user, optional: true

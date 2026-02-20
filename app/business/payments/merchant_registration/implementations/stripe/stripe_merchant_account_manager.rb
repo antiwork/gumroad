@@ -106,7 +106,7 @@ module StripeMerchantAccountManager
 
     merchant_account
   rescue Stripe::StripeError => e
-    merchant_account.mark_deleted! if merchant_account.present? && merchant_account.charge_processor_merchant_id.blank?
+    cleanup_failed_merchant_account(merchant_account) if merchant_account.present?
     Bugsnag.notify(e)
     raise
   end
@@ -308,6 +308,18 @@ module StripeMerchantAccountManager
       raise MerchantRegistrationUserNotReadyError
         .new(user.id, "does not have a Stripe merchant account")
     end
+  end
+
+  private_class_method
+  def self.cleanup_failed_merchant_account(merchant_account)
+    if merchant_account.charge_processor_merchant_id.present?
+      begin
+        Stripe::Account.delete(merchant_account.charge_processor_merchant_id)
+      rescue Stripe::StripeError => cleanup_error
+        Bugsnag.notify(cleanup_error)
+      end
+    end
+    merchant_account.mark_deleted!
   end
 
   private_class_method

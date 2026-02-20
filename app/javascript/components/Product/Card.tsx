@@ -39,6 +39,7 @@ export const Card = ({
           name={product.seller.name}
           profileUrl={product.seller.profile_url}
           avatarUrl={product.seller.avatar_url ?? undefined}
+          isTopCreator={product.seller.is_verified}
         />
       ) : null}
       {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
@@ -91,6 +92,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
             name={product.seller.name}
             profileUrl={product.seller.profile_url}
             avatarUrl={product.seller.avatar_url ?? undefined}
+            isTopCreator={product.seller.is_verified}
           />
         ) : null}
       </ProductCardHeader>
