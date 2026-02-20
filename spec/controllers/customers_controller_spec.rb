@@ -446,7 +446,7 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
         end.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
-    
+
     context "when seller is suspended for TOS violation" do
       let(:admin_user) { create(:user) }
       let!(:product) { create(:product, user: seller) }
