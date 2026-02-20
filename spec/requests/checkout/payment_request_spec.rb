@@ -207,7 +207,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
     it "allows selecting Google Pay" do
       visit product.long_url
+      inject_payment_request_mock
       add_to_cart(product)
+      inject_payment_request_mock
 
       expect(page).to have_field("Google Pay", type: "radio", wait: 10)
 
@@ -229,7 +231,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
     it "can switch between Google Pay and credit card" do
       visit product.long_url
+      inject_payment_request_mock
       add_to_cart(product)
+      inject_payment_request_mock
 
       choose "Google Pay"
 
@@ -246,7 +250,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
     it "returns to input state when payment is cancelled" do
       visit product.long_url
+      inject_payment_request_mock
       add_to_cart(product)
+      inject_payment_request_mock
 
       fill_in "Email address", with: "buyer@example.com"
       choose "Google Pay"
@@ -260,7 +266,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
     it "requires email before allowing payment" do
       visit product.long_url
+      inject_payment_request_mock
       add_to_cart(product)
+      inject_payment_request_mock
 
       choose "Google Pay"
 
@@ -276,7 +284,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
       physical_product = create(:product, :physical, price_cents: 3000)
 
       visit physical_product.long_url
+      inject_payment_request_mock
       add_to_cart(physical_product)
+      inject_payment_request_mock
 
       expect(page).to have_field("Google Pay", type: "radio", wait: 10)
 
@@ -289,7 +299,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
       subscription_product = create(:product, :membership, price_cents: 1500, subscription_duration: "monthly")
 
       visit subscription_product.long_url
+      inject_payment_request_mock
       add_to_cart(subscription_product)
+      inject_payment_request_mock
 
       expect(page).to have_field("Google Pay", type: "radio", wait: 10)
 
@@ -306,7 +318,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
     it "shows both payment options" do
       visit product.long_url
+      inject_payment_request_mock
       add_to_cart(product)
+      inject_payment_request_mock
 
       expect(page).to have_field("Apple Pay", type: "radio", wait: 10)
       expect(page).to have_field("Google Pay", type: "radio")
@@ -315,7 +329,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
     it "can switch between all payment methods" do
       visit product.long_url
+      inject_payment_request_mock
       add_to_cart(product)
+      inject_payment_request_mock
 
       choose "Apple Pay"
       expect(page).to have_checked_field("Apple Pay")
@@ -338,7 +354,9 @@ describe "Checkout with Payment Request API", :js, type: :system do
 
     it "only shows credit card option" do
       visit product.long_url
+      inject_payment_request_mock
       add_to_cart(product)
+      inject_payment_request_mock
 
       expect(page).not_to have_field("Apple Pay", type: "radio")
       expect(page).not_to have_field("Google Pay", type: "radio")

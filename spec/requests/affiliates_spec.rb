@@ -19,7 +19,7 @@ describe "Affiliates", type: :system, js: true do
     click_on "I want this!"
     fill_in("Your email address", with: "test@gumroad.com")
     click_on "Get"
-    expect(page).to have_alert(text: "Your purchase was successful!")
+    expect(page).to have_alert(text: "Your purchase was successful!", visible: :all, wait: 10)
   end
 
   it "displays affiliates based on initial page load query parameters" do
