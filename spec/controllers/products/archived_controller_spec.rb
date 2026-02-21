@@ -52,8 +52,8 @@ describe Products::ArchivedController, inertia: true do
 
     context "when there are no archived products" do
       before do
-        archived_membership.update(archived: false)
-        archived_product.update(archived: false)
+        archived_membership.update!(archived: false)
+        archived_product.update!(archived: false)
       end
 
       it "redirects to products page" do
