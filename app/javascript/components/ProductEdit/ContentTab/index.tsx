@@ -118,7 +118,7 @@ const FileUploadMenu = ({
     </PopoverClose>
     <PopoverClose asChild>
       <label role="menuitem">
-        <input type="file" name="file" multiple onChange={(e) => onUploadFile(e.target)} />
+        <input type="file" name="file" className="sr-only" multiple onChange={(e) => onUploadFile(e.target)} />
         <Icon name="paperclip" />
         <span>Computer files</span>
       </label>
