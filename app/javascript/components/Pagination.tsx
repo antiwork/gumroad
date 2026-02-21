@@ -77,7 +77,11 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
           </>
         ) : null}
       </menu>
-      <Button size="sm" disabled={pagination.page + 1 > pagination.pages} onClick={() => onChangePage(pagination.page + 1)}>
+      <Button
+        size="sm"
+        disabled={pagination.page + 1 > pagination.pages}
+        onClick={() => onChangePage(pagination.page + 1)}
+      >
         Next
         <Icon name="outline-cheveron-right" />
       </Button>
