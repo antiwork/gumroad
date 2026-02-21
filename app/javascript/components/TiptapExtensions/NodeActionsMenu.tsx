@@ -22,7 +22,7 @@ export const NodeActionsMenu = ({
       <div className="actions-menu">
         <PopoverAnchor>
           <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
-            <Button small color="filled">
+            <Button size="sm" color="filled">
               <Icon name="outline-drag" />
             </Button>
           </PopoverTrigger>

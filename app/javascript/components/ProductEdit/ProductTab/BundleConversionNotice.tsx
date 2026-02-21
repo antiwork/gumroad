@@ -26,7 +26,7 @@ export const BundleConversionNotice = () => {
             workflows.
           </p>
           <div>
-            <Button color="primary" small onClick={() => setIsModalOpen(true)}>
+            <Button color="primary" size="sm" onClick={() => setIsModalOpen(true)}>
               Switch to bundle
             </Button>
           </div>

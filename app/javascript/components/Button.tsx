@@ -1,5 +1,5 @@
 import { Slot } from "@radix-ui/react-slot";
-import { cva } from "class-variance-authority";
+import { cva, VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
@@ -107,21 +107,19 @@ export const buttonVariants = cva(
   },
 );
 
-// Legacy props for backward compatibility
 type ButtonVariation = {
   color?: ButtonColor | BrandName | undefined;
   outline?: boolean | undefined;
-  small?: boolean | undefined;
 };
 
 export interface ButtonProps extends Omit<React.ComponentPropsWithoutRef<"button">, "color">, ButtonVariation {
+  size?: VariantProps<typeof buttonVariants>["size"];
   asChild?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, color, outline, small, disabled, children, asChild = false, ...props }, ref) => {
+  ({ className, color, outline, size, disabled, children, asChild = false, ...props }, ref) => {
     const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
-    const size = small ? "sm" : "default";
 
     const classes = classNames(buttonVariants({ variant, size, color: color || undefined }), className);
     const Comp = asChild ? Slot : "button";
@@ -136,12 +134,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 
 export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutRef<"a">, "color">, ButtonVariation {
+  size?: VariantProps<typeof buttonVariants>["size"];
   disabled?: boolean | undefined;
 }
 
 export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
-  ({ className, color, outline, small, disabled, children, ...props }, ref) => (
-    <Button asChild className={className} color={color} outline={outline} small={small} disabled={disabled}>
+  ({ className, color, outline, size, disabled, children, ...props }, ref) => (
+    <Button asChild className={className} color={color} outline={outline} size={size} disabled={disabled}>
       <a
         ref={ref}
         inert={disabled}
