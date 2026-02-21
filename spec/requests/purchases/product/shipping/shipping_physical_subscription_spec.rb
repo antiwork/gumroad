@@ -21,7 +21,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
       expect(page).to have_text("Total US$20", normalize_ws: true)
     end
 
-    expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+    expect(page).to have_alert("Your purchase was successful!")
 
     purchase = Purchase.last
     subscription = Subscription.last
@@ -49,7 +49,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
       expect(page).to have_text("Total US$21.07", normalize_ws: true)
     end
 
-    expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+    expect(page).to have_alert("Your purchase was successful!")
 
     purchase = Purchase.last
     subscription = Subscription.last
@@ -79,7 +79,7 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
       expect(page).to have_text("Total US$37", normalize_ws: true)
     end
 
-    expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+    expect(page).to have_alert("Your purchase was successful!")
 
     purchase = Purchase.last
 

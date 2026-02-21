@@ -17,7 +17,7 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
       expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     end
 
-    expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+    expect(page).to have_alert("Your purchase was successful!")
 
     expect(Purchase.last.price_cents).to eq(7000)
     expect(Purchase.last.shipping_cents).to eq(2000)
@@ -39,7 +39,7 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
       expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     end
 
-    expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+    expect(page).to have_alert("Your purchase was successful!")
 
     expect(Purchase.last.price_cents).to eq(2000)
     expect(Purchase.last.shipping_cents).to eq(2000)
@@ -70,7 +70,7 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
       expect(page).to have_text("Total US$112.40", normalize_ws: true)
     end
 
-    expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+    expect(page).to have_alert("Your purchase was successful!")
 
     expect(page).to have_text(@product.name)
     expect(Purchase.last.price_cents).to eq(10727)

@@ -139,7 +139,7 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
 
         click_on "Yes, update"
 
-        expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+        expect(page).to have_alert("Your purchase was successful!")
 
         purchase = Purchase.last
         expect(purchase.street_address).to eq("255 KING ST APT 602")
@@ -158,7 +158,7 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
 
         click_on "No, continue"
 
-        expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+        expect(page).to have_alert("Your purchase was successful!")
 
         purchase = Purchase.last
         expect(purchase.street_address).to eq("255 King St #602")
@@ -200,7 +200,7 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
       add_to_cart(@product)
       check_out(@product, address: { city: "Burnaby", state: "BC", zip_code: "V3N 4H4" }, country: "Canada", should_verify_address: true)
 
-      expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+      expect(page).to have_alert("Your purchase was successful!")
 
       purchase = Purchase.last
       expect(purchase.street_address).to eq("1640 17th St")
@@ -240,7 +240,7 @@ describe("Product Page - Shipping Scenarios Address verification", type: :system
 
       expect(page).not_to have_text("We are unable to verify your shipping address. Is your address correct?")
 
-      expect(page).to have_alert("Your purchase was successful!", visible: :all, wait: 10)
+      expect(page).to have_alert("Your purchase was successful!")
 
       purchase = Purchase.last
       expect(purchase.street_address).to eq("9384 CARDSTON CT")

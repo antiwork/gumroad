@@ -81,17 +81,6 @@ FactoryBot.define do
       is_tiered_membership { false }
     end
 
-    trait :physical do
-      is_physical
-    end
-
-    trait :membership do
-      is_recurring_billing { true }
-      subscription_duration { :monthly }
-      is_tiered_membership { true }
-      native_type { Link::NATIVE_TYPE_MEMBERSHIP }
-    end
-
     trait :is_collab do
       is_collab { true }
 

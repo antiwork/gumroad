@@ -34,7 +34,7 @@ describe "Checkout bundles", :js, type: :system do
 
     fill_checkout_form(bundle)
     click_on "Pay"
-    expect(page).to have_alert(text: "Your purchase was successful!", visible: :all, wait: 10)
+    expect(page).to have_alert(text: "Your purchase was successful!")
 
     expect(page).to_not have_link("Product")
     expect(page).to have_section("Product")
@@ -50,7 +50,7 @@ describe "Checkout bundles", :js, type: :system do
       add_to_cart(bundle)
       fill_checkout_form(bundle, logged_in_user: buyer)
       click_on "Pay"
-      expect(page).to have_alert(text: "Your purchase was successful!", visible: :all, wait: 10)
+      expect(page).to have_alert(text: "Your purchase was successful!")
 
       expect(page.current_url).to eq(library_url({ bundles: bundle.external_id, host: UrlService.domain_with_protocol }))
     end
@@ -66,7 +66,7 @@ describe "Checkout bundles", :js, type: :system do
       visit current_path
       fill_checkout_form(bundle)
       click_on "Pay"
-      expect(page).to have_alert(text: "Your purchase was successful!", visible: :all, wait: 10)
+      expect(page).to have_alert(text: "Your purchase was successful!")
     end
   end
 
@@ -81,7 +81,7 @@ describe "Checkout bundles", :js, type: :system do
       add_to_cart(physical_bundle)
       fill_checkout_form(physical_bundle, address: { street: "2031 7th Ave", state: "WA", city: "Seattle", zip_code: "98121" })
       click_on "Pay"
-      expect(page).to have_alert(text: "Your purchase was successful!", visible: :all, wait: 10)
+      expect(page).to have_alert(text: "Your purchase was successful!")
 
       purchase = Purchase.last
       expect(purchase.street_address).to eq("2031 7TH AVE")
@@ -122,7 +122,7 @@ describe "Checkout bundles", :js, type: :system do
       end
 
       click_on "Pay"
-      expect(page).to have_alert(text: "Your purchase was successful!", visible: :all, wait: 10)
+      expect(page).to have_alert(text: "Your purchase was successful!")
 
       bundle_purchase = Purchase.third_to_last
       expect(bundle_purchase).to be_successful

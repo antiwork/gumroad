@@ -139,7 +139,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         elsif page.has_text?("You entered this address:", wait: 5) && page.has_text?("We recommend using this format:", wait: 5)
           click_on "No, continue"
         end
-        expect(page).to have_alert(text: "Your purchase was successful!", visible: :all, wait: 10)
+        expect(page).to have_alert(text: "Your purchase was successful!")
 
         purchase = Purchase.last
         expect(purchase.link_id).to eq(@product.id)
