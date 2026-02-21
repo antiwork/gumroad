@@ -512,7 +512,7 @@ describe "Purchase Process", :vcr do
         affiliate_purchase.process!
       end
 
-      it "no longer blocks the purchase" do
+      it "does not block the purchase" do
         expect(affiliate_purchase.error_code).to be_nil
         expect(affiliate_purchase.errors).to be_empty
       end
