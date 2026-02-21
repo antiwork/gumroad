@@ -96,14 +96,15 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     rich_text_editor_input = find("[aria-label='Description']")
 
     # When images are uploading
-    attach_file file_fixture("smilie.png") do
-      click_on "Insert image"
+    fixture_file = file_fixture("smilie.png")
+    with_throttled_network(fixture_file) do
+      attach_file fixture_file do
+        click_on "Insert image"
+      end
+      expect(rich_text_editor_input).to have_selector("img[src^='blob:']")
+      select_tab "Content"
+      expect(page).to have_alert(text: "Some images are still uploading, please wait...")
     end
-    expect(rich_text_editor_input).to have_selector("img[src^='blob:']")
-
-    # TODO(ershad): Enable this once we have a way to slow down the upload process
-    # select_tab "Content"
-    # expect(page).to have_alert(text: "Some images are still uploading, please wait...")
 
     expect(page).to have_current_path(edit_link_path(@product))
     expect(page).to have_tab_button("Product", open: true)
@@ -115,11 +116,14 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
 
     # When files are uploading
     select_tab "Product"
-    attach_file file_fixture("test.mp3") do
-      click_on "Insert audio"
+    fixture_file = file_fixture("test.mp3")
+    with_throttled_network(fixture_file) do
+      attach_file fixture_file do
+        click_on "Insert audio"
+      end
+      select_tab "Content"
+      expect(page).to have_alert(text: "Some files are still uploading, please wait...")
     end
-    select_tab "Content"
-    expect(page).to have_alert(text: "Some files are still uploading, please wait...")
     wait_for_file_embed_to_finish_uploading(name: "test")
     select_tab "Content"
     expect(page).to_not have_alert(text: "Some files are still uploading, please wait...")

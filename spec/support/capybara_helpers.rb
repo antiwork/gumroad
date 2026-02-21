@@ -78,4 +78,12 @@ module CapybaraHelpers
     end
     page.driver.browser.switch_to.alert.accept
   end
+
+  def with_throttled_network(fixture_file, factor: 4)
+    throughput = (File.size(fixture_file) * factor)
+    page.driver.browser.execute_cdp("Network.enable")
+    page.driver.browser.execute_cdp("Network.emulateNetworkConditions", offline: false, latency: 0, downloadThroughput: throughput, uploadThroughput: throughput)
+    yield
+    page.driver.browser.execute_cdp("Network.emulateNetworkConditions", offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1)
+  end
 end
