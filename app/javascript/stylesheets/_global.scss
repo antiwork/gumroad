@@ -213,22 +213,6 @@ details {
   }
 }
 
-%stretched {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 100%;
-}
-
-a.stretched-link {
-  text-decoration: none;
-  &::before {
-    @extend %stretched;
-  }
-}
-
 .dummy {
   @include dummy;
 }

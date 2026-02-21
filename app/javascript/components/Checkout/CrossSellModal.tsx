@@ -3,10 +3,12 @@ import * as React from "react";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 
 import { Button } from "$app/components/Button";
-import { CrossSell, CartState, CartItem, getDiscountedPrice } from "$app/components/Checkout/cartState";
+import { CartItem, CartState, CrossSell, getDiscountedPrice } from "$app/components/Checkout/cartState";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { PriceTag } from "$app/components/Product/PriceTag";
-import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
+import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
+
+import { StretchedLink } from "../ui/StretchedLink";
 
 export const CrossSellModal = ({
   crossSell,
@@ -42,9 +44,9 @@ export const CrossSellModal = ({
           </ProductCardFigure>
           <section className="flex flex-1 flex-col overflow-hidden lg:gap-8 lg:px-6 lg:py-4">
             <ProductCardHeader className="lg:border-b-0 lg:p-0">
-              <a className="stretched-link" href={product.url} target="_blank" rel="noreferrer">
+              <StretchedLink href={product.url} target="_blank" rel="noreferrer">
                 <h3 className="truncate">{option ? `${product.name} - ${option.name}` : product.name}</h3>
-              </a>
+              </StretchedLink>
               <AuthorByline
                 name={product.creator.name}
                 profileUrl={product.creator.profile_url}

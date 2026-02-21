@@ -55,6 +55,27 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     expect(@product.reload.description).to_not include("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD")
   end
 
+  it "shows an error when uploading an image that exceeds the size limit" do
+    visit edit_link_path(@product)
+    large_image = Tempfile.new(["large_image", ".png"])
+    begin
+      png_header = "\x89PNG\r\n\x1a\n".b
+      large_image.binmode
+      large_image.write(png_header)
+      large_image.write("\0" * (11 * 1024 * 1024)) # 11MB
+      large_image.flush
+
+      attach_file large_image.path do
+        click_on "Insert image"
+      end
+      expect(page).to have_alert(text: "File is too large (max allowed size is 10.0 MB)")
+      expect(find("[aria-label='Description']")).to_not have_selector("img")
+    ensure
+      large_image.close
+      large_image.unlink
+    end
+  end
+
   it "shows loading spinner over an image while it is being uploaded" do
     visit edit_link_path(@product)
     rich_text_editor_input = find("[aria-label='Description']")

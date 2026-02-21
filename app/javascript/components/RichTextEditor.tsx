@@ -40,6 +40,7 @@ export type ImageUploadSettings = {
   allowedExtensions: string[];
   onUpload: (file: File, src?: string) => Promise<string> | undefined;
   isUploading?: boolean;
+  maxFileSize?: number;
 };
 
 const ToolbarTooltipContext = React.createContext<null | [boolean, (show: boolean) => void]>(null);
@@ -128,7 +129,7 @@ export const PopoverMenuItem = ({
         </div>
       </MenuItemTooltip>
     </PopoverTrigger>
-    <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+    <PopoverContent usePortal sideOffset={4} className="border-0 p-0 shadow-none">
       {children}
     </PopoverContent>
   </Popover>

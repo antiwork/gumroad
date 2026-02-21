@@ -139,7 +139,6 @@ export const Nav = ({ title, children, footer }: Props) => {
         </div>
         <header className="hidden p-6 lg:grid">
           <a href={Routes.root_url()} aria-label="Dashboard" className="no-underline">
-            {/* This custom text and line height size is required so the header's bottom border aligns with the main page header’s bottom border */}
             <span className="logo-full w-full text-[2.5rem] leading-[1.2]" />
           </a>
         </header>

@@ -8,8 +8,10 @@ import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
+import { TopCreatorBadge } from "$app/components/Product/AuthorByline";
 import { FollowForm } from "$app/components/Profile/FollowForm";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { WithTooltip } from "$app/components/WithTooltip";
 
 type LayoutProps = {
   creatorProfile: CreatorProfile;
@@ -52,8 +54,13 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
               </NavigationButton>
             ) : null}
             <img className="user-avatar" src={creatorProfile.avatar_url} alt="Profile Picture" />
-            <a href={Routes.root_path()} className="no-underline">
+            <a href={Routes.root_path()} className="flex items-center gap-2 no-underline">
               {creatorProfile.name}
+              {creatorProfile.is_verified ? (
+                <WithTooltip tip="Top creator" position="bottom">
+                  <TopCreatorBadge />
+                </WithTooltip>
+              ) : null}
             </a>
             {!isDesktop ? headerButtons : null}
           </div>

@@ -46,6 +46,29 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
         expect(inertia.props[:customers_presenter][:product_id]).to eq(product1.external_id)
       end
     end
+
+    context "when seller is suspended for TOS violation" do
+      let(:admin_user) { create(:user) }
+      let!(:product) { create(:product, user: seller) }
+
+      before do
+        seller.flag_for_tos_violation(author_id: admin_user.id, product_id: product.id)
+        seller.suspend_for_tos_violation(author_id: admin_user.id)
+        sign_in seller
+        cookies.encrypted[:current_seller_id] = seller.id
+        # NOTE: The invalidate_active_sessions! callback from suspending the user, interferes
+        # with the login mechanism, this is a hack get the `sign_in user` method work correctly
+        request.env["warden"].session["last_sign_in_at"] = DateTime.current.to_i
+        index_model_records(Purchase)
+      end
+
+      it "renders successfully" do
+        get :index
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Customers/Index")
+      end
+    end
   end
 
   describe "GET paged" do
