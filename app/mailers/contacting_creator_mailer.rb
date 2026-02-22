@@ -84,12 +84,6 @@ class ContactingCreatorMailer < ApplicationMailer
     do_not_send unless should_send_email?
   end
 
-  def negative_revenue_sale_failure(purchase_id)
-    @purchase = Purchase.find(purchase_id)
-    @seller = @purchase.seller
-    @subject = "A sale failed because of negative net revenue"
-  end
-
   def chargeback_notice(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable

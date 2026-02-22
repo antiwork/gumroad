@@ -20,14 +20,16 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "allows to mark PDF files as stampable" do
     visit edit_link_path(@product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    fixture_file = file_fixture("Alice's Adventures in Wonderland.pdf")
+    with_throttled_network(fixture_file) do
+      select_disclosure "Upload files" do
+        attach_product_file(fixture_file)
+      end
 
-    # TODO(ershad): Enable this once we have a way to slow down the upload process
-    # button = find_button("Save changes", disabled: true)
-    # button.hover
-    # expect(button).to have_tooltip(text: "Files are still uploading...")
+      button = find_button("Save changes", disabled: true)
+      button.hover
+      expect(button).to have_tooltip(text: "Files are still uploading...")
+    end
 
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     find_button("Save changes").hover
