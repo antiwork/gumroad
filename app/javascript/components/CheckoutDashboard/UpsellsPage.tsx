@@ -860,13 +860,11 @@ const Form = ({
                     className="toggle"
                     open={!!discount}
                     summary={
-                      <Label>
-                        <Switch
-                          checked={!!discount}
-                          onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
-                        />
-                        Add discount to the offered product
-                      </Label>
+                      <Switch
+                        checked={!!discount}
+                        onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
+                        label="Add discount to the offered product"
+                      />
                     }
                   >
                     {discount ? (

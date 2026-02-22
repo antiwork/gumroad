@@ -643,16 +643,18 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             ) : null}
 
             {file.is_pdf ? (
-              <Label>
-                <Switch
-                  checked={file.pdf_stamp_enabled}
-                  onChange={(e) => updateFile({ pdf_stamp_enabled: e.target.checked })}
-                />
-                Stamp this PDF with buyer information
-                <a href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">
-                  Learn more
-                </a>
-              </Label>
+              <Switch
+                checked={file.pdf_stamp_enabled}
+                onChange={(e) => updateFile({ pdf_stamp_enabled: e.target.checked })}
+                label={
+                  <>
+                    Stamp this PDF with buyer information{" "}
+                    <a href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">
+                      Learn more
+                    </a>
+                  </>
+                }
+              />
             ) : null}
 
             {file.is_streamable ? (
@@ -675,13 +677,18 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                     <SubtitleUploadBox onUploadFiles={uploadSubtitles} />
                   </div>
                 </Fieldset>
-                <Label>
-                  <Switch checked={file.stream_only} onChange={(e) => updateFile({ stream_only: e.target.checked })} />
-                  Disable file downloads (stream only)
-                  <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
-                    Learn more
-                  </a>
-                </Label>
+                <Switch
+                  checked={file.stream_only}
+                  onChange={(e) => updateFile({ stream_only: e.target.checked })}
+                  label={
+                    <>
+                      Disable file downloads (stream only){" "}
+                      <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
+                        Learn more
+                      </a>
+                    </>
+                  }
+                />
               </>
             ) : null}
           </RowDetails>

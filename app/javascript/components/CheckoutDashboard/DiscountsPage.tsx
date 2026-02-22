@@ -1030,10 +1030,11 @@ const Form = ({
               className="toggle"
               open={limitQuantity}
               summary={
-                <Label>
-                  <Switch checked={limitQuantity} onChange={(evt) => setLimitQuantity(evt.target.checked)} />
-                  Limit quantity
-                </Label>
+                <Switch
+                  checked={limitQuantity}
+                  onChange={(evt) => setLimitQuantity(evt.target.checked)}
+                  label="Limit quantity"
+                />
               }
             >
               <Dropdown>
@@ -1058,10 +1059,11 @@ const Form = ({
               className="toggle"
               open={limitValidity}
               summary={
-                <Label>
-                  <Switch checked={limitValidity} onChange={(evt) => setLimitValidity(evt.target.checked)} />
-                  Limit validity period
-                </Label>
+                <Switch
+                  checked={limitValidity}
+                  onChange={(evt) => setLimitValidity(evt.target.checked)}
+                  label="Limit validity period"
+                />
               }
             >
               <Dropdown className="gap-4 lg:grid-cols-2">
@@ -1103,10 +1105,11 @@ const Form = ({
               className="toggle"
               open={hasMinimumAmount}
               summary={
-                <Label>
-                  <Switch checked={hasMinimumAmount} onChange={(evt) => setHasMinimumAmount(evt.target.checked)} />
-                  Set a minimum qualifying amount
-                </Label>
+                <Switch
+                  checked={hasMinimumAmount}
+                  onChange={(evt) => setHasMinimumAmount(evt.target.checked)}
+                  label="Set a minimum qualifying amount"
+                />
               }
             >
               <Dropdown>
@@ -1129,10 +1132,11 @@ const Form = ({
               className="toggle"
               open={hasMinimumQuantity}
               summary={
-                <Label>
-                  <Switch checked={hasMinimumQuantity} onChange={(evt) => setHasMinimumQuantity(evt.target.checked)} />
-                  Set a minimum quantity
-                </Label>
+                <Switch
+                  checked={hasMinimumQuantity}
+                  onChange={(evt) => setHasMinimumQuantity(evt.target.checked)}
+                  label="Set a minimum quantity"
+                />
               }
             >
               <Dropdown>
