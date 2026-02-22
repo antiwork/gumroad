@@ -225,7 +225,7 @@ export default function BundlesContentEdit() {
       onBeforeNavigate={saveBeforeNavigate}
     >
       <form onSubmit={(evt) => evt.preventDefault()} ref={formRef}>
-        <section className="grid gap-8 p-4 md:p-8">
+        <section className="grid gap-8 p-4! md:p-8!">
           {has_outdated_purchases ? <BundleContentUpdatedStatus id={id} /> : null}
           {isSelecting ? (
             <>

@@ -141,7 +141,7 @@ export default function BundlesShareEdit() {
       isProcessing={form.processing}
     >
       <form>
-        <section className="grid gap-8 p-4 md:p-8">
+        <section className="grid gap-8 p-4! md:p-8!">
           <header>
             <h2>Share</h2>
           </header>

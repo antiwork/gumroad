@@ -83,7 +83,7 @@ export const ProductTab = () => {
     <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
       <div className="squished">
         <form>
-          <section className="grid gap-8 p-4 md:p-8">
+          <section className="grid gap-8 p-4! md:p-8!">
             {showAiNotification ? (
               <Alert role="status" variant="accent">
                 <div className="flex items-center gap-4">

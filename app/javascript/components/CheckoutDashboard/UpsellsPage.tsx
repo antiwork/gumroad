@@ -705,7 +705,7 @@ const Form = ({
       />
       <WithPreviewSidebar className="flex-1">
         <form>
-          <section className="grid gap-8 p-4 md:p-8">
+          <section className="grid gap-8 p-4! md:p-8!">
             <p>
               When a customer clicks "Pay", offer a version upgrade or another product with or without a discount.{" "}
               <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">

@@ -248,7 +248,7 @@ export default function BundlesProductEdit() {
       onBeforeNavigate={saveBeforeNavigate}
     >
       <form>
-        <section className="grid gap-8 p-4 md:p-8">
+        <section className="grid gap-8 p-4! md:p-8!">
           <Fieldset>
             <Label htmlFor={`${uid}-name`}>Name</Label>
             <Input
