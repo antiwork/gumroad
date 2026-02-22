@@ -1,0 +1,46 @@
+name: Close non-English issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  close-non-english:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Detect language and close if non-English
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are a language detection bot. Your only job is to determine whether
+            GitHub issue #${{ github.event.issue.number }} is written in English.
+
+            Read the issue title and body:
+            gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json title,body
+
+            Evaluate ONLY the natural-language prose. Ignore code blocks, stack traces,
+            URLs, file paths, log output, and variable/function names.
+
+            Decision rules:
+            - If the prose is clearly NOT English, close the issue with a comment.
+            - If the prose is English, mostly English, or ambiguous, do nothing.
+
+            If you decide to close, run both of these commands exactly as shown:
+
+            gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body "Closing this issue because it does not appear to be written in English. We require issues in English so maintainers can triage effectively. Feel free to reopen with an English translation!"
+
+            gh issue close ${{ github.event.issue.number }} --repo ${{ github.repository }}
+
+            If the issue is in English or you are unsure, do absolutely nothing.
+          claude_args: |
+            --allowedTools "Bash(gh issue close:*),Bash(gh issue comment:*)"
