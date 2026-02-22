@@ -39,7 +39,7 @@ const tabVariants = cva("", {
     {
       variant: "buttons",
       active: true,
-      className: "shadow -translate-1",
+      className: "shadow -translate-1 hover:-translate-2!",
     },
   ],
   defaultVariants: {
