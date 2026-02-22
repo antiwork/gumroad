@@ -159,7 +159,7 @@ const CoverUploader = ({
       <div style={{ width: "100%" }}>
         <Tabs variant="buttons">
           <Tab isSelected={false} asChild className="items-center">
-            <label className="relative">
+            <label>
               <input
                 type="file"
                 className="sr-only"
