@@ -50,7 +50,9 @@ import {
   CurrencyCode,
   formatPriceCentsWithCurrencySymbol,
   formatPriceCentsWithoutCurrencySymbol,
+  getIsSingleUnitCurrency,
 } from "$app/utils/currency";
+import { priceCentsToUnit } from "$app/utils/price";
 import { formatCallDate } from "$app/utils/date";
 import { isValidEmail } from "$app/utils/email";
 import FileUtils from "$app/utils/file";
@@ -2278,7 +2280,7 @@ const RefundForm = ({
     }
     try {
       setIsLoading(true);
-      await refund(purchaseId, refundAmountCents.value / 100.0);
+      await refund(purchaseId, priceCentsToUnit(refundAmountCents.value, getIsSingleUnitCurrency(currencyType)));
       const refundAmountRemaining = amountRefundable - refundAmountCents.value;
       onChange(refundAmountRemaining);
       setRefundAmountCents({ value: refundAmountRemaining });

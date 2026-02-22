@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::SalesController < Api::V2::BaseController
+  include CurrencyHelper
   before_action(only: [:index, :show]) { doorkeeper_authorize! :view_sales }
   before_action(only: [:mark_as_shipped]) { doorkeeper_authorize! :mark_sales_as_shipped }
   before_action(only: [:refund]) { doorkeeper_authorize! :refund_sales, :edit_sales }
@@ -111,7 +112,7 @@ class Api::V2::SalesController < Api::V2::BaseController
       return error_with_sale(purchase)
     end
 
-    amount = params[:amount_cents].to_i / 100.0 if params[:amount_cents].present?
+    amount = params[:amount_cents].to_i / unit_scaling_factor(purchase.displayed_price_currency_type).to_f if params[:amount_cents].present?
 
     if purchase.refund!(refunding_user_id: current_resource_owner.id, amount:)
       success_with_sale(purchase.as_json(version: 2))
