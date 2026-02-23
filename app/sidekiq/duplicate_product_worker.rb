@@ -9,11 +9,11 @@ class DuplicateProductWorker
   rescue => e
     logger.error("Error while duplicating product id '#{product_id}': #{e.inspect}")
     Bugsnag.notify(e)
-    error_message = e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.full_messages.first : e.message
-    ProductDuplicatorService.new(product_id).store_duplication_error(error_message)
   ensure
     product = Link.find(product_id)
     product.is_duplicating = false
+    # Skip validation — products may have update-only validation errors (e.g. call products
+    # without durations) unrelated to resetting this flag.
     product.save!(validate: false)
   end
 end
