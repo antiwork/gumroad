@@ -97,17 +97,12 @@ Generally: Include an AI disclosure, self-review (comment) on your code, break u
   - Example: If you enqueue a backfilling job for each user upon them being updated, it's likely going to result in enqueuing millions of jobs in an uncontrollable way, potentially crashing Sidekiq (redis would be out of memory), and/or clogging the queues because each of these jobs takes "a few seconds" (= way too slow) and/or create massive uncontrollable replica lag, etc.
 - Use scripts in the `app/services/onetime` folder
 
-## Writing Bug Reports
+## Writing Issues
 
-A great bug report includes:
+Every issue boils down to behavior and intention — what is happening (or should happen) and why it matters.
 
-- A quick summary and/or background
-- Steps to reproduce
-  - Be specific!
-  - Give sample code if you can
-- What you expected would happen
-- What actually happens
-- Notes (possibly including why you think this might be happening, or stuff you tried that didn't work)
+- **What** — the behavior. Steps to reproduce, expected vs actual result, sample code if helpful.
+- **Why** — the intention. The use case, motivation, or root cause.
 
 ## Writing commit messages
 
