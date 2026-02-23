@@ -760,6 +760,14 @@ describe SettingsPresenter do
       end
     end
 
+    context "when the seller is a business with a different personal and business country" do
+      it "returns payout_currency based on the business country, not the personal country" do
+        create(:user_compliance_info_business, user: seller, country: "United States", business_country: "Canada")
+
+        expect(presenter.payments_props[:user][:payout_currency]).to eq("cad")
+      end
+    end
+
     context "when the seller is from Brazil" do
       before do
         @user_compliance_info = create(:user_compliance_info, user: seller, country: "Brazil")

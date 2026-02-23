@@ -639,7 +639,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       />
     ) : null}
     {purchase.successful ? (
-      <Button asChild small>
+      <Button asChild size="sm">
         <a href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" rel="noopener noreferrer">
           Go to Receipt
         </a>

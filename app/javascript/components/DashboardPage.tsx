@@ -384,9 +384,11 @@ export const DashboardPage = ({
         </div>
       ) : null}
 
-      <div className="p-4 md:p-8">
-        <ProductsTable sales={sales} />
-      </div>
+      {sales.length > 0 ? (
+        <div className="p-4 md:p-8">
+          <ProductsTable sales={sales} />
+        </div>
+      ) : null}
 
       <div className="grid gap-4 p-4 md:p-8">
         <h2>Activity</h2>

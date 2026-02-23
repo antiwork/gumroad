@@ -131,6 +131,8 @@ describe Order::ChargeService, :vcr do
     end
 
     it "charges all purchases in the order with the payment method provided in params" do
+      create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+
       params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
 
       order, _ = Order::CreateService.new(params:).perform
@@ -606,6 +608,41 @@ describe Order::ChargeService, :vcr do
 
       expect(charge_responses.size).to eq(10)
       expect(charge_responses.values).to match_array(order.purchases.map { _1.purchase_response })
+    end
+
+    it "skips purchases that already have a processor payment intent" do
+      create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+
+      params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
+
+      order, _ = Order::CreateService.new(params:).perform
+      expect(order.purchases.in_progress.count).to eq(2)
+
+      # Simulate a subscription restart SCA purchase that was added to the order
+      # by Order::CreateService (for the confirm endpoint) but should not be charged again
+      membership_product = create(:membership_product, user: seller_1, price_cents: 500)
+      sca_purchase = create(:purchase_in_progress,
+                            link: membership_product,
+                            seller_id: seller_1.id,
+                            price_cents: 500,
+                            total_transaction_cents: 500)
+      sca_purchase.create_processor_payment_intent!(intent_id: "pi_existing_#{SecureRandom.hex(8)}")
+      order.purchases << sca_purchase
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      # The two normal purchases should be charged successfully
+      expect(order.reload.purchases.successful.count).to eq(2)
+      expect(order.charges.count).to eq(1)
+      charge = order.charges.last
+      expect(charge.purchases.successful.count).to eq(2)
+      expect(charge.purchases.pluck(:link_id)).to match_array([product_1.id, product_2.id])
+
+      # The SCA purchase should remain in progress (awaiting SCA confirmation)
+      expect(sca_purchase.reload).to be_in_progress
+      expect(sca_purchase.charge).to be_nil
+
+      expect(charge_responses.size).to eq(2)
     end
 
     context "when payment method requires mandate" do

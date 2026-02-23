@@ -11,6 +11,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
+import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import {
   type PayoutsProps,
   type CurrentPayoutsDataAndPaymentMethodWithUserPayable,
@@ -491,10 +492,10 @@ export default function PayoutsIndex() {
   if (!loggedInUser) return null;
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
-    <NavigationButton href={Routes.settings_payments_path()}>
+    <NavigationButtonInertia href={Routes.settings_payments_path()}>
       <Icon name="gear-fill" />
       Settings
-    </NavigationButton>
+    </NavigationButtonInertia>
   ) : null;
 
   const bulkExportAction = loggedInUser.policies.balance.export ? <ExportPayoutsPopover /> : null;
@@ -556,7 +557,7 @@ export default function PayoutsIndex() {
                   <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
                 ) : (
                   <Button
-                    small
+                    size="sm"
                     color="primary"
                     aria-label="Get paid now"
                     onClick={() => setIsInstantPayoutModalOpen(true)}

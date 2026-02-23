@@ -21,23 +21,23 @@ import {
   type CartItem,
   type CartState,
   convertToUSD,
+  CrossSell,
   findCartItem,
   getDiscountedPrice,
-  type ProductToAdd,
-  type CrossSell,
-  type Result,
   newCartState,
+  type ProductToAdd,
+  type Result,
 } from "$app/components/Checkout/cartState";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import {
-  StateContext,
-  createReducer,
-  type Product,
-  loadSurcharges,
-  requiresReusablePaymentMethod,
-  type Gift,
-  getCustomFieldKey,
   computeTipForPrice,
+  createReducer,
+  getCustomFieldKey,
+  type Gift,
+  loadSurcharges,
+  type Product,
+  requiresReusablePaymentMethod,
+  StateContext,
 } from "$app/components/Checkout/payment";
 import { Receipt } from "$app/components/Checkout/Receipt";
 import { TemporaryLibrary } from "$app/components/Checkout/TemporaryLibrary";

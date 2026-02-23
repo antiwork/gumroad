@@ -65,7 +65,7 @@ export const AdminManualPayoutForm = ({
           </div>
         ) : null}
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={isLoading} small>
+          <Button type="submit" disabled={isLoading} size="sm">
             {isLoading ? "Issuing Payout..." : "Issue Payout"}
           </Button>
         </div>

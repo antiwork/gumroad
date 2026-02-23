@@ -41,7 +41,7 @@ export const FieldsetTitle = React.forwardRef<
   <legend
     ref={ref}
     className={classNames(
-      "relative mb-2 flex w-full items-center justify-between text-base leading-[1.4] font-bold",
+      "relative mb-2 flex w-full items-center justify-between text-base leading-snug font-bold",
       "[&_a]:font-normal",
       className,
     )}

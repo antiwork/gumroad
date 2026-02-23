@@ -70,7 +70,7 @@ export const ImageUploader = ({
           <img alt={imageAlt} src={imageUrl} className="h-full w-full rounded-sm border border-border bg-background" />
           <Button
             color="primary"
-            small
+            size="sm"
             className="absolute top-2 right-2"
             aria-label="Remove"
             onClick={onRemove}

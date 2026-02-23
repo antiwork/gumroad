@@ -22,10 +22,11 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
-import { Card as UICard, CardContent } from "$app/components/ui/Card";
+import { CardContent, Card as UICard } from "$app/components/ui/Card";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
-import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
+import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -90,9 +91,9 @@ export const Card = ({
       </ProductCardFigure>
       <ProductCardHeader>
         {purchase.download_url ? (
-          <a href={purchase.download_url} className="stretched-link" aria-label={name}>
+          <StretchedLink href={purchase.download_url} aria-label={name}>
             <h3 itemProp="name">{name}</h3>
-          </a>
+          </StretchedLink>
         ) : (
           <h3 itemProp="name">{name}</h3>
         )}

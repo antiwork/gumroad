@@ -290,6 +290,24 @@ describe UserComplianceInfo do
           uci.valid?
           expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
         end
+
+        it "allows prolonged vowel mark (ー U+30FC)" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { first_name_kana: "テイラー" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+
+        it "allows full-width space (U+3000)" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { first_name_kana: "ジョン\u3000トレッゲサー" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+
+        it "allows half-width katakana (U+FF65-U+FF9F)" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { first_name_kana: "ｶﾀｶﾅ" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
       end
 
       describe "address kana fields" do
@@ -314,6 +332,18 @@ describe UserComplianceInfo do
 
         it "allows blank address kana fields" do
           uci = build(:user_compliance_info, country: "Japan", json_data: { building_number_kana: nil, street_address_kana: "" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+
+        it "allows full-width space in address kana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { street_address_kana: "シブヤ\u3000ヒカリエ" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+
+        it "allows prolonged vowel mark in address kana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { street_address_kana: "シブヤヒカリエドオリー" })
           uci.valid?
           expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
         end

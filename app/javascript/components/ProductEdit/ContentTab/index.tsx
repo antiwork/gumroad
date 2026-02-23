@@ -922,7 +922,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <span>Enter the content you want to sell.</span>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button small className="pointer-events-auto">
+                      <Button size="sm" className="pointer-events-auto">
                         Upload your files
                       </Button>
                     </PopoverTrigger>

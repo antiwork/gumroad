@@ -389,6 +389,17 @@ class CustomerLowPriorityMailer < ApplicationMailer
     )
   end
 
+  def already_subscribed_checkout_attempt(subscription_id)
+    @subscription = Subscription.find(subscription_id)
+    @product = @subscription.link
+
+    mail(
+      to: @subscription.email,
+      subject: "Someone tried to purchase a membership you already have",
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @subscription.seller)
+    )
+  end
+
   private
     def deliver_subscription_email
       query_params = { token: @subscription.refresh_token }

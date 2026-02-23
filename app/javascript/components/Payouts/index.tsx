@@ -765,7 +765,7 @@ const Payouts = ({
                 <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
               ) : (
                 <Button
-                  small
+                  size="sm"
                   color="primary"
                   aria-label="Get paid now"
                   onClick={() => setIsInstantPayoutModalOpen(true)}
