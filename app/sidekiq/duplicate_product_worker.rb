@@ -12,7 +12,7 @@ class DuplicateProductWorker
   ensure
     product = Link.find(product_id)
     product.is_duplicating = false
-    # Skip validation — products may have update-only validation errors (e.g. call products
+    # Skip validations because products may have update-only validation errors (e.g. call products
     # without durations) unrelated to resetting this flag.
     product.save!(validate: false)
   end
