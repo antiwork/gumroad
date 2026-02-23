@@ -91,7 +91,7 @@ export const Review = ({
               }))
             }
             onEditingChange={setIsEditing}
-            buttonProps={{ small: true }}
+            buttonProps={{ size: "sm" }}
           />
         </section>
       ) : null}

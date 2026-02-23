@@ -7,7 +7,7 @@
   <%= form_tag(receipt_purchase_path(@purchase.external_id), method: "get") do %>
     <%= label_tag :email, "Email address:", class: "form-label" %>
     <%= email_field_tag :email, nil, placeholder: "Email address", required: true %>
-    <%= button_tag "View receipt", type: "submit", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none px-4 py-3 text-base leading-[1.4] bg-primary text-primary-foreground hover:bg-accent hover:text-accent-foreground w-full", name: nil %>
+    <%= button_tag "View receipt", type: "submit", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none px-4 py-3 text-base leading-snug bg-primary text-primary-foreground hover:bg-accent hover:text-accent-foreground w-full", name: nil %>
   <% end %>
 </main>
 <% content_for :footer do %>

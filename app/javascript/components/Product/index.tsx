@@ -76,7 +76,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-export type Seller = { id: string; name: string; avatar_url: string; profile_url: string };
+export type Seller = { id: string; name: string; avatar_url: string; profile_url: string; is_verified: boolean };
 
 type RefundPolicy = {
   title: string;
@@ -336,6 +336,7 @@ export const Product = ({
       name={product.seller.name}
       profileUrl={product.seller.profile_url}
       avatarUrl={product.seller.avatar_url}
+      isTopCreator={product.seller.is_verified}
     />
   ) : null;
 

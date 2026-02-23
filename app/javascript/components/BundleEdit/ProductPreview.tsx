@@ -82,6 +82,7 @@ export const ProductPreview = ({
             name: currentSeller.name ?? "",
             avatar_url: currentSeller.avatarUrl,
             profile_url: Routes.root_url({ host: currentSeller.subdomain }),
+            is_verified: false,
           },
           collaborating_user: bundle.collaborating_user,
           covers: bundle.covers,

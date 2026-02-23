@@ -31,6 +31,7 @@ class DashboardProductsPagePresenter
       { can_create_product: Pundit.policy!(@pundit_user, Link).create? }
     else
       {
+        has_products: seller.products.visible.not_archived.exists?,
         archived_products_count: seller.archived_products_count,
         can_create_product: Pundit.policy!(@pundit_user, Link).create?,
       }

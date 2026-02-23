@@ -8,6 +8,9 @@ include CurrencyHelper
 describe OrdersController, :vcr do
   before do
     cookies[:_gumroad_guid] = SecureRandom.uuid
+    MerchantAccount.find_or_create_by!(user_id: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) do |ma|
+      ma.charge_processor_alive_at = Time.current
+    end
   end
 
   describe "POST create" do

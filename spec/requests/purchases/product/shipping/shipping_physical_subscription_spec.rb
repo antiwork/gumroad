@@ -2,6 +2,9 @@
 
 describe("Product Page - Shipping physical subscription", type: :system, js: true, shipping: true) do
   before do
+    MerchantAccount.find_or_create_by!(user_id: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) do |ma|
+      ma.charge_processor_alive_at = Time.current
+    end
     @creator = create(:user_with_compliance_info)
     Feature.deactivate_user(:merchant_migration, @creator)
     @sub_link = create(:physical_product, user: @creator, name: "physical subscription", price_cents: 16_00, is_recurring_billing: true, subscription_duration: :monthly, require_shipping: true)

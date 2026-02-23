@@ -18,7 +18,7 @@ type Props = {
 const PageNumber = ({ page, isCurrent, onClick }: { page: number; isCurrent: boolean; onClick: () => void }) => (
   <li>
     <Button
-      small
+      size="sm"
       color={isCurrent ? "primary" : undefined}
       aria-current={isCurrent ? "page" : undefined}
       onClick={() => (isCurrent ? null : onClick())}
@@ -52,7 +52,7 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
 
   return (
     <div role="navigation" aria-label="Pagination" className="flex w-full justify-center gap-2">
-      <Button small disabled={pagination.page - 1 === 0} onClick={() => onChangePage(pagination.page - 1)}>
+      <Button size="sm" disabled={pagination.page - 1 === 0} onClick={() => onChangePage(pagination.page - 1)}>
         <Icon name="outline-cheveron-left" />
         Previous
       </Button>
@@ -77,7 +77,11 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
           </>
         ) : null}
       </menu>
-      <Button small disabled={pagination.page + 1 > pagination.pages} onClick={() => onChangePage(pagination.page + 1)}>
+      <Button
+        size="sm"
+        disabled={pagination.page + 1 > pagination.pages}
+        onClick={() => onChangePage(pagination.page + 1)}
+      >
         Next
         <Icon name="outline-cheveron-right" />
       </Button>
