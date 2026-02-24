@@ -154,9 +154,7 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       expect(Stripe::Balance).not_to receive(:retrieve)
       expect(Stripe::Transfer).not_to receive(:create)
 
-      travel_to(Date.new(2026, 2, 11)) do
-        CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
-      end
+      CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
     end
 
     it "does not attempt to collect balance if the Stripe account is considered active based on last payout date" do
@@ -169,9 +167,7 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       expect(Stripe::Balance).not_to receive(:retrieve)
       expect(Stripe::Transfer).not_to receive(:create)
 
-      travel_to(Date.new(2026, 2, 11)) do
-        CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
-      end
+      CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
     end
 
     it "does not attempt to collect balance if the Stripe account is considered active based on last charge date" do
@@ -184,9 +180,7 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
       expect(Stripe::Balance).not_to receive(:retrieve)
       expect(Stripe::Transfer).not_to receive(:create)
 
-      travel_to(Date.new(2026, 2, 11)) do
-        CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
-      end
+      CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
     end
 
     it "does not attempt to collect balance if the Stripe account is a standard Stripe account" do
