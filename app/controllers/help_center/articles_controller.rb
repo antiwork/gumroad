@@ -27,16 +27,21 @@ class HelpCenter::ArticlesController < HelpCenter::BaseController
 
     title = "#{article.title} - Gumroad Help Center"
     canonical_url = help_center_article_url(article)
+    article_content = render_to_string(article)
+    description = @description
 
     set_meta_tag(title:)
     set_meta_tag(tag_name: "link", rel: "canonical", href: canonical_url, head_key: "canonical")
+    set_meta_tag(name: "description", content: description)
 
     set_meta_tag(property: "og:title", value: title)
+    set_meta_tag(property: "og:description", value: description)
     set_meta_tag(property: "og:url", value: canonical_url)
 
     set_meta_tag(name: "twitter:title", content: title)
+    set_meta_tag(name: "twitter:description", content: description)
 
-    render inertia: "HelpCenter/Articles/Show", props: help_center_presenter.article_props(article)
+    render inertia: "HelpCenter/Articles/Show", props: help_center_presenter.article_props(article, article_content:)
   end
 
   private

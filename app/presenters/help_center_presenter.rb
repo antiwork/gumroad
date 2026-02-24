@@ -17,12 +17,12 @@ class HelpCenterPresenter
     }
   end
 
-  def article_props(article)
+  def article_props(article, article_content: nil)
     {
       article: {
         title: article.title,
         slug: article.slug,
-        content: view_context.render(article),
+        content: article_content || view_context.render(article),
         category: category_data(article.category)
       },
       sidebar_categories: same_audience_categories_data(article.category)
