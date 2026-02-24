@@ -736,7 +736,7 @@ const BankAccountSection = ({
   const uid = React.useId();
 
   const BANK_AND_BRANCH_CODE_COUNTRIES = ["AZ", "SG", "JP", "DO", "UZ", "LK", "TT", "JM"];
-  const BANK_CODE_COUNTRIES = ["BD", "BO", "CL", "CO", "GH", "ID", "KR", "PY", "TH", "UY", "VN"];
+  const BANK_CODE_COUNTRIES = ["BD", "BO", "CL", "CO", "GH", "ID", "KR", "TH", "UY", "VN"];
   const SWIFT_BIC_CODE_COUNTRIES = [
     "AG",
     "AL",
@@ -776,6 +776,7 @@ const BankAccountSection = ({
     "OM",
     "PA",
     "PK",
+    "PY",
     "QA",
     "RS",
     "RW",
@@ -1616,13 +1617,13 @@ const BankAccountSection = ({
               ) : user.country_code === "PY" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
                   <FieldsetTitle>
-                    <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
+                    <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
                   </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="27"
-                    maxLength={2}
+                    placeholder="ABCDPYXX"
+                    maxLength={11}
                     required
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("bank_code")}

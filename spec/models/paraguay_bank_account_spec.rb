@@ -22,9 +22,14 @@ describe ParaguayBankAccount do
   end
 
   describe "#bank_code" do
-    it "returns valid for 1 to 2 characters" do
-      expect(create(:paraguay_bank_account, bank_code: "12")).to be_valid
-      expect(create(:paraguay_bank_account, bank_code: "1")).to be_valid
+    it "returns valid for SWIFT/BIC codes" do
+      expect(create(:paraguay_bank_account, bank_code: "ABCDPYXX")).to be_valid
+      expect(create(:paraguay_bank_account, bank_code: "ABCDPYXXYYY")).to be_valid
+    end
+
+    it "returns invalid for non-SWIFT codes" do
+      expect(build(:paraguay_bank_account, bank_code: "12")).to_not be_valid
+      expect(build(:paraguay_bank_account, bank_code: "ABC")).to_not be_valid
     end
   end
 

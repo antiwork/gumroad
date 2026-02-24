@@ -3,7 +3,7 @@
 class ParaguayBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "PY"
 
-  BANK_CODE_FORMAT_REGEX = /\A[0-9]{1,2}\z/
+  BANK_CODE_FORMAT_REGEX = /\A[a-zA-Z]{4}[a-zA-Z]{2}[0-9a-zA-Z]{2}([0-9a-zA-Z]{3})?\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{1,16}\z/

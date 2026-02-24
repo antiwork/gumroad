@@ -7300,7 +7300,7 @@ describe StripeMerchantAccountManager, :vcr do
             country: "PY",
             currency: "pyg",
             account_number: "0567890123456789",
-            routing_number: "0"
+            routing_number: "ABCDPYXX"
           },
           settings: {
             payouts: {
