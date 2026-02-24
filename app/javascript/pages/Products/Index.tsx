@@ -5,7 +5,7 @@ import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import ProductsPage from "$app/components/ProductsPage";
 import { ProductsContentLoading } from "$app/components/ProductsPage/ContentLoading";
-import { LayoutCtaButton } from "$app/components/ProductsPage/LayoutCtaButton";
+import { HeaderButtons } from "$app/components/ProductsPage/HeaderButtons";
 import { type ProductsPageProps } from "$app/components/ProductsPage/ProductsPageProps";
 import { useProductsSearch } from "$app/components/ProductsPage/useProductsSearch";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -77,7 +77,7 @@ const ProductsIndexPage = () => {
       selectedTab="products"
       title="Products"
       archivedTabVisible={enableArchiveTab}
-      ctaButton={<LayoutCtaButton query={query} setQuery={setQuery} />}
+      ctaButton={<HeaderButtons query={query} setQuery={setQuery} />}
     >
       <Deferred data={["memberships_data", "products_data"]} fallback={<ProductsContentLoading />}>
         <ProductsContent query={query} setEnableArchiveTab={setEnableArchiveTab} />

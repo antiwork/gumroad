@@ -4,7 +4,7 @@ import React from "react";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import ProductsPage from "$app/components/ProductsPage";
 import { ProductsContentLoading } from "$app/components/ProductsPage/ContentLoading";
-import { LayoutCtaButton } from "$app/components/ProductsPage/LayoutCtaButton";
+import { HeaderButtons } from "$app/components/ProductsPage/HeaderButtons";
 import { type ProductsPageProps } from "$app/components/ProductsPage/ProductsPageProps";
 import { useProductsSearch } from "$app/components/ProductsPage/useProductsSearch";
 
@@ -37,7 +37,7 @@ const ArchivedProductsIndexPage = () => {
       selectedTab="archived"
       title="Products"
       archivedTabVisible
-      ctaButton={<LayoutCtaButton query={query} setQuery={setQuery} />}
+      ctaButton={<HeaderButtons query={query} setQuery={setQuery} />}
     >
       <section className="p-4 md:p-8">
         <Deferred data={["products_data", "memberships_data"]} fallback={<ProductsContentLoading />}>

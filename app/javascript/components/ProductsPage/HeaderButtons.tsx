@@ -15,7 +15,7 @@ type PageProps = {
   can_create_product: boolean;
 };
 
-export const LayoutCtaButton = ({ query, setQuery }: Props) => {
+export const HeaderButtons = ({ query, setQuery }: Props) => {
   const { can_create_product: canCreateProduct, has_products: hasProducts } = cast<PageProps>(usePage().props);
 
   return (

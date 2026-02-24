@@ -15,6 +15,7 @@ class Products::ArchivedController < Sellers::BaseController
     set_meta_tag(title: "Archived products")
 
     render inertia: "Products/Archived/Index", props: {
+      query: archived_products_page_presenter.query,
       has_products: -> { archived_products_page_presenter.page_props[:has_products] },
       can_create_product: -> { archived_products_page_presenter.page_props[:can_create_product] },
       products_data: InertiaRails.defer(group: "data") do
