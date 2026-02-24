@@ -50,10 +50,12 @@ import {
   CurrencyCode,
   formatPriceCentsWithCurrencySymbol,
   formatPriceCentsWithoutCurrencySymbol,
+  getIsSingleUnitCurrency,
 } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { isValidEmail } from "$app/utils/email";
 import FileUtils from "$app/utils/file";
+import { priceCentsToUnit } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -2278,7 +2280,7 @@ const RefundForm = ({
     }
     try {
       setIsLoading(true);
-      await refund(purchaseId, refundAmountCents.value / 100.0);
+      await refund(purchaseId, priceCentsToUnit(refundAmountCents.value, getIsSingleUnitCurrency(currencyType)));
       const refundAmountRemaining = amountRefundable - refundAmountCents.value;
       onChange(refundAmountRemaining);
       setRefundAmountCents({ value: refundAmountRemaining });

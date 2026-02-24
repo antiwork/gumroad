@@ -1,3 +1,4 @@
+import { Trash } from "@boxicons/react";
 import { router } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import placeholderAppIcon from "images/gumroad_app.png";
@@ -15,7 +16,6 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Trash } from "@boxicons/react";
 
 export type Application = {
   id: string;

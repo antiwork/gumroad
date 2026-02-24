@@ -2,6 +2,7 @@
 
 class BalanceController < Sellers::BaseController
   layout "inertia", only: [:index]
+  skip_before_action :check_suspended
 
   def index
     authorize :balance

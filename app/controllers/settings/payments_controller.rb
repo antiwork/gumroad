@@ -225,15 +225,13 @@ class Settings::PaymentsController < Settings::BaseController
           comment_type: :note,
           content: result[:error_message]
         )
-        redirect_with_error(result[:error_message], error_code: result[:error_code])
+        redirect_with_error(result[:error_message])
         false
       end
     end
 
-    def redirect_with_error(error_message, error_code: nil)
-      errors_hash = { base: [error_message] }
-      errors_hash[:error_code] = [error_code] if error_code.present?
-      redirect_to settings_payments_path, inertia: { errors: errors_hash }
+    def redirect_with_error(error_message)
+      redirect_to settings_payments_path, inertia: { errors: { base: [error_message] } }
     end
 
     def authorize

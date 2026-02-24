@@ -1,3 +1,4 @@
+import { ArrowUp, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
@@ -7,7 +8,6 @@ import { Button, buttonVariants } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Placeholder } from "$app/components/ui/Placeholder";
-import { ArrowUp, Trash } from "@boxicons/react";
 
 export const ImageUploader = ({
   id,

@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUp, ChevronLeft, Move, Trash } from "@boxicons/react";
 import { Editor } from "@tiptap/core";
 import * as React from "react";
 
@@ -5,7 +6,6 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { ArrowDown, ArrowUp, ChevronLeft, Move, Trash } from "@boxicons/react";
 
 export const NodeActionsMenu = ({
   editor,

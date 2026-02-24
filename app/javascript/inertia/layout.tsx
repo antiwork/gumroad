@@ -39,7 +39,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <Alert initial={null} />
         <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
           {logged_in_user ? <Nav title="Dashboard" /> : null}
-          <main className="flex-1 overflow-y-auto">{children}</main>
+          <main scroll-region="" className="flex-1 overflow-y-auto">
+            {children}
+          </main>
         </div>
       </CurrentSellerProvider>
     </LoggedInUserProvider>

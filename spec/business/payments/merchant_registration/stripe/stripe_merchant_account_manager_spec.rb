@@ -8505,6 +8505,42 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "Stripe account cleanup when create_person fails" do
+      let(:user_compliance_info) { create(:user_compliance_info_business, user:) }
+      let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+      let(:fake_stripe_account) { Stripe::Account.construct_from(id: "acct_fake_123", object: "account") }
+
+      before do
+        user_compliance_info
+        bank_account
+        tos_agreement
+
+        allow(Stripe::Account).to receive(:create).and_return(fake_stripe_account)
+        allow(Stripe::Account).to receive(:create_person).and_raise(Stripe::InvalidRequestError.new("person creation failed", "person"))
+        allow(Bugsnag).to receive(:notify)
+      end
+
+      it "deletes the Stripe account and marks the merchant account as deleted" do
+        expect(Stripe::Account).to receive(:delete).with("acct_fake_123")
+
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(Stripe::InvalidRequestError)
+        expect(user.merchant_accounts.alive.count).to eq(0)
+      end
+
+      it "still marks the merchant account as deleted when Stripe account deletion fails" do
+        allow(Stripe::Account).to receive(:delete).and_raise(Stripe::APIError.new("cleanup failed"))
+
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(Stripe::InvalidRequestError)
+        expect(user.merchant_accounts.alive.count).to eq(0)
+        expect(Bugsnag).to have_received(:notify).at_least(:twice)
+      end
+    end
+
     describe "user doesn't have compliance info" do
       it "raises a user not ready error" do
         expect { subject.create_account(user, passphrase: "1234") }.to raise_error(MerchantRegistrationUserNotReadyError)

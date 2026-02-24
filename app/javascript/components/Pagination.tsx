@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "@boxicons/react";
 import { range } from "lodash-es";
 import * as React from "react";
 
@@ -5,7 +6,6 @@ import { isOpenTuple, last } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
-import { ChevronLeft, ChevronRight } from "@boxicons/react";
 export type PaginationProps = { pages: number; page: number };
 
 type Props = {
@@ -76,7 +76,11 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
           </>
         ) : null}
       </menu>
-      <Button size="sm" disabled={pagination.page + 1 > pagination.pages} onClick={() => onChangePage(pagination.page + 1)}>
+      <Button
+        size="sm"
+        disabled={pagination.page + 1 > pagination.pages}
+        onClick={() => onChangePage(pagination.page + 1)}
+      >
         Next
         <ChevronRight className="size-5" />
       </Button>

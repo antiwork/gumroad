@@ -474,8 +474,9 @@ class Purchase < ApplicationRecord
   scope :not_additional_contribution, -> { where("purchases.flags IS NULL OR purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:is_additional_contribution]) }
   scope :for_products, ->(products) { where(link_id: products) if products.present? }
   scope :not_subscription_or_original_purchase, -> {
-    where("purchases.subscription_id IS NULL OR purchases.flags & ? = ?",
-          Purchase.flag_mapping["flags"][:is_original_subscription_purchase], Purchase.flag_mapping["flags"][:is_original_subscription_purchase])
+    where("purchases.subscription_id IS NULL OR purchases.flags & ? = ? OR purchases.flags & ? = ?",
+          Purchase.flag_mapping["flags"][:is_original_subscription_purchase], Purchase.flag_mapping["flags"][:is_original_subscription_purchase],
+          Purchase.flag_mapping["flags"][:is_gift_receiver_purchase], Purchase.flag_mapping["flags"][:is_gift_receiver_purchase])
   }
   # TODO: since Memberships, `not_recurring_charge` & `recurring_charge` are not an accurate names for what the scopes filter, and they should be renamed.
   scope :not_recurring_charge, lambda { not_subscription_or_original_purchase }
@@ -2729,9 +2730,6 @@ class Purchase < ApplicationRecord
 
       calculate_fees
 
-      validate_seller_revenue
-      return if errors.present?
-
       purchase_sales_tax_info.save
       save
 
@@ -2799,15 +2797,6 @@ class Purchase < ApplicationRecord
     # Private: truncate the referrer so that they fit in our mysql string column.
     def truncate_referrer
       self.referrer = referrer.first(191) if referrer
-    end
-
-    def validate_seller_revenue
-      return unless price_cents
-      return if price_cents == 0
-      return if price_cents > fee_cents + affiliate_credit_cents
-
-      self.error_code = PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE
-      errors.add(:base, "Your purchase failed because the product is not correctly set up. Please contact the creator for more information.")
     end
 
     # Private: Prepare for charging the chargeable and retrieve any information about the chargeable that's needed
@@ -3755,9 +3744,7 @@ class Purchase < ApplicationRecord
       after_commit do
         next if destroyed?
 
-        if error_code == PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE
-          ContactingCreatorMailer.negative_revenue_sale_failure(id).deliver_later(queue: "critical")
-        elsif paid? && charge_processor_id.in?([PaypalChargeProcessor.charge_processor_id, BraintreeChargeProcessor.charge_processor_id])
+        if paid? && charge_processor_id.in?([PaypalChargeProcessor.charge_processor_id, BraintreeChargeProcessor.charge_processor_id])
           CustomerMailer.paypal_purchase_failed(id).deliver_later(queue: "critical")
         end
       end

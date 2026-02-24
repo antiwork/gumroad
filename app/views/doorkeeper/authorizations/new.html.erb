@@ -44,7 +44,7 @@
       <%= hidden_field_tag :state, @pre_auth.state %>
       <%= hidden_field_tag :response_type, @pre_auth.response_type %>
       <%= hidden_field_tag :scope, @pre_auth.scope %>
-      <%= button_tag "Authorize", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-[1.4]" %>
+      <%= button_tag "Authorize", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-snug" %>
     <% end %>
     <%= form_tag oauth_authorization_path, method: :delete, style: "display: contents" do %>
       <%= hidden_field_tag :client_id, @pre_auth.client.uid %>
@@ -52,7 +52,7 @@
       <%= hidden_field_tag :state, @pre_auth.state %>
       <%= hidden_field_tag :response_type, @pre_auth.response_type %>
       <%= hidden_field_tag :scope, @pre_auth.scope %>
-      <%= button_tag "Deny", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-[1.4]" %>
+      <%= button_tag "Deny", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-snug" %>
     <% end %>
   </footer>
 </main>
