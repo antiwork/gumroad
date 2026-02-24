@@ -27,17 +27,31 @@ class DashboardProductsPagePresenter
   end
 
   def page_props
-    @page_props ||= if archived?
-      {
-        has_products: seller.products.archived.exists?,
-        can_create_product: Pundit.policy!(@pundit_user, Link).create?
-      }
+    presenter = self
+    props = {
+      query:,
+      has_products: -> { presenter.send(:base_props)[:has_products] },
+      can_create_product: -> { presenter.send(:base_props)[:can_create_product] },
+      products_data: InertiaRails.defer(group: "data") do
+        {
+          products: presenter.products_table_props[:products],
+          pagination: presenter.products_table_props[:products_pagination],
+          sort: presenter.products_sort,
+        }
+      end,
+      memberships_data: InertiaRails.defer(group: "data") do
+        {
+          memberships: presenter.memberships_table_props[:memberships],
+          pagination: presenter.memberships_table_props[:memberships_pagination],
+          sort: presenter.memberships_sort,
+        }
+      end,
+    }
+
+    if archived?
+      props
     else
-      {
-        has_products: seller.products.visible.not_archived.exists?,
-        archived_products_count: seller.archived_products_count,
-        can_create_product: Pundit.policy!(@pundit_user, Link).create?,
-      }
+      props.merge(archived_products_count: -> { presenter.send(:base_props)[:archived_products_count] })
     end
   end
 
@@ -71,6 +85,21 @@ class DashboardProductsPagePresenter
     attr_reader :pundit_user, :products_page, :memberships_page
 
     def archived? = @archived
+
+    def base_props
+      @base_props ||= if archived?
+        {
+          has_products: seller.products.archived.exists?,
+          can_create_product: Pundit.policy!(@pundit_user, Link).create?
+        }
+      else
+        {
+          has_products: seller.products.visible.not_archived.exists?,
+          archived_products_count: seller.archived_products_count,
+          can_create_product: Pundit.policy!(@pundit_user, Link).create?,
+        }
+      end
+    end
 
     def seller
       pundit_user.seller

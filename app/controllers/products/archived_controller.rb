@@ -14,25 +14,7 @@ class Products::ArchivedController < Sellers::BaseController
 
     set_meta_tag(title: "Archived products")
 
-    render inertia: "Products/Archived/Index", props: {
-      query: archived_products_page_presenter.query,
-      has_products: -> { archived_products_page_presenter.page_props[:has_products] },
-      can_create_product: -> { archived_products_page_presenter.page_props[:can_create_product] },
-      products_data: InertiaRails.defer(group: "data") do
-        {
-          products: archived_products_page_presenter.products_table_props[:products],
-          pagination: archived_products_page_presenter.products_table_props[:products_pagination],
-          sort: archived_products_page_presenter.products_sort,
-        }
-      end,
-      memberships_data: InertiaRails.defer(group: "data") do
-        {
-          memberships: archived_products_page_presenter.memberships_table_props[:memberships],
-          pagination: archived_products_page_presenter.memberships_table_props[:memberships_pagination],
-          sort: archived_products_page_presenter.memberships_sort,
-        }
-      end,
-    }
+    render inertia: "Products/Archived/Index", props: archived_products_page_presenter.page_props
   end
 
   def create
