@@ -731,7 +731,7 @@ const CreditCardContent = () => {
         onChange={(evt) => setCardError(!!evt.error)}
       />
       {!useSavedCard && isLoggedIn ? (
-        <Label>
+        <Label className="flex items-center gap-2">
           <Checkbox
             disabled={isProcessing(state)}
             checked={keepOnFile}

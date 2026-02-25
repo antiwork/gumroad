@@ -608,7 +608,7 @@ export const ConfigurationSelector = React.forwardRef<
           variant="buttons"
           role="radiogroup"
           className="md:grid-flow-row"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(6rem, 100%), 1fr))" }}
         >
           {product.options.map((option) => {
             const isSelected = selection.optionId === option.id;
