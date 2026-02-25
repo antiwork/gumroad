@@ -54,34 +54,56 @@ export const getDraggedFileEmbed = (editor: Editor) => {
 
 const FILE_ROW_HEIGHT = 82;
 
-const visibilityCallbacks = new Map<Element, (isIntersecting: boolean) => void>();
-const sharedObserver =
-  typeof IntersectionObserver !== "undefined"
-    ? new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            visibilityCallbacks.get(entry.target)?.(entry.isIntersecting);
-          }
-        },
-        { rootMargin: "200px" },
-      )
-    : null;
+const findScrollParent = (el: Element): Element | null => {
+  let current = el.parentElement;
+  while (current) {
+    const { overflowY } = getComputedStyle(current);
+    if (overflowY === "auto" || overflowY === "scroll") return current;
+    current = current.parentElement;
+  }
+  return null;
+};
+
+const observersByRoot = new Map<
+  Element | null,
+  { observer: IntersectionObserver; callbacks: Map<Element, (isIntersecting: boolean) => void> }
+>();
+
+const getObserverForRoot = (root: Element | null) => {
+  let entry = observersByRoot.get(root);
+  if (!entry) {
+    const callbacks = new Map<Element, (isIntersecting: boolean) => void>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          callbacks.get(e.target)?.(e.isIntersecting);
+        }
+      },
+      { root, rootMargin: "1000px" },
+    );
+    entry = { observer, callbacks };
+    observersByRoot.set(root, entry);
+  }
+  return entry;
+};
 
 const useViewportVisibility = () => {
   const ref = React.useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = React.useState(!sharedObserver);
+  const [visible, setVisible] = React.useState(typeof IntersectionObserver === "undefined");
   const lastHeight = React.useRef(FILE_ROW_HEIGHT);
   React.useEffect(() => {
     const el = ref.current;
-    if (!el || !sharedObserver) return;
-    visibilityCallbacks.set(el, (isIntersecting) => {
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const root = findScrollParent(el);
+    const { observer, callbacks } = getObserverForRoot(root);
+    callbacks.set(el, (isIntersecting) => {
       if (!isIntersecting) lastHeight.current = el.offsetHeight;
       setVisible(isIntersecting);
     });
-    sharedObserver.observe(el);
+    observer.observe(el);
     return () => {
-      sharedObserver.unobserve(el);
-      visibilityCallbacks.delete(el);
+      observer.unobserve(el);
+      callbacks.delete(el);
     };
   }, []);
   return { ref, visible, lastHeight };
