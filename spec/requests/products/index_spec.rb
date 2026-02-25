@@ -486,6 +486,16 @@ describe "Products Page Scenario", type: :system, js: true do
       stub_const("DashboardProductsPagePresenter::PER_PAGE", per_page)
     end
 
+    it "auto-focuses the search input when the search popover opens" do
+      create(:product, user: seller)
+      visit(products_path)
+
+      select_disclosure "Toggle Search" do
+        expect(page).to have_field("Search products")
+      end
+      expect(page).to have_selector("input[placeholder='Search products']:focus")
+    end
+
     it "shows the search results" do
       product = create(:product, user: seller, name: "Chicken", unique_permalink: "chicken")
       visit(products_path)

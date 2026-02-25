@@ -23,7 +23,7 @@ export const Search = ({ onSearch, value: initialValue, placeholder = "Search" }
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
-      <PopoverContent sideOffset={4} onOpenAutoFocus={() => searchInputRef.current?.focus()}>
+      <PopoverContent sideOffset={4} onOpenAutoFocus={(e) => { e.preventDefault(); searchInputRef.current?.focus(); }}>
         <div className="input input-wrapper">
           <Icon name="solid-search" />
           <input
