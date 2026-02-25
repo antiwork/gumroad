@@ -34,12 +34,17 @@ describe LinksController, :vcr, inertia: true do
         expect(inertia.props).to include(
           :has_products,
           :archived_products_count,
-          :can_create_product,
-          :products_data,
-          :memberships_data
+          :can_create_product
         )
-        expect(inertia.props[:products_data]).to include(:products, :pagination, :sort)
-        expect(inertia.props[:memberships_data]).to include(:memberships, :pagination, :sort)
+        expect(inertia.props).not_to include(:products_data, :memberships_data)
+
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Data"] = "products_data,memberships_data"
+        request.headers["X-Inertia-Partial-Component"] = "Products/Index"
+        get :index
+
+        expect(inertia.props["products_data"]).to include("products", "pagination", "sort")
+        expect(inertia.props["memberships_data"]).to include("memberships", "pagination", "sort")
       end
     end
 

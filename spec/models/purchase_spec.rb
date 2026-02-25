@@ -4884,6 +4884,27 @@ describe Purchase, :vcr do
         expect(purchase.refunding_amount_cents(4_000.05)).to eq(price_cents)
       end
     end
+
+    context "for JPY (single-unit currency)" do
+      let(:price_cents) { 3759 }
+      let(:product) { create(:product, user:, price_cents:, price_currency_type: "jpy") }
+      let(:purchase) do
+        create(:purchase,
+               link: product,
+               seller: product.user,
+               displayed_price_currency_type: "jpy",
+               rate_converted_to_usd: "153.3446")
+      end
+
+      it "converts JPY partial refund amount to correct USD cents" do
+        expect(purchase.refunding_amount_cents("5764")).to eq((5764 / 153.3446 * 100).round)
+      end
+
+      it "converts JPY full refund amount to match price_cents" do
+        jpy_full_price = (price_cents * 153.3446 / 100).round
+        expect(purchase.refunding_amount_cents(jpy_full_price.to_s)).to eq(price_cents)
+      end
+    end
   end
 
   describe "#original_offer_code" do

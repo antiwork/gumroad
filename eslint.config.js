@@ -125,6 +125,7 @@ const tsxConfig = tseslint.config({
     "react/jsx-no-useless-fragment": "error",
     "react/no-unescaped-entities": "off",
     "react/no-unstable-nested-components": ["error", { allowAsProps: true }],
+    "react/no-unknown-property": ["error", { ignore: ["scroll-region"] }],
     "react/prop-types": "off",
   },
   settings: {

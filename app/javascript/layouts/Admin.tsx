@@ -24,7 +24,7 @@ export default function Admin({ children }: { children: React.ReactNode }) {
       <MetaTags />
       <Alert initial={null} />
       <AdminNav />
-      <main className="flex h-screen flex-1 flex-col overflow-y-auto">
+      <main scroll-region="" className="flex h-screen flex-1 flex-col overflow-y-auto">
         <header className="flex items-center justify-between border-b border-border p-4 md:p-8">
           <h1>{title}</h1>
           <div className="actions grid shrink-0 grid-cols-2 gap-2 has-[>*:only-child]:grid-cols-1 sm:flex md:-my-2">
