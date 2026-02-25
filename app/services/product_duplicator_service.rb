@@ -27,7 +27,6 @@ class ProductDuplicatorService
     ApplicationRecord.connection.transaction do
       @duplicated_product = product.dup
       duplicated_product.unique_permalink = nil
-      duplicated_product.send(:set_unique_permalink)
       duplicated_product.custom_permalink = nil
       duplicated_product.name = "#{product.name} (copy)"
       duplicated_product.price_cents = product.price_cents
@@ -35,7 +34,7 @@ class ProductDuplicatorService
       duplicated_product.is_collab = false
       mark_duplicate_product_as_draft
       duplicated_product.is_duplicating = false
-      duplicated_product.save!(validate: false) # Skip validations since the duplicated product may have invalid state (e.g. missing required fields) that will be fixed by subsequent duplication steps
+      duplicated_product.save!
 
       duplicate_prices
       duplicate_asset_previews
@@ -58,7 +57,7 @@ class ProductDuplicatorService
 
     set_recently_duplicated_product
 
-    duplicated_product.reload
+    duplicated_product
   rescue => e
     error_message = e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.full_messages.first : e.message
     store_duplication_error(error_message)
@@ -205,8 +204,7 @@ class ProductDuplicatorService
         end
       end
 
-      duplicated_product.description = doc.to_html
-      duplicated_product.save!(validate: false) # Skip validations to persist the updated description with remapped public file IDs without triggering unrelated validation failures
+      duplicated_product.update!(description: doc.to_html)
     end
 
     def duplicate_offer_codes
