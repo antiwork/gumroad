@@ -1,10 +1,10 @@
+import { Shield } from "@boxicons/react";
 import React from "react";
 
 import { formatDate } from "$app/utils/date";
 
 import type { User } from "$app/components/Admin/Users/User";
 import { WithTooltip, type Position } from "$app/components/WithTooltip";
-import { Shield } from "@boxicons/react";
 
 export type Props = {
   user: User;
@@ -34,7 +34,7 @@ const BlockedUserTooltip = ({ user, position = "bottom" }: Props) => {
 
   return (
     <WithTooltip tip={content()} position={position}>
-      <Shield pack="filled" className="size-5 text-warning" />
+      <Shield pack="filled" className="size-5 text-warning" aria-label="Blocked User" />
     </WithTooltip>
   );
 };

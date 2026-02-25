@@ -1,15 +1,16 @@
+import { ChevronDown, TurnRight, X } from "@boxicons/react";
 import * as React from "react";
 import ReactSelect, {
+  ClearIndicatorProps,
   components,
+  ControlProps,
+  DropdownIndicatorProps,
+  GroupBase,
   InputProps,
   MenuListProps,
   MultiValueProps,
   OptionProps,
   Props as ReactSelectProps,
-  DropdownIndicatorProps,
-  ControlProps,
-  ClearIndicatorProps,
-  GroupBase,
   SelectInstance,
 } from "react-select";
 
@@ -17,7 +18,6 @@ import { escapeRegExp } from "$app/utils";
 import { classNames } from "$app/utils/classNames";
 
 import { Pill } from "$app/components/ui/Pill";
-import { ChevronDown, Reply, X } from "@boxicons/react";
 
 export type Option = { id: string; label: string; isSubOption?: boolean; disabled?: boolean };
 
@@ -166,7 +166,7 @@ const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel
   }
   return (
     <span>
-      {isSubOption ? <Reply className="size-5 mr-2" /> : null}
+      {isSubOption ? <TurnRight className="mr-2 size-5" /> : null}
       {label}
     </span>
   );
@@ -229,7 +229,7 @@ const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMu
     <Pill asChild color="primary" className="cursor-pointer font-[inherit] text-[length:inherit]">
       <button>
         {props.data.label}
-        <X className="size-5 ml-2" />
+        <X className="ml-2 size-5" />
       </button>
     </Pill>
   </div>
@@ -276,6 +276,7 @@ const Option = <IsMulti extends boolean>(props: OptionProps<Option, IsMulti>) =>
       onMouseOver={innerProps.onMouseOver}
       tabIndex={innerProps.tabIndex}
       role="option"
+      aria-disabled={props.isDisabled}
     >
       {customProps.customOption?.({ id: props.label, label: props.label }) ?? props.children}
     </div>
