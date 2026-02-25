@@ -11,7 +11,10 @@ class ProductDuplicatesController < Sellers::BaseController
     end
 
     DuplicateProductWorker.perform_async(@product.id)
-    @product.update!(is_duplicating: true)
+    @product.is_duplicating = true
+    # Skip validations because products may have update-only validation errors (e.g. call products
+    # without durations) unrelated to toggling this flag.
+    @product.save!(validate: false)
 
     render json: { success: true }
   end

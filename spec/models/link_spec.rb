@@ -237,28 +237,6 @@ describe Link, :vcr do
         expect(product).to_not be_valid
         expect(product.errors.full_messages.to_sentence).to eq("Sorry, the product versions must have at least one option.")
       end
-
-      it "skips validation when the product is a draft" do
-        product.draft = true
-        create(:variant_category, link: product)
-        category_two = create(:variant_category, link: product)
-        create(:variant, variant_category: category_two)
-
-        expect { product.save! }.to_not raise_error
-        expect(product).to be_valid
-      end
-
-      it "runs validation when a draft product is no longer a draft" do
-        product.draft = true
-        create(:variant_category, link: product)
-        category_two = create(:variant_category, link: product)
-        create(:variant, variant_category: category_two)
-        product.save!
-
-        product.draft = false
-        expect { product.save! }.to raise_error(ActiveRecord::RecordInvalid)
-        expect(product.errors.full_messages.to_sentence).to eq("Sorry, the product versions must have at least one option.")
-      end
     end
   end
 

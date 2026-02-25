@@ -193,16 +193,16 @@ class Link < ApplicationRecord
                                          if: ->(link) { link.free_trial_enabled? && (!link.persisted? || link.free_trial_duration_amount_changed?) }
   validate :price_must_be_within_range
   validate :require_shipping_for_physical
-  validate :valid_tier_version_structure, if: :is_tiered_membership, on: :update, unless: :draft?
-  validate :calls_must_have_at_least_one_duration, on: :update, unless: :draft?
-  validate :alive_category_variants_presence, on: :update, unless: :draft?
+  validate :valid_tier_version_structure, if: :is_tiered_membership, on: :update
+  validate :calls_must_have_at_least_one_duration, on: :update
+  validate :alive_category_variants_presence, on: :update
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
   validate :custom_view_content_button_text_length
   validates :custom_receipt_text, length: { maximum: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH }
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?
-  validate :published_bundle_must_have_at_least_one_product, on: :update, unless: :draft?
+  validate :published_bundle_must_have_at_least_one_product, on: :update
   validate :user_is_eligible_for_service_products, on: :create, if: :is_service?
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }

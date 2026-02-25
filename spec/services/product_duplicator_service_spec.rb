@@ -358,19 +358,6 @@ describe ProductDuplicatorService do
     end
   end
 
-  describe "duplicating a product with validation errors" do
-    it "duplicates a call product without durations" do
-      seller.update!(created_at: 31.days.ago)
-      call_product = create(:product, user: seller, native_type: "call")
-
-      duplicate_product = ProductDuplicatorService.new(call_product.id).duplicate
-
-      expect(duplicate_product).to be_persisted
-      expect(duplicate_product.draft).to be(true)
-      expect(duplicate_product.name).to eq("#{call_product.name} (copy)")
-    end
-  end
-
   describe "error handling" do
     it "stores the error message on failure and re-raises" do
       service = ProductDuplicatorService.new(product.id)
