@@ -1,3 +1,4 @@
+import { BookmarkHeart } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
@@ -10,7 +11,6 @@ import { Nav } from "$app/components/Discover/Nav";
 import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
-import { BookmarkHeart } from "@boxicons/react";
 
 const UserActionButtons: React.FC = () => {
   const currentSeller = useCurrentSeller();

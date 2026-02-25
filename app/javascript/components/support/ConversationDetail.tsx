@@ -1,3 +1,4 @@
+import { ArrowLeft, ChevronDown, ChevronUp, Paperclip, Trash } from "@boxicons/react";
 import type { Message } from "@helperai/client";
 import { useConversation, useRealtimeEvents, useCreateMessage, MessageContent } from "@helperai/react";
 import cx from "classnames";
@@ -13,7 +14,6 @@ import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
-import { ArrowLeft, ChevronDown, ChevronUp, Paperclip, Trash } from "@boxicons/react";
 
 export const ALLOWED_ATTACHMENT_MIMETYPES = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
 

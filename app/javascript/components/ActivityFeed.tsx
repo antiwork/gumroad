@@ -1,3 +1,4 @@
+import { Dollar, UserCircle } from "@boxicons/react";
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
@@ -6,7 +7,6 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { useUserAgentInfo } from "$app/components/UserAgent";
-import { Dollar, UserCircle } from "@boxicons/react";
 type SaleItemDetails = {
   price_cents: number;
   email: string;

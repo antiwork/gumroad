@@ -1,7 +1,7 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { ChevronDown } from "@boxicons/react";
 
 type User = { name: string | null; email: string | null; avatarUrl: string };
 

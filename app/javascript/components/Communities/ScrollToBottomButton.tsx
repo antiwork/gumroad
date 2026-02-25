@@ -1,5 +1,5 @@
-import * as React from "react";
 import { ArrowDown } from "@boxicons/react";
+import * as React from "react";
 
 export const DEFAULT_FORM_ELEMENT_HEIGHT_IN_PX = 48; // same as the `$form-element-height` design system variable
 

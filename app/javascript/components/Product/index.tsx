@@ -1,3 +1,4 @@
+import { Star } from "@boxicons/react";
 import { EditorContent } from "@tiptap/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
@@ -74,7 +75,6 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { Star } from "@boxicons/react";
 
 export type Seller = { id: string; name: string; avatar_url: string; profile_url: string; is_verified: boolean };
 

@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf, Calendar, CheckCircle, ChevronDown, Clock, Cog } from "@boxicons/react";
 import { Link, router } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
@@ -21,7 +22,6 @@ import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { ArrowInDownSquareHalf, Calendar, CheckCircle, ChevronDown, Clock, Cog } from "@boxicons/react";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
 

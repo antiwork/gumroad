@@ -1,3 +1,4 @@
+import { X } from "@boxicons/react";
 import * as React from "react";
 
 import { computeOfferDiscount } from "$app/data/offer_code";
@@ -65,7 +66,6 @@ import {
 } from "./payment";
 
 import placeholder from "$assets/images/placeholders/checkout.png";
-import { X } from "@boxicons/react";
 
 function formatPrice(price: number) {
   return formatUSDCentsWithExpandedCurrencySymbol(Math.floor(price));
@@ -293,7 +293,7 @@ export const Checkout = ({
                                 aria-label="Purchasing power parity discount"
                               >
                                 Purchasing power parity discount
-                                <X className="size-5 ml-2" />
+                                <X className="ml-2 size-5" />
                               </button>
                             </Pill>
                           </WithTooltip>
@@ -309,7 +309,7 @@ export const Checkout = ({
                             aria-label="Discount code"
                           >
                             {code.code}
-                            <X className="size-5 ml-2" />
+                            <X className="ml-2 size-5" />
                           </Pill>
                         ))}
                       </h4>

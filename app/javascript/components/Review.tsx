@@ -1,3 +1,4 @@
+import { CheckCircle } from "@boxicons/react";
 import * as React from "react";
 
 import { Review as ReviewType } from "$app/data/product_reviews";
@@ -7,7 +8,6 @@ import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { CheckCircle } from "@boxicons/react";
 
 export type Seller = {
   id: string;

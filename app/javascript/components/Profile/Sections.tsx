@@ -1,3 +1,4 @@
+import { Archive, ArrowUpRight } from "@boxicons/react";
 import { EditorContent } from "@tiptap/react";
 import classNames from "classnames";
 import * as React from "react";
@@ -24,7 +25,6 @@ import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { CardContent } from "$app/components/ui/Card";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Card as WishlistCard, CardGrid as WishlistCardGrid, CardWishlist } from "$app/components/Wishlist/Card";
-import { Archive, ArrowUpRight } from "@boxicons/react";
 
 type BaseSection = {
   id: string;

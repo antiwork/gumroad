@@ -190,12 +190,7 @@ export const Nav = (props: Props) => {
         ) : null}
       </NavSection>
       <NavSection>
-        <ClientNavLink
-          text="Discover"
-          icon={<Search className="size-5" />}
-          href={discoverUrl}
-          exactHrefMatch
-        />
+        <ClientNavLink text="Discover" icon={<Search className="size-5" />} href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <ClientNavLink
             text="Library"

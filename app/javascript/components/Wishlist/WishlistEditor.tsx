@@ -1,3 +1,4 @@
+import { CheckCircle } from "@boxicons/react";
 import * as React from "react";
 
 import { updateWishlist } from "$app/data/wishlists";
@@ -5,7 +6,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { showAlert } from "$app/components/server-components/Alert";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
-import { CheckCircle } from "@boxicons/react";
 
 export const WishlistEditor = ({
   id,

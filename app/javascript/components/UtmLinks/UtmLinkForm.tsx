@@ -1,3 +1,4 @@
+import { Link, RefreshCcw, XSquare } from "@boxicons/react";
 import { router, useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -14,7 +15,6 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Link, RefreshCcw, XSquare } from "@boxicons/react";
 
 type UtmLinkFormData = {
   utm_link: {

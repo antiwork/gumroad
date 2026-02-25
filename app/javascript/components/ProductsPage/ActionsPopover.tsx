@@ -1,3 +1,4 @@
+import { Archive, Copy, DotsHorizontalRounded, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { archiveProduct, deleteProduct, duplicateProduct, unarchiveProduct } from "$app/data/product_dashboard";
@@ -8,7 +9,6 @@ import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Archive, Copy, DotsHorizontalRounded, Trash } from "@boxicons/react";
 
 const ActionsPopover = ({
   product,

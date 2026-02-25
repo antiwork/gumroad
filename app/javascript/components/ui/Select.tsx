@@ -1,10 +1,10 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
 import { useFieldset, stateBorderStyles } from "$app/components/ui/Fieldset";
 import { baseInputStyles } from "$app/components/ui/Input";
-import { ChevronDown } from "@boxicons/react";
 
 export const Select = React.forwardRef<
   HTMLSelectElement,
@@ -22,7 +22,7 @@ export const Select = React.forwardRef<
       >
         {children}
       </select>
-      <ChevronDown className="size-5 pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-muted" />
+      <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-5 -translate-y-1/2 text-muted" />
     </div>
   );
 });

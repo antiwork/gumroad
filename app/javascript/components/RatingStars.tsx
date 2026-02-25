@@ -1,6 +1,6 @@
+import { Star, StarHalf } from "@boxicons/react";
 import { range } from "lodash-es";
 import * as React from "react";
-import { Star, StarHalf } from "@boxicons/react";
 
 export const RatingStars = ({ rating }: { rating: number }) => (
   <>

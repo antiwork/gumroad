@@ -1,3 +1,4 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { NumberInput } from "$app/components/NumberInput";
@@ -6,7 +7,6 @@ import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Pill } from "$app/components/ui/Pill";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
-import { ChevronDown } from "@boxicons/react";
 
 const UNITS = ["minutes", "hours", "days"] as const;
 type Unit = (typeof UNITS)[number];
@@ -73,7 +73,7 @@ export const CallLimitationsEditor = ({
                     options={UNITS.map((unit) => ({ id: unit, label: unit }))}
                     className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                   />
-                  <ChevronDown className="size-5 ml-auto" />
+                  <ChevronDown className="ml-auto size-5" />
                 </label>
               </Pill>
             </div>

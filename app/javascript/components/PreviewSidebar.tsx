@@ -1,8 +1,8 @@
+import { ArrowUpRight } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 
 import { WithTooltip } from "$app/components/WithTooltip";
-import { ArrowUpRight } from "@boxicons/react";
 
 export const WithPreviewSidebar = ({ children, className, ...props }: React.ComponentProps<"div">) => (
   <div className={cx("squished lg:grid lg:grid-cols-[1fr_30vw]", className)} {...props}>

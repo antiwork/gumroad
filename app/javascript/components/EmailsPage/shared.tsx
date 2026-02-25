@@ -1,3 +1,4 @@
+import { FileDetail } from "@boxicons/react";
 import { useForm } from "@inertiajs/react";
 import React from "react";
 
@@ -11,7 +12,6 @@ import { EditEmailButton, NewEmailButton } from "$app/components/EmailsPage/Layo
 import { ViewEmailButton } from "$app/components/EmailsPage/ViewEmailButton";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
-import { FileDetail } from "@boxicons/react";
 
 type DeleteEmailModalProps = {
   installment: { id: string; name: string } | null;

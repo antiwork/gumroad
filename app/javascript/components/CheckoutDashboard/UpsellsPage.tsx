@@ -1,3 +1,4 @@
+import { ArrowRightCircle, XSquare } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -47,7 +48,6 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 import placeholder from "$assets/images/placeholders/upsells.png";
-import { ArrowRightCircle, XSquare } from "@boxicons/react";
 
 type Variant = {
   id: string;

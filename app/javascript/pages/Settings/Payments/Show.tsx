@@ -1,3 +1,4 @@
+import { Bank, CreditCard, Paypal, Stripe } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
@@ -39,7 +40,6 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import logo from "$assets/images/logo-g.svg";
-import { Bank, CreditCard, Paypal, Stripe } from "@boxicons/react";
 
 const KANA_NAME_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\-.]*$/u;
 const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=Latin}\d\s\-.]*$/u;

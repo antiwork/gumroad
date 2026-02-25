@@ -1,3 +1,4 @@
+import { Copy } from "@boxicons/react";
 import CodeBlockLowlight, { CodeBlockLowlightOptions } from "@tiptap/extension-code-block-lowlight";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import { common, createLowlight } from "lowlight";
@@ -5,7 +6,6 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Copy } from "@boxicons/react";
 const lowlight = createLowlight(common);
 
 const LANGUAGES = lowlight.listLanguages().map((lang) => {

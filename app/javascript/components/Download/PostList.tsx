@@ -1,3 +1,4 @@
+import { FileDetail } from "@boxicons/react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import * as React from "react";
 
@@ -6,7 +7,6 @@ import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import { TrackClick } from "./Interactions";
-import { FileDetail } from "@boxicons/react";
 
 export type Post = { id: string; name: string; view_url: string; action_at: string };
 
@@ -19,7 +19,7 @@ export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
         return (
           <Row key={post.id} role="listitem">
             <RowContent>
-              <FileDetail pack="filled" className="size-5 type-icon" />
+              <FileDetail pack="filled" className="type-icon size-5" />
               <div>
                 <div>
                   <h4>{post.name}</h4>

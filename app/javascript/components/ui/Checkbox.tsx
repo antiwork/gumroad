@@ -1,7 +1,7 @@
+import { Check } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-import { Check } from "@boxicons/react";
 
 export const Checkbox = React.forwardRef<
   HTMLInputElement,
@@ -27,7 +27,7 @@ export const Checkbox = React.forwardRef<
       )}
       {...props}
     />
-    <Check className="size-5 pointer-events-none absolute hidden! text-accent-foreground peer-checked:block!" />
+    <Check className="pointer-events-none absolute hidden! size-5 text-accent-foreground peer-checked:block!" />
   </span>
 ));
 Checkbox.displayName = "Checkbox";

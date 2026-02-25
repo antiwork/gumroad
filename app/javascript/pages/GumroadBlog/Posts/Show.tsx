@@ -1,3 +1,4 @@
+import { ArrowLeft } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import { EditorContent } from "@tiptap/react";
 import * as React from "react";
@@ -12,7 +13,6 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { ArrowLeft } from "@boxicons/react";
 
 type ShowPageProps = {
   external_id: string;
@@ -27,7 +27,7 @@ const BackToBlog = () => (
     href={Routes.gumroad_blog_root_path()}
     className="mt-4 flex items-center font-medium text-pink-600 hover:text-pink-800"
   >
-    <ArrowLeft className="size-5 mr-1.5" style={{ width: 18, height: 18 }} />
+    <ArrowLeft className="mr-1.5 size-5" style={{ width: 18, height: 18 }} />
     Back to Blog
   </Link>
 );

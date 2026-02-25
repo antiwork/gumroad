@@ -1,3 +1,4 @@
+import { XCircle } from "@boxicons/react";
 import * as React from "react";
 
 import { createAccount, CreateAccountPayload } from "$app/data/account";
@@ -14,7 +15,6 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { XCircle } from "@boxicons/react";
 
 export const LineItem = ({
   name,

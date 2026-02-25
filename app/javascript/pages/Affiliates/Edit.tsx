@@ -1,3 +1,4 @@
+import { XSquare } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -11,7 +12,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 import { AffiliateForm, AffiliateProduct } from "./Form";
-import { XSquare } from "@boxicons/react";
 
 type AffiliateData = {
   id: string;

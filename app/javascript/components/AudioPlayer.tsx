@@ -1,3 +1,4 @@
+import { PauseCircle, PlayCircle, RotateCcw10, RotateCw10 } from "@boxicons/react";
 import * as React from "react";
 
 import { asyncVoid } from "$app/utils/promise";
@@ -5,7 +6,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Range } from "$app/components/ui/Range";
 import { useUserAgentInfo } from "$app/components/UserAgent";
-import { PauseCircle, PlayCircle, RotateCcw10, RotateCw10 } from "@boxicons/react";
 
 type Props = {
   src: string;

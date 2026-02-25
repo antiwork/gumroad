@@ -1,3 +1,4 @@
+import { Pencil } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -18,7 +19,6 @@ import { Table, TableBody, TableCaption, TableCell, TableRow } from "$app/compon
 import { useOnChange } from "$app/components/useOnChange";
 
 import placeholderImage from "$assets/images/placeholders/reviews.png";
-import { Pencil } from "@boxicons/react";
 
 const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbnails/");
 

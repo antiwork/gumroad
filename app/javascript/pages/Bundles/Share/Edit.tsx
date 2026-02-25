@@ -1,3 +1,4 @@
+import { Link } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -23,7 +24,6 @@ import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEdi
 import { ProfileSection, PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Switch } from "$app/components/ui/Switch";
-import { Link } from "@boxicons/react";
 
 type SharePageProps = {
   bundle: {

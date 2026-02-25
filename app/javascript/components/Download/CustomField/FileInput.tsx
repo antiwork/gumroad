@@ -1,3 +1,4 @@
+import { ArrowUp } from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
 
@@ -12,7 +13,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
-import { ArrowUp } from "@boxicons/react";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 

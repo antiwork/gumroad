@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf, Pencil, Search, Trash } from "@boxicons/react";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { parseISO } from "date-fns";
@@ -30,7 +31,6 @@ import { Sort, useClientSortingTableDriver, useSortingTableDriver } from "$app/c
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
-import { ArrowInDownSquareHalf, Pencil, Search, Trash } from "@boxicons/react";
 
 type SortKey = "affiliate_user_name" | "products" | "fee_percent" | "volume_cents";
 

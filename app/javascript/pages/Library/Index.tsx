@@ -1,3 +1,4 @@
+import { Archive, DotsHorizontalRounded, Search, Trash } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import { produce } from "immer";
 import * as React from "react";
@@ -33,7 +34,6 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 import placeholder from "$assets/images/placeholders/library.png";
-import { Archive, DotsHorizontalRounded, Search, Trash } from "@boxicons/react";
 
 export type Result = {
   product: {

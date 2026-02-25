@@ -1,3 +1,4 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { type SaveActionName } from "$app/types/workflow";
@@ -5,7 +6,6 @@ import { type SaveActionName } from "$app/types/workflow";
 import { Button } from "$app/components/Button";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Switch } from "$app/components/ui/Switch";
-import { ChevronDown } from "@boxicons/react";
 
 type PublishButtonProps = {
   isPublished: boolean;

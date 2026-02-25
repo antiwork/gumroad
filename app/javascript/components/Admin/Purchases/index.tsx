@@ -1,3 +1,4 @@
+import { ArrowUpRightSquare, Copy } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -16,7 +17,6 @@ import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
 import { type PurchaseStatesInfo, PurchaseStates } from "./States";
-import { ArrowUpRightSquare, Copy } from "@boxicons/react";
 
 type UrlRedirect = {
   download_page_url: string;

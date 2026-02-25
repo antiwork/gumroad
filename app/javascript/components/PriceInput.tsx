@@ -1,3 +1,4 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import {
@@ -11,7 +12,6 @@ import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Pill } from "$app/components/ui/Pill";
-import { ChevronDown } from "@boxicons/react";
 
 export const PriceInput = React.forwardRef<
   HTMLInputElement,
@@ -76,7 +76,7 @@ export const PriceInput = React.forwardRef<
               }))}
               className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
             />
-            <ChevronDown className="size-5 ml-auto" />
+            <ChevronDown className="ml-auto size-5" />
           </Pill>
         ) : (
           <Pill className="-ml-2 shrink-0">{getLongCurrencySymbol(currencyCode)}</Pill>

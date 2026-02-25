@@ -1,3 +1,4 @@
+import { Pencil, Trash } from "@boxicons/react";
 import cx from "classnames";
 import React from "react";
 
@@ -16,7 +17,6 @@ import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { UserAvatar } from "./UserAvatar";
-import { Pencil, Trash } from "@boxicons/react";
 
 const MAX_TEXTAREA_HEIGHT = 300;
 

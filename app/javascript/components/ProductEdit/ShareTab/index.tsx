@@ -1,3 +1,4 @@
+import { Link, Plus } from "@boxicons/react";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
 
@@ -16,7 +17,6 @@ import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
 import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { Link, Plus } from "@boxicons/react";
 
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();

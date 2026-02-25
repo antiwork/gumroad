@@ -1,3 +1,4 @@
+import { BookmarkPlus, BookmarkStar } from "@boxicons/react";
 import * as React from "react";
 
 import { followWishlist, unfollowWishlist } from "$app/data/wishlists";
@@ -9,7 +10,6 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { BookmarkPlus, BookmarkStar } from "@boxicons/react";
 
 export const useFollowWishlist = ({
   wishlistId,

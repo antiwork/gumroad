@@ -1,10 +1,10 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { type Product } from "$app/components/Analytics";
 import { Button } from "$app/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { ChevronDown } from "@boxicons/react";
 
 export type ProductOption = Product & { selected: boolean };
 

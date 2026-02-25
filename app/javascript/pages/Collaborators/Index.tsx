@@ -1,3 +1,4 @@
+import { Pencil, Shield, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -16,7 +17,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
-import { Pencil, Shield, Trash } from "@boxicons/react";
 
 type CollaboratorsPageProps = {
   collaborators: Collaborator[];
@@ -99,8 +99,12 @@ const CollaboratorsPage = () => {
                         </div>
                         {collaborator.setup_incomplete ? (
                           <WithTooltip tip="Not receiving payouts" position="top">
-                            <Shield pack="filled" style={{ color: "rgb(var(--warning))" }}
-                              aria-label="Not receiving payouts" className="size-5" />
+                            <Shield
+                              pack="filled"
+                              style={{ color: "rgb(var(--warning))" }}
+                              aria-label="Not receiving payouts"
+                              className="size-5"
+                            />
                           </WithTooltip>
                         ) : null}
                       </div>

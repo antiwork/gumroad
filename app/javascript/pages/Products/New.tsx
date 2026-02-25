@@ -1,3 +1,4 @@
+import { ChevronDown, Sparkle, XSquare } from "@boxicons/react";
 import { Link, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import hands from "images/illustrations/hands.png";
@@ -25,7 +26,6 @@ import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { ChevronDown, Sparkle, XSquare } from "@boxicons/react";
 
 const nativeTypeIcons = require.context("$assets/images/native_types/");
 
@@ -406,7 +406,7 @@ const NewProductPage = () => {
                         })}
                         className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                       />
-                      <ChevronDown className="size-5 ml-auto" />
+                      <ChevronDown className="ml-auto size-5" />
                     </label>
                   </Pill>
 
@@ -445,7 +445,7 @@ const NewProductPage = () => {
                           }))}
                           className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
                         />
-                        <ChevronDown className="size-5 ml-auto" />
+                        <ChevronDown className="ml-auto size-5" />
                       </label>
                     </Pill>
                   ) : null}

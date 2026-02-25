@@ -1,3 +1,4 @@
+import { ArrowLeft } from "@boxicons/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
 
@@ -17,7 +18,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
-import { ArrowLeft } from "@boxicons/react";
 
 export type PurchaseCustomField = {
   custom_field_id: string;
@@ -249,7 +249,7 @@ export const Layout = ({
       {loggedInUser && !is_mobile_app_web_view ? (
         <div className="font-size-base grid-row-[-3] text-singleline border-b border-border px-8 py-4">
           <a style={{ textDecoration: "none" }} href={Routes.library_url()} title="Back to Library">
-            <ArrowLeft className="size-5 mr-1.5" />
+            <ArrowLeft className="mr-1.5 size-5" />
             {headerVisible ? "Back to Library" : null}
           </a>
           {!headerVisible ? <strong>{purchase?.product_name}</strong> : null}

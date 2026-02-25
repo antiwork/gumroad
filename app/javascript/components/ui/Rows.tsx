@@ -1,8 +1,8 @@
+import { Move } from "@boxicons/react";
 import { Slot } from "@radix-ui/react-slot";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-import { Move } from "@boxicons/react";
 
 export const Rows = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ className, ...props }, ref) => (

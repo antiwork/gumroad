@@ -1,3 +1,4 @@
+import { Link, XCircle } from "@boxicons/react";
 import * as React from "react";
 
 import { getPagedAffiliatedProducts } from "$app/data/affiliated_products";
@@ -24,7 +25,6 @@ import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriv
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/affiliated.png";
-import { Link, XCircle } from "@boxicons/react";
 
 export type AffiliatedProduct = {
   product_name: string;

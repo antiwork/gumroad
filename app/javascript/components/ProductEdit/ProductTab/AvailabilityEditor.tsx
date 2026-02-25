@@ -1,3 +1,4 @@
+import { Plus, Trash } from "@boxicons/react";
 import { fromZonedTime, toZonedTime, format } from "date-fns-tz";
 import * as React from "react";
 
@@ -6,7 +7,6 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { Availability } from "$app/components/ProductEdit/state";
 import { Placeholder } from "$app/components/ui/Placeholder";
-import { Plus, Trash } from "@boxicons/react";
 
 const DEFAULT_INTERVAL_START_HOURS = 9;
 const DEFAULT_INTERVAL_LENGTH = 8;

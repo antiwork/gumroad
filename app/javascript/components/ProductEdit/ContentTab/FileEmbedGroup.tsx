@@ -150,7 +150,7 @@ const FileEmbedGroupNodeView = ({
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
             {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
-            <FolderOpen pack="filled" className="size-5 type-icon" />
+            <FolderOpen pack="filled" className="type-icon size-5" />
             {editing ? (
               <input
                 type="text"

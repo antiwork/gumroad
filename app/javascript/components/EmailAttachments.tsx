@@ -1,3 +1,4 @@
+import { Paperclip, Pencil, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import FileUtils from "$app/utils/file";
@@ -17,7 +18,6 @@ import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/u
 import { Switch } from "$app/components/ui/Switch";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Paperclip, Pencil, Trash } from "@boxicons/react";
 
 export type FileItem = {
   id: string;

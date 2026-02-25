@@ -1,3 +1,4 @@
+import { InfoCircle } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
@@ -18,7 +19,6 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import publishedPlaceholder from "$assets/images/placeholders/published_posts.png";
-import { InfoCircle } from "@boxicons/react";
 
 type PageProps = {
   installments: PublishedInstallment[];

@@ -1,3 +1,4 @@
+import { ChevronDown, Envelope, Eye, FileDetail, X, XSquare } from "@boxicons/react";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import { Editor, JSONContent } from "@tiptap/core";
@@ -45,7 +46,6 @@ import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { ChevronDown, Envelope, Eye, FileDetail, X, XSquare } from "@boxicons/react";
 
 type ProductOrVariantOption = {
   id: string;

@@ -1,3 +1,4 @@
+import { Box, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -6,7 +7,6 @@ import { ShippingDestination, useProductEditContext } from "$app/components/Prod
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Box, Plus, Trash } from "@boxicons/react";
 
 export const ShippingDestinationsEditor = ({
   shippingDestinations,

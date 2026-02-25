@@ -1,3 +1,4 @@
+import { XSquare } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -13,7 +14,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 import { AffiliateForm, AffiliateProduct } from "./Form";
-import { XSquare } from "@boxicons/react";
 
 type Props = {
   products: AffiliateProduct[];

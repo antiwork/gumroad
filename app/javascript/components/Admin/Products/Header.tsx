@@ -1,3 +1,4 @@
+import { ArrowUpRightSquare } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -5,8 +6,8 @@ import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelat
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
 import { buttonVariants } from "$app/components/Button";
+
 import coverPlaceholder from "$assets/images/cover_placeholder.png";
-import { ArrowUpRightSquare } from "@boxicons/react";
 
 type Props = {
   product: Product;

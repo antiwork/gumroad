@@ -1,3 +1,4 @@
+import { BookmarkX, DotsHorizontalRounded } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
@@ -12,7 +13,6 @@ import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 import placeholder from "$assets/images/placeholders/wishlists-following.png";
-import { BookmarkX, DotsHorizontalRounded } from "@boxicons/react";
 
 export type Wishlist = {
   id: string;

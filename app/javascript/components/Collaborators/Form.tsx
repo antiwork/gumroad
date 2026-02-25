@@ -1,3 +1,4 @@
+import { XSquare } from "@boxicons/react";
 import { useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -14,7 +15,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { XSquare } from "@boxicons/react";
 
 const WITH_CONFIRMED_ACKNOWLEDGEMENT = "withConfirmedAcknowledgement";
 

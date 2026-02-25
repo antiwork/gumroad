@@ -1,8 +1,8 @@
+import { X } from "@boxicons/react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-import { X } from "@boxicons/react";
 
 export const Sheet = ({
   children,

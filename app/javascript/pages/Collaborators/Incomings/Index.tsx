@@ -1,3 +1,4 @@
+import { Check, X } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -18,7 +19,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/collaborators.png";
-import { Check, X } from "@boxicons/react";
 
 const IncomingCollaboratorsTableRow = ({
   incomingCollaborator,

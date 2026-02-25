@@ -1,8 +1,8 @@
+import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { Placeholder } from "$app/components/ui/Placeholder";
-import { Plus, Trash } from "@boxicons/react";
 
 export type Attribute = { name: string; value: string };
 

@@ -1,3 +1,18 @@
+import {
+  ArrowDown,
+  ArrowUp,
+  Bell,
+  Box,
+  ChevronLeft,
+  ChevronRight,
+  DotsHorizontalRounded,
+  Envelope,
+  FileDetail,
+  Grid,
+  Link,
+  Plus,
+  Trash,
+} from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import { EditorContent } from "@tiptap/react";
 import { debounce, isEqual, sortBy } from "lodash-es";
@@ -36,7 +51,6 @@ import { useOnChange } from "$app/components/useOnChange";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 
 import { PageProps as BasePageProps, FeaturedProductView, Post, PostsView, SubscribeView } from "./Sections";
-import { ArrowDown, ArrowUp, Bell, Box, ChevronLeft, ChevronRight, DotsHorizontalRounded, Envelope, FileDetail, Grid, Link, Plus, Trash } from "@boxicons/react";
 
 type ProductsSection = SavedProductsSection & { search_results: SearchResults };
 type EditProduct = { id: string; name: string };

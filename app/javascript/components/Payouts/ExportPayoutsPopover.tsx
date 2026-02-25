@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf } from "@boxicons/react";
 import * as React from "react";
 
 import { ExportablePayout, exportPayouts, getExportablePayouts } from "$app/data/balance";
@@ -9,7 +10,6 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { ArrowInDownSquareHalf } from "@boxicons/react";
 
 const ExportPayoutsPopoverContent = () => {
   const currentYear = new Date().getFullYear();

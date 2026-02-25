@@ -1,3 +1,13 @@
+import {
+  ArrowDown,
+  ArrowInDownSquareHalf,
+  ArrowLeft,
+  ArrowUpRightSquare,
+  MenuFilter,
+  Paperclip,
+  Trash,
+  Truck,
+} from "@boxicons/react";
 import { Blob, DirectUpload } from "@rails/activestorage";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
@@ -95,7 +105,6 @@ import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
-import { ArrowDown, ArrowInDownSquareHalf, ArrowLeft, ArrowUpRightSquare, MenuFilter, Paperclip, Trash, Truck } from "@boxicons/react";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
@@ -464,7 +473,11 @@ const CustomersPage = ({
                       <TableCell>
                         {customer.shipping && !customer.shipping.tracking.shipped ? (
                           <WithTooltip tip="Not Shipped">
-                            <Truck style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" className="size-5" />
+                            <Truck
+                              style={{ marginRight: "var(--spacer-2)" }}
+                              aria-label="Not Shipped"
+                              className="size-5"
+                            />
                           </WithTooltip>
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}

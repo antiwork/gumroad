@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight, FileDetail, RefreshCcw } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
@@ -16,7 +17,6 @@ import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { ChevronDown, ChevronRight, FileDetail, RefreshCcw } from "@boxicons/react";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -71,13 +71,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
             aria-expanded={expanded}
             contentEditable={false}
           >
-            {total > 0 ? (
-              expanded ? (
-                <ChevronDown className="size-5" />
-              ) : (
-                <ChevronRight className="size-5" />
-              )
-            ) : null}
+            {total > 0 ? expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" /> : null}
             <FileDetail pack="filled" className={cx("type-icon", { "text-muted": total === 0 })} />
             <div>
               {isLoading || total > 0 ? (
@@ -114,7 +108,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
             <Drawer id={uid}>
               {posts.map((post) => (
                 <RowContent key={post.id}>
-                  <FileDetail pack="filled" className="size-5 type-icon" />
+                  <FileDetail pack="filled" className="type-icon size-5" />
                   <div>
                     {editor.isEditable ? (
                       <a href={post.url} target="_blank" rel="noreferrer">

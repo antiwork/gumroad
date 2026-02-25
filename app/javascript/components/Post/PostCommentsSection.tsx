@@ -1,3 +1,4 @@
+import { DotsHorizontalRounded } from "@boxicons/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
 
@@ -23,7 +24,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
 
 import defaultUserAvatar from "$assets/images/user-avatar.png";
-import { DotsHorizontalRounded } from "@boxicons/react";
 
 type CommentsMetadata = {
   seller_id: string;

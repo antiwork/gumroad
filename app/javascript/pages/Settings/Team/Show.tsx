@@ -1,3 +1,4 @@
+import { Shield } from "@boxicons/react";
 import { usePage, router } from "@inertiajs/react";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -33,7 +34,6 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Shield } from "@boxicons/react";
 
 const ROLE_TITLES: Record<Role, string> = {
   owner: "Owner",
@@ -321,8 +321,12 @@ const TeamMembersSection = ({
                         tip="Invitation has expired. You can resend the invitation from the member's menu options."
                         position="top"
                       >
-                        <Shield pack="filled" style={{ color: "rgb(var(--warning))" }}
-                          aria-label="Invitation has expired. You can resend the invitation from the member's menu options." className="size-5" />
+                        <Shield
+                          pack="filled"
+                          style={{ color: "rgb(var(--warning))" }}
+                          aria-label="Invitation has expired. You can resend the invitation from the member's menu options."
+                          className="size-5"
+                        />
                       </WithTooltip>
                     ) : null}
                   </div>

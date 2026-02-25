@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "@boxicons/react";
 import { Head, usePage } from "@inertiajs/react";
 import { EditorContent } from "@tiptap/react";
 import * as React from "react";
@@ -15,7 +16,6 @@ import { Layout } from "$app/components/Profile/Layout";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { ArrowUpRight } from "@boxicons/react";
 
 type RecentPost = {
   name: string;

@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, Layers, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -11,7 +12,6 @@ import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { ChevronDown, ChevronUp, Layers, Plus, Trash } from "@boxicons/react";
 
 let newVersionId = 0;
 

@@ -1,3 +1,4 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { searchProductOfferCodes } from "$app/data/offer_code";
@@ -8,7 +9,6 @@ import { OfferCode, useProductEditContext } from "$app/components/ProductEdit/st
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
-import { ChevronDown } from "@boxicons/react";
 
 export const DefaultDiscountCodeSelector = () => {
   const { uniquePermalink, product, updateProduct } = useProductEditContext();

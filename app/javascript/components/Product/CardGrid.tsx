@@ -1,3 +1,4 @@
+import { Archive } from "@boxicons/react";
 import * as React from "react";
 
 import { getSearchResults, ProductFilter, SearchRequest, SearchResults } from "$app/data/search";
@@ -18,7 +19,6 @@ import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
 import { Card } from "./Card";
-import { Archive } from "@boxicons/react";
 
 export const SORT_BY_LABELS = {
   default: "Default",

@@ -1,8 +1,8 @@
+import { Circle } from "@boxicons/react";
 import * as React from "react";
 
 import { Stats } from "$app/components/Stats";
 import { useUserAgentInfo } from "$app/components/UserAgent";
-import { Circle } from "@boxicons/react";
 
 export const AudienceQuickStats = ({
   totalFollowers,

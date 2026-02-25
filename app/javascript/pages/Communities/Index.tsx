@@ -1,4 +1,5 @@
 import { Channel } from "@anycable/web";
+import { ArrowLeft, Bell, ChevronDown, ChevronLeft, X } from "@boxicons/react";
 import { InfiniteScroll, router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { debounce } from "lodash-es";
@@ -28,7 +29,6 @@ import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 import placeholderImage from "$assets/images/placeholders/community.png";
-import { ArrowLeft, Bell, ChevronDown, ChevronLeft, X } from "@boxicons/react";
 
 const COMMUNITY_CHANNEL_NAME = "CommunityChannel";
 const USER_CHANNEL_NAME = "UserChannel";
@@ -806,7 +806,7 @@ const GoBackHeader = () => {
           onClick={handleGoBack}
           className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline all-unset"
         >
-          <ArrowLeft className="size-5 mr-1" /> Go back
+          <ArrowLeft className="mr-1 size-5" /> Go back
         </button>
       </div>
     </header>

@@ -1,3 +1,4 @@
+import { FileDetail, Trash, XCircle } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -10,7 +11,6 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { UploadProgressBar } from "$app/components/UploadProgressBar";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
-import { FileDetail, Trash, XCircle } from "@boxicons/react";
 
 export type SubtitleFile = {
   file_name: string;
@@ -62,7 +62,7 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
       ) : (
         <>
           <RowContent>
-            <FileDetail pack="filled" className="size-5 type-icon" />
+            <FileDetail pack="filled" className="type-icon size-5" />
             <div>
               <h4>{subtitleFile.file_name}</h4>
               {FileUtils.getFullFileSizeString(subtitleFile.file_size ?? 0)} {subtitleFile.extension}

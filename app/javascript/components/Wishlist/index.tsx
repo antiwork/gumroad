@@ -1,3 +1,4 @@
+import { Cart, Gift, Link, Pencil, Trash } from "@boxicons/react";
 import { uniqBy } from "lodash-es";
 import * as React from "react";
 import { createCast } from "ts-safe-cast";
@@ -21,7 +22,6 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { FollowButton } from "$app/components/Wishlist/FollowButton";
 import { WishlistEditor } from "$app/components/Wishlist/WishlistEditor";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Cart, Gift, Link, Pencil, Trash } from "@boxicons/react";
 
 export type WishlistItem = {
   id: string;

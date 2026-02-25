@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, Envelope, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -7,7 +8,6 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
-import { ChevronDown, ChevronUp, Envelope, Plus, Trash } from "@boxicons/react";
 
 type ProductLevelSupportEmail = {
   email: string;
@@ -61,7 +61,7 @@ const ProductLevelSupportEmailRow = React.memo(
     return (
       <Row role="listitem">
         <RowContent>
-          <Envelope pack="filled" className="size-5 type-icon" />
+          <Envelope pack="filled" className="type-icon size-5" />
           <div className="ml-1">
             <h4>{supportEmail.email || "No email set"}</h4>
             <span>

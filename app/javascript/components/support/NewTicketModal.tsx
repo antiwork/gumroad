@@ -1,3 +1,4 @@
+import { Paperclip, Trash } from "@boxicons/react";
 import { useCreateConversation, useCreateMessage } from "@helperai/react";
 import React from "react";
 
@@ -11,7 +12,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { ALLOWED_ATTACHMENT_MIMETYPES } from "$app/components/support/ConversationDetail";
 import { SupportSlaMessage } from "$app/components/support/SupportSlaMessage";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
-import { Paperclip, Trash } from "@boxicons/react";
 
 export function NewTicketModal({
   open,

@@ -1,3 +1,4 @@
+import { Star } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -15,7 +16,6 @@ import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useRunOnce } from "$app/components/useRunOnce";
-import { Star } from "@boxicons/react";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {

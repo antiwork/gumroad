@@ -1,3 +1,4 @@
+import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash, XSquare } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -49,7 +50,6 @@ import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriv
 
 import blackFridayIllustration from "$assets/images/illustrations/black_friday.svg";
 import placeholder from "$assets/images/placeholders/discounts.png";
-import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash, XSquare } from "@boxicons/react";
 
 type Product = {
   id: string;
@@ -426,7 +426,11 @@ const DiscountsPage = ({
                             }}
                           >
                             <PopoverTrigger asChild>
-                              <Button size="icon" aria-label="Open discount action menu" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="icon"
+                                aria-label="Open discount action menu"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <DotsHorizontalRounded className="size-5" />
                               </Button>
                             </PopoverTrigger>

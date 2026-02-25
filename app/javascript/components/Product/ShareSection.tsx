@@ -1,3 +1,4 @@
+import { Check, ChevronDown, FileDetail, Link, Plus, Share } from "@boxicons/react";
 import * as React from "react";
 
 import { Wishlist, addToWishlist, createWishlist } from "$app/data/wishlists";
@@ -15,7 +16,6 @@ import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
-import { Check, ChevronDown, FileDetail, Link, Plus, Share } from "@boxicons/react";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
 

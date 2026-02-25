@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronLeft, ChevronRight, MenuFilter } from "@boxicons/react";
 import * as React from "react";
 import { CSSProperties } from "react";
 
@@ -12,7 +13,6 @@ import { Sheet } from "$app/components/ui/Sheet";
 import { useIsOnTouchDevice } from "$app/components/useIsOnTouchDevice";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useWindowDimensions } from "$app/components/useWindowDimensions";
-import { ChevronDown, ChevronLeft, ChevronRight, MenuFilter } from "@boxicons/react";
 
 type MenuItemKey = string;
 export type MenuItem = {
@@ -266,7 +266,7 @@ const MenubarItem = ({
         }}
       >
         {menuItem.label}
-        {showExpandableIcon ? <ChevronDown className="size-5 float-right" /> : null}
+        {showExpandableIcon ? <ChevronDown className="float-right size-5" /> : null}
       </a>
     </Button>
   );

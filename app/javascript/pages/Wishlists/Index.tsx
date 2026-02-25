@@ -1,3 +1,4 @@
+import { InfoCircle, Trash } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
@@ -12,7 +13,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/wishlists.png";
-import { InfoCircle, Trash } from "@boxicons/react";
 
 export type Wishlist = {
   id: string;

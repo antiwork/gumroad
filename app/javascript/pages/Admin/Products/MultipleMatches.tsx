@@ -1,9 +1,9 @@
+import { ArrowUpRightSquare } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { ArrowUpRightSquare } from "@boxicons/react";
 
 type ProductMatchProps = {
   external_id: string;

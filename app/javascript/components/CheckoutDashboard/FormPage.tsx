@@ -1,3 +1,4 @@
+import { Plus, Trash } from "@boxicons/react";
 import { useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -18,7 +19,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Switch } from "$app/components/ui/Switch";
-import { Plus, Trash } from "@boxicons/react";
 
 export type SimpleProduct = { id: string; name: string; archived: boolean };
 

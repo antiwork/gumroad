@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf, Plus } from "@boxicons/react";
 import { usePoll } from "@inertiajs/react";
 import * as React from "react";
 
@@ -7,7 +8,6 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { ArrowInDownSquareHalf, Plus } from "@boxicons/react";
 
 export type JobHistoryItem = {
   job_id: string;

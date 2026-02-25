@@ -1,9 +1,9 @@
+import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { PriceInput } from "$app/components/PriceInput";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
-import { Plus, Trash } from "@boxicons/react";
 
 let newVersionId = 0;
 

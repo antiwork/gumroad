@@ -1,7 +1,7 @@
+import { Shield } from "@boxicons/react";
 import React from "react";
 
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Shield } from "@boxicons/react";
 
 export type RefundPolicy = {
   title: string;

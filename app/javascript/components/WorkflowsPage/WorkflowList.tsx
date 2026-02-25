@@ -1,3 +1,4 @@
+import { Pencil, Trash } from "@boxicons/react";
 import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
@@ -13,7 +14,6 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Layout } from "$app/components/WorkflowsPage";
 
 import placeholder from "$assets/images/placeholders/workflows.png";
-import { Pencil, Trash } from "@boxicons/react";
 
 type WorkflowListProps = {
   workflows: Workflow[];
@@ -136,7 +136,14 @@ const WorkflowRow = ({
               <Pencil className="size-5" />
             </Link>
           </Button>
-          <Button size="icon" color="danger" outline aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
+          <Button
+            size="icon"
+            color="danger"
+            outline
+            aria-label="Delete workflow"
+            disabled={!canManageWorkflow}
+            onClick={onDelete}
+          >
             <Trash className="size-5" />
           </Button>
         </div>

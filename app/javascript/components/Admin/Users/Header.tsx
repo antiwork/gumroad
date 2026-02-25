@@ -1,3 +1,4 @@
+import { Copy } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -9,7 +10,6 @@ import AdminUserStats from "$app/components/Admin/Users/Stats";
 import type { User } from "$app/components/Admin/Users/User";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Copy } from "@boxicons/react";
 
 type HeaderProps = {
   user: User;

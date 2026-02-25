@@ -1,3 +1,4 @@
+import { FileDetail, Paperclip, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
@@ -20,7 +21,6 @@ import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
-import { FileDetail, Paperclip, Trash } from "@boxicons/react";
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
 
@@ -393,7 +393,7 @@ const Files = ({
       {eligibleBlobs.map((blob) => (
         <Row role="listitem" key={blob.key}>
           <RowContent>
-            <FileDetail pack="filled" className="size-5 type-icon" />
+            <FileDetail pack="filled" className="type-icon size-5" />
             <div>
               <h4>{blob.title}</h4>
               <ul className="inline">

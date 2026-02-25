@@ -1,7 +1,7 @@
+import { Image } from "@boxicons/react";
 import * as React from "react";
 
 import { TableCell } from "$app/components/ui/Table";
-import { Image } from "@boxicons/react";
 
 export const ProductIconCell = ({
   href,

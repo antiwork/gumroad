@@ -1,3 +1,4 @@
+import { Pencil } from "@boxicons/react";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
@@ -37,7 +38,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { Pencil } from "@boxicons/react";
 
 export type Props = ProductProps & { main_section_index: number } & (SectionsProps | EditSectionsProps);
 

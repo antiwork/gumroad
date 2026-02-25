@@ -1,3 +1,4 @@
+import { CreditCard } from "@boxicons/react";
 import { loadScript as loadPaypal, PayPalNamespace } from "@paypal/paypal-js";
 import { useStripe } from "@stripe/react-stripe-js";
 import {
@@ -60,7 +61,6 @@ import { useRefToLatest } from "$app/components/useRefToLatest";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 import { Product } from "./cartState";
-import { CreditCard } from "@boxicons/react";
 
 const CountryInput = () => {
   const [state, dispatch] = useState();

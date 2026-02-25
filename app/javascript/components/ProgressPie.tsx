@@ -1,7 +1,7 @@
+import { Check } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-import { Check } from "@boxicons/react";
 
 export const ProgressPie = ({
   progress,
