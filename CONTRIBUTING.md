@@ -3,8 +3,9 @@
 ## Overall
 
 Use native-sounding English in all communication with no excessive capitalization (e.g HOW IS THIS GOING), multiple question marks (how's this going???), grammatical errors (how's dis going), or typos (thnx fr update).
-   - ❌ Before: "is this still open ?? I am happy to work on it ??"
-   - ✅ After: "Is this actively being worked on? I've started work on it here…"
+
+- ❌ Before: "is this still open ?? I am happy to work on it ??"
+- ✅ After: "Is this actively being worked on? I've started work on it here…"
 
 Explain the reasoning behind your changes, not just the change itself. Describe the architectural decision or the specific problem being solved. For bug fixes, identify the root cause. Don't apply a fix without explaining how the invalid state occurred.
 
