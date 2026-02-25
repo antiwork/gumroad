@@ -1,60 +1,68 @@
 import * as React from "react";
 
-const findScrollParent = (element: Element): Element | null => {
-  let current = element.parentElement;
-  while (current) {
-    const { overflowY } = getComputedStyle(current);
-    if (overflowY === "auto" || overflowY === "scroll") return current;
-    current = current.parentElement;
-  }
-  return null;
-};
+type ObserveElement = (element: Element, callback: (isIntersecting: boolean) => void) => () => void;
 
-const observersByScrollParent = new Map<
-  Element | null,
-  { observer: IntersectionObserver; callbacks: Map<Element, (isIntersecting: boolean) => void> }
->();
+const NodeVisibilityContext = React.createContext<ObserveElement | null>(null);
 
-const addObserverForScrollParent = (element: Element, callback: (isIntersecting: boolean) => void) => {
-  const root = findScrollParent(element);
-  let entry = observersByScrollParent.get(root);
-  if (!entry) {
-    const callbacks = new Map<Element, (isIntersecting: boolean) => void>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          callbacks.get(e.target)?.(e.isIntersecting);
-        }
-      },
-      { root, rootMargin: "1000px" },
-    );
-    entry = { observer, callbacks };
-    observersByScrollParent.set(root, entry);
-  }
+export const NodeVisibilityProvider = ({
+  scrollRef,
+  children,
+}: {
+  scrollRef: React.RefObject<Element | null>;
+  children: React.ReactNode;
+}) => {
+  const stableRef = React.useRef<{
+    observer: IntersectionObserver;
+    callbacks: Map<Element, (isIntersecting: boolean) => void>;
+  } | null>(null);
 
-  entry.callbacks.set(element, callback);
-  entry.observer.observe(element);
-
-  return () => {
-    entry.callbacks.delete(element);
-    entry.observer.unobserve(element);
+  const getObserver = () => {
+    if (!stableRef.current) {
+      const callbacks = new Map<Element, (isIntersecting: boolean) => void>();
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            callbacks.get(e.target)?.(e.isIntersecting);
+          }
+        },
+        { root: scrollRef.current, rootMargin: "1000px" },
+      );
+      stableRef.current = { observer, callbacks };
+    }
+    return stableRef.current;
   };
+
+  const observe = React.useCallback<ObserveElement>((element, callback) => {
+    const { observer, callbacks } = getObserver();
+    callbacks.set(element, callback);
+    observer.observe(element);
+
+    return () => {
+      callbacks.delete(element);
+      observer.unobserve(element);
+    };
+  }, []);
+
+  return React.createElement(NodeVisibilityContext.Provider, { value: observe }, children);
 };
 
+// Mimics virtualized scrolling for file nodes in the editor, where we can't use react-virtualized etc.
+// This dramatically improves performance when there are thousands of files being rendered.
 export const useNodeVisibility = (initialHeight: number) => {
   const ref = React.useRef<HTMLDivElement>(null);
   const [visible, setVisible] = React.useState(typeof IntersectionObserver === "undefined");
   const lastHeight = React.useRef(initialHeight);
+  const observe = React.useContext(NodeVisibilityContext);
 
   React.useEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!element || !observe) return;
 
-    return addObserverForScrollParent(element, (isIntersecting) => {
+    return observe(element, (isIntersecting) => {
       if (!isIntersecting) lastHeight.current = element.offsetHeight;
       setVisible(isIntersecting);
     });
-  }, []);
+  }, [observe]);
 
   return { ref, visible, lastHeight };
 };
