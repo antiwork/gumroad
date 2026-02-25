@@ -52,9 +52,54 @@ export const getDraggedFileEmbed = (editor: Editor) => {
   return draggedNode?.type.name === FileEmbed.name ? draggedNode : null;
 };
 
-const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
-  if (!node.attrs.id) return;
+const FILE_ROW_HEIGHT = 82;
 
+const visibilityCallbacks = new Map<Element, (isIntersecting: boolean) => void>();
+const sharedObserver =
+  typeof IntersectionObserver !== "undefined"
+    ? new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            visibilityCallbacks.get(entry.target)?.(entry.isIntersecting);
+          }
+        },
+        { rootMargin: "200px" },
+      )
+    : null;
+
+const useViewportVisibility = () => {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = React.useState(!sharedObserver);
+  const lastHeight = React.useRef(FILE_ROW_HEIGHT);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el || !sharedObserver) return;
+    visibilityCallbacks.set(el, (isIntersecting) => {
+      if (!isIntersecting) lastHeight.current = el.offsetHeight;
+      setVisible(isIntersecting);
+    });
+    sharedObserver.observe(el);
+    return () => {
+      sharedObserver.unobserve(el);
+      visibilityCallbacks.delete(el);
+    };
+  }, []);
+  return { ref, visible, lastHeight };
+};
+
+const FileEmbedNodeView = (props: NodeViewProps) => {
+  const { ref, visible, lastHeight } = useViewportVisibility();
+
+  if (!props.node.attrs.id) return;
+
+  return (
+    <NodeViewWrapper ref={ref} contentEditable={false}>
+      {visible ? <FileEmbedNodeViewContent {...props} /> : <div style={{ height: lastHeight.current }} />}
+    </NodeViewWrapper>
+  );
+};
+
+const FileEmbedNodeViewContent = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
   const { id, updateProduct, filesById } = useProductEditContext();
   const uid = React.useId();
   const ref = React.useRef<HTMLDivElement>(null);
@@ -318,15 +363,15 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   };
 
   return (
-    <NodeViewWrapper
+    <div
       ref={ref}
-      onDragOver={(e: DragEvent) => {
+      onDragOver={(e: React.DragEvent) => {
         const draggedFileEmbed = getDraggedFileEmbed(editor);
         setDragOver(
           !isInGroup && !!draggedFileEmbed && draggedFileEmbed !== node && !shouldIgnoreFileGroupingAt(e.clientY),
         );
       }}
-      onDragLeave={(e: DragEvent) => {
+      onDragLeave={(e: React.DragEvent) => {
         // dragleave events are fired when moving the cursor between sub-elements
         const isMovedToChild =
           e.relatedTarget instanceof Element &&
@@ -693,7 +738,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           </div>
         </div>
       ) : null}
-    </NodeViewWrapper>
+    </div>
   );
 };
 
