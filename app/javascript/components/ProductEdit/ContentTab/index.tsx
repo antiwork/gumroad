@@ -1,6 +1,7 @@
 import {
+  ArrowFromBottomStroke,
   ArrowUp,
-  Button as ButtonIcon,
+  CursorClick,
   CartPlus,
   CheckCircle,
   ChevronDown,
@@ -564,7 +565,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             custom={
               <>
                 <LinkMenuItem editor={editor} />
-                <PopoverMenuItem name="Upload files" icon="upload-fill">
+                <PopoverMenuItem name="Upload files" icon={<ArrowFromBottomStroke pack="filled" className="size-5" />}>
                   <FileUploadMenu
                     existingFiles={existingFiles}
                     onEmbedMedia={() => setShowEmbedModal(true)}
@@ -729,7 +730,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       ) : (
                         <>
                           <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
-                            <ButtonIcon className="size-5" />
+                            <CursorClick className="size-5" />
                             <span>Button</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>

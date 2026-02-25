@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Layers, Plus, Trash } from "@boxicons/react";
+import { ChevronDown, ChevronUp, LayersAlt, Plus, Trash } from "@boxicons/react";
 import { Editor } from "@tiptap/core";
 import cx from "classnames";
 import { format } from "date-fns";
@@ -193,7 +193,7 @@ const TierEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Layers pack="filled" className="size-5" />
+        <LayersAlt pack="filled" className="size-5" />
         <div>
           <h3>{tier.name || "Untitled"}</h3>
           {tier.active_subscribers_count ? (

@@ -15,10 +15,10 @@ import {
   DollarCircle,
   Envelope,
   Handshake,
-  Home,
+  HomeAlt2,
   MessageBubble,
   Search,
-  WorkflowAlt,
+  Workflow,
 } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import * as React from "react";
@@ -122,7 +122,7 @@ export const Nav = (props: Props) => {
       <NavSection>
         <ClientNavLink
           text="Home"
-          icon={<Home pack="filled" className="size-5" />}
+          icon={<HomeAlt2 pack="filled" className="size-5" />}
           href={Routes.dashboard_url(routeParams)}
           exactHrefMatch
         />
@@ -153,7 +153,7 @@ export const Nav = (props: Props) => {
         />
         <ClientNavLink
           text="Workflows"
-          icon={<WorkflowAlt pack="filled" className="size-5" />}
+          icon={<Workflow pack="filled" className="size-5" />}
           href={Routes.workflows_url(routeParams)}
         />
         <ClientNavLink

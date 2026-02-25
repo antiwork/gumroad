@@ -1,4 +1,4 @@
-import { ChevronDown, Envelope, Eye, FileDetail, X, XSquare } from "@boxicons/react";
+import { ChevronDown, Envelope, Eye, FileDetail, X } from "@boxicons/react";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import { Editor, JSONContent } from "@tiptap/core";
@@ -718,7 +718,6 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
             )}
             <Button asChild>
               <Link href={getCancelPath()} inert={isBusy ? true : undefined}>
-                <XSquare className="size-5" />
                 Cancel
               </Link>
             </Button>

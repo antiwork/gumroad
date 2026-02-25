@@ -1,4 +1,3 @@
-import { XSquare } from "@boxicons/react";
 import { Link, useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -286,7 +285,6 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         <>
           <Button asChild>
             <Link href={Routes.workflows_path()} inert={form.processing || undefined}>
-              <XSquare className="size-5" />
               Cancel
             </Link>
           </Button>

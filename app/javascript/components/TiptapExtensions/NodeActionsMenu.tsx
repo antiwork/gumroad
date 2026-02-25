@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronLeft, Move, Trash } from "@boxicons/react";
+import { ArrowDown, ArrowUp, ChevronLeft, DotsVerticalRounded, Trash } from "@boxicons/react";
 import { Editor } from "@tiptap/core";
 import * as React from "react";
 
@@ -23,7 +23,7 @@ export const NodeActionsMenu = ({
         <PopoverAnchor>
           <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
             <Button size="sm" color="filled">
-              <Move className="size-5" />
+              <DotsVerticalRounded pack="filled" className="size-5" />
             </Button>
           </PopoverTrigger>
         </PopoverAnchor>

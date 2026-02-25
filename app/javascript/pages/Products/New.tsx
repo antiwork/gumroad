@@ -1,4 +1,4 @@
-import { ChevronDown, Sparkle, XSquare } from "@boxicons/react";
+import { ChevronDown, Sparkle } from "@boxicons/react";
 import { Link, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import hands from "images/illustrations/hands.png";
@@ -252,7 +252,6 @@ const NewProductPage = () => {
           <>
             <Button asChild>
               <Link href={Routes.products_path()}>
-                <XSquare className="size-5" />
                 <span>Cancel</span>
               </Link>
             </Button>

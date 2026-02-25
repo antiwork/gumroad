@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Layers, Plus, Trash } from "@boxicons/react";
+import { ChevronDown, ChevronUp, LayersAlt, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
@@ -132,7 +132,7 @@ const VersionEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Layers pack="filled" className="size-5" />
+        <LayersAlt pack="filled" className="size-5" />
         <h3>{version.name || "Untitled"}</h3>
       </RowContent>
       <RowActions>

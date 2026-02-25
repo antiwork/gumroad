@@ -1,5 +1,5 @@
 import {
-  Blockquote,
+  QuoteLeftAlt,
   Bold,
   CartPlus,
   ChevronDown,
@@ -476,7 +476,7 @@ export const RichTextEditorToolbar = ({
         />
         <MenuItem
           name="Quote"
-          icon={<Blockquote className="size-5" />}
+          icon={<QuoteLeftAlt pack="filled" className="size-5" />}
           active={editor.isActive("blockquote")}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         />

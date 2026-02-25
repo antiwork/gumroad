@@ -1,8 +1,8 @@
 import {
   Archive,
-  ArrowRight,
+  ArrowFromLeft,
   Bank,
-  BarChart,
+  BarChartBig,
   Book,
   BookmarkHeart,
   Cart,
@@ -11,10 +11,11 @@ import {
   Cog,
   Gift,
   MessageBubble,
-  NetworkChart,
   Search,
   Store,
-  Tag,
+  Handshake,
+  Workflow,
+  HomeAlt2,
 } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import * as React from "react";
@@ -100,7 +101,7 @@ export const Nav = (props: Props) => {
 
           <NavLink
             text="Help"
-            icon={<Book className="size-5" />}
+            icon={<Book pack="filled" className="size-5" />}
             href={Routes.help_center_root_url(routeParams)}
             badge={
               props.helper_host && props.helper_session ? (
@@ -132,7 +133,7 @@ export const Nav = (props: Props) => {
               />
               <NavLinkDropdownItem
                 text="Logout"
-                icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-5" />}
+                icon={<ArrowFromLeft pack="filled" className="mr-3 ml-1 size-5" />}
                 href={Routes.logout_url(routeParams)}
               />
               {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
@@ -145,7 +146,7 @@ export const Nav = (props: Props) => {
       <NavSection>
         <NavLink
           text="Home"
-          icon={<Store pack="filled" className="size-5" />}
+          icon={<HomeAlt2 pack="filled" className="size-5" />}
           href={Routes.dashboard_url(routeParams)}
           exactHrefMatch
         />
@@ -158,7 +159,7 @@ export const Nav = (props: Props) => {
         {loggedInUser?.policies.collaborator.create ? (
           <NavLink
             text="Collaborators"
-            icon={<Tag pack="filled" className="size-5" />}
+            icon={<Handshake pack="filled" className="size-5" />}
             href={Routes.collaborators_url(routeParams)}
           />
         ) : null}
@@ -176,7 +177,7 @@ export const Nav = (props: Props) => {
         />
         <NavLink
           text="Workflows"
-          icon={<NetworkChart pack="filled" className="size-5" />}
+          icon={<Workflow pack="filled" className="size-5" />}
           href={Routes.workflows_url(routeParams)}
         />
         <NavLink
@@ -186,7 +187,7 @@ export const Nav = (props: Props) => {
         />
         <NavLink
           text="Analytics"
-          icon={<BarChart pack="filled" className="size-5" />}
+          icon={<BarChartBig pack="filled" className="size-5" />}
           href={Routes.sales_dashboard_url(routeParams)}
           additionalPatterns={[
             Routes.audience_dashboard_url(routeParams),
@@ -195,7 +196,11 @@ export const Nav = (props: Props) => {
           ]}
         />
         {loggedInUser?.policies.balance.index ? (
-          <NavLink text="Payouts" icon={<Bank className="size-5" />} href={Routes.balance_url(routeParams)} />
+          <NavLink
+            text="Payouts"
+            icon={<Bank pack="filled" className="size-5" />}
+            href={Routes.balance_url(routeParams)}
+          />
         ) : null}
         {loggedInUser?.policies.community.index ? (
           <NavLink

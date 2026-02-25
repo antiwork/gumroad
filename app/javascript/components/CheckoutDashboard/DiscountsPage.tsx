@@ -1,4 +1,4 @@
-import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash, XSquare } from "@boxicons/react";
+import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -867,7 +867,6 @@ const Form = ({
         actions={
           <>
             <Button onClick={cancel} disabled={isLoading}>
-              <XSquare className="size-5" />
               Cancel
             </Button>
             <Button color="accent" onClick={handleSubmit} disabled={isLoading}>

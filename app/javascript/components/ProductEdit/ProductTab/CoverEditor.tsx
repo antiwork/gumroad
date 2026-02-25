@@ -239,7 +239,7 @@ const CoverUploader = ({
                 }}
                 aria-label="Upload"
               >
-                <ArrowUp pack="filled" className="size-5" />
+                <Plus pack="filled" className="size-5" />
               </Button>
             </div>
           ) : null}
@@ -250,7 +250,7 @@ const CoverUploader = ({
   ) : (
     <>
       <Button color="primary" onClick={() => setIsSelecting(true)}>
-        <ArrowUp pack="filled" className="size-5" /> Upload images or videos
+        <Plus pack="filled" className="size-5" /> Upload images or videos
       </Button>
       Images should be horizontal, at least 1280x720px, and 72 DPI (dots per inch).
     </>

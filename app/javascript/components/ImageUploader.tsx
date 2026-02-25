@@ -1,4 +1,4 @@
-import { ArrowUp, Trash } from "@boxicons/react";
+import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
@@ -61,7 +61,7 @@ export const ImageUploader = ({
               }}
               disabled={disabled}
             />
-            <ArrowUp pack="filled" className="size-5" />
+            <Plus pack="filled" className="size-5" />
             Upload
           </label>
         </Placeholder>
