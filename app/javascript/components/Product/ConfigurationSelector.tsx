@@ -448,7 +448,7 @@ const CallDateAndTimeSelector = ({
               {clientTimeZone.shortFormattedName}
             </span>
           </h4>
-          <Tabs variant="buttons" className="grid-cols-2" role="radiogroup">
+          <Tabs variant="buttons" className="grid-cols-2 md:grid-flow-row" role="radiogroup">
             {getAvailableStartTimesByDate(selectedStartTime).map((time) => {
               const isSelected = isEqual(selectedStartTime, time);
               return (
