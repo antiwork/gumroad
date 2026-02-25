@@ -1,3 +1,4 @@
+import { ArrowLeft, ArrowRight, SearchMinus, SearchPlus, X } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import type { PDFSinglePageViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import * as React from "react";
@@ -6,12 +7,11 @@ import { cast, is } from "ts-safe-cast";
 import { trackMediaLocationChanged } from "$app/data/media_location";
 
 import { Button } from "$app/components/Button";
-import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Range } from "$app/components/ui/Range";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
-import { ArrowLeft, ArrowRight, SearchMinus, SearchPlus, X } from "@boxicons/react";
+import "pdfjs-dist/legacy/web/pdf_viewer.css";
 
 const zoomLevelMin = 0.1;
 const zoomLevelMax = 5.0;
