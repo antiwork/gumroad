@@ -40,6 +40,8 @@ import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { WithTooltip } from "$app/components/WithTooltip";
 
+import { useNodeVisibility } from "./useNodeVisibility";
+
 export const getDownloadUrl = (productId: string, file: FileEntry) =>
   file.extension === "URL" || file.status.type === "removed"
     ? null
@@ -52,65 +54,10 @@ export const getDraggedFileEmbed = (editor: Editor) => {
   return draggedNode?.type.name === FileEmbed.name ? draggedNode : null;
 };
 
-const FILE_ROW_HEIGHT = 82;
-
-const findScrollParent = (el: Element): Element | null => {
-  let current = el.parentElement;
-  while (current) {
-    const { overflowY } = getComputedStyle(current);
-    if (overflowY === "auto" || overflowY === "scroll") return current;
-    current = current.parentElement;
-  }
-  return null;
-};
-
-const observersByRoot = new Map<
-  Element | null,
-  { observer: IntersectionObserver; callbacks: Map<Element, (isIntersecting: boolean) => void> }
->();
-
-const getObserverForRoot = (root: Element | null) => {
-  let entry = observersByRoot.get(root);
-  if (!entry) {
-    const callbacks = new Map<Element, (isIntersecting: boolean) => void>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          callbacks.get(e.target)?.(e.isIntersecting);
-        }
-      },
-      { root, rootMargin: "1000px" },
-    );
-    entry = { observer, callbacks };
-    observersByRoot.set(root, entry);
-  }
-  return entry;
-};
-
-const useViewportVisibility = () => {
-  const ref = React.useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = React.useState(typeof IntersectionObserver === "undefined");
-  const lastHeight = React.useRef(FILE_ROW_HEIGHT);
-  React.useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
-    const root = findScrollParent(el);
-    const { observer, callbacks } = getObserverForRoot(root);
-    callbacks.set(el, (isIntersecting) => {
-      if (!isIntersecting) lastHeight.current = el.offsetHeight;
-      setVisible(isIntersecting);
-    });
-    observer.observe(el);
-    return () => {
-      observer.unobserve(el);
-      callbacks.delete(el);
-    };
-  }, []);
-  return { ref, visible, lastHeight };
-};
+const DEFAULT_FILE_ROW_HEIGHT = 82;
 
 const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
-  const { ref: visibilityRef, visible, lastHeight } = useViewportVisibility();
+  const { ref: visibilityRef, visible, lastHeight } = useNodeVisibility(DEFAULT_FILE_ROW_HEIGHT);
   const { id, updateProduct, filesById } = useProductEditContext();
   const uid = React.useId();
   const ref = React.useRef<HTMLDivElement>(null);
