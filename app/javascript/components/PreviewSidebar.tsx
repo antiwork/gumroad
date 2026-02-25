@@ -5,7 +5,7 @@ import { Icon } from "$app/components/Icons";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const WithPreviewSidebar = ({ children, className, ...props }: React.ComponentProps<"div">) => (
-  <div className={cx("squished lg:grid lg:grid-cols-[1fr_30vw]", className)} {...props}>
+  <div className={cx("squished lg:grid lg:grid-cols-[1fr_30vw] [&>*]:min-w-0", className)} {...props}>
     {children}
   </div>
 );
