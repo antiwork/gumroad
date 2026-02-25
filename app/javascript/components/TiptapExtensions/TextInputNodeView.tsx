@@ -3,10 +3,10 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { TextInput } from "$app/components/Download/CustomField/TextInput";
+import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Textarea } from "$app/components/ui/Textarea";
-import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 
 export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewProps) => {
   const label = cast<string | null>(node.attrs.label);
