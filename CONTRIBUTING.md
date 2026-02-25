@@ -109,38 +109,8 @@ A great bug report includes:
 - What actually happens
 - Notes (possibly including why you think this might be happening, or stuff you tried that didn't work)
 
-## Writing commit messages
-
-We use the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification.
-
-A commit message should be structured as follows:
-
-```bash
-type(scope): title
-
-description
-```
-
-Where type can be:
-
-- `feat`: new feature or enhancement
-- `fix`: bug fixes
-- `docs`: documentation-only changes
-- `test`: test-only changes
-- `refactor`: code improvements without behaviour changes
-- `chore`: maintenance/anything else
-
-Example:
-
-```
-feat(cli): Add mobile testing support
-```
-
 ## Help
 
-- Check existing discussions/issues/PRs before creating new ones
-- Start a discussion for questions or ideas
-- Open an [issue](https://github.com/antiwork/gumroad/issues) for bugs or problems
 - Any issue with label `help wanted` is open for contributions - [view open issues](https://github.com/antiwork/gumroad/issues?q=state%3Aopen%20label%3A%22help%20wanted%22)
 
 ## License
