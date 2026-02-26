@@ -540,7 +540,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.active_bank_account.account_holder_full_name).to eq("Gumhead Moneybags")
       end
 
-      it "displays the Stripe Connect embedded verification banner" do
+      it "shows the verification section when identity verification is needed" do
         user = create(:user, username: nil, payment_address: nil)
         create(:user_compliance_info, user:, birthday: Date.new(1901, 1, 2))
         create(:ach_account_stripe_succeed, user:)
