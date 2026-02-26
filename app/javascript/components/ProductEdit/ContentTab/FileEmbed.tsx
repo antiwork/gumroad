@@ -178,7 +178,35 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const isConnectedRow = isInGroup && !hasStreamable;
   const isLastInGroup = node === parentNode?.content.lastChild;
 
-  if (!fileExists) return;
+  if (!fileExists) return <NodeViewWrapper ref={ref} contentEditable={false} />;
+
+  const updateFile = (data: Partial<FileEntry>) =>
+    updateProduct((product) => {
+      product.files = product.files.map((existing) => (existing.id === file.id ? { ...existing, ...data } : existing));
+    });
+
+  const uploadThumbnail = (thumbnail: File) => {
+    if (thumbnail.size > 5 * 1024 * 1024)
+      return showAlert(
+        "Could not process your thumbnail, please upload an image with size smaller than 5 MB.",
+        "error",
+      );
+
+    setLoadingVideo(true);
+    const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
+    upload.create((error, blob) => {
+      if (error) return showAlert(error.message, "error");
+      updateFile({
+        thumbnail: {
+          url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
+          signed_id: blob.signed_id,
+          status: { type: "unsaved" },
+        },
+      });
+      setLoadingVideo(false);
+    });
+  };
+
   if (!visible)
     return (
       <NodeViewWrapper ref={ref} contentEditable={false}>
@@ -186,10 +214,6 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       </NodeViewWrapper>
     );
 
-  const updateFile = (data: Partial<FileEntry>) =>
-    updateProduct((product) => {
-      product.files = product.files.map((existing) => (existing.id === file.id ? { ...existing, ...data } : existing));
-    });
   const isComplete = !(
     (file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading") ||
     (file.status.type === "dropbox" && file.status.uploadState === "in_progress")
@@ -221,27 +245,6 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     return clientY < top + threshold || clientY > bottom - threshold;
   };
 
-  const uploadThumbnail = (thumbnail: File) => {
-    if (thumbnail.size > 5 * 1024 * 1024)
-      return showAlert(
-        "Could not process your thumbnail, please upload an image with size smaller than 5 MB.",
-        "error",
-      );
-
-    setLoadingVideo(true);
-    const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
-    upload.create((error, blob) => {
-      if (error) return showAlert(error.message, "error");
-      updateFile({
-        thumbnail: {
-          url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-          signed_id: blob.signed_id,
-          status: { type: "unsaved" },
-        },
-      });
-      setLoadingVideo(false);
-    });
-  };
   const onThumbnailSelected = (files: FileList | null) => {
     const thumbnail = files?.[0];
     if (thumbnail) uploadThumbnail(thumbnail);
