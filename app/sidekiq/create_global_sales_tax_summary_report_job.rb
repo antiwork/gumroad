@@ -40,20 +40,20 @@ class CreateGlobalSalesTaxSummaryReportJob
         raw_name = country.presence || ip_country.presence
         country_name = resolve_country_name(raw_name)
         state_code = case country_name
-          when "United States"
-            resolved = UsZipCodes.identify_state_code(zip_code)
-            if resolved.nil?
-              unresolved_us_tuple_keys << [country_key, ip_country_key, zip_key, state_key, ip_state_key]
-              next
-            end
-            resolved
-          when "Canada"
-            resolve_canada_province(state, ip_state)
-          when "India"
-            resolve_india_state(ip_state)
-          else
-            ""
-          end
+                     when "United States"
+                       resolved = UsZipCodes.identify_state_code(zip_code)
+                       if resolved.nil?
+                         unresolved_us_tuple_keys << [country_key, ip_country_key, zip_key, state_key, ip_state_key]
+                         next
+                       end
+                       resolved
+                     when "Canada"
+                       resolve_canada_province(state, ip_state)
+                     when "India"
+                       resolve_india_state(ip_state)
+                     else
+                       ""
+        end
 
         bucket = aggregation[[country_name, state_code]]
         bucket[:gmv_cents] += gmv.to_i
