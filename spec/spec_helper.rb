@@ -141,13 +141,11 @@ module ResilientFixtureTeardown
     if run_in_transaction?
       ActiveSupport::Notifications.unsubscribe(@connection_subscriber) if @connection_subscriber
       @fixture_connections.each do |connection|
-        begin
-          connection.rollback_transaction if connection.transaction_open?
-        rescue StandardError => e
-          Rails.logger.warn("[RSpec] fixture rollback failed: #{e.message}")
-        ensure
-          connection.pool.lock_thread = false
-        end
+        connection.rollback_transaction if connection.transaction_open?
+      rescue StandardError => e
+        Rails.logger.warn("[RSpec] fixture rollback failed: #{e.message}")
+      ensure
+        connection.pool.lock_thread = false
       end
       @fixture_connections.clear
       teardown_shared_connection_pool
