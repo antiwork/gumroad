@@ -72,6 +72,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
+import { NodeVisibilityProvider } from "./useNodeVisibility";
 
 declare global {
   interface Window {
@@ -144,6 +145,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const isDesktop = useIsAboveBreakpoint("lg");
   const imageSettings = useImageUploadSettings();
 
@@ -776,6 +778,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
           />
         ) : null}
         <PageListLayout
+          ref={scrollContainerRef}
           className="md:h-auto! md:flex-1"
           pageList={
             !isDesktop && !showPageList ? null : (
@@ -915,36 +918,38 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             )
           }
         >
-          <div className="relative h-full flex-1">
-            {editor?.isEmpty ? (
-              <div className="pointer-events-none absolute inset-0 flex items-start">
-                <p className="flex flex-wrap items-center gap-1 text-muted">
-                  <span>Enter the content you want to sell.</span>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button size="sm" className="pointer-events-auto">
-                        Upload your files
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent sideOffset={4} className="pointer-events-auto border-0 p-0 shadow-none">
-                      <FileUploadMenu
-                        existingFiles={existingFiles}
-                        onEmbedMedia={() => setShowEmbedModal(true)}
-                        onUploadFile={uploadFileInput}
-                        onSelectExistingFiles={() => {
-                          setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
-                          void fetchLatestExistingFiles();
-                        }}
-                        onUploadFromDropbox={uploadFromDropbox}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <span>or start typing.</span>
-                </p>
-              </div>
-            ) : null}
-            <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
-          </div>
+          <NodeVisibilityProvider scrollRef={scrollContainerRef}>
+            <div className="relative h-full flex-1">
+              {editor?.isEmpty ? (
+                <div className="pointer-events-none absolute inset-0 flex items-start">
+                  <p className="flex flex-wrap items-center gap-1 text-muted">
+                    <span>Enter the content you want to sell.</span>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button size="sm" className="pointer-events-auto">
+                          Upload your files
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent sideOffset={4} className="pointer-events-auto border-0 p-0 shadow-none">
+                        <FileUploadMenu
+                          existingFiles={existingFiles}
+                          onEmbedMedia={() => setShowEmbedModal(true)}
+                          onUploadFile={uploadFileInput}
+                          onSelectExistingFiles={() => {
+                            setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
+                            void fetchLatestExistingFiles();
+                          }}
+                          onUploadFromDropbox={uploadFromDropbox}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <span>or start typing.</span>
+                  </p>
+                </div>
+              ) : null}
+              <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
+            </div>
+          </NodeVisibilityProvider>
         </PageListLayout>
       </div>
       {confirmingDeletePage !== null ? (
