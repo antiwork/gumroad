@@ -188,8 +188,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
 
   const updateFile = (data: Partial<FileEntry>) =>
     updateProduct((product) => {
-      const existing = product.files.find((existing) => existing.id === file.id);
-      if (existing) Object.assign(existing, data);
+      product.files = product.files.map((existing) => (existing.id === file.id ? { ...existing, ...data } : existing));
     });
   const isComplete = !(
     (file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading") ||
