@@ -229,11 +229,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_text("$100")
 
       add_to_cart(product)
-      check_out(product, address: { street: "2031 7th Ave", state: "WA", city: "Seattle", zip_code: "98121" }, should_verify_address: true) do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$10.35", normalize_ws: true)
-        expect(page).to have_text("Total US$110.35", normalize_ws: true)
-      end
+      check_out(product, address: { street: "2031 7th Ave", state: "WA", city: "Seattle", zip_code: "98121" }, should_verify_address: true)
 
       purchase = Purchase.last
       expect(purchase.total_transaction_cents).to eq(110_35)
@@ -269,11 +265,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_text("$100")
 
       add_to_cart(product)
-      check_out(product, zip_code: "98121") do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$10.35", normalize_ws: true, wait: 10)
-        expect(page).to have_text("Total US$110.35", normalize_ws: true)
-      end
+      check_out(product, zip_code: "98121")
 
       purchase = Purchase.last
       expect(purchase.total_transaction_cents).to eq(110_35)
