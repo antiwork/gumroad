@@ -191,8 +191,7 @@ describe CreateGlobalSalesTaxSummaryReportJob do
         de_row = actual_payload.find { |row| row[0] == "Germany" }
         expect(de_row).to be_present
 
-        gmv = BigDecimal(de_row[2].delete(","))
-        expect(gmv).to be < BigDecimal("119.00")
+        expect(de_row[2]).to eq("89.00")
       end
     end
 
