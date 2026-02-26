@@ -1399,6 +1399,23 @@ describe BalanceTransaction, :vcr do
               expect(balance_transaction.balance.amount_cents).to eq(88_90)
               expect(balance_transaction.balance.holding_amount_cents).to eq(97_79)
             end
+
+            describe "when the returned payment does not include any balances" do
+              it "creates a new balance record with same date as credit creation date" do
+                returned_payment.update!(balances: [])
+
+                expect(user.unpaid_balances.where(merchant_account: credit.merchant_account)).to be_empty
+                expect(returned_payment.balances).to be_empty
+
+                expect(balance_transaction.balance).to eq(user.unpaid_balances.where(merchant_account: credit.merchant_account).last)
+                expect(user.unpaid_balances.where(merchant_account: credit.merchant_account).last).to be_present
+                expect(balance_transaction.balance.user).to eq(user)
+                expect(balance_transaction.balance.merchant_account).to eq(merchant_account)
+                expect(balance_transaction.balance.date).to eq(credit.created_at.to_date)
+                expect(balance_transaction.balance.amount_cents).to eq(88_90)
+                expect(balance_transaction.balance.holding_amount_cents).to eq(97_79)
+              end
+            end
           end
         end
       end
