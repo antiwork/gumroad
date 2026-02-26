@@ -119,6 +119,25 @@ def prepare_mysql
   ActiveRecord::Base.connection.execute("SET SESSION information_schema_stats_expiry = 0")
 end
 
+DB_CONNECTION_LOSS_PATTERN = /SAVEPOINT.*does not exist|Lost connection|gone away/i
+
+def reset_db_connection(example)
+  return unless example.exception&.message&.match?(DB_CONNECTION_LOSS_PATTERN)
+
+  Rails.logger.warn("[RSpec retry] DB connection issue: #{example.exception.message}. Reconnecting.")
+  connection = ActiveRecord::Base.connection
+  connection.rollback_transaction while connection.transaction_open?
+  connection.reconnect!
+  prepare_mysql
+rescue StandardError => e
+  Rails.logger.warn("[RSpec retry] Connection reset failed: #{e.class}: #{e.message}")
+  begin
+    ActiveRecord::Base.connection_pool.disconnect!
+  rescue StandardError => disconnect_error
+    Rails.logger.warn("[RSpec retry] Pool disconnect also failed: #{disconnect_error.message}")
+  end
+end
+
 RSpec.configure do |config|
   config.include Capybara::DSL
   config.include ErrorResponses
@@ -142,7 +161,9 @@ RSpec.configure do |config|
     # show exception that triggers a retry if verbose_retry is set to true
     config.display_try_failure_messages = true
     config.default_retry_count = 3
+    config.retry_callback = proc { |example| reset_db_connection(example) }
   end
+
   config.before(:suite) do
     # Disable webmock while cleanup, see also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
