@@ -11,6 +11,9 @@ class DuplicateProductWorker
     Bugsnag.notify(e)
   ensure
     product = Link.find(product_id)
-    product.update!(is_duplicating: false)
+    product.is_duplicating = false
+    # Skip validations because products may have update-only validation errors (e.g. call products
+    # without durations) unrelated to resetting this flag.
+    product.save!(validate: false)
   end
 end

@@ -75,12 +75,66 @@ http_interactions:
       string: |-
         {
           "object": "list",
-          "count": 5,
+          "count": 7,
           "data": [
+            {
+              "id": "taxform_1c",
+              "object": "tax.form",
+              "corrected_by": null,
+              "created": 1737614172,
+              "filing_statuses": [
+                {
+                  "effective_at": 1737803275,
+                  "jurisdiction": {
+                    "country": "US",
+                    "level": "country",
+                    "state": null
+                  },
+                  "value": "accepted"
+                }
+              ],
+              "livemode": true,
+              "payee": {
+                "account": "acct_1234567890",
+                "external_reference": null,
+                "type": "account"
+              },
+              "type": "us_1099_k",
+              "us_1099_k": {
+                "reporting_year": 2024
+              }
+            },
+            {
+              "id": "taxform_1b",
+              "object": "tax.form",
+              "corrected_by": "taxform_1c",
+              "created": 1737614172,
+              "filing_statuses": [
+                {
+                  "effective_at": 1737803274,
+                  "jurisdiction": {
+                    "country": "US",
+                    "level": "country",
+                    "state": null
+                  },
+                  "value": "accepted"
+                }
+              ],
+              "livemode": true,
+              "payee": {
+                "account": "acct_1234567890",
+                "external_reference": null,
+                "type": "account"
+              },
+              "type": "us_1099_k",
+              "us_1099_k": {
+                "reporting_year": 2024
+              }
+            },
             {
               "id": "taxform_1",
               "object": "tax.form",
-              "corrected_by": null,
+              "corrected_by": "taxform_1b",
               "created": 1737614171,
               "filing_statuses": [
                 {
