@@ -6,6 +6,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { Icon } from "$app/components/Icons";
 import { Availability } from "$app/components/ProductEdit/state";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 
 const DEFAULT_INTERVAL_START_HOURS = 9;
@@ -125,7 +126,7 @@ export const AvailabilityEditor = ({
                   ) : (
                     <span />
                   )}
-                  <input
+                  <Input
                     type="time"
                     value={formatTime(availability.start_time)}
                     onChange={(evt) =>
@@ -135,7 +136,7 @@ export const AvailabilityEditor = ({
                     }
                     aria-label="From"
                   />
-                  <input
+                  <Input
                     type="time"
                     value={formatTime(availability.end_time)}
                     onChange={(evt) =>

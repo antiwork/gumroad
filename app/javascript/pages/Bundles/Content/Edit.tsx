@@ -12,6 +12,10 @@ import { CartItemList } from "$app/components/CartItemList";
 import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -221,7 +225,7 @@ export default function BundlesContentEdit() {
       onBeforeNavigate={saveBeforeNavigate}
     >
       <form onSubmit={(evt) => evt.preventDefault()} ref={formRef}>
-        <section className="p-4! md:p-8!">
+        <section className="grid gap-8 p-4! md:p-8!">
           {has_outdated_purchases ? <BundleContentUpdatedStatus id={id} /> : null}
           {isSelecting ? (
             <>
@@ -233,9 +237,8 @@ export default function BundlesContentEdit() {
                 }}
               >
                 <h2>Products</h2>
-                <label>
-                  <input
-                    type="checkbox"
+                <Label>
+                  <Checkbox
                     checked={form.data.products.length === products_count}
                     disabled={isSearchLoading}
                     onChange={(evt) => {
@@ -247,7 +250,7 @@ export default function BundlesContentEdit() {
                     }}
                   />
                   All products
-                </label>
+                </Label>
               </header>
               {form.data.products.length > 0 ? (
                 <CartItemList aria-label="Bundle products">
@@ -265,15 +268,15 @@ export default function BundlesContentEdit() {
                 className="grid gap-4 rounded-sm border border-border bg-background p-4"
                 aria-label="Product selector"
               >
-                <div className="input">
+                <InputGroup>
                   <Icon name="solid-search" />
-                  <input
+                  <Input
                     type="text"
                     value={query}
                     onChange={(evt) => setQuery(evt.target.value)}
                     placeholder="Search products"
                   />
-                </div>
+                </InputGroup>
                 {isSearchLoading && results.length === 0 ? (
                   <div style={{ justifySelf: "center" }}>
                     <LoadingSpinner />

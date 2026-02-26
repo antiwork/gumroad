@@ -521,6 +521,40 @@ describe Api::V2::SalesController do
           }.as_json)
         end
 
+        context "when product is sold in a single unit currency type" do
+          before do
+            @product.update!(price_currency_type: "jpy", price_cents: 1000)
+            @jpy_purchase = create(:purchase_in_progress,
+                                   link: @product,
+                                   seller: @product.user,
+                                   price_cents: 914,
+                                   total_transaction_cents: 100,
+                                   fee_cents: 54,
+                                   displayed_price_cents: 1000,
+                                   displayed_price_currency_type: "jpy",
+                                   rate_converted_to_usd: "109.383",
+                                   chargeable: create(:chargeable))
+            @jpy_purchase.process!
+            @jpy_purchase.mark_successful!
+          end
+
+          it "does not divide by 100 for JPY (unit_scaling_factor is 1)" do
+            expect_any_instance_of(Purchase).to receive(:refund!).with(refunding_user_id: @seller.id, amount: 500.0).and_return(true)
+
+            put :refund, params: @params.merge(id: @jpy_purchase.external_id, amount_cents: 500)
+
+            expect(response.parsed_body["success"]).to eq true
+          end
+
+          it "divides by 100 for USD purchases" do
+            expect_any_instance_of(Purchase).to receive(:refund!).with(refunding_user_id: @seller.id, amount: 50.50).and_return(true)
+
+            put :refund, params: @params.merge(id: @purchase.external_id, amount_cents: 5050)
+
+            expect(response.parsed_body["success"]).to eq true
+          end
+        end
+
         it "does nothing if refund amount is more than the available balance" do
           allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(99_99)
 

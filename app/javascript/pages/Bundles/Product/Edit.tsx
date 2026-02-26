@@ -28,6 +28,9 @@ import { PriceEditor } from "$app/components/ProductEdit/ProductTab/PriceEditor"
 import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { RefundPolicy, RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
 
 type ProductPageProps = {
@@ -245,16 +248,16 @@ export default function BundlesProductEdit() {
       onBeforeNavigate={saveBeforeNavigate}
     >
       <form>
-        <section className="p-4! md:p-8!">
-          <fieldset>
-            <label htmlFor={`${uid}-name`}>Name</label>
-            <input
+        <section className="grid gap-8 p-4! md:p-8!">
+          <Fieldset>
+            <Label htmlFor={`${uid}-name`}>Name</Label>
+            <Input
               id={`${uid}-name`}
               type="text"
               value={form.data.name}
               onChange={(evt) => form.setData("name", evt.target.value)}
             />
-          </fieldset>
+          </Fieldset>
           <DescriptionEditor
             id={id}
             initialDescription={initialBundle.description}
@@ -271,7 +274,7 @@ export default function BundlesProductEdit() {
             url={url}
           />
         </section>
-        <section className="p-4! md:p-8!">
+        <section className="grid gap-8 border-t border-border p-4 md:p-8">
           <h2>Pricing</h2>
           <PriceEditor
             priceCents={form.data.price_cents}
@@ -308,7 +311,7 @@ export default function BundlesProductEdit() {
           setCovers={(covers) => form.setData("covers", covers)}
           permalink={unique_permalink}
         />
-        <section className="p-4! md:p-8!">
+        <section className="grid gap-8 border-t border-border p-4 md:p-8">
           <h2>Product info</h2>
           <CustomButtonTextOptionInput
             value={form.data.custom_button_text_option}
@@ -324,9 +327,9 @@ export default function BundlesProductEdit() {
             setCustomAttributes={(custom_attributes) => form.setData("custom_attributes", custom_attributes)}
           />
         </section>
-        <section className="p-4! md:p-8!">
+        <section className="grid gap-8 border-t border-border p-4 md:p-8">
           <h2>Settings</h2>
-          <fieldset>
+          <Fieldset>
             <MaxPurchaseCountToggle
               maxPurchaseCount={form.data.max_purchase_count}
               setMaxPurchaseCount={(value) => form.setData("max_purchase_count", value)}
@@ -363,7 +366,7 @@ export default function BundlesProductEdit() {
                 setShowPreview={setShowRefundPolicyPreview}
               />
             ) : null}
-          </fieldset>
+          </Fieldset>
         </section>
       </form>
     </BundleEditLayout>

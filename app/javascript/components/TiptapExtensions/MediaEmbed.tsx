@@ -15,6 +15,9 @@ import { Modal } from "$app/components/Modal";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 declare module "@tiptap/core" {
@@ -124,7 +127,7 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
 
     const fields = (
       <>
-        <input
+        <Input
           id={inputUid}
           ref={inputRef}
           className="top-level-input"
@@ -175,12 +178,12 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
       </>
     );
     return (
-      <fieldset>
-        <legend>
-          <label htmlFor={inputUid}>{type === "embed" ? "Video URL" : "Tweet URL"}</label>
-        </legend>
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor={inputUid}>{type === "embed" ? "Video URL" : "Tweet URL"}</Label>
+        </FieldsetTitle>
         {horizontalLayout ? <div className="flex gap-2">{fields}</div> : fields}
-      </fieldset>
+      </Fieldset>
     );
   },
 );

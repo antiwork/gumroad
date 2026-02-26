@@ -11,6 +11,9 @@ import { Icon } from "$app/components/Icons";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";
 
@@ -83,17 +86,17 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
                 />
               ) : null}
               {productId ? (
-                <fieldset>
-                  <legend>
-                    <label htmlFor={`product_id-${uid}`}>Use your product ID to verify licenses through the API.</label>
-                  </legend>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`product_id-${uid}`}>Use your product ID to verify licenses through the API.</Label>
+                  </FieldsetTitle>
                   <div className="flex gap-2">
-                    <input id={`product_id-${uid}`} type="text" value={productId} className="flex-1" readOnly />
+                    <Input id={`product_id-${uid}`} type="text" value={productId} className="flex-1" readOnly />
                     <CopyToClipboard text={productId} tooltipPosition="bottom">
                       <Button>Copy</Button>
                     </CopyToClipboard>
                   </div>
-                </fieldset>
+                </Fieldset>
               ) : null}
             </Drawer>
           </RowDetails>

@@ -10,6 +10,7 @@ import {
   CartItemFooter,
 } from "$app/components/CartItemList";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+import { Checkbox } from "$app/components/ui/Checkbox";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 export const BundleProductSelector = ({
@@ -58,7 +59,7 @@ export const BundleProductSelector = ({
         </CartItemFooter>
       </CartItemMain>
       <CartItemEnd className="justify-center">
-        <input type="checkbox" aria-label={bundleProduct.name} checked={!!selected} onChange={onToggle} />
+        <Checkbox aria-label={bundleProduct.name} checked={!!selected} onChange={onToggle} />
       </CartItemEnd>
     </CartItem>
   );

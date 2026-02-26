@@ -17,6 +17,8 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 import { Covers } from "$app/components/Product/Covers";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Tab, TabIcon, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -51,7 +53,7 @@ export const CoverEditor = ({
   };
 
   return (
-    <section className="p-4! md:p-8!">
+    <section className="grid gap-8 border-t border-border p-4 md:p-8">
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Cover</h2>
@@ -160,6 +162,7 @@ const CoverUploader = ({
             <label>
               <input
                 type="file"
+                className="sr-only"
                 multiple
                 accept={ALLOWED_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
                 disabled={isUploading}
@@ -209,7 +212,7 @@ const CoverUploader = ({
             External link
           </Tab>
         </Tabs>
-        <fieldset
+        <Fieldset
           role="tabpanel"
           className="mt-4 rounded-sm border border-border p-4"
           id={`${uid}-url`}
@@ -217,7 +220,7 @@ const CoverUploader = ({
         >
           {uploader?.type === "url" ? (
             <div className="flex gap-2">
-              <input
+              <Input
                 type="url"
                 placeholder="https://"
                 value={uploader.value}
@@ -239,8 +242,8 @@ const CoverUploader = ({
               </Button>
             </div>
           ) : null}
-          <small>We support media from sites such as YouTube, Vimeo, and Soundcloud.</small>
-        </fieldset>
+          <FieldsetDescription>We support media from sites such as YouTube, Vimeo, and Soundcloud.</FieldsetDescription>
+        </Fieldset>
       </div>
     )
   ) : (

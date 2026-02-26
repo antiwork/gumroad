@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Wishlist, addToWishlist, createWishlist } from "$app/data/wishlists";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -16,6 +17,7 @@ import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
+import { Input } from "$app/components/ui/Input";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
 
@@ -97,10 +99,13 @@ export const ShareSection = ({
           input={(props) => (
             <div
               {...props}
-              className={`input ${dropdownState.state !== "closed" ? "!rounded-b-none" : ""}`}
+              className={classNames(
+                "flex cursor-pointer items-center rounded border border-border bg-background px-4 py-3",
+                dropdownState.state !== "closed" && "rounded-b-none",
+              )}
               aria-label="Add to wishlist"
             >
-              <span className="fake-input text-singleline">
+              <span className="text-singleline flex-1">
                 {saveState.type === "success"
                   ? saveState.wishlist.name
                   : saveState.type === "saving"
@@ -139,13 +144,12 @@ export const ShareSection = ({
                   void addProduct(newWishlist(dropdownState.newWishlistName));
                 }}
               >
-                <input
+                <Input
                   type="text"
                   autoFocus
                   placeholder="Wishlist name"
                   value={dropdownState.newWishlistName}
                   onChange={(e) => setDropdownState({ state: "creating", newWishlistName: e.target.value })}
-                  className="input"
                   aria-label="Wishlist name"
                 />
                 <Button type="submit" aria-label="Create wishlist" color="primary">

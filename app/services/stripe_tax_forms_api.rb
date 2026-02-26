@@ -40,6 +40,7 @@ class StripeTaxFormsApi
       response = Stripe.raw_request(:get, "/v1/tax/forms", params, opts)
       Stripe.deserialize(response.http_body).auto_paging_each do |tax_form|
         year = tax_form[tax_form.type].reporting_year
+        next if tax_forms[year].present? || tax_form[:corrected_by].present?
         tax_forms[year] = tax_form
       end
 

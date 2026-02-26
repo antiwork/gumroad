@@ -1,10 +1,14 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { useState, getErrors } from "$app/components/Checkout/payment";
 import { Modal } from "$app/components/Modal";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export const GiftForm = ({ isMembership, className }: { isMembership: boolean; className?: string | undefined }) => {
   const giftEmailUID = React.useId();
@@ -17,10 +21,8 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
 
   return (
     <div className={`flex flex-col gap-4 ${className}`}>
-      <label className="flex w-full grow items-center gap-4">
-        <input
-          type="checkbox"
-          role="switch"
+      <Label className="flex w-full grow items-center gap-4">
+        <Switch
           checked={!!gift}
           onChange={(e) => {
             if (gift?.type === "anonymous") {
@@ -32,7 +34,7 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
           }}
         />
         <h4>Give as a gift?</h4>
-      </label>
+      </Label>
 
       {gift ? (
         <div className="flex w-full flex-col gap-4">
@@ -43,20 +45,19 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
             </Alert>
           ) : null}
           {gift.type === "normal" ? (
-            <fieldset className={cx({ danger: hasError })}>
-              <legend>
-                <label htmlFor={giftEmailUID}>Recipient email</label>
-              </legend>
-              <input
+            <Fieldset state={hasError ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={giftEmailUID}>Recipient email</Label>
+              </FieldsetTitle>
+              <Input
                 id={giftEmailUID}
                 type="email"
                 value={gift.email}
                 onChange={(evt) => dispatch({ type: "set-value", gift: { ...gift, email: evt.target.value } })}
                 placeholder="Recipient email address"
                 aria-invalid={hasError}
-                className="w-full"
               />
-            </fieldset>
+            </Fieldset>
           ) : (
             <Alert variant="info">
               {gift.name}'s email has been hidden for privacy purposes.{" "}
@@ -87,18 +88,18 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
               </Modal>
             </Alert>
           )}
-          <fieldset className="w-full">
-            <legend>
-              <label htmlFor={giftNoteUID}>Message</label>
-            </legend>
-            <textarea
+          <Fieldset className="w-full">
+            <FieldsetTitle>
+              <Label htmlFor={giftNoteUID}>Message</Label>
+            </FieldsetTitle>
+            <Textarea
               id={giftNoteUID}
               value={gift.note}
               onChange={(evt) => dispatch({ type: "set-value", gift: { ...gift, note: evt.target.value } })}
               placeholder="A personalized message (optional)"
               className="w-full"
             />
-          </fieldset>
+          </Fieldset>
         </div>
       ) : null}
     </div>

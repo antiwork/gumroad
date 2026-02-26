@@ -15,6 +15,9 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 
 export const LineItem = ({
   name,
@@ -231,27 +234,27 @@ export const CreateAccountForm = ({
           <div>
             <h3>Create an account to access all of your purchases in one place</h3>
           </div>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}email`}>Email</label>
-            </legend>
-            <input type="text" readOnly value={createAccountData.email} id={`${uid}email`} />
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}password`}>Password</label>
-            </legend>
-            <input
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}email`}>Email</Label>
+            </FieldsetTitle>
+            <Input type="text" readOnly value={createAccountData.email} id={`${uid}email`} />
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}password`}>Password</Label>
+            </FieldsetTitle>
+            <Input
               type="password"
               placeholder="Enter password"
               value={password}
               onChange={(evt) => setPassword(evt.target.value)}
               id={`${uid}password`}
             />
-            <small>
+            <FieldsetDescription>
               You agree to our <a href="https://gumroad.com/terms">Terms Of Use</a>.
-            </small>
-          </fieldset>
+            </FieldsetDescription>
+          </Fieldset>
 
           <Button type="submit" color="primary" disabled={status === "processing"}>
             {status === "processing" ? "..." : "Sign up"}

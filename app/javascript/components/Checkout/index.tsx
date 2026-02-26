@@ -37,10 +37,13 @@ import {
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -324,7 +327,7 @@ export const Checkout = ({
                         void applyDiscount(newDiscountCode);
                       }}
                     >
-                      <input
+                      <Input
                         placeholder="Discount code"
                         value={newDiscountCode}
                         className="flex-1"
@@ -414,33 +417,39 @@ const TipSelector = () => {
       <CartPriceItem title="Add a tip?" price={formatPrice(computeTip(state))} variant="tip" />
       <div className="grid grid-cols-1 gap-4 @[52rem]:grid-cols-5">
         {showPercentageOptions ? (
-          <div
+          <Tabs
+            variant="buttons"
             role="radiogroup"
-            className="radio-buttons col-span-full grid-cols-1! @3xs:grid-cols-2! @sm:grid-cols-4! @[52rem]:col-span-4!"
+            className="col-span-full grid-cols-1! @3xs:grid-cols-2! @sm:grid-cols-4! @[52rem]:col-span-4!"
           >
             {tipPercentages.map((percentage) => (
-              <Button
-                className="justify-center! whitespace-nowrap"
+              <Tab
                 key={percentage}
-                role="radio"
-                aria-checked={state.tip.type === "percentage" && percentage === state.tip.percentage}
-                onClick={() => {
-                  dispatch({
-                    type: "set-value",
-                    tip: {
-                      type: "percentage",
-                      percentage,
-                    },
-                  });
-                }}
-                disabled={isProcessing(state)}
+                isSelected={state.tip.type === "percentage" && percentage === state.tip.percentage}
+                asChild
               >
-                {percentage === 0 ? "No Tip" : `${percentage}%`}
-              </Button>
+                <Button
+                  className="justify-center! whitespace-nowrap"
+                  role="radio"
+                  aria-checked={state.tip.type === "percentage" && percentage === state.tip.percentage}
+                  onClick={() => {
+                    dispatch({
+                      type: "set-value",
+                      tip: {
+                        type: "percentage",
+                        percentage,
+                      },
+                    });
+                  }}
+                  disabled={isProcessing(state)}
+                >
+                  {percentage === 0 ? "No Tip" : `${percentage}%`}
+                </Button>
+              </Tab>
             ))}
-          </div>
+          </Tabs>
         ) : null}
-        <fieldset className={classNames("col-span-full @[52rem]:col-span-1!", { danger: errors.has("tip") })}>
+        <Fieldset state={errors.has("tip") ? "danger" : undefined} className="col-span-full @[52rem]:col-span-1!">
           <PriceInput
             hasError={errors.has("tip")}
             ariaLabel="Tip"
@@ -458,7 +467,7 @@ const TipSelector = () => {
             placeholder="Custom tip"
             disabled={isProcessing(state)}
           />
-        </fieldset>
+        </Fieldset>
       </div>
     </div>
   );
