@@ -119,24 +119,46 @@ def prepare_mysql
   ActiveRecord::Base.connection.execute("SET SESSION information_schema_stats_expiry = 0")
 end
 
-DB_CONNECTION_LOSS_PATTERN = /SAVEPOINT.*does not exist|Lost connection|gone away/i
+DB_CORRUPTION_PATTERN = /SAVEPOINT.*does not exist|Lost connection|gone away/i
 
 def reset_db_connection(example)
-  return unless example.exception&.message&.match?(DB_CONNECTION_LOSS_PATTERN)
+  return unless example.exception&.message&.match?(DB_CORRUPTION_PATTERN)
 
-  Rails.logger.warn("[RSpec retry] DB connection issue: #{example.exception.message}. Reconnecting.")
-  connection = ActiveRecord::Base.connection
-  connection.rollback_transaction while connection.transaction_open?
-  connection.reconnect!
+  Rails.logger.warn("[RSpec retry] DB corruption detected: #{example.exception.message}. Reconnecting.")
+  pool = ActiveRecord::Base.connection_pool
+  pool.disconnect!
   prepare_mysql
 rescue StandardError => e
-  Rails.logger.warn("[RSpec retry] Connection reset failed: #{e.class}: #{e.message}")
-  begin
-    ActiveRecord::Base.connection_pool.disconnect!
-  rescue StandardError => disconnect_error
-    Rails.logger.warn("[RSpec retry] Pool disconnect also failed: #{disconnect_error.message}")
+  Rails.logger.warn("[RSpec retry] Pool disconnect failed: #{e.class}: #{e.message}")
+end
+
+# Harden teardown_fixtures so that a corrupted SAVEPOINT doesn't skip pool
+# unlock and connection cleanup. Without this, a single SAVEPOINT failure
+# poisons every subsequent retry because lock_thread is never reset and
+# clear_active_connections! is never called.
+module ResilientFixtureTeardown
+  def teardown_fixtures
+    if run_in_transaction?
+      ActiveSupport::Notifications.unsubscribe(@connection_subscriber) if @connection_subscriber
+      @fixture_connections.each do |connection|
+        begin
+          connection.rollback_transaction if connection.transaction_open?
+        rescue StandardError => e
+          Rails.logger.warn("[RSpec] fixture rollback failed: #{e.message}")
+        ensure
+          connection.pool.lock_thread = false
+        end
+      end
+      @fixture_connections.clear
+      teardown_shared_connection_pool
+    else
+      ActiveRecord::FixtureSet.reset_cache
+    end
+
+    ActiveRecord::Base.connection_handler.clear_active_connections!(:all)
   end
 end
+ActiveRecord::TestFixtures.prepend(ResilientFixtureTeardown) if BUILDING_ON_CI
 
 RSpec.configure do |config|
   config.include Capybara::DSL
