@@ -2610,11 +2610,12 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
     </RowContent>
     <RowActions>
       {onDelete ? (
-        <Button color="danger" onClick={onDelete} disabled={disabled} aria-label="Delete">
+        <Button color="danger" size="icon" onClick={onDelete} disabled={disabled} aria-label="Delete">
           <Trash className="size-5" />
         </Button>
       ) : null}
       <NavigationButton
+        size="icon"
         href={Routes.s3_utility_cdn_url_for_blob_path({ key: file.key })}
         download
         target="_blank"

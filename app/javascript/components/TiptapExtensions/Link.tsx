@@ -1,4 +1,4 @@
-import { Button as ButtonIcon, Link as LinkIcon } from "@boxicons/react";
+import { Button as ButtonIcon, CursorClick, Link as LinkIcon } from "@boxicons/react";
 import { Editor, Node } from "@tiptap/core";
 import { Link as BaseLink } from "@tiptap/extension-link";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
@@ -327,7 +327,7 @@ const TiptapButton = Node.create({
     item: (editor) => (
       <WithDialog editor={editor} type="button">
         <div role="menuitem">
-          <ButtonIcon className="size-5" />
+          <CursorClick className="size-5" />
           <span>Button</span>
         </div>
       </WithDialog>

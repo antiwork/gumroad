@@ -351,6 +351,7 @@ const EditButton = ({ product }: { product: Product }) => {
       <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
         <NavigationButton
           color="filled"
+          size="icon"
           href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
           aria-label="Edit product"
         >

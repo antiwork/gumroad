@@ -1,5 +1,4 @@
 import {
-  QuoteLeftAlt,
   Bold,
   CartPlus,
   ChevronDown,
@@ -12,6 +11,7 @@ import {
   ListOl,
   ListUl,
   Minus,
+  QuoteLeftAlt,
   Redo,
   Star,
   Strikethrough,
@@ -142,7 +142,6 @@ export const PopoverMenuItem = ({
   <Popover>
     <PopoverTrigger aria-label={name} className="all-unset">
       <MenuItemTooltip tip={name}>
-        <div className="toolbar-item">{icon}</div>
         <div className="toolbar-item flex items-center gap-2">
           {icon}
           <span>{name}</span>

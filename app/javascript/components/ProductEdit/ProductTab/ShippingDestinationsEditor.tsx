@@ -113,7 +113,7 @@ const ShippingDestinationRow = ({
             })}
           </select>
           <WithTooltip position="bottom" tip="Remove">
-            <Button color="danger" outline onClick={onRemove} aria-label="Remove shipping destination">
+            <Button color="danger" size="icon" outline onClick={onRemove} aria-label="Remove shipping destination">
               <Trash className="size-5" />
             </Button>
           </WithTooltip>

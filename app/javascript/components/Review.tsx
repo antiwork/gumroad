@@ -54,12 +54,12 @@ export const Review = ({
     <>
       <section className="grid gap-2">
         <span
-          className="flex shrink-0 items-center gap-1"
+          className="flex shrink-0 items-center"
           aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
         >
           <RatingStars rating={review.rating} />
           {review.is_new ? (
-            <Pill size="small" color="primary">
+            <Pill size="small" color="primary" className="ml-1">
               New
             </Pill>
           ) : null}

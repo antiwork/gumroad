@@ -317,6 +317,7 @@ const OverlayMenu = ({
     <>
       <Button
         color="filled"
+        size="icon"
         onClick={() => setMenuOpen(true)}
         aria-controls={overlayMenuUID}
         aria-expanded={menuOpen}

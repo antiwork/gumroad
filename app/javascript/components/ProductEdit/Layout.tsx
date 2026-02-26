@@ -338,6 +338,7 @@ export const Layout = ({
               previewLink: (props) => (
                 <NavigationButton
                   {...props}
+                  size="icon"
                   disabled={isBusy}
                   href={url}
                   onClick={(evt) => {

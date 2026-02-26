@@ -12,7 +12,7 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { RatingSelector } from "$app/components/RatingSelector";
 import { ReviewVideoRecorder } from "$app/components/ReviewForm/ReviewVideoRecorder";
-import { VideoState, ReviewVideoRecorderUiState } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
+import { ReviewVideoRecorderUiState, VideoState } from "$app/components/ReviewForm/ReviewVideoRecorderCommon";
 import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -334,7 +334,7 @@ export const ReviewForm = React.forwardRef<
         className={`flex flex-col items-start! ${className}`}
       >
         {error ? <p className="text-red"> {error} </p> : null}
-        <div className="flex grow flex-wrap justify-between gap-2">
+        <div className="flex grow flex-wrap items-center justify-between gap-2">
           <label htmlFor={uid}>{viewing ? "Your rating:" : "Liked it? Give it a rating:"}</label>
           <RatingSelector currentRating={rating} onChangeCurrentRating={setRating} disabled={disabled || viewing} />
         </div>
