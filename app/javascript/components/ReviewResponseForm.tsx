@@ -14,7 +14,7 @@ export const ReviewResponseForm = ({
   purchaseId,
   onChange,
   onEditingChange,
-  buttonProps = { small: false },
+  buttonProps = {},
   className,
 }: {
   message: string | undefined;

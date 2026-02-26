@@ -39,25 +39,7 @@ class LinksController < ApplicationController
 
     set_meta_tag(title: "Products")
 
-    render inertia: "Products/Index", props: {
-      has_products: -> { products_page_presenter.page_props[:has_products] },
-      archived_products_count: -> { products_page_presenter.page_props[:archived_products_count] },
-      can_create_product: -> { products_page_presenter.page_props[:can_create_product] },
-      products_data: -> {
-        {
-          products: products_page_presenter.products_table_props[:products],
-          pagination: products_page_presenter.products_table_props[:products_pagination],
-          sort: products_page_presenter.products_sort,
-        }
-      },
-      memberships_data: -> {
-        {
-          memberships: products_page_presenter.memberships_table_props[:memberships],
-          pagination: products_page_presenter.memberships_table_props[:memberships_pagination],
-          sort: products_page_presenter.memberships_sort,
-        }
-      },
-    }
+    render inertia: "Products/Index", props: products_page_presenter.page_props
   end
 
   def new

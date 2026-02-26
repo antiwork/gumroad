@@ -196,7 +196,7 @@ const TaxCenterIndex = () => {
                     <TableCell data-label="" className="text-right">
                       <div className="flex justify-end">
                         <NavigationButton
-                          small
+                          size="sm"
                           className="w-full sm:w-auto"
                           href={Routes.download_tax_form_path(doc.year, doc.form_type)}
                           disabled={downloadingFormType === doc.form_type}

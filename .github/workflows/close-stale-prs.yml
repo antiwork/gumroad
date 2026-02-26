@@ -1,0 +1,107 @@
+name: Close stale PRs
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  close-stale-prs:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const MS_PER_DAY = 24 * 60 * 60 * 1000;
+            const STALE_DAYS = 7;
+            const CLOSE_DAYS = 8;
+            const now = Date.now();
+            const { owner, repo } = context.repo;
+
+            // Ensure stale label exists
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: "stale" });
+            } catch {
+              await github.rest.issues.createLabel({
+                owner, repo, name: "stale", color: "ededed",
+                description: "Inactive PR — will be closed soon"
+              });
+              core.info("Created label: stale");
+            }
+
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: "open", per_page: 100
+            });
+
+            for (const pr of prs) {
+              if (pr.draft) {
+                core.info(`#${pr.number} — skipped (draft)`);
+                continue;
+              }
+
+              const events = await github.paginate(github.rest.issues.listEventsForTimeline, {
+                owner, repo, issue_number: pr.number, per_page: 100
+              });
+
+              let lastActivity = new Date(pr.created_at).getTime();
+
+              for (const event of events) {
+                let ts = null;
+
+                switch (event.event) {
+                  case "ready_for_review":
+                    ts = new Date(event.created_at).getTime();
+                    break;
+                  case "committed":
+                    if (event.committer?.date) ts = new Date(event.committer.date).getTime();
+                    break;
+                  case "commented":
+                    if (event.user?.type !== "Bot") ts = new Date(event.created_at).getTime();
+                    break;
+                  case "reviewed":
+                    if (event.user?.type !== "Bot") ts = new Date(event.submitted_at).getTime();
+                    break;
+                }
+
+                if (ts && ts > lastActivity) lastActivity = ts;
+              }
+
+              const staleDays = (now - lastActivity) / MS_PER_DAY;
+              const lastActivityDate = new Date(lastActivity).toISOString().split("T")[0];
+              core.info(`#${pr.number} — last activity: ${lastActivityDate}, stale days: ${staleDays.toFixed(1)}`);
+
+              const hasStaleLabel = pr.labels.some(l => l.name === "stale");
+
+              // Activity resumed — remove stale label
+              if (hasStaleLabel && staleDays < STALE_DAYS) {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: pr.number, name: "stale"
+                });
+                core.info(`#${pr.number} — removed stale label (activity resumed)`);
+
+              // Grace period expired — close
+              } else if (hasStaleLabel && staleDays >= CLOSE_DAYS) {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: pr.number,
+                  body: "Closing this PR due to inactivity. Feel free to reopen if you'd like to continue working on it!"
+                });
+                await github.rest.pulls.update({
+                  owner, repo, pull_number: pr.number, state: "closed"
+                });
+                core.info(`#${pr.number} — closed (stale for ${staleDays.toFixed(1)} days)`);
+
+              // Newly stale — warn
+              } else if (!hasStaleLabel && staleDays >= STALE_DAYS) {
+                await github.rest.issues.addLabels({
+                  owner, repo, issue_number: pr.number, labels: ["stale"]
+                });
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: pr.number,
+                  body: "This PR has been inactive for 7 days and has been marked as stale. It will be closed in 24 hours if there is no new activity."
+                });
+                core.info(`#${pr.number} — marked stale (${staleDays.toFixed(1)} days inactive)`);
+              }
+            }

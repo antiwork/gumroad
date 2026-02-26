@@ -319,11 +319,11 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
           scrollToEndOfTextarea();
         }}
       >
-        <Button small onClick={onCancel} disabled={isSaving}>
+        <Button size="sm" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
         <Button
-          small
+          size="sm"
           color="accent"
           onClick={asyncVoid(async () => await onSave(editedContent.trim()))}
           disabled={isSaving}

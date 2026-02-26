@@ -5,6 +5,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { SupportSlaMessage } from "$app/components/support/SupportSlaMessage";
 import { useRecaptcha, RecaptchaCancelledError } from "$app/components/useRecaptcha";
 
 export function UnauthenticatedNewTicketModal({
@@ -83,6 +84,9 @@ export function UnauthenticatedNewTicketModal({
         </Button>
       }
     >
+      <p>
+        <SupportSlaMessage />
+      </p>
       <form
         ref={formRef}
         className="space-y-4 md:w-[700px] [&_.grecaptcha-badge]:invisible"

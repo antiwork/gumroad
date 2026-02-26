@@ -488,3 +488,7 @@
   slug: "347-gumroad-community"
   title: "Gumroad Community"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 348
+  slug: "348-support-response-times"
+  title: "Support response times"
+  category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
