@@ -129,11 +129,7 @@ class CreateGlobalSalesTaxSummaryReportJob
 
     def resolve_india_state(purchase)
       raw_state = (purchase.ip_state || "").strip.upcase
-      if !raw_state.match?(/^\d+$/) && CreateIndiaSalesReportJob::VALID_INDIAN_STATES.include?(raw_state)
-        raw_state
-      else
-        ""
-      end
+      Compliance::Countries.valid_indian_state?(raw_state) ? raw_state : ""
     end
 
     def net_cents(gross_cents, refunded_cents)
