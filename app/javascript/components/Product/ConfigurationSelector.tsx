@@ -1,4 +1,3 @@
-import cx from "classnames";
 import {
   addMinutes,
   compareAsc,
@@ -39,7 +38,11 @@ import { PriceInput } from "$app/components/PriceInput";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Calendar } from "$app/components/ui/Calendar";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Pill } from "$app/components/ui/Pill";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const PWYWInput = React.forwardRef<
@@ -57,11 +60,11 @@ const PWYWInput = React.forwardRef<
   const uid = React.useId();
 
   return (
-    <fieldset className={cx({ danger: hasError })}>
+    <Fieldset state={hasError ? "danger" : undefined}>
       {!hideLabel ? (
-        <legend>
-          <label htmlFor={uid}>Name a fair price:</label>
-        </legend>
+        <FieldsetTitle>
+          <Label htmlFor={uid}>Name a fair price:</Label>
+        </FieldsetTitle>
       ) : null}
       <PriceInput
         id={uid}
@@ -78,7 +81,7 @@ const PWYWInput = React.forwardRef<
         ref={ref}
         ariaLabel="Price"
       />
-    </fieldset>
+    </Fieldset>
   );
 });
 PWYWInput.displayName = "PWYWInput";
@@ -229,52 +232,54 @@ export const OptionRadioButton = ({
   priceCents ??= 0;
   const { value: discountedPriceCents } = computeDiscountedPrice(priceCents, discount, product);
   return (
-    <Button
-      role="radio"
-      aria-checked={selected}
-      disabled={disabled}
-      aria-label={name}
-      onClick={onClick}
-      itemProp="offer"
-      itemType="https://schema.org/Offer"
-      itemScope
-      style={recurrence ? { flexDirection: "column" } : undefined}
-    >
-      {status ? (
-        <Alert role="status" variant="info">
-          {status}
-        </Alert>
-      ) : null}
-      {hidePrice ? null : (
-        <Pill>
-          {discountedPriceCents < priceCents ? (
-            <>
-              <s>{formatPriceCentsWithCurrencySymbol(currencyCode, priceCents, { symbolFormat: "long" })}</s>{" "}
-            </>
-          ) : null}
-          {formatPriceCentsWithCurrencySymbol(currencyCode, discountedPriceCents, {
-            symbolFormat: "long",
-          })}
-          {isPWYW ? "+" : null}
-          {recurrence ? ` ${recurrenceLabels[recurrence]}` : null}
-          <div itemProp="price" hidden>
-            {formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, discountedPriceCents)}
-          </div>
-          <div itemProp="priceCurrency" hidden>
-            {currencyCode}
-          </div>
-        </Pill>
-      )}
-      <div>
-        <h4>{name}</h4>
-        {quantityLeft != null ? <small>{`${quantityLeft} left`}</small> : null}
-        {description ? (
-          <div>
-            <Breaklines text={description} />
-          </div>
+    <Tab isSelected={selected} asChild className={recurrence ? "flex-col" : undefined}>
+      <Button
+        role="radio"
+        aria-checked={selected}
+        disabled={disabled}
+        aria-label={name}
+        onClick={onClick}
+        itemProp="offer"
+        itemType="https://schema.org/Offer"
+        itemScope
+        className="items-start justify-start text-left"
+      >
+        {status ? (
+          <Alert role="status" variant="info">
+            {status}
+          </Alert>
         ) : null}
-      </div>
-    </Button>
+        {hidePrice ? null : (
+          <Pill>
+            {discountedPriceCents < priceCents ? (
+              <>
+                <s>{formatPriceCentsWithCurrencySymbol(currencyCode, priceCents, { symbolFormat: "long" })}</s>{" "}
+              </>
+            ) : null}
+            {formatPriceCentsWithCurrencySymbol(currencyCode, discountedPriceCents, {
+              symbolFormat: "long",
+            })}
+            {isPWYW ? "+" : null}
+            {recurrence ? ` ${recurrenceLabels[recurrence]}` : null}
+            <div itemProp="price" hidden>
+              {formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, discountedPriceCents)}
+            </div>
+            <div itemProp="priceCurrency" hidden>
+              {currencyCode}
+            </div>
+          </Pill>
+        )}
+        <div>
+          <h4>{name}</h4>
+          {quantityLeft != null ? <small>{`${quantityLeft} left`}</small> : null}
+          {description ? (
+            <div>
+              <Breaklines text={description} />
+            </div>
+          ) : null}
+        </div>
+      </Button>
+    </Tab>
   );
 };
 
@@ -443,19 +448,23 @@ const CallDateAndTimeSelector = ({
               {clientTimeZone.shortFormattedName}
             </span>
           </h4>
-          <div role="radiogroup" className="radio-buttons" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-            {getAvailableStartTimesByDate(selectedStartTime).map((time) => (
-              <Button
-                role="radio"
-                key={time.toISOString()}
-                aria-checked={isEqual(selectedStartTime, time)}
-                onClick={() => onChange({ callStartTime: time })}
-                style={{ justifyContent: "center" }}
-              >
-                <div>{formatCallDate(time, { date: { hidden: true }, timeZone: { hidden: true } })}</div>
-              </Button>
-            ))}
-          </div>
+          <Tabs variant="buttons" className="grid-cols-2 md:grid-flow-row" role="radiogroup">
+            {getAvailableStartTimesByDate(selectedStartTime).map((time) => {
+              const isSelected = isEqual(selectedStartTime, time);
+              return (
+                <Tab key={time.toISOString()} isSelected={isSelected} asChild>
+                  <Button
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={() => onChange({ callStartTime: time })}
+                    className="justify-center"
+                  >
+                    <div>{formatCallDate(time, { date: { hidden: true }, timeZone: { hidden: true } })}</div>
+                  </Button>
+                </Tab>
+              );
+            })}
+          </Tabs>
         </section>
       ) : null}
       {selectedStartTime ? (
@@ -488,35 +497,41 @@ const PaymentOptionSelector = ({
   return (
     <section>
       <h4 className="mb-2">Payment option</h4>
-      <div role="radiogroup" className="radio-buttons">
-        <Button
-          role="radio"
-          aria-checked={!selection.payInInstallments}
-          onClick={() => onChange({ payInInstallments: false })}
-        >
-          <div>
-            <strong>Pay in full</strong>
-            <p>One-time payment</p>
-          </div>
-        </Button>
+      <Tabs variant="buttons" role="radiogroup">
+        <Tab isSelected={!selection.payInInstallments} asChild>
+          <Button
+            role="radio"
+            aria-checked={!selection.payInInstallments}
+            onClick={() => onChange({ payInInstallments: false })}
+            className="items-start justify-start text-left"
+          >
+            <div>
+              <strong>Pay in full</strong>
+              <p>One-time payment</p>
+            </div>
+          </Button>
+        </Tab>
 
-        <Button
-          role="radio"
-          aria-checked={selection.payInInstallments}
-          onClick={() => onChange({ payInInstallments: true })}
-        >
-          <div>
-            <strong>Pay in {product.installment_plan.number_of_installments} installments</strong>
-            <p>
-              {formatInstallmentPaymentSchedule(
-                fullPriceCents,
-                product.currency_code,
-                product.installment_plan.number_of_installments,
-              )}
-            </p>
-          </div>
-        </Button>
-      </div>
+        <Tab isSelected={selection.payInInstallments} asChild>
+          <Button
+            role="radio"
+            aria-checked={selection.payInInstallments}
+            onClick={() => onChange({ payInInstallments: true })}
+            className="items-start justify-start text-left"
+          >
+            <div>
+              <strong>Pay in {product.installment_plan.number_of_installments} installments</strong>
+              <p>
+                {formatInstallmentPaymentSchedule(
+                  fullPriceCents,
+                  product.currency_code,
+                  product.installment_plan.number_of_installments,
+                )}
+              </p>
+            </div>
+          </Button>
+        </Tab>
+      </Tabs>
     </section>
   );
 };
@@ -589,39 +604,46 @@ export const ConfigurationSelector = React.forwardRef<
     if (product.options.length === 1) return pwywInput;
     return (
       <>
-        <div
+        <Tabs
+          variant="buttons"
           role="radiogroup"
-          className="radio-buttons"
+          className="md:grid-flow-row"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(6rem, 100%), 1fr))" }}
         >
-          {product.options.map((option) => (
+          {product.options.map((option) => {
+            const isSelected = selection.optionId === option.id;
+            return (
+              <Tab key={option.id} isSelected={isSelected} asChild>
+                <Button
+                  role="radio"
+                  aria-checked={isSelected}
+                  onClick={() =>
+                    setSelection?.({
+                      ...selection,
+                      optionId: option.id,
+                      price: { value: option.price_difference_cents ?? 100, error: false },
+                    })
+                  }
+                  className="justify-center"
+                >
+                  {formatPriceCentsWithCurrencySymbol(product.currency_code, option.price_difference_cents ?? 0, {
+                    symbolFormat: "short",
+                  })}
+                </Button>
+              </Tab>
+            );
+          })}
+          <Tab isSelected={selection.optionId === null} asChild>
             <Button
               role="radio"
-              style={{ justifyContent: "center" }}
-              aria-checked={selection.optionId === option.id}
-              onClick={() =>
-                setSelection?.({
-                  ...selection,
-                  optionId: option.id,
-                  price: { value: option.price_difference_cents ?? 100, error: false },
-                })
-              }
-              key={option.id}
+              aria-checked={selection.optionId === null}
+              onClick={() => setSelection?.({ ...selection, optionId: null, price: { value: null, error: false } })}
+              className="justify-center"
             >
-              {formatPriceCentsWithCurrencySymbol(product.currency_code, option.price_difference_cents ?? 0, {
-                symbolFormat: "short",
-              })}
+              Other
             </Button>
-          ))}
-          <Button
-            role="radio"
-            style={{ justifyContent: "center" }}
-            aria-checked={selection.optionId === null}
-            onClick={() => setSelection?.({ ...selection, optionId: null, price: { value: null, error: false } })}
-          >
-            Other
-          </Button>
-        </div>
+          </Tab>
+        </Tabs>
         {selection.optionId === null ? pwywInput : null}
       </>
     );
@@ -641,9 +663,11 @@ export const ConfigurationSelector = React.forwardRef<
         />
       ) : null}
       {hasRentOption && product.rental ? (
-        <div
-          className="radio-buttons"
+        <Tabs
+          variant="buttons"
           role="radiogroup"
+          className="md:grid-flow-row"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
           itemProp="offers"
           itemType="https://schema.org/AggregateOffer"
           itemScope
@@ -672,13 +696,15 @@ export const ConfigurationSelector = React.forwardRef<
             product={product}
             hidePrice={hidePrices}
           />
-        </div>
+        </Tabs>
       ) : null}
       {hasOptions && hasRentOption ? <hr /> : null}
       {hasOptions ? (
-        <div
-          className="radio-buttons"
+        <Tabs
+          variant="buttons"
           role="radiogroup"
+          className="md:grid-flow-row"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
           itemProp="offers"
           itemType="https://schema.org/AggregateOffer"
           itemScope
@@ -726,7 +752,7 @@ export const ConfigurationSelector = React.forwardRef<
           <div itemProp="priceCurrency" hidden>
             {product.currency_code}
           </div>
-        </div>
+        </Tabs>
       ) : null}
       {isPWYW ? pwywInput : null}
       {product.native_type === "call" && selectedOption ? (
@@ -740,14 +766,14 @@ export const ConfigurationSelector = React.forwardRef<
         />
       ) : null}
       {hasConfigurableQuantity ? (
-        <fieldset>
-          <legend>
-            <label htmlFor={quantityInputUID}>{product.is_multiseat_license ? "Seats" : "Quantity"}</label>
-          </legend>
+        <Fieldset>
+          <FieldsetTitle>
+            <Label htmlFor={quantityInputUID}>{product.is_multiseat_license ? "Seats" : "Quantity"}</Label>
+          </FieldsetTitle>
           <NumberInput onChange={(quantity) => update({ quantity: quantity ?? 0 })} value={selection.quantity}>
-            {(props) => <input type="number" id={quantityInputUID} {...props} min={1} max={maxQuantity ?? undefined} />}
+            {(props) => <Input type="number" id={quantityInputUID} {...props} min={1} max={maxQuantity ?? undefined} />}
           </NumberInput>
-        </fieldset>
+        </Fieldset>
       ) : null}
       {showInstallmentPlan && product.installment_plan ? (
         <PaymentOptionSelector product={product} selection={selection} onChange={update} />

@@ -1,5 +1,9 @@
 import * as React from "react";
 
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+
 export const CustomViewContentButtonTextInput = ({
   value,
   onChange,
@@ -11,9 +15,9 @@ export const CustomViewContentButtonTextInput = ({
 }) => {
   const uid = React.useId();
   return (
-    <fieldset>
-      <label htmlFor={uid}>Button text</label>
-      <input
+    <Fieldset>
+      <Label htmlFor={uid}>Button text</Label>
+      <Input
         id={uid}
         type="text"
         placeholder="View content"
@@ -21,7 +25,9 @@ export const CustomViewContentButtonTextInput = ({
         onChange={(evt) => onChange(evt.target.value)}
         maxLength={maxLength}
       />
-      <small>Customize the download button text on receipts and product pages (max {maxLength} characters).</small>
-    </fieldset>
+      <FieldsetDescription>
+        Customize the download button text on receipts and product pages (max {maxLength} characters).
+      </FieldsetDescription>
+    </Fieldset>
   );
 };

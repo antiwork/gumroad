@@ -27,6 +27,7 @@ import { createBillingAgreement, createBillingAgreementToken } from "$app/data/p
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { VerificationResult, verifyShippingAddress } from "$app/data/shipping";
 import { assert, assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
@@ -54,6 +55,12 @@ import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover"
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Radio } from "$app/components/ui/Radio";
+import { Select } from "$app/components/ui/Select";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
@@ -81,11 +88,11 @@ const CountryInput = () => {
   }, [state.country, shippingCountryCodes]);
 
   return (
-    <fieldset>
-      <legend>
-        <label htmlFor={`${uid}country`}>Country</label>
-      </legend>
-      <select
+    <Fieldset>
+      <FieldsetTitle>
+        <Label htmlFor={`${uid}country`}>Country</Label>
+      </FieldsetTitle>
+      <Select
         id={`${uid}country`}
         value={state.country}
         onChange={(e) =>
@@ -104,8 +111,8 @@ const CountryInput = () => {
             </option>
           ),
         )}
-      </select>
-    </fieldset>
+      </Select>
+    </Fieldset>
   );
 };
 
@@ -134,12 +141,12 @@ const StateInput = () => {
   }
 
   return (
-    <fieldset className={cx({ danger: errors.has("state") })}>
-      <legend>
-        <label htmlFor={`${uid}state`}>{stateLabel}</label>
-      </legend>
+    <Fieldset state={errors.has("state") ? "danger" : undefined}>
+      <FieldsetTitle>
+        <Label htmlFor={`${uid}state`}>{stateLabel}</Label>
+      </FieldsetTitle>
       {(state.country === "US" || state.country === "CA") && states !== null ? (
-        <select
+        <Select
           id={`${uid}state`}
           value={state.state}
           onChange={(e) => dispatch({ type: "set-value", state: e.target.value })}
@@ -150,9 +157,9 @@ const StateInput = () => {
               {state}
             </option>
           ))}
-        </select>
+        </Select>
       ) : (
-        <input
+        <Input
           id={`${uid}state`}
           type="text"
           aria-invalid={errors.has("state")}
@@ -162,7 +169,7 @@ const StateInput = () => {
           onChange={(e) => dispatch({ type: "set-value", state: e.target.value })}
         />
       )}
-    </fieldset>
+    </Fieldset>
   );
 };
 
@@ -173,11 +180,11 @@ const ZipCodeInput = () => {
   const label = state.country === "US" || state.country === "PH" ? "ZIP code" : "Postal";
 
   return (
-    <fieldset className={cx({ danger: errors.has("zipCode") })}>
-      <legend>
-        <label htmlFor={`${uid}zipCode`}>{label}</label>
-      </legend>
-      <input
+    <Fieldset state={errors.has("zipCode") ? "danger" : undefined}>
+      <FieldsetTitle>
+        <Label htmlFor={`${uid}zipCode`}>{label}</Label>
+      </FieldsetTitle>
+      <Input
         id={`${uid}zipCode`}
         type="text"
         aria-invalid={errors.has("zipCode")}
@@ -186,7 +193,7 @@ const ZipCodeInput = () => {
         onChange={(e) => dispatch({ type: "set-value", zipCode: e.target.value })}
         disabled={isProcessing(state)}
       />
-    </fieldset>
+    </Fieldset>
   );
 };
 
@@ -325,14 +332,14 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
       <div className={className}>
         <div className="flex grow flex-col gap-4">
           <h4 className="text-base sm:text-lg">Contact information</h4>
-          <fieldset className={cx({ danger: errors.has("email") })}>
-            <legend>
-              <label htmlFor={`${uid}email`}>Email address</label>
-            </legend>
+          <Fieldset state={errors.has("email") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}email`}>Email address</Label>
+            </FieldsetTitle>
             <div className="relative inline-block w-full">
               <Popover open={!!state.emailTypoSuggestion}>
                 <PopoverAnchor>
-                  <input
+                  <Input
                     id={`${uid}email`}
                     type="email"
                     aria-invalid={errors.has("email")}
@@ -352,13 +359,13 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
                 </PopoverContent>
               </Popover>
             </div>
-          </fieldset>
+          </Fieldset>
           {showFullNameInput ? (
-            <fieldset className={cx({ danger: errors.has("fullName") })}>
-              <legend>
-                <label htmlFor={`${uid}fullName`}>Full name</label>
-              </legend>
-              <input
+            <Fieldset state={errors.has("fullName") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}fullName`}>Full name</Label>
+              </FieldsetTitle>
+              <Input
                 id={`${uid}fullName`}
                 type="text"
                 aria-invalid={errors.has("fullName")}
@@ -367,7 +374,7 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
                 onChange={(e) => dispatch({ type: "set-value", fullName: e.target.value })}
                 disabled={isProcessing(state)}
               />
-            </fieldset>
+            </Fieldset>
           ) : null}
           {showCountryInput ? (
             <div
@@ -383,11 +390,11 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
             </div>
           ) : null}
           {showVatIdInput ? (
-            <fieldset className={cx({ danger: errors.has("vatId") })}>
-              <legend>
-                <label htmlFor={`${uid}vatId`}>{vatLabel}</label>
-              </legend>
-              <input
+            <Fieldset state={errors.has("vatId") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}vatId`}>{vatLabel}</Label>
+              </FieldsetTitle>
+              <Input
                 id={`${uid}vatId`}
                 type="text"
                 placeholder={vatLabel}
@@ -395,7 +402,7 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
                 onChange={(e) => dispatch({ type: "set-value", vatId: e.target.value })}
                 disabled={isProcessing(state)}
               />
-            </fieldset>
+            </Fieldset>
           ) : null}
         </div>
       </div>
@@ -418,16 +425,15 @@ const PaymentMethodRadioRow = ({
   const disabled = !selected && isProcessing(state);
 
   return (
-    <label
-      className={cx(
+    <Label
+      className={classNames(
         "flex cursor-pointer items-center gap-3 border-b-0 p-4",
         selected ? "bg-body" : "",
         disabled && "cursor-not-allowed opacity-50",
       )}
       htmlFor={`${uid}-${paymentMethod}`}
     >
-      <input
-        type="radio"
+      <Radio
         id={`${uid}-${paymentMethod}`}
         name={`${uid}-payment-method`}
         checked={selected}
@@ -437,11 +443,10 @@ const PaymentMethodRadioRow = ({
           }
         }}
         disabled={disabled}
-        className="accent-pink"
       />
       {icon}
       <span className="font-medium">{label}</span>
-    </label>
+    </Label>
   );
 };
 
@@ -505,11 +510,11 @@ const CustomerDetails = ({ className }: { className?: string }) => {
           <div className={className}>
             <div className="flex grow flex-col gap-4">
               <h4 className="text-base sm:text-lg">Shipping information</h4>
-              <fieldset className={cx({ danger: errors.has("fullName") })}>
-                <legend>
-                  <label htmlFor={`${uid}fullName`}>Full name</label>
-                </legend>
-                <input
+              <Fieldset state={errors.has("fullName") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}fullName`}>Full name</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}fullName`}
                   type="text"
                   aria-invalid={errors.has("fullName")}
@@ -518,12 +523,12 @@ const CustomerDetails = ({ className }: { className?: string }) => {
                   value={state.fullName}
                   onChange={(e) => dispatch({ type: "set-value", fullName: e.target.value })}
                 />
-              </fieldset>
-              <fieldset className={cx({ danger: errors.has("address") })}>
-                <legend>
-                  <label htmlFor={`${uid}address`}>Street address</label>
-                </legend>
-                <input
+              </Fieldset>
+              <Fieldset state={errors.has("address") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}address`}>Street address</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}address`}
                   type="text"
                   aria-invalid={errors.has("address")}
@@ -532,13 +537,13 @@ const CustomerDetails = ({ className }: { className?: string }) => {
                   value={state.address}
                   onChange={(e) => dispatch({ type: "set-value", address: e.target.value })}
                 />
-              </fieldset>
+              </Fieldset>
               <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: "var(--spacer-2)" }}>
-                <fieldset className={cx({ danger: errors.has("city") })}>
-                  <legend>
-                    <label htmlFor={`${uid}city`}>City</label>
-                  </legend>
-                  <input
+                <Fieldset state={errors.has("city") ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}city`}>City</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={`${uid}city`}
                     type="text"
                     aria-invalid={errors.has("city")}
@@ -547,22 +552,21 @@ const CustomerDetails = ({ className }: { className?: string }) => {
                     value={state.city}
                     onChange={(e) => dispatch({ type: "set-value", city: e.target.value })}
                   />
-                </fieldset>
+                </Fieldset>
                 <StateInput />
                 <ZipCodeInput />
               </div>
               <CountryInput />
               {isLoggedIn ? (
-                <label>
-                  <input
-                    type="checkbox"
+                <Label>
+                  <Checkbox
                     title="Save shipping address to account"
                     checked={state.saveAddress}
                     onChange={(e) => dispatch({ type: "set-value", saveAddress: e.target.checked })}
                     disabled={isProcessing(state)}
                   />
                   Save address for future purchases
-                </label>
+                </Label>
               ) : null}
             </div>
           </div>
@@ -727,15 +731,14 @@ const CreditCardContent = () => {
         onChange={(evt) => setCardError(!!evt.error)}
       />
       {!useSavedCard && isLoggedIn ? (
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
+        <Label className="flex items-center gap-2">
+          <Checkbox
             disabled={isProcessing(state)}
             checked={keepOnFile}
             onChange={(evt) => setKeepOnFile(evt.target.checked)}
           />
           Save card for future purchases
-        </label>
+        </Label>
       ) : null}
     </div>
   );

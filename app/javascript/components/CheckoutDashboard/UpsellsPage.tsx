@@ -40,10 +40,18 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Radio } from "$app/components/ui/Radio";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Textarea } from "$app/components/ui/Textarea";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -274,7 +282,9 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                           <div>
                             <b>{upsell.name}</b>
                           </div>
-                          <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
+                          <FieldsetDescription>
+                            {formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}
+                          </FieldsetDescription>
                         </div>
                       </TableCell>
                       <TableCell aria-busy={!statistics}>
@@ -695,18 +705,18 @@ const Form = ({
       />
       <WithPreviewSidebar className="flex-1">
         <form>
-          <section className="p-8!">
+          <section className="grid gap-8 p-4! md:p-8!">
             <p>
               When a customer clicks "Pay", offer a version upgrade or another product with or without a discount.{" "}
               <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">
                 Learn more
               </a>
             </p>
-            <fieldset className={cx({ danger: name.error })}>
-              <legend>
-                <label htmlFor={`${uid}name`}>Name</label>
-              </legend>
-              <input
+            <Fieldset state={name.error ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}name`}>Name</Label>
+              </FieldsetTitle>
+              <Input
                 type="text"
                 id={`${uid}name`}
                 placeholder="Complete course upsell"
@@ -714,12 +724,12 @@ const Form = ({
                 onChange={(evt) => setName({ value: evt.target.value })}
                 aria-invalid={name.error}
               />
-            </fieldset>
-            <fieldset className={cx({ danger: offerText.error })}>
-              <legend>
-                <label htmlFor={`${uid}offerText`}>Offer text</label>
-              </legend>
-              <input
+            </Fieldset>
+            <Fieldset state={offerText.error ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}offerText`}>Offer text</Label>
+              </FieldsetTitle>
+              <Input
                 type="text"
                 id={`${uid}offerText`}
                 placeholder="Enhance your learning experience"
@@ -727,69 +737,68 @@ const Form = ({
                 onChange={(evt) => setOfferText({ value: evt.target.value })}
                 aria-invalid={offerText.error}
               />
-            </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}offerDescription`}>Offer description</label>
-              </legend>
-              <textarea
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}offerDescription`}>Offer description</Label>
+              </FieldsetTitle>
+              <Textarea
                 id={`${uid}offerDescription`}
                 placeholder="You'll enjoy a range of exclusive features, including..."
                 value={offerDescription}
                 onChange={(evt) => setOfferDescription(evt.target.value)}
               />
-            </fieldset>
-            <fieldset>
-              <legend>Status</legend>
-              <label>
-                <input type="radio" name="paused" value="false" checked={!paused} onChange={handlePausedChange} />
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>Status</FieldsetTitle>
+              <Label>
+                <Radio name="paused" value="false" checked={!paused} onChange={handlePausedChange} />
                 Live
-              </label>
-              <label>
-                <input type="radio" name="paused" value="true" checked={paused} onChange={handlePausedChange} />
+              </Label>
+              <Label>
+                <Radio name="paused" value="true" checked={paused} onChange={handlePausedChange} />
                 Paused
-              </label>
-              <small>Paused upsells will not appear at checkout. You can resume anytime.</small>
-            </fieldset>
-            <fieldset>
-              <legend>Type of offer</legend>
-              <label>
-                <input
-                  type="radio"
+              </Label>
+              <FieldsetDescription>
+                Paused upsells will not appear at checkout. You can resume anytime.
+              </FieldsetDescription>
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>Type of offer</FieldsetTitle>
+              <Label>
+                <Radio
                   checked={type === "cross-sell"}
                   onChange={(evt) => {
                     if (evt.target.checked) setType("cross-sell");
                   }}
                 />
                 Add another product to the cart
-              </label>
-              <label>
-                <input
-                  type="radio"
+              </Label>
+              <Label>
+                <Radio
                   checked={type === "replacement-cross-sell"}
                   onChange={(evt) => {
                     if (evt.target.checked) setType("replacement-cross-sell");
                   }}
                 />
                 Replace the selected products with another product
-              </label>
-              <label>
-                <input
-                  type="radio"
+              </Label>
+              <Label>
+                <Radio
                   checked={type === "upsell"}
                   onChange={(evt) => {
                     if (evt.target.checked) setType("upsell");
                   }}
                 />
                 Replace the version selected with another version of the same product
-              </label>
-            </fieldset>
+              </Label>
+            </Fieldset>
             {isCrossSell ? (
               <>
-                <fieldset className={cx({ danger: selectedProductIds.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}selectedProducts`}>Apply to these products</label>
-                  </legend>
+                <Fieldset state={selectedProductIds.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}selectedProducts`}>Apply to these products</Label>
+                  </FieldsetTitle>
                   <Select
                     inputId={`${uid}selectedProducts`}
                     instanceId={`${uid}selectedProducts`}
@@ -805,15 +814,15 @@ const Form = ({
                     isClearable
                     aria-invalid={selectedProductIds.error}
                   />
-                  <label>
-                    <input type="checkbox" checked={universal} onChange={(evt) => setUniversal(evt.target.checked)} />
+                  <Label>
+                    <Checkbox checked={universal} onChange={(evt) => setUniversal(evt.target.checked)} />
                     All products
-                  </label>
-                </fieldset>
-                <fieldset className={cx({ danger: offeredProductId.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}offeredProduct`}>Product to offer</label>
-                  </legend>
+                  </Label>
+                </Fieldset>
+                <Fieldset state={offeredProductId.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}offeredProduct`}>Product to offer</Label>
+                  </FieldsetTitle>
                   <Select
                     inputId={`${uid}offeredProduct`}
                     instanceId={`${uid}offeredProduct`}
@@ -827,12 +836,12 @@ const Form = ({
                     isClearable
                     aria-invalid={offeredProductId.error}
                   />
-                </fieldset>
+                </Fieldset>
                 {offeredProduct && offeredProduct.options.length > 0 ? (
-                  <fieldset className={cx({ danger: offeredVariantId.error })}>
-                    <legend>
-                      <label htmlFor={`${uid}offeredVariant`}>Version to offer</label>
-                    </legend>
+                  <Fieldset state={offeredVariantId.error ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}offeredVariant`}>Version to offer</Label>
+                    </FieldsetTitle>
                     <Select
                       inputId={`${uid}offeredVariant`}
                       instanceId={`${uid}offeredVariant`}
@@ -843,23 +852,19 @@ const Form = ({
                       isClearable
                       aria-invalid={offeredVariantId.error}
                     />
-                  </fieldset>
+                  </Fieldset>
                 ) : null}
-                <fieldset>
-                  <legend>Settings</legend>
+                <Fieldset>
+                  <FieldsetTitle>Settings</FieldsetTitle>
                   <Details
                     className="toggle"
                     open={!!discount}
                     summary={
-                      <label>
-                        <input
-                          type="checkbox"
-                          role="switch"
-                          checked={!!discount}
-                          onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
-                        />
-                        Add discount to the offered product
-                      </label>
+                      <Switch
+                        checked={!!discount}
+                        onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
+                        label="Add discount to the offered product"
+                      />
                     }
                   >
                     {discount ? (
@@ -868,14 +873,14 @@ const Form = ({
                       </Dropdown>
                     ) : null}
                   </Details>
-                </fieldset>
+                </Fieldset>
               </>
             ) : (
               <>
-                <fieldset className={cx({ danger: selectedProductId.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}selectedProduct`}>Apply to this product</label>
-                  </legend>
+                <Fieldset state={selectedProductId.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}selectedProduct`}>Apply to this product</Label>
+                  </FieldsetTitle>
                   <Select
                     inputId={`${uid}selectedProduct`}
                     instanceId={`${uid}selectedProduct`}
@@ -891,7 +896,7 @@ const Form = ({
                     isClearable
                     aria-invalid={selectedProductId.error}
                   />
-                </fieldset>
+                </Fieldset>
                 {selectedProduct ? (
                   <div className="grid grid-cols-[1fr_auto_1fr] gap-2" aria-label="Upsell versions">
                     <b>Version selected</b>
@@ -905,7 +910,7 @@ const Form = ({
                       );
                       return (
                         <React.Fragment key={option.id}>
-                          <div className="input read-only">{option.name}</div>
+                          <InputGroup readOnly>{option.name}</InputGroup>
                           <Icon name="arrow-right-circle" />
                           <Select
                             options={selectedProduct.options.flatMap(({ id, name: label }) =>

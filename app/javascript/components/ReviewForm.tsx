@@ -16,6 +16,9 @@ import { VideoState, ReviewVideoRecorderUiState } from "$app/components/ReviewFo
 import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVideoUploader";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Label } from "$app/components/ui/Label";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export type Review = {
   rating: number;
@@ -243,30 +246,36 @@ export const ReviewForm = React.forwardRef<
     };
 
     const reviewModeRadioButtons = (
-      <div role="radiogroup" className="radio-buttons grid-cols-2!">
-        <Button
-          role="radio"
-          aria-checked={reviewMode === "text"}
-          onClick={() => setReviewMode("text")}
-          disabled={disabled || reviewVideoRecorderBusy}
-        >
-          <div className="w-full text-center">Text review</div>
-        </Button>
-        <Button
-          role="radio"
-          aria-checked={reviewMode === "video"}
-          onClick={() => setReviewMode("video")}
-          disabled={disabled || reviewVideoRecorderBusy}
-        >
-          <div className="w-full text-center">Video review</div>
-        </Button>
-      </div>
+      <Tabs variant="buttons" className="grid-cols-2!" role="radiogroup">
+        <Tab isSelected={reviewMode === "text"} asChild>
+          <Button
+            role="radio"
+            aria-checked={reviewMode === "text"}
+            onClick={() => setReviewMode("text")}
+            disabled={disabled || reviewVideoRecorderBusy}
+            className="disabled:pointer-events-none"
+          >
+            <div className="w-full text-center">Text review</div>
+          </Button>
+        </Tab>
+        <Tab isSelected={reviewMode === "video"} asChild>
+          <Button
+            role="radio"
+            aria-checked={reviewMode === "video"}
+            onClick={() => setReviewMode("video")}
+            disabled={disabled || reviewVideoRecorderBusy}
+            className="disabled:pointer-events-none"
+          >
+            <div className="w-full text-center">Video review</div>
+          </Button>
+        </Tab>
+      </Tabs>
     );
 
     const textReview = viewing ? (
       <div className="w-full">{message ? `"${message}"` : "No written review"}</div>
     ) : (
-      <textarea
+      <Textarea
         id={uid}
         value={message}
         onChange={(evt) => setMessage(evt.target.value)}
@@ -335,7 +344,7 @@ export const ReviewForm = React.forwardRef<
       >
         {error ? <p className="text-red"> {error} </p> : null}
         <div className="flex grow flex-wrap justify-between gap-2">
-          <label htmlFor={uid}>{viewing ? "Your rating:" : "Liked it? Give it a rating:"}</label>
+          <Label htmlFor={uid}>{viewing ? "Your rating:" : "Liked it? Give it a rating:"}</Label>
           <RatingSelector currentRating={rating} onChangeCurrentRating={setRating} disabled={disabled || viewing} />
         </div>
 

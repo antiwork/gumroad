@@ -15,6 +15,7 @@ import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEdi
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
 import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -34,7 +35,7 @@ export const ShareTab = () => {
     <Layout preview={<ProductPreview />}>
       <div className="squished">
         <form>
-          <section className="p-4! md:p-8!">
+          <section className="grid gap-8 p-4! md:p-8!">
             <DiscoverEligibilityPromo />
             <header>
               <h2>Share</h2>
@@ -64,7 +65,7 @@ export const ShareTab = () => {
             onChange={(sectionIds) => updateProduct({ section_ids: sectionIds })}
             profileSections={profileSections}
           />
-          <section className="p-8!">
+          <section className="grid gap-8 border-t border-border p-4 md:p-8">
             <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h2>Gumroad Discover</h2>
               <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
@@ -92,7 +93,7 @@ export const ShareTab = () => {
               taxonomies={taxonomies}
             />
             <TagSelector tags={product.tags} onChange={(tags) => updateProduct({ tags })} />
-            <fieldset>
+            <Fieldset>
               <Switch
                 checked={product.display_product_reviews}
                 onChange={(e) => updateProduct({ display_product_reviews: e.target.checked })}
@@ -111,7 +112,7 @@ export const ShareTab = () => {
                   </>
                 }
               />
-            </fieldset>
+            </Fieldset>
           </section>
         </form>
       </div>

@@ -9,6 +9,8 @@ import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
 import { Review } from "$app/components/Review";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Label } from "$app/components/ui/Label";
 
 export const TestimonialSelectModal = ({
   isOpen,
@@ -120,16 +122,14 @@ export const TestimonialSelectModal = ({
           <p>No reviews with text or video yet.</p>
         ) : (
           <>
-            <div className="flex flex-row items-center gap-2">
-              <input
-                type="checkbox"
-                role="checkbox"
+            <Label>
+              <Checkbox
                 checked={selectedReviewIds.length === state.reviews.length && state.reviews.length > 0}
                 onChange={toggleSelectAll}
                 aria-label="Select all reviews"
               />
-              <p>Select all</p>
-            </div>
+              Select all
+            </Label>
             <section className="flex flex-col gap-4 overflow-y-auto p-1">
               {state.reviews.map((review) => (
                 <SelectableReviewCard
@@ -164,7 +164,7 @@ const SelectableReviewCard = ({
   onSelect: () => void;
 }) => (
   <div className="flex gap-4 rounded-xs p-4 outline-[1px] outline-solid">
-    <input type="checkbox" role="checkbox" checked={isSelected} onChange={onSelect} aria-label="Select review" />
+    <Checkbox checked={isSelected} onChange={onSelect} aria-label="Select review" />
     <div className="w-full">
       <Review review={review} seller={null} canRespond={false} hideResponse />
     </div>

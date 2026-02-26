@@ -3,6 +3,8 @@ import * as React from "react";
 import { Taxonomy } from "$app/utils/discover";
 
 import { Select } from "$app/components/Select";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
 
 export const TaxonomyEditor = ({
   taxonomyId,
@@ -25,10 +27,10 @@ export const TaxonomyEditor = ({
   }, [taxonomies]);
 
   return (
-    <fieldset>
-      <legend>
-        <label htmlFor={uid}>Category</label>
-      </legend>
+    <Fieldset>
+      <FieldsetTitle>
+        <Label htmlFor={uid}>Category</Label>
+      </FieldsetTitle>
       <Select
         inputId={uid}
         placeholder="Begin typing to select a category"
@@ -38,7 +40,7 @@ export const TaxonomyEditor = ({
         isClearable
         value={options.find(({ id }) => id === taxonomyId) ?? null}
       />
-      <small>Select a category to show your product on Gumroad Discover.</small>
-    </fieldset>
+      <FieldsetDescription>Select a category to show your product on Gumroad Discover.</FieldsetDescription>
+    </Fieldset>
   );
 };

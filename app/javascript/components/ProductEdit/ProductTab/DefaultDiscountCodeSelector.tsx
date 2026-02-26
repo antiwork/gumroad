@@ -8,6 +8,10 @@ import { Icon } from "$app/components/Icons";
 import { OfferCode, useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 
 export const DefaultDiscountCodeSelector = () => {
@@ -77,8 +81,8 @@ export const DefaultDiscountCodeSelector = () => {
       label="Automatically apply discount code"
       dropdown={
         <section className="flex flex-col gap-4">
-          <fieldset>
-            <label htmlFor="default-discount-code">Discount code</label>
+          <Fieldset>
+            <Label htmlFor="default-discount-code">Discount code</Label>
             <ComboBox<OfferCode>
               editable
               open={isOpen ? options.length > 0 : false}
@@ -92,8 +96,8 @@ export const DefaultDiscountCodeSelector = () => {
                 }
               }}
               input={(props) => (
-                <div className="input">
-                  <input
+                <InputGroup>
+                  <Input
                     {...props}
                     id="default-discount-code"
                     type="search"
@@ -109,7 +113,7 @@ export const DefaultDiscountCodeSelector = () => {
                     }}
                   />
                   <Icon name="outline-cheveron-down" />
-                </div>
+                </InputGroup>
               )}
               option={(code, props) => (
                 <div
@@ -131,7 +135,7 @@ export const DefaultDiscountCodeSelector = () => {
                 </div>
               )}
             />
-          </fieldset>
+          </Fieldset>
         </section>
       }
     />

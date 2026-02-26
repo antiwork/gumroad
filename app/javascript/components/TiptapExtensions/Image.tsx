@@ -228,6 +228,7 @@ export const Image = TiptapNode.create({
           onClick={() => inputRef.current?.click()}
         />
         <input
+          className="sr-only"
           ref={inputRef}
           multiple
           type="file"
