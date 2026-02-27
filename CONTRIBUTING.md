@@ -100,14 +100,18 @@ End with an AI disclosure after a `---` separator.
 Issues for enhancements, features, or refactors use this structure:
 
 ### What
+
 What needs to change. Be concrete:
+
 - Describe the current behavior and the desired behavior
 - Who is affected (buyers, sellers, internal team)
 - Quantify impact with data when possible (error rates, support tickets, revenue)
 - Use a checkbox task list for multiple deliverables
 
 ### Why
+
 Why this change matters:
+
 - What user or business problem does this solve?
 - Link to related issues, support tickets, or prior discussions for context
 
