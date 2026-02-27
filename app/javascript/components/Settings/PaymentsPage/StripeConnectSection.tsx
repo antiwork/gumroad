@@ -103,6 +103,7 @@ const StripeConnectSection = ({
               })}
               disabled={isFormDisabled}
             >
+              <Stripe pack="brands" className="size-5" />
               Connect with Stripe
             </SocialAuthButton>
           </div>

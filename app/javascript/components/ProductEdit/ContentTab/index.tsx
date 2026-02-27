@@ -20,7 +20,7 @@ import {
   Plus,
   Rename,
   Star,
-  Twitter,
+  TwitterX,
 } from "@boxicons/react";
 import { findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
@@ -762,7 +762,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             <span>License key</span>
                           </div>
                           <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
-                            <Twitter pack="brands" className="size-5" />
+                            <TwitterX pack="brands" className="size-5" />
                             <span>Twitter post</span>
                           </div>
                           <div

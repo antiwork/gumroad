@@ -1,4 +1,4 @@
-import { Twitter } from "@boxicons/react";
+import { TwitterX } from "@boxicons/react";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
@@ -29,7 +29,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
       <div className="ml-auto flex items-center gap-3">
         {creatorProfile.twitter_handle ? (
           <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
-            <Twitter pack="brands" className="size-5" />
+            <TwitterX pack="brands" className="size-5" />
           </NavigationButton>
         ) : null}
         <CartNavigationButton />
