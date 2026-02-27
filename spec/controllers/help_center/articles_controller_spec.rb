@@ -57,6 +57,14 @@ describe HelpCenter::ArticlesController, inertia: true do
       expect(response.body).to include("#{CGI.escapeHTML(article.title)} - Gumroad Help Center</title>")
     end
 
+    it "sets description meta tags from the article" do
+      get :show, params: { slug: article.slug }
+      html = Nokogiri::HTML.parse(response.body)
+      expect(html.xpath("//meta[@name='description']/@content").text).to eq(article.description)
+      expect(html.xpath("//meta[@property='og:description']/@value").text).to eq(article.description)
+      expect(html.xpath("//meta[@name='twitter:description']/@content").text).to eq(article.description)
+    end
+
     it "redirects to help center root for non-existent articles" do
       get :show, params: { slug: "non-existent-article" }
       expect(response).to redirect_to(help_center_root_path)

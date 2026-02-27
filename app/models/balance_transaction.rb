@@ -186,6 +186,8 @@ class BalanceTransaction < ApplicationRecord
           refund.created_at.to_date
         elsif dispute
           dispute.formalized_at.to_date
+        elsif credit&.returned_payment
+          credit.returned_payment.balances.order(date: :asc).first&.date || credit.created_at.to_date
         elsif credit
           credit.created_at.to_date
         end

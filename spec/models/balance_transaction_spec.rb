@@ -1325,6 +1325,99 @@ describe BalanceTransaction, :vcr do
             expect(balance_transaction.balance.holding_amount_cents).to eq(317_79)
           end
         end
+
+        describe "for a returned payment" do
+          let!(:returned_payment) { create(:payment, user:) }
+          let!(:credit) { create(:credit, user:, merchant_account:, returned_payment:) }
+          let!(:paid_balance) do
+            create(
+              :balance,
+              state: "paid",
+              user:,
+              merchant_account:,
+              date: (credit.created_at - 3.weeks).to_date,
+              currency: Currency::USD,
+              amount_cents: 100_00,
+              holding_currency: Currency::CAD,
+              holding_amount_cents: 110_00
+            )
+          end
+
+          before do
+            returned_payment.balances = [create(:balance, user:, date: 6.days.ago),
+                                         create(:balance, user:, date: 5.days.ago)]
+          end
+
+          describe "when an unpaid balance against the merchant account already exists" do
+            let!(:balance_2) do
+              create(
+                :balance,
+                state: "unpaid",
+                user:,
+                merchant_account:,
+                date: (credit.created_at - 2.weeks).to_date,
+                currency: Currency::USD,
+                amount_cents: 200_00,
+                holding_currency: Currency::CAD,
+                holding_amount_cents: 220_00
+              )
+            end
+
+            let!(:balance_3) do
+              create(
+                :balance,
+                state: "unpaid",
+                user:,
+                merchant_account:,
+                date: (credit.created_at - 1.week).to_date,
+                currency: Currency::USD,
+                amount_cents: 200_00,
+                holding_currency: Currency::CAD,
+                holding_amount_cents: 220_00
+              )
+            end
+
+            it "updates the earliest unpaid balance for the merchant account" do
+              expect(balance_transaction.balance).to eq(balance_2)
+              expect(balance_transaction.balance.user).to eq(user)
+              expect(balance_transaction.balance.merchant_account).to eq(merchant_account)
+              expect(balance_transaction.balance.date).to eq((credit.created_at - 2.weeks).to_date)
+              expect(balance_transaction.balance.amount_cents).to eq(288_90)
+              expect(balance_transaction.balance.holding_amount_cents).to eq(317_79)
+            end
+          end
+
+          describe "when no unpaid balance against the merchant account exists" do
+            it "creates a new balance for the date of the earliest balance in the returned payment" do
+              expect(user.unpaid_balances.where(merchant_account: credit.merchant_account)).to be_empty
+
+              expect(balance_transaction.balance).to eq(user.unpaid_balances.where(merchant_account: credit.merchant_account).last)
+              expect(user.unpaid_balances.where(merchant_account: credit.merchant_account).last).to be_present
+              expect(balance_transaction.balance.user).to eq(user)
+              expect(balance_transaction.balance.merchant_account).to eq(merchant_account)
+              expect(balance_transaction.balance.date).to eq(6.days.ago.to_date)
+              expect(balance_transaction.balance.amount_cents).to eq(88_90)
+              expect(balance_transaction.balance.holding_amount_cents).to eq(97_79)
+            end
+
+            describe "when the returned payment does not include any balances" do
+              it "creates a new balance record with same date as credit creation date" do
+                returned_payment.update!(balances: [])
+
+                expect(user.unpaid_balances.where(merchant_account: credit.merchant_account)).to be_empty
+                expect(returned_payment.balances).to be_empty
+
+                expect(balance_transaction.balance).to eq(user.unpaid_balances.where(merchant_account: credit.merchant_account).last)
+                expect(user.unpaid_balances.where(merchant_account: credit.merchant_account).last).to be_present
+                expect(balance_transaction.balance.user).to eq(user)
+                expect(balance_transaction.balance.merchant_account).to eq(merchant_account)
+                expect(balance_transaction.balance.date).to eq(credit.created_at.to_date)
+                expect(balance_transaction.balance.amount_cents).to eq(88_90)
+                expect(balance_transaction.balance.holding_amount_cents).to eq(97_79)
+              end
+            end
+          end
+        end
       end
     end
   end

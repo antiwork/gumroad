@@ -17,5 +17,7 @@ class GenerateFinancialReportsForPreviousMonthJob
     CreateUsStatesSalesSummaryReportJob.perform_async(subdivision_codes, prev_month_date.month, prev_month_date.year)
 
     GenerateCanadaSalesReportJob.perform_async(prev_month_date.month, prev_month_date.year)
+
+    CreateGlobalSalesTaxSummaryReportJob.perform_async(prev_month_date.month, prev_month_date.year)
   end
 end
