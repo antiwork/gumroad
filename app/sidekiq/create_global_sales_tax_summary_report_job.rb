@@ -4,6 +4,8 @@ class CreateGlobalSalesTaxSummaryReportJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed
 
+  # GROUP BY uses HEX(CAST(... AS BINARY)) to prevent MySQL's case-insensitive collation
+  # from silently merging rows like "USA" and "usa" — Ruby handles normalization instead.
   BINARY_SAFE_KEY_COLUMNS = {
     country: "COALESCE(HEX(CAST(purchases.country AS BINARY)), '__NULL__')",
     ip_country: "COALESCE(HEX(CAST(purchases.ip_country AS BINARY)), '__NULL__')",
@@ -61,7 +63,7 @@ class CreateGlobalSalesTaxSummaryReportJob
         bucket[:tax_collected_cents] += tax.to_i
       end
 
-      unresolved_us_tuple_keys.uniq!
+      # US purchases with zip codes not in UsZipCodes need individual GeoIp lookup for state resolution.
       resolve_geoip_fallback_purchases(purchases_scope, unresolved_us_tuple_keys, aggregation)
     end
 
