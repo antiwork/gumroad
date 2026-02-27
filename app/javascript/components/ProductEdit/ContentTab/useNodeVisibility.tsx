@@ -43,7 +43,7 @@ export const NodeVisibilityProvider = ({
     };
   }, []);
 
-  return React.createElement(NodeVisibilityContext.Provider, { value: observe }, children);
+  return <NodeVisibilityContext.Provider value={observe}>{children}</NodeVisibilityContext.Provider>;
 };
 
 // Mimics virtualized scrolling for file nodes in the editor, where we can't use react-virtualized etc.
