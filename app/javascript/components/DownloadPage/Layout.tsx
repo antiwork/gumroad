@@ -241,13 +241,14 @@ export const Layout = ({
             <a
               href={Routes.library_url()}
               title="Back to Library"
+              aria-label="Back to Library"
               className="flex shrink-0 items-center justify-center border-r border-border px-6 no-underline transition-colors hover:bg-active-bg"
             >
               <X className="size-6" />
             </a>
           ) : null}
           <div
-            className={`flex min-h-[72px] min-w-0 flex-1 items-center justify-between gap-2 py-3 pr-4 ${loggedInUser ? "pl-4" : "pl-8"}`}
+            className={`flex min-h-18 min-w-0 flex-1 items-center justify-between gap-2 py-3 pr-4 ${loggedInUser ? "pl-4" : "pl-8"}`}
           >
             <h1 className="line-clamp-2 hidden! min-w-0 flex-1 text-2xl sm:block!">{purchase?.product_name}</h1>
             {headerActions ? <div className="flex shrink-0 items-center gap-2">{headerActions}</div> : null}
@@ -264,7 +265,7 @@ export const Layout = ({
             </>
           }
         >
-          <div className="mx-auto flex max-w-[800px] flex-col gap-4">
+          <div className="mx-auto flex max-w-200 flex-col gap-4">
             {children}
             {!isDesktop ? settings : null}
           </div>
