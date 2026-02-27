@@ -446,7 +446,7 @@ const CustomersPage = ({
         {customers.length > 0 ? (
           <section className="flex flex-col gap-4">
             <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
-              <TableCaption>{`All sales (${count})`}</TableCaption>
+              <TableCaption>{`All sales (${count.toLocaleString()})`}</TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>

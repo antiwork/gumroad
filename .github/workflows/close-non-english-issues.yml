@@ -43,4 +43,4 @@ jobs:
 
             If the issue is in English or you are unsure, do absolutely nothing.
           claude_args: |
-            --allowedTools "Bash(gh issue close:*),Bash(gh issue comment:*)"
+            --allowedTools "Bash(gh issue view:*),Bash(gh issue close:*),Bash(gh issue comment:*)"
