@@ -256,11 +256,15 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         mimeType,
         onComplete: () => {
           fileStatus.uploadStatus = { type: "uploaded" };
-          updateProduct({});
+          updateProduct((product) => {
+            product.files = [...product.files];
+          });
         },
         onProgress: (progress) => {
           fileStatus.uploadStatus = { type: "uploading", progress };
-          updateProduct({});
+          updateProduct((product) => {
+            product.files = [...product.files];
+          });
         },
       });
       if (typeof status === "string") {

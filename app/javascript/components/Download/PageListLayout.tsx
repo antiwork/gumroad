@@ -14,7 +14,7 @@ export const PageListLayout = ({
 }) => (
   <div
     className={classNames(
-      "flex min-h-0 flex-col gap-6 bg-background p-4 [scrollbar-gutter:stable] md:p-8 lg:flex-row lg:gap-16 lg:overflow-y-auto",
+      "flex min-h-0 flex-col gap-6 bg-background p-4 [scrollbar-gutter:stable] md:p-8 lg:flex-row lg:gap-8 lg:overflow-y-auto",
       className,
     )}
   >
