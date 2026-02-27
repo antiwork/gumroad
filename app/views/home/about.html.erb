@@ -97,9 +97,7 @@
           ].each do |text| %>
           <div class="flex gap-4">
             <div class="h-7 flex-none flex items-center justify-center">
-              <%= image_tag "icons/outline-check-circle-about.svg",
-                            alt: "Check",
-                            class: "s-5" %>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" class="s-5" aria-label="Check"><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m-1.29 13.71c-.2.2-.45.29-.71.29s-.51-.1-.71-.29l-3-3L7.7 11.3l2.29 2.29 5.29-5.29 1.41 1.41-6 6Z"/></svg>
             </div>
             <p class="text-lg text-balance"><%= text %></p>
           </div>
