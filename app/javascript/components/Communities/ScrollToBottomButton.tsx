@@ -1,6 +1,6 @@
+import { ArrowDown } from "@boxicons/react";
 import * as React from "react";
 
-import { Icon } from "$app/components/Icons";
 export const DEFAULT_FORM_ELEMENT_HEIGHT_IN_PX = 48; // same as the `$form-element-height` design system variable
 
 export const ScrollToBottomButton = ({
@@ -24,7 +24,7 @@ export const ScrollToBottomButton = ({
         onClick={onClick}
         className="flex cursor-pointer items-center justify-center gap-1 overflow-hidden rounded-full border border-solid bg-black px-3 py-1.5 text-xs font-bold text-white all-unset hover:border-black hover:bg-pink hover:text-black hover:shadow-[4px_4px_#000] focus:outline-hidden dark:border-black dark:bg-pink dark:text-black dark:hover:bg-pink dark:hover:shadow-[4px_4px_#fff]"
       >
-        <Icon name="arrow-down" />
+        <ArrowDown className="size-5" />
         <span>{hasUnreadMessages ? "New messages" : "Latest messages"}</span>
       </button>
     </div>

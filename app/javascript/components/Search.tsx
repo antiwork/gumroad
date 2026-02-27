@@ -1,7 +1,7 @@
+import { Search as SearchIcon } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -20,14 +20,14 @@ export const Search = ({ onSearch, value: initialValue, placeholder = "Search" }
     <Popover>
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
-          <Button>
-            <Icon name="solid-search" />
+          <Button size="icon">
+            <SearchIcon className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent sideOffset={4} onOpenAutoFocus={() => searchInputRef.current?.focus()}>
         <InputGroup>
-          <Icon name="solid-search" />
+          <SearchIcon className="size-5 text-muted" />
           <Input
             ref={searchInputRef}
             value={searchQuery}

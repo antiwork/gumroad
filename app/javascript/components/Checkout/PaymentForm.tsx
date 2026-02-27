@@ -1,3 +1,4 @@
+import { CreditCard } from "@boxicons/react";
 import { loadScript as loadPaypal, PayPalNamespace } from "@paypal/paypal-js";
 import { useStripe } from "@stripe/react-stripe-js";
 import {
@@ -48,7 +49,6 @@ import {
   useState,
 } from "$app/components/Checkout/payment";
 import { Dropdown } from "$app/components/Dropdown";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover";
@@ -1172,10 +1172,10 @@ const PaymentMethodsSection = ({
     <>
       <div className="overflow-hidden rounded border border-border">
         {hasMultiplePaymentMethods ? (
-          <PaymentMethodRadioRow paymentMethod="card" label="Card" icon={<Icon name="card" />} />
+          <PaymentMethodRadioRow paymentMethod="card" label="Card" icon={<CreditCard className="size-5" />} />
         ) : (
           <div className="flex items-center gap-3 bg-body p-4">
-            <Icon name="card" />
+            <CreditCard className="size-5" />
             <span className="font-medium">Card</span>
           </div>
         )}

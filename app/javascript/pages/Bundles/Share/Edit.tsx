@@ -1,3 +1,4 @@
+import { Link } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -14,7 +15,6 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
-import { Icon } from "$app/components/Icons";
 import { Seller } from "$app/components/Product";
 import { Attribute } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
@@ -150,7 +150,7 @@ export default function BundlesShareEdit() {
             <FacebookShareButton url={url} text={bundle.name} />
             <CopyToClipboard text={url} tooltipPosition="top">
               <Button color="primary">
-                <Icon name="link" />
+                <Link className="size-5" />
                 Copy URL
               </Button>
             </CopyToClipboard>

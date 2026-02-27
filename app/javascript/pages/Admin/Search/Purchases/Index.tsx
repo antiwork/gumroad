@@ -1,3 +1,4 @@
+import { ArrowUpRightSquare, Copy, Search } from "@boxicons/react";
 import { Link, useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
@@ -8,7 +9,6 @@ import { type RefundPolicy, RefundPolicyTitle } from "$app/components/Admin/Purc
 import { PurchaseStates } from "$app/components/Admin/Purchases/States";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { Input } from "$app/components/ui/Input";
 import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -75,7 +75,7 @@ export default function Purchases() {
               <option value="failed">Failed</option>
             </Select>
             <Button type="submit" color="primary">
-              <Icon name="solid-search" />
+              <Search className="size-5" />
             </Button>
             {data.product_title_query || data.purchase_status ? (
               <Button asChild>
@@ -101,7 +101,7 @@ export default function Purchases() {
                     <Link href={Routes.admin_product_url(purchase.product.external_id)}>{purchase.product.name}</Link>{" "}
                     {purchase.variants_list}{" "}
                     <a href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
-                      <Icon name="arrow-up-right-square" />
+                      <ArrowUpRightSquare className="size-5" />
                     </a>{" "}
                     <PurchaseStates purchase={purchase} />
                     <div className="text-sm">
@@ -114,7 +114,7 @@ export default function Purchases() {
                         <li>
                           Seller: {purchase.seller.email}{" "}
                           <CopyToClipboard text={purchase.seller.email}>
-                            <Icon name="outline-duplicate" />
+                            <Copy className="size-5" />
                           </CopyToClipboard>
                         </li>
                         {purchase.seller.support_email ? (
@@ -126,7 +126,7 @@ export default function Purchases() {
                   <TableCell>
                     <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>{" "}
                     <CopyToClipboard text={purchase.email}>
-                      <Icon name="outline-duplicate" />
+                      <Copy className="size-5" />
                     </CopyToClipboard>
                     <small>
                       <DateTimeWithRelativeTooltip date={purchase.created_at} />

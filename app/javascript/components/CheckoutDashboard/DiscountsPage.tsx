@@ -1,3 +1,4 @@
+import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -24,7 +25,6 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
@@ -415,6 +415,7 @@ const DiscountsPage = ({
                       <TableCell>
                         <div className="flex flex-wrap gap-3 lg:justify-end">
                           <Button
+                            size="icon"
                             aria-label="Edit"
                             disabled={!offerCode.can_update || isLoading}
                             onClick={() => {
@@ -422,7 +423,7 @@ const DiscountsPage = ({
                               setView("edit");
                             }}
                           >
-                            <Icon name="pencil" />
+                            <Pencil className="size-5" />
                           </Button>
                           <Popover
                             open={popoverOfferCodeId === offerCode.id}
@@ -431,8 +432,12 @@ const DiscountsPage = ({
                             }}
                           >
                             <PopoverTrigger asChild>
-                              <Button aria-label="Open discount action menu" onClick={(e) => e.stopPropagation()}>
-                                <Icon name="three-dots" />
+                              <Button
+                                size="icon"
+                                aria-label="Open discount action menu"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <DotsHorizontalRounded className="size-5" />
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -446,7 +451,7 @@ const DiscountsPage = ({
                                     setView("create");
                                   }}
                                 >
-                                  <Icon name="outline-duplicate" />
+                                  <Copy className="size-5" />
                                   &ensp;Duplicate
                                 </div>
                                 <div
@@ -466,7 +471,7 @@ const DiscountsPage = ({
                                     setIsLoading(false);
                                   })}
                                 >
-                                  <Icon name="trash2" />
+                                  <Trash className="size-5" />
                                   &ensp;Delete
                                 </div>
                               </div>
@@ -590,8 +595,8 @@ const DiscountsPage = ({
                           copyTooltip="Copy link with discount"
                           text={`${product.url}/${selectedOfferCode.code}`}
                         >
-                          <Button aria-label="Copy link with discount">
-                            <Icon name="link" />
+                          <Button size="icon" aria-label="Copy link with discount">
+                            <Link className="size-5" />
                           </Button>
                         </CopyToClipboard>
                       </CardContent>
@@ -868,7 +873,6 @@ const Form = ({
         actions={
           <>
             <Button onClick={cancel} disabled={isLoading}>
-              <Icon name="x-square" />
               Cancel
             </Button>
             <Button color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -932,7 +936,7 @@ const Form = ({
                 aria-label="Generate new discount"
                 disabled={readOnlyCode || isBlackFridayMode}
               >
-                <Icon name="outline-refresh" />
+                <RefreshCcw className="size-5" />
               </Button>
             </div>
             {isBlackFridayMode ? (

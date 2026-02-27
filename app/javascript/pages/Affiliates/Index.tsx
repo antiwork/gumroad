@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf, Pencil, Search, Trash } from "@boxicons/react";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { parseISO } from "date-fns";
@@ -9,7 +10,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, buttonVariants } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
@@ -83,14 +83,14 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
     <Popover open={searchBoxOpen} onOpenChange={setSearchBoxOpen}>
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
-          <Button>
-            <Icon name="solid-search" />
+          <Button size="icon">
+            <Search className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent>
         <div className="input input-wrapper">
-          <Icon name="solid-search" />
+          <Search className="size-5 text-muted" />
           <input
             ref={searchInputRef}
             value={inputValue}
@@ -383,7 +383,7 @@ export default function AffiliatesIndex() {
                               className={buttonVariants({ size: "default", color: "primary" })}
                               aria-label="Export"
                             >
-                              <Icon name="download" />
+                              <ArrowInDownSquareHalf className="size-5" />
                             </a>
                           </WithTooltip>
                         </div>
@@ -440,20 +440,22 @@ export default function AffiliatesIndex() {
 
                                 <NavigationButtonInertia
                                   href={Routes.edit_affiliate_path(affiliate.id)}
+                                  size="icon"
                                   aria-label="Edit"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
-                                  <Icon name="pencil" />
+                                  <Pencil className="size-5" />
                                 </NavigationButtonInertia>
 
                                 <Button
                                   type="submit"
+                                  size="icon"
                                   color="danger"
                                   onClick={() => remove(affiliate.id)}
                                   aria-label="Delete"
                                   disabled={!loggedInUser?.policies.direct_affiliate.update || isNavigating}
                                 >
-                                  <Icon name="trash2" />
+                                  <Trash className="size-5" />
                                 </Button>
                               </div>
                             </TableCell>

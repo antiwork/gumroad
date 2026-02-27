@@ -1,3 +1,4 @@
+import { Store, User as UserIcon } from "@boxicons/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -5,7 +6,6 @@ import { cast } from "ts-safe-cast";
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -413,7 +413,7 @@ const AccountDetailsSection = ({
                 disabled={isFormDisabled}
                 className="items-start justify-start text-left"
               >
-                <Icon name="person" />
+                <UserIcon className="size-5" />
                 <div>
                   <h4 className="font-bold">Individual</h4>
                   When you are selling as yourself
@@ -433,7 +433,7 @@ const AccountDetailsSection = ({
                 disabled={isFormDisabled}
                 className="items-start justify-start text-left"
               >
-                <Icon name="shop-window" />
+                <Store className="size-5" />
                 <div>
                   <h4 className="font-bold">Business</h4>
                   When you are selling as a business

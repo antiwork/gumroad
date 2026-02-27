@@ -224,10 +224,9 @@ describe("Discover", js: true, type: :system) do
       within_section "Wishlists you might like", section_element: :section do
         wishlist_card = find_product_card(wishlists.first)
         within wishlist_card do
-          follow_button = find("a[role='button'] .icon-bookmark-plus")
-          follow_button.click
+          click_on "Follow"
           wait_for_ajax
-          expect(page).to have_selector("a[role='button'] .icon-bookmark-check-fill")
+          expect(page).to have_button("Unfollow")
         end
       end
 
@@ -237,10 +236,9 @@ describe("Discover", js: true, type: :system) do
       within_section "Wishlists you might like", section_element: :section do
         wishlist_card = find_product_card(wishlists.first)
         within wishlist_card do
-          unfollow_button = find("a[role='button'] .icon-bookmark-check-fill")
-          unfollow_button.click
+          click_on "Unfollow"
           wait_for_ajax
-          expect(page).to have_selector("a[role='button'] .icon-bookmark-plus")
+          expect(page).to have_button("Follow")
         end
       end
 

@@ -1,3 +1,4 @@
+import { CreditCard } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -6,7 +7,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { FormSection } from "$app/components/ui/FormSection";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -50,7 +50,7 @@ export const CreditCardForm = ({ card, can_remove, read_only }: Props) => {
     >
       <div className="flex flex-col gap-4">
         <InputGroup readOnly aria-label="Saved credit card">
-          <Icon name="outline-credit-card" />
+          <CreditCard className="size-5" />
           <span>{card.number}</span>
           <span style={{ marginLeft: "auto" }}>{card.expiration_date}</span>
         </InputGroup>

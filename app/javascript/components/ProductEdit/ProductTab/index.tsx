@@ -1,13 +1,13 @@
+import { Sparkle } from "@boxicons/react";
 import * as React from "react";
 
 import { COFFEE_CUSTOM_BUTTON_TEXT_OPTIONS, CUSTOM_BUTTON_TEXT_OPTIONS } from "$app/parsers/product";
 import { currencyCodeList } from "$app/utils/currency";
-import { recurrenceLabels, recurrenceIds } from "$app/utils/recurringPricing";
+import { recurrenceIds, recurrenceLabels } from "$app/utils/recurringPricing";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import CustomDomain from "$app/components/CustomDomain";
-import { Icon } from "$app/components/Icons";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
@@ -87,7 +87,7 @@ export const ProductTab = () => {
             {showAiNotification ? (
               <Alert role="status" variant="accent">
                 <div className="flex items-center gap-4">
-                  <Icon className="text-lg" name="sparkle" />
+                  <Sparkle className="size-5 text-lg" />
                   <div className="flex-1">
                     <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
                     Tweak things and make it your own—this is your time to shine!

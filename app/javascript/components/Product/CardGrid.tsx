@@ -1,3 +1,4 @@
+import { Archive } from "@boxicons/react";
 import * as React from "react";
 
 import { getSearchResults, ProductFilter, SearchRequest, SearchResults } from "$app/data/search";
@@ -8,7 +9,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card as UICard, CardContent } from "$app/components/ui/Card";
@@ -372,7 +372,7 @@ export const CardGrid = ({
       )}
       {results?.products.length === 0 ? (
         <Placeholder>
-          <Icon name="archive-fill" />
+          <Archive pack="filled" className="size-5" />
           No products found
         </Placeholder>
       ) : (

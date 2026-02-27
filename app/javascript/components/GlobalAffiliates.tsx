@@ -1,3 +1,4 @@
+import { Link, Search } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -8,7 +9,6 @@ import { assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useDomains, useDiscoverUrl } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -227,7 +227,7 @@ const ProductEligibilitySection = ({
               }
             })}
           />
-          <Icon name="solid-search" />
+          <Search className="size-5 text-muted" />
         </div>
       </fieldset>
       {result.isLoading ? <LoadingSpinner /> : null}
@@ -240,7 +240,7 @@ const ProductEligibilitySection = ({
             <span>{result.product.formatted_price}</span>
             <CopyToClipboard text={result.product.short_url} tooltipPosition="bottom">
               <Button>
-                <Icon name="link" />
+                <Link className="size-5" />
                 Copy link
               </Button>
             </CopyToClipboard>

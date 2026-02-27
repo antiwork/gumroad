@@ -1,3 +1,4 @@
+import { SendAlt } from "@boxicons/react";
 import { type FormDataErrors } from "@inertiajs/core";
 import * as React from "react";
 
@@ -5,7 +6,6 @@ import { MAX_MESSAGE_LENGTH } from "$app/pages/Communities/Index";
 import { classNames } from "$app/utils/classNames";
 
 import { CommunityDraft } from "$app/components/Communities/useCommunities";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type Props = {
@@ -75,7 +75,7 @@ export const ChatMessageInput = React.forwardRef<HTMLTextAreaElement, Props>(
           disabled={draft?.isSending}
           aria-label="Send message"
         >
-          <Icon name="solid-send" className="text-sm" />
+          <SendAlt pack="filled" className="size-4" />
         </button>
       </div>
     );

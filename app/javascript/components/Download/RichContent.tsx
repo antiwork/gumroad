@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight, Dropbox as DropboxIcon, Folder } from "@boxicons/react";
 import { Content, findParentNodeClosestToPos, Mark, Node as TiptapNode } from "@tiptap/core";
 import { LinkOptions as BaseLinkOptions } from "@tiptap/extension-link";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -11,10 +12,9 @@ import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
+import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
 import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
 import { License, useContentFiles } from "$app/components/DownloadPage/WithContent";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { titleWithFallback } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
@@ -286,8 +286,8 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
       <Rows role="tree" ref={ref}>
         <Row role="treeitem" aria-expanded={expanded}>
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
-            <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
-            <Icon name="solid-folder-open" className="type-icon" />
+            {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+            <Folder pack="filled" className="type-icon size-5" />
             <div>
               <h4>{folderTitle}</h4>
             </div>
@@ -378,7 +378,7 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
         <PopoverTrigger disabled={isDownloading} contentEditable={false} asChild>
           <Button>
             Download all
-            <Icon name="outline-cheveron-down" />
+            <ChevronDown className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
@@ -436,7 +436,7 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
               }
             })}
           >
-            <Icon name="dropbox" />
+            <DropboxIcon pack="brands" className="size-5" />
             Save to Dropbox
           </Button>
         </div>

@@ -1,3 +1,4 @@
+import { Image as ImageIcon } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorView } from "@tiptap/pm/view";
@@ -223,7 +224,7 @@ export const Image = TiptapNode.create({
       <>
         <MenuItem
           name="Insert image"
-          icon="image"
+          icon={<ImageIcon className="size-5" />}
           active={editor.isActive("image")}
           onClick={() => inputRef.current?.click()}
         />

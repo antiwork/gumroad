@@ -1,3 +1,4 @@
+import { ArrowUp, ChevronDown, ChevronUp, Folder, FolderPlus, Fullscreen, FullscreenExit } from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import { Editor, findChildren, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer, DOMParser as ProseMirrorDOMParser } from "@tiptap/pm/model";
@@ -19,7 +20,6 @@ import { Button, buttonVariants, NavigationButton } from "$app/components/Button
 import { connectedFileRowClassName } from "$app/components/Download/RichContent";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -45,6 +45,8 @@ import { Switch } from "$app/components/ui/Switch";
 import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
+import { useNodeVisibility } from "./useNodeVisibility";
+
 export const getDownloadUrl = (productId: string, file: FileEntry) =>
   file.extension === "URL" || file.status.type === "removed"
     ? null
@@ -57,12 +59,14 @@ export const getDraggedFileEmbed = (editor: Editor) => {
   return draggedNode?.type.name === FileEmbed.name ? draggedNode : null;
 };
 
+const DEFAULT_FILE_ROW_HEIGHT = 82;
+
 const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
   if (!node.attrs.id) return;
 
+  const { ref, visible, lastHeight } = useNodeVisibility(DEFAULT_FILE_ROW_HEIGHT);
   const { id, updateProduct, filesById } = useProductEditContext();
   const uid = React.useId();
-  const ref = React.useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = React.useState(false);
   const [isDropZone, setIsDropZone] = React.useState(false);
   const [loadingVideo, setLoadingVideo] = React.useState(false);
@@ -174,12 +178,42 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const isConnectedRow = isInGroup && !hasStreamable;
   const isLastInGroup = node === parentNode?.content.lastChild;
 
-  if (!fileExists) return;
+  if (!fileExists) return <NodeViewWrapper ref={ref} contentEditable={false} />;
+
   const updateFile = (data: Partial<FileEntry>) =>
     updateProduct((product) => {
-      const existing = product.files.find((existing) => existing.id === file.id);
-      if (existing) Object.assign(existing, data);
+      product.files = product.files.map((existing) => (existing.id === file.id ? { ...existing, ...data } : existing));
     });
+
+  const uploadThumbnail = (thumbnail: File) => {
+    if (thumbnail.size > 5 * 1024 * 1024)
+      return showAlert(
+        "Could not process your thumbnail, please upload an image with size smaller than 5 MB.",
+        "error",
+      );
+
+    setLoadingVideo(true);
+    const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
+    upload.create((error, blob) => {
+      if (error) return showAlert(error.message, "error");
+      updateFile({
+        thumbnail: {
+          url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
+          signed_id: blob.signed_id,
+          status: { type: "unsaved" },
+        },
+      });
+      setLoadingVideo(false);
+    });
+  };
+
+  if (!visible)
+    return (
+      <NodeViewWrapper ref={ref} contentEditable={false}>
+        <div style={{ height: lastHeight.current }} />
+      </NodeViewWrapper>
+    );
+
   const isComplete = !(
     (file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading") ||
     (file.status.type === "dropbox" && file.status.uploadState === "in_progress")
@@ -211,27 +245,6 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     return clientY < top + threshold || clientY > bottom - threshold;
   };
 
-  const uploadThumbnail = (thumbnail: File) => {
-    if (thumbnail.size > 5 * 1024 * 1024)
-      return showAlert(
-        "Could not process your thumbnail, please upload an image with size smaller than 5 MB.",
-        "error",
-      );
-
-    setLoadingVideo(true);
-    const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
-    upload.create((error, blob) => {
-      if (error) return showAlert(error.message, "error");
-      updateFile({
-        thumbnail: {
-          url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-          signed_id: blob.signed_id,
-          status: { type: "unsaved" },
-        },
-      });
-      setLoadingVideo(false);
-    });
-  };
   const onThumbnailSelected = (files: FileList | null) => {
     const thumbnail = files?.[0];
     if (thumbnail) uploadThumbnail(thumbnail);
@@ -293,7 +306,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const folderAction = {
     item: () => (
       <>
-        <Icon name="solid-folder-open" />
+        <Folder pack="filled" className="size-5" />
         <span>Move to folder...</span>
       </>
     ),
@@ -304,7 +317,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             onClick={() => editor.commands.moveFileEmbedToGroup({ fileUid: cast(node.attrs.uid), groupUid: null })}
             role="menuitem"
           >
-            <Icon name="folder-plus" />
+            <FolderPlus className="size-5" />
             <span>New folder</span>
           </div>
         )}
@@ -319,7 +332,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             }}
             role="menuitem"
           >
-            <Icon name="solid-folder-open" />
+            <Folder pack="filled" className="size-5" />
             <span>{name || "Untitled"}</span>
           </div>
         ))}
@@ -417,7 +430,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         aria-label="Replace thumbnail"
                       >
                         {thumbnailInput}
-                        <Icon name="upload-fill" />
+                        <ArrowUp pack="filled" className="size-5" />
                       </label>
                     </WithTooltip>
                   </div>
@@ -428,7 +441,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                 <Placeholder>
                   <label className={buttonVariants({ size: "default", color: "primary" })}>
                     {thumbnailInput}
-                    <Icon name="upload-fill" />
+                    <ArrowUp pack="filled" className="size-5" />
                     Upload a thumbnail
                   </label>
                   <div>
@@ -460,7 +473,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   {file.thumbnail ? <img src={file.thumbnail.url} /> : null}
                   <Placeholder>
                     {thumbnailInput}
-                    <Icon name="upload-fill" />
+                    <ArrowUp pack="filled" className="size-5" />
                   </Placeholder>
                 </>
               )}
@@ -513,8 +526,8 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             <Popover>
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Thumbnail view" asChild>
-                  <Button>
-                    <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
+                  <Button size="icon">
+                    {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
@@ -527,7 +540,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         updateAttributes({ collapsed: !node.attrs.collapsed });
                       }}
                     >
-                      <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
+                      {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
                       <span>{node.attrs.collapsed ? "Expand selected" : "Collapse selected"}</span>
                     </div>
                   </PopoverClose>
@@ -549,7 +562,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                         });
                       }}
                     >
-                      <Icon name={node.attrs.collapsed ? "arrows-expand" : "arrows-collapse"} />
+                      {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
                       <span>{node.attrs.collapsed ? "Expand all thumbnails" : "Collapse all thumbnails"}</span>
                     </div>
                   </PopoverClose>
@@ -559,8 +572,8 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
           ) : null}
 
           {!file.is_streamable || isComplete ? (
-            <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
-              <Icon name={expanded ? "outline-cheveron-up" : "outline-cheveron-down"} />
+            <Button size="icon" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
+              {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}
 

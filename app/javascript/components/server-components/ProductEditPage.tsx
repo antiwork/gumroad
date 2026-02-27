@@ -24,12 +24,12 @@ import { ReceiptTab } from "$app/components/ProductEdit/ReceiptTab";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
 import { ShareTab } from "$app/components/ProductEdit/ShareTab";
 import {
-  ProductEditContext,
-  Product,
-  ProfileSection,
-  ExistingFileEntry,
-  ShippingCountry,
   ContentUpdates,
+  ExistingFileEntry,
+  Product,
+  ProductEditContext,
+  ProfileSection,
+  ShippingCountry,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -87,6 +87,9 @@ type Props = {
   ai_generated: boolean;
 };
 
+const buildFilesById = (productId: string, files: Props["product"]["files"]) =>
+  new Map(files.map((file) => [file.id, { ...file, url: getDownloadUrl(productId, file) }]));
+
 const createContextValue = (props: Props) => ({
   id: props.id,
   product: props.product,
@@ -120,7 +123,6 @@ const createContextValue = (props: Props) => ({
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
   contentUpdates: null,
   setContentUpdates: () => {},
-  filesById: new Map(props.product.files.map((file) => [file.id, { ...file, url: getDownloadUrl(props.id, file) }])),
   aiGenerated: props.ai_generated,
 });
 
@@ -192,6 +194,8 @@ const ProductEditPage = (props: Props) => {
     setSaving(false);
   };
 
+  const filesById = React.useMemo(() => buildFilesById(props.id, product.files), [product.files, props.id]);
+
   const contextValue = React.useMemo(
     () => ({
       ...createContextValue({ ...props, product }),
@@ -204,8 +208,9 @@ const ProductEditPage = (props: Props) => {
       saving,
       contentUpdates,
       setContentUpdates,
+      filesById,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles],
+    [product, updateProduct, existingFiles, setExistingFiles, filesById],
   );
 
   const imageSettings = React.useMemo(
@@ -258,6 +263,7 @@ const ProductEditRouter = async (global: GlobalProps) => {
     <ProductEditContext.Provider
       value={{
         ...createContextValue(props),
+        filesById: buildFilesById(props.id, props.product.files),
         setCurrencyType: (_currency) => {}, // no-op
       }}
     >

@@ -1,3 +1,4 @@
+import { X } from "@boxicons/react";
 import * as React from "react";
 
 import { computeOfferDiscount } from "$app/data/offer_code";
@@ -24,7 +25,6 @@ import {
 } from "$app/components/CartItemList";
 import { GiftForm } from "$app/components/Checkout/GiftForm";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Card } from "$app/components/Product/Card";
@@ -296,7 +296,7 @@ export const Checkout = ({
                                 aria-label="Purchasing power parity discount"
                               >
                                 Purchasing power parity discount
-                                <Icon name="x" className="ml-2" />
+                                <X className="ml-2 size-5" />
                               </button>
                             </Pill>
                           </WithTooltip>
@@ -312,7 +312,7 @@ export const Checkout = ({
                             aria-label="Discount code"
                           >
                             {code.code}
-                            <Icon name="x" className="ml-2" />
+                            <X className="ml-2 size-5" />
                           </Pill>
                         ))}
                       </h4>

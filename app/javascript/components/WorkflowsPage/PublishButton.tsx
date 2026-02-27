@@ -1,9 +1,9 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { type SaveActionName } from "$app/types/workflow";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Switch } from "$app/components/ui/Switch";
 
@@ -40,7 +40,7 @@ export const PublishButton = ({
         <PopoverTrigger disabled={isDisabled} asChild>
           <Button color="accent">
             Publish
-            <Icon name="outline-cheveron-down" />
+            <ChevronDown className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>

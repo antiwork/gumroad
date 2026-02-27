@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, LayersAlt, Plus, Trash } from "@boxicons/react";
 import { Editor } from "@tiptap/core";
 import { format } from "date-fns";
 import * as React from "react";
@@ -7,8 +8,8 @@ import { getIsSingleUnitCurrency } from "$app/utils/currency";
 import { priceCentsToUnit } from "$app/utils/price";
 import {
   numberOfMonthsInRecurrence,
-  RecurrenceId,
   perRecurrenceLabels,
+  RecurrenceId,
   recurrenceNames,
 } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
@@ -17,7 +18,6 @@ import { Button } from "$app/components/Button";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
@@ -83,7 +83,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
         ]);
       }}
     >
-      <Icon name="plus" />
+      <Plus className="size-5" />
       Add tier
     </Button>
   );
@@ -197,7 +197,7 @@ const TierEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Icon name="stack-fill" />
+        <LayersAlt pack="filled" className="size-5" />
         <div>
           <h3>{tier.name || "Untitled"}</h3>
           {tier.active_subscribers_count ? (
@@ -209,13 +209,13 @@ const TierEditor = ({
       </RowContent>
       <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
-          <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
-            <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
+          <Button size="icon" onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
+            {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
         </WithTooltip>
         <WithTooltip tip="Remove">
-          <Button onClick={onDelete} aria-label="Remove">
-            <Icon name="trash2" />
+          <Button size="icon" onClick={onDelete} aria-label="Remove">
+            <Trash className="size-5" />
           </Button>
         </WithTooltip>
       </RowActions>

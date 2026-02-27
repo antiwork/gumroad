@@ -1,3 +1,4 @@
+import { XSquare } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -5,7 +6,6 @@ import { cast } from "ts-safe-cast";
 import { isUrlValid } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -136,7 +136,7 @@ export default function AffiliatesEdit() {
         actions={
           <>
             <NavigationButtonInertia href={Routes.affiliates_path()} disabled={processing}>
-              <Icon name="x-square" />
+              <XSquare className="size-5" />
               Cancel
             </NavigationButtonInertia>
             <Button

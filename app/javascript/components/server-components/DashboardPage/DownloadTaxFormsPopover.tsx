@@ -1,7 +1,7 @@
+import { ArrowInDownSquareHalf } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -45,7 +45,7 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
         <PopoverTrigger aria-label="Tax forms" asChild>
           <Button>
             Tax forms
-            <Icon name="download" />
+            <ArrowInDownSquareHalf className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>

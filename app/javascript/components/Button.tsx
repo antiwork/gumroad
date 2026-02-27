@@ -34,6 +34,7 @@ export const buttonVariants = cva(
       size: {
         default: "px-4 py-3 text-base leading-snug",
         sm: "p-2 text-sm leading-[1.3]",
+        icon: "size-12 box-border",
       },
       color: {
         default: "bg-transparent",

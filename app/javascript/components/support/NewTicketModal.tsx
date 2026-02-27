@@ -1,3 +1,4 @@
+import { Paperclip, Trash } from "@boxicons/react";
 import { useCreateConversation, useCreateMessage } from "@helperai/react";
 import React from "react";
 
@@ -6,7 +7,6 @@ import FileUtils from "$app/utils/file";
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ALLOWED_ATTACHMENT_MIMETYPES } from "$app/components/support/ConversationDetail";
@@ -64,7 +64,7 @@ export function NewTicketModal({
       footer={
         <>
           <Button onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-            <Icon name="paperclip" /> Attach files
+            <Paperclip className="size-5" /> Attach files
           </Button>
           <Button
             color="accent"
@@ -127,7 +127,7 @@ export function NewTicketModal({
                     aria-label="Remove"
                     onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
                   >
-                    <Icon name="trash2" />
+                    <Trash className="size-5" />
                   </Button>
                 </RowActions>
               </Row>

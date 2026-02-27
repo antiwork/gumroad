@@ -1,3 +1,4 @@
+import { FileDetail, Paperclip, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
@@ -14,7 +15,6 @@ import {
 import FileUtils from "$app/utils/file";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -333,7 +333,7 @@ export default function Show() {
                   </>
                 ) : (
                   <>
-                    <Icon name="paperclip" /> Upload customer communication
+                    <Paperclip className="size-5" /> Upload customer communication
                   </>
                 )}
               </Button>
@@ -393,7 +393,7 @@ const Files = ({
       {eligibleBlobs.map((blob) => (
         <Row role="listitem" key={blob.key}>
           <RowContent>
-            <Icon name="solid-document-text" className="type-icon" />
+            <FileDetail pack="filled" className="type-icon size-5" />
             <div>
               <h4>{blob.title}</h4>
               <ul className="inline">
@@ -408,13 +408,14 @@ const Files = ({
             </NavigationButton>
             {blob.signed_id ? (
               <Button
+                size="icon"
                 color="danger"
                 outline
                 aria-label="Remove"
                 disabled={isRemovingFile || isSubmitting}
                 onClick={handleFileRemove}
               >
-                <Icon name="trash2" />
+                <Trash className="size-5" />
               </Button>
             ) : null}
           </RowActions>

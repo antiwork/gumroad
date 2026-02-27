@@ -1,3 +1,4 @@
+import { BookmarkHeart } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
@@ -9,7 +10,6 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Nav } from "$app/components/Discover/Nav";
 import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 const UserActionButtons: React.FC = () => {
@@ -19,7 +19,7 @@ const UserActionButtons: React.FC = () => {
     return (
       <>
         <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none">
-          <Icon name="bookmark-heart-fill" /> Library
+          <BookmarkHeart pack="filled" className="size-5" /> Library
         </NavigationButton>
         {currentSeller.has_published_products ? null : (
           <NavigationButton href={Routes.products_url()} color="primary" className="flex-1 lg:flex-none">

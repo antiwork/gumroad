@@ -1,8 +1,8 @@
+import { Calendar, CreditCard, DollarCircle, Lock, Search, User } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -92,8 +92,8 @@ const SearchPopover = () => {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
-          <Button>
-            <Icon name="solid-search" />
+          <Button size="icon">
+            <Search className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
@@ -101,7 +101,7 @@ const SearchPopover = () => {
         <div className="grid w-96 max-w-full gap-3">
           <form onSubmit={(e) => submitForm(e, Routes.admin_search_users_path(), "user_query")} className="flex gap-2">
             <InputGroup>
-              <Icon name="person" />
+              <User className="size-5" />
               <Input
                 autoFocus
                 name="query"
@@ -111,8 +111,8 @@ const SearchPopover = () => {
                 onChange={(e) => setData("user_query", e.target.value)}
               />
             </InputGroup>
-            <Button color="primary" type="submit">
-              <Icon name="solid-search" />
+            <Button color="primary" size="icon" type="submit">
+              <Search className="size-5" />
             </Button>
           </form>
 
@@ -121,7 +121,7 @@ const SearchPopover = () => {
             className="flex gap-2"
           >
             <InputGroup>
-              <Icon name="solid-currency-dollar" />
+              <DollarCircle pack="filled" className="size-5" />
               <Input
                 name="query"
                 placeholder="Search purchases (email, IP, card, external ID)"
@@ -130,8 +130,8 @@ const SearchPopover = () => {
                 onChange={(e) => setData("purchase_query", e.target.value)}
               />
             </InputGroup>
-            <Button color="primary" type="submit">
-              <Icon name="solid-search" />
+            <Button color="primary" size="icon" type="submit">
+              <Search className="size-5" />
             </Button>
           </form>
 
@@ -140,7 +140,7 @@ const SearchPopover = () => {
             className="flex gap-2"
           >
             <InputGroup>
-              <Icon name="people-fill" />
+              <User pack="filled" className="size-5" />
               <Input
                 name="query"
                 placeholder="Search affiliates (email, name, ID)"
@@ -149,8 +149,8 @@ const SearchPopover = () => {
                 onChange={(e) => setData("affiliate_query", e.target.value)}
               />
             </InputGroup>
-            <Button color="primary" type="submit">
-              <Icon name="solid-search" />
+            <Button color="primary" size="icon" type="submit">
+              <Search className="size-5" />
             </Button>
           </form>
 
@@ -169,7 +169,7 @@ const SearchPopover = () => {
               ))}
             </Select>
             <InputGroup>
-              <Icon name="calendar-all" />
+              <Calendar className="size-5" />
               <Input
                 name="transaction_date"
                 placeholder="Date (02/22/2022)"
@@ -179,7 +179,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <InputGroup>
-              <Icon name="lock-fill" />
+              <Lock pack="filled" className="size-5" />
               <Input
                 name="last_4"
                 placeholder="Last 4 (7890)"
@@ -191,7 +191,7 @@ const SearchPopover = () => {
               />
             </InputGroup>
             <InputGroup>
-              <Icon name="outline-credit-card" />
+              <CreditCard className="size-5" />
               <Input
                 name="expiry_date"
                 placeholder="Expiry (02/22)"
