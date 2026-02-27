@@ -6494,6 +6494,17 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(page).to have_alert(text: "Thanks! You're all set.")
           expect(user.reload.minimum_payout_amount_cents).to eq(4000)
         end
+
+        it "does not inflate the stored payout threshold to the effective minimum on save" do
+          user.update!(payout_threshold_cents: 5000)
+
+          visit settings_payments_path
+
+          click_on "Update settings"
+
+          expect(page).to have_alert(text: "Thanks! You're all set.")
+          expect(user.reload.payout_threshold_cents).to eq(5000)
+        end
       end
     end
 
