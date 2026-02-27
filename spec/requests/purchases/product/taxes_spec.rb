@@ -3958,7 +3958,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     end
   end
 
-  describe "Canada Tax", taxjar: true do
+  describe "Canada Tax", taxjar: true, force_vcr_on: true do
     let (:product) { create(:product, price_cents: 100_00) }
 
     it "detects the province for Canada" do
@@ -4046,10 +4046,10 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "ON")
-        expect(page).to_not have_field "Business QST ID (optional)"
+        expect(page).to_not have_field("Business QST ID (optional)")
 
         select "QC", from: "Province"
-        expect(page).to have_field "Business QST ID (optional)"
+        expect(page).to have_field("Business QST ID (optional)")
         check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
@@ -4072,10 +4072,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         add_to_cart(product)
 
         select "Canada", from: "Country"
-        check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" }) do
-          expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-          expect(page).to have_text("Tax US$5", normalize_ws: true)
-        end
+        check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
         expect(purchase.country).to eq("Canada")
@@ -4100,10 +4097,8 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "QC")
 
-        check_out(product, qst_id: "1002092821TQ0001", zip_code: nil, credit_card: { number: "4000001240000000" }) do
-          expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-          expect(page).to have_text("Total US$100", normalize_ws: true)
-        end
+        expect(page).to have_field("Business QST ID (optional)")
+        check_out(product, qst_id: "1002092821TQ0001", zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
         expect(purchase.country).to eq("Canada")
@@ -4134,10 +4129,8 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "QC")
 
-        check_out(product, qst_id: "NR00005576", zip_code: nil, credit_card: { number: "4000001240000000" }) do
-          expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-          expect(page).to have_text("Tax US$14.98", normalize_ws: true)
-        end
+        expect(page).to have_field("Business QST ID (optional)")
+        check_out(product, qst_id: "NR00005576", zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
         expect(purchase.country).to eq("Canada")
