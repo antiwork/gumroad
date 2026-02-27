@@ -92,7 +92,7 @@ export const Raw = TiptapNode.create({
       <WithDialog editor={editor} type="twitter">
         <div role="menuitem">
           <TwitterX pack="brands" className="size-5" />
-          <span>Twitter post</span>
+          <span>X post</span>
         </div>
       </WithDialog>
     ),

@@ -763,7 +763,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           </div>
                           <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
                             <TwitterX pack="brands" className="size-5" />
-                            <span>Twitter post</span>
+                            <span>X post</span>
                           </div>
                           <div
                             role="menuitem"
@@ -997,7 +997,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       ) : null}
       {editor ? (
         <>
-          <Modal open={showInsertPostModal} onClose={() => setShowInsertPostModal(false)} title="Insert Twitter post">
+          <Modal open={showInsertPostModal} onClose={() => setShowInsertPostModal(false)} title="Insert X post">
             <EmbedMediaForm
               type="twitter"
               onClose={() => setShowInsertPostModal(false)}
