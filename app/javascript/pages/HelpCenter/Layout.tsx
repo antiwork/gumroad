@@ -1,4 +1,4 @@
-import { Search } from "@boxicons/react";
+import { Github, Search } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
@@ -38,7 +38,7 @@ function ReportBugButton() {
       rel="noopener noreferrer"
       className="flex items-center gap-2"
     >
-      <span className="brand-icon brand-icon-github" />
+      <Github pack="brands" className="size-5" />
       Report a bug
     </NavigationButton>
   );

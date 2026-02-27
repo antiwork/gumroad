@@ -1,4 +1,4 @@
-import { FontFamily } from "@boxicons/react";
+import { FontFamily, Twitter } from "@boxicons/react";
 import { Head, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -167,7 +167,7 @@ export default function SettingsPage() {
                 <FieldsetTitle>Social links</FieldsetTitle>
                 {creatorProfile.twitter_handle ? (
                   <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
-                    <span className="brand-icon brand-icon-twitter" />
+                    <Twitter pack="brands" className="size-5" />
                     Disconnect {creatorProfile.twitter_handle} from X
                   </Button>
                 ) : (

@@ -1,4 +1,5 @@
 import {
+  Amazon,
   ArrowDown,
   CheckCircle,
   ChevronDown,
@@ -326,7 +327,7 @@ export const FileRow = ({
             {file.kindle_data != null ? (
               <TrackClick eventName="send_to_kindle_click" file={file}>
                 <Button color="kindle" onClick={toggleKindleDrawer}>
-                  <span className="brand-icon brand-icon-kindle" />
+                  <Amazon pack="brands" className="size-5" />
                   Send to Kindle
                 </Button>
               </TrackClick>

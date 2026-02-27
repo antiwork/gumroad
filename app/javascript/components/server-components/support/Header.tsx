@@ -1,4 +1,4 @@
-import { Search } from "@boxicons/react";
+import { Github, Search } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import React from "react";
 import { createCast } from "ts-safe-cast";
@@ -63,7 +63,7 @@ export function SupportHeader({
                 rel="noopener noreferrer"
                 className="flex items-center gap-2"
               >
-                <span className="brand-icon brand-icon-github" />
+                <Github pack="brands" className="size-5" />
                 Report a bug
               </NavigationButton>
               <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
@@ -80,7 +80,7 @@ export function SupportHeader({
                 rel="noopener noreferrer"
                 className="flex items-center gap-2"
               >
-                <span className="brand-icon brand-icon-github" />
+                <Github pack="brands" className="size-5" />
                 Report a bug
               </NavigationButton>
               <Button color="accent" onClick={onOpenNewTicket}>
