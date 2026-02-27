@@ -26,7 +26,11 @@ export const Fieldset = React.forwardRef<
   const contextValue = React.useMemo(() => ({ state: state ?? "default" }), [state]);
   return (
     <FieldsetContext.Provider value={contextValue}>
-      <fieldset ref={ref} className={classNames(fieldsetStyles, className)} {...props}>
+      <fieldset
+        ref={ref}
+        className={classNames(fieldsetStyles, state && state !== "default" ? state : undefined, className)}
+        {...props}
+      >
         {children}
       </fieldset>
     </FieldsetContext.Provider>

@@ -145,42 +145,57 @@ describe CollectUnclaimedBalancesOfInactiveStripeAccountsJob do
     end
 
     it "does not attempt to collect balance if the Stripe account is considered active based on creation date" do
-      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SwhnzEqM4HpFFlW", created_at: 2.months.ago)
-      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+      # Freeze time to keep VCR cassette timestamps (recorded Feb 3, 2026) within the stubbed 3-week
+      # STRIPE_ACCOUNT_INACTIVE_AFTER_DURATION window. Without this, the test breaks as real time drifts
+      # past the cassette dates.
+      travel_to(Date.new(2026, 2, 11)) do
+        us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SwhnzEqM4HpFFlW", created_at: 2.months.ago)
+        create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
 
-      expect(Stripe::Account).to receive(:retrieve).and_call_original
-      expect(Stripe::Payout).not_to receive(:list)
-      expect(Stripe::Charge).not_to receive(:list)
-      expect(Stripe::Balance).not_to receive(:retrieve)
-      expect(Stripe::Transfer).not_to receive(:create)
+        expect(Stripe::Account).to receive(:retrieve).and_call_original
+        expect(Stripe::Payout).not_to receive(:list)
+        expect(Stripe::Charge).not_to receive(:list)
+        expect(Stripe::Balance).not_to receive(:retrieve)
+        expect(Stripe::Transfer).not_to receive(:create)
 
-      CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
+        CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
+      end
     end
 
     it "does not attempt to collect balance if the Stripe account is considered active based on last payout date" do
-      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SksUmIK1urmCqcP", created_at: 2.months.ago)
-      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+      # Freeze time to keep VCR cassette timestamps (recorded Feb 3, 2026) within the stubbed 3-week
+      # STRIPE_ACCOUNT_INACTIVE_AFTER_DURATION window. Without this, the test breaks as real time drifts
+      # past the cassette dates.
+      travel_to(Date.new(2026, 2, 11)) do
+        us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SksUmIK1urmCqcP", created_at: 2.months.ago)
+        create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
 
-      expect(Stripe::Account).to receive(:retrieve).and_call_original
-      expect(Stripe::Payout).to receive(:list).and_call_original
-      expect(Stripe::Charge).not_to receive(:list)
-      expect(Stripe::Balance).not_to receive(:retrieve)
-      expect(Stripe::Transfer).not_to receive(:create)
+        expect(Stripe::Account).to receive(:retrieve).and_call_original
+        expect(Stripe::Payout).to receive(:list).and_call_original
+        expect(Stripe::Charge).not_to receive(:list)
+        expect(Stripe::Balance).not_to receive(:retrieve)
+        expect(Stripe::Transfer).not_to receive(:create)
 
-      CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
+        CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
+      end
     end
 
     it "does not attempt to collect balance if the Stripe account is considered active based on last charge date" do
-      us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SkrZURRjYPUisng", created_at: 2.months.ago)
-      create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
+      # Freeze time to keep VCR cassette timestamps (recorded Feb 3, 2026) within the stubbed 3-week
+      # STRIPE_ACCOUNT_INACTIVE_AFTER_DURATION window. Without this, the test breaks as real time drifts
+      # past the cassette dates.
+      travel_to(Date.new(2026, 2, 11)) do
+        us_stripe_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_1SkrZURRjYPUisng", created_at: 2.months.ago)
+        create(:balance, user: us_stripe_account.user, merchant_account: us_stripe_account, amount_cents: 100_00)
 
-      expect(Stripe::Account).to receive(:retrieve).and_call_original
-      expect(Stripe::Payout).to receive(:list).and_call_original
-      expect(Stripe::Charge).to receive(:list).and_call_original
-      expect(Stripe::Balance).not_to receive(:retrieve)
-      expect(Stripe::Transfer).not_to receive(:create)
+        expect(Stripe::Account).to receive(:retrieve).and_call_original
+        expect(Stripe::Payout).to receive(:list).and_call_original
+        expect(Stripe::Charge).to receive(:list).and_call_original
+        expect(Stripe::Balance).not_to receive(:retrieve)
+        expect(Stripe::Transfer).not_to receive(:create)
 
-      CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
+        CollectUnclaimedBalancesOfInactiveStripeAccountsJob.new.perform
+      end
     end
 
     it "does not attempt to collect balance if the Stripe account is a standard Stripe account" do

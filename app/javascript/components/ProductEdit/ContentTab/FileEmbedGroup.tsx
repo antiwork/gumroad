@@ -18,6 +18,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Input } from "$app/components/ui/Input";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -152,7 +153,7 @@ const FileEmbedGroupNodeView = ({
             {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
             <FolderOpen pack="filled" className="type-icon size-5" />
             {editing ? (
-              <input
+              <Input
                 type="text"
                 ref={inputRef}
                 defaultValue={node.attrs.name ? String(node.attrs.name) : ""}

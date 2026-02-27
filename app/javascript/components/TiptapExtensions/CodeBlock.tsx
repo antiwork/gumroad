@@ -6,6 +6,8 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { Select } from "$app/components/ui/Select";
+
 const lowlight = createLowlight(common);
 
 const LANGUAGES = lowlight.listLanguages().map((lang) => {
@@ -63,7 +65,7 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
     <NodeViewWrapper as="pre" className="codeblock-lowlight">
       <div style={{ width: "fit-content", float: "right" }}>
         {isEditable ? (
-          <select
+          <Select
             onChange={(e) => updateAttributes({ language: e.target.value })}
             defaultValue={language || "plaintext"}
             style={{
@@ -78,7 +80,7 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
                 {lang.label}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           <CopyToClipboard text={node.textContent}>
             <button

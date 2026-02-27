@@ -1,4 +1,3 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { followSeller } from "$app/data/follow_seller";
@@ -10,6 +9,8 @@ import { Button } from "$app/components/Button";
 import { ButtonColor } from "$app/components/design";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 
 export const FollowForm = ({
   creatorProfile,
@@ -59,9 +60,9 @@ export const FollowForm = ({
 
   return (
     <form onSubmit={(e) => void submit(e)} style={{ flexGrow: 1 }} noValidate>
-      <fieldset className={cx({ danger: formStatus === "invalid" })}>
+      <Fieldset state={formStatus === "invalid" ? "danger" : undefined}>
         <div className="flex gap-2">
-          <input
+          <Input
             ref={emailInputRef}
             type="email"
             value={email}
@@ -79,7 +80,7 @@ export const FollowForm = ({
                   : "Subscribe"}
           </Button>
         </div>
-      </fieldset>
+      </Fieldset>
     </form>
   );
 };

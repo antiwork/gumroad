@@ -10,6 +10,8 @@ import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Alert } from "$app/components/ui/Alert";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
 
 export type DiscordIntegration = {
@@ -138,16 +140,15 @@ export const DiscordIntegrationEditor = ({
                 </>
               ) : null}
               {product.native_type === "membership" ? (
-                <label>
-                  <input
-                    type="checkbox"
+                <Label>
+                  <Checkbox
                     checked={integration.keep_inactive_members}
                     onChange={() =>
                       onChange({ ...integration, keep_inactive_members: !integration.keep_inactive_members })
                     }
                   />
                   Do not remove Discord access when membership ends
-                </label>
+                </Label>
               ) : null}
             </>
           )}

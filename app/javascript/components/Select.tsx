@@ -186,7 +186,7 @@ const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Opti
 const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProps<Option, IsMulti>) =>
   props.isMulti ? null : (
     <components.DropdownIndicator {...props}>
-      <ChevronDown className="size-5" />
+      <ChevronDown className="size-5 text-muted" />
     </components.DropdownIndicator>
   );
 

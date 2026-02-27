@@ -8,9 +8,14 @@ import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newVersionId = 0;
@@ -150,10 +155,10 @@ const VersionEditor = ({
       {isOpen ? (
         <RowDetails asChild>
           <Drawer className="grid gap-6">
-            <fieldset>
-              <label htmlFor={`${uid}-name`}>Name</label>
-              <div className="input">
-                <input
+            <Fieldset>
+              <Label htmlFor={`${uid}-name`}>Name</Label>
+              <InputGroup>
+                <Input
                   id={`${uid}-name`}
                   type="text"
                   value={version.name}
@@ -163,19 +168,19 @@ const VersionEditor = ({
                 <a href={url} target="_blank" rel="noreferrer">
                   Share
                 </a>
-              </div>
-            </fieldset>
-            <fieldset>
-              <label htmlFor={`${uid}-description`}>Description</label>
-              <textarea
+              </InputGroup>
+            </Fieldset>
+            <Fieldset>
+              <Label htmlFor={`${uid}-description`}>Description</Label>
+              <Textarea
                 id={`${uid}-description`}
                 value={version.description}
                 onChange={(evt) => updateVersion({ description: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
             <section className="grid grid-flow-col items-end gap-6">
-              <fieldset>
-                <label htmlFor={`${uid}-price`}>Additional amount</label>
+              <Fieldset>
+                <Label htmlFor={`${uid}-price`}>Additional amount</Label>
                 <PriceInput
                   id={`${uid}-price`}
                   currencyCode={currencyType}
@@ -183,22 +188,22 @@ const VersionEditor = ({
                   onChange={(price_difference_cents) => updateVersion({ price_difference_cents })}
                   placeholder="0"
                 />
-              </fieldset>
-              <fieldset>
-                <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
+              </Fieldset>
+              <Fieldset>
+                <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>
                 <NumberInput
                   onChange={(value) => updateVersion({ max_purchase_count: value })}
                   value={version.max_purchase_count}
                 >
                   {(inputProps) => (
-                    <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
+                    <Input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
                   )}
                 </NumberInput>
-              </fieldset>
+              </Fieldset>
             </section>
             {integrations.length > 0 ? (
-              <fieldset>
-                <legend>Integrations</legend>
+              <Fieldset>
+                <FieldsetTitle>Integrations</FieldsetTitle>
                 {integrations.map((integration) => (
                   <Switch
                     checked={version.integrations[integration]}
@@ -211,7 +216,7 @@ const VersionEditor = ({
                     }
                   />
                 ))}
-              </fieldset>
+              </Fieldset>
             ) : null}
           </Drawer>
         </RowDetails>

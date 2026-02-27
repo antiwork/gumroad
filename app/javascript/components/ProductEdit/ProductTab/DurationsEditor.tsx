@@ -7,9 +7,14 @@ import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { Duration, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newDurationId = 0;
@@ -144,11 +149,11 @@ const DurationEditor = ({
       {isOpen ? (
         <RowDetails asChild>
           <Drawer className="grid gap-6">
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-duration`}>Duration</label>
-              </legend>
-              <div className="input">
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-duration`}>Duration</Label>
+              </FieldsetTitle>
+              <InputGroup>
                 <NumberInput
                   value={duration.duration_in_minutes}
                   onChange={(duration_in_minutes) =>
@@ -160,24 +165,24 @@ const DurationEditor = ({
                     })
                   }
                 >
-                  {(props) => <input id={`${uid}-duration`} {...props} />}
+                  {(props) => <Input id={`${uid}-duration`} {...props} />}
                 </NumberInput>
                 <Pill className="-mr-2 shrink-0">minutes</Pill>
-              </div>
-            </fieldset>
-            <fieldset>
-              <label htmlFor={`${uid}-description`}>Description</label>
-              <textarea
+              </InputGroup>
+            </Fieldset>
+            <Fieldset>
+              <Label htmlFor={`${uid}-description`}>Description</Label>
+              <Textarea
                 id={`${uid}-description`}
                 value={duration.description}
                 onChange={(evt) => updateDuration({ description: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
             <section
               style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", alignItems: "flex-end" }}
             >
-              <fieldset>
-                <label htmlFor={`${uid}-price`}>Additional amount</label>
+              <Fieldset>
+                <Label htmlFor={`${uid}-price`}>Additional amount</Label>
                 <PriceInput
                   id={`${uid}-price`}
                   currencyCode={currencyType}
@@ -185,18 +190,18 @@ const DurationEditor = ({
                   onChange={(price_difference_cents) => updateDuration({ price_difference_cents })}
                   placeholder="0"
                 />
-              </fieldset>
-              <fieldset>
-                <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
+              </Fieldset>
+              <Fieldset>
+                <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>
                 <NumberInput
                   onChange={(value) => updateDuration({ max_purchase_count: value })}
                   value={duration.max_purchase_count}
                 >
                   {(inputProps) => (
-                    <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
+                    <Input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
                   )}
                 </NumberInput>
-              </fieldset>
+              </Fieldset>
             </section>
           </Drawer>
         </RowDetails>

@@ -23,6 +23,7 @@ import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { FollowForm } from "$app/components/Profile/FollowForm";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { CardContent } from "$app/components/ui/Card";
+import { Input } from "$app/components/ui/Input";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Card as WishlistCard, CardGrid as WishlistCardGrid, CardWishlist } from "$app/components/Wishlist/Card";
 
@@ -125,7 +126,7 @@ const ProductsSectionView = ({
       defaults={defaultParams}
       prependFilters={
         <CardContent>
-          <input
+          <Input
             aria-label="Search products"
             placeholder="Search products"
             value={enteredQuery}

@@ -23,6 +23,7 @@ import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
 import { ProfileSection, PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
+import { Fieldset } from "$app/components/ui/Fieldset";
 import { Switch } from "$app/components/ui/Switch";
 
 type SharePageProps = {
@@ -140,7 +141,7 @@ export default function BundlesShareEdit() {
       isProcessing={form.processing}
     >
       <form>
-        <section className="p-4! md:p-8!">
+        <section className="grid gap-8 p-4! md:p-8!">
           <header>
             <h2>Share</h2>
           </header>
@@ -171,7 +172,7 @@ export default function BundlesShareEdit() {
           onChange={(sectionIds) => form.setData("section_ids", sectionIds)}
           profileSections={profile_sections}
         />
-        <section className="p-4! md:p-8!">
+        <section className="grid gap-8 border-t border-border p-4 md:p-8">
           <header className="flex items-center justify-between">
             <h2>Gumroad Discover</h2>
             <a href="/help/article/79-gumroad-discover" target="_blank" rel="noreferrer">
@@ -191,7 +192,7 @@ export default function BundlesShareEdit() {
             taxonomies={taxonomies}
           />
           <TagSelector tags={form.data.tags} onChange={(tags) => form.setData("tags", tags)} />
-          <fieldset>
+          <Fieldset>
             <Switch
               checked={form.data.display_product_reviews}
               onChange={(e) => form.setData("display_product_reviews", e.target.checked)}
@@ -202,7 +203,7 @@ export default function BundlesShareEdit() {
               onChange={(e) => form.setData("is_adult", e.target.checked)}
               label="This product contains content meant only for adults, including the preview"
             />
-          </fieldset>
+          </Fieldset>
         </section>
       </form>
     </BundleEditLayout>

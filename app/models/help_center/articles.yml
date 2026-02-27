@@ -2,493 +2,616 @@
 - id: 10
   slug: "10-dealing-with-vat"
   title: "EU & UK VAT on Gumroad"
+  description: "Disclaimer: This article is neither legal advice nor tax advice. We recommend that you speak to your tax advisor with any questions or concerns about tax report"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 13
   slug: "13-getting-paid"
   title: "Getting paid by Gumroad"
+  description: "In this article: Payout modes Get paid to your bank account Get paid to Stripe Get paid to PayPal Other payout modes Stripe verification process Payout schedule"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 15
   slug: "15-1099s"
   title: "Does Gumroad issue form 1099-K and 1099-MISC?"
+  description: "Disclaimer: This article is neither legal advice nor tax advice. We recommend that you speak to your tax advisor with any questions or concerns about tax report"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 20
   slug: "20-how-do-i-contact-gumroad"
   title: "Contact Gumroad"
+  description: "If issues arise, Gumroad support is here to help. Below is a breakdown of what questions we can help answer and which questions creators answer.  Gumroad can he"
   category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
 - id: 37
   slug: "37-how-to-delete-your-gumroad-account"
   title: "Deleting a Gumroad account"
+  description: "Account deletions are permanent and cannot be reversed. Before you delete your account, we highly recommend that you: Change your account’s email address if you"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 42
   slug: "42-content-security"
   title: "Content protection on Gumroad"
+  description: "Gumroad offers a variety of security measures to keep your content safe: All download links are unique Purchaser IP addresses are tracked and we ask for the buy"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 43
   slug: "43-streaming-videos"
   title: "Prepare videos for streaming"
+  description: "In this article: Preparing your video Video transcoding Adding subtitles Disable video downloads Preparing your video Gumroad's streaming player supports nearly"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 44
   slug: "44-build-gumroad-into-your-website"
   title: "Integrating Gumroad into websites"
+  description: "In this article: Overlay Using custom buttons Inserting multiple buttons Send customers directly to checkout Embed FAQs While there is always the option to redi"
   category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
 - id: 46
   slug: "46-what-currency-does-gumroad-use"
   title: "What currency does Gumroad use?"
+  description: "Gumroad processes all transactions in United States Dollars. That means that you have the flexibility to display your products in the currency of your choosing "
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 47
   slug: "47-how-to-refund-a-customer"
   title: "Issuing a refund"
+  description: "In this article: Full refund Partial refund PayPal refund After issuing a refund Handling negative balances Refund fees Please only issue refunds from your Gumr"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 51
   slug: "51-what-is-gumroads-refund-policy"
   title: "Gumroad's refund policy"
+  description: "Every seller has their own unique needs and principles when it comes to issuing refunds, therefore Gumroad allows and encourages its sellers to set their own re"
   category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
 - id: 53
   slug: "53-what-browsers-does-gumroad-support"
   title: "Supported browsers"
+  description: "Gumroad supports the last four major updates to the following browsers: Edge, Safari, Chrome, and Firefox. Using an outdated browser with Gumroad can result in "
   category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
 - id: 54
   slug: "54-not-receiving-updates"
   title: "Customers not receiving emails"
+  description: "To view whether or not a customer has received the emails you've sent, go to your Sales dashboard and select the name of your customer to open up their customer"
   category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
 - id: 60
   slug: "60-adding-a-cover-image"
   title: "Adding cover and thumbnail images"
+  description: "In this article: Filetypes Adding cover images Recommended specifications Embed videos Selecting and using multiple files Removing cover images What customers s"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 62
   slug: "62-testing-a-purchase"
   title: "Testing a purchase"
+  description: "WARNING: Don't use your credit card to purchase your own items...do a test purchase instead! Once you've created a product, you can run a test purchaseto see wh"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 64
   slug: "64-is-gumroad-for-me"
   title: "Why choose Gumroad?"
+  description: "Gumroad is perfect for anyone who makes and sells products. Writers, musicians, filmmakers, SaaS developers, educators (and all in-between) can sell on Gumroad "
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 66
   slug: "66-gumroads-fees"
   title: "Gumroad's fees"
+  description: "Gumroad's fees are simple  For sales made on Gumroad's website, we charge a 10% + $0.50 fee per transaction. This does not include:  Credit card processing  PayPal fees There are "
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 67
   slug: "67-the-settings-menu"
   title: "Account settings"
+  description: "In this article:  Settings User Details Notifications Support Email Language and Time Zone Currency Sales Tax Profile name Payments Password Advanced Settings S"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 70
   slug: "70-can-i-sell-services"
   title: "Sell digital services: freelancing, coaching, and tip jars"
+  description: "In this article: Coffee Restrictions If your account is 30 days old and you’ve received at least one payout from us, you can sell services on Gumroad! We curren"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 74
   slug: "74-the-analytics-dashboard"
   title: "The sales analytics dashboard"
+  description: "In this article: Terms to know Diving into the data Churn Referrers Locations Exporting a customer sales CSV How to read your CSV Once you've started accruing sales, "
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 76
   slug: "76-license-keys"
   title: "License keys"
+  description: "⚠️ Important: Our license key verification API requires the product_id parameter instead of product_permalink for all products created on or after Jan 9, 2023. "
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 78
   slug: "78-my-customer-did-not-receive-a-receipt"
   title: "Customers not receiving receipts"
+  description: "If your customer did not receive a receipt from you, here are a few common reasons why.  Reason #1: Their purchase did not go through properly Sometimes a credi"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 79
   slug: "79-gumroad-discover"
   title: "Gumroad Discover"
+  description: "In this article: Discover eligibility Setting product categories and tags Increase Sales on Discover with tags Filter your products by tag NSFW tag Improved Pro"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 81
   slug: "81-custom-product-urls"
   title: "Custom product URLs"
+  description: "You can change the URL of your product by editing the gray text under the product description on the edit page. For example, you can change: annagreen.gumroad.c"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 82
   slug: "82-membership-products"
   title: "Selling memberships and subscriptions"
+  description: "In this article: Creating a membership Creating and managing tiers Reorder and share tiers Free trials Create fixed-length memberships Discounts on memberships "
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 101
   slug: "101-designing-your-product-page"
   title: "Checkout customization"
+  description: "In this article: Offering discounts Add custom fields More like this recommendations Creating an Upsell Offering discounts By providing discounts on your produc"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 107
   slug: "107-common-zapier-integrations-with-gumroad"
   title: "Zapier integrations with Gumroad"
+  description: "Zapier is a tool used by many Gumroad creators to help integrate their Gumroad stores into other applications, or automate their post-sale tasks (like adding cu"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 110
   slug: "110-gumroads-subprocessors"
   title: "Gumroad's subprocessors"
+  description: "In this document, we list the subprocessors that Gumroad and its subsidiaries and affiliates (collectively, “Gumroad”, “we”, “us”, or “our”) use in connection w"
   category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
 - id: 112
   slug: "112-mobile-friendly-files"
   title: "Mobile-friendly files"
+  description: "If you have created a product on Gumroad and want your customers to be able to take full advantage of the Gumroad app (for iOS and Android!), it is important to"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 120
   slug: "120-protecting-your-privacy-on-gumroad"
   title: "Protecting creator privacy"
+  description: "In this article: What information do your customers see PayPal Stripe Exceptions What information do your customers see? We only show customers your: Email addr"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 121
   slug: "121-sales-tax-on-gumroad"
   title: "Sales tax on Gumroad"
+  description: "Disclaimer: This article is neither legal advice nor tax advice. We recommend that you speak to your tax advisor with any questions or concerns about tax report"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 124
   slug: "124-your-gumroad-profile-page"
   title: "Build a website on Gumroad"
+  description: "In this article: Set up your profile Customize font and colors Create pages and sections Product sections Sort your products Let customers filter your products "
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 125
   slug: "125-how-to-compress-a-video-using-handbrake"
   title: "Compress videos using Handbrake"
+  description: "For all our Gumroad filmmakers allowing their customers to download video products, we highly recommend compressing your files before uploading them. By using t"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 126
   slug: "126-setting-up-versions-on-a-digital-product"
   title: "Setting up versions"
+  description: "In this article: Add a version Add a free version Add different content to your versions Share a version Reorder versions Delete a version Reassign a customer t"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 128
   slug: "128-discount-codes"
   title: "Discount codes"
+  description: "In this article: Create a discount code Allow customers to enter discount codes Discounts for memberships Discount code customization Edit discount codes FAQs C"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 130
   slug: "130-pdf-stamping"
   title: "PDF stamping"
+  description: "Add a customer-specific stamp to your work with PDF stamping. For any PDF on Gumroad, you can turn on PDF stamping by clicking..."
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 131
   slug: "131-using-workflows-to-send-automated-updates"
   title: "Send automated emails with Workflows"
+  description: "In this article: Create a workflow Add emails to your workflow Send abandoned cart emails Testing your workflow Your audience's experience Workflows allow you t"
   category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
 - id: 133
   slug: "133-pay-what-you-want-pricing"
   title: '"Pay what you want" pricing'
+  description: "In this article:  Suggest a Price Create a free product To allow your customers to name their own price for your product, simply enter \"0+\" as the price"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 134
   slug: "134-how-does-gumroad-handle-chargebacks"
   title: "Chargebacks on Gumroad"
+  description: "In this article:  What’s a chargeback? Why do they happen? When chargebacks occur Understanding the Dispute form The timeline of a chargeback Multiple chargebac"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 136
   slug: "136-find-your-products-url"
   title: "Customize and Share Your Product's URL"
+  description: "To find the URL of the incredible product you just created, you need to get to your product's dashboard: Select the specific product and click on Copy URL and i"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 139
   slug: "139-how-to-cancel-your-customers-subscriptions"
   title: "Cancel customer memberships"
+  description: "To cancel an individual customer's membership, simply head to your Sales dashboard, search for their name or email, and click Cancel Subscription. However, as a"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 144
   slug: "144-send-customers-directly-to-your-payment-form"
   title: "Send customers to the payment form"
+  description: "Many Gumroad creators using Overlay or linking to their product page from their websites find it useful to have the Gumroad payment form open up automatically, "
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 149
   slug: "149-adding-a-product"
   title: "Adding a product"
+  description: "In this article: Choose a product type Set a price Describe your product Provide additional product info Integrations Add content to your product Pages Embed em"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 153
   slug: "153-setting-up-a-custom-domain"
   title: "Setting up a custom domain"
+  description: "In this article: DNS configuration Subdomains Update your Gumroad settings Custom domains for profiles Custom domains for products IP address issues Cloudflare "
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 155
   slug: "155-things-you-cant-sell-on-gumroad"
   title: "Things not allowed on Gumroad"
+  description: "While Gumroad allows for a huge variety of products to be sold, we do have to delete products from time to time, and we suggest all new creators read through th"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 156
   slug: "156-gumroad-and-adult-content"
   title: "Adult content on Gumroad"
+  description: "In accordance with the policies of our payment processing partners, including Stripe and PayPal, we do not allow sales of sexually explicit content. What is"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 160
   slug: "160-suspension"
   title: "Account suspension FAQ"
+  description: "In this article: Summary Terms of Service Violation High Risk & Fraudulent Sales High Chargeback Amounts Your account was rejected by our partners Frequently As"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 161
   slug: "161-what-gumroad-considers-fraud"
   title: "Defining fraud on Gumroad"
+  description: "In this article: What constitutes \"fraud\" Why we suspend and disable accounts Why was my account permanently suspended? What constitutes \"fraud\" We can't actual"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 169
   slug: "169-how-to-send-an-update"
   title: "Send email updates"
+  description: "In this article: Create an email Audience and channel selection Preview Save and publish Comments on emails Leaving a comment Deleting comments Get notification"
   category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
 - id: 170
   slug: "170-audience"
   title: "Starting an email newsletter"
+  description: "In this article: Your subscribe page Embed the subscribe form on your website Sending email to your subscribers Using Workflows to keep subscribers engaged Mana"
   category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
 - id: 174
   slug: "174-third-party-analytics"
   title: "Third-party analytics"
+  description: "Google Analytics Cross-domain tracking Domain verification for Meta/Facebook Meta Pixel Snippets Google Ads 𝕏 / Twitter TikTok Google Analytics Google ended su"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 176
   slug: "176-metadata-for-audio-files"
   title: "Metadata for audio files"
+  description: "“What band is this?” is a question that should never go unanswered. For audio files, metadata can give you everything from the track’s title and credits to albu"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 177
   slug: "177-the-gumroad-dashboard-app"
   title: "Gumroad mobile app"
+  description: "In this article: Download the app Track your sales Access your Library Mobile Discover The Gumroad mobile app lets you track your sales on Gumroad"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 189
   slug: "189-safe-gumroad-buying"
   title: "Safe buying on Gumroad"
+  description: "Buying on a secure browser Your payment is secured by TLS, a higher grade of security than SSL, with 256-bit encryption and using modern SHA2 cyphers. Your paym"
   category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
 - id: 190
   slug: "190-how-do-i-get-a-refund"
   title: "How do I get a refund?"
+  description: "In this article: Website purchases In-app purchases Website purchases When you buy a product from a Gumroad creator, Gumroad only processes payments on behalf o"
   category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
 - id: 191
   slug: "191-a-guide-to-buying-on-gumroad"
   title: "A guide to buying on Gumroad"
+  description: "In this article: Accepted payment options Gift cards and prepaid cards Is Gumroad safe? Do I need to have a Gumroad account to buy products? Profile vs Product "
   category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
 - id: 192
   slug: "192-how-do-i-cancel-my-membership"
   title: "How do I cancel my membership?"
+  description: "There are two ways to cancel your subscription to a Gumroad membership: From your receipt From your library (if you have a Gumroad account) Cancellation will no"
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 193
   slug: "193-my-purchase-isnt-downloading"
   title: "My purchase isn't downloading"
+  description: "Here are the most common reasons why a download may not be working from Gumroad: Downloading on mobile devices Please use our mobile app to download files direc"
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 194
   slug: "194-i-need-an-invoice"
   title: "I need an invoice"
+  description: "In this article: How to generate your invoice from the receipt VAT ID Don't have your receipt? Older purchases No W9? How to generate your invoice from the rece"
   category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
 - id: 195
   slug: "195-theres-an-issue-with-my-purchase"
   title: "There's an issue with my purchase"
+  description: "The best resource you have when it comes to your purchase is the product's creator. You should contact them to: inquire about a refund find out the shipping sta"
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 196
   slug: "196-contact-gumroad"
   title: "How do I contact Gumroad?"
+  description: "Email support If an issue comes up, Gumroad support is here to help. Below is a breakdown of the types of issues Gumroad support can help with and the types of "
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 197
   slug: "197-why-do-i-have-a-1-charge-from-gumroad"
   title: "Why do I have a $1 charge from Gumroad?"
+  description: "When you attempt to make a charge with Gumroad, we send over a request to your issuing bank for either a $0 or $1 authorization (depending on the bank) to verif"
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 198
   slug: "198-your-gumroad-library"
   title: "Your Gumroad Library"
+  description: "Your library is the place where you can find all of your Gumroad purchases. You can filter your Library by the product or creator’s name or sort it based on rec"
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
 - id: 199
   slug: "199-how-do-i-access-my-purchase"
   title: "How do I access my purchase?"
+  description: "In this article, we explain how to access your digital purchase from Gumroad. If you are trying to find out when your physical purchase will arrive, you will ne"
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
 - id: 200
   slug: "200-i-need-a-vat-refund"
   title: "I need a VAT refund"
+  description: "We are required by the EU and UK law to collect and remit VAT on all transactions made in the EU and UK respectively. If you are a business with a valid VAT num"
   category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
 - id: 203
   slug: "203-why-did-my-payment-fail"
   title: "Why did my payment fail?"
+  description: "In this article: TL;DR Blocked by PayPal Blocked by card processor Zip code errors Proxy server issues Browser error Blocked by Gumroad’s risk system Chargeback"
   category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
 - id: 204
   slug: "204-get-to-know-your-gumroad-receipt"
   title: "Get to know your Gumroad receipt"
+  description: "In this article: Access your purchase content Generate an invoice Unsubscribe from emails Cancel memberships Contact the creator Access your purchased content A"
   category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
 - id: 206
   slug: "206-how-to-open-zip-and-rar-files"
   title: "How to open ZIP and RAR files"
+  description: "On a Mac Locate the ZIP file and double-click on it. That's it. A new folder will be created and all unzipped files will be there, ready for use. If you’re tryi"
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
 - id: 208
   slug: "208-how-do-i-send-my-gumroad-purchase-to-my-kindle"
   title: "How do I send my purchases to Kindle?"
+  description: "If you've purchased a .mobi or a PDF file, you can send it to your Kindle directly from your Gumroad Library. Note: ePub files do not work on Kindle for now. If"
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
 - id: 209
   slug: "209-how-do-i-combine-two-accounts"
   title: "Combining multiple accounts"
+  description: "Oftentimes Gumroad customers get so caught up buying all the cool stuff we have on offer that they use multiple email addresses. While we aren't able to \"merge\""
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 210
   slug: "210-send-your-purchase-to-dropbox"
   title: "How do I send my purchase to Dropbox?"
+  description: "If you have a Gumroad account, you can easily move your downloads to your Dropbox: Log into your Dropbox account. Go to your Gumroad library and click on the pr"
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
 - id: 211
   slug: "211-im-not-receiving-updates"
   title: "I'm not receiving updates"
+  description: "If you are not receiving updates from a product you subscribed to, you may have inadvertently opted out of receiving all communication from the creator. To fix "
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 212
   slug: "212-i-never-received-a-receipt"
   title: "I never received a receipt"
+  description: "If you can't locate a receipt in your inbox, it is either: In your Spam folder. In another Inbox. You may have used a different email during checkout (emails li"
   category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
 - id: 213
   slug: "213-how-do-i-give-a-product-as-a-gift"
   title: "How do I give a product as a gift?"
+  description: "When you get to the checkout form, click the “Give as a gift” toggle to allow for gifting. Just below the recipient's email, you will also see the option to sen"
   category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
 - id: 214
   slug: "214-why-was-i-charged-by-gumroad"
   title: "Why was I charged by Gumroad?"
+  description: "Gumroad is a digital commerce platform that enables writers, musicians, filmmakers, designers, etc. to easily sell their products online. We provide payment pro"
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 215
   slug: "215-when-will-my-purchase-be-shipped"
   title: "When will my purchase be shipped?"
+  description: "For shipping and product-related questions, contact the creator directly."
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
 - id: 216
   slug: "216-delete-credit-card-information"
   title: "How do I delete my credit card information?"
+  description: "You can remove your saved credit card or PayPal account from the bottom of the payment settings page. Note: You cannot delete your saved payment information if "
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 217
   slug: "217-i-have-extra-charges-from-gumroad-after-my-purchase"
   title: "I have extra charges from Gumroad after my purchase"
+  description: "All purchases made on Gumroad, regardless of the currency they are displayed in, are processed in USD ($). Often, payment processors will charge an internationa"
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 222
   slug: "222-product-ratings-on-gumroad"
   title: "Product ratings and reviews"
+  description: "In this article: Get customers to leave a rating View your ratings Organize products by rating on your profile How to remove ratings Customers can rate and leav"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 223
   slug: "223-payoneer-and-gumroad"
   title: "Payoneer, Transferwise, and Gumroad"
+  description: "We get asked fairly often by new and prospective Gumroad creators whether or not they can be paid out via Payoneer or Transferwise The answer, as of right is:  "
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 247
   slug: "247-what-your-customers-see"
   title: "The Gumroad Library"
+  description: "In this article: Navigating your Library Archiving or deleting products What is the Gumroad app? FAQs When your customers purchase a product on Gumroad, it will"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 248
   slug: "248-delete-a-product"
   title: "Unpublish or delete a product"
+  description: "In this article: How to unpublish a product How to delete a product After deleting the product Deleting a membership product How to unpublish a product To unpub"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 249
   slug: "249-affiliate-faq"
   title: "Becoming an affiliate on Gumroad"
+  description: "In this article: Getting started Gumroad Affiliate Program Sticky affiliate links Reasons you might not be credited for a sale Can the affiliate links be shorte"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 251
   slug: "251-incorrect-recurring-charge"
   title: "Incorrect recurring charge"
+  description: "As long as you have not purchased a membership on Gumroad, you will not be automatically charged again for the same product. Recurring charges only occur for me"
   category_id: <%= HelpCenter::Category::ISSUES_WITH_YOUR_PURCHASE.id %>
 - id: 252
   slug: "252-multiple-accounts"
   title: "Having multiple accounts"
+  description: "In this article: Transferring products or customers Transferring purchases Transferring ownership of account Yes, you can have as many Gumroad accounts as you w"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 260
   slug: "260-your-payout-settings-page"
   title: "Filling out payout settings"
+  description: "Requirements: You must be 18 or older or get permission to use your legal guardian’s details. Use your full legal name (including any middle name) and/or full b"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 266
   slug: "266-why-are-my-customers-purchases-failing"
   title: "Why customer payments fail"
+  description: "In this article: PayPal is blocking their purchase Credit Card Provider is blocking their purchase Zip Code errors Proxy Server Browser Error Our risk system is"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 268
   slug: "268-customer-dashboard"
   title: "The sales dashboard"
+  description: "In this article: Search and Filter Customer drawer Discover or Offer codes Edit a customer's email address Tiers, versions, and variants Manage license keys Shi"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 269
   slug: "269-balance-page"
   title: "The payouts dashboard"
+  description: "In this article: Navigating the Payouts dashboard PayPal payouts Credits Bank withdrawals Understanding the payout period Account under review Navigating the Pa"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 270
   slug: "270-url-parameters"
   title: "URL parameters"
+  description: "In this article: Send customers directly to checkout Autofill your checkout form Link your customer directly to a variant, version, or tier Auto-select payment "
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 275
   slug: "275-paypal-connect"
   title: "Adding PayPal to checkout"
+  description: "In this article: Overview Set up Payouts page Refunds Chargebacks Sales tax and payment details Sales tax refunds Affiliates and PayPal Connect Privacy NSFW acc"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 278
   slug: "278-guide-to-memberships"
   title: "Guide to memberships"
+  description: "In this article: What are memberships How to buy a membership How to access your membership Managing your membership Cancelling your membership Restarting a mem"
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
 - id: 280
   slug: "280-create-application-api"
   title: "Create an application for the API"
+  description: "In this article: For just your Gumroad account Generating an access token For any Gumroad account Sign in with Gumroad Using a Redirect URI Enabling your applic"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 281
   slug: "281-payout-delays"
   title: "Payout delays"
+  description: "Creators are typically paid every Friday for all sales not made through PayPal (here's how payouts work). However, payouts can sometimes be delayed—see reasons below. If yours is delayed by more than one Friday, please email us."
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 282
   slug: "282-how-do-purchases-work-for-my-customers"
   title: "How Gumroad works for customers"
+  description: "In this article: Buying on Gumroad without an account Receipts and Invoices VAT for your customers Credit and Debit card payments Paypal payments Making a test "
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 283
   slug: "283-fraudulent-purchases"
   title: "Fraudulent purchases"
+  description: "In this article:  What is fraud? How do we prevent fraud? So you got an email… What this means What do I, a creator, have to do? What if we're wrong? Can I bloc"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 
 - id: 285
   slug: "285-turning-off-third-party-trackers"
   title: "Turn off third-party trackers"
+  description: "This feature is opt-in because many creators use Google, Facebook, and third-party analytics to track traffic and conversions. If you don't use anything other t"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 286
   slug: "286-how-do-i-report-a-gumroad-creator"
   title: "Report a Gumroad creator"
+  description: "We want Gumroad to be a platform that makes it possible for creatives to make a living from doing what they love. You can help us keep the Gumroad community saf"
   category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
 - id: 288
   slug: "288-dmca-counter-notices"
   title: "DMCA counter notices"
+  description: "When Gumroad receives a DMCA Takedown notice on one of your products, our policy is to remove it, then allow you to file a counter-notice to get the product bac"
   category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
 - id: 289
   slug: "289-file-size-limits-on-gumroad"
   title: "File size limits"
+  description: "In this article: 16 GB File size limit 250 MB limit Download All button How to zip your files Mac PC Your file size limit depends on how you’ve decided to price"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 290
   slug: "290-facebook-domain-verification"
   title: "Facebook domain verification"
+  description: "Starting April 27, 2021, following the release of Apple's iOS 14.5, Facebook began rolling out its new ad measurement protocols. Under this new protocol, one of"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 292
   slug: "292-account-login-security"
   title: "Account login security"
+  description: "In this article reCAPTCHA Two-Factor Authentication (2FA) Not receiving your token Disable 2FA You can login to Gumroad here with an Email address, Twitter, or "
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 295
   slug: "295-external-integration"
   title: "Integrating products with external services"
+  description: "In this article: Circle Discord Customize your integration further FAQ Gumroad allows creators to integrate services like Circle and Discord into their products"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 304
   slug: "304-products-dashboard"
   title: "The products dashboard"
+  description: "In this article: Products you have created Archive a product Products you are affiliated to Products you have created The “Products dashboard” allows you to cre"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 324
   slug: "324-accessibiility-statement"
   title: "Accessibility statement for Gumroad"
+  description: "Gumroad takes the following operational measures to ensure accessibility: Require knowledge of accessibility technologies and mindfulness thereof when hiring en"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 325
   slug: "325-indirect-taxes-on-sales-via-discover"
   title: "Indirect taxes on sales via Gumroad Discover"
+  description: "Sales originating from Gumroad Discover may be subject to an indirect tax (VAT, GST, Sales Tax) based on the customer’s tax jurisdiction and requirements there."
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 326
   slug: "326-teams-and-roles"
   title: "Teams and Roles"
+  description: "In this article: Roles Invite team members Switch accounts Mobile You can now invite members of your team to access your Gumroad account with different roles.  "
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 327
   slug: "327-purchasing-power-parity"
   title: "Purchasing Power Parity"
+  description: "In this article: Enabling Purchasing Power Parity Retrieve PPP prices via API Customer Integrity Purchasing power parity (PPP) lets Gumroad creators set up dyna"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 329
   slug: "329-customer-moderation"
   title: "Customer Moderation"
+  description: "In this article: Block customers from purchasing your products Revoke a customer's access to their content"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 330
   slug: "330-stripe-connect"
   title: "Connect your Stripe account to Gumroad"
+  description: "In this article: Connect with Stripe Get paid to Stripe Issue refunds Manage disputes Disconnect your Stripe account Connecting your Stripe account allows you t"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 331
   slug: "331-creating-upsells"
   title: "Creating an Upsell"
+  description: "Offering an upsell at checkout Upsells allow you to suggest additional products to your customer at checkout. You can either nudge them to purchase an upgraded "
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 333
   slug: "333-affiliates-on-gumroad"
   title: "Affiliates on Gumroad"
+  description: "In this article: Your Affiliates - How does it work? Adding a new affiliate Method 1: Adding affiliates manually Method 2: Let affiliates sign up on their own E"
   category_id: <%= HelpCenter::Category::MARKET_YOUR_WORK.id %>
 - id: 334
   slug: "334-more-like-this"
   title: "Recommend related products"
+  description: "Providing recommendations to your customers can bring awareness to other products offered in your store and motivate them to try out different items.  To update"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 335
   slug: "335-custom-refund-policy"
   title: "Set a custom refund policy"
+  description: "You can inform your customers of a product's refund policy before purchase; just add your policy in the product's settings. Specify the conditions under which y"
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 336
   slug: "336-singaporean-gst"
   title: "Singaporean GST on Gumroad"
+  description: "If you live in Singapore and buy/sell things, chances are GST is a real headache. The question is, how do you apply it to sales made on Gumroad? The simple answ"
   category_id: <%= HelpCenter::Category::GET_PAID.id %>
 - id: 339
   slug: "339-product-bundles"
   title: "Product bundles"
+  description: "In this article: What are bundles? Create a bundle Adding products Variants Quantities Checkout Customer drawer What are bundles? Bundles allow creators to sell"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 341
   slug: "341-collaborations"
   title: "Collaborate with another creator"
+  description: "If you’ve worked with another creator to create a product for your audience, our Collaborators feature allows you to jointly manage the product and automaticall"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 343
   slug: "343-wishlists"
   title: "Wishlists"
+  description: "In this article: Creating wishlists Viewing and editing your wishlists Sharing wishlists Gifting from wishlists Follow wishlists Wishlists are a great way for y"
   category_id: <%= HelpCenter::Category::BEFORE_YOU_BUY.id %>
 - id: 344
   slug: "344-rate-and-review-your-purchase"
   title: "Rate and review your purchase"
+  description: "Leaving a written review is the best way to give product feedback to both the creator and future potential customers. Leaving a review After you've purchased a "
   category_id: <%= HelpCenter::Category::ACCESSING_YOUR_PURCHASE.id %>
 - id: 345
   slug: "345-tipping"
   title: "Tipping"
+  description: "Tips are optional extra payments customers can add to their purchase to show additional support for your work."
   category_id: <%= HelpCenter::Category::START_SELLING.id %>
 - id: 346
   slug: "346-installment-plans"
   title: "Allowing installment plans"
+  description: "In this article: What are installment plans, Pricing considerations, Customer experience, FAQs"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 347
   slug: "347-gumroad-community"
   title: "Gumroad Community"
+  description: "In this article: What is Gumroad Community, Enabling Community for your product, Managing your Community, Community as a buyer, Notifications and emails, Editing and deleting messages, Community best practices, Restrictions and limitations"
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
 - id: 348
   slug: "348-support-response-times"
   title: "Support response times"
+  description: "If you reach out to us, you'll most likely hear back within an hour. 97.7% of people do. We guarantee a response within 24 hours."
   category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>

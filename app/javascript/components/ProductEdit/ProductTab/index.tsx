@@ -38,7 +38,11 @@ import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export const ProductTab = () => {
   const uid = React.useId();
@@ -79,7 +83,7 @@ export const ProductTab = () => {
     <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
       <div className="squished">
         <form>
-          <section className="p-4! md:p-8!">
+          <section className="grid gap-8 p-4! md:p-8!">
             {showAiNotification ? (
               <Alert role="status" variant="accent">
                 <div className="flex items-center gap-4">
@@ -98,37 +102,37 @@ export const ProductTab = () => {
               </Alert>
             ) : null}
             <BundleConversionNotice />
-            <fieldset>
-              <label htmlFor={`${uid}-name`}>{isCoffee ? "Header" : "Name"}</label>
-              <input
+            <Fieldset>
+              <Label htmlFor={`${uid}-name`}>{isCoffee ? "Header" : "Name"}</Label>
+              <Input
                 id={`${uid}-name`}
                 type="text"
                 value={product.name}
                 onChange={(evt) => updateProduct({ name: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
             {isCoffee ? (
               <>
-                <fieldset>
-                  <label htmlFor={`${uid}-body`}>Body</label>
-                  <textarea
+                <Fieldset>
+                  <Label htmlFor={`${uid}-body`}>Body</Label>
+                  <Textarea
                     id={`${uid}-body`}
                     value={product.description}
                     placeholder="Add a short inspiring message"
                     onChange={(evt) => updateProduct({ description: evt.target.value })}
                   />
-                </fieldset>
-                <fieldset>
-                  <legend>
-                    <label htmlFor={`${uid}-url`}>URL</label>
+                </Fieldset>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-url`}>URL</Label>
                     <CopyToClipboard text={url}>
                       <button type="button" className="cursor-pointer font-normal underline all-unset">
                         Copy URL
                       </button>
                     </CopyToClipboard>
-                  </legend>
-                  <input id={`${uid}-url`} type="text" value={url} disabled />
-                </fieldset>
+                  </FieldsetTitle>
+                  <Input id={`${uid}-url`} type="text" value={url} disabled />
+                </Fieldset>
               </>
             ) : (
               <>
@@ -152,14 +156,14 @@ export const ProductTab = () => {
           </section>
           {isCoffee ? (
             <>
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Pricing</h2>
                 <SuggestedAmountsEditor
                   versions={product.variants}
                   onChange={(variants) => updateProduct({ variants })}
                 />
               </section>
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Settings</h2>
                 <CustomButtonTextOptionInput
                   value={product.custom_button_text_option}
@@ -182,7 +186,7 @@ export const ProductTab = () => {
                 permalink={uniquePermalink}
                 nativeType={product.native_type}
               />
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Product info</h2>
                 {product.native_type !== "membership" ? (
                   <CustomButtonTextOptionInput
@@ -202,9 +206,9 @@ export const ProductTab = () => {
                   setFileAttributes={(file_attributes) => updateProduct({ file_attributes })}
                 />
               </section>
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Integrations</h2>
-                <fieldset>
+                <Fieldset>
                   {product.community_chat_enabled === null ? null : (
                     <ToggleSettingRow
                       label="Invite your customers to your Gumroad community chat"
@@ -251,16 +255,16 @@ export const ProductTab = () => {
                       }
                     />
                   ) : null}
-                </fieldset>
+                </Fieldset>
               </section>
               {product.native_type === "membership" ? (
-                <section className="p-4! md:p-8!">
+                <section className="grid gap-8 border-t border-border p-4 md:p-8">
                   <h2>Tiers</h2>
                   <TiersEditor tiers={product.variants} onChange={(variants) => updateProduct({ variants })} />
                 </section>
               ) : (
                 <>
-                  <section className="p-4! md:p-8!">
+                  <section className="grid gap-8 border-t border-border p-4 md:p-8">
                     <h2>Pricing</h2>
                     <PriceEditor
                       priceCents={product.price_cents}
@@ -307,7 +311,7 @@ export const ProductTab = () => {
                   </section>
                   {product.native_type === "call" ? (
                     <>
-                      <section className="p-4! md:p-8!">
+                      <section className="grid gap-8 border-t border-border p-4 md:p-8">
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <h2>Durations</h2>
                           <a
@@ -323,7 +327,7 @@ export const ProductTab = () => {
                           onChange={(variants) => updateProduct({ variants })}
                         />
                       </section>
-                      <section className="p-4! md:p-8!">
+                      <section className="grid gap-8 border-t border-border p-4 md:p-8">
                         <h2>Available hours</h2>
                         <AvailabilityEditor
                           availabilities={product.availabilities}
@@ -331,7 +335,7 @@ export const ProductTab = () => {
                         />
                       </section>
                       {product.call_limitation_info ? (
-                        <section className="p-4! md:p-8!">
+                        <section className="grid gap-8 border-t border-border p-4 md:p-8">
                           <h2>Call limitations</h2>
                           <CallLimitationsEditor
                             callLimitations={product.call_limitation_info}
@@ -341,7 +345,7 @@ export const ProductTab = () => {
                       ) : null}
                     </>
                   ) : (
-                    <section aria-label="Version editor" className="p-4! md:p-8!">
+                    <section aria-label="Version editor" className="grid gap-8 border-t border-border p-4 md:p-8">
                       <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <h2>{product.native_type === "physical" ? "Variants" : "Versions"}</h2>
                         <a
@@ -366,9 +370,9 @@ export const ProductTab = () => {
                   onChange={(shipping_destinations) => updateProduct({ shipping_destinations })}
                 />
               ) : null}
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Settings</h2>
-                <fieldset>
+                <Fieldset>
                   {product.native_type === "membership" ? (
                     <>
                       <FreeTrialSelector />
@@ -451,12 +455,12 @@ export const ProductTab = () => {
                     onChange={(e) => updateProduct({ require_shipping: e.target.checked })}
                     label="Require shipping information"
                   />
-                </fieldset>
+                </Fieldset>
                 {product.native_type === "membership" ? (
-                  <fieldset>
-                    <legend>
-                      <label htmlFor={`${uid}-subscription-duration`}>Default payment frequency</label>
-                    </legend>
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-subscription-duration`}>Default payment frequency</Label>
+                    </FieldsetTitle>
                     <TypeSafeOptionSelect
                       id={`${uid}-subscription-duration`}
                       value={product.subscription_duration || "monthly"}
@@ -466,7 +470,7 @@ export const ProductTab = () => {
                         label: recurrenceLabels[recurrenceId],
                       }))}
                     />
-                  </fieldset>
+                  </Fieldset>
                 ) : null}
                 <CustomDomain
                   verificationStatus={customDomainVerificationStatus}
