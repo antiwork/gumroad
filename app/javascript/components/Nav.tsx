@@ -1,3 +1,4 @@
+import { ArrowRight, CheckCircle, Menu, X } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -6,7 +7,6 @@ import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { TeamMembership } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -22,7 +22,7 @@ export const useNav = () => React.useContext(NavContext);
 
 interface BaseNavLinkProps {
   text: string;
-  icon?: IconName;
+  icon?: React.ReactNode;
   badge?: React.ReactNode;
   href: string;
   exactHrefMatch?: boolean;
@@ -62,8 +62,8 @@ const BaseNavLink = ({
       )}
       {...props}
     >
-      {icon ? <Icon name={icon} className="mr-4" /> : null}
-      {text}
+      {icon}
+      <span className="ml-4">{text}</span>
       {badge ? (
         <>
           <span className="flex-1" />
@@ -97,12 +97,12 @@ export const NavLinkDropdownItem = ({
   onClick,
 }: {
   text: string;
-  icon: IconName;
+  icon: React.ReactNode;
   href: string;
   onClick?: (ev: React.MouseEvent<HTMLAnchorElement>) => void;
 }) => (
   <a role="menuitem" href={href} onClick={onClick} className="block truncate border-0 px-4 py-2 no-underline">
-    <Icon name={icon} className="mr-3 ml-1" />
+    {icon}
     {text}
   </a>
 );
@@ -134,7 +134,7 @@ export const Nav = ({ title, children, footer }: Props) => {
           </a>
           <h1 className="w-full truncate text-center text-base">{title}</h1>
           <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
-            <Icon name={open ? "x" : "outline-menu"} />
+            {open ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
         <header className="hidden p-6 lg:grid">
@@ -171,7 +171,14 @@ export const UnbecomeDropdownItem = () => {
     }
   });
 
-  return <NavLinkDropdownItem text="Unbecome" icon="box-arrow-in-right-fill" href="#" onClick={makeRequest} />;
+  return (
+    <NavLinkDropdownItem
+      text="Unbecome"
+      icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-5" />}
+      href="#"
+      onClick={makeRequest}
+    />
+  );
 };
 
 export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembership: TeamMembership }) => {
@@ -210,7 +217,7 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
       <span className="min-w-0 flex-1 truncate" title={teamMembership.seller_name}>
         {teamMembership.seller_name}
       </span>
-      {teamMembership.is_selected ? <Icon name="solid-check-circle" className="h-5 shrink-0 text-accent" /> : null}
+      {teamMembership.is_selected ? <CheckCircle pack="filled" className="size-5 h-5 shrink-0 text-accent" /> : null}
     </a>
   );
 };

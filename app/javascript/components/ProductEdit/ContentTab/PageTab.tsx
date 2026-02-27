@@ -1,13 +1,13 @@
+import { DotsHorizontalRounded, Move, Pencil, Trash } from "@boxicons/react";
 import CharacterCount from "@tiptap/extension-character-count";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-import { generatePageIcon } from "$app/utils/rich_content_page";
+import { PAGE_ICON_COMPONENTS, type PageIconKey } from "$app/utils/rich_content_page";
 
 import { PageListItem } from "$app/components/Download/PageListLayout";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { BlurOnEnter } from "$app/components/TiptapExtensions/BlurOnEnter";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
@@ -36,7 +36,7 @@ export const PageTab = ({
   page: Page;
   selected: boolean;
   dragging: boolean;
-  icon: ReturnType<typeof generatePageIcon>;
+  icon: PageIconKey;
   renaming: boolean;
   setRenaming: (renaming: boolean) => void;
   onClick: () => void;
@@ -60,13 +60,14 @@ export const PageTab = ({
     if (renaming) editor?.commands.focus("end");
   }, [renaming, editor]);
 
-  const iconLabels = {
+  const iconLabels: Record<PageIconKey, string> = {
     "file-arrow-down": "Page has various types of files",
     "file-music": "Page has audio files",
     "file-play": "Page has videos",
     "file-text": "Page has no files",
     "outline-key": "Page has license key",
   };
+  const PageIcon = PAGE_ICON_COMPONENTS[icon];
   return (
     <PageListItem
       onClick={onClick}
@@ -79,13 +80,9 @@ export const PageTab = ({
       role="tab"
     >
       {!disabled ? (
-        <Icon
-          name="outline-drag"
-          className="invisible absolute left-0 text-muted group-hover/tab:visible"
-          aria-grabbed={dragging}
-        />
+        <Move className="invisible absolute left-0 size-5 text-muted group-hover/tab:visible" aria-grabbed={dragging} />
       ) : null}
-      <Icon name={icon} aria-label={iconLabels[icon]} />
+      <PageIcon className="size-5" aria-label={iconLabels[icon]} />
       <span className="flex-1">
         {renaming ? <EditorContent editor={editor} className="cursor-text" /> : titleWithFallback(page.title)}
       </span>
@@ -93,15 +90,15 @@ export const PageTab = ({
         <span onClick={(e) => e.stopPropagation()}>
           <Popover>
             <PopoverTrigger>
-              <Icon name="three-dots" />
+              <DotsHorizontalRounded className="size-5" />
             </PopoverTrigger>
             <PopoverContent usePortal className="border-0 p-0 shadow-none">
               <div role="menu">
                 <div role="menuitem" onClick={() => setRenaming(true)}>
-                  <Icon name="pencil" /> Rename
+                  <Pencil className="size-5" /> Rename
                 </div>
                 <div className="danger" role="menuitem" onClick={onDelete}>
-                  <Icon name="trash2" /> Delete
+                  <Trash className="size-5" /> Delete
                 </div>
               </div>
             </PopoverContent>

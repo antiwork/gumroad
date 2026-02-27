@@ -6,6 +6,20 @@
   and the client-side version for Inertia-powered views. Once the migration is complete, the server-side navbar will be phased out.
 */
 
+import {
+  ArchiveAlt,
+  Bank,
+  BarChartBig,
+  BookmarkHeart,
+  Cart,
+  DollarCircle,
+  Envelope,
+  Handshake,
+  HomeAlt2,
+  MessageBubble,
+  Search,
+  Workflow,
+} from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import * as React from "react";
 
@@ -17,7 +31,6 @@ import NavbarFooter from "$app/components/client-components/Nav/footer";
 import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Nav as NavFramework, NavSection } from "$app/components/Nav";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -37,7 +50,7 @@ export const ClientNavLink = ({
   onClick,
 }: {
   text: string;
-  icon?: IconName;
+  icon?: React.ReactNode;
   badge?: React.ReactNode;
   href: string;
   exactHrefMatch?: boolean;
@@ -65,8 +78,8 @@ export const ClientNavLink = ({
         { "text-accent": !!ariaCurrent },
       )}
     >
-      {icon ? <Icon name={icon} className="mr-4" /> : null}
-      {text}
+      {icon}
+      <span className="ml-4">{text}</span>
       {badge ? (
         <>
           <span className="flex-1" />
@@ -107,33 +120,50 @@ export const Nav = (props: Props) => {
     <NavFramework footer={<NavbarFooter />} {...props}>
       <CloseOnNavigate />
       <NavSection>
-        <ClientNavLink text="Home" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
+        <ClientNavLink
+          text="Home"
+          icon={<HomeAlt2 pack="filled" className="size-5" />}
+          href={Routes.dashboard_url(routeParams)}
+          exactHrefMatch
+        />
         <ClientNavLink
           text="Products"
-          icon="archive-fill"
+          icon={<ArchiveAlt pack="filled" className="size-5" />}
           href={Routes.products_url(routeParams)}
           additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
-          <ClientNavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
+          <ClientNavLink
+            text="Collaborators"
+            icon={<Handshake pack="filled" className="size-5" />}
+            href={Routes.collaborators_url(routeParams)}
+          />
         ) : null}
         <ClientNavLink
           text="Checkout"
-          icon="cart3-fill"
+          icon={<Cart pack="filled" className="size-5" />}
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
         />
         <ClientNavLink
           text="Emails"
-          icon="envelope-fill"
+          icon={<Envelope pack="filled" className="size-5" />}
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
         />
-        <ClientNavLink text="Workflows" icon="diagram-2-fill" href={Routes.workflows_url(routeParams)} />
-        <ClientNavLink text="Sales" icon="solid-currency-dollar" href={Routes.customers_url(routeParams)} />
+        <ClientNavLink
+          text="Workflows"
+          icon={<Workflow pack="filled" className="size-5" />}
+          href={Routes.workflows_url(routeParams)}
+        />
+        <ClientNavLink
+          text="Sales"
+          icon={<DollarCircle pack="filled" className="size-5" />}
+          href={Routes.customers_url(routeParams)}
+        />
         <ClientNavLink
           text="Analytics"
-          icon="bar-chart-fill"
+          icon={<BarChartBig pack="filled" className="size-5" />}
           href={Routes.sales_dashboard_url(routeParams)}
           additionalPatterns={[
             Routes.audience_dashboard_url(routeParams),
@@ -142,12 +172,16 @@ export const Nav = (props: Props) => {
           ]}
         />
         {loggedInUser?.policies.balance.index ? (
-          <ClientNavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
+          <ClientNavLink
+            text="Payouts"
+            icon={<Bank pack="filled" className="size-5" />}
+            href={Routes.balance_url(routeParams)}
+          />
         ) : null}
         {loggedInUser?.policies.community.index ? (
           <ClientNavLink
             text="Community"
-            icon="solid-chat-alt"
+            icon={<MessageBubble pack="filled" className="size-5" />}
             href={Routes.communities_path()}
             onClick={() => {
               sessionStorage.setItem("communities:referrer", window.location.pathname + window.location.search);
@@ -156,11 +190,11 @@ export const Nav = (props: Props) => {
         ) : null}
       </NavSection>
       <NavSection>
-        <ClientNavLink text="Discover" icon="solid-search" href={discoverUrl} exactHrefMatch />
+        <ClientNavLink text="Discover" icon={<Search className="size-5" />} href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
           <ClientNavLink
             text="Library"
-            icon="bookmark-heart-fill"
+            icon={<BookmarkHeart pack="filled" className="size-5" />}
             href={Routes.library_url(routeParams)}
             additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
           />

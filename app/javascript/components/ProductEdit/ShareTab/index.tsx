@@ -1,3 +1,4 @@
+import { Link, Plus } from "@boxicons/react";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
 
@@ -6,7 +7,6 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
-import { Icon } from "$app/components/Icons";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
@@ -45,7 +45,7 @@ export const ShareTab = () => {
               <FacebookShareButton url={url} text={product.name} />
               <CopyToClipboard text={url} tooltipPosition="top">
                 <Button color="primary">
-                  <Icon name="link" />
+                  <Link className="size-5" />
                   Copy URL
                 </Button>
               </CopyToClipboard>
@@ -55,7 +55,7 @@ export const ShareTab = () => {
                 rel="noopener noreferrer"
                 color="accent"
               >
-                <Icon name="plus" />
+                <Plus className="size-5" />
                 Create Gum
               </NavigationButton>
             </div>

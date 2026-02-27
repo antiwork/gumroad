@@ -1,3 +1,4 @@
+import { ArrowUp, Link as LinkIcon, Plus } from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import classNames from "classnames";
 import * as React from "react";
@@ -11,7 +12,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Covers } from "$app/components/Product/Covers";
@@ -98,7 +98,7 @@ export const CoverEditor = ({
                 <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
                   <PopoverTrigger disabled={!canAddPreview || isUploading} asChild>
                     <Button aria-label="Add cover">
-                      <Icon name="plus" />
+                      <Plus className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -196,7 +196,9 @@ const CoverUploader = ({
                   setIsSelecting(false);
                 })}
               />
-              <TabIcon name="upload-fill" />
+              <TabIcon>
+                <ArrowUp pack="filled" className="size-5" />
+              </TabIcon>
               Computer files
             </label>
           </Tab>
@@ -208,7 +210,9 @@ const CoverUploader = ({
             isSelected={uploader?.type === "url"}
             aria-controls={`${uid}-url`}
           >
-            <TabIcon name="link" />
+            <TabIcon>
+              <LinkIcon className="size-5" />
+            </TabIcon>
             External link
           </Tab>
         </Tabs>
@@ -238,7 +242,7 @@ const CoverUploader = ({
                 }}
                 aria-label="Upload"
               >
-                <Icon name="upload-fill" />
+                <Plus pack="filled" className="size-5" />
               </Button>
             </div>
           ) : null}
@@ -249,7 +253,7 @@ const CoverUploader = ({
   ) : (
     <>
       <Button color="primary" onClick={() => setIsSelecting(true)}>
-        <Icon name="upload-fill" /> Upload images or videos
+        <Plus pack="filled" className="size-5" /> Upload images or videos
       </Button>
       Images should be horizontal, at least 1280x720px, and 72 DPI (dots per inch).
     </>

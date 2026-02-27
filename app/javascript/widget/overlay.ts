@@ -17,7 +17,8 @@ overlay.appendChild(content);
 
 const overlayCloseButton = document.createElement("button");
 overlayCloseButton.className = "gumroad-button-filled fixed right-3 top-3";
-overlayCloseButton.innerHTML = '<span class="icon icon-x"></span>';
+overlayCloseButton.innerHTML =
+  "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none'><path stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M6 18 18 6M6 6l12 12'/></svg>";
 overlay.appendChild(overlayCloseButton);
 
 const overlayIframe = document.createElement("iframe");

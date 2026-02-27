@@ -1,9 +1,8 @@
+import { DotsVerticalRounded } from "@boxicons/react";
 import { Slot } from "@radix-ui/react-slot";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-
-import { Icon } from "$app/components/Icons";
 
 export const Rows = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -54,7 +53,7 @@ export const RowDetails = ({
 export const RowDragHandle = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div ref={ref} className={classNames("order-first -ml-4 text-muted", className)} {...props}>
-      <Icon name="outline-drag" />
+      <DotsVerticalRounded pack="filled" className="size-5" />
     </div>
   ),
 );

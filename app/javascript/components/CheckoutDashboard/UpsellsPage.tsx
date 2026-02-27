@@ -1,3 +1,4 @@
+import { ArrowRightCircle, XSquare } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -21,7 +22,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { ProductToAdd, CartItem } from "$app/components/Checkout/cartState";
+import { CartItem, ProductToAdd } from "$app/components/Checkout/cartState";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { UpsellModal } from "$app/components/Checkout/UpsellModal";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
@@ -29,7 +30,6 @@ import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboa
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
@@ -694,7 +694,7 @@ const Form = ({
         actions={
           <>
             <Button onClick={onCancel} disabled={isLoading}>
-              <Icon name="x-square" />
+              <XSquare className="size-5" />
               Cancel
             </Button>
             <Button type="submit" color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -911,7 +911,7 @@ const Form = ({
                       return (
                         <React.Fragment key={option.id}>
                           <InputGroup readOnly>{option.name}</InputGroup>
-                          <Icon name="arrow-right-circle" />
+                          <ArrowRightCircle className="size-5" />
                           <Select
                             options={selectedProduct.options.flatMap(({ id, name: label }) =>
                               id !== option.id ? { id, label } : [],

@@ -1,3 +1,12 @@
+import {
+  ArrowDown,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
+  PauseCircle,
+  PlayCircle,
+} from "@boxicons/react";
 import cx from "classnames";
 import { throttle } from "lodash-es";
 import * as React from "react";
@@ -17,7 +26,6 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { AudioPlayerContainer } from "$app/components/DownloadPage/AudioPlayerContainer";
 import { useIsMobileAppView, useMediaUrls, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { ProgressPie } from "$app/components/ProgressPie";
@@ -105,8 +113,8 @@ const FolderRow = ({ folder, children }: { folder: FolderItem; children: React.R
   return (
     <Row role="treeitem" aria-expanded={isExpanded}>
       <RowContent onClick={() => setIsExpanded(!isExpanded)}>
-        <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
-        <Icon name="solid-folder-open" className="type-icon" />
+        {isExpanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+        <FolderOpen pack="filled" className="type-icon size-5" />
         <h4>{folder.name}</h4>
       </RowContent>
       <RowDetails role="group" className={classNames({ hidden: !isExpanded })}>
@@ -213,7 +221,11 @@ export const FileRow = ({
       ) : null}
       <RowContent onClick={() => setIsExpanded(!isExpanded)}>
         {shouldShowSubtitlesForFile(file) ? (
-          <Icon name={isExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+          isExpanded ? (
+            <ChevronDown className="size-5" />
+          ) : (
+            <ChevronRight className="size-5" />
+          )
         ) : null}
         {isEmbeddedVideo && file.thumbnail_url && isCollapsed ? (
           <div className="thumbnail">
@@ -525,7 +537,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         {file.download_url ? (
           <TrackClick eventName="download_click" file={file}>
             <button aria-label="Download" className="cursor-pointer all-unset">
-              <Icon name="download" className="type-icon" />
+              <ArrowDown className="type-icon size-5" />
             </button>
           </TrackClick>
         ) : null}
@@ -539,25 +551,22 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
         >
           {isPlaying ? (
             <button aria-label="Pause" disabled={isProcessing} className="cursor-pointer all-unset">
-              <Icon
-                className="type-icon"
-                name="circle-pause"
+              <PauseCircle
+                className="type-icon size-5"
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
               />
             </button>
           ) : isCompleted ? (
             <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
-              <Icon
-                className="type-icon text-muted"
-                name="outline-check-circle"
+              <CheckCircle
+                className="type-icon size-5 text-muted"
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
               />
             </button>
           ) : (
             <button aria-label="Play" disabled={isProcessing} className="cursor-pointer all-unset">
-              <Icon
-                className="type-icon"
-                name={latestMediaLocation && latestMediaLocation > 0 ? "outline-circle-play" : "circle-play"}
+              <PlayCircle
+                className="type-icon size-5"
                 style={{ width: "var(--big-icon-size)", height: "var(--big-icon-size)" }}
               />
             </button>

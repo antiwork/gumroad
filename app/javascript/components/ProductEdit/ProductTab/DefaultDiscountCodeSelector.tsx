@@ -1,10 +1,10 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { searchProductOfferCodes } from "$app/data/offer_code";
 import { assertResponseError } from "$app/utils/request";
 
 import { ComboBox } from "$app/components/ComboBox";
-import { Icon } from "$app/components/Icons";
 import { OfferCode, useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
@@ -112,7 +112,7 @@ export const DefaultDiscountCodeSelector = () => {
                       setIsOpen(true);
                     }}
                   />
-                  <Icon name="outline-cheveron-down" />
+                  <ChevronDown className="size-5" />
                 </InputGroup>
               )}
               option={(code, props) => (

@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, Key } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
@@ -7,7 +8,6 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
@@ -53,7 +53,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
       <Row className={cx("embed", { selected })}>
         {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
         <RowContent className="content" contentEditable={false}>
-          <Icon name="solid-key" className="type-icon" />
+          <Key pack="filled" className="type-icon size-5" />
           <div>
             <h4 className="text-singleline">{licenseKey}</h4>
             <ul className="inline">
@@ -70,8 +70,12 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
             </CopyToClipboard>
           ) : null}
           {editor.isEditable ? (
-            <Button onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label={isDrawerOpen ? "Close drawer" : "Edit"}>
-              <Icon name={isDrawerOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
+            <Button
+              size="icon"
+              onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+              aria-label={isDrawerOpen ? "Close drawer" : "Edit"}
+            >
+              {isDrawerOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}
         </RowActions>

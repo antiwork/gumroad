@@ -1,9 +1,9 @@
+import { Circle } from "@boxicons/react";
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { type AnalyticsTotal } from "$app/components/Analytics";
-import { Icon } from "$app/components/Icons";
 import { Stats } from "$app/components/Stats";
 
 export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }) => (
@@ -11,7 +11,7 @@ export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }
     <Stats
       title={
         <>
-          <Icon name="circle-fill" className="text-foreground" />
+          <Circle pack="filled" className="size-5 text-foreground" />
           Sales
         </>
       }
@@ -20,7 +20,7 @@ export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }
     <Stats
       title={
         <>
-          <Icon name="circle-fill" className="text-active-bg" />
+          <Circle pack="filled" className="size-5 text-active-bg" />
           Views
         </>
       }
@@ -29,7 +29,7 @@ export const SalesQuickStats = ({ total }: { total: AnalyticsTotal | undefined }
     <Stats
       title={
         <>
-          <Icon name="circle-fill" className="text-accent" />
+          <Circle pack="filled" className="size-5 text-accent" />
           Total
         </>
       }

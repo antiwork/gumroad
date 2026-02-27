@@ -1,3 +1,13 @@
+import {
+  ArrowDown,
+  ArrowInDownSquareHalf,
+  ArrowLeft,
+  ArrowUpRightSquare,
+  MenuFilter,
+  Paperclip,
+  Trash,
+  Truck,
+} from "@boxicons/react";
 import { Blob, DirectUpload } from "@rails/activestorage";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
@@ -65,7 +75,6 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { FileKindIcon } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
@@ -267,8 +276,8 @@ const CustomersPage = ({
               <PopoverAnchor>
                 <WithTooltip tip="Filter">
                   <PopoverTrigger aria-label="Filter" asChild>
-                    <Button>
-                      <Icon name="filter" />
+                    <Button size="icon">
+                      <MenuFilter className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -395,8 +404,8 @@ const CustomersPage = ({
               <PopoverAnchor>
                 <WithTooltip tip="Export">
                   <PopoverTrigger aria-label="Export" asChild>
-                    <Button>
-                      <Icon name="download" />
+                    <Button size="icon">
+                      <ArrowInDownSquareHalf className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -464,7 +473,11 @@ const CustomersPage = ({
                       <TableCell>
                         {customer.shipping && !customer.shipping.tracking.shipped ? (
                           <WithTooltip tip="Not Shipped">
-                            <Icon name="truck" style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" />
+                            <Truck
+                              style={{ marginRight: "var(--spacer-2)" }}
+                              aria-label="Not Shipped"
+                              className="size-5"
+                            />
                           </WithTooltip>
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
@@ -779,7 +792,7 @@ const CustomerDrawer = ({
         <div className="flex gap-4">
           {onBack ? (
             <button onClick={onBack} aria-label="Return to bundle" className="cursor-pointer all-unset">
-              <Icon name="arrow-left" style={{ fontSize: "var(--big-icon-size)" }} />
+              <ArrowLeft style={{ fontSize: "var(--big-icon-size)" }} className="size-5" />
             </button>
           ) : null}
           <h2>{customer.product.name}</h2>
@@ -891,7 +904,7 @@ const CustomerDrawer = ({
                   aria-label="Transaction"
                   className="grow"
                 >
-                  <Icon name="arrow-up-right-square" />
+                  <ArrowUpRightSquare className="size-5" />
                 </a>
               ) : null}
             </h3>
@@ -2404,7 +2417,7 @@ const ChargeRow = ({
             rel="noreferrer"
             aria-label="Transaction"
           >
-            <Icon name="arrow-up-right-square" />
+            <ArrowUpRightSquare className="size-5" />
           </a>
           {purchase.partially_refunded ? (
             <Pill size="small">Partial refund</Pill>
@@ -2597,18 +2610,19 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
     </RowContent>
     <RowActions>
       {onDelete ? (
-        <Button color="danger" onClick={onDelete} disabled={disabled} aria-label="Delete">
-          <Icon name="trash2" />
+        <Button color="danger" size="icon" onClick={onDelete} disabled={disabled} aria-label="Delete">
+          <Trash className="size-5" />
         </Button>
       ) : null}
       <NavigationButton
+        size="icon"
         href={Routes.s3_utility_cdn_url_for_blob_path({ key: file.key })}
         download
         target="_blank"
         disabled={disabled}
         aria-label="Download"
       >
-        <Icon name="download-fill" />
+        <ArrowDown pack="filled" className="size-5" />
       </NavigationButton>
     </RowActions>
   </Row>
@@ -2735,7 +2749,7 @@ const CommissionSection = ({
                   multiple
                   style={{ display: "none" }}
                 />
-                <Icon name="paperclip" /> Upload files
+                <Paperclip className="size-5" /> Upload files
               </label>
               {commission.status === "in_progress" ? (
                 <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()}>

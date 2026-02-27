@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf } from "@boxicons/react";
 import * as React from "react";
 
 import { ExportablePayout, exportPayouts, getExportablePayouts } from "$app/data/balance";
@@ -5,7 +6,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -151,8 +151,8 @@ export const ExportPayoutsPopover = () => (
   <Popover>
     <PopoverAnchor>
       <PopoverTrigger aria-label="Bulk export" asChild>
-        <Button>
-          <Icon name="download" />
+        <Button size="icon">
+          <ArrowInDownSquareHalf className="size-5" />
         </Button>
       </PopoverTrigger>
     </PopoverAnchor>

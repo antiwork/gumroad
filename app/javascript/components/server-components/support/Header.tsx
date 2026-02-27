@@ -1,3 +1,4 @@
+import { Search } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import React from "react";
 import { createCast } from "ts-safe-cast";
@@ -5,11 +6,10 @@ import { createCast } from "ts-safe-cast";
 import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 export function SupportHeader({
@@ -50,7 +50,7 @@ export function SupportHeader({
           isHelpArticle ? (
             <Button asChild>
               <a href={Routes.help_center_root_path()} aria-label="Search" title="Search">
-                <Icon name="solid-search" />
+                <Search className="size-5" />
               </a>
             </Button>
           ) : isAnonymousUserOnHelpCenter ? (

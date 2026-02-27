@@ -1,3 +1,4 @@
+import { Cog } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import taxesPlaceholder from "images/placeholders/taxes.png";
 import * as React from "react";
@@ -6,7 +7,6 @@ import { cast } from "ts-safe-cast";
 import { classNames } from "$app/utils/classNames";
 
 import { NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -119,7 +119,7 @@ const TaxCenterIndex = () => {
 
   const settingsAction = loggedInUser?.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Icon name="gear-fill" />
+      <Cog pack="filled" className="size-5" />
       Settings
     </NavigationButton>
   ) : null;

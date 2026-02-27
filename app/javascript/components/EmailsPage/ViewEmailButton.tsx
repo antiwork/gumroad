@@ -1,3 +1,4 @@
+import { Envelope } from "@boxicons/react";
 import React from "react";
 
 import { previewInstallment, SavedInstallment } from "$app/data/installments";
@@ -5,7 +6,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 
 export const ViewEmailButton = (props: { installment: SavedInstallment }) => {
@@ -27,7 +27,7 @@ export const ViewEmailButton = (props: { installment: SavedInstallment }) => {
         }
       })}
     >
-      <Icon name="envelope-fill"></Icon>
+      <Envelope pack="filled" className="size-5" />
       {sendingPreviewEmail ? "Sending..." : "View email"}
     </Button>
   );

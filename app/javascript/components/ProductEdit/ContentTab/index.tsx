@@ -1,3 +1,27 @@
+import {
+  ArrowFromBottomStroke,
+  ArrowUp,
+  CartPlus,
+  CheckCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CursorClick,
+  Dropbox as DropboxIcon,
+  File,
+  FileDetail,
+  FolderPlus,
+  Grid,
+  Images,
+  Key,
+  Link as LinkIcon,
+  Minus,
+  Paperclip,
+  Plus,
+  Rename,
+  Star,
+  Twitter,
+} from "@boxicons/react";
 import { findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorContent } from "@tiptap/react";
@@ -25,7 +49,6 @@ import { PageList, PageListItem, PageListLayout } from "$app/components/Download
 import { EntityInfo } from "$app/components/DownloadPage/Layout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -112,28 +135,28 @@ const FileUploadMenu = ({
   <div role="menu" aria-label="Image and file uploader">
     <PopoverClose asChild>
       <div role="menuitem" onClick={onEmbedMedia}>
-        <Icon name="media" />
+        <Images className="size-5" />
         <span>Embed media</span>
       </div>
     </PopoverClose>
     <PopoverClose asChild>
       <label role="menuitem">
         <input type="file" name="file" className="sr-only" multiple onChange={(e) => onUploadFile(e.target)} />
-        <Icon name="paperclip" />
+        <Paperclip className="size-5" />
         <span>Computer files</span>
       </label>
     </PopoverClose>
     {existingFiles.length > 0 ? (
       <PopoverClose asChild>
         <div role="menuitem" onClick={onSelectExistingFiles}>
-          <Icon name="files-earmark" />
+          <File className="size-5" />
           <span>Existing product files</span>
         </div>
       </PopoverClose>
     ) : null}
     <PopoverClose asChild>
       <div role="menuitem" onClick={onUploadFromDropbox}>
-        <Icon name="dropbox" />
+        <DropboxIcon pack="brands" className="size-5" />
         <span>Dropbox files</span>
       </div>
     </PopoverClose>
@@ -233,11 +256,15 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         mimeType,
         onComplete: () => {
           fileStatus.uploadStatus = { type: "uploaded" };
-          updateProduct({});
+          updateProduct((product) => {
+            product.files = [...product.files];
+          });
         },
         onProgress: (progress) => {
           fileStatus.uploadStatus = { type: "uploading", progress };
-          updateProduct({});
+          updateProduct((product) => {
+            product.files = [...product.files];
+          });
         },
       });
       if (typeof status === "string") {
@@ -543,7 +570,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             custom={
               <>
                 <LinkMenuItem editor={editor} />
-                <PopoverMenuItem name="Upload files" icon="upload-fill">
+                <PopoverMenuItem name="Upload files" icon={<ArrowFromBottomStroke pack="filled" className="size-5" />}>
                   <FileUploadMenu
                     existingFiles={existingFiles}
                     onEmbedMedia={() => setShowEmbedModal(true)}
@@ -631,7 +658,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <Tabs variant="buttons">
                     <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
                       <button type="button">
-                        <Icon name="link" />
+                        <LinkIcon className="size-5" />
                         <h4>Embed link</h4>
                       </button>
                     </Tab>
@@ -653,7 +680,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             setShowEmbedModal(false);
                           }}
                         />
-                        <Icon name="upload-fill" />
+                        <ArrowUp pack="filled" className="size-5" />
                         <h4>Upload</h4>
                       </Label>
                     </Tab>
@@ -675,7 +702,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   onOpenChange={(open) => setInsertMenuState(open ? "open" : null)}
                 >
                   <PopoverTrigger className="toolbar-item all-unset">
-                    Insert <Icon name="outline-cheveron-down" />
+                    Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                     <div role="menu" onClick={() => setInsertMenuState(null)}>
@@ -688,30 +715,30 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               setInsertMenuState("open");
                             }}
                           >
-                            <Icon name="outline-cheveron-left" />
+                            <ChevronLeft className="size-5" />
                             <span>Back</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
-                            <Icon name="card-text" />
+                            <FileDetail className="size-5" />
                             <span>Short answer</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
-                            <Icon name="file-text" />
+                            <FileDetail className="size-5" />
                             <span>Long answer</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
-                            <Icon name="folder-plus" />
+                            <FolderPlus className="size-5" />
                             <span>Upload file</span>
                           </div>
                         </>
                       ) : (
                         <>
                           <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
-                            <Icon name="button" />
+                            <CursorClick className="size-5" />
                             <span>Button</span>
                           </div>
                           <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                            <Icon name="horizontal-rule" />
+                            <Minus className="size-5" />
                             <span>Divider</span>
                           </div>
                           <div
@@ -722,24 +749,24 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             }}
                             className="flex items-center"
                           >
-                            <Icon name="input-cursor-text" />
+                            <Rename />
                             <span>Input</span>
-                            <Icon name="outline-cheveron-right" className="ml-auto" />
+                            <ChevronRight className="ml-auto size-5" />
                           </div>
                           <div role="menuitem" onClick={onInsertMoreLikeThis}>
-                            <Icon name="grid" />
+                            <Grid className="size-5" />
                             <span>More like this</span>
                           </div>
                           <div role="menuitem" onClick={onInsertPosts}>
-                            <Icon name="file-earmark-medical" />
+                            <FileDetail className="size-5" />
                             <span>List of posts</span>
                           </div>
                           <div role="menuitem" onClick={onInsertLicense}>
-                            <Icon name="outline-key" />
+                            <Key className="size-5" />
                             <span>License key</span>
                           </div>
                           <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
-                            <Icon name="twitter" />
+                            <Twitter pack="brands" className="size-5" />
                             <span>Twitter post</span>
                           </div>
                           <div
@@ -749,7 +776,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               setShowUpsellModal(true);
                             }}
                           >
-                            <Icon name="cart-plus" />
+                            <CartPlus className="size-5" />
                             <span>Upsell</span>
                           </div>
                           <div
@@ -759,7 +786,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               setShowReviewModal(true);
                             }}
                           >
-                            <Icon name="solid-star" />
+                            <Star pack="filled" className="size-5" />
                             <span>Review</span>
                           </div>
                         </>
@@ -769,7 +796,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 </Popover>
                 <Separator aria-orientation="vertical" />
                 <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
-                  <Icon name="plus" /> Page
+                  <Plus className="size-5" /> Page
                 </button>
               </>
             }
@@ -796,7 +823,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
                             </span>
 
-                            <Icon name={pagesExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+                            {pagesExpanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
                           </button>
                         </PageListItem>
                       )}
@@ -860,7 +887,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                 handleCreatePageClick();
                               }}
                             >
-                              <Icon name="plus" />
+                              <Plus className="size-5" />
                               <span className="flex-1">Add another page</span>
                             </button>
                           </PageListItem>
@@ -1131,7 +1158,7 @@ export const ContentTab = () => {
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}
                           </span>
-                          <Icon name="outline-cheveron-down" />
+                          <ChevronDown className="size-5" />
                         </InputGroup>
                       )}
                       options={product.variants}
@@ -1168,7 +1195,7 @@ export const ContentTab = () => {
                               )}
                             </div>
                             {item.id === selectedVariant?.id && (
-                              <Icon name="solid-check-circle" className="ml-auto text-success" />
+                              <CheckCircle pack="filled" className="ml-auto size-5 text-success" />
                             )}
                           </div>
                           {index === product.variants.length - 1 ? (

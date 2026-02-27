@@ -1,3 +1,4 @@
+import { DotsHorizontalRounded } from "@boxicons/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
 
@@ -16,7 +17,6 @@ import { assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { UserAvatar } from "$app/components/Communities/UserAvatar";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -258,7 +258,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
             {comment.is_editable || comment.is_deletable ? (
               <Popover>
                 <PopoverTrigger aria-label="Open comment action menu">
-                  <Icon name="three-dots" />
+                  <DotsHorizontalRounded className="size-5" />
                 </PopoverTrigger>
                 <PopoverContent>
                   <div className="grid gap-3">

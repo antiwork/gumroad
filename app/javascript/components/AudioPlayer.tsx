@@ -1,8 +1,8 @@
+import { PauseCircle, PlayCircle, RotateCcw10, RotateCw10 } from "@boxicons/react";
 import * as React from "react";
 
 import { asyncVoid } from "$app/utils/promise";
 
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Range } from "$app/components/ui/Range";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -102,18 +102,18 @@ export const AudioPlayer = (props: Props) => {
           <div role="toolbar" className="flex items-center gap-2 text-[1.25rem]">
             {isPlaying ? (
               <button type="button" className="cursor-pointer all-unset" onClick={pauseAudio} aria-label="Pause">
-                <Icon name="circle-pause" />
+                <PauseCircle className="size-5" />
               </button>
             ) : (
               <button type="button" className="cursor-pointer all-unset" onClick={playAudio} aria-label="Play">
-                <Icon name="circle-play" />
+                <PlayCircle className="size-5" />
               </button>
             )}
             <button type="button" className="cursor-pointer all-unset" onClick={rewind15} aria-label="Rewind15">
-              <Icon name="skip-back-15" />
+              <RotateCcw10 className="size-5" />
             </button>
             <button type="button" className="cursor-pointer all-unset" onClick={skip30} aria-label="Skip30">
-              <Icon name="skip-forward-30" />
+              <RotateCw10 className="size-5" />
             </button>
           </div>
           <time aria-label="Progress" className="text-[0.875rem] leading-[1.3] tabular-nums">

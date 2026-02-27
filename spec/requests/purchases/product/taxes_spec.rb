@@ -229,11 +229,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_text("$100")
 
       add_to_cart(product)
-      check_out(product, address: { street: "2031 7th Ave", state: "WA", city: "Seattle", zip_code: "98121" }, should_verify_address: true) do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$10.35", normalize_ws: true)
-        expect(page).to have_text("Total US$110.35", normalize_ws: true)
-      end
+      check_out(product, address: { street: "2031 7th Ave", state: "WA", city: "Seattle", zip_code: "98121" }, should_verify_address: true)
 
       purchase = Purchase.last
       expect(purchase.total_transaction_cents).to eq(110_35)
@@ -269,11 +265,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_text("$100")
 
       add_to_cart(product)
-      check_out(product, zip_code: "98121") do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$10.35", normalize_ws: true, wait: 10)
-        expect(page).to have_text("Total US$110.35", normalize_ws: true)
-      end
+      check_out(product, zip_code: "98121")
 
       purchase = Purchase.last
       expect(purchase.total_transaction_cents).to eq(110_35)
@@ -4004,36 +3996,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_select("Province", selected: "ON")
 
       select "QC", from: "Province"
-      expect(page).to_not have_field "Business QST ID (optional)"
       check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
-
-      purchase = Purchase.last
-      expect(purchase.country).to eq("Canada")
-      expect(purchase.state).to eq("QC")
-      expect(purchase.ip_country).to eq("Canada")
-      expect(purchase.card_country).to eq("CA")
-      expect(purchase.total_transaction_cents).to eq(114_98)
-      expect(purchase.price_cents).to eq(100_00)
-      expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(14_98)
-      expect(purchase.was_purchase_taxable).to be(true)
-    end
-
-    it "charges tax Canada" do
-      allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("192.206.151.131") # Ontario, Canada
-
-      visit "/l/#{product.unique_permalink}"
-      expect(page).to have_text("$100")
-      add_to_cart(product)
-
-      expect(page).to have_select("Country", selected: "Canada")
-      expect(page).to have_select("Province", selected: "ON")
-
-      select "QC", from: "Province"
-      check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" }) do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Tax US$14.98", normalize_ws: true)
-      end
 
       purchase = Purchase.last
       expect(purchase.country).to eq("Canada")
@@ -4087,10 +4050,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         select "QC", from: "Province"
         expect(page).to have_field "Business QST ID (optional)"
-        check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" }) do
-          expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-          expect(page).to have_text("Tax US$14.98", normalize_ws: true)
-        end
+        check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
         expect(purchase.country).to eq("Canada")

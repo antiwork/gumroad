@@ -1,3 +1,4 @@
+import { XSquare } from "@boxicons/react";
 import { useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -7,7 +8,6 @@ import { isValidEmail } from "$app/utils/email";
 
 import { Button } from "$app/components/Button";
 import { Layout } from "$app/components/Collaborators/Layout";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
@@ -153,7 +153,7 @@ const CollaboratorForm = ({
       headerActions={
         <>
           <NavigationButtonInertia disabled={form.processing} href={Routes.collaborators_path()}>
-            <Icon name="x-square" />
+            <XSquare className="size-5" />
             Cancel
           </NavigationButtonInertia>
           <WithTooltip position="bottom" tip={collaboratorsDisabledReason}>

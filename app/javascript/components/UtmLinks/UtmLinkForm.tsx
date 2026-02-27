@@ -1,3 +1,4 @@
+import { Link, RefreshCcw, XSquare } from "@boxicons/react";
 import { router, useForm } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -9,7 +10,6 @@ import { assertDefined } from "$app/utils/assert";
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -259,7 +259,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
       actions={
         <>
           <NavigationButtonInertia href={Routes.dashboard_utm_links_path()} disabled={processing}>
-            <Icon name="x-square" />
+            <XSquare className="size-5" />
             Cancel
           </NavigationButtonInertia>
           <Button color="accent" onClick={handleSubmit} disabled={processing}>
@@ -336,18 +336,19 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                   copyTooltip="Copy short link"
                   text={`${shortUrlProtocol}//${shortUrlPrefix}${isEditing ? permalink : data.utm_link.permalink}`}
                 >
-                  <Button type="button" aria-label="Copy short link">
-                    <Icon name="link" />
+                  <Button type="button" size="icon" aria-label="Copy short link">
+                    <Link className="size-5" />
                   </Button>
                 </CopyToClipboard>
                 {!isEditing && (
                   <WithTooltip tip="Generate new short link">
                     <Button
+                      size="icon"
                       onClick={generateNewPermalink}
                       disabled={isLoadingNewPermalink}
                       aria-label="Generate new short link"
                     >
-                      <Icon name="outline-refresh" />
+                      <RefreshCcw className="size-5" />
                     </Button>
                   </WithTooltip>
                 )}
@@ -466,8 +467,8 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                   onChange={() => {}}
                 />
                 <CopyToClipboard copyTooltip="Copy UTM link" text={finalUrl}>
-                  <Button type="button" aria-label="Copy UTM link">
-                    <Icon name="link" />
+                  <Button type="button" size="icon" aria-label="Copy UTM link">
+                    <Link className="size-5" />
                   </Button>
                 </CopyToClipboard>
               </div>

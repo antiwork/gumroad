@@ -1,3 +1,4 @@
+import { ChevronDown, Envelope, Eye, FileDetail, X } from "@boxicons/react";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import { Editor, JSONContent } from "@tiptap/core";
@@ -28,7 +29,6 @@ import {
   mapEmailFilesToFileState,
 } from "$app/components/EmailAttachments";
 import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
@@ -688,20 +688,20 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                 <PopoverAnchor>
                   <PopoverTrigger disabled={isBusy} asChild>
                     <Button>
-                      <Icon name="eye-fill" />
+                      <Eye pack="filled" className="size-5" />
                       Preview
-                      <Icon name="outline-cheveron-down" />
+                      <ChevronDown className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </PopoverAnchor>
                 <PopoverContent sideOffset={4}>
                   <div className="grid gap-3">
                     <Button disabled={isBusy} onClick={() => save("save_and_preview_post")}>
-                      <Icon name="file-earmark-medical-fill" />
+                      <FileDetail pack="filled" className="size-5" />
                       Preview Post
                     </Button>
                     <Button disabled={isBusy} onClick={() => save("save_and_preview_email")}>
-                      <Icon name="envelope-fill" />
+                      <Envelope pack="filled" className="size-5" />
                       Preview Email
                     </Button>
                   </div>
@@ -712,13 +712,12 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                 disabled={isBusy}
                 onClick={() => save(channel.profile ? "save_and_preview_post" : "save_and_preview_email")}
               >
-                <Icon name="eye-fill" />
+                <Eye pack="filled" className="size-5" />
                 Preview
               </Button>
             )}
             <Button asChild>
               <Link href={getCancelPath()} inert={isBusy ? true : undefined}>
-                <Icon name="x-square" />
                 Cancel
               </Link>
             </Button>
@@ -727,7 +726,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                 <PopoverTrigger disabled={isBusy} asChild>
                   <Button>
                     {channel.profile ? "Publish" : "Send"}
-                    <Icon name="outline-cheveron-down" />
+                    <ChevronDown className="size-5" />
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
@@ -749,7 +748,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                             finishPublishing();
                           }}
                         >
-                          <Icon name="x" />
+                          <X className="size-5" />
                         </Button>
                       </>
                     ) : (

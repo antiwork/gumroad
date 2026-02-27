@@ -1,3 +1,4 @@
+import { ArrowUp } from "@boxicons/react";
 import { NodeViewProps, Node as TiptapNode } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -5,7 +6,6 @@ import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
 import { FileInput } from "$app/components/Download/CustomField/FileInput";
-import { Icon } from "$app/components/Icons";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -51,7 +51,7 @@ const FileUploadNodeView = ({ editor, node }: NodeViewProps) => {
       <NodeActionsMenu editor={editor} />
       <Placeholder>
         <Button color="primary">
-          <Icon name="upload-fill" />
+          <ArrowUp pack="filled" className="size-5" />
           Upload files
         </Button>
       </Placeholder>

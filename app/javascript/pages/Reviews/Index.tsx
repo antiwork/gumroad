@@ -1,3 +1,4 @@
+import { Pencil } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -6,7 +7,6 @@ import { ProductNativeType } from "$app/parsers/product";
 import { Button, NavigationButton } from "$app/components/Button";
 import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
@@ -88,8 +88,8 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
           <Popover open={isEditing} onOpenChange={setIsEditing}>
             <PopoverAnchor>
               <PopoverTrigger aria-label="Edit" asChild>
-                <Button>
-                  <Icon name="pencil" />
+                <Button size="icon">
+                  <Pencil className="size-5" />
                 </Button>
               </PopoverTrigger>
             </PopoverAnchor>

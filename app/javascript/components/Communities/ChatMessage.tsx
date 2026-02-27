@@ -1,3 +1,4 @@
+import { Pencil, Trash } from "@boxicons/react";
 import cx from "classnames";
 import React from "react";
 
@@ -7,7 +8,6 @@ import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -172,7 +172,7 @@ export const ChatMessage = ({
                     onClick={handleEdit}
                     aria-label="Edit message"
                   >
-                    <Icon name="pencil" />
+                    <Pencil className="size-5" />
                   </button>
                 </WithTooltip>
                 <div className="flex border-r dark:border-[rgb(var(--parent-color)/var(--border-alpha))]" />
@@ -184,7 +184,7 @@ export const ChatMessage = ({
                 onClick={() => setDeleteConfirmation({ deleting: false })}
                 aria-label="Delete message"
               >
-                <Icon name="trash2" />
+                <Trash className="size-5" />
               </button>
             </WithTooltip>
           </div>

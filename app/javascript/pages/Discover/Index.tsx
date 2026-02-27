@@ -1,9 +1,10 @@
+import { ArrowLeft, ArrowRight, X } from "@boxicons/react";
 import { Deferred, Link, router, usePage } from "@inertiajs/react";
 import { range } from "lodash-es";
 import * as React from "react";
 import { cast, is } from "ts-safe-cast";
 
-import { SearchResults, SearchRequest } from "$app/data/search";
+import { SearchRequest, SearchResults } from "$app/data/search";
 import { useScrollToElement } from "$app/hooks/useScrollToElement";
 import { CardProduct } from "$app/parsers/product";
 import { last } from "$app/utils/array";
@@ -14,12 +15,11 @@ import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
 import { HomeFooter } from "$app/components/Home/Shared/Footer";
-import { Icon } from "$app/components/Icons";
 import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
 import { CardContent } from "$app/components/ui/Card";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
 import { CardWishlist } from "$app/components/Wishlist/Card";
 
@@ -64,14 +64,14 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
             className="cursor-pointer all-unset"
             onClick={() => setActive((active + products.length - 1) % products.length)}
           >
-            <Icon name="arrow-left" className="text-xl" />
+            <ArrowLeft className="size-6" />
           </button>
           {active + 1} / {products.length}
           <button
             className="cursor-pointer all-unset"
             onClick={() => setActive((active + products.length + 1) % products.length)}
           >
-            <Icon name="arrow-right" className="text-xl" />
+            <ArrowRight className="size-6" />
           </button>
         </div>
       </header>
@@ -518,7 +518,7 @@ function DiscoverIndex() {
                             className="flex cursor-pointer items-center justify-center all-unset"
                             aria-label="Remove offer code filter"
                           >
-                            <Icon name="x" />
+                            <X className="size-4" />
                           </button>
                         </div>
                       </details>

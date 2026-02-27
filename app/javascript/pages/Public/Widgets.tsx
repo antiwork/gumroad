@@ -1,3 +1,4 @@
+import { Link } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import React from "react";
 import ReactDOMServer from "react-dom/server";
@@ -16,8 +17,6 @@ import { ProductSelect, Product } from "$app/components/Developer/ProductSelect"
 import { Tab, Tabs } from "$app/components/Developer/Tabs";
 import { useHasChanged } from "$app/components/Developer/useHasChanged";
 import { DomainSettingsProvider, useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
-
 type WidgetsPageProps = {
   default_product: Product;
   display_product_select: boolean;
@@ -95,7 +94,7 @@ export default function PublicWidgets() {
                 tooltipPosition="bottom"
               >
                 <Button id={copyButtonUID} color="primary">
-                  <Icon name="link" />
+                  <Link className="size-5" />
                   Copy link
                 </Button>
               </CopyToClipboard>

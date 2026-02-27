@@ -1,3 +1,4 @@
+import { ArrowLeft, ArrowRight, ListUl } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -5,7 +6,7 @@ import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastConte
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
-import { generatePageIcon } from "$app/utils/rich_content_page";
+import { generatePageIcon, PAGE_ICON_COMPONENTS, type PageIconKey } from "$app/utils/rich_content_page";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -20,7 +21,6 @@ import {
   RichContentView,
 } from "$app/components/Download/RichContent";
 import { TranscodingNoticeModal } from "$app/components/Download/TranscodingNoticeModal";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -36,12 +36,17 @@ import { Layout, LayoutProps, PurchaseCustomField } from "./Layout";
 
 export type { PurchaseCustomField };
 
-const PAGE_ICON_LABEL: Record<string, string> = {
+const PAGE_ICON_LABEL: Record<PageIconKey, string> = {
   "file-arrow-down": "Page has various types of files",
   "file-music": "Page has audio files",
   "file-play": "Page has videos",
   "file-text": "Page has no files",
   "outline-key": "Page has license key",
+};
+
+const PageIcon = ({ iconKey }: { iconKey: PageIconKey }) => {
+  const Component = PAGE_ICON_COMPONENTS[iconKey];
+  return <Component className="size-5" aria-label={PAGE_ICON_LABEL[iconKey]} />;
 };
 
 const ContentFilesContext = React.createContext<FileItem[] | null>(null);
@@ -240,10 +245,7 @@ export const WithContent = ({
                 onClick={() => handlePageChange(index)}
                 role="tab"
               >
-                <Icon
-                  name={pageIcons[index] ?? "file-text"}
-                  aria-label={pageIcons[index] ? PAGE_ICON_LABEL[pageIcons[index]] : "file-text"}
-                />
+                <PageIcon iconKey={pageIcons[index] ?? "file-text"} />
                 <span className="flex-1">{page.title ?? "Untitled"}</span>
               </PageListItem>
             ))}
@@ -292,8 +294,8 @@ export const WithContent = ({
             <Popover>
               <PopoverAnchor>
                 <PopoverTrigger aria-label="Table of Contents" asChild>
-                  <Button>
-                    <Icon name="unordered-list" />
+                  <Button size="icon">
+                    <ListUl className="size-5" />
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
@@ -308,10 +310,7 @@ export const WithContent = ({
                           handlePageChange(index);
                         }}
                       >
-                        <Icon
-                          name={pageIcons[index] ?? "file-text"}
-                          aria-label={pageIcons[index] ? PAGE_ICON_LABEL[pageIcons[index]] : "file-text"}
-                        />
+                        <PageIcon iconKey={pageIcons[index] ?? "file-text"} />
                         &ensp;
                         {page.title ?? "Untitled"}
                       </div>
@@ -327,7 +326,7 @@ export const WithContent = ({
               onClick={() => handlePageChange(activePageIndex - 1)}
               className="flex-1 lg:flex-none"
             >
-              <Icon name="arrow-left" />
+              <ArrowLeft className="size-5" />
               Previous
             </Button>
           </WithTooltip>
@@ -338,7 +337,7 @@ export const WithContent = ({
               className="flex-1 lg:flex-none"
             >
               Next
-              <Icon name="arrow-right" />
+              <ArrowRight className="size-5" />
             </Button>
           </WithTooltip>
         </div>

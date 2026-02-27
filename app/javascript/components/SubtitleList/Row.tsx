@@ -1,3 +1,4 @@
+import { FileDetail, Trash, XCircle } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -6,7 +7,6 @@ import { SUBTITLE_LANGUAGES } from "$app/utils/subtitle_languages";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { UploadProgressBar } from "$app/components/UploadProgressBar";
@@ -54,15 +54,15 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
             </div>
           </RowContent>
           <RowActions>
-            <Button onClick={onCancel} color="danger" outline aria-label="Remove">
-              <Icon name="x-circle-fill" />
+            <Button size="icon" onClick={onCancel} color="danger" outline aria-label="Remove">
+              <XCircle pack="filled" className="size-5" />
             </Button>
           </RowActions>
         </>
       ) : (
         <>
           <RowContent>
-            <Icon name="solid-document-text" className="type-icon" />
+            <FileDetail pack="filled" className="type-icon size-5" />
             <div>
               <h4>{subtitleFile.file_name}</h4>
               {FileUtils.getFullFileSizeString(subtitleFile.file_size ?? 0)} {subtitleFile.extension}
@@ -70,8 +70,8 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
           </RowContent>
           <RowActions>
             <SubtitleLanguageSelect currentLanguage={subtitleFile.language} onChange={onChangeLanguage} />
-            <Button onClick={onRemove} color="danger" outline aria-label="Remove">
-              <Icon name="trash2" />
+            <Button size="icon" onClick={onRemove} color="danger" outline aria-label="Remove">
+              <Trash className="size-5" />
             </Button>
           </RowActions>
         </>

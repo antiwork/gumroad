@@ -1,3 +1,4 @@
+import { Pencil } from "@boxicons/react";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
@@ -6,7 +7,6 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import {
   Product,
   ProductDiscount,
@@ -351,10 +351,11 @@ const EditButton = ({ product }: { product: Product }) => {
       <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
         <NavigationButton
           color="filled"
+          size="icon"
           href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
           aria-label="Edit product"
         >
-          <Icon name="pencil" />
+          <Pencil className="size-5" />
         </NavigationButton>
       </WithTooltip>
     </div>

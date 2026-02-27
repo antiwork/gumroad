@@ -1,3 +1,18 @@
+import {
+  ArrowDown,
+  ArrowUp,
+  Bell,
+  Box,
+  ChevronLeft,
+  ChevronRight,
+  DotsHorizontalRounded,
+  Envelope,
+  FileDetail,
+  Grid,
+  Link,
+  Plus,
+  Trash,
+} from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import { EditorContent } from "@tiptap/react";
 import { debounce, isEqual, sortBy } from "lodash-es";
@@ -22,7 +37,6 @@ import { classNames } from "$app/utils/classNames";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Props as ProductProps } from "$app/components/Product";
 import { CardGrid, SORT_BY_LABELS, useSearchReducer } from "$app/components/Product/CardGrid";
@@ -168,14 +182,14 @@ export const EditorMenu = ({
       }}
     >
       <PopoverTrigger aria-label={label} className={sectionButtonClasses}>
-        <Icon name="three-dots" />
+        <DotsHorizontalRounded className="size-5" />
       </PopoverTrigger>
       <PopoverContent className="p-0!" arrowClassName="dark:fill-[rgb(var(--parent-color)/var(--border-alpha))]">
         {isSubmenu(activeSubmenu) ? (
           <div className="flex w-75 flex-col gap-4 p-4">
             <h4 className="grid grid-cols-[1em_1fr_1em]">
               <button className="cursor-pointer all-unset" onClick={() => setMenuState("menu")} aria-label="Go back">
-                <Icon name="outline-cheveron-left" />
+                <ChevronLeft className="size-5" />
               </button>
               <div className="text-center">{activeSubmenu.props.heading}</div>
             </h4>
@@ -192,7 +206,7 @@ export const EditorMenu = ({
                   >
                     <h5 className="grow font-bold">{item.props.heading}</h5>
                     <div>
-                      {item.props.text} <Icon name="outline-cheveron-right" />
+                      {item.props.text} <ChevronRight className="size-5" />
                     </div>
                   </button>
                 </CardContent>
@@ -288,7 +302,7 @@ export const SectionLayout = ({
           <CardContent asChild>
             <button className="cursor-pointer all-unset" onClick={copyLink}>
               <h5 className="grow font-bold">{linkCopied ? "Copied!" : "Copy link"}</h5>
-              <Icon name="link" />
+              <Link className="size-5" />
             </button>
           </CardContent>
           <CardContent asChild>
@@ -298,7 +312,7 @@ export const SectionLayout = ({
               style={{ color: "rgb(var(--danger))" }}
             >
               <h5 className="grow font-bold">Remove</h5>
-              <Icon name="trash2" />
+              <Trash className="size-5" />
             </button>
           </CardContent>
         </EditorMenu>
@@ -308,7 +322,7 @@ export const SectionLayout = ({
           onClick={() => move("move-section-up")}
           className={sectionButtonClasses}
         >
-          <Icon name="arrow-up" />
+          <ArrowUp className="size-5" />
         </button>
         <button
           aria-label="Move section down"
@@ -316,7 +330,7 @@ export const SectionLayout = ({
           onClick={() => move("move-section-down")}
           className={sectionButtonClasses}
         >
-          <Icon name="arrow-down" />
+          <ArrowDown className="size-5" />
         </button>
       </SectionToolbar>
       <div ref={scrollRef} className="absolute" />
@@ -680,7 +694,7 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
             "rounded-b border",
           )}
         >
-          <Icon name="plus" />
+          <Plus className="size-5" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -690,27 +704,27 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
       >
         <div role="menu" onClick={() => setOpen(false)}>
           <div role="menuitem" onClick={() => addSection("SellerProfileProductsSection")}>
-            <Icon name="grid" />
+            <Grid className="size-5" />
             &ensp; Products
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfilePostsSection")}>
-            <Icon name="envelope-fill" />
+            <Envelope pack="filled" className="size-5" />
             &ensp; Posts
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileFeaturedProductSection")}>
-            <Icon name="box" />
+            <Box className="size-5" />
             &ensp; Featured Product
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileRichTextSection")}>
-            <Icon name="file-earmark-text" />
+            <FileDetail className="size-5" />
             &ensp; Rich text
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileSubscribeSection")}>
-            <Icon name="solid-bell" />
+            <Bell pack="filled" className="size-5" />
             &ensp; Subscribe
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileWishlistsSection")}>
-            <Icon name="file-text-fill" />
+            <FileDetail pack="filled" className="size-5" />
             &ensp; Wishlists
           </div>
         </div>

@@ -1,6 +1,6 @@
+import { Shield } from "@boxicons/react";
 import React from "react";
 
-import { Icon } from "$app/components/Icons";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export type RefundPolicy = {
@@ -13,7 +13,7 @@ export const RefundPolicyTitle = ({ refundPolicy }: { refundPolicy: RefundPolicy
     Refund policy: {refundPolicy.title}{" "}
     {refundPolicy.current_refund_policy ? (
       <WithTooltip tip={`Current refund policy: ${refundPolicy.current_refund_policy}`}>
-        <Icon name="solid-shield-exclamation" className="text-warning" />
+        <Shield pack="filled" className="size-5 text-warning" />
       </WithTooltip>
     ) : null}
   </>
