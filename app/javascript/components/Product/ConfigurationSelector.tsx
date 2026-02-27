@@ -250,7 +250,7 @@ export const OptionRadioButton = ({
           </Alert>
         ) : null}
         {hidePrice ? null : (
-          <Pill>
+          <Pill className="shrink-0">
             {discountedPriceCents < priceCents ? (
               <>
                 <s>{formatPriceCentsWithCurrencySymbol(currencyCode, priceCents, { symbolFormat: "long" })}</s>{" "}
