@@ -1,4 +1,4 @@
-import { ArrowUp, ChevronDown, ChevronUp, FolderOpen, FolderPlus, Fullscreen, FullscreenExit } from "@boxicons/react";
+import { ArrowUp, ChevronDown, ChevronUp, Folder, FolderPlus, Fullscreen, FullscreenExit } from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import { Editor, findChildren, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer, DOMParser as ProseMirrorDOMParser } from "@tiptap/pm/model";
@@ -293,7 +293,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const folderAction = {
     item: () => (
       <>
-        <FolderOpen pack="filled" className="size-5" />
+        <Folder pack="filled" className="size-5" />
         <span>Move to folder...</span>
       </>
     ),
@@ -319,7 +319,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
             }}
             role="menuitem"
           >
-            <FolderOpen pack="filled" className="size-5" />
+            <Folder pack="filled" className="size-5" />
             <span>{name || "Untitled"}</span>
           </div>
         ))}

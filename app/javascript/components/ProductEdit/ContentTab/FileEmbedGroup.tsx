@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, Dropbox as DropboxIcon, FolderOpen, Pencil } from "@boxicons/react";
+import { Check, ChevronDown, ChevronRight, Dropbox as DropboxIcon, Folder, Pencil } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
@@ -151,7 +151,7 @@ const FileEmbedGroupNodeView = ({
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
             {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
-            <FolderOpen pack="filled" className="type-icon size-5" />
+            <Folder pack="filled" className="type-icon size-5" />
             {editing ? (
               <Input
                 type="text"
@@ -214,6 +214,7 @@ const FileEmbedGroupNodeView = ({
               ) : null}
               {editor.isEditable ? (
                 <Button
+                  size="icon"
                   aria-label="Edit"
                   onMouseDown={(e) => {
                     // NoOp if the user is already editing the name since it will

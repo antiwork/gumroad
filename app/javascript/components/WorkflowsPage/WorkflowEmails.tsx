@@ -459,6 +459,7 @@ const EmailRow = ({
       <RowActions>
         {isAbandonedCartWorkflow ? null : (
           <Button
+            size="icon"
             outline
             disabled={(expanded && hasUploadingImages) || false}
             aria-label="Edit"
@@ -469,7 +470,7 @@ const EmailRow = ({
         )}
         <WithTooltip tip="Send email preview">
           <Button size="icon" outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
-            <Eye pack="filled" className="size-5" />
+            <Eye className="size-5" />
           </Button>
         </WithTooltip>
         {isAbandonedCartWorkflow ? null : (

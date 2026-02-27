@@ -1,4 +1,4 @@
-import { File, FileDetail, Key, MusicAlt, Play, type BoxIconProps } from "@boxicons/react";
+import { FileDetail, Key, MusicAlt, Play, type BoxIconProps } from "@boxicons/react";
 
 import { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
 
@@ -9,7 +9,7 @@ export const PAGE_ICON_COMPONENTS: Record<PageIconKey, React.ComponentType<BoxIc
   "file-text": FileDetail,
   "file-play": Play,
   "file-music": MusicAlt,
-  "file-arrow-down": File,
+  "file-arrow-down": FileDetail,
 };
 
 export const generatePageIcon = ({

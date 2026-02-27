@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Dropbox as DropboxIcon, FolderOpen } from "@boxicons/react";
+import { ChevronDown, ChevronRight, Dropbox as DropboxIcon, Folder } from "@boxicons/react";
 import { Content, findParentNodeClosestToPos, Mark, Node as TiptapNode } from "@tiptap/core";
 import { LinkOptions as BaseLinkOptions } from "@tiptap/extension-link";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -287,7 +287,7 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
         <Row role="treeitem" aria-expanded={expanded}>
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
             {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
-            <FolderOpen pack="filled" className="type-icon size-5" />
+            <Folder pack="filled" className="type-icon size-5" />
             <div>
               <h4>{folderTitle}</h4>
             </div>

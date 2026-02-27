@@ -1,4 +1,4 @@
-import { Video, PlayCircle, Trash, Twitter } from "@boxicons/react";
+import { PlayCircle, Trash, Twitter, Video } from "@boxicons/react";
 import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
@@ -36,7 +36,7 @@ const MEDIA_EMBED_SUPPORTING_PROVIDERS = ["YouTube", "Vimeo", "Wistia, Inc.", "D
 const VideoEmbed = Extension.create({
   menuItem: (editor) => (
     <WithDialog editor={editor} type="embed">
-      <MenuItem name="Insert video" icon={<Video pack="filled" className="size-5" />} />
+      <MenuItem name="Insert video" icon={<Video className="size-5" />} />
     </WithDialog>
   ),
 });
