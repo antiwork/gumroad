@@ -45,6 +45,8 @@ import { Switch } from "$app/components/ui/Switch";
 import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
+import { useNodeVisibility } from "./useNodeVisibility";
+
 export const getDownloadUrl = (productId: string, file: FileEntry) =>
   file.extension === "URL" || file.status.type === "removed"
     ? null
@@ -57,12 +59,14 @@ export const getDraggedFileEmbed = (editor: Editor) => {
   return draggedNode?.type.name === FileEmbed.name ? draggedNode : null;
 };
 
+const DEFAULT_FILE_ROW_HEIGHT = 82;
+
 const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
   if (!node.attrs.id) return;
 
+  const { ref, visible, lastHeight } = useNodeVisibility(DEFAULT_FILE_ROW_HEIGHT);
   const { id, updateProduct, filesById } = useProductEditContext();
   const uid = React.useId();
-  const ref = React.useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = React.useState(false);
   const [isDropZone, setIsDropZone] = React.useState(false);
   const [loadingVideo, setLoadingVideo] = React.useState(false);
@@ -174,11 +178,42 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const isConnectedRow = isInGroup && !hasStreamable;
   const isLastInGroup = node === parentNode?.content.lastChild;
 
-  if (!fileExists) return;
+  if (!fileExists) return <NodeViewWrapper ref={ref} contentEditable={false} />;
+
   const updateFile = (data: Partial<FileEntry>) =>
     updateProduct((product) => {
       product.files = product.files.map((existing) => (existing.id === file.id ? { ...existing, ...data } : existing));
     });
+
+  const uploadThumbnail = (thumbnail: File) => {
+    if (thumbnail.size > 5 * 1024 * 1024)
+      return showAlert(
+        "Could not process your thumbnail, please upload an image with size smaller than 5 MB.",
+        "error",
+      );
+
+    setLoadingVideo(true);
+    const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
+    upload.create((error, blob) => {
+      if (error) return showAlert(error.message, "error");
+      updateFile({
+        thumbnail: {
+          url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
+          signed_id: blob.signed_id,
+          status: { type: "unsaved" },
+        },
+      });
+      setLoadingVideo(false);
+    });
+  };
+
+  if (!visible)
+    return (
+      <NodeViewWrapper ref={ref} contentEditable={false}>
+        <div style={{ height: lastHeight.current }} />
+      </NodeViewWrapper>
+    );
+
   const isComplete = !(
     (file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading") ||
     (file.status.type === "dropbox" && file.status.uploadState === "in_progress")
@@ -210,27 +245,6 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     return clientY < top + threshold || clientY > bottom - threshold;
   };
 
-  const uploadThumbnail = (thumbnail: File) => {
-    if (thumbnail.size > 5 * 1024 * 1024)
-      return showAlert(
-        "Could not process your thumbnail, please upload an image with size smaller than 5 MB.",
-        "error",
-      );
-
-    setLoadingVideo(true);
-    const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
-    upload.create((error, blob) => {
-      if (error) return showAlert(error.message, "error");
-      updateFile({
-        thumbnail: {
-          url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-          signed_id: blob.signed_id,
-          status: { type: "unsaved" },
-        },
-      });
-      setLoadingVideo(false);
-    });
-  };
   const onThumbnailSelected = (files: FileList | null) => {
     const thumbnail = files?.[0];
     if (thumbnail) uploadThumbnail(thumbnail);

@@ -3,16 +3,16 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-export const PageListLayout = ({
-  pageList,
-  children,
-  className,
-}: {
-  pageList: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) => (
+export const PageListLayout = React.forwardRef<
+  HTMLDivElement,
+  {
+    pageList: React.ReactNode;
+    children: React.ReactNode;
+    className?: string;
+  }
+>(({ pageList, children, className }, ref) => (
   <div
+    ref={ref}
     className={classNames(
       "flex min-h-0 flex-col gap-6 bg-background p-4 [scrollbar-gutter:stable] md:p-8 lg:flex-row lg:gap-8 lg:overflow-y-auto",
       className,
@@ -23,7 +23,8 @@ export const PageListLayout = ({
     </div>
     <div className="h-0 flex-1">{children}</div>
   </div>
-);
+));
+PageListLayout.displayName = "PageListLayout";
 
 export const PageList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
