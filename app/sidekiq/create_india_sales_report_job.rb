@@ -4,13 +4,6 @@ class CreateIndiaSalesReportJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
 
-  VALID_INDIAN_STATES = %w[
-    AP AR AS BR CG GA GJ HR HP JK JH KA
-    KL MP MH MN ML MZ NL OR PB RJ SK TN
-    TR UK UP WB
-    AN CH DH DD DL LD PY
-  ].to_set.freeze
-
   def perform(month = nil, year = nil)
     if month.nil? || year.nil?
       previous_month = 1.month.ago
@@ -51,11 +44,7 @@ class CreateIndiaSalesReportJob
           tax_amount_cents = purchase.gumroad_tax_cents || 0
 
           raw_state = (purchase.ip_state || "").strip.upcase
-          display_state = if raw_state.match?(/^\d+$/) || !VALID_INDIAN_STATES.include?(raw_state)
-            ""
-          else
-            raw_state
-          end
+          display_state = Compliance::Countries.valid_indian_state?(raw_state) ? raw_state : ""
 
           expected_tax_rounded = (price_cents * india_tax_rate).round
           expected_tax_floored = (price_cents * india_tax_rate).floor

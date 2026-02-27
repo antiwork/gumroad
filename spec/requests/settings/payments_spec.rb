@@ -540,7 +540,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.active_bank_account.account_holder_full_name).to eq("Gumhead Moneybags")
       end
 
-      it "displays the Stripe Connect embedded verification banner" do
+      it "shows the verification section when identity verification is needed" do
         user = create(:user, username: nil, payment_address: nil)
         create(:user_compliance_info, user:, birthday: Date.new(1901, 1, 2))
         create(:ach_account_stripe_succeed, user:)
@@ -554,7 +554,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+        expect(page).to have_section("Verification")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
       end
 
       it "always shows the verification section with success message when verification is not needed" do
@@ -589,7 +590,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+        expect(page).to have_section("Verification")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
 
         merchant_account.mark_deleted!
         visit settings_payments_path
@@ -857,7 +859,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::Business::COMPANY_REGISTRATION_VERIFICATION)
 
         visit settings_payments_path
-        expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+        expect(page).to have_section("Verification")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
       end
     end
 
@@ -1866,7 +1869,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+        expect(page).to have_section("Verification")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
       end
 
       it "allows the creator to use paypal payouts as an individual" do

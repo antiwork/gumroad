@@ -1,4 +1,5 @@
-import { Head, router, usePage, useForm } from "@inertiajs/react";
+import { FontFamily } from "@boxicons/react";
+import { Head, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -12,7 +13,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
@@ -207,7 +207,7 @@ export default function SettingsPage() {
                         isSelected && "-translate-x-1! -translate-y-1! bg-background! shadow!",
                       )}
                     >
-                      <Icon name="file-earmark-font" className="shrink-0" />
+                      <FontFamily className="size-5" />
                       <div>
                         <h4 className="font-bold">{font}</h4>
                         {FONT_DESCRIPTIONS[font]}

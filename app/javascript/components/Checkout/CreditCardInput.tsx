@@ -1,5 +1,6 @@
+import { CreditCard } from "@boxicons/react";
 import { CardElement, Elements } from "@stripe/react-stripe-js";
-import { StripeCardElement, StripeElementStyleVariant, StripeCardElementChangeEvent } from "@stripe/stripe-js";
+import { StripeCardElement, StripeCardElementChangeEvent, StripeElementStyleVariant } from "@stripe/stripe-js";
 import * as React from "react";
 
 import { SavedCreditCard } from "$app/parsers/card";
@@ -7,7 +8,6 @@ import { getStripeInstance } from "$app/utils/stripe_loader";
 import { getCssVariable } from "$app/utils/styles";
 
 import { useFont } from "$app/components/DesignSettings";
-import { Icon } from "$app/components/Icons";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
@@ -49,7 +49,7 @@ export const CreditCardInput = ({
       </FieldsetTitle>
       {savedCreditCard && useSavedCard ? (
         <InputGroup readOnly aria-label="Saved credit card">
-          <Icon name="outline-credit-card" />
+          <CreditCard className="size-5" />
           <span>{savedCreditCard.number}</span>
           <span style={{ marginLeft: "auto" }}>{savedCreditCard.expiration_date}</span>
         </InputGroup>

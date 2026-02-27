@@ -1,12 +1,12 @@
+import { Image } from "@boxicons/react";
 import * as React from "react";
 
-import { Icon } from "$app/components/Icons";
 import { TableCell } from "$app/components/ui/Table";
 
 export const ProductIconCell = ({
   href,
   thumbnail,
-  placeholder = <Icon name="card-image-fill" />,
+  placeholder = <Image pack="filled" className="size-5" />,
 }: {
   href: string;
   thumbnail: string | null;

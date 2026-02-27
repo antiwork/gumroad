@@ -13,7 +13,6 @@ import {
 } from "$app/types/workflow";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { NumberInput } from "$app/components/NumberInput";
 import { TagInput } from "$app/components/TagInput";
 import { Pill } from "$app/components/ui/Pill";
@@ -286,7 +285,6 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         <>
           <Button asChild>
             <Link href={Routes.workflows_path()} inert={form.processing || undefined}>
-              <Icon name="x-square" />
               Cancel
             </Link>
           </Button>

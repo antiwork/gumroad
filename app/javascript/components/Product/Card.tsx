@@ -1,10 +1,10 @@
+import { Star } from "@boxicons/react";
 import * as React from "react";
 
 import { CardProduct, Ratings } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 
-import { Icon } from "$app/components/Icons";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Ribbon } from "$app/components/Product/Ribbon";
@@ -125,7 +125,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
 
 const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSProperties }) => (
   <div className="flex shrink-0 items-center gap-1" aria-label="Rating" style={style}>
-    <Icon name="solid-star" />
+    <Star pack="filled" className="size-5" />
     <span className="rating-average">{ratings.average.toFixed(1)}</span>
     <span title={`${ratings.average} ${ratings.average === 1 ? "rating" : "ratings"}`}>
       {`(${formatOrderOfMagnitude(ratings.count, 1)})`}

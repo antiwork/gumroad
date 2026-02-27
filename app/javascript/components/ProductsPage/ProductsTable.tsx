@@ -96,6 +96,7 @@ export const ProductsPageProductsTable = (props: {
             <TableHead {...thProps("status")} title="Sort by Status">
               Status
             </TableHead>
+            <TableHead />
           </TableRow>
         </TableHeader>
 
@@ -106,7 +107,7 @@ export const ProductsPageProductsTable = (props: {
                 href={product.can_edit ? product.edit_url : product.url}
                 thumbnail={product.thumbnail?.url ?? null}
               />
-              <TableCell className="w-full" hideLabel>
+              <TableCell hideLabel>
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   {product.can_edit ? (

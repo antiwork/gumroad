@@ -1,3 +1,4 @@
+import { Archive, Cog } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
@@ -7,7 +8,6 @@ import { cast } from "ts-safe-cast";
 import { getRecommendedProducts, RecommendationType } from "$app/data/recommended_products";
 import { CardProduct } from "$app/parsers/product";
 
-import { Icon } from "$app/components/Icons";
 import { Card } from "$app/components/Product/Card";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Label } from "$app/components/ui/Label";
@@ -81,7 +81,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
               {
                 item: () => (
                   <>
-                    <Icon name="gear" />
+                    <Cog className="size-5" />
                     <span>Settings</span>
                   </>
                 ),
@@ -146,7 +146,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
           </ProductCardGrid>
         ) : (
           <Placeholder>
-            <Icon name="archive-fill" />
+            <Archive pack="filled" className="size-5" />
             <p>No products found</p>
           </Placeholder>
         )}

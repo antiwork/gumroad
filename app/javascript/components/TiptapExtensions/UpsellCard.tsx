@@ -1,3 +1,4 @@
+import { Star } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -9,7 +10,6 @@ import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { OfferCode, applyOfferCodeToCents } from "$app/utils/offer-code";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
@@ -190,7 +190,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
               <ProductCardFooter className="lg:divide-x-0">
                 {product.review_count > 0 ? (
                   <div className="flex flex-[1_0_max-content] items-center gap-1 p-4 lg:p-0">
-                    <Icon name="solid-star" />
+                    <Star pack="filled" className="size-5" />
                     <span className="rating-average">{product.average_rating.toFixed(1)}</span>
                     <span>{`(${formatOrderOfMagnitude(product.review_count, 1)})`}</span>
                   </div>

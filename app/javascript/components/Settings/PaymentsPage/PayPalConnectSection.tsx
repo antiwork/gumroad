@@ -1,3 +1,4 @@
+import { CheckCircle } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -5,7 +6,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -107,7 +107,7 @@ const PayPalConnectSection = ({
                 </FieldsetTitle>
                 <InputGroup readOnly>
                   <span className="flex-1">{paypalConnect.charge_processor_merchant_id}</span>
-                  <Icon name="solid-check-circle" className="text-success" />
+                  <CheckCircle pack="filled" className="size-5 text-success" />
                 </InputGroup>
               </Fieldset>
               {paypalConnect.show_paypal_connect ? (

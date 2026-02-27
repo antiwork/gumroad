@@ -1,7 +1,7 @@
+import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -31,7 +31,7 @@ export const AttributesEditor = ({
 
   const addButton = (
     <Button color="primary" onClick={() => setCustomAttributes([...customAttributes, { name: "", value: "" }])}>
-      <Icon name="plus" />
+      <Plus className="size-5" />
       Add detail
     </Button>
   );
@@ -92,7 +92,7 @@ const AttributeEditor = ({
       disabled={!onUpdate}
     />
     <Button onClick={onDelete}>
-      <Icon name="trash2" />
+      <Trash className="size-5" />
     </Button>
   </div>
 );

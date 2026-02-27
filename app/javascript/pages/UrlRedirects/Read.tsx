@@ -1,3 +1,4 @@
+import { ArrowLeft, ArrowRight, SearchMinus, SearchPlus, X } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import type { PDFSinglePageViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import * as React from "react";
@@ -6,12 +7,11 @@ import { cast, is } from "ts-safe-cast";
 import { trackMediaLocationChanged } from "$app/data/media_location";
 
 import { Button } from "$app/components/Button";
-import "pdfjs-dist/legacy/web/pdf_viewer.css";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Range } from "$app/components/ui/Range";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
+import "pdfjs-dist/legacy/web/pdf_viewer.css";
 
 const zoomLevelMin = 0.1;
 const zoomLevelMax = 5.0;
@@ -189,7 +189,7 @@ const Read = () => {
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
             <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
-              <Icon name="x" />
+              <X className="size-5" />
             </button>
           </div>
           <div className="flex flex-1 items-center border-r p-4">
@@ -197,17 +197,17 @@ const Read = () => {
           </div>
           <Popover>
             <PopoverTrigger aria-label="Appearance" className="border-r p-4">
-              <Icon name="zoom-in" />
+              <SearchPlus className="size-5" />
             </PopoverTrigger>
             <PopoverContent>
               <fieldset>
                 <legend>Appearance</legend>
                 <div>
-                  <Button className="mr-2" onClick={zoomOut}>
-                    <Icon name="zoom-out" />
+                  <Button size="icon" className="mr-2" onClick={zoomOut}>
+                    <SearchMinus className="size-5" />
                   </Button>
-                  <Button onClick={zoomIn}>
-                    <Icon name="zoom-in" />
+                  <Button size="icon" onClick={zoomIn}>
+                    <SearchPlus className="size-5" />
                   </Button>
                 </div>
               </fieldset>
@@ -223,7 +223,7 @@ const Read = () => {
               onClick={() => updatePage("previous")}
               disabled={pageNumber === 1 || pageCount === 1}
             >
-              <Icon name="arrow-left" />
+              <ArrowLeft className="size-5" />
             </button>
             <button
               className="cursor-pointer all-unset"
@@ -231,7 +231,7 @@ const Read = () => {
               onClick={() => updatePage("next")}
               disabled={pageNumber === pageCount || pageCount === 1}
             >
-              <Icon name="arrow-right" />
+              <ArrowRight className="size-5" />
             </button>
           </div>
         </div>

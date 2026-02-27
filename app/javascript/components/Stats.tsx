@@ -1,10 +1,10 @@
+import { InfoCircle } from "@boxicons/react";
 import { cva } from "class-variance-authority";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 
-import { Icon } from "$app/components/Icons";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const statsVariants = cva(
@@ -64,7 +64,7 @@ export const Stats = ({
         {title}
         {description ? (
           <WithTooltip tip={description} position="top">
-            <Icon name="info-circle" />
+            <InfoCircle className="size-5" />
           </WithTooltip>
         ) : null}
       </h2>

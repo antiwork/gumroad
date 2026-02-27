@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, Music } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
@@ -9,7 +10,6 @@ import FileUtils, { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { Button } from "$app/components/Button";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { usePublicFilesSettings } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
@@ -67,8 +67,8 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
             </Button>
           ) : null}
           {editor.isEditable && !isUploading ? (
-            <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
-              <Icon name={expanded ? "outline-cheveron-up" : "outline-cheveron-down"} />
+            <Button size="icon" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
+              {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}
           {FileUtils.isAudioExtension(file.extension) ? (
@@ -128,7 +128,7 @@ export const PublicFileEmbed = TiptapNode.create({
       <>
         <MenuItem
           name="Insert audio"
-          icon="music-note-beamed"
+          icon={<Music className="size-5" />}
           active={editor.isActive("public-file-embed")}
           onClick={() => inputRef.current?.click()}
         />

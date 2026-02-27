@@ -1,3 +1,4 @@
+import { Plus, Search } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -9,7 +10,6 @@ import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layo
 import { BundleProduct } from "$app/components/BundleEdit/types";
 import { Button } from "$app/components/Button";
 import { CartItemList } from "$app/components/CartItemList";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
@@ -269,7 +269,7 @@ export default function BundlesContentEdit() {
                 aria-label="Product selector"
               >
                 <InputGroup>
-                  <Icon name="solid-search" />
+                  <Search className="size-5 text-muted" />
                   <Input
                     type="text"
                     value={query}
@@ -305,7 +305,7 @@ export default function BundlesContentEdit() {
               <h2>Select products</h2>
               <p>Choose the products you want to include in your bundle</p>
               <Button color="primary" onClick={() => setIsSelecting(true)}>
-                <Icon name="plus" />
+                <Plus className="size-5" />
                 Add products
               </Button>
             </Placeholder>

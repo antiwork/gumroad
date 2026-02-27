@@ -1,3 +1,4 @@
+import { InfoCircle } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
@@ -11,7 +12,6 @@ import { EmptyStatePlaceholder } from "$app/components/EmailsPage/EmptyStatePlac
 import { EmailsLayout } from "$app/components/EmailsPage/Layout";
 import { DeleteEmailModal, EmailSheetActions, LoadMoreButton } from "$app/components/EmailsPage/shared";
 import { useEmailSearch } from "$app/components/EmailsPage/useEmailSearch";
-import { Icon } from "$app/components/Icons";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -71,7 +71,7 @@ export default function EmailsPublished() {
                       tip="Views only apply to emails published on your profile."
                       className="whitespace-normal"
                     >
-                      <Icon name="info-circle" />
+                      <InfoCircle className="size-5" />
                     </WithTooltip>
                   </TableHead>
                 </TableRow>

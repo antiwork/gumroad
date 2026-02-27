@@ -1,11 +1,11 @@
+import { CheckCircle } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { asyncVoid } from "$app/utils/promise";
-import { request, assertResponseError } from "$app/utils/request";
+import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
@@ -74,7 +74,7 @@ const StripeConnectSection = ({
               </FieldsetTitle>
               <InputGroup readOnly>
                 <span className="flex-1">{stripeConnect.stripe_connect_account_id}</span>
-                <Icon name="solid-check-circle" className="text-success" />
+                <CheckCircle pack="filled" className="size-5 text-success" />
               </InputGroup>
             </Fieldset>
             <p>

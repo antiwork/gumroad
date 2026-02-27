@@ -1,19 +1,19 @@
+import { ChevronDown } from "@boxicons/react";
 import {
   endOfMonth,
+  endOfQuarter,
   endOfYear,
   startOfMonth,
+  startOfQuarter,
   startOfYear,
   subDays,
   subMonths,
-  subYears,
-  endOfQuarter,
-  startOfQuarter,
   subQuarters,
+  subYears,
 } from "date-fns";
 import * as React from "react";
 
 import { DateInput } from "$app/components/DateInput";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -56,7 +56,7 @@ export const DateRangePicker = ({
         <PopoverTrigger>
           <InputGroup aria-label="Date range selector" className="whitespace-nowrap">
             <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
-            <Icon name="outline-cheveron-down" className="ml-auto" />
+            <ChevronDown className="ml-auto size-5" />
           </InputGroup>
         </PopoverTrigger>
       </PopoverAnchor>

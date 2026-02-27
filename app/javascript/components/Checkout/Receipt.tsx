@@ -1,3 +1,4 @@
+import { XCircle } from "@boxicons/react";
 import * as React from "react";
 
 import { createAccount, CreateAccountPayload } from "$app/data/account";
@@ -10,7 +11,6 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { useState } from "$app/components/Checkout/payment";
 import { DiscordButton } from "$app/components/DiscordButton";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -286,7 +286,7 @@ export const Receipt = ({
           <h4 className="relative grow font-bold">
             Checkout
             <a href={discoverUrl} style={{ position: "absolute", right: 0 }} aria-label="Close">
-              <Icon name="x-circle" />
+              <XCircle className="size-5" />
             </a>
           </h4>
         </header>

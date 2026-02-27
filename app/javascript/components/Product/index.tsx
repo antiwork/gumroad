@@ -1,3 +1,4 @@
+import { Star } from "@boxicons/react";
 import { EditorContent } from "@tiptap/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
@@ -30,26 +31,25 @@ import {
   CartItem,
   CartItemEnd,
   CartItemFooter,
+  CartItemList,
   CartItemMain,
   CartItemMedia,
   CartItemTitle,
-  CartItemList,
 } from "$app/components/CartItemList";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import {
-  Option,
-  ConfigurationSelector,
-  Rental,
-  Recurrences,
-  PriceSelection,
   applySelection,
-  PurchasingPowerParityDetails,
+  ConfigurationSelector,
   ConfigurationSelectorHandle,
   getMaxQuantity,
+  Option,
+  PriceSelection,
+  PurchasingPowerParityDetails,
+  Recurrences,
+  Rental,
 } from "$app/components/Product/ConfigurationSelector";
 import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { CtaButton } from "$app/components/Product/CtaButton";
@@ -62,7 +62,7 @@ import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductT
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
 import { RatingStars } from "$app/components/RatingStars";
 import { Review as ReviewComponent } from "$app/components/Review";
-import { ReviewForm, Review as FormReview } from "$app/components/ReviewForm";
+import { Review as FormReview, ReviewForm } from "$app/components/ReviewForm";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
@@ -426,7 +426,7 @@ export const Product = ({
                       </CartItemTitle>
                       {bundleProduct.ratings ? (
                         <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
-                          <Icon name="solid-star" />
+                          <Star pack="filled" className="size-5" />
                           {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
                         </div>
                       ) : null}
@@ -779,7 +779,7 @@ const Reviews = ({
       <header className="flex items-center justify-between">
         <h3>Ratings</h3>
         <div className="flex shrink-0 items-center gap-1">
-          <Icon name="solid-star" />
+          <Star pack="filled" className="size-5" />
           <div className="rating-average">{ratings.average}</div>(
           {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "rating" : "ratings"}`})
         </div>
@@ -837,9 +837,9 @@ const Review = ({
 );
 
 export const RatingsSummary = ({ ratings, className }: { ratings: Ratings; className?: string }) => (
-  <div className={classNames("flex shrink-0 items-center gap-1", className)}>
+  <div className={classNames("flex shrink-0 items-center", className)}>
     <RatingStars rating={ratings.average} />
-    <span className="rating-number">
+    <span className="rating-number ml-1">
       {ratings.count} {ratings.count === 1 ? "rating" : "ratings"}
     </span>
   </div>

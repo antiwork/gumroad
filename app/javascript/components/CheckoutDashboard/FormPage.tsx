@@ -1,3 +1,4 @@
+import { Plus, Trash } from "@boxicons/react";
 import { useForm } from "@inertiajs/react";
 import * as React from "react";
 
@@ -10,7 +11,6 @@ import { Button } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Select } from "$app/components/Select";
@@ -210,7 +210,7 @@ const FormPage = ({
                             outline
                             aria-label="Remove"
                           >
-                            <Icon name="trash2" />
+                            <Trash className="size-5" />
                           </Button>
                         </div>
                         {field.type !== "terms" ? (
@@ -300,7 +300,7 @@ const FormPage = ({
                   ])
                 }
               >
-                <Icon name="plus" />
+                <Plus className="size-5" />
                 Add custom field
               </Button>
             </div>

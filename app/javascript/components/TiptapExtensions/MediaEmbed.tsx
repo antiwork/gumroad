@@ -1,4 +1,5 @@
-import { Editor, Node as TiptapNode, Extension } from "@tiptap/core";
+import { PlayCircle, Trash, Twitter, Video } from "@boxicons/react";
+import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -10,7 +11,6 @@ import { assertResponseError, request } from "$app/utils/request";
 import { sanitizeHtml } from "$app/utils/sanitize";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -36,7 +36,7 @@ const MEDIA_EMBED_SUPPORTING_PROVIDERS = ["YouTube", "Vimeo", "Wistia, Inc.", "D
 const VideoEmbed = Extension.create({
   menuItem: (editor) => (
     <WithDialog editor={editor} type="embed">
-      <MenuItem name="Insert video" icon="embed" />
+      <MenuItem name="Insert video" icon={<Video className="size-5" />} />
     </WithDialog>
   ),
 });
@@ -83,7 +83,7 @@ export const Raw = TiptapNode.create({
   },
   menuItem: (editor) => (
     <WithDialog editor={editor} type="twitter">
-      <MenuItem name="Insert post" icon="twitter" />
+      <MenuItem name="Insert post" icon={<Twitter pack="brands" className="size-5" />} />
     </WithDialog>
   ),
   submenu: {
@@ -91,7 +91,7 @@ export const Raw = TiptapNode.create({
     item: (editor) => (
       <WithDialog editor={editor} type="twitter">
         <div role="menuitem">
-          <Icon name="twitter" />
+          <Twitter pack="brands" className="size-5" />
           <span>Twitter post</span>
         </div>
       </WithDialog>
@@ -252,7 +252,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
         <Row className="embed">
           <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }} />
           <RowContent className="content">
-            <Icon name="file-earmark-play-fill" className="type-icon" />
+            <PlayCircle pack="filled" className="type-icon size-5" />
             <div>
               <h4 className="text-singleline">{node.attrs.title}</h4>
               {node.attrs.url ? (
@@ -266,8 +266,8 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
           </RowContent>
           {editor.isEditable ? (
             <RowActions>
-              <Button color="danger" outline aria-label="Remove" onClick={deleteNode}>
-                <Icon name="trash2" />
+              <Button size="icon" color="danger" outline aria-label="Remove" onClick={deleteNode}>
+                <Trash className="size-5" />
               </Button>
             </RowActions>
           ) : null}

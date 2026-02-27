@@ -1,3 +1,4 @@
+import { Twitter } from "@boxicons/react";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
@@ -5,7 +6,6 @@ import { CreatorProfile } from "$app/parsers/profile";
 import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { TopCreatorBadge } from "$app/components/Product/AuthorByline";
@@ -29,7 +29,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
       <div className="ml-auto flex items-center gap-3">
         {creatorProfile.twitter_handle ? (
           <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
-            <Icon name="twitter" />
+            <Twitter pack="brands" className="size-5" />
           </NavigationButton>
         ) : null}
         <CartNavigationButton />
