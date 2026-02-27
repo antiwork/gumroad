@@ -15,16 +15,6 @@
   }
 }
 
-.icon {
-  @extend %icon;
-}
-
-@each $icon in $icons {
-  .icon-#{$icon} {
-    mask-image: url("~images/icons/#{$icon}.svg");
-  }
-}
-
 .logo-full {
   @extend %icon;
   width: calc(1em / #{$logo-aspect-ratio});
