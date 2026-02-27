@@ -1,6 +1,6 @@
 # Example: Well-Received PR Description
 
-This PR was well-received by the Gumroad team. Use it as a style reference.
+This PR was well-received by the Gumroad team. Use it as a style reference for tone, detail level, and the "Why This Approach" comparison. Note: it used Problem/Approach headers — we use What/Why, but the content quality is what matters.
 
 ```markdown
 Fixes #2562
