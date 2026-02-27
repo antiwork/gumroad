@@ -1138,11 +1138,7 @@ const StripePaymentRequestRadioOption = ({ canPay, isGooglePay }: { canPay: bool
 
   return (
     <div className="border-t border-border">
-      <PaymentMethodRadioRow
-        paymentMethod="stripePaymentRequest"
-        label={label}
-        icon={icon}
-      />
+      <PaymentMethodRadioRow paymentMethod="stripePaymentRequest" label={label} icon={icon} />
     </div>
   );
 };
