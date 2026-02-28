@@ -27,7 +27,6 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
-import { Logo } from "$app/components/Logo";
 import {
   EmailAttachments,
   FilesDispatchProvider,
@@ -38,6 +37,7 @@ import {
   useFiles,
 } from "$app/components/EmailAttachments";
 import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
+import { Logo } from "$app/components/Logo";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
