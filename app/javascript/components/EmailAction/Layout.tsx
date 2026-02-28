@@ -23,7 +23,7 @@ export const Layout = ({ heading, children }: { heading: string; children: React
         </Card>
         <footer className="p-4 text-center">
           Powered by&ensp;
-          <Link href={Routes.root_url({ host: rootDomain })} aria-label="Gumroad">
+          <Link href={Routes.root_url({ host: rootDomain })}>
             <Logo />
           </Link>
         </footer>

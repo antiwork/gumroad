@@ -12,7 +12,7 @@ export const PoweredByFooter = ({ className }: { className?: string }) => {
     <footer className={classNames("px-4 py-8 text-center lg:py-16", className)}>
       <div>
         Powered by{" "}
-        <a href={Routes.root_url({ host: rootDomain })} aria-label="Gumroad">
+        <a href={Routes.root_url({ host: rootDomain })}>
           <Logo />
         </a>
       </div>
