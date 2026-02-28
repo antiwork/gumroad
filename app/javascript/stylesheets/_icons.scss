@@ -24,10 +24,3 @@
     mask-image: url("~images/icons/#{$icon}.svg");
   }
 }
-
-.logo-full {
-  @extend %icon;
-  width: calc(1em / #{$logo-aspect-ratio});
-  mask-image: url("~images/logo.svg");
-  mask-size: contain;
-}
