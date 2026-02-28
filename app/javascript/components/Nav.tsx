@@ -8,6 +8,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { TeamMembership } from "$app/components/LoggedInUser";
+import { Logo } from "$app/components/Logo";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
@@ -141,7 +142,7 @@ export const Nav = ({ title, children, footer }: Props) => {
         </div>
         <header className="hidden p-6 lg:grid">
           <a href={Routes.root_url()} aria-label="Dashboard" className="no-underline">
-            <span className="logo-full w-full text-[2.5rem] leading-[1.2]" />
+            <Logo className="w-full text-[2.5rem] leading-[1.2]" />
           </a>
         </header>
         {children}
