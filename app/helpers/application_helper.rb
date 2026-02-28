@@ -13,7 +13,7 @@ module ApplicationHelper
     safe_join(
       [
         "Powered by",
-        tag.span("Gumroad", class: "logo-full", aria: { label: "Gumroad" })
+        tag.span(class: "inline-block bg-current h-[1em] aspect-157/22 shrink-0 mask-(--logo) mask-contain mask-center mask-no-repeat", aria: { label: "Gumroad" })
       ],
       " "
     )

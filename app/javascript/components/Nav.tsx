@@ -11,6 +11,8 @@ import { TeamMembership } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
+import logo from "$assets/images/logo-g.svg";
+
 type NavContextValue = {
   open: boolean;
   close: () => void;
@@ -130,7 +132,7 @@ export const Nav = ({ title, children, footer }: Props) => {
       >
         <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">
           <a href={Routes.root_url()} className="no-underline">
-            <span className="logo-g" />
+            <img src={logo} className="size-6" alt="Home" />
           </a>
           <h1 className="w-full truncate text-center text-base">{title}</h1>
           <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
