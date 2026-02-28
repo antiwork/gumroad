@@ -600,7 +600,7 @@ const EmailPreview = ({
         <div className="flex flex-col items-center gap-4">
           <p>{gumroadAddress}</p>
           <p>
-            Powered by <Logo style={{ marginLeft: "var(--spacer-1)" }} />
+            Powered by <Logo className="ml-1" />
           </p>
         </div>
       </div>
