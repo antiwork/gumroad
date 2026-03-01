@@ -303,8 +303,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       expect(page).to have_link("Google", href: "https://google.com")
       expect(page).to have_text("Visit Google to explore the web", normalize_ws: true)
       expect(page).to have_text("And also visit Gumroad to buy products from indie creators", normalize_ws: true)
+      click_on "Gumroad"
     end
-    click_on "Gumroad"
     within_disclosure "Gumroad" do
       expect(page).to have_field("Enter text", with: "Gumroad")
       expect(page).to have_field("Enter URL", with: "https://gumroad.com")
