@@ -6503,7 +6503,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           field = find_field("Minimum payout threshold")
           expect(field.value).to eq("10")
 
-          field.send_keys([:command, "a"], "35")
+          fill_in "Minimum payout threshold", with: "35", fill_options: { clear: :backspace }
 
           click_on "Update settings"
 
