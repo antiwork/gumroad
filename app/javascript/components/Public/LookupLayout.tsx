@@ -1,3 +1,4 @@
+import { Paypal } from "@boxicons/react";
 import cx from "classnames"
 import React, { useEffect, useRef } from "react"
 
@@ -175,7 +176,7 @@ const LookupLayout = ({ children, title, type }: {
                 type="submit"
                 disabled={isPaypalLoading}
               >
-                <span className="brand-icon brand-icon-paypal" />
+                <Paypal pack="brands" className="size-5" />
                 {isPaypalLoading ? "Searching..." : "Search"}
               </Button>
             </fieldset>

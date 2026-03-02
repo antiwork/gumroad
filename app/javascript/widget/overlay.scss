@@ -33,8 +33,18 @@
 a.gumroad-button {
   --parent-color: 0 0 0 !important;
   font-family: $font-family;
-  $icons: [];
-  @import "../stylesheets/icons";
+
+  .logo-full {
+    display: inline-block;
+    background: currentColor;
+    min-height: max(1lh, 1em);
+    width: calc(1em / $logo-aspect-ratio);
+    mask-image: url("~images/logo.svg");
+    mask-size: contain;
+    mask-position: 50% 50%;
+    mask-repeat: no-repeat;
+    flex-shrink: 0;
+  }
 
   @extend %gumroad-button-base;
 

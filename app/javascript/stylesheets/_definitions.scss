@@ -12,45 +12,6 @@ $colors: (
   "yellow": #f1f333,
 );
 
-$brands: (
-  facebook: (
-    color: #4267b2,
-  ),
-  twitter: (
-    color: #000000,
-  ),
-  paypal: (
-    color: #00457c,
-  ),
-  stripe: (
-    color: #625bf6,
-  ),
-  apple: (
-    color: #000000,
-  ),
-  android: (
-    color: #142f40,
-  ),
-  kindle: (
-    color: #f3a642,
-  ),
-  discord: (
-    color: #7289da,
-    text-color: #ffffff,
-  ),
-  zoom: (
-    color: #4087fc,
-    text-color: #ffffff,
-  ),
-  google: (
-    color: #5383ec,
-    text-color: #ffffff,
-  ),
-  github: (
-    color: #000000,
-  ),
-);
-
 $states: (success, danger, warning, info);
 $bg-colors: list.join($states, primary "black" accent filled);
 

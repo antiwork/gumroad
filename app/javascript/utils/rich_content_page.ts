@@ -1,15 +1,23 @@
-import { FileDetail, Key, MusicAlt, Play, type BoxIconProps } from "@boxicons/react";
+import { FileDetail, Key, MoviePlay, MusicAlt, type BoxIconProps } from "@boxicons/react";
 
 import { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
 
-export type PageIconKey = "outline-key" | "file-text" | "file-play" | "file-music" | "file-arrow-down";
+export type PageIconType = "license-key" | "text-only" | "video-file" | "music-file" | "mixed-files";
 
-export const PAGE_ICON_COMPONENTS: Record<PageIconKey, React.ComponentType<BoxIconProps>> = {
-  "outline-key": Key,
-  "file-text": FileDetail,
-  "file-play": Play,
-  "file-music": MusicAlt,
-  "file-arrow-down": FileDetail,
+export const PAGE_ICON_COMPONENTS: Record<PageIconType, React.ComponentType<BoxIconProps>> = {
+  "license-key": Key,
+  "text-only": FileDetail,
+  "video-file": MoviePlay,
+  "music-file": MusicAlt,
+  "mixed-files": FileDetail,
+};
+
+export const PAGE_ICON_LABELS: Record<PageIconType, string> = {
+  "mixed-files": "Page has various types of files",
+  "music-file": "Page has audio files",
+  "video-file": "Page has videos",
+  "text-only": "Page has no files",
+  "license-key": "Page has license key",
 };
 
 export const generatePageIcon = ({
@@ -20,8 +28,8 @@ export const generatePageIcon = ({
   hasLicense: boolean;
   fileIds: string[];
   allFiles: { id: string; extension: string | null }[];
-}): PageIconKey => {
-  if (hasLicense) return "outline-key";
+}): PageIconType => {
+  if (hasLicense) return "license-key";
 
   const fileTypeCounts = { video: 0, audio: 0, unknown: 0 };
   for (const fileId of fileIds) {
@@ -39,8 +47,8 @@ export const generatePageIcon = ({
   }
 
   const totalFiles = fileIds.length;
-  if (totalFiles === 0) return "file-text";
-  if (fileTypeCounts.video > totalFiles / 2) return "file-play";
-  if (fileTypeCounts.audio > totalFiles / 2) return "file-music";
-  return "file-arrow-down";
+  if (totalFiles === 0) return "text-only";
+  if (fileTypeCounts.video > totalFiles / 2) return "video-file";
+  if (fileTypeCounts.audio > totalFiles / 2) return "music-file";
+  return "mixed-files";
 };

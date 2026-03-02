@@ -1,3 +1,4 @@
+import { Facebook } from "@boxicons/react";
 import * as React from "react";
 
 import { NavigationButton } from "$app/components/Button";
@@ -17,7 +18,7 @@ export const FacebookShareButton = ({ url, text = "Join me on Gumroad!" }: { url
 
   return (
     <NavigationButton color="facebook" onClick={handleClick} href={shareUrl} target="_blank" rel="noopener noreferrer">
-      <span className="brand-icon brand-icon-facebook" />
+      <Facebook pack="brands" className="size-5" />
       Share on Facebook
     </NavigationButton>
   );

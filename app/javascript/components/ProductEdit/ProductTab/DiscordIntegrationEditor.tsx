@@ -1,3 +1,4 @@
+import { Discord } from "@boxicons/react";
 import * as React from "react";
 
 import { fetchServerInfo } from "$app/data/discord_integration";
@@ -100,7 +101,7 @@ export const DiscordIntegrationEditor = ({
                   });
                 }}
               >
-                <span className="brand-icon brand-icon-discord" />
+                <Discord pack="brands" className="size-5" />
                 Connect to Discord
               </Button>
             </div>
@@ -119,7 +120,7 @@ export const DiscordIntegrationEditor = ({
                     setIsLoading(false);
                   }}
                 >
-                  <span className="icon brand-icon-discord" />
+                  <Discord pack="brands" className="size-5" />
                   Disconnect Discord
                 </Button>
               </div>
