@@ -20,7 +20,7 @@ import {
   Plus,
   Rename,
   Star,
-  Twitter,
+  TwitterX,
 } from "@boxicons/react";
 import { findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
@@ -768,8 +768,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             <span>License key</span>
                           </div>
                           <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
-                            <Twitter pack="brands" className="size-5" />
-                            <span>Twitter post</span>
+                            <TwitterX pack="brands" className="size-5" />
+                            <span>X post</span>
                           </div>
                           <div
                             role="menuitem"
@@ -837,7 +837,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               key={page.id}
                               page={page}
                               selected={page === selectedPage}
-                              icon={pageIcons.get(page.id) ?? "file-text"}
+                              icon={pageIcons.get(page.id) ?? "text-only"}
                               dragging={!!page.chosen}
                               renaming={page.id === renamingPageId}
                               setRenaming={(renaming) => setRenamingPageId(renaming ? page.id : null)}
@@ -871,7 +871,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                   updated_at: pages[0]?.updated_at ?? new Date().toString(),
                                 }}
                                 selected={false}
-                                icon="file-arrow-down"
+                                icon="mixed-files"
                                 dragging={false}
                                 renaming={false}
                                 onClick={() => {}}
@@ -1006,7 +1006,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       ) : null}
       {editor ? (
         <>
-          <Modal open={showInsertPostModal} onClose={() => setShowInsertPostModal(false)} title="Insert Twitter post">
+          <Modal open={showInsertPostModal} onClose={() => setShowInsertPostModal(false)} title="Insert X post">
             <EmbedMediaForm
               type="twitter"
               onClose={() => setShowInsertPostModal(false)}

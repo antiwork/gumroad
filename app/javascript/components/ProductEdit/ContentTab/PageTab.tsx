@@ -5,7 +5,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-import { PAGE_ICON_COMPONENTS, type PageIconKey } from "$app/utils/rich_content_page";
+import { PAGE_ICON_COMPONENTS, PAGE_ICON_LABELS, type PageIconType } from "$app/utils/rich_content_page";
 
 import { PageListItem } from "$app/components/Download/PageListLayout";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -36,7 +36,7 @@ export const PageTab = ({
   page: Page;
   selected: boolean;
   dragging: boolean;
-  icon: PageIconKey;
+  icon: PageIconType;
   renaming: boolean;
   setRenaming: (renaming: boolean) => void;
   onClick: () => void;
@@ -60,13 +60,6 @@ export const PageTab = ({
     if (renaming) editor?.commands.focus("end");
   }, [renaming, editor]);
 
-  const iconLabels: Record<PageIconKey, string> = {
-    "file-arrow-down": "Page has various types of files",
-    "file-music": "Page has audio files",
-    "file-play": "Page has videos",
-    "file-text": "Page has no files",
-    "outline-key": "Page has license key",
-  };
   const PageIcon = PAGE_ICON_COMPONENTS[icon];
   return (
     <PageListItem
@@ -82,7 +75,7 @@ export const PageTab = ({
       {!disabled ? (
         <Move className="invisible absolute left-0 size-5 text-muted group-hover/tab:visible" aria-grabbed={dragging} />
       ) : null}
-      <PageIcon className="size-5" aria-label={iconLabels[icon]} />
+      <PageIcon className="size-5" aria-label={PAGE_ICON_LABELS[icon]} />
       <span className="flex-1">
         {renaming ? <EditorContent editor={editor} className="cursor-text" /> : titleWithFallback(page.title)}
       </span>

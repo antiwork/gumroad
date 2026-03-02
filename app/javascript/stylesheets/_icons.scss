@@ -39,15 +39,3 @@
   width: $big-icon-size;
   height: $big-icon-size;
 }
-
-// Override %icon here rather than making a shared base to avoid generating the giant selector string for %icon twice
-.brand-icon {
-  @extend %icon;
-  mask-size: 100%;
-}
-
-@each $name, $info in $brands {
-  .brand-icon-#{$name} {
-    mask-image: url("~images/brands/#{$name}.svg");
-  }
-}

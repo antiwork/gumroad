@@ -230,6 +230,82 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
       expect(page.evaluate_script("window._messages.length")).to eq(6)
     end
 
+    it "sends tocData messages and handles mobileAppPageChange in React Native" do
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(title: "Page 1", position: 0, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Page 1 content" }] }])
+      page_2 = create(:rich_content, entity: @product, title: "Page 2", position: 1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Page 2 content" }] }])
+
+      cdp_id = page.driver.browser.execute_cdp(
+        "Page.addScriptToEvaluateOnNewDocument",
+        source: <<~JS
+          window._messages = [];
+          window.ReactNativeWebView = {
+            postMessage: (message) => {
+              window._messages.push(JSON.parse(message));
+            }
+          };
+        JS
+      ).fetch("identifier")
+
+      visit("/d/#{@url_redirect.token}?display=mobile_app")
+      expect(page).to have_text("Page 1 content")
+
+      toc_messages = page.evaluate_script("window._messages.filter(m => m.type === 'tocData')")
+      expect(toc_messages).to eq([
+                                   {
+                                     type: "tocData",
+                                     payload: {
+                                       activePageIndex: 0,
+                                       pages: [
+                                         { page_id: product_rich_content.external_id, title: "Page 1", icon: "text-only" },
+                                         { page_id: page_2.external_id, title: "Page 2", icon: "text-only" },
+                                       ],
+                                     },
+                                   }.as_json,
+                                 ])
+
+      page.execute_script <<~JS
+        window.postMessage(JSON.stringify({ type: "mobileAppPageChange", payload: { pageIndex: 1 } }), "*");
+      JS
+
+      expect(page).to have_text("Page 2 content")
+
+      toc_messages = page.evaluate_script("window._messages.filter(m => m.type === 'tocData')")
+      expect(toc_messages.last).to eq({
+        type: "tocData",
+        payload: {
+          activePageIndex: 1,
+          pages: [
+            { page_id: product_rich_content.external_id, title: "Page 1", icon: "text-only" },
+            { page_id: page_2.external_id, title: "Page 2", icon: "text-only" },
+          ]
+        }
+      }.as_json)
+
+      page.execute_script <<~JS
+        window.postMessage(JSON.stringify({ type: "mobileAppPageChange", payload: { pageIndex: 0 } }), "*");
+      JS
+
+      expect(page).to have_text("Page 1 content")
+      toc_messages = page.evaluate_script("window._messages.filter(m => m.type === 'tocData')")
+      expect(toc_messages.last).to eq({
+        type: "tocData",
+        payload: {
+          activePageIndex: 0,
+          pages: [
+            { page_id: product_rich_content.external_id, title: "Page 1", icon: "text-only" },
+            { page_id: page_2.external_id, title: "Page 2", icon: "text-only" },
+          ]
+        }
+      }.as_json)
+
+      # Web navigation buttons should be hidden when native navigation is available
+      expect(page).to_not have_button("Next")
+      expect(page).to_not have_button("Previous")
+
+      page.driver.browser.execute_cdp("Page.removeScriptToEvaluateOnNewDocument", identifier: cdp_id)
+    end
+
     it "renders the customized download page for the purpose of embedding inside webview in the mobile apps" do
       visit("/d/#{@url_redirect.token}?display=mobile_app")
 

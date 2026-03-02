@@ -1,3 +1,4 @@
+import { Google } from "@boxicons/react";
 import * as React from "react";
 
 import { fetchAccountInfo, fetchCalendarList, getOAuthUrl } from "$app/data/google_calendar_integration";
@@ -159,7 +160,7 @@ export const GoogleCalendarIntegrationEditor = ({
                 calendar in sync.
               </p>
               <Button color="google" onClick={handleConnectGoogleAccount}>
-                <span className="brand-icon brand-icon-google" />
+                <Google pack="brands" className="size-5" />
                 Connect to Google Calendar
               </Button>
             </>
