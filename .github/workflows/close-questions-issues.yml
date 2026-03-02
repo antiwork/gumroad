@@ -1,0 +1,75 @@
+# TODO: auto-close question issues once false positive rate is acceptable
+name: Close question issues
+
+on:
+  issues:
+    types: [opened]
+
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  close-questions:
+    if: >-
+      github.event.issue.author_association != 'MEMBER' &&
+      github.event.issue.author_association != 'OWNER'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Check if issue is still open
+        id: check-open
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.issue.number }}
+            });
+            return issue.data.state === 'open';
+          result-encoding: string
+
+      - name: Checkout repository
+        if: steps.check-open.outputs.result == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Detect questions and ideas
+        if: steps.check-open.outputs.result == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
+          prompt: |
+            You are a question detection bot. Your job is to determine whether
+            GitHub issue #${{ github.event.issue.number }} is a question or idea
+            rather than an actionable bug report or feature request.
+
+            Read the issue:
+            gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json title,body
+
+            Examples of questions/ideas that belong in Discussions:
+            - "How do I set up custom domains?"
+            - "What's the best way to price my product?"
+            - "Would it be cool if Gumroad had X?"
+            - "Is there a way to do Y?"
+            - "Just an idea: what about Z?"
+
+            These are not actionable — they don't describe a bug or a concrete feature with clear requirements.
+
+            If the issue is clearly a question or idea, post this exact comment:
+
+            gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body "Thanks for your interest! This looks like a question or idea rather than a bug report or feature request. GitHub Issues is for actionable bugs and enhancements — questions and ideas are a great fit for [Discussions](https://github.com/antiwork/gumroad/discussions)."
+
+            Do NOT close the issue.
+
+            If the issue is a bug report, feature request, support request, or you are unsure, do nothing.
+            False positives are worse than false negatives.
+          claude_args: |
+            --allowedTools "Bash(gh issue view:*),Bash(gh issue comment:*)"
