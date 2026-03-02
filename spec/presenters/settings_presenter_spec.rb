@@ -828,7 +828,7 @@ describe SettingsPresenter do
       end
 
       it "returns the stored payout threshold, not the effective minimum" do
-        expect(seller.minimum_payout_amount_cents).to eq(seller.minimum_payout_threshold_cents)
+        expect(seller.minimum_payout_amount_cents).to be > 1000
         expect(presenter.payments_props[:payout_threshold_cents]).to eq(1000)
       end
     end

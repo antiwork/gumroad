@@ -6495,15 +6495,20 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(user.reload.minimum_payout_amount_cents).to eq(4000)
         end
 
-        it "does not inflate the stored payout threshold to the effective minimum on save" do
-          user.update!(payout_threshold_cents: 5000)
+        it "loads the raw stored payout threshold in the form field, not the effective minimum" do
+          user.update!(payout_threshold_cents: 1000)
 
           visit settings_payments_path
+
+          field = find_field("Minimum payout threshold")
+          expect(field.value).to eq("10")
+
+          field.send_keys([:command, "a"], "35")
 
           click_on "Update settings"
 
           expect(page).to have_alert(text: "Thanks! You're all set.")
-          expect(user.reload.payout_threshold_cents).to eq(5000)
+          expect(user.reload.payout_threshold_cents).to eq(3500)
         end
       end
     end
