@@ -1,4 +1,4 @@
-import { CheckCircle } from "@boxicons/react";
+import { CheckCircle, Stripe } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -83,7 +83,7 @@ const StripeConnectSection = ({
                 disabled={isFormDisabled || isDisconnecting || !stripeConnect.stripe_disconnect_allowed}
                 onClick={disconnectStripe}
               >
-                <span className="brand-icon brand-icon-stripe" />
+                <Stripe pack="brands" className="size-5" />
                 Disconnect Stripe account
               </Button>
             </p>
@@ -103,6 +103,7 @@ const StripeConnectSection = ({
               })}
               disabled={isFormDisabled}
             >
+              <Stripe pack="brands" className="size-5" />
               Connect with Stripe
             </SocialAuthButton>
           </div>

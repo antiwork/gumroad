@@ -1,4 +1,4 @@
-import { CheckCircle } from "@boxicons/react";
+import { CheckCircle, Paypal } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -79,7 +79,7 @@ const PayPalConnectSection = ({
                       })}
                       inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
                     >
-                      <span className="brand-icon brand-icon-paypal" />
+                      <Paypal pack="brands" className="size-5" />
                       Connect with Paypal
                     </a>
                   </Button>
@@ -145,7 +145,7 @@ const PayPalConnectSection = ({
                       })}
                       inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
                     >
-                      <span className="brand-icon brand-icon-paypal" />
+                      <Paypal pack="brands" className="size-5" />
                       Connect with Paypal
                     </a>
                   </Button>

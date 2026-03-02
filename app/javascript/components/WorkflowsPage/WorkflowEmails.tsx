@@ -37,6 +37,7 @@ import {
   useFiles,
 } from "$app/components/EmailAttachments";
 import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
+import { Logo } from "$app/components/Logo";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
@@ -599,7 +600,7 @@ const EmailPreview = ({
         <div className="flex flex-col items-center gap-4">
           <p>{gumroadAddress}</p>
           <p>
-            Powered by <span style={{ marginLeft: "var(--spacer-1)" }} className="logo-full" />
+            Powered by <Logo className="ml-1" />
           </p>
         </div>
       </div>

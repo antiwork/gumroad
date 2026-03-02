@@ -1,4 +1,4 @@
-import { CreditCard } from "@boxicons/react";
+import { Apple, CreditCard, Google, Paypal } from "@boxicons/react";
 import { loadScript as loadPaypal, PayPalNamespace } from "@paypal/paypal-js";
 import { useStripe } from "@stripe/react-stripe-js";
 import {
@@ -12,7 +12,6 @@ import { DataCollector, PayPal } from "braintree-web";
 import * as BraintreeClient from "braintree-web/client";
 import * as BraintreeDataCollector from "braintree-web/data-collector";
 import * as BraintreePaypal from "braintree-web/paypal";
-import cx from "classnames";
 import * as React from "react";
 
 import { useBraintreeToken } from "$app/data/braintree_client_token_data";
@@ -823,7 +822,7 @@ const BraintreePayPal = ({ token }: { token: string }) => {
 
   return (
     <Button color="paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
-      <span className="brand-icon brand-icon-paypal" />
+      <Paypal pack="brands" className="size-5" />
       {payLabel}
     </Button>
   );
@@ -1135,15 +1134,11 @@ const StripePaymentRequestRadioOption = ({ canPay, isGooglePay }: { canPay: bool
   if (!canPay) return null;
 
   const label = isGooglePay ? "Google Pay" : "Apple Pay";
-  const iconClass = isGooglePay ? "brand-icon-google" : "brand-icon-apple";
+  const icon = isGooglePay ? <Google pack="brands" className="size-5" /> : <Apple pack="brands" className="size-5" />;
 
   return (
     <div className="border-t border-border">
-      <PaymentMethodRadioRow
-        paymentMethod="stripePaymentRequest"
-        label={label}
-        icon={<span className={cx("brand-icon", iconClass)} />}
-      />
+      <PaymentMethodRadioRow paymentMethod="stripePaymentRequest" label={label} icon={icon} />
     </div>
   );
 };
@@ -1189,7 +1184,7 @@ const PaymentMethodsSection = ({
             <PaymentMethodRadioRow
               paymentMethod="paypal"
               label="PayPal"
-              icon={<span className="brand-icon brand-icon-paypal" />}
+              icon={<Paypal pack="brands" className="size-5" />}
             />
           </div>
         ) : null}
