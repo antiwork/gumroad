@@ -1,0 +1,91 @@
+# TODO: auto-close non-compliant issues once false positive rate is acceptable
+name: Close non-compliant issues
+
+on:
+  issues:
+    types: [opened]
+
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  close-non-compliant:
+    if: >-
+      github.event.issue.author_association != 'MEMBER' &&
+      github.event.issue.author_association != 'OWNER'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Check if issue is still open
+        id: check-open
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.issue.number }}
+            });
+            return issue.data.state === 'open';
+          result-encoding: string
+
+      - name: Checkout repository
+        if: steps.check-open.outputs.result == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check issue against contributing guidelines
+        if: steps.check-open.outputs.result == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
+          prompt: |
+            You are a contributing guidelines bot. Your job is to check whether
+            GitHub issue #${{ github.event.issue.number }} follows the structure
+            outlined in CONTRIBUTING.md.
+
+            Step 1: Read the issue.
+            gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json title,body,labels
+
+            Step 2: Read the contributing guidelines.
+            cat CONTRIBUTING.md
+
+            Step 3: Classify the issue as either a "bug report" or an "enhancement/feature/refactor".
+            Use the title, body, and labels to decide. If a label contains "bug", treat it as a bug report.
+            Otherwise default to enhancement/feature/refactor.
+
+            Step 4: Check compliance against the structure in CONTRIBUTING.md for
+            the issue type you identified. Be lenient — check for the substance,
+            not exact headings. A well-written issue that covers the required
+            information without using exact section headers is compliant. Very short
+            issues that lack context or motivation are non-compliant.
+
+            Step 5: Decide.
+
+            If the issue is compliant or you are unsure, do absolutely nothing.
+
+            If the issue is clearly missing required information, post a comment
+            using exactly this template (fill in the bullet points):
+
+            gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body "Thanks for opening this issue! It's missing some information we need:
+
+            - [what's missing, e.g. 'Steps to reproduce' or 'Why this change matters']
+
+            Please see our [contributing guidelines](https://github.com/antiwork/gumroad/blob/main/CONTRIBUTING.md) for the expected structure."
+
+            Do NOT close the issue.
+
+            Important:
+            - If the issue is a support request about a specific Gumroad account
+              (e.g., account suspended, can't access payouts, product removed,
+              payment issues), do nothing. A separate workflow handles those.
+            - When in doubt, do nothing. False positives are worse than false negatives.
+          claude_args: |
+            --allowedTools "Bash(gh issue view:*),Bash(gh issue comment:*),Bash(cat CONTRIBUTING.md)"
