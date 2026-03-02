@@ -101,6 +101,35 @@ describe Admin::PurchasePresenter do
           expect(props[:tip]).to eq(500)
         end
       end
+
+      context "when purchase has a subscription" do
+        let(:product) { create(:subscription_product, user: seller) }
+        let(:subscription) { create(:subscription, link: product) }
+        let(:purchase) { create(:purchase, link: product, seller: seller, subscription: subscription, is_original_subscription_purchase: true) }
+
+        it "returns subscription fields including cancellation timestamps" do
+          expect(props[:subscription]).to include(
+            id: subscription.id,
+            external_id: subscription.external_id,
+            cancelled_at: nil,
+            user_requested_cancellation_at: nil,
+            ended_at: nil,
+            failed_at: nil,
+          )
+        end
+
+        context "when the subscription is cancelled" do
+          before do
+            subscription.update!(user_requested_cancellation_at: Time.current, cancelled_at: 1.month.from_now, cancelled_by_buyer: true)
+          end
+
+          it "returns cancellation timestamps" do
+            expect(props[:subscription][:user_requested_cancellation_at]).to be_present
+            expect(props[:subscription][:cancelled_at]).to be_present
+            expect(props[:subscription][:cancelled_by_buyer]).to eq(true)
+          end
+        end
+      end
     end
   end
 end
