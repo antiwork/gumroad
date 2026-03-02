@@ -111,22 +111,37 @@ describe Admin::PurchasePresenter do
           expect(props[:subscription]).to include(
             id: subscription.id,
             external_id: subscription.external_id,
-            cancelled_at: nil,
             user_requested_cancellation_at: nil,
             ended_at: nil,
             failed_at: nil,
           )
         end
 
-        context "when the subscription is cancelled" do
+        context "when the subscription is cancelled by a buyer" do
+          let(:cancellation_time) { Time.current }
+          let(:end_time) { 1.month.from_now }
+
           before do
-            subscription.update!(user_requested_cancellation_at: Time.current, cancelled_at: 1.month.from_now, cancelled_by_buyer: true)
+            subscription.update!(user_requested_cancellation_at: cancellation_time, cancelled_at: end_time, cancelled_by_buyer: true)
           end
 
-          it "returns cancellation timestamps" do
-            expect(props[:subscription][:user_requested_cancellation_at]).to be_present
-            expect(props[:subscription][:cancelled_at]).to be_present
-            expect(props[:subscription][:cancelled_by_buyer]).to eq(true)
+          it "sets ended_at to cancelled_at and returns cancellation timestamps" do
+            freeze_time do
+              expect(props[:subscription][:user_requested_cancellation_at]).to be_present
+              expect(props[:subscription][:ended_at]).to eq(end_time)
+              expect(props[:subscription][:cancelled_by_buyer]).to eq(true)
+            end
+          end
+        end
+
+        context "when a fixed-length subscription ends without explicit cancellation" do
+          before do
+            subscription.update!(ended_at: Time.current)
+          end
+
+          it "sets ended_at to ended_at" do
+            expect(props[:subscription][:ended_at]).to be_present
+            expect(props[:subscription][:user_requested_cancellation_at]).to be_nil
           end
         end
       end

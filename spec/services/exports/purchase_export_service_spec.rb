@@ -165,13 +165,13 @@ describe Exports::PurchaseExportService do
           @subscription.update!(user_requested_cancellation_at: Time.current, cancelled_at: 1.month.from_now)
 
           row = last_data_row
-          expect(field_value(row, "Date of Cancellation")).to eq(Time.current.to_s)
+          expect(field_value(row, "Cancellation Date")).to eq(Time.current.to_s)
         end
       end
 
       it "returns nil for cancellation date when subscription has not been cancelled" do
         row = last_data_row
-        expect(field_value(row, "Date of Cancellation")).to eq(nil)
+        expect(field_value(row, "Cancellation Date")).to eq(nil)
       end
     end
 

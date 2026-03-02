@@ -83,7 +83,6 @@ export type Purchase = PurchaseStatesInfo & {
   subscription: {
     id: number;
     external_id: string;
-    cancelled_at: string | null;
     cancelled_by_buyer: boolean | null;
     user_requested_cancellation_at: string | null;
     ended_at: string | null;
@@ -413,12 +412,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
 
           <dt>Ended</dt>
           <dd>
-            <BooleanIcon value={!!purchase.subscription.cancelled_at || !!purchase.subscription.ended_at} />
-            {purchase.subscription.cancelled_at
-              ? ` (on ${purchase.subscription.cancelled_at})`
-              : purchase.subscription.ended_at
-                ? ` (on ${purchase.subscription.ended_at})`
-                : null}
+            <BooleanIcon value={!!purchase.subscription.ended_at} />
+            {purchase.subscription.ended_at ? ` (on ${purchase.subscription.ended_at})` : null}
           </dd>
 
           <dt>Failed</dt>
@@ -592,10 +587,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
       </>
     ) : null}
-    {purchase.subscription &&
-    !purchase.subscription.cancelled_at &&
-    !purchase.subscription.ended_at &&
-    !purchase.subscription.failed_at ? (
+    {purchase.subscription && !purchase.subscription.ended_at && !purchase.subscription.failed_at ? (
       <>
         <AdminActionButton
           label="Cancel subscription for buyer"
