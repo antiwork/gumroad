@@ -754,11 +754,11 @@ class Subscription < ApplicationRecord
   end
 
   def charges_completed?
-    has_fixed_length? && purchases.successful.count == charge_occurrence_count
+    has_fixed_length? && successful_purchases.count == charge_occurrence_count
   end
 
   def remaining_charges_count
-    has_fixed_length? ? charge_occurrence_count - purchases.successful.count : 0
+    has_fixed_length? ? charge_occurrence_count - successful_purchases.count : 0
   end
 
   # Certain events should transition the subscription from pending cancellation to cancelled thus not allowing the customer access to updates.
