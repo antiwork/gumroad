@@ -106,7 +106,9 @@ Include: Desktop (light + dark) and Mobile (light + dark) if applicable.
 This PR was implemented with AI assistance using [specific model, e.g., Claude Opus 4.6].
 
 Prompts used:
+
 <!-- chronological, verbatim if under ~100 chars otherwise summarized, skip pure confirmations -->
+
 - "[first prompt that shaped the code]"
 - "[next prompt]"
 ```
