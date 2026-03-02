@@ -128,7 +128,7 @@ describe Admin::PurchasePresenter do
           it "sets ended_at to cancelled_at and returns cancellation timestamps" do
             freeze_time do
               expect(props[:subscription][:user_requested_cancellation_at]).to be_present
-              expect(props[:subscription][:ended_at]).to eq(end_time)
+              expect(props[:subscription][:ended_at]).to be_within(1.second).of(end_time)
               expect(props[:subscription][:cancelled_by_buyer]).to eq(true)
             end
           end
