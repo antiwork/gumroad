@@ -328,7 +328,7 @@ describe Order::CreateService, :vcr do
                                                                  success: true,
                                                                  requires_card_action: true,
                                                                  client_secret: "pi_123_secret_456",
-                                                                 purchase: { id: upgrade_purchase.external_id, stripe_connect_account_id: merchant_account.charge_processor_merchant_id }
+                                                                 purchase: { id: upgrade_purchase.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now), stripe_connect_account_id: merchant_account.charge_processor_merchant_id }
                                                                })
 
         order, purchase_responses, _ = Order::CreateService.new(params: params_with_membership, buyer:).perform

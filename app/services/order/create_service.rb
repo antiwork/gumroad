@@ -69,7 +69,7 @@ class Order::CreateService
         if sca_response
           # Subscription restart SCA: add the upgrade purchase to the order so the
           # confirm endpoint can find it, and use the `order` key the frontend expects
-          if sca_response[:purchase].is_a?(Hash) && (upgrade_purchase = Purchase.find_by_external_id(sca_response[:purchase][:id]))
+          if sca_response[:purchase].is_a?(Hash) && (upgrade_purchase = Purchase.find_by_secure_external_id(sca_response[:purchase][:id], scope: "confirm"))
             order.purchases << upgrade_purchase
             order.save!
             sca_response = sca_response.except(:purchase).merge(
