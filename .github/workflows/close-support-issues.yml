@@ -1,4 +1,3 @@
-# TODO: auto-close support issues once false positive rate is acceptable
 name: Close support issues
 
 on:
