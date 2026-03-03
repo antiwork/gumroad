@@ -67,6 +67,7 @@ class CreateGlobalSalesTaxSummaryReportJob
         bucket[:tax_collected_cents] += net_cents(tax.to_i, adj&.dig(:tax_cents))
       end
 
+      # US purchases with zip codes not in UsZipCodes need individual GeoIp lookup for state resolution.
       resolve_geoip_fallback_purchases(purchases_scope, unresolved_us_tuple_keys, aggregation)
     end
 
@@ -86,6 +87,7 @@ class CreateGlobalSalesTaxSummaryReportJob
           *key_sqls.map { |sql| Arel.sql(sql) }
         )
 
+      Rails.logger.info("CreateGlobalSalesTaxSummaryReportJob: prefetched #{partial_purchases.size} partially refunded purchases")
       return {} if partial_purchases.empty?
 
       refund_sums = refund_totals_by_purchase(partial_purchases.map(&:first))
