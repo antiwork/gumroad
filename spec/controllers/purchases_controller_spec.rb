@@ -939,9 +939,23 @@ describe PurchasesController, :vcr do
     describe "POST confirm" do
       let(:chargeable) { build(:chargeable, card: StripePaymentMethodHelper.success_sca_not_required) }
       let(:purchase) { create(:purchase_in_progress, chargeable:, was_product_recommended: true, recommended_by: "discover") }
+      let(:secure_confirm_id) { purchase.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now) }
       before do
         allow_any_instance_of(Link).to receive(:recommendable?).and_return(true)
         purchase.process!
+      end
+
+      it "returns 404 for plain external_id" do
+        expect do
+          post :confirm, params: { id: purchase.external_id }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "returns 404 for expired token" do
+        expired_token = purchase.secure_external_id(scope: "confirm", expires_at: 1.minute.ago)
+        expect do
+          post :confirm, params: { id: expired_token }
+        end.to raise_error(ActionController::RoutingError)
       end
 
       context "when purchase was marked as failed" do
@@ -951,7 +965,7 @@ describe PurchasesController, :vcr do
 
         it "renders an error" do
           post :confirm, params: {
-            id: purchase.external_id
+            id: secure_confirm_id
           }
 
           expect(ChargeProcessor).not_to receive(:confirm_payment_intent!)
@@ -964,7 +978,7 @@ describe PurchasesController, :vcr do
       context "when SCA fails" do
         it "marks purchase as failed and renders an error" do
           post :confirm, params: {
-            id: purchase.external_id,
+            id: secure_confirm_id,
             stripe_error: {
               code: "invalid_request_error",
               message: "We are unable to authenticate your payment method."
@@ -984,7 +998,7 @@ describe PurchasesController, :vcr do
         end
 
         it "marks purchase as failed and renders an error" do
-          post :confirm, params: { id: purchase.external_id }
+          post :confirm, params: { id: secure_confirm_id }
 
           expect(purchase.reload.purchase_state).to eq("failed")
 
@@ -995,7 +1009,7 @@ describe PurchasesController, :vcr do
         it "does not delete the bundle cookie" do
           cookies["gumroad-bundle"] = "bundle cookie"
 
-          post :confirm, params: { id: purchase.external_id }
+          post :confirm, params: { id: secure_confirm_id }
           cookies.update(response.cookies)
 
           expect(cookies["gumroad-bundle"]).to be_present
@@ -1011,7 +1025,7 @@ describe PurchasesController, :vcr do
           expect(purchase.reload.successful?).to eq(false)
           expect(Purchase::ConfirmService).to receive(:new).with(hash_including(purchase:)).and_call_original
 
-          post :confirm, params: { id: purchase.external_id }
+          post :confirm, params: { id: secure_confirm_id }
           expect(response.parsed_body["success"]).to eq(true)
 
           expect(response.parsed_body).to eq(purchase.reload.purchase_response.as_json)
@@ -1032,7 +1046,7 @@ describe PurchasesController, :vcr do
           it "marks pre-order authorized" do
             expect(Purchase::ConfirmService).to receive(:new).with(hash_including(purchase:)).and_call_original
 
-            post :confirm, params: { id: purchase.external_id }
+            post :confirm, params: { id: secure_confirm_id }
             expect(response.parsed_body["success"]).to eq(true)
 
             expect(response.parsed_body).to eq(purchase.reload.purchase_response.as_json)
@@ -1044,7 +1058,7 @@ describe PurchasesController, :vcr do
 
         it "creates a purchase event" do
           expect do
-            post :confirm, params: { id: purchase.external_id }
+            post :confirm, params: { id: secure_confirm_id }
 
             event = Event.last
             expect(event.purchase_id).to eq(purchase.id)
@@ -1058,7 +1072,7 @@ describe PurchasesController, :vcr do
 
         it "creates recommended purchase info" do
           expect do
-            post :confirm, params: { id: purchase.external_id }
+            post :confirm, params: { id: secure_confirm_id }
             purchase.reload
             expect(purchase.recommended_purchase_info.recommendation_type).to eq("discover")
             expect(purchase.recommended_purchase_info.discover_fee_per_thousand).to eq(100)

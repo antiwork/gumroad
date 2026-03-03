@@ -45,38 +45,15 @@ If suggesting sub-issues, number the solution parts clearly and note which can b
 
 ### 3. Write the Issue
 
-Structure:
+Follow the structure in CONTRIBUTING.md.
+
+**Title** — Carries most of the weight. Specific and actionable.
 
 **## What**
-The problem, concretely. Include:
-
-- What's happening and what the impact is
-- Who's affected (users, sellers, internal team)
-- Quantify with data when possible (error rates, support ticket counts)
-- Link to related issues, Slack threads, or prior attempts
-- Mention workarounds people are using and why they're insufficient
+What needs to change. Be concrete — current vs desired behavior, who is affected, checkbox task list for multiple deliverables.
 
 **## Why**
-The root cause. Explain the technical reason the problem exists — not just symptoms. Reference code areas and behaviors (e.g., "the PayPal webhook handler" or "the dispute resolution flow"), not specific file paths or line numbers — those change. This is what makes the issue actionable rather than just a complaint.
-
-**## Proposed solution**
-High-level direction that's technically sound but not overly prescriptive. Give enough guidance that someone can start working without a long investigation phase, while leaving room for implementation decisions:
-
-- Name the approach and why it's the right one
-- If there are API constraints or non-obvious technical details, explain them (link to external docs when relevant)
-- Number the parts if the solution has multiple steps
-- Note alternatives considered and why they were rejected, if relevant
-- Don't dictate implementation details like exact method signatures or class names — describe what needs to happen, not exactly how to code it
-
-**## Acceptance criteria**
-Checkboxes. Each one should be independently testable. Cover:
-
-- The happy path
-- Key edge cases
-- Things that should NOT change (e.g., "Stripe behavior is unchanged")
-
-**## Edge cases** (when applicable)
-Call out non-obvious scenarios: race conditions, ordering issues, backward compatibility, migration concerns.
+Why this matters — business rationale or user impact, root cause if it's a bug, links to related issues or prior discussions.
 
 ### 4. Output
 
@@ -86,13 +63,12 @@ If the issue should be split into sub-issues, write the parent issue first, then
 
 ## Style
 
+Follow CONTRIBUTING.md for terminology and tone. Additionally:
+
 - Concise and direct. No jargon, no filler.
-- Ground claims in data or code references — don't just say "this is a problem," show it.
-- Use `product` not `link`, `buyer`/`seller` not `customer`/`creator` per CONTRIBUTING.md.
-- Link to external docs (API references, etc.) where they add clarity.
-- Reference code by area or concept ("the dispute webhook handler"), not by file:line — those change.
-- The issue is public (open source). It must be **self-contained**: an OSS contributor who has no access to prod, Slack, or internal tools should have everything they need to implement it without asking follow-up questions.
-- Include aggregated data when it quantifies the problem. **Never include PII** — no emails, user IDs, names, or payment details.
+- Ground claims in data or code references.
+- Reference code by area or concept ("the dispute webhook handler"), not by file:line.
+- The issue is public (open source). Self-contained for OSS contributors with no access to internal tools.
 
 ## Important
 

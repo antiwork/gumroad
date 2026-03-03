@@ -18,6 +18,17 @@ Explain the reasoning behind your changes, not just the change itself. Describe 
 - Include updates to any tests, especially end-to-end tests!
 - Deploy the app to a preview URL and include QA steps
 
+### PR description structure
+
+Non-trivial PRs should follow this structure:
+
+- **What** — What this PR does. Concrete changes, not a list of files.
+- **Why** — Why this change exists and why this approach was chosen over alternatives.
+- **Before/After** — Screenshots or video for UI/CSS changes only. Include desktop and mobile, light and dark mode.
+- **Test Results** — Screenshot of tests passing locally.
+
+End with an AI disclosure after a `---` separator.
+
 ## Development guidelines
 
 ### Testing guidelines
@@ -83,6 +94,28 @@ Explain the reasoning behind your changes, not just the change itself. Describe 
   - This is because we have a lot of users, products, and data.
   - Example: If you enqueue a backfilling job for each user upon them being updated, it's likely going to result in enqueuing millions of jobs in an uncontrollable way, potentially crashing Sidekiq (redis would be out of memory), and/or clogging the queues because each of these jobs takes "a few seconds" (= way too slow) and/or create massive uncontrollable replica lag, etc.
   - Create scripts in the `app/services/onetime` folder
+
+## Writing issues
+
+Issues for enhancements, features, or refactors use this structure:
+
+### What
+
+What needs to change. Be concrete:
+
+- Describe the current behavior and the desired behavior
+- Who is affected (buyers, sellers, internal team)
+- Quantify impact with data when possible (error rates, support tickets, revenue)
+- Use a checkbox task list for multiple deliverables
+
+### Why
+
+Why this change matters:
+
+- What user or business problem does this solve?
+- Link to related issues, support tickets, or prior discussions for context
+
+Keep it short. The title should carry most of the weight — the body adds context the title can't.
 
 ## Writing bug reports
 

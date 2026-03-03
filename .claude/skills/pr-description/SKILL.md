@@ -53,12 +53,14 @@ Read key changed files if the diff alone doesn't make the approach clear.
 
 ### 3. Write the Description
 
-Use the template below. Adapt sections based on what's relevant — not every section is needed for every PR.
+Follow the PR description structure in CONTRIBUTING.md. The template below implements it:
+
+Adapt sections based on what's relevant — not every section is needed for every PR.
 
 **Style rules:**
 
 - Write in simple, direct language. Avoid jargon.
-- Focus on _why_ and _how at a high level_ — not what files changed.
+- Focus on _what_ and _why_ — not what files changed.
 - No file change summaries or lists of modified files.
 - No checklists.
 - Succinct PR title: no "feat:" prefix, but "Fix:" is fine for bug fixes.
@@ -69,15 +71,15 @@ Use the template below. Adapt sections based on what's relevant — not every se
 ```markdown
 Fixes #<issue-number>
 
-## Problem
+## What
 
-[Why this change exists. What was broken or missing. 1-3 sentences max.]
+[What this PR does. Concrete changes — not a list of files.
+For features: what was built. For fixes: what was wrong and what was changed.]
 
-## Approach
+## Why
 
-[High-level concept of the solution. What strategy was used and why.
-NOT a list of file changes. If there were alternative approaches considered,
-briefly explain why this one was chosen.]
+[Why this change exists and why this approach over alternatives.
+Business or user rationale. Strategic context if relevant.]
 
 <!-- BEFORE/AFTER — include for UI/CSS changes, delete this section otherwise
 ## Before/After

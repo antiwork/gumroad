@@ -217,7 +217,7 @@ class SettingsPresenter
       payouts_paused_by: seller.payouts_paused_by_source,
       payouts_paused_for_reason: seller.payouts_paused_for_reason,
       payouts_paused_by_user: seller.payouts_paused_by_user?,
-      payout_threshold_cents: seller.minimum_payout_amount_cents,
+      payout_threshold_cents: seller.payout_threshold_cents,
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
       payout_country_name: Compliance::Countries.for_select.to_h[seller.alive_user_compliance_info&.legal_entity_country_code],
       payout_frequency: seller.payout_frequency,

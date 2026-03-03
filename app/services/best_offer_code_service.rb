@@ -17,7 +17,9 @@ class BestOfferCodeService
     url_code_valid = url_code_result&.dig(:valid) == true
     default_code_valid = default_code_result&.dig(:valid) == true
 
-    return url_code_result unless url_code_valid || default_code_valid
+    unless url_code_valid || default_code_valid
+      return @url_code.present? ? url_code_result : nil
+    end
 
     return url_code_result if !default_code_valid
     return default_code_result if !url_code_valid

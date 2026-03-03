@@ -21,6 +21,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
           prompt: |
             You are a language detection bot. Your only job is to determine whether
             GitHub issue #${{ github.event.issue.number }} is written in English.
