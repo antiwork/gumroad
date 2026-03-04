@@ -34,4 +34,21 @@ class CreatorMailer < ApplicationMailer
     @bundles = bundles
     mail to: seller.form_email, subject: "Join top creators who have sold over $300,000 of bundles"
   end
+
+  def top_creator_announcement(user_id:)
+    user = User.alive.not_suspended.find_by(id: user_id)
+    return unless user
+
+    email = user.form_email
+    return unless EmailFormatValidator.valid?(email)
+
+    @subject = "You're a Top Creator!"
+
+    mail(
+      to: email,
+      from: "Gumroad <gumroad@#{CREATOR_CONTACTING_CUSTOMERS_MAIL_DOMAIN}>",
+      subject: @subject,
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :creators)
+    )
+  end
 end
