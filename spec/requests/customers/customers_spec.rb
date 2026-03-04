@@ -1162,11 +1162,9 @@ describe "Sales page", type: :system, js: true do
             fill_in "4", with: "2"
             click_on "Issue partial refund"
 
-            within page.document do
-              within_modal "Charge refund" do
-                expect(page).to have_text("Would you like to confirm this charge refund?")
-                click_on "Cancel"
-              end
+            within_modal "Charge refund" do
+              expect(page).to have_text("Would you like to confirm this charge refund?")
+              click_on "Cancel"
             end
 
             click_on "Issue partial refund"
@@ -1189,13 +1187,11 @@ describe "Sales page", type: :system, js: true do
             find_field("2", with: "2").fill_in with: "3"
             click_on "Refund fully"
 
-            within page.document do
-              within_modal "Charge refund" do
-                click_on "Confirm refund"
-              end
-              wait_for_ajax
-              expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+            within_modal "Charge refund" do
+              click_on "Confirm refund"
             end
+            wait_for_ajax
+            expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
 
             find_field("2", with: "3").fill_in with: "2"
             click_on "Refund fully"
@@ -1487,12 +1483,10 @@ describe "Sales page", type: :system, js: true do
             fill_in "3", with: "1"
             click_on "Issue partial refund"
 
-            within page.document do
-              within_modal "Purchase refund" do
-                click_on "Cancel"
-              end
-              expect(page).to_not have_modal("Purchase refund")
+            within_modal "Purchase refund" do
+              click_on "Cancel"
             end
+            expect(page).to_not have_modal("Purchase refund")
 
             click_on "Issue partial refund"
           end
@@ -1515,12 +1509,10 @@ describe "Sales page", type: :system, js: true do
             find_field("2", with: "2").fill_in with: "3"
             click_on "Refund fully"
 
-            within page.document do
-              within_modal "Purchase refund" do
-                click_on "Confirm refund"
-              end
-              expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+            within_modal "Purchase refund" do
+              click_on "Confirm refund"
             end
+            expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
 
             fill_in "2", with: "2"
             click_on "Refund fully"
