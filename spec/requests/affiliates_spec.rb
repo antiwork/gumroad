@@ -55,6 +55,18 @@ describe "Affiliates", type: :system, js: true do
     expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
   end
 
+  it "auto-focuses search input when opening search popover" do
+    seller = create(:user)
+    product = create(:product, user: seller, price_cents: 2000)
+    create(:direct_affiliate, seller:, products: [product])
+
+    sign_in seller
+    visit affiliates_path
+
+    select_disclosure "Toggle Search"
+    expect(page).to have_field("Search", focused: true)
+  end
+
   it "allows filtering for affiliates" do
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 2000)

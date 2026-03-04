@@ -93,9 +93,8 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
     visit edit_link_path(product.unique_permalink) + "/content"
 
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
 
     expect(page).to have_embed(name: "Alice's Adventures in Wonderland")
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")

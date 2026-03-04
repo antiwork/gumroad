@@ -56,19 +56,10 @@ const AffiliatesNavigation = () => (
 const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; onSearch: (query: string) => void }) => {
   const [searchBoxOpen, setSearchBoxOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState(initialQuery);
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
-  const wasOpenedRef = React.useRef(false);
-
-  React.useEffect(() => {
-    if (searchBoxOpen) {
-      searchInputRef.current?.focus();
-      wasOpenedRef.current = true;
-    }
-  }, [searchBoxOpen]);
 
   React.useEffect(() => {
     setInputValue(initialQuery);
-    if (wasOpenedRef.current && initialQuery.length > 0) {
+    if (searchBoxOpen && initialQuery.length > 0) {
       setSearchBoxOpen(true);
     }
   }, [initialQuery]);
@@ -92,9 +83,7 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
         <div className="input input-wrapper">
           <Search className="size-5 text-muted" />
           <input
-            ref={searchInputRef}
             value={inputValue}
-            autoFocus
             type="text"
             placeholder="Search"
             aria-label="Search"

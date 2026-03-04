@@ -103,7 +103,6 @@ const SearchPopover = () => {
             <InputGroup>
               <User className="size-5" />
               <Input
-                autoFocus
                 name="query"
                 placeholder="Search users (email, name, ID)"
                 type="text"
