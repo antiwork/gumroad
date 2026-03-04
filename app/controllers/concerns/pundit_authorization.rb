@@ -16,7 +16,7 @@ module PunditAuthorization
 
   private
     def user_not_authorized(exception)
-      if exception.policy.class == LinkPolicy && exception.query == "edit?"
+      if exception.policy.class == LinkPolicy && exception.query.in?(%w[edit? edit_new?])
         product_edit_user_not_authorized(exception.record)
       elsif exception.policy.class == Settings::Main::UserPolicy && exception.query == "show?"
         settings_main_user_not_authorized
