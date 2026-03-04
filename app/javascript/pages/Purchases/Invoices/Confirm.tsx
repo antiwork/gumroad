@@ -2,6 +2,7 @@ import { Form, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Card, CardContent } from "$app/components/ui/Card";
 
 const PurchasesInvoiceConfirmationPage = () => {
@@ -30,6 +31,7 @@ const PurchasesInvoiceConfirmationPage = () => {
           </CardContent>
         </main>
       </Card>
+      <PoweredByFooter />
     </div>
   );
 };
