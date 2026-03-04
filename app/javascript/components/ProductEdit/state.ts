@@ -250,4 +250,4 @@ export type ThumbnailFile = {
 };
 
 export const parseEditSegment = (pathname: string): string =>
-  pathname.match(/\/products\/[^/]+\/(edit(?:_new)?)/u)?.[1] ?? "edit";
+  /\/products\/[^/]+\/(edit(?:_new)?)/u.exec(pathname)?.[1] ?? "edit";
