@@ -36,7 +36,7 @@ const resolvePageComponent = async (name: string): Promise<PageComponent> => {
 };
 
 void createInertiaApp<GlobalProps>({
-  progress: { delay: 100, color: "#FF90E8" },
+  progress: false,
   resolve: (name: string) => resolvePageComponent(name),
   setup({ el, App, props }) {
     const global = props.initialPage.props;
