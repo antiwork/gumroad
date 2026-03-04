@@ -4,7 +4,6 @@ import { DirectUpload } from "@rails/activestorage";
 import { findChildren, Node as TiptapNode } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { EditorContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -44,8 +43,11 @@ import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Select } from "$app/components/ui/Select";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -498,7 +500,7 @@ const EmailRow = ({
                   value={email.delayed_delivery_time_duration}
                 >
                   {(inputProps) => (
-                    <input
+                    <Input
                       type="text"
                       autoComplete="off"
                       placeholder="0"
@@ -508,7 +510,7 @@ const EmailRow = ({
                     />
                   )}
                 </NumberInput>
-                <select
+                <Select
                   value={email.delayed_delivery_time_period}
                   aria-label="Period"
                   onChange={(e) => onChange({ delayed_delivery_time_period: cast(e.target.value) })}
@@ -519,11 +521,11 @@ const EmailRow = ({
                       {`${period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
-            <fieldset className={cx({ danger: invalidFieldNames.includes("name") })}>
-              <input
+            <Fieldset state={invalidFieldNames.includes("name") ? "danger" : undefined}>
+              <Input
                 ref={nameInputRef}
                 type="text"
                 placeholder="Subject"
@@ -532,10 +534,10 @@ const EmailRow = ({
                 onChange={(e) => onChange({ name: e.target.value })}
                 onFocus={() => onFocus("name")}
               />
-            </fieldset>
+            </Fieldset>
             <RichTextEditor
               id={email.id}
-              className="textarea"
+              className="textarea bg-filled block w-full rounded border border-border px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
               ariaLabel="Email message"
               placeholder="Write a personalized message..."
               extensions={[...(isAbandonedCartWorkflow ? [AbandonedCartProductList] : [])]}

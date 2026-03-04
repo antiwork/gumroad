@@ -7,6 +7,8 @@ import * as Routes from "$app/utils/routes";
 import { Button } from "$app/components/Button";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 
 type SecureRedirectPageProps = {
   message: string;
@@ -53,10 +55,10 @@ const New = () => {
         <CardContent className="mini-rule legacy-only"></CardContent>
         <CardContent asChild>
           <form onSubmit={submitForm}>
-            <label htmlFor="confirmation_text" className="form-label grow">
+            <Label htmlFor="confirmation_text" className="form-label grow">
               {field_name}
-            </label>
-            <input
+            </Label>
+            <Input
               id="confirmation_text"
               name="confirmation_text"
               type="text"

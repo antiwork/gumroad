@@ -1,6 +1,5 @@
 import { Link, RefreshCcw, XSquare } from "@boxicons/react";
 import { router, useForm } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -13,7 +12,13 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { Pill } from "$app/components/ui/Pill";
+import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type UtmLinkFormData = {
@@ -269,19 +274,22 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
       }
     >
       <form onSubmit={handleSubmit}>
-        <section className="p-4! md:p-8!">
-          <header>
-            <p>Create UTM links to track where your traffic is coming from.</p>
-            <p>Once set up, simply share the links to see which sources are driving more conversions and revenue.</p>
-            <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
-              Learn more
-            </a>
-          </header>
-          <fieldset className={cx({ danger: getFieldError("title") })}>
-            <legend>
-              <label htmlFor={`title-${uid}`}>Title</label>
-            </legend>
-            <input
+        <FormSection
+          header={
+            <>
+              <p>Create UTM links to track where your traffic is coming from.</p>
+              <p>Once set up, simply share the links to see which sources are driving more conversions and revenue.</p>
+              <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </>
+          }
+        >
+          <Fieldset state={getFieldError("title") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`title-${uid}`}>Title</Label>
+            </FieldsetTitle>
+            <Input
               id={`title-${uid}`}
               type="text"
               placeholder="Title"
@@ -289,14 +297,14 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               ref={titleRef}
               onChange={(e) => setData("utm_link.title", e.target.value)}
             />
-            {getFieldError("title") ? <small>{getFieldError("title")}</small> : null}
-          </fieldset>
-          <fieldset
-            className={cx({ danger: getFieldError("target_resource_id") || getFieldError("target_resource_type") })}
+            {getFieldError("title") ? <FieldsetDescription>{getFieldError("title")}</FieldsetDescription> : null}
+          </Fieldset>
+          <Fieldset
+            state={getFieldError("target_resource_id") || getFieldError("target_resource_type") ? "danger" : undefined}
           >
-            <legend>
-              <label htmlFor={`destination-${uid}`}>Destination</label>
-            </legend>
+            <FieldsetTitle>
+              <Label htmlFor={`destination-${uid}`}>Destination</Label>
+            </FieldsetTitle>
             <Select
               inputId={`destination-${uid}`}
               instanceId={`destination-${uid}`}
@@ -313,24 +321,26 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               }}
             />
             {getFieldError("target_resource_id") || getFieldError("target_resource_type") ? (
-              <small>{getFieldError("target_resource_id") || getFieldError("target_resource_type")}</small>
+              <FieldsetDescription>
+                {getFieldError("target_resource_id") || getFieldError("target_resource_type")}
+              </FieldsetDescription>
             ) : null}
-          </fieldset>
-          <fieldset className={cx({ danger: getFieldError("permalink") })}>
-            <legend>
-              <label htmlFor={`${uid}-link-text`}>Link</label>
-            </legend>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "var(--spacer-2)" }}>
-              <div className={cx("input", { disabled: isEditing })}>
+          </Fieldset>
+          <Fieldset state={getFieldError("permalink") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-link-text`}>Link</Label>
+            </FieldsetTitle>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <InputGroup disabled={isEditing}>
                 <Pill className="-ml-2 shrink-0">{shortUrlPrefix}</Pill>
-                <input
+                <Input
                   type="text"
                   id={`${uid}-link-text`}
                   value={isEditing ? permalink : data.utm_link.permalink}
                   readOnly
                   disabled={isEditing}
                 />
-              </div>
+              </InputGroup>
               <div className="flex gap-2">
                 <CopyToClipboard
                   copyTooltip="Copy short link"
@@ -355,11 +365,11 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               </div>
             </div>
             {getFieldError("permalink") ? (
-              <small>{getFieldError("permalink")}</small>
+              <FieldsetDescription>{getFieldError("permalink")}</FieldsetDescription>
             ) : (
-              <small>This is your short UTM link to share</small>
+              <FieldsetDescription>This is your short UTM link to share</FieldsetDescription>
             )}
-          </fieldset>
+          </Fieldset>
           <div
             style={{
               display: "grid",
@@ -367,10 +377,10 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
             }}
           >
-            <fieldset className={cx({ danger: getFieldError("utm_source") })}>
-              <legend>
-                <label htmlFor={`${uid}-source`}>Source</label>
-              </legend>
+            <Fieldset state={getFieldError("utm_source") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-source`}>Source</Label>
+              </FieldsetTitle>
               <UtmFieldSelect
                 id={`${uid}-source`}
                 placeholder="newsletter"
@@ -379,15 +389,15 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                 onChange={(value) => setData("utm_link.utm_source", value)}
               />
               {getFieldError("utm_source") ? (
-                <small>{getFieldError("utm_source")}</small>
+                <FieldsetDescription>{getFieldError("utm_source")}</FieldsetDescription>
               ) : (
-                <small>Where the traffic comes from e.g Twitter, Instagram</small>
+                <FieldsetDescription>Where the traffic comes from e.g Twitter, Instagram</FieldsetDescription>
               )}
-            </fieldset>
-            <fieldset className={cx({ danger: getFieldError("utm_medium") })}>
-              <legend>
-                <label htmlFor={`${uid}-medium`}>Medium</label>
-              </legend>
+            </Fieldset>
+            <Fieldset state={getFieldError("utm_medium") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-medium`}>Medium</Label>
+              </FieldsetTitle>
               <UtmFieldSelect
                 id={`${uid}-medium`}
                 placeholder="email"
@@ -396,16 +406,16 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                 onChange={(value) => setData("utm_link.utm_medium", value)}
               />
               {getFieldError("utm_medium") ? (
-                <small>{getFieldError("utm_medium")}</small>
+                <FieldsetDescription>{getFieldError("utm_medium")}</FieldsetDescription>
               ) : (
-                <small>Medium by which the traffic arrived e.g. email, ads, story</small>
+                <FieldsetDescription>Medium by which the traffic arrived e.g. email, ads, story</FieldsetDescription>
               )}
-            </fieldset>
+            </Fieldset>
           </div>
-          <fieldset className={cx({ danger: getFieldError("utm_campaign") })}>
-            <legend>
-              <label htmlFor={`${uid}-campaign`}>Campaign</label>
-            </legend>
+          <Fieldset state={getFieldError("utm_campaign") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-campaign`}>Campaign</Label>
+            </FieldsetTitle>
             <UtmFieldSelect
               id={`${uid}-campaign`}
               placeholder="new-course-launch"
@@ -414,15 +424,15 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               onChange={(value) => setData("utm_link.utm_campaign", value)}
             />
             {getFieldError("utm_campaign") ? (
-              <small>{getFieldError("utm_campaign")}</small>
+              <FieldsetDescription>{getFieldError("utm_campaign")}</FieldsetDescription>
             ) : (
-              <small>Name of the campaign</small>
+              <FieldsetDescription>Name of the campaign</FieldsetDescription>
             )}
-          </fieldset>
-          <fieldset className={cx({ danger: getFieldError("utm_term") })}>
-            <legend>
-              <label htmlFor={`${uid}-term`}>Term</label>
-            </legend>
+          </Fieldset>
+          <Fieldset state={getFieldError("utm_term") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-term`}>Term</Label>
+            </FieldsetTitle>
             <UtmFieldSelect
               id={`${uid}-term`}
               placeholder="photo-editing"
@@ -431,15 +441,15 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               onChange={(value) => setData("utm_link.utm_term", value)}
             />
             {getFieldError("utm_term") ? (
-              <small>{getFieldError("utm_term")}</small>
+              <FieldsetDescription>{getFieldError("utm_term")}</FieldsetDescription>
             ) : (
-              <small>Keywords used in ads</small>
+              <FieldsetDescription>Keywords used in ads</FieldsetDescription>
             )}
-          </fieldset>
-          <fieldset className={cx({ danger: getFieldError("utm_content") })}>
-            <legend>
-              <label htmlFor={`${uid}-content`}>Content</label>
-            </legend>
+          </Fieldset>
+          <Fieldset state={getFieldError("utm_content") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-content`}>Content</Label>
+            </FieldsetTitle>
             <UtmFieldSelect
               id={`${uid}-content`}
               placeholder="video-ad"
@@ -448,17 +458,17 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               onChange={(value) => setData("utm_link.utm_content", value)}
             />
             {getFieldError("utm_content") ? (
-              <small>{getFieldError("utm_content")}</small>
+              <FieldsetDescription>{getFieldError("utm_content")}</FieldsetDescription>
             ) : (
-              <small>Use to differentiate ads</small>
+              <FieldsetDescription>Use to differentiate ads</FieldsetDescription>
             )}
-          </fieldset>
+          </Fieldset>
           {finalUrl ? (
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-utm-url`}>Generated URL with UTM tags</label>
-              </legend>
-              <div className="input">
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-utm-url`}>Generated URL with UTM tags</Label>
+              </FieldsetTitle>
+              <InputGroup>
                 <ResizableTextarea
                   id={`${uid}-utm-url`}
                   className="resize-none"
@@ -471,10 +481,10 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                     <Link className="size-5" />
                   </Button>
                 </CopyToClipboard>
-              </div>
-            </fieldset>
+              </InputGroup>
+            </Fieldset>
           ) : null}
-        </section>
+        </FormSection>
       </form>
     </AnalyticsLayout>
   );
@@ -532,5 +542,5 @@ const ResizableTextarea = (props: React.ComponentProps<"textarea">) => {
     ref.current.style.height = `${ref.current.scrollHeight}px`;
   }, [props.value]);
 
-  return <textarea ref={ref} {...props} />;
+  return <Textarea ref={ref} {...props} />;
 };

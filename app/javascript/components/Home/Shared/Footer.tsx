@@ -1,6 +1,8 @@
 import { Link } from "@inertiajs/react";
 import * as React from "react";
 
+import { Input } from "$app/components/ui/Input";
+
 import logoG from "$assets/images/logo-g.svg";
 
 const FooterLink = ({
@@ -47,7 +49,7 @@ export const HomeFooter = () => (
         <form action="https://gumroad.com/follow_from_embed_form" method="post" className="flex gap-1">
           <input name="seller_id" type="hidden" value="6282492303727" />
           <div className="lg:flex-1">
-            <input name="email" placeholder="Your email address" type="email" />
+            <Input name="email" placeholder="Your email address" type="email" />
           </div>
           <div className="group relative inline-block">
             <div className="absolute inset-0 z-[2] rounded-sm border border-black bg-yellow transition-transform duration-150" />
