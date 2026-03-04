@@ -1,4 +1,4 @@
-import { ArrowInDownSquareHalf, Calendar, CheckCircle, ChevronDown, Clock, Cog } from "@boxicons/react";
+import { ArrowInDownSquareHalf, Calendar, CheckCircle, Clock, Cog } from "@boxicons/react";
 import { Link, router } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
@@ -820,7 +820,6 @@ const Payouts = ({
                       </option>
                     ))}
                   </Select>
-                  <ChevronDown className="size-5" />
                 </InputGroup>
               </Fieldset>
               <Fieldset>
