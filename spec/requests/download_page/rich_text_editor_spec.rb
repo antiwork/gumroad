@@ -778,29 +778,58 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
     end
 
     it "appends purchase_id to Gumroad post URLs in links and buttons" do
-      post_url = "https://#{@user.username}.gumroad.com/p/test-post"
+      post_url = "#{PROTOCOL}://#{@user.username}.#{ROOT_DOMAIN}/p/test-post"
       product_rich_content = @product.alive_rich_contents.first
       product_rich_content.update!(description: [
-                                     { "type" => "paragraph",
-                                       "content" =>
-                                        [{ "text" => "Post link",
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "text" => "Post link",
                                            "type" => "text",
-                                           "marks" =>
-                                            [{ "type" => "link",
-                                               "attrs" =>
-                                              { "rel" => "noopener noreferrer nofollow",
-                                                "href" => post_url,
-                                                "class" => nil,
-                                                "target" => "_blank" } }] }] },
-                                     { "type" => "paragraph",
-                                       "content" =>
-                                        [{ "type" => "tiptap-link",
-                                           "attrs" => { "href" => post_url },
-                                           "content" => [{ "text" => "Tiptap post link", "type" => "text" }] }] },
-                                     { "type" => "button",
-                                       "attrs" => { "href" => post_url },
-                                       "content" =>
-                                        [{ "text" => "Post button", "type" => "text" }] },
+                                           "marks" => [
+                                             {
+                                               "type" => "link",
+                                               "attrs" => {
+                                                 "rel" => "noopener noreferrer nofollow",
+                                                 "href" => post_url,
+                                                 "class" => nil,
+                                                 "target" => "_blank",
+                                               },
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "type" => "tiptap-link",
+                                           "attrs" => {
+                                             "href" => post_url,
+                                           },
+                                           "content" => [
+                                             {
+                                               "text" => "Tiptap post link",
+                                               "type" => "text",
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                     {
+                                       "type" => "button",
+                                       "attrs" => {
+                                         "href" => post_url,
+                                       },
+                                       "content" => [
+                                         {
+                                           "text" => "Post button",
+                                           "type" => "text",
+                                         },
+                                       ],
+                                     },
                                    ])
 
       visit("/d/#{@url_redirect.token}")
@@ -814,17 +843,26 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
       external_url = "https://example.com/p/some-post"
       product_rich_content = @product.alive_rich_contents.first
       product_rich_content.update!(description: [
-                                     { "type" => "paragraph",
-                                       "content" =>
-                                        [{ "text" => "External link",
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "text" => "External link",
                                            "type" => "text",
-                                           "marks" =>
-                                            [{ "type" => "link",
-                                               "attrs" =>
-                                              { "rel" => "noopener noreferrer nofollow",
-                                                "href" => external_url,
-                                                "class" => nil,
-                                                "target" => "_blank" } }] }] },
+                                           "marks" => [
+                                             {
+                                               "type" => "link",
+                                               "attrs" => {
+                                                 "rel" => "noopener noreferrer nofollow",
+                                                 "href" => external_url,
+                                                 "class" => nil,
+                                                 "target" => "_blank",
+                                               },
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
                                    ])
 
       visit("/d/#{@url_redirect.token}")
@@ -832,20 +870,29 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
     end
 
     it "does not append purchase_id to Gumroad URLs without /p/ paths" do
-      gumroad_product_url = "https://#{@user.username}.gumroad.com/l/test-product"
+      gumroad_product_url = "#{PROTOCOL}://#{@user.username}.#{ROOT_DOMAIN}/l/test-product"
       product_rich_content = @product.alive_rich_contents.first
       product_rich_content.update!(description: [
-                                     { "type" => "paragraph",
-                                       "content" =>
-                                        [{ "text" => "Product link",
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "text" => "Product link",
                                            "type" => "text",
-                                           "marks" =>
-                                            [{ "type" => "link",
-                                               "attrs" =>
-                                              { "rel" => "noopener noreferrer nofollow",
-                                                "href" => gumroad_product_url,
-                                                "class" => nil,
-                                                "target" => "_blank" } }] }] },
+                                           "marks" => [
+                                             {
+                                               "type" => "link",
+                                               "attrs" => {
+                                                 "rel" => "noopener noreferrer nofollow",
+                                                 "href" => gumroad_product_url,
+                                                 "class" => nil,
+                                                 "target" => "_blank",
+                                               },
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
                                    ])
 
       visit("/d/#{@url_redirect.token}")
