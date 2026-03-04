@@ -14,11 +14,11 @@ function FollowersFromEmbedFormPage() {
   const { success, message } = cast<Props>(usePage().props);
 
   return (
-    <div className="flex min-h-screen flex-col justify-between">
+    <div className="flex min-h-screen flex-col justify-between p-4">
       <Card asChild>
-        <main className="mx-auto my-4 h-min w-[calc(100%-2rem)] max-w-md">
+        <main className="mx-auto h-min w-full max-w-md">
           <CardContent asChild>
-            <header className="flex-col items-stretch text-center">
+            <header className="text-center">
               <h2>{success ? "Followed!" : "Something went wrong"}</h2>
               <p>{message}</p>
             </header>
