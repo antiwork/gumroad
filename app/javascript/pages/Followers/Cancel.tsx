@@ -7,7 +7,7 @@ function FollowersCancelPage() {
   return (
     <div className="flex min-h-screen flex-col justify-between">
       <Card asChild>
-        <main className="mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+        <main className="mx-auto my-4 h-min w-[calc(100%-2rem)] max-w-md">
           <CardContent asChild>
             <header className="flex-col items-stretch text-center">
               <h2>You have been unsubscribed.</h2>
