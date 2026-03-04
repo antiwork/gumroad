@@ -1191,8 +1191,12 @@ describe "Sales page", type: :system, js: true do
               click_on "Confirm refund"
             end
             wait_for_ajax
-            expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+          end
+        end
+        expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
 
+        within_modal "Membership" do
+          within_section "Charges", section_element: :section do
             find_field("2", with: "3").fill_in with: "2"
             click_on "Refund fully"
           end
@@ -1512,8 +1516,12 @@ describe "Sales page", type: :system, js: true do
             within_modal "Purchase refund" do
               click_on "Confirm refund"
             end
-            expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+          end
+        end
+        expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
 
+        within_modal "Product 2" do
+          within_section "Refund", section_element: :section do
             fill_in "2", with: "2"
             click_on "Refund fully"
           end

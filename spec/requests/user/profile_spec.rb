@@ -275,10 +275,12 @@ describe "User profile page", type: :system, js: true do
           items[0].find("[aria-grabbed]").drag_to items[2], delay: 0.1
           within items[1] do
             click_on "Remove page"
-            click_on "No, cancel"
-            click_on "Remove page"
-            click_on "Yes, delete"
           end
+          click_on "No, cancel"
+          within items[1] do
+            click_on "Remove page"
+          end
+          click_on "Yes, delete"
           expect(page).to have_selector("[role=list][aria-label=Pages] [role=listitem]", count: 2)
         end
         toggle_disclosure "Page settings"
