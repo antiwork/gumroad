@@ -60,7 +60,7 @@ export const NodeActionsMenu = ({
       <div
         data-actions-menu
         className={classNames(
-          "absolute bottom-4 left-0 z-[1] text-base leading-[1.375] lg:top-6 lg:bottom-auto lg:-left-2 lg:-translate-x-full",
+          "absolute bottom-4 left-0 z-1 text-base lg:top-6 lg:bottom-auto lg:-left-2 lg:-translate-x-full",
           !selected && !open && "lg:hidden",
         )}
       >

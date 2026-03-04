@@ -418,7 +418,7 @@ export const RichTextEditorToolbar = ({
       <div
         role="toolbar"
         className={classNames(
-          "sticky top-0 z-[1] flex flex-wrap gap-1 px-2 py-1 text-foreground",
+          "sticky top-0 z-1 flex flex-wrap gap-1 px-2 py-1 text-foreground",
           color === "ghost" ? "bg-background" : "bg-primary text-primary-foreground",
           className,
         )}
