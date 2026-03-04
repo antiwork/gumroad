@@ -1,0 +1,74 @@
+name: Close support issues
+
+on:
+  issues:
+    types: [opened]
+
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  close-support:
+    if: >-
+      github.event.issue.author_association != 'MEMBER' &&
+      github.event.issue.author_association != 'OWNER'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Check if issue is still open
+        id: check-open
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.issue.number }}
+            });
+            return issue.data.state === 'open';
+          result-encoding: string
+
+      - name: Checkout repository
+        if: steps.check-open.outputs.result == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Detect support requests
+        if: steps.check-open.outputs.result == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
+          prompt: |
+            You are a support request detection bot. Your job is to determine whether
+            GitHub issue #${{ github.event.issue.number }} is a support request about
+            a specific Gumroad account rather than a bug report or feature request.
+
+            Read the issue:
+            gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json title,body
+
+            Examples of support requests:
+            - "My account was suspended"
+            - "I can't access my payouts"
+            - "Why was my product removed?"
+            - "I was charged but didn't receive the product"
+            - "How do I get a refund?"
+
+            These are about a specific user's account, not about Gumroad's software.
+
+            If the issue is clearly a support request, post this exact comment:
+
+            gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body "Thanks for reaching out! This issue appears to be about a specific Gumroad account. GitHub Issues is for bug reports and feature requests — for account-specific help, please visit https://help.gumroad.com."
+
+            Do NOT close the issue.
+
+            If the issue is a bug report, feature request, or you are unsure, do nothing.
+            False positives are worse than false negatives.
+          claude_args: |
+            --allowedTools "Bash(gh issue view:*),Bash(gh issue comment:*)"

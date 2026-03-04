@@ -103,7 +103,14 @@ Include: Desktop (light + dark) and Mobile (light + dark) if applicable.
 
 ---
 
-This PR was implemented with AI assistance using Claude Code for code generation. All code was self-reviewed.
+This PR was implemented with AI assistance using [specific model, e.g., Claude Opus 4.6].
+
+Prompts used:
+
+<!-- chronological, verbatim if under ~100 chars otherwise summarized, skip pure confirmations -->
+
+- "[first prompt that shaped the code]"
+- "[next prompt]"
 ```
 
 See [references/example.md](references/example.md) for a well-received PR description example.
@@ -122,4 +129,4 @@ Tell the user the file was created and suggest they review it before posting.
 - Always fetch the GitHub issue — it provides critical context for the Problem section.
 - Omit the Before/After section entirely for non-UI changes (remove the HTML comment too).
 - Omit the Test Results section if not applicable (remove the HTML comment too).
-- The AI disclaimer is always the last line, after a `---` separator.
+- The AI disclosure format follows CONTRIBUTING.md.
