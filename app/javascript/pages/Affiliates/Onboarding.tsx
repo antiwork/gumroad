@@ -129,7 +129,7 @@ export default function AffiliatesOnboarding() {
         <AffiliatesNavigation />
       </PageHeader>
       {data.products.length === 0 ? (
-        <FormSection>
+        <section className="p-4! md:p-8!">
           <Placeholder>
             <PlaceholderImage src={placeholderImage} />
             <h2>Almost there!</h2>
@@ -142,7 +142,7 @@ export default function AffiliatesOnboarding() {
               New product
             </NavigationButtonInertia>
           </Placeholder>
-        </FormSection>
+        </section>
       ) : (
         <form onSubmit={handleSaveChanges}>
           <FormSection
