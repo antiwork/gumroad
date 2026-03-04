@@ -276,11 +276,15 @@ describe "User profile page", type: :system, js: true do
           within items[1] do
             click_on "Remove page"
           end
-          click_on "No, cancel"
+          within_modal "Delete page?" do
+            click_on "No, cancel"
+          end
           within items[1] do
             click_on "Remove page"
           end
-          click_on "Yes, delete"
+          within_modal "Delete page?" do
+            click_on "Yes, delete"
+          end
           expect(page).to have_selector("[role=list][aria-label=Pages] [role=listitem]", count: 2)
         end
         toggle_disclosure "Page settings"
