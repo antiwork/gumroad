@@ -10,7 +10,7 @@ const PurchasesInvoiceConfirmationPage = () => {
   return (
     <div>
       <Card asChild>
-        <main className="single-page-form horizontal-form mx-auto my-4 h-min max-w-md [&>*]:flex-col [&>*]:items-stretch">
+        <main className="mx-auto my-4 h-min max-w-md [&>*]:flex-col [&>*]:items-stretch">
           <CardContent asChild>
             <header className="text-center">
               <h2 className="grow">Generate invoice</h2>

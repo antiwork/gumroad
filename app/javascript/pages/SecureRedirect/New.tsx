@@ -43,7 +43,7 @@ const New = () => {
 
   return (
     <>
-      <Card className="single-page-form horizontal-form">
+      <Card>
         <CardContent asChild>
           <header>
             <h2 className="grow">Confirm access</h2>
