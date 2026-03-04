@@ -82,13 +82,7 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       <PopoverContent>
         <div className="input input-wrapper">
           <Search className="size-5 text-muted" />
-          <input
-            value={inputValue}
-            type="text"
-            placeholder="Search"
-            aria-label="Search"
-            onChange={handleChange}
-          />
+          <input value={inputValue} type="text" placeholder="Search" aria-label="Search" onChange={handleChange} />
         </div>
       </PopoverContent>
     </Popover>

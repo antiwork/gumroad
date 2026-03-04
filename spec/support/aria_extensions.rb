@@ -293,23 +293,22 @@ module CapybaraAccessibleSelectors
     end
 
     private
-
-    def _run_in_disclosure(name, **find_options, &block)
-      attempts = 0
-      begin
-        attempts += 1
-        disclosure = if is_a?(Capybara::Node::Element) && name.nil?
-                       _locate_disclosure(name, **find_options)
-                     else
-                       Capybara.page.find(:disclosure, name, **find_options)
-                     end
-        block_executed = false
-        wrapped_block = proc { block.call; block_executed = true }
-        Capybara.page.within(disclosure, &wrapped_block)
-      rescue Selenium::WebDriver::Error::StaleElementReferenceError
-        retry if !block_executed && attempts == 1
+      def _run_in_disclosure(name, **find_options, &block)
+        attempts = 0
+        begin
+          attempts += 1
+          disclosure = if is_a?(Capybara::Node::Element) && name.nil?
+            _locate_disclosure(name, **find_options)
+          else
+            Capybara.page.find(:disclosure, name, **find_options)
+          end
+          block_executed = false
+          wrapped_block = proc { block.call; block_executed = true }
+          Capybara.page.within(disclosure, &wrapped_block)
+        rescue Selenium::WebDriver::Error::StaleElementReferenceError
+          retry if !block_executed && attempts == 1
+        end
       end
-    end
   end
 end
 

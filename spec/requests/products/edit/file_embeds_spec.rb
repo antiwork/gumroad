@@ -391,9 +391,9 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
     select_disclosure "Upload files"
     attach_product_file([
-                            file_fixture("test.mp3"),
-                            file_fixture("Alice's Adventures in Wonderland.pdf")
-                          ])
+                          file_fixture("test.mp3"),
+                          file_fixture("Alice's Adventures in Wonderland.pdf")
+                        ])
     sleep 0.5 # wait for the editor to update the content
     send_keys :enter
     within_file_group "Untitled" do
