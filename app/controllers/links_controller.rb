@@ -305,7 +305,7 @@ class LinksController < ApplicationController
 
     ai_generated = params[:ai_generated] == "true"
     presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
-    render inertia: "ProductEdit", props: presenter.edit_props
+    render inertia: "Products/Edit", props: presenter.edit_props
   end
 
   def update

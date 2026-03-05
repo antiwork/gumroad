@@ -265,7 +265,7 @@ describe LinksController, :vcr, inertia: true do
       it "renders the Inertia product edit page" do
         get :edit_new, params: { id: product.unique_permalink }
         expect(response).to be_successful
-        expect(inertia).to render_component("ProductEdit")
+        expect(inertia).to render_component("Products/Edit")
         expect(inertia.props[:id]).to eq(product.external_id)
         expect(inertia.props[:unique_permalink]).to eq(product.unique_permalink)
         expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
@@ -311,7 +311,7 @@ describe LinksController, :vcr, inertia: true do
         it "renders the Inertia page for sub-routes" do
           get :edit_new, params: { id: product.unique_permalink, other: "content" }
           expect(response).to be_successful
-          expect(inertia).to render_component("ProductEdit")
+          expect(inertia).to render_component("Products/Edit")
         end
       end
     end
