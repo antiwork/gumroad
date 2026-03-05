@@ -13,6 +13,7 @@ class UserComplianceInfo < ApplicationRecord
   MINIMUM_DATE_OF_BIRTH_AGE = 13
   KANA_NAME_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\s\u3000\-.]*\z/
   KANA_ADDRESS_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\p{Latin}\d\s\u3000\-.]*\z/
+  HAS_KATAKANA = /[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F]/
   ROMAJI_REGEX = /\A[^\p{Han}\p{Hiragana}\p{Katakana}]*\z/
 
   belongs_to :user, optional: true
@@ -32,6 +33,7 @@ class UserComplianceInfo < ApplicationRecord
 
   validate :birthday_is_over_minimum_age
   validate :kana_fields_format
+  validate :street_address_kana_must_contain_katakana
   validate :business_name_romaji_format
 
   after_create_commit :handle_stripe_compliance_info
@@ -214,6 +216,18 @@ class UserComplianceInfo < ApplicationRecord
         next if value.blank?
         next if value.match?(regex)
         errors.add(:base, "#{label} may only contain #{allowed_description}")
+      end
+    end
+
+    def street_address_kana_must_contain_katakana
+      return if country_code != Compliance::Countries::JPN.alpha2
+
+      { street_address_kana: "Street address (Kana)",
+        business_street_address_kana: "Business street address (Kana)" }.each do |field, label|
+        value = send(field)
+        next if value.blank?
+        next if value.match?(HAS_KATAKANA)
+        errors.add(:base, "#{label} must include katakana characters")
       end
     end
 

@@ -3,8 +3,7 @@
 module WithFileProperties
   include InfosHelper
 
-  MAX_DOWNLOAD_SIZE = 1_073_741_824 # 1gb
-  MAX_VIDEO_DOWNLOAD_SIZE = 40.gigabytes
+  MAX_DOWNLOAD_SIZE = 40.gigabytes
 
   def file_info(require_shipping = false)
     # One-off for not showing image properties for a physical product.
@@ -50,7 +49,7 @@ module WithFileProperties
     FILE_REGEX.each do |file_type, regex|
       next unless filetype.match(regex)
 
-      if methods.grep(/assign_#{file_type}_attributes/) != [] && size && size < max_download_size_for_file_type(file_type)
+      if methods.grep(/assign_#{file_type}_attributes/) != [] && size && size < MAX_DOWNLOAD_SIZE
         temp_file = Tempfile.new([file_uuid, File.extname(s3_url)], encoding: "ascii-8bit")
         begin
           s3_object.get(response_target: temp_file)
@@ -186,10 +185,6 @@ module WithFileProperties
   end
 
   private
-    def max_download_size_for_file_type(file_type)
-      file_type == "video" ? MAX_VIDEO_DOWNLOAD_SIZE : MAX_DOWNLOAD_SIZE
-    end
-
     def transcode_video(streamable)
       TranscodeVideoForStreamingWorker.perform_in(10.seconds, streamable.id, streamable.class.name)
     end
