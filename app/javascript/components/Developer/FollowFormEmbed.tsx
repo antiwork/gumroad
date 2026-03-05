@@ -8,6 +8,7 @@ import { getAppliedStyles } from "$app/utils/styles";
 import { Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Input } from "$app/components/ui/Input";
 
 export const FOLLOW_FORM_EMBED_INPUT_ID = "gumroad-follow-form-embed-input";
 
@@ -47,7 +48,7 @@ export const FollowFormEmbed = ({ sellerId, preview }: { sellerId: string; previ
         id="gumroad-follow-form-embed"
       >
         <input type="hidden" name="seller_id" value={sellerId} />
-        <input
+        <Input
           id={FOLLOW_FORM_EMBED_INPUT_ID}
           type="email"
           placeholder="Your email address"

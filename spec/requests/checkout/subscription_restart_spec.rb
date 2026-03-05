@@ -96,7 +96,7 @@ describe "Subscription restart at checkout", :js, type: :system do
           requires_card_action: true,
           client_secret: @payment_intent.client_secret,
           purchase: {
-            id: @upgrade_purchase.external_id,
+            id: @upgrade_purchase.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: @merchant_account.charge_processor_merchant_id
           }
         }

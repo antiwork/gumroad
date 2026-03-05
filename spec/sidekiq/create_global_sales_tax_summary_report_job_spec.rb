@@ -15,14 +15,14 @@ describe CreateGlobalSalesTaxSummaryReportJob do
   end
 
   describe "report generation" do
-    let(:s3_bucket_double) do
-      s3_bucket_double = double
-      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
-      s3_bucket_double
-    end
-
     before :context do
       @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/global-sales-tax-summary-spec-#{SecureRandom.hex(18)}.csv")
+    end
+
+    before do
+      s3_bucket_double = double
+      allow(Aws::S3::Resource).to receive_message_chain(:new, :bucket).and_return(s3_bucket_double)
+      allow(s3_bucket_double).to receive(:object).and_return(@s3_object)
     end
 
     def read_csv_from_s3
@@ -56,8 +56,6 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "creates a summary CSV with correct headers, country/state breakdown, and sends email" do
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
-
         described_class.new.perform(month, year)
 
         actual_payload = read_csv_from_s3
@@ -111,8 +109,6 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "normalizes country names using common_name" do
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
-
         described_class.new.perform(month, year)
 
         actual_payload = read_csv_from_s3
@@ -132,8 +128,6 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "falls back to ip_country when country is nil" do
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
-
         described_class.new.perform(month, year)
 
         actual_payload = read_csv_from_s3
@@ -153,8 +147,6 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "groups purchases with no country as Unknown" do
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
-
         described_class.new.perform(month, year)
 
         actual_payload = read_csv_from_s3
@@ -182,15 +174,12 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "uses net-of-refunds amounts for partially refunded purchases" do
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
-
         described_class.new.perform(month, year)
 
         actual_payload = read_csv_from_s3
 
         de_row = actual_payload.find { |row| row[0] == "Germany" }
         expect(de_row).to be_present
-
         expect(de_row[2]).to eq("89.00")
       end
     end
@@ -210,8 +199,6 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "excludes fully refunded and zero-tax purchases" do
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
-
         described_class.new.perform(month, year)
 
         actual_payload = read_csv_from_s3
@@ -233,9 +220,7 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "falls back to GeoIp lookup when zip code is missing" do
-        geo_result = double(region_name: "CA")
-        allow(GeoIp).to receive(:lookup).and_return(geo_result)
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+        allow(GeoIp).to receive(:lookup).and_return(double(region_name: "CA"))
 
         described_class.new.perform(month, year)
 
@@ -255,8 +240,6 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "falls back to ip_state for Canada province" do
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
-
         described_class.new.perform(month, year)
 
         actual_payload = read_csv_from_s3
@@ -275,8 +258,6 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "uses empty state when ip_state is invalid for India" do
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
-
         described_class.new.perform(month, year)
 
         actual_payload = read_csv_from_s3
@@ -296,8 +277,6 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
 
       it "formats monetary values with cents" do
-        expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
-
         described_class.new.perform(month, year)
 
         actual_payload = read_csv_from_s3
@@ -305,6 +284,109 @@ describe CreateGlobalSalesTaxSummaryReportJob do
         de_row = actual_payload.find { |row| row[0] == "Germany" }
         expect(de_row[2]).to match(/\d+\.\d{2}/)
         expect(de_row[4]).to match(/\d+\.\d{2}/)
+      end
+    end
+
+    describe "US state resolution via GeoIp for invalid zip code" do
+      before do
+        travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do
+          product = create(:product, price_cents: 100_00, native_type: "digital")
+          create_taxed_purchase(product, country: "United States", zip_code: "00000", gumroad_tax_cents: 1000)
+        end
+      end
+
+      it "falls back to GeoIp lookup when zip code is invalid" do
+        allow(GeoIp).to receive(:lookup).and_return(double(region_name: "TX"))
+
+        described_class.new.perform(month, year)
+
+        actual_payload = read_csv_from_s3
+
+        us_tx_row = actual_payload.find { |row| row[0] == "United States" && row[1] == "TX" }
+        expect(us_tx_row).to be_present
+        expect(us_tx_row[3]).to eq("1")
+      end
+    end
+
+    describe "country alias normalization" do
+      before do
+        travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do
+          product = create(:product, price_cents: 100_00, native_type: "digital")
+          create_taxed_purchase(product, country: "USA", zip_code: "10001", gumroad_tax_cents: 500)
+        end
+      end
+
+      it "normalizes country aliases to canonical names" do
+        described_class.new.perform(month, year)
+
+        actual_payload = read_csv_from_s3
+
+        us_row = actual_payload.find { |row| row[0] == "United States" }
+        expect(us_row).to be_present
+        expect(us_row[3]).to eq("1")
+
+        usa_row = actual_payload.find { |row| row[0] == "USA" }
+        expect(usa_row).to be_nil
+      end
+    end
+
+    describe "no double-counting between aggregation and GeoIp fallback" do
+      before do
+        travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do
+          product = create(:product, price_cents: 100_00, native_type: "digital")
+          create_taxed_purchase(product, country: "United States", zip_code: "10001", gumroad_tax_cents: 700)
+          create_taxed_purchase(product, country: "United States", zip_code: "00000", gumroad_tax_cents: 900)
+        end
+      end
+
+      it "counts each purchase exactly once" do
+        allow(GeoIp).to receive(:lookup).and_return(double(region_name: "TX"))
+
+        described_class.new.perform(month, year)
+
+        actual_payload = read_csv_from_s3
+
+        us_ny_row = actual_payload.find { |row| row[0] == "United States" && row[1] == "NY" }
+        expect(us_ny_row).to be_present
+        expect(us_ny_row[3]).to eq("1")
+        expect(us_ny_row[4]).to eq("7.00")
+
+        us_tx_row = actual_payload.find { |row| row[0] == "United States" && row[1] == "TX" }
+        expect(us_tx_row).to be_present
+        expect(us_tx_row[3]).to eq("1")
+        expect(us_tx_row[4]).to eq("9.00")
+
+        total_us_orders = actual_payload.select { |row| row[0] == "United States" }.sum { |row| row[3].to_i }
+        expect(total_us_orders).to eq(2)
+      end
+    end
+
+    describe "binary-safe GROUP BY prevents collation merges" do
+      before do
+        travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do
+          product = create(:product, price_cents: 100_00, native_type: "digital")
+          create_taxed_purchase(product, country: "United States", zip_code: "10001", gumroad_tax_cents: 600)
+
+          p2 = create_taxed_purchase(product, country: "United States", zip_code: "98121", gumroad_tax_cents: 800)
+          p2.update_columns(country: "united states")
+        end
+      end
+
+      it "does not merge case-different country values in GROUP BY and aggregates correctly in Ruby" do
+        described_class.new.perform(month, year)
+
+        actual_payload = read_csv_from_s3
+
+        us_ny_row = actual_payload.find { |row| row[0] == "United States" && row[1] == "NY" }
+        expect(us_ny_row).to be_present
+        expect(us_ny_row[3]).to eq("1")
+
+        us_wa_row = actual_payload.find { |row| row[0] == "United States" && row[1] == "WA" }
+        expect(us_wa_row).to be_present
+        expect(us_wa_row[3]).to eq("1")
+
+        total_us_orders = actual_payload.select { |row| row[0] == "United States" }.sum { |row| row[3].to_i }
+        expect(total_us_orders).to eq(2)
       end
     end
   end

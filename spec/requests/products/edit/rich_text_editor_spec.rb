@@ -303,8 +303,8 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       expect(page).to have_link("Google", href: "https://google.com")
       expect(page).to have_text("Visit Google to explore the web", normalize_ws: true)
       expect(page).to have_text("And also visit Gumroad to buy products from indie creators", normalize_ws: true)
+      click_on "Gumroad"
     end
-    click_on "Gumroad"
     within_disclosure "Gumroad" do
       expect(page).to have_field("Enter text", with: "Gumroad")
       expect(page).to have_field("Enter URL", with: "https://gumroad.com")
@@ -386,7 +386,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     visit("/products/#{@product.unique_permalink}/edit")
     rich_text_editor_input = find("[aria-label='Description']")
     select_disclosure "Insert" do
-      click_on "Twitter post"
+      click_on "X post"
     end
     within_modal do
       fill_in "URL", with: "https://twitter.com/gumroad/status/1380521414818557955"
@@ -525,7 +525,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       visit edit_link_path(product) + "/content"
       rich_text_editor_input = find("[aria-label='Content editor']")
       select_disclosure "Insert" do
-        click_on "Twitter post"
+        click_on "X post"
       end
       within_modal do
         fill_in "URL", with: tweet_url

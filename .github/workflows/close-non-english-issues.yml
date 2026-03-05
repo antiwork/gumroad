@@ -4,6 +4,10 @@ on:
   issues:
     types: [opened]
 
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   close-non-english:
     runs-on: ubuntu-latest
@@ -21,6 +25,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_non_write_users: "*"
           prompt: |
             You are a language detection bot. Your only job is to determine whether
             GitHub issue #${{ github.event.issue.number }} is written in English.
@@ -43,4 +49,4 @@ jobs:
 
             If the issue is in English or you are unsure, do absolutely nothing.
           claude_args: |
-            --allowedTools "Bash(gh issue close:*),Bash(gh issue comment:*)"
+            --allowedTools "Bash(gh issue view:*),Bash(gh issue close:*),Bash(gh issue comment:*)"

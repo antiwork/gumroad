@@ -190,7 +190,7 @@ describe WithFileProperties do
       @product_file.url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/some-video-file.mov"
 
       s3_double = double
-      allow(s3_double).to receive(:content_length).and_return(2_000_000_000)
+      allow(s3_double).to receive(:content_length).and_return(WithFileProperties::MAX_DOWNLOAD_SIZE + 1)
       allow(@product_file).to receive(:s3_object).and_return(s3_double)
       allow(@product_file).to receive(:confirm_s3_key!)
       @product_file.analyze

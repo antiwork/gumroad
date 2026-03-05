@@ -1,3 +1,4 @@
+import { Android, Apple } from "@boxicons/react";
 import * as React from "react";
 
 import { Button, buttonVariants } from "$app/components/Button";
@@ -24,7 +25,7 @@ export const OpenInAppButton = ({ iosAppUrl, androidAppUrl }: Props) => (
               target="_blank"
               rel="noreferrer"
             >
-              <span className="brand-icon brand-icon-apple" />
+              <Apple pack="brands" className="size-5" />
               App Store
             </a>
           </Button>
@@ -35,7 +36,7 @@ export const OpenInAppButton = ({ iosAppUrl, androidAppUrl }: Props) => (
               target="_blank"
               rel="noreferrer"
             >
-              <span className="brand-icon brand-icon-android" />
+              <Android pack="brands" className="size-5" />
               Play Store
             </a>
           </Button>

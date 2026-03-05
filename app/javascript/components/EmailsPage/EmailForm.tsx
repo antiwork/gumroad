@@ -2,7 +2,6 @@ import { ChevronDown, Envelope, Eye, FileDetail, X } from "@boxicons/react";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import { Editor, JSONContent } from "@tiptap/core";
-import cx from "classnames";
 import { addHours, format, startOfDay, startOfHour } from "date-fns";
 import React from "react";
 import { cast } from "ts-safe-cast";
@@ -10,7 +9,6 @@ import { cast } from "ts-safe-cast";
 import { AudienceType, getRecipientCount, InstallmentFormContext, Installment } from "$app/data/installments";
 import { type EmailTab, TYPE_TO_TAB } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
-import { classNames } from "$app/utils/classNames";
 import Countdown from "$app/utils/countdown";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
@@ -41,7 +39,14 @@ import { TagInput } from "$app/components/TagInput";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Radio } from "$app/components/ui/Radio";
+import { Select } from "$app/components/ui/Select";
+import { Switch } from "$app/components/ui/Switch";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -775,7 +780,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                     )}
                   </div>
                   <Separator>OR</Separator>
-                  <fieldset className={cx({ danger: invalidFields.has("scheduleDate") })}>
+                  <Fieldset state={invalidFields.has("scheduleDate") ? "danger" : undefined}>
                     <DateInput
                       withTime
                       aria-label="Schedule date"
@@ -787,7 +792,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                         markFieldAsValid("scheduleDate");
                       }}
                     />
-                  </fieldset>
+                  </Fieldset>
                   <Button disabled={isPublished || isBusy} onClick={() => save("save_and_schedule")}>
                     Schedule
                   </Button>
@@ -806,8 +811,8 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
         <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
           <Card>
             <CardContent>
-              <fieldset className="grow basis-0" role="group">
-                <legend>
+              <Fieldset className="grow basis-0" role="group">
+                <FieldsetTitle>
                   <div>Audience</div>
                   {hasAudience ? (
                     recipientCount.loading ? (
@@ -818,64 +823,68 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                       <div aria-label="Recipient count">{`${recipientCount.count.toLocaleString()} / ${recipientCount.total.toLocaleString()}`}</div>
                     )
                   ) : null}
-                </legend>
-                <label htmlFor={`${uid}-recipient_everyone`}>
+                </FieldsetTitle>
+                <Label htmlFor={`${uid}-recipient_everyone`} className="w-full">
                   Everyone
-                  <input
+                  <Radio
+                    wrapperClassName="ml-auto"
                     id={`${uid}-recipient_everyone`}
-                    type="radio"
                     checked={audienceType === "everyone"}
                     disabled={isPublished}
                     onChange={() => setAudienceType("everyone")}
                   />
-                </label>
+                </Label>
                 {context.audience_types.includes("followers") ? (
-                  <label htmlFor={`${uid}-recipient_followers_only`}>
+                  <Label htmlFor={`${uid}-recipient_followers_only`} className="w-full">
                     Followers only
-                    <input
+                    <Radio
+                      wrapperClassName="ml-auto"
                       id={`${uid}-recipient_followers_only`}
-                      type="radio"
                       checked={audienceType === "followers"}
                       disabled={isPublished}
                       onChange={() => setAudienceType("followers")}
                     />
-                  </label>
+                  </Label>
                 ) : null}
                 {context.audience_types.includes("customers") ? (
-                  <label htmlFor={`${uid}-recipient_customers_only`}>
+                  <Label htmlFor={`${uid}-recipient_customers_only`} className="w-full">
                     Customers only
-                    <input
+                    <Radio
+                      wrapperClassName="ml-auto"
                       id={`${uid}-recipient_customers_only`}
-                      type="radio"
                       checked={audienceType === "customers"}
                       disabled={isPublished}
                       onChange={() => setAudienceType("customers")}
                     />
-                  </label>
+                  </Label>
                 ) : null}
                 {context.audience_types.includes("affiliates") ? (
-                  <label htmlFor={`${uid}-recipient_affiliates_only`}>
+                  <Label htmlFor={`${uid}-recipient_affiliates_only`} className="w-full">
                     Affiliates only
-                    <input
+                    <Radio
+                      wrapperClassName="ml-auto"
                       id={`${uid}-recipient_affiliates_only`}
-                      type="radio"
                       checked={audienceType === "affiliates"}
                       disabled={isPublished}
                       onChange={() => setAudienceType("affiliates")}
                     />
-                  </label>
+                  </Label>
                 ) : null}
-              </fieldset>
+              </Fieldset>
             </CardContent>
             <CardContent>
-              <fieldset role="group" className={classNames({ danger: invalidFields.has("channel") }, "grow basis-0")}>
-                <legend>Channel</legend>
+              <Fieldset
+                className="grow basis-0"
+                role="group"
+                state={invalidFields.has("channel") ? "danger" : undefined}
+              >
+                <FieldsetTitle>Channel</FieldsetTitle>
                 {hasAudience ? (
-                  <label htmlFor={`${uid}-channel_email`}>
+                  <Label htmlFor={`${uid}-channel_email`} className="w-full">
                     Send email
-                    <input
+                    <Checkbox
+                      wrapperClassName="ml-auto"
                       id={`${uid}-channel_email`}
-                      type="checkbox"
                       ref={sendEmailRef}
                       checked={channel.email}
                       disabled={!!(installment?.external_id && installment.has_been_blasted)}
@@ -884,45 +893,42 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                         markFieldAsValid("channel");
                       }}
                     />
-                  </label>
+                  </Label>
                 ) : null}
                 {audienceType === "everyone" ? (
-                  <label htmlFor={`${uid}-channel_profile`}>
+                  <Label htmlFor={`${uid}-channel_profile`} className="w-full">
                     Post to profile
                     <WithTooltip tip="This post will be visible to anyone who visits your profile." position="top">
                       (?)
                     </WithTooltip>
-                    <input
+                    <Checkbox
+                      wrapperClassName="ml-auto"
                       id={`${uid}-channel_profile`}
-                      type="checkbox"
                       checked={channel.profile}
                       onChange={(event) => {
                         setChannel((prev) => ({ ...prev, profile: event.target.checked }));
                         markFieldAsValid("channel");
                       }}
                     />
-                  </label>
+                  </Label>
                 ) : null}
                 {audienceType === "everyone" && channel.profile ? (
                   context.profile_sections.length > 0 ? (
                     <>
                       {context.profile_sections.map((section) => (
-                        <label key={section.id} className="w-fit">
-                          <input
-                            type="checkbox"
-                            role="switch"
-                            checked={shownInProfileSections.includes(section.id)}
-                            onChange={() => {
-                              setShownInProfileSections((prevSections) =>
-                                prevSections.includes(section.id)
-                                  ? prevSections.filter((id) => id !== section.id)
-                                  : [...prevSections, section.id],
-                              );
-                            }}
-                          />
-
-                          {section.name || "Unnamed section"}
-                        </label>
+                        <Switch
+                          key={section.id}
+                          className="ml-auto"
+                          checked={shownInProfileSections.includes(section.id)}
+                          onChange={() => {
+                            setShownInProfileSections((prevSections) =>
+                              prevSections.includes(section.id)
+                                ? prevSections.filter((id) => id !== section.id)
+                                : [...prevSections, section.id],
+                            );
+                          }}
+                          label={section.name || "Unnamed section"}
+                        />
                       ))}
                       {installment?.published_at ? null : (
                         <Alert role="status" variant="info">
@@ -937,24 +943,24 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                     </Alert>
                   )
                 ) : null}
-              </fieldset>
+              </Fieldset>
             </CardContent>
             {audienceType === "affiliates" ? (
               <CardContent>
-                <fieldset className="grow basis-0" role="group">
-                  <legend>Affiliated products</legend>
-                  <label htmlFor={`${uid}-all_affiliated_products`}>
+                <Fieldset className="grow basis-0" role="group">
+                  <FieldsetTitle>Affiliated products</FieldsetTitle>
+                  <Label htmlFor={`${uid}-all_affiliated_products`} className="w-full">
                     All products
-                    <input
+                    <Checkbox
+                      wrapperClassName="ml-auto"
                       id={`${uid}-all_affiliated_products`}
-                      type="checkbox"
                       checked={affiliatedProducts.length === affiliateProductOptions.length}
                       disabled={isPublished}
                       onChange={(event) =>
                         setAffiliatedProducts(event.target.checked ? affiliateProductOptions.map(({ id }) => id) : [])
                       }
                     />
-                  </label>
+                  </Label>
                   <TagInput
                     inputId={`${uid}-affiliated_products_dropdown`}
                     placeholder="Select products..."
@@ -963,15 +969,15 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                     onChangeTagIds={setAffiliatedProducts}
                     isDisabled={isPublished}
                   />
-                </fieldset>
+                </Fieldset>
               </CardContent>
             ) : null}
             {audienceType === "customers" || audienceType === "followers" ? (
               <CardContent>
-                <fieldset className="grow basis-0">
-                  <legend>
-                    <label htmlFor={`${uid}-bought`}>Bought</label>
-                  </legend>
+                <Fieldset className="grow basis-0">
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-bought`}>Bought</Label>
+                  </FieldsetTitle>
                   <TagInput
                     inputId={`${uid}-bought`}
                     placeholder="Any product"
@@ -980,15 +986,15 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                     onChangeTagIds={setBought}
                     isDisabled={isPublished}
                   />
-                </fieldset>
+                </Fieldset>
               </CardContent>
             ) : null}
             {hasAudience && audienceType !== "affiliates" ? (
               <CardContent>
-                <fieldset className="grow basis-0">
-                  <legend>
-                    <label htmlFor={`${uid}-not_bought`}>Has not yet bought</label>
-                  </legend>
+                <Fieldset className="grow basis-0">
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-not_bought`}>Has not yet bought</Label>
+                  </FieldsetTitle>
                   <TagInput
                     inputId={`${uid}-not_bought`}
                     placeholder="No products"
@@ -999,7 +1005,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                     // Displayed as a multi-select for consistency, but supports only one option for now
                     maxTags={1}
                   />
-                </fieldset>
+                </Fieldset>
               </CardContent>
             ) : null}
             {audienceType === "customers" ? (
@@ -1012,10 +1018,10 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                   }}
                   className="grow"
                 >
-                  <fieldset className={cx({ danger: invalidFields.has("paidMoreThan") })}>
-                    <legend>
-                      <label htmlFor={`${uid}-paid_more_than`}>Paid more than</label>
-                    </legend>
+                  <Fieldset state={invalidFields.has("paidMoreThan") ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-paid_more_than`}>Paid more than</Label>
+                    </FieldsetTitle>
                     <PriceInput
                       id={`${uid}-paid_more_than`}
                       ref={paidMoreThanRef}
@@ -1029,11 +1035,11 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                       }}
                       placeholder="0"
                     />
-                  </fieldset>
-                  <fieldset className={cx({ danger: invalidFields.has("paidLessThan") })}>
-                    <legend>
-                      <label htmlFor={`${uid}-paid_less_than`}>Paid less than</label>
-                    </legend>
+                  </Fieldset>
+                  <Fieldset state={invalidFields.has("paidLessThan") ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-paid_less_than`}>Paid less than</Label>
+                    </FieldsetTitle>
                     <PriceInput
                       id={`${uid}-paid_less_than`}
                       currencyCode={context.currency_type}
@@ -1046,7 +1052,7 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                       }}
                       placeholder="∞"
                     />
-                  </fieldset>
+                  </Fieldset>
                 </div>
               </CardContent>
             ) : null}
@@ -1060,11 +1066,11 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                   }}
                   className="grow"
                 >
-                  <fieldset className={cx({ danger: invalidFields.has("afterDate") })}>
-                    <legend>
-                      <label htmlFor={`${uid}-after_date`}>After</label>
-                    </legend>
-                    <input
+                  <Fieldset state={invalidFields.has("afterDate") ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-after_date`}>After</Label>
+                    </FieldsetTitle>
+                    <Input
                       type="date"
                       id={`${uid}-after_date`}
                       ref={afterDateRef}
@@ -1076,13 +1082,13 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                         markFieldAsValid("beforeDate");
                       }}
                     />
-                    <small>00:00 {context.timezone}</small>
-                  </fieldset>
-                  <fieldset className={cx({ danger: invalidFields.has("beforeDate") })}>
-                    <legend>
-                      <label htmlFor={`${uid}-before_date`}>Before</label>
-                    </legend>
-                    <input
+                    <FieldsetDescription>00:00 {context.timezone}</FieldsetDescription>
+                  </Fieldset>
+                  <Fieldset state={invalidFields.has("beforeDate") ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-before_date`}>Before</Label>
+                    </FieldsetTitle>
+                    <Input
                       type="date"
                       id={`${uid}-before_date`}
                       value={beforeDate}
@@ -1093,18 +1099,18 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                         markFieldAsValid("afterDate");
                       }}
                     />
-                    <small>11:59 {context.timezone}</small>
-                  </fieldset>
+                    <FieldsetDescription>11:59 {context.timezone}</FieldsetDescription>
+                  </Fieldset>
                 </div>
               </CardContent>
             ) : null}
             {audienceType === "customers" ? (
               <CardContent>
-                <fieldset className="grow basis-0">
-                  <legend>
-                    <label htmlFor={`${uid}-from_country`}>From</label>
-                  </legend>
-                  <select
+                <Fieldset className="grow basis-0">
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-from_country`}>From</Label>
+                  </FieldsetTitle>
+                  <Select
                     id={`${uid}-from_country`}
                     value={fromCountry}
                     disabled={isPublished}
@@ -1116,30 +1122,30 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                         {country}
                       </option>
                     ))}
-                  </select>
-                </fieldset>
+                  </Select>
+                </Fieldset>
               </CardContent>
             ) : null}
             <CardContent>
-              <fieldset className="grow basis-0" role="group">
-                <legend>Engagement</legend>
-                <label htmlFor={`${uid}-allow_comments`}>
+              <Fieldset className="grow basis-0" role="group">
+                <FieldsetTitle>Engagement</FieldsetTitle>
+                <Label htmlFor={`${uid}-allow_comments`} className="w-full">
                   Allow comments
-                  <input
+                  <Checkbox
+                    wrapperClassName="ml-auto"
                     id={`${uid}-allow_comments`}
-                    type="checkbox"
                     checked={allowComments}
                     onChange={(event) => setAllowComments(event.target.checked)}
                   />
-                </label>
-              </fieldset>
+                </Label>
+              </Fieldset>
             </CardContent>
           </Card>
           <S3UploadConfigProvider value={s3UploadConfig}>
             <EvaporateUploaderProvider value={evaporateUploader}>
               <div className="grid gap-6">
-                <fieldset className={cx({ danger: invalidFields.has("title") })}>
-                  <input
+                <Fieldset state={invalidFields.has("title") ? "danger" : undefined}>
+                  <Input
                     ref={titleRef}
                     type="text"
                     placeholder="Title"
@@ -1150,10 +1156,10 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                       markFieldAsValid("title");
                     }}
                   />
-                </fieldset>
+                </Fieldset>
                 {isPublished ? (
-                  <fieldset className={cx({ danger: invalidFields.has("publishDate") })}>
-                    <input
+                  <Fieldset state={invalidFields.has("publishDate") ? "danger" : undefined}>
+                    <Input
                       ref={publishDateRef}
                       type="date"
                       placeholder="Publish date"
@@ -1165,11 +1171,11 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                       }}
                       max={toISODateString(new Date())}
                     />
-                  </fieldset>
+                  </Fieldset>
                 ) : null}
                 <ImageUploadSettingsContext.Provider value={imageSettings}>
                   <RichTextEditor
-                    className="textarea"
+                    className="textarea block w-full rounded border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
                     ariaLabel="Email message"
                     placeholder="Write a personalized message..."
                     initialValue={initialMessageValue}

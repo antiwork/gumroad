@@ -6,7 +6,12 @@ import { getFolderArchiveDownloadUrl, getProductFileDownloadInfos, saveLastConte
 import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
-import { generatePageIcon, PAGE_ICON_COMPONENTS, type PageIconKey } from "$app/utils/rich_content_page";
+import {
+  generatePageIcon,
+  PAGE_ICON_COMPONENTS,
+  PAGE_ICON_LABELS,
+  type PageIconType,
+} from "$app/utils/rich_content_page";
 
 import { Button } from "$app/components/Button";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -29,6 +34,7 @@ import { PostsProvider } from "$app/components/TiptapExtensions/Posts";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -36,17 +42,9 @@ import { Layout, LayoutProps, PurchaseCustomField } from "./Layout";
 
 export type { PurchaseCustomField };
 
-const PAGE_ICON_LABEL: Record<PageIconKey, string> = {
-  "file-arrow-down": "Page has various types of files",
-  "file-music": "Page has audio files",
-  "file-play": "Page has videos",
-  "file-text": "Page has no files",
-  "outline-key": "Page has license key",
-};
-
-const PageIcon = ({ iconKey }: { iconKey: PageIconKey }) => {
+const PageIcon = ({ iconKey }: { iconKey: PageIconType }) => {
   const Component = PAGE_ICON_COMPONENTS[iconKey];
-  return <Component className="size-5" aria-label={PAGE_ICON_LABEL[iconKey]} />;
+  return <Component className="size-5" aria-label={PAGE_ICON_LABELS[iconKey]} />;
 };
 
 const ContentFilesContext = React.createContext<FileItem[] | null>(null);
@@ -168,6 +166,38 @@ export const WithContent = ({
     [pages, props.token, props.purchase],
   );
   const showPageList = pages.length > 1 || (pages.length === 1 && (pages[0]?.title ?? "").trim() !== "");
+
+  const pageIcons = React.useMemo(
+    () =>
+      pages.map(({ description }) =>
+        generatePageIcon({
+          hasLicense: description ? nodeHasLicense(description) : false,
+          fileIds: description ? findFileEmbeds(description) : [],
+          allFiles: contentFiles,
+        }),
+      ),
+    [pages, contentFiles],
+  );
+
+  React.useEffect(() => {
+    if (!window.ReactNativeWebView || !showPageList) return;
+    window.ReactNativeWebView.postMessage(
+      JSON.stringify({
+        type: "tocData",
+        payload: {
+          pages: pages.map((page, index) => ({ page_id: page.page_id, title: page.title, icon: pageIcons[index] })),
+          activePageIndex,
+        },
+      }),
+    );
+  }, [showPageList, activePageIndex, pages, pageIcons]);
+
+  useReactNativeMessage((data) => {
+    if (data.type === "mobileAppPageChange") {
+      handlePageChange(data.payload.pageIndex);
+    }
+  });
+
   const hasPreviousPage = activePageIndex > 0;
   const hasNextPage = activePageIndex < pages.length - 1;
   const downloadableFiles: FileDownloadInfo[] = [];
@@ -200,17 +230,6 @@ export const WithContent = ({
     total: content.rich_content_pages ? content.posts.length : 0,
   };
 
-  const pageIcons = React.useMemo(
-    () =>
-      pages.map(({ description }) =>
-        generatePageIcon({
-          hasLicense: description ? nodeHasLicense(description) : false,
-          fileIds: description ? findFileEmbeds(description) : [],
-          allFiles: contentFiles,
-        }),
-      ),
-    [pages, contentFiles],
-  );
   const purchaseInfo = { purchaseId: props.purchase?.id ?? null, redirectId: props.redirect_id, token: props.token };
 
   return (
@@ -245,7 +264,7 @@ export const WithContent = ({
                 onClick={() => handlePageChange(index)}
                 role="tab"
               >
-                <PageIcon iconKey={pageIcons[index] ?? "file-text"} />
+                <PageIcon iconKey={pageIcons[index] ?? "text-only"} />
                 <span className="flex-1">{page.title ?? "Untitled"}</span>
               </PageListItem>
             ))}
@@ -288,7 +307,8 @@ export const WithContent = ({
         </MediaUrlsProvider>
       </PurchaseInfoProvider>
 
-      {showPageList ? (
+      {showPageList &&
+      (!props.is_mobile_app_web_view || (typeof window !== "undefined" && !window.ReactNativeWebView)) ? (
         <div role="navigation" className="mt-auto flex gap-4 border-t border-border pt-4 lg:justify-end lg:pb-4">
           {isDesktop ? null : (
             <Popover>
@@ -310,7 +330,7 @@ export const WithContent = ({
                           handlePageChange(index);
                         }}
                       >
-                        <PageIcon iconKey={pageIcons[index] ?? "file-text"} />
+                        <PageIcon iconKey={pageIcons[index] ?? "text-only"} />
                         &ensp;
                         {page.title ?? "Untitled"}
                       </div>

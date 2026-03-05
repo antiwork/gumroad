@@ -290,7 +290,7 @@ class Subscription::UpdaterService
           requires_card_action: true,
           client_secret: upgrade_purchase.charge_intent.client_secret,
           purchase: {
-            id: upgrade_purchase.external_id,
+            id: upgrade_purchase.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: upgrade_purchase.merchant_account.is_a_stripe_connect_account? ? upgrade_purchase.merchant_account.charge_processor_merchant_id : nil
           }
         }

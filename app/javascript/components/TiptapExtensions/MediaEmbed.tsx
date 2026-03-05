@@ -1,4 +1,4 @@
-import { PlayCircle, Trash, Twitter, Video } from "@boxicons/react";
+import { PlayCircle, Trash, TwitterX, Video } from "@boxicons/react";
 import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
@@ -83,7 +83,7 @@ export const Raw = TiptapNode.create({
   },
   menuItem: (editor) => (
     <WithDialog editor={editor} type="twitter">
-      <MenuItem name="Insert post" icon={<Twitter pack="brands" className="size-5" />} />
+      <MenuItem name="Insert post" icon={<TwitterX pack="brands" className="size-5" />} />
     </WithDialog>
   ),
   submenu: {
@@ -91,8 +91,8 @@ export const Raw = TiptapNode.create({
     item: (editor) => (
       <WithDialog editor={editor} type="twitter">
         <div role="menuitem">
-          <Twitter pack="brands" className="size-5" />
-          <span>Twitter post</span>
+          <TwitterX pack="brands" className="size-5" />
+          <span>X post</span>
         </div>
       </WithDialog>
     ),

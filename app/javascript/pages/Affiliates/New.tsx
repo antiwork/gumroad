@@ -1,6 +1,5 @@
 import { XSquare } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -11,6 +10,9 @@ import { Button } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 import { AffiliateForm, AffiliateProduct } from "./Form";
@@ -153,11 +155,11 @@ export default function AffiliatesNew() {
           uid={uid}
           headerText="Add a new affiliate below and we'll send them a unique link to share with their audience. Your affiliate will then earn a commission on each sale they refer."
           emailField={
-            <fieldset className={cx({ danger: errors["affiliate.email"] })}>
-              <legend>
-                <label htmlFor={`${uid}email`}>Email</label>
-              </legend>
-              <input
+            <Fieldset state={errors["affiliate.email"] ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}email`}>Email</Label>
+              </FieldsetTitle>
+              <Input
                 ref={emailInputRef}
                 type="email"
                 id={`${uid}email`}
@@ -168,7 +170,7 @@ export default function AffiliatesNew() {
                 onChange={(e) => setData("affiliate", { ...data.affiliate, email: e.target.value })}
                 autoFocus
               />
-            </fieldset>
+            </Fieldset>
           }
           onToggleAllProducts={toggleAllProducts}
           onUpdateFeePercent={(value) => {

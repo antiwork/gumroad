@@ -45,6 +45,9 @@ export default function FollowersPage() {
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [selectedFollowerId, setSelectedFollowerId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState(email);
+  const hasSearchableContent = followers.length > 0 || searchQuery.length > 0;
+  const isSearchVisible = React.useRef(hasSearchableContent);
+  isSearchVisible.current ||= hasSearchableContent;
   const selectedFollower = followers.find((follower) => follower.id === selectedFollowerId);
 
   const updateSearch = useDebouncedCallback((email: string) => {
@@ -88,9 +91,9 @@ export default function FollowersPage() {
       selectedTab="subscribers"
       actions={
         <>
-          {(followers.length > 0 || searchQuery.length > 0) && (
+          {isSearchVisible.current ? (
             <Search onSearch={setSearchQuery} value={searchQuery} placeholder="Search followers" />
-          )}
+          ) : null}
           <Popover>
             <PopoverAnchor>
               <WithTooltip tip="Export" position="bottom">

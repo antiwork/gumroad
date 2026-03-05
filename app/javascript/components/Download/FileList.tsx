@@ -1,4 +1,5 @@
 import {
+  Amazon,
   ArrowDown,
   CheckCircle,
   ChevronDown,
@@ -10,7 +11,7 @@ import {
 import cx from "classnames";
 import { throttle } from "lodash-es";
 import * as React from "react";
-import { cast, is } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
@@ -18,7 +19,6 @@ import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
-import Mobile from "$app/utils/mobile";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
@@ -30,8 +30,11 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { ProgressPie } from "$app/components/ProgressPie";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
+import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -326,7 +329,7 @@ export const FileRow = ({
             {file.kindle_data != null ? (
               <TrackClick eventName="send_to_kindle_click" file={file}>
                 <Button color="kindle" onClick={toggleKindleDrawer}>
-                  <span className="brand-icon brand-icon-kindle" />
+                  <Amazon pack="brands" className="size-5" />
                   Send to Kindle
                 </Button>
               </TrackClick>
@@ -449,29 +452,12 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
     }
   });
 
-  const messageListener = useRefToLatest((event: MessageEvent) => {
-    if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
-    let data: unknown;
-    try {
-      data = JSON.parse(event.data);
-    } catch {
-      return;
-    }
-    if (is<{ type: "mobileAppAudioPlayerInfo"; payload: MobileAppAudioPlayerInfo }>(data)) {
-      if (data.payload.fileId !== file.id) return;
+  useReactNativeMessage((data) => {
+    if (data.type === "mobileAppAudioPlayerInfo" && data.payload.fileId === file.id) {
       setIsPlaying(data.payload.isPlaying);
       setLatestMediaLocation(parseFloat(data.payload.latestMediaLocation ?? "0"));
     }
   });
-
-  React.useEffect(() => {
-    const target = Mobile.isOnAndroidDevice() ? document : window;
-    const listener = (e: MessageEvent) => messageListener.current(e);
-    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
-    target.addEventListener("message", listener);
-    // @ts-expect-error - React Native sends message events to Android webviews via the document object, not window
-    return () => target.removeEventListener("message", listener);
-  }, []);
 
   const [showTooltip, setShowTooltip] = React.useState(false);
   const touchAndHoldEventListeners = useTouchAndHold({
@@ -773,8 +759,8 @@ const SendToKindleContainer = ({
   return (
     <div>
       <div className="flex gap-2">
-        <fieldset className={cx("flex-1", { danger: hasError })}>
-          <input
+        <Fieldset className="flex-1" state={hasError ? "danger" : undefined}>
+          <Input
             type="text"
             value={emailEntry}
             onChange={(evt) => {
@@ -784,14 +770,14 @@ const SendToKindleContainer = ({
             placeholder="e7@kindle.com"
             autoFocus
           />
-          <small>
+          <FieldsetDescription>
             You'll need to add noreply@customers.gumroad.com to your{" "}
             <a href="https://www.amazon.com/gp/help/customer/display.html?nodeId=GX9XLEVV8G4DB28H">
               list of approved personal document emails
             </a>
             .
-          </small>
-        </fieldset>
+          </FieldsetDescription>
+        </Fieldset>
         <Button color="primary" onClick={() => void sendToKindle()} style={{ alignSelf: "flex-start" }}>
           Send
         </Button>

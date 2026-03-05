@@ -1,4 +1,4 @@
-import { ArrowInDownSquareHalf, Calendar, CheckCircle, ChevronDown, Clock, Cog } from "@boxicons/react";
+import { ArrowInDownSquareHalf, Calendar, CheckCircle, Clock, Cog } from "@boxicons/react";
 import { Link, router } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
@@ -16,9 +16,13 @@ import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopov
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -387,7 +391,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                     </a>
                   </h4>
                   {payoutPeriodData.discover_sales_count > 0 ? (
-                    <small>
+                    <small className="text-muted">
                       on {payoutPeriodData.discover_sales_count}{" "}
                       {payoutPeriodData.discover_sales_count === 1 ? "sale" : "sales"}
                     </small>
@@ -406,7 +410,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                     </a>
                   </h4>
                   {payoutPeriodData.direct_sales_count > 0 ? (
-                    <small>
+                    <small className="text-muted">
                       on {payoutPeriodData.direct_sales_count}{" "}
                       {payoutPeriodData.direct_sales_count === 1 ? "sale" : "sales"}
                     </small>
@@ -797,11 +801,11 @@ const Payouts = ({
                 bank account within 30 minutes, though some payouts may take longer to be credited.
               </p>
 
-              <fieldset>
-                <label htmlFor="instant-payout-date">Pay out balance up to</label>
-                <div className="input cursor-pointer">
+              <Fieldset>
+                <Label htmlFor="instant-payout-date">Pay out balance up to</Label>
+                <InputGroup className="cursor-pointer">
                   <Calendar className="size-5" />
-                  <select
+                  <Select
                     id="instant-payout-date"
                     value={instantPayoutId}
                     onChange={(e) => setInstantPayoutId(e.target.value)}
@@ -815,12 +819,11 @@ const Payouts = ({
                         })}
                       </option>
                     ))}
-                  </select>
-                  <ChevronDown className="size-5" />
-                </div>
-              </fieldset>
-              <fieldset>
-                <legend>Payout details</legend>
+                  </Select>
+                </InputGroup>
+              </Fieldset>
+              <Fieldset>
+                <FieldsetTitle>Payout details</FieldsetTitle>
                 <div className="rounded-sm border border-border bg-background not-first:border-t">
                   <div className="grid gap-4 p-4">
                     <div className="grid grid-flow-col justify-between gap-4">
@@ -868,7 +871,7 @@ const Payouts = ({
                     your balance into multiple payouts.
                   </Alert>
                 ) : null}
-              </fieldset>
+              </Fieldset>
             </Modal>
           </Alert>
         ) : null}

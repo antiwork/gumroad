@@ -8,8 +8,11 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { TeamMembership } from "$app/components/LoggedInUser";
+import { Logo } from "$app/components/Logo";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+
+import logo from "$assets/images/logo-g.svg";
 
 type NavContextValue = {
   open: boolean;
@@ -130,7 +133,7 @@ export const Nav = ({ title, children, footer }: Props) => {
       >
         <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">
           <a href={Routes.root_url()} className="no-underline">
-            <span className="logo-g" />
+            <img src={logo} className="size-6" alt="Home" />
           </a>
           <h1 className="w-full truncate text-center text-base">{title}</h1>
           <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
@@ -139,7 +142,7 @@ export const Nav = ({ title, children, footer }: Props) => {
         </div>
         <header className="hidden p-6 lg:grid">
           <a href={Routes.root_url()} aria-label="Dashboard" className="no-underline">
-            <span className="logo-full w-full text-[2.5rem] leading-[1.2]" />
+            <Logo className="w-full text-[2.5rem] leading-[1.2]" />
           </a>
         </header>
         {children}
