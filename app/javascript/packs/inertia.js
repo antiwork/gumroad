@@ -51,6 +51,17 @@ router.on("invalid", (event) => {
   }
 });
 
+router.on("exception", (event) => {
+  // When logging in for a mobile OAuth flow, the redirect chain ends at a custom scheme
+  // (gumroadmobile://) that XHR can't follow. Fall back to navigating the browser
+  // to the OAuth authorize URL so it can handle the custom scheme redirect natively.
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (next?.includes("redirect_uri=gumroadmobile")) {
+    event.preventDefault();
+    window.location.href = next;
+  }
+});
+
 function assignLayout(page) {
   if (page.publicLayout) {
     page.layout ||= (page) => createElement(PublicLayout, { children: page });
