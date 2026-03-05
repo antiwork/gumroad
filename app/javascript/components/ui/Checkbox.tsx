@@ -22,12 +22,11 @@ export const Checkbox = React.forwardRef<
         "checked:bg-accent",
         "rounded-lg",
         "peer",
-        "after:hidden!", // this should be removed after complete forms migration
         className,
       )}
       {...props}
     />
-    <Check className="pointer-events-none absolute hidden! size-5 text-accent-foreground peer-checked:block!" />
+    <Check className="pointer-events-none absolute hidden size-5 text-accent-foreground peer-checked:block" />
   </span>
 ));
 Checkbox.displayName = "Checkbox";

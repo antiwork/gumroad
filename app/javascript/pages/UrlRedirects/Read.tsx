@@ -8,6 +8,7 @@ import { trackMediaLocationChanged } from "$app/data/media_location";
 
 import { Button } from "$app/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Range } from "$app/components/ui/Range";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -200,8 +201,8 @@ const Read = () => {
               <SearchPlus className="size-5" />
             </PopoverTrigger>
             <PopoverContent>
-              <fieldset>
-                <legend>Appearance</legend>
+              <Fieldset>
+                <FieldsetTitle>Appearance</FieldsetTitle>
                 <div>
                   <Button size="icon" className="mr-2" onClick={zoomOut}>
                     <SearchMinus className="size-5" />
@@ -210,7 +211,7 @@ const Read = () => {
                     <SearchPlus className="size-5" />
                   </Button>
                 </div>
-              </fieldset>
+              </Fieldset>
             </PopoverContent>
           </Popover>
           <div className="flex items-center gap-1 p-4 whitespace-nowrap tabular-nums">

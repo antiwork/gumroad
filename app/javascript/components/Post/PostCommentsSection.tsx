@@ -22,6 +22,7 @@ import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Pill } from "$app/components/ui/Pill";
+import { Textarea } from "$app/components/ui/Textarea";
 
 import defaultUserAvatar from "$assets/images/user-avatar.png";
 
@@ -381,7 +382,7 @@ const CommentTextarea = ({
         />
       ) : null}
       {loggedInUser || purchase_id ? (
-        <textarea ref={ref} rows={1} placeholder="Write a comment" {...props} />
+        <Textarea ref={ref} rows={1} placeholder="Write a comment" {...props} />
       ) : (
         <div>
           <a href={Routes.login_url({ host: appDomain })}>Log in</a> or{" "}

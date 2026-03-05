@@ -1,5 +1,4 @@
 import { Link, useForm } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 
 import {
@@ -15,7 +14,15 @@ import {
 import { Button } from "$app/components/Button";
 import { NumberInput } from "$app/components/NumberInput";
 import { TagInput } from "$app/components/TagInput";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { Pill } from "$app/components/ui/Pill";
+import { Select } from "$app/components/ui/Select";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { WithTooltip } from "$app/components/WithTooltip";
 import {
   Layout,
@@ -263,18 +270,20 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
   };
 
   const abandonedCartButton = (
-    <Button
-      className="vertical"
-      role="radio"
-      disabled={wasPublishedPreviously || !context.eligible_for_abandoned_cart_workflows}
-      aria-checked={formState.trigger === "abandoned_cart"}
-      onClick={() => updateFormState({ trigger: "abandoned_cart" })}
-    >
-      <img src={abandonedCartTriggerImage} width={40} height={40} />
-      <div>
-        <h4>Abandoned cart</h4>A customer doesn't complete checking out
-      </div>
-    </Button>
+    <Tab isSelected={formState.trigger === "abandoned_cart"} asChild>
+      <Button
+        className="flex-col"
+        role="radio"
+        disabled={wasPublishedPreviously || !context.eligible_for_abandoned_cart_workflows}
+        aria-checked={formState.trigger === "abandoned_cart"}
+        onClick={() => updateFormState({ trigger: "abandoned_cart" })}
+      >
+        <img src={abandonedCartTriggerImage} width={40} height={40} className="shrink-0" />
+        <div>
+          <h4 className="font-bold">Abandoned cart</h4>A customer doesn't complete checking out
+        </div>
+      </Button>
+    </Tab>
   );
 
   return (
@@ -311,14 +320,15 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
         </>
       }
     >
-      <form className="space-y-4 p-4 md:p-8">
-        <section>
-          <header>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</header>
-          <fieldset className={cx({ danger: invalidFields.has("name") })}>
-            <legend>
-              <label htmlFor="name">Name</label>
-            </legend>
-            <input
+      <form className="space-y-4">
+        <FormSection
+          header={<>Workflows allow you to send scheduled emails to a subset of your audience based on a trigger.</>}
+        >
+          <Fieldset state={invalidFields.has("name") ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor="name">Name</Label>
+            </FieldsetTitle>
+            <Input
               id="name"
               type="text"
               ref={nameInputRef}
@@ -327,80 +337,100 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
               value={formState.name}
               onChange={(e) => updateFormState({ name: e.target.value })}
             />
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor="trigger">Trigger</label>
-            </legend>
-            <div
-              className="radio-buttons"
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor="trigger">Trigger</Label>
+            </FieldsetTitle>
+            <Tabs
+              variant="buttons"
+              className="gap-4 sm:grid-cols-2 md:grid-flow-row md:grid-cols-3 2xl:grid-cols-5"
               role="radiogroup"
-              style={{
-                gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
-              }}
             >
               {workflow && workflow.workflow_type === "audience" ? (
+                <Tab isSelected={formState.trigger === "legacy_audience"} asChild>
+                  <Button
+                    className="flex-col"
+                    role="radio"
+                    aria-checked={formState.trigger === "legacy_audience"}
+                    disabled={wasPublishedPreviously}
+                    onClick={() => updateFormState({ trigger: "legacy_audience" })}
+                  >
+                    <img src={audienceTriggerImage} width={40} height={40} className="shrink-0" />
+                    <div>
+                      <h4 className="font-bold">Audience</h4>A user becomes a customer, subscriber or an affiliate
+                    </div>
+                  </Button>
+                </Tab>
+              ) : null}
+              <Tab isSelected={formState.trigger === "purchase"} asChild>
                 <Button
-                  className="vertical"
+                  className="flex-col"
                   role="radio"
+                  aria-checked={formState.trigger === "purchase"}
                   disabled={wasPublishedPreviously}
-                  aria-checked={formState.trigger === "legacy_audience"}
-                  onClick={() => updateFormState({ trigger: "legacy_audience" })}
+                  onClick={() => updateFormState({ trigger: "purchase" })}
                 >
-                  <img src={audienceTriggerImage} width={40} height={40} />
+                  <img src={purchaseTriggerImage} width={40} height={40} className="shrink-0" />
                   <div>
-                    <h4>Audience</h4>A user becomes a customer, subscriber or an affiliate
+                    <h4 className="font-bold">Purchase</h4>A customer purchases your product
                   </div>
                 </Button>
-              ) : null}
-              <Button
-                className="vertical"
-                role="radio"
-                disabled={wasPublishedPreviously}
-                aria-checked={formState.trigger === "purchase"}
-                onClick={() => updateFormState({ trigger: "purchase" })}
-              >
-                <img src={purchaseTriggerImage} width={40} height={40} />
-                <div>
-                  <h4>Purchase</h4>A customer purchases your product
-                </div>
-              </Button>
-              <Button
-                className="vertical"
-                role="radio"
-                disabled={wasPublishedPreviously}
-                aria-checked={formState.trigger === "new_subscriber"}
-                onClick={() => updateFormState({ trigger: "new_subscriber" })}
-              >
-                <img src={newSubscriberTriggerImage} width={40} height={40} />
-                <div>
-                  <h4>New subscriber</h4>A user subscribes to your email list
-                </div>
-              </Button>
-              <Button
-                className="vertical"
-                role="radio"
-                disabled={wasPublishedPreviously}
-                aria-checked={formState.trigger === "member_cancels"}
-                onClick={() => updateFormState({ trigger: "member_cancels" })}
-              >
-                <img src={memberCancelsTriggerImage} width={40} height={40} style={{ objectFit: "contain" }} />
-                <div>
-                  <h4>Member cancels</h4>A membership product subscriber cancels
-                </div>
-              </Button>
-              <Button
-                className="vertical"
-                role="radio"
-                disabled={wasPublishedPreviously}
-                aria-checked={formState.trigger === "new_affiliate"}
-                onClick={() => updateFormState({ trigger: "new_affiliate" })}
-              >
-                <img src={newAffiliateTriggerImage} width={40} height={40} style={{ objectFit: "contain" }} />
-                <div>
-                  <h4>New affiliate</h4>A user becomes an affiliate of yours
-                </div>
-              </Button>
+              </Tab>
+              <Tab isSelected={formState.trigger === "new_subscriber"} asChild>
+                <Button
+                  className="flex-col"
+                  role="radio"
+                  aria-checked={formState.trigger === "new_subscriber"}
+                  disabled={wasPublishedPreviously}
+                  onClick={() => updateFormState({ trigger: "new_subscriber" })}
+                >
+                  <img src={newSubscriberTriggerImage} width={40} height={40} className="shrink-0" />
+                  <div>
+                    <h4 className="font-bold">New subscriber</h4>A user subscribes to your email list
+                  </div>
+                </Button>
+              </Tab>
+              <Tab isSelected={formState.trigger === "member_cancels"} asChild>
+                <Button
+                  className="flex-col"
+                  role="radio"
+                  aria-checked={formState.trigger === "member_cancels"}
+                  disabled={wasPublishedPreviously}
+                  onClick={() => updateFormState({ trigger: "member_cancels" })}
+                >
+                  <img
+                    src={memberCancelsTriggerImage}
+                    width={40}
+                    height={40}
+                    className="shrink-0"
+                    style={{ objectFit: "contain" }}
+                  />
+                  <div>
+                    <h4 className="font-bold">Member cancels</h4>A membership product subscriber cancels
+                  </div>
+                </Button>
+              </Tab>
+              <Tab isSelected={formState.trigger === "new_affiliate"} asChild>
+                <Button
+                  className="flex-col"
+                  role="radio"
+                  aria-checked={formState.trigger === "new_affiliate"}
+                  disabled={wasPublishedPreviously}
+                  onClick={() => updateFormState({ trigger: "new_affiliate" })}
+                >
+                  <img
+                    src={newAffiliateTriggerImage}
+                    width={40}
+                    height={40}
+                    className="shrink-0"
+                    style={{ objectFit: "contain" }}
+                  />
+                  <div>
+                    <h4 className="font-bold">New affiliate</h4>A user becomes an affiliate of yours
+                  </div>
+                </Button>
+              </Tab>
               {context.eligible_for_abandoned_cart_workflows ? (
                 abandonedCartButton
               ) : (
@@ -408,23 +438,22 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                   {abandonedCartButton}
                 </WithTooltip>
               )}
-            </div>
+            </Tabs>
             {wasPublishedPreviously || formState.trigger === "abandoned_cart" ? null : (
-              <label>
-                <input
-                  type="checkbox"
+              <Label>
+                <Checkbox
                   checked={formState.sendToPastCustomers}
                   onChange={(e) => updateFormState({ sendToPastCustomers: e.target.checked })}
                 />
                 {sendToPastCustomersCheckboxLabel(formState.trigger)}
-              </label>
+              </Label>
             )}
-          </fieldset>
+          </Fieldset>
           {formState.trigger === "new_affiliate" ? (
-            <fieldset>
-              <legend>
-                <label htmlFor="affiliated_products">Affiliated products</label>
-              </legend>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor="affiliated_products">Affiliated products</Label>
+              </FieldsetTitle>
               <TagInput
                 inputId="affiliated_products"
                 placeholder="Select products..."
@@ -437,9 +466,8 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 onChangeTagIds={(affiliatedProducts) => updateFormState({ affiliatedProducts })}
               />
               {wasPublishedPreviously ? null : (
-                <label>
-                  <input
-                    type="checkbox"
+                <Label>
+                  <Checkbox
                     checked={
                       formState.affiliatedProducts.length ===
                       selectableProductAndVariantOptions(
@@ -459,21 +487,21 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                     }
                   />
                   All products
-                </label>
+                </Label>
               )}
-            </fieldset>
+            </Fieldset>
           ) : null}
           {triggerSupportsBoughtFilter ? (
-            <fieldset>
-              <legend>
-                <label htmlFor="bought">
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor="bought">
                   {formState.trigger === "member_cancels"
                     ? "Is a member of"
                     : formState.trigger === "abandoned_cart"
                       ? "Has products in abandoned cart"
                       : "Has bought"}
-                </label>
-              </legend>
+                </Label>
+              </FieldsetTitle>
               <TagInput
                 inputId="bought"
                 placeholder="Any product"
@@ -483,19 +511,19 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 onChangeTagIds={(bought) => updateFormState({ bought })}
               />
               {formState.trigger === "abandoned_cart" ? (
-                <small>Leave this field blank to include all products</small>
+                <FieldsetDescription>Leave this field blank to include all products</FieldsetDescription>
               ) : null}
-            </fieldset>
+            </Fieldset>
           ) : null}
           {triggerSupportsNotBoughtFilter ? (
-            <fieldset>
-              <legend>
-                <label htmlFor="not_bought">
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor="not_bought">
                   {formState.trigger === "abandoned_cart"
                     ? "Does not have products in abandoned cart"
                     : "Has not yet bought"}
-                </label>
-              </legend>
+                </Label>
+              </FieldsetTitle>
               <TagInput
                 inputId="not_bought"
                 placeholder="No products"
@@ -506,7 +534,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 // Displayed as a multi-select for consistency, but supports only one option for now
                 maxTags={1}
               />
-            </fieldset>
+            </Fieldset>
           ) : null}
           {triggerSupportsPaidFilters ? (
             <div
@@ -516,18 +544,18 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
               }}
             >
-              <fieldset className={cx({ danger: invalidFields.has("paidMoreThan") })}>
-                <legend>
-                  <label htmlFor="paid_more_than">Paid more than</label>
-                </legend>
+              <Fieldset state={invalidFields.has("paidMoreThan") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor="paid_more_than">Paid more than</Label>
+                </FieldsetTitle>
                 <NumberInput
                   onChange={(paidMoreThan) => updateFormState({ paidMoreThan })}
                   value={formState.paidMoreThan}
                 >
                   {(inputProps) => (
-                    <div className={cx("input", { disabled: wasPublishedPreviously })}>
+                    <InputGroup disabled={wasPublishedPreviously}>
                       <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
-                      <input
+                      <Input
                         id="paid_more_than"
                         type="text"
                         disabled={wasPublishedPreviously}
@@ -536,22 +564,22 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                         placeholder="0"
                         {...inputProps}
                       />
-                    </div>
+                    </InputGroup>
                   )}
                 </NumberInput>
-              </fieldset>
-              <fieldset className={cx({ danger: invalidFields.has("paidLessThan") })}>
-                <legend>
-                  <label htmlFor="paid_less_than">Paid less than</label>
-                </legend>
+              </Fieldset>
+              <Fieldset state={invalidFields.has("paidLessThan") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor="paid_less_than">Paid less than</Label>
+                </FieldsetTitle>
                 <NumberInput
                   onChange={(paidLessThan) => updateFormState({ paidLessThan })}
                   value={formState.paidLessThan}
                 >
                   {(inputProps) => (
-                    <div className={cx("input", { disabled: wasPublishedPreviously })}>
+                    <InputGroup disabled={wasPublishedPreviously}>
                       <Pill className="-ml-2 shrink-0">{context.currency_symbol}</Pill>
-                      <input
+                      <Input
                         id="paid_less_than"
                         type="text"
                         disabled={wasPublishedPreviously}
@@ -559,10 +587,10 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                         placeholder="∞"
                         {...inputProps}
                       />
-                    </div>
+                    </InputGroup>
                   )}
                 </NumberInput>
-              </fieldset>
+              </Fieldset>
             </div>
           ) : null}
           {triggerSupportsDateFilters ? (
@@ -573,9 +601,9 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
               }}
             >
-              <fieldset className={cx({ danger: invalidFields.has("afterDate") })}>
-                <legend>
-                  <label htmlFor="after_date">
+              <Fieldset state={invalidFields.has("afterDate") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor="after_date">
                     {formState.trigger === "new_subscriber"
                       ? "Subscribed after"
                       : formState.trigger === "member_cancels"
@@ -583,9 +611,9 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                         : formState.trigger === "new_affiliate"
                           ? "Affiliate after"
                           : "Purchased after"}
-                  </label>
-                </legend>
-                <input
+                  </Label>
+                </FieldsetTitle>
+                <Input
                   type="date"
                   id="after_date"
                   disabled={wasPublishedPreviously}
@@ -593,11 +621,11 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                   value={formState.afterDate}
                   onChange={(e) => updateFormState({ afterDate: e.target.value })}
                 />
-                <small>00:00 {context.timezone}</small>
-              </fieldset>
-              <fieldset className={cx({ danger: invalidFields.has("beforeDate") })}>
-                <legend>
-                  <label htmlFor="before_date">
+                <FieldsetDescription>00:00 {context.timezone}</FieldsetDescription>
+              </Fieldset>
+              <Fieldset state={invalidFields.has("beforeDate") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor="before_date">
                     {formState.trigger === "new_subscriber"
                       ? "Subscribed before"
                       : formState.trigger === "member_cancels"
@@ -605,25 +633,25 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                         : formState.trigger === "new_affiliate"
                           ? "Affiliate before"
                           : "Purchased before"}
-                  </label>
-                </legend>
-                <input
+                  </Label>
+                </FieldsetTitle>
+                <Input
                   type="date"
                   id="before_date"
                   disabled={wasPublishedPreviously}
                   value={formState.beforeDate}
                   onChange={(e) => updateFormState({ beforeDate: e.target.value })}
                 />
-                <small>11:59 {context.timezone}</small>
-              </fieldset>
+                <FieldsetDescription>11:59 {context.timezone}</FieldsetDescription>
+              </Fieldset>
             </div>
           ) : null}
           {triggerSupportsFromCountryFilter ? (
-            <fieldset>
-              <legend>
-                <label htmlFor="from_country">From</label>
-              </legend>
-              <select
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor="from_country">From</Label>
+              </FieldsetTitle>
+              <Select
                 id="from_country"
                 disabled={wasPublishedPreviously}
                 value={formState.fromCountry}
@@ -635,10 +663,10 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                     {country}
                   </option>
                 ))}
-              </select>
-            </fieldset>
+              </Select>
+            </Fieldset>
           ) : null}
-        </section>
+        </FormSection>
       </form>
     </Layout>
   );

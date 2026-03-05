@@ -693,6 +693,8 @@ Rails.application.routes.draw do
 
     get "/products/:id/edit", to: "links#edit", as: :edit_link
     get "/products/:id/edit/*other", to: "links#edit"
+    get "/products/:id/edit_new", to: "links#edit_new", as: :edit_link_new
+    get "/products/:id/edit_new/*other", to: "links#edit_new"
     get "/products/:id/card", to: "links#card", as: :product_card
     get "/products/search", to: "links#search"
 

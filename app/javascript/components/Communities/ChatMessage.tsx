@@ -10,6 +10,7 @@ import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Textarea } from "$app/components/ui/Textarea";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -293,7 +294,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
 
   return (
     <div className="relative overflow-hidden rounded-md border focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] focus-within:outline-solid dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
-      <textarea
+      <Textarea
         ref={textareaRef}
         placeholder="Edit message"
         className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-hidden"

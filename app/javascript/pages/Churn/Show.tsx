@@ -9,7 +9,9 @@ import { ChurnChart, type DataPoint as ChurnChartDataPoint } from "$app/componen
 import ChurnQuickStats, { type ChurnSummary } from "$app/components/Churn/ChurnQuickStats";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Placeholder } from "$app/components/ui/Placeholder";
+import { Select } from "$app/components/ui/Select";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
@@ -294,7 +296,7 @@ export default function Churn() {
       actions={
         hasProducts ? (
           <>
-            <select
+            <Select
               aria-label="Aggregate by"
               onChange={(event) => setAggregateBy(event.target.value === "daily" ? "daily" : "monthly")}
               className="w-auto"
@@ -302,7 +304,7 @@ export default function Churn() {
             >
               <option value="daily">Daily</option>
               <option value="monthly">Monthly</option>
-            </select>
+            </Select>
             <ProductsPopover products={products} setProducts={setProducts} />
             <div className="col-span-2">
               <DateRangePicker {...dateRange} />
@@ -315,14 +317,14 @@ export default function Churn() {
         <div className="space-y-8 p-4 md:p-8">
           <ChurnQuickStats summary={summary} />
           {isReloading ? (
-            <div className="input">
+            <InputGroup>
               <LoadingSpinner />
               Loading churn analytics...
-            </div>
+            </InputGroup>
           ) : chartData.length > 0 ? (
             <ChurnChart data={chartData} />
           ) : (
-            <div className="input">No churn data for this date range.</div>
+            <InputGroup>No churn data for this date range.</InputGroup>
           )}
         </div>
       ) : (

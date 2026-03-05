@@ -4,6 +4,9 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
 
 type Props = {
   taxForms: Record<number, string>;
@@ -63,13 +66,12 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
               </header>
 
               <section className="relative -mx-4 max-h-[300px] max-w-none overflow-y-auto border-b p-4">
-                <fieldset>
+                <Fieldset>
                   {Object.keys(taxForms)
                     .sort((a, b) => Number(b) - Number(a))
                     .map((year) => (
-                      <label key={year}>
-                        <input
-                          type="checkbox"
+                      <Label key={year}>
+                        <Checkbox
                           checked={selectedYears.has(year)}
                           onChange={(event) => {
                             const newSelectedYears = new Set(selectedYears);
@@ -82,11 +84,10 @@ export const DownloadTaxFormsPopover = ({ taxForms }: Props) => {
                           }}
                         />
                         {year}
-                      </label>
+                      </Label>
                     ))}
-                </fieldset>
+                </Fieldset>
               </section>
-
               <footer className="flex gap-4">
                 <Button className="flex-1" onClick={toggleSelectAll}>
                   {selectedYears.size === Object.keys(taxForms).length ? "Deselect all" : "Select all"}

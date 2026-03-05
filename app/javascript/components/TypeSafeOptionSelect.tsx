@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Select } from "$app/components/ui/Select";
+import { Select, SelectProps } from "$app/components/ui/Select";
 
 type Props<OptionId extends string> = {
   value: OptionId;
@@ -16,7 +16,7 @@ export const TypeSafeOptionSelect = <OptionId extends string>({
   className,
   disabled,
   ...rest
-}: Props<OptionId> & Omit<React.HTMLAttributes<HTMLSelectElement>, "value" | "onChange"> & { name?: string }) => (
+}: Props<OptionId> & Omit<SelectProps, "value" | "onChange"> & { name?: string }) => (
   <Select
     value={value}
     /* eslint-disable-next-line @typescript-eslint/consistent-type-assertions */

@@ -7,6 +7,8 @@ import { classNames } from "$app/utils/classNames";
 
 import { CommunityDraft } from "$app/components/Communities/useCommunities";
 import { showAlert } from "$app/components/server-components/Alert";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type Props = {
   draft: CommunityDraft | null;
@@ -44,14 +46,14 @@ export const ChatMessageInput = React.forwardRef<HTMLTextAreaElement, Props>(
     React.useEffect(adjustTextareaHeight, [draft?.content, adjustTextareaHeight]);
 
     return (
-      <div
-        className={classNames("input pr-2! dark:border-[rgb(var(--parent-color)/var(--border-alpha))]", {
+      <InputGroup
+        className={classNames("pr-2! dark:border-[rgb(var(--parent-color)/var(--border-alpha))]", {
           "!border-red": errors && errors["community_chat_message.content"],
         })}
       >
-        <textarea
+        <Textarea
           ref={ref}
-          className="resize-none"
+          className="resize-none border-none outline-none"
           rows={1}
           placeholder="Type a message"
           value={draft?.content ?? ""}
@@ -77,7 +79,7 @@ export const ChatMessageInput = React.forwardRef<HTMLTextAreaElement, Props>(
         >
           <SendAlt pack="filled" className="size-4" />
         </button>
-      </div>
+      </InputGroup>
     );
   },
 );
