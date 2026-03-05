@@ -9,7 +9,12 @@ import { useAppDomain } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout } from "$app/components/Profile/Layout";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type Props = {
   creator_profile: CreatorProfile;
@@ -50,9 +55,10 @@ const AffiliateRequestsNew = () => {
         className="mx-auto w-full max-w-6xl border-0 lg:px-0"
       />
       <form className="border-y border-border px-4 pt-8 lg:px-0" onSubmit={onSubmit}>
-        <section className="mx-auto w-full max-w-6xl">
-          <header>
-            <div className="flex flex-col gap-4">
+        <FormSection
+          className="mx-auto w-full max-w-6xl"
+          header={
+            <>
               <p>
                 Applying to be an affiliate is easy. Fill out the form below and let {creator_profile.name} know how
                 you'll be promoting their products.
@@ -61,8 +67,9 @@ const AffiliateRequestsNew = () => {
                 To help speed up your approval, include things like social urls, audience size, audience engagement,
                 etc...
               </p>
-            </div>
-          </header>
+            </>
+          }
+        >
           {success ? (
             <Alert variant="success">
               <div className="flex flex-col gap-4">
@@ -82,11 +89,11 @@ const AffiliateRequestsNew = () => {
           ) : (
             <>
               {loggedInUser?.name ? null : (
-                <fieldset>
-                  <legend>
-                    <label htmlFor={nameUID}>Name</label>
-                  </legend>
-                  <input
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={nameUID}>Name</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={nameUID}
                     type="text"
                     required
@@ -94,14 +101,14 @@ const AffiliateRequestsNew = () => {
                     value={data.affiliate_request.name}
                     onChange={(event) => setData("affiliate_request.name", event.target.value)}
                   />
-                </fieldset>
+                </Fieldset>
               )}
               {loggedInUser?.email ? null : (
-                <fieldset>
-                  <legend>
-                    <label htmlFor={emailUID}>Email</label>
-                  </legend>
-                  <input
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={emailUID}>Email</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={emailUID}
                     type="email"
                     required
@@ -109,26 +116,26 @@ const AffiliateRequestsNew = () => {
                     value={data.affiliate_request.email}
                     onChange={(event) => setData("affiliate_request.email", event.target.value)}
                   />
-                </fieldset>
+                </Fieldset>
               )}
-              <fieldset>
-                <legend>
-                  <label htmlFor={promotionUID}>Promotion</label>
-                </legend>
-                <textarea
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={promotionUID}>Promotion</Label>
+                </FieldsetTitle>
+                <Textarea
                   id={promotionUID}
                   rows={5}
                   placeholder="How do you intend to promote their products? How big is your audience?"
                   value={data.affiliate_request.promotion_text}
                   onChange={(event) => setData("affiliate_request.promotion_text", event.target.value)}
                 />
-              </fieldset>
+              </Fieldset>
               <Button type="submit" color="accent" disabled={processing}>
                 {processing ? "Submitting..." : "Submit affiliate request"}
               </Button>
             </>
           )}
-        </section>
+        </FormSection>
       </form>
     </Layout>
   );

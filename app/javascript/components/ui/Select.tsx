@@ -14,10 +14,9 @@ export const Select = React.forwardRef<
 
   return (
     <div className={classNames("relative inline-grid", wrapperClassName)}>
-      {/* bg-none! should be removed after complete forms migration */}
       <select
         ref={ref}
-        className={classNames(baseInputStyles, "appearance-none bg-none! pr-10", stateBorderStyles[state], className)}
+        className={classNames(baseInputStyles, "appearance-none bg-none pr-10", stateBorderStyles[state], className)}
         {...props}
       >
         {children}

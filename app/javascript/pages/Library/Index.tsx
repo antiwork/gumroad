@@ -23,9 +23,15 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { CardContent, Card as UICard } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Select as FormSelect } from "$app/components/ui/Select";
 import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
@@ -437,9 +443,9 @@ export default function LibraryPage() {
               {isDesktop || mobileFiltersExpanded ? (
                 <>
                   <CardContent>
-                    <div className="input input-wrapper product-search__wrapper grow">
+                    <InputGroup className="grow">
                       <Search className="size-5 text-muted" />
-                      <input
+                      <Input
                         className="search-products"
                         placeholder="Search products"
                         value={enteredQuery}
@@ -447,16 +453,16 @@ export default function LibraryPage() {
                         onBlur={handleSearchBlur}
                         onKeyDown={handleSearchKeyDown}
                       />
-                    </div>
+                    </InputGroup>
                   </CardContent>
                   <CardContent className="sort">
-                    <fieldset className="grow basis-0">
-                      <legend>
-                        <label className="filter-header" htmlFor={sortUid}>
+                    <Fieldset className="grow basis-0">
+                      <FieldsetTitle>
+                        <Label className="filter-header" htmlFor={sortUid}>
                           Sort by
-                        </label>
-                      </legend>
-                      <select
+                        </Label>
+                      </FieldsetTitle>
+                      <FormSelect
                         id={sortUid}
                         value={state.search.sort}
                         onChange={(e) =>
@@ -468,15 +474,15 @@ export default function LibraryPage() {
                       >
                         <option value="recently_updated">Recently Updated</option>
                         <option value="purchase_date">Purchase Date</option>
-                      </select>
-                    </fieldset>
+                      </FormSelect>
+                    </Fieldset>
                   </CardContent>
                   {bundles.length > 0 ? (
                     <CardContent>
-                      <fieldset className="grow basis-0">
-                        <legend>
-                          <label htmlFor={bundlesUid}>Bundles</label>
-                        </legend>
+                      <Fieldset className="grow basis-0">
+                        <FieldsetTitle>
+                          <Label htmlFor={bundlesUid}>Bundles</Label>
+                        </FieldsetTitle>
                         <Select
                           inputId={bundlesUid}
                           instanceId={bundlesUid}
@@ -491,28 +497,28 @@ export default function LibraryPage() {
                           isMulti
                           isClearable
                         />
-                      </fieldset>
+                      </Fieldset>
                     </CardContent>
                   ) : null}
                   <CardContent className="creator">
-                    <fieldset role="group" className="grow basis-0">
-                      <legend className="filter-header">Creator</legend>
-                      <label>
+                    <Fieldset role="group" className="grow basis-0">
+                      <FieldsetTitle className="filter-header">Creator</FieldsetTitle>
+                      <Label className="w-full">
                         All Creators
-                        <input
-                          type="checkbox"
+                        <Checkbox
+                          wrapperClassName="ml-auto"
                           checked={state.search.creators.length === 0}
                           onClick={() => dispatch({ type: "update-search", search: { creators: [] } })}
                           readOnly
                         />
-                      </label>
+                      </Label>
                       {(showingAllCreators ? creatorsWithProductCounts : creatorsWithProductCounts.slice(0, 5)).map(
                         (creator) => (
-                          <label key={creator.id}>
+                          <Label key={creator.id} className="w-full">
                             {creator.name}
                             <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
-                            <input
-                              type="checkbox"
+                            <Checkbox
+                              wrapperClassName="ml-auto"
                               checked={state.search.creators.includes(creator.id)}
                               onClick={() =>
                                 dispatch({
@@ -526,7 +532,7 @@ export default function LibraryPage() {
                               }
                               readOnly
                             />
-                          </label>
+                          </Label>
                         ),
                       )}
                       <div>
@@ -539,15 +545,14 @@ export default function LibraryPage() {
                           </button>
                         ) : null}
                       </div>
-                    </fieldset>
+                    </Fieldset>
                   </CardContent>
                   {archivedCount > 0 ? (
                     <CardContent className="archived">
-                      <fieldset role="group" className="grow basis-0">
-                        <label className="filter-archived">
+                      <Fieldset role="group" className="grow basis-0">
+                        <Label className="justify-between">
                           Show archived only
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={state.search.showArchivedOnly}
                             readOnly
                             onClick={() =>
@@ -557,8 +562,8 @@ export default function LibraryPage() {
                               })
                             }
                           />
-                        </label>
-                      </fieldset>
+                        </Label>
+                      </Fieldset>
                     </CardContent>
                   ) : null}
                 </>

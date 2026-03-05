@@ -15,6 +15,7 @@ import { DateRangePicker } from "$app/components/DateRangePicker";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useOnChange } from "$app/components/useOnChange";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -75,10 +76,10 @@ function Audience() {
           <Deferred
             data={["audience_data"]}
             fallback={
-              <div className="input">
+              <InputGroup>
                 <LoadingSpinner />
                 Loading charts...
-              </div>
+              </InputGroup>
             }
           >
             {audience_data ? <AudienceChart data={audience_data} /> : null}

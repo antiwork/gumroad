@@ -12,6 +12,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
@@ -144,7 +145,7 @@ const TaxCenterIndex = () => {
           <h2>Tax documents</h2>
           {selected_year ? (
             <div className="flex items-center gap-3">
-              <select
+              <Select
                 aria-label="Tax year"
                 disabled={isLoading}
                 value={selected_year}
@@ -155,7 +156,7 @@ const TaxCenterIndex = () => {
                     {year}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           ) : null}
         </div>

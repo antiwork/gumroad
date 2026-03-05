@@ -16,6 +16,8 @@ import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 export type PurchaseCustomField = {
@@ -460,17 +462,17 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
           </CardContent>
           <CardContent>
             <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="grid grow gap-4">
-              <fieldset>
-                <input
+              <Fieldset>
+                <Input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Your password"
                 />
-                <small>
+                <FieldsetDescription>
                   You agree to our <a href={terms_page_url}>Terms Of Use</a>.
-                </small>
-              </fieldset>
+                </FieldsetDescription>
+              </Fieldset>
               <Button color="primary" type="submit" disabled={isSubmitting}>
                 {isSubmitting ? "Creating..." : "Create"}
               </Button>

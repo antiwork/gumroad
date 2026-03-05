@@ -5,6 +5,10 @@ import { type Product } from "$app/components/Analytics";
 import { Button } from "$app/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 
 export type ProductOption = Product & { selected: boolean };
 
@@ -17,18 +21,17 @@ export const ProductsPopover = ({
 }) => (
   <Popover>
     <PopoverTrigger>
-      <span className="input whitespace-nowrap">
-        <div className="fake-input">Select products...</div>
+      <InputGroup className="whitespace-nowrap">
+        <div className="flex-1">Select products...</div>
         <ChevronDown className="size-5" />
-      </span>
+      </InputGroup>
     </PopoverTrigger>
     <PopoverContent matchTriggerWidth className="p-0">
       <Card className="border-none shadow-none">
         <CardContent>
-          <fieldset className="grow basis-0">
-            <label>
-              <input
-                type="checkbox"
+          <Fieldset className="grow basis-0">
+            <Label>
+              <Checkbox
                 checked={products.filter((product) => product.selected).length === products.length}
                 onChange={(event) =>
                   setProducts((prevProducts) =>
@@ -37,11 +40,10 @@ export const ProductsPopover = ({
                 }
               />
               All products
-            </label>
+            </Label>
             {products.map(({ id, name, unique_permalink, selected }) => (
-              <label key={id}>
-                <input
-                  type="checkbox"
+              <Label key={id}>
+                <Checkbox
                   checked={selected}
                   onChange={(event) =>
                     setProducts((prevProducts) =>
@@ -54,9 +56,9 @@ export const ProductsPopover = ({
                   }
                 />
                 {name}
-              </label>
+              </Label>
             ))}
-          </fieldset>
+          </Fieldset>
         </CardContent>
         <CardContent>
           <Button

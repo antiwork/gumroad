@@ -13,7 +13,7 @@ export const SocialAuth = () => {
   const isSignupPage = new URL(originalLocation).pathname === "/signup";
   const showStripe = isSignupPage ? !featureFlags.disable_stripe_signup : true;
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-4 pb-12">
       <SocialAuthButton provider="facebook" href={Routes.user_facebook_omniauth_authorize_path({ referer: next })}>
         <Facebook pack="brands" className="size-5" />
         Facebook

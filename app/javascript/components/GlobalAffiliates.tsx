@@ -1,5 +1,4 @@
 import { Link, Search } from "@boxicons/react";
-import cx from "classnames";
 import * as React from "react";
 
 import { searchGlobalAffiliatesProductEligibility, Product } from "$app/data/global_affiliates";
@@ -12,6 +11,10 @@ import { useDomains, useDiscoverUrl } from "$app/components/DomainSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Pill } from "$app/components/ui/Pill";
 
 const DiscoverLinkSection = ({
@@ -28,33 +31,36 @@ const DiscoverLinkSection = ({
   const baseDiscoverUrl = useDiscoverUrl();
   const discoverUrl = `${baseDiscoverUrl}?${affiliateQueryParam}=${globalAffiliateId}`;
   return (
-    <section className="p-4! md:p-8!">
-      <header>
-        <h2>Affiliate link</h2>
-        <p>Earn 10% for each referral sale made by your link.</p>
-        <a href="/help/article/333-affiliates-on-gumroad" target="_blank" rel="noreferrer">
-          Learn more
-        </a>
-      </header>
-      <fieldset>
-        <legend>Your Discover affiliate link</legend>
-        <div className="input">
-          <div className="input">{discoverUrl}</div>
+    <FormSection
+      header={
+        <>
+          <h2>Affiliate link</h2>
+          <p>Earn 10% for each referral sale made by your link.</p>
+          <a href="/help/article/333-affiliates-on-gumroad" target="_blank" rel="noreferrer">
+            Learn more
+          </a>
+        </>
+      }
+    >
+      <Fieldset>
+        <FieldsetTitle>Your Discover affiliate link</FieldsetTitle>
+        <InputGroup>
+          <InputGroup readOnly>{discoverUrl}</InputGroup>
           <CopyToClipboard text={discoverUrl} tooltipPosition="bottom">
             <Pill asChild>
               <Button className="rounded-full! px-3! py-2!">Copy link</Button>
             </Pill>
           </CopyToClipboard>
-        </div>
-        <small>
+        </InputGroup>
+        <FieldsetDescription>
           You will be attributed any sales you referred within {cookieExpiryDays} days, even if they're for different
           products you linked to.
-        </small>
-        <small>
+        </FieldsetDescription>
+        <FieldsetDescription>
           To date, you have made <strong>{totalSales}</strong> from Gumroad referrals.
-        </small>
-      </fieldset>
-    </section>
+        </FieldsetDescription>
+      </Fieldset>
+    </FormSection>
   );
 };
 
@@ -71,21 +77,24 @@ const LinkGenerationSection = ({
   const [hasError, setHasError] = React.useState(false);
 
   return (
-    <section className="p-4! md:p-8!">
-      <header>
-        <h2>Affiliate link generator</h2>
-        <p>
-          You can add{" "}
-          <strong>
-            ?{affiliateQueryParam}={globalAffiliateId}
-          </strong>{" "}
-          to the end of any link or use the generator to automatically add it for you.
-        </p>
-      </header>
-      <fieldset className={cx({ danger: hasError })}>
-        <legend>Destination page URL</legend>
-        <div className="input">
-          <input
+    <FormSection
+      header={
+        <>
+          <h2>Affiliate link generator</h2>
+          <p>
+            You can add{" "}
+            <strong>
+              ?{affiliateQueryParam}={globalAffiliateId}
+            </strong>{" "}
+            to the end of any link or use the generator to automatically add it for you.
+          </p>
+        </>
+      }
+    >
+      <Fieldset state={hasError ? "danger" : undefined}>
+        <FieldsetTitle>Destination page URL</FieldsetTitle>
+        <InputGroup>
+          <Input
             placeholder="Paste a destination page URL"
             value={inputLink}
             onChange={(evt) => setInputLink(evt.target.value)}
@@ -112,26 +121,26 @@ const LinkGenerationSection = ({
               Generate link
             </Button>
           </Pill>
-        </div>
+        </InputGroup>
         {hasError ? (
           <Alert variant="danger">
             Invalid URL. Make sure your URL is a Gumroad URL and starts with "http" or "https".
           </Alert>
         ) : null}
-      </fieldset>
-      <fieldset>
-        <legend>Your affiliate link</legend>
-        <div className="input">
-          <div className="input">{generatedLink}</div>
+      </Fieldset>
+      <Fieldset>
+        <FieldsetTitle>Your affiliate link</FieldsetTitle>
+        <InputGroup>
+          <InputGroup readOnly>{generatedLink}</InputGroup>
           <CopyToClipboard text={generatedLink} tooltipPosition="bottom">
             <Pill asChild>
               <Button className="rounded-full! px-3! py-2!">Copy link</Button>
             </Pill>
           </CopyToClipboard>
-        </div>
-        <small>Copy this affiliate link and share it with your audience</small>
-      </fieldset>
-    </section>
+        </InputGroup>
+        <FieldsetDescription>Copy this affiliate link and share it with your audience</FieldsetDescription>
+      </Fieldset>
+    </FormSection>
   );
 };
 
@@ -156,18 +165,21 @@ const ProductEligibilitySection = ({
   });
 
   return (
-    <section className="p-4! md:p-8!">
-      <header>
-        <h2>How to know if a product is eligible</h2>
-        <p>
-          All products published on Discover are part of this program. You can check if any specific product is on
-          Discover by entering the product URL here.
-        </p>
-      </header>
-      <fieldset>
-        <legend>Product URL</legend>
-        <div className="input">
-          <input
+    <FormSection
+      header={
+        <>
+          <h2>How to know if a product is eligible</h2>
+          <p>
+            All products published on Discover are part of this program. You can check if any specific product is on
+            Discover by entering the product URL here.
+          </p>
+        </>
+      }
+    >
+      <Fieldset>
+        <FieldsetTitle>Product URL</FieldsetTitle>
+        <InputGroup>
+          <Input
             placeholder="Paste a product URL"
             value={query}
             onChange={(e) => {
@@ -228,8 +240,8 @@ const ProductEligibilitySection = ({
             })}
           />
           <Search className="size-5 text-muted" />
-        </div>
-      </fieldset>
+        </InputGroup>
+      </Fieldset>
       {result.isLoading ? <LoadingSpinner /> : null}
       {result.product ? (
         <Card>
@@ -248,7 +260,7 @@ const ProductEligibilitySection = ({
         </Card>
       ) : null}
       {result.error ? <Alert variant={result.error.type}>{result.error.message}</Alert> : null}
-    </section>
+    </FormSection>
   );
 };
 
