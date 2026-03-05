@@ -7,6 +7,9 @@ import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
 
@@ -70,13 +73,13 @@ function LoginPage() {
         <Separator>
           <span>or</span>
         </Separator>
-        <section>
+        <section className="grid gap-8 py-12">
           <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-email`}>Email</label>
-            </legend>
-            <input
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-email`}>Email</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-email`}
               type="email"
               value={form.data.user.login_identifier}
@@ -85,14 +88,14 @@ function LoginPage() {
               tabIndex={1}
               autoComplete="email"
             />
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-password`}>Password</label>
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-password`}>Password</Label>
               <Link href={Routes.new_user_password_path({ next })} className="font-normal underline">
                 Forgot your password?
               </Link>
-            </legend>
+            </FieldsetTitle>
             <PasswordInput
               id={`${uid}-password`}
               value={form.data.user.password}
@@ -101,7 +104,7 @@ function LoginPage() {
               tabIndex={1}
               autoComplete="current-password"
             />
-          </fieldset>
+          </Fieldset>
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Logging in..." : "Login"}
           </Button>

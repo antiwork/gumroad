@@ -6,6 +6,8 @@ import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SupportSlaMessage } from "$app/components/support/SupportSlaMessage";
+import { Input } from "$app/components/ui/Input";
+import { Textarea } from "$app/components/ui/Textarea";
 import { useRecaptcha, RecaptchaCancelledError } from "$app/components/useRecaptcha";
 
 export function UnauthenticatedNewTicketModal({
@@ -96,7 +98,7 @@ export function UnauthenticatedNewTicketModal({
       >
         <div>
           <label className="sr-only">Email address</label>
-          <input
+          <Input
             type="email"
             value={email}
             placeholder="Your email address"
@@ -106,11 +108,11 @@ export function UnauthenticatedNewTicketModal({
         </div>
         <div>
           <label className="sr-only">Subject</label>
-          <input value={subject} placeholder="Subject" onChange={(e) => setSubject(e.target.value)} required />
+          <Input value={subject} placeholder="Subject" onChange={(e) => setSubject(e.target.value)} required />
         </div>
         <div>
           <label className="sr-only">Message</label>
-          <textarea
+          <Textarea
             rows={6}
             value={message}
             onChange={(e) => setMessage(e.target.value)}

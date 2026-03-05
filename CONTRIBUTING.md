@@ -27,7 +27,7 @@ Non-trivial PRs should follow this structure:
 - **Before/After** — Screenshots or video for UI/CSS changes only. Include desktop and mobile, light and dark mode.
 - **Test Results** — Screenshot of tests passing locally.
 
-End with an AI disclosure after a `---` separator.
+End with an AI disclosure after a `---` separator. Name the specific model (e.g., "Claude Opus 4.6") and list the prompts given to the agent.
 
 ## Development guidelines
 

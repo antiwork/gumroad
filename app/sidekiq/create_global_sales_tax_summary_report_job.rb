@@ -33,6 +33,7 @@ class CreateGlobalSalesTaxSummaryReportJob
         .where("purchases.created_at BETWEEN ? AND ?", start_date, end_date)
         .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
 
+      refund_adjustments = prefetch_partial_refund_adjustments(purchases_scope)
       rows = aggregation_query_rows(purchases_scope)
       unresolved_us_tuple_keys = []
 
@@ -41,11 +42,13 @@ class CreateGlobalSalesTaxSummaryReportJob
                     gmv, count, tax|
         raw_name = country.presence || ip_country.presence
         country_name = resolve_country_name(raw_name)
+        group_key = [country_key, ip_country_key, zip_key, state_key, ip_state_key]
+
         state_code = case country_name
                      when "United States"
                        resolved = UsZipCodes.identify_state_code(zip_code)
                        if resolved.nil?
-                         unresolved_us_tuple_keys << [country_key, ip_country_key, zip_key, state_key, ip_state_key]
+                         unresolved_us_tuple_keys << group_key
                          next
                        end
                        resolved
@@ -57,10 +60,11 @@ class CreateGlobalSalesTaxSummaryReportJob
                        ""
         end
 
+        adj = refund_adjustments[group_key]
         bucket = aggregation[[country_name, state_code]]
-        bucket[:gmv_cents] += gmv.to_i
+        bucket[:gmv_cents] += net_cents(gmv.to_i, adj&.dig(:gmv_cents))
         bucket[:order_count] += count.to_i
-        bucket[:tax_collected_cents] += tax.to_i
+        bucket[:tax_collected_cents] += net_cents(tax.to_i, adj&.dig(:tax_cents))
       end
 
       # US purchases with zip codes not in UsZipCodes need individual GeoIp lookup for state resolution.
@@ -71,23 +75,41 @@ class CreateGlobalSalesTaxSummaryReportJob
   end
 
   private
+    def prefetch_partial_refund_adjustments(purchases_scope)
+      key_sqls = BINARY_SAFE_KEY_COLUMNS.values
+
+      partial_purchases = purchases_scope
+        .where(stripe_partially_refunded: true)
+        .pluck(
+          :id,
+          Arel.sql("purchases.total_transaction_cents"),
+          Arel.sql("purchases.gumroad_tax_cents"),
+          *key_sqls.map { |sql| Arel.sql(sql) }
+        )
+
+      Rails.logger.info("CreateGlobalSalesTaxSummaryReportJob: prefetched #{partial_purchases.size} partially refunded purchases")
+      return {} if partial_purchases.empty?
+
+      refund_sums = refund_totals_by_purchase(partial_purchases.map(&:first))
+
+      adjustments = Hash.new { |h, k| h[k] = { gmv_cents: 0, tax_cents: 0 } }
+
+      partial_purchases.each do |id, gross_gmv, gross_tax, *group_keys|
+        refund = refund_sums[id]
+        next unless refund
+
+        adj = adjustments[group_keys]
+        adj[:gmv_cents] += [refund[:total], gross_gmv].min
+        adj[:tax_cents] += [refund[:tax], gross_tax].min
+      end
+
+      adjustments
+    end
+
     def aggregation_query_rows(purchases_scope)
       key_sqls = BINARY_SAFE_KEY_COLUMNS.values
 
       purchases_scope
-        .joins(<<~SQL)
-          LEFT JOIN (
-            SELECT purchase_id,
-                   SUM(total_transaction_cents) AS refund_total_cents,
-                   SUM(gumroad_tax_cents) AS refund_tax_cents
-            FROM refunds
-            WHERE purchase_id IN (
-              #{purchases_scope.where(stripe_partially_refunded: true).select(:id).to_sql}
-            )
-            GROUP BY purchase_id
-          ) refund_sums ON purchases.stripe_partially_refunded = 1
-                        AND refund_sums.purchase_id = purchases.id
-        SQL
         .group(*key_sqls.map { |sql| Arel.sql(sql) })
         .pluck(
           Arel.sql("ANY_VALUE(purchases.country)"),
@@ -96,9 +118,9 @@ class CreateGlobalSalesTaxSummaryReportJob
           Arel.sql("ANY_VALUE(purchases.state)"),
           Arel.sql("ANY_VALUE(purchases.ip_state)"),
           *key_sqls.map { |sql| Arel.sql(sql) },
-          Arel.sql("SUM(GREATEST(purchases.total_transaction_cents - COALESCE(refund_sums.refund_total_cents, 0), 0))"),
+          Arel.sql("SUM(purchases.total_transaction_cents)"),
           Arel.sql("COUNT(*)"),
-          Arel.sql("SUM(GREATEST(purchases.gumroad_tax_cents - COALESCE(refund_sums.refund_tax_cents, 0), 0))")
+          Arel.sql("SUM(purchases.gumroad_tax_cents)")
         )
     end
 
@@ -117,10 +139,9 @@ class CreateGlobalSalesTaxSummaryReportJob
 
       fallback_scope = purchases_scope.where(Arel.sql(combined_condition_sql))
 
-      fallback_refunds = Refund.where(purchase_id: fallback_scope.where(stripe_partially_refunded: true).select(:id))
-        .group(:purchase_id)
-        .pluck(:purchase_id, Arel.sql("SUM(refunds.total_transaction_cents)"), Arel.sql("SUM(refunds.gumroad_tax_cents)"))
-        .to_h { |pid, total, tax| [pid, { total: total.to_i, tax: tax.to_i }] }
+      fallback_refunds = refund_totals_by_purchase(
+        fallback_scope.where(stripe_partially_refunded: true).pluck(:id)
+      )
 
       fallback_scope.select(:id, :ip_address, :total_transaction_cents, :gumroad_tax_cents, :stripe_partially_refunded)
         .find_each do |purchase|
@@ -192,6 +213,13 @@ class CreateGlobalSalesTaxSummaryReportJob
     def resolve_india_state(ip_state)
       raw_state = ip_state.to_s.strip.upcase
       Compliance::Countries.valid_indian_state?(raw_state) ? raw_state : ""
+    end
+
+    def refund_totals_by_purchase(purchase_ids)
+      Refund.where(purchase_id: purchase_ids)
+        .group(:purchase_id)
+        .pluck(:purchase_id, Arel.sql("SUM(refunds.total_transaction_cents)"), Arel.sql("SUM(refunds.gumroad_tax_cents)"))
+        .to_h { |pid, total, tax| [pid, { total: total.to_i, tax: tax.to_i }] }
     end
 
     def net_cents(gross_cents, refunded_cents)

@@ -1,5 +1,4 @@
 import { Link, useForm, usePage } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -14,8 +13,14 @@ import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tabs, Tab } from "$app/components/ui/Tabs";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -140,23 +145,26 @@ export default function AffiliatesOnboarding() {
         </section>
       ) : (
         <form onSubmit={handleSaveChanges}>
-          <section className="p-4! md:p-8!">
-            <header>
-              <h2>Affiliate link</h2>
-              <div>
-                Anyone can request to become your affiliate by using your affiliate link. Affiliates will earn a
-                commission on each sale they refer.
-              </div>
-              <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
-                Learn more
-              </a>
-            </header>
-            <fieldset>
-              <legend>
-                <label htmlFor="affiliate-link">Your affiliate link</label>
-              </legend>
-              <div className="input input-wrapper">
-                <input
+          <FormSection
+            header={
+              <>
+                <h2>Affiliate link</h2>
+                <div>
+                  Anyone can request to become your affiliate by using your affiliate link. Affiliates will earn a
+                  commission on each sale they refer.
+                </div>
+                <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
+                  Learn more
+                </a>
+              </>
+            }
+          >
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor="affiliate-link">Your affiliate link</Label>
+              </FieldsetTitle>
+              <InputGroup disabled={!enableAffiliateLink}>
+                <Input
                   type="text"
                   id="affiliate-link"
                   readOnly
@@ -171,19 +179,22 @@ export default function AffiliatesOnboarding() {
                     </button>
                   </CopyToClipboard>
                 ) : null}
-              </div>
+              </InputGroup>
               {enableAffiliateLink ? null : (
                 <Alert variant="warning">
                   You must enable and set up the commission for at least one product before sharing your affiliate link.
                 </Alert>
               )}
-            </fieldset>
-          </section>
-          <section className="p-4! md:p-8!">
-            <header>
-              <h2>Affiliate products</h2>
-              <p>Enable specific products you want your affiliates to earn a commission with.</p>
-            </header>
+            </Fieldset>
+          </FormSection>
+          <FormSection
+            header={
+              <>
+                <h2>Affiliate products</h2>
+                <p>Enable specific products you want your affiliates to earn a commission with.</p>
+              </>
+            }
+          >
             <Table>
               <TableCaption>Enable specific products</TableCaption>
               <TableHeader>
@@ -205,26 +216,29 @@ export default function AffiliatesOnboarding() {
                 ))}
               </TableBody>
             </Table>
-          </section>
-          <section className="p-4! md:p-8!">
-            <header>
-              <h2>Gumroad Affiliate Program</h2>
-              <div>
-                Being part of Gumroad Affiliate Program enables other creators to share your products in exchange for a{" "}
-                {props.global_affiliate_percentage}% commission.
-              </div>
-              <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
-                Learn more
-              </a>
-            </header>
-            <fieldset>
+          </FormSection>
+          <FormSection
+            header={
+              <>
+                <h2>Gumroad Affiliate Program</h2>
+                <div>
+                  Being part of Gumroad Affiliate Program enables other creators to share your products in exchange for
+                  a {props.global_affiliate_percentage}% commission.
+                </div>
+                <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
+                  Learn more
+                </a>
+              </>
+            }
+          >
+            <Fieldset>
               <ToggleSettingRow
                 label="Opt out of the Gumroad Affiliate Program"
                 value={data.disable_global_affiliate}
                 onChange={onToggleDisableGlobalAffiliate}
               />
-            </fieldset>
-          </section>
+            </Fieldset>
+          </FormSection>
         </form>
       )}
     </div>
@@ -244,10 +258,8 @@ const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
   return (
     <TableRow>
       <TableCell>
-        <input
+        <Switch
           id={uid}
-          type="checkbox"
-          role="switch"
           checked={product.enabled}
           onChange={(evt) => onChange({ enabled: evt.target.checked })}
           aria-label="Enable product"
@@ -255,14 +267,14 @@ const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
         />
       </TableCell>
       <TableCell>
-        <label htmlFor={uid}>{product.name}</label>
+        <Label htmlFor={uid}>{product.name}</Label>
       </TableCell>
       <TableCell>
-        <fieldset className={cx({ danger: invalidAttrs.has("commission") })}>
+        <Fieldset state={invalidAttrs.has("commission") ? "danger" : undefined}>
           <NumberInput onChange={(value) => onChange({ fee_percent: value ?? 0 })} value={product.fee_percent}>
             {(inputProps) => (
-              <div className={cx("input", { disabled: disabled || !product.enabled })}>
-                <input
+              <InputGroup disabled={disabled || !product.enabled}>
+                <Input
                   type="text"
                   autoComplete="off"
                   placeholder="Commission"
@@ -270,14 +282,14 @@ const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
                   {...inputProps}
                 />
                 <div className="pill">%</div>
-              </div>
+              </InputGroup>
             )}
           </NumberInput>
-        </fieldset>
+        </Fieldset>
       </TableCell>
       <TableCell>
-        <fieldset className={cx({ danger: invalidAttrs.has("destination_url") })}>
-          <input
+        <Fieldset state={invalidAttrs.has("destination_url") ? "danger" : undefined}>
+          <Input
             type="text"
             aria-label="destination_url"
             disabled={disabled || !product.enabled}
@@ -285,7 +297,7 @@ const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
             value={product.destination_url || ""}
             onChange={(event) => onChange({ destination_url: event.target.value.trim() })}
           />
-        </fieldset>
+        </Fieldset>
       </TableCell>
     </TableRow>
   );

@@ -617,6 +617,7 @@ $accent-color: map-get($colors, "pink"); // [1]
   @include bg-color(filled);
   border: $border;
   border-radius: border-radius(1);
+  display: grid;
 
   > figure {
     background: url("~images/placeholders/product-cover.png");

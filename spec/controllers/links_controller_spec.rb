@@ -254,6 +254,68 @@ describe LinksController, :vcr, inertia: true do
       end
     end
 
+    describe "GET edit_new" do
+      let(:product) { create(:product, user: seller) }
+
+      it_behaves_like "authorize called for action", :get, :edit_new do
+        let(:record) { product }
+        let(:request_params) { { id: product.unique_permalink } }
+      end
+
+      it "renders the Inertia product edit page" do
+        get :edit_new, params: { id: product.unique_permalink }
+        expect(response).to be_successful
+        expect(inertia).to render_component("Products/Edit")
+        expect(inertia.props[:id]).to eq(product.external_id)
+        expect(inertia.props[:unique_permalink]).to eq(product.unique_permalink)
+        expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
+      end
+
+      context "with other user not owning the product" do
+        let(:other_user) { create(:user) }
+
+        before do
+          sign_in other_user
+        end
+
+        it "redirects to product page" do
+          get :edit_new, params: { id: product.unique_permalink }
+          expect(response).to redirect_to(short_link_path(product))
+        end
+      end
+
+      context "with admin user signed in" do
+        let(:admin) { create(:admin_user) }
+
+        before do
+          sign_in admin
+        end
+
+        it "renders the page" do
+          get :edit_new, params: { id: product.unique_permalink }
+          expect(response).to have_http_status(:ok)
+        end
+      end
+
+      context "when the product is a bundle" do
+        let(:bundle) { create(:product, :bundle) }
+
+        it "redirects to the bundle edit page" do
+          sign_in bundle.user
+          get :edit_new, params: { id: bundle.unique_permalink }
+          expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
+        end
+      end
+
+      context "with wildcard sub-path" do
+        it "renders the Inertia page for sub-routes" do
+          get :edit_new, params: { id: product.unique_permalink, other: "content" }
+          expect(response).to be_successful
+          expect(inertia).to render_component("Products/Edit")
+        end
+      end
+    end
+
     describe "PUT update" do
       before do
         @product = create(:product_with_pdf_file, user: seller)

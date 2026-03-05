@@ -18,6 +18,8 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -89,9 +91,9 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent>
-        <div className="input input-wrapper">
+        <InputGroup>
           <Search className="size-5 text-muted" />
-          <input
+          <Input
             ref={searchInputRef}
             value={inputValue}
             autoFocus
@@ -100,7 +102,7 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
             aria-label="Search"
             onChange={handleChange}
           />
-        </div>
+        </InputGroup>
       </PopoverContent>
     </Popover>
   );
@@ -168,7 +170,7 @@ const AffiliateRequestsTable = ({
               <TableRow key={affiliateRequest.id}>
                 <TableCell>
                   {affiliateRequest.name}
-                  <small>{affiliateRequest.email}</small>
+                  <small className="text-muted">{affiliateRequest.email}</small>
                 </TableCell>
 
                 <TableCell>{affiliateRequest.promotion}</TableCell>
