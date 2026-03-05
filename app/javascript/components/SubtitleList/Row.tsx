@@ -9,6 +9,7 @@ import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
+import { Select } from "$app/components/ui/Select";
 import { UploadProgressBar } from "$app/components/UploadProgressBar";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
 
@@ -82,7 +83,7 @@ export const SubtitleRow = ({ subtitleFile, onRemove, onCancel, onChangeLanguage
 
 type SelectProps = { currentLanguage: string; onChange: (newLanguage: string) => void };
 const SubtitleLanguageSelect = ({ currentLanguage, onChange }: SelectProps) => (
-  <select
+  <Select
     aria-label="Language"
     value={currentLanguage}
     onChange={(evt) => onChange(evt.target.value)}
@@ -93,5 +94,5 @@ const SubtitleLanguageSelect = ({ currentLanguage, onChange }: SelectProps) => (
         {language}
       </option>
     ))}
-  </select>
+  </Select>
 );

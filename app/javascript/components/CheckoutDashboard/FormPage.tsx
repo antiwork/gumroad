@@ -196,6 +196,7 @@ const FormPage = ({
                         <div className="flex gap-2">
                           <TypeSafeOptionSelect
                             id={`${uid}-${field.key}-type`}
+                            wrapperClassName="flex-1"
                             value={field.type}
                             onChange={(type) => updateCustomField(i, { type })}
                             options={[
@@ -205,6 +206,7 @@ const FormPage = ({
                             ]}
                           />
                           <Button
+                            size="icon"
                             onClick={() => setCustomFields(customFields.filter((_, index) => index !== i))}
                             color="danger"
                             outline

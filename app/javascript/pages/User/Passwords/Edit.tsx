@@ -5,6 +5,8 @@ import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
 
 type PageProps = {
   reset_password_token: string;
@@ -30,12 +32,12 @@ function PasswordReset() {
   return (
     <Layout header={<h1>Reset your password</h1>} headerActions={<Link href={Routes.login_path()}>Log in</Link>}>
       <form onSubmit={handleSubmit}>
-        <section>
+        <section className="grid gap-8 pb-12">
           <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-password`}>Enter a new password</label>
-            </legend>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-password`}>Enter a new password</Label>
+            </FieldsetTitle>
             <PasswordInput
               id={`${uid}-password`}
               value={form.data.user.password}
@@ -45,11 +47,11 @@ function PasswordReset() {
               autoFocus
               autoComplete="new-password"
             />
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-password-confirmation`}>Enter same password to confirm</label>
-            </legend>
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-password-confirmation`}>Enter same password to confirm</Label>
+            </FieldsetTitle>
             <PasswordInput
               id={`${uid}-password-confirmation`}
               value={form.data.user.password_confirmation}
@@ -58,7 +60,7 @@ function PasswordReset() {
               required
               autoComplete="new-password"
             />
-          </fieldset>
+          </Fieldset>
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Resetting..." : "Reset password"}
           </Button>

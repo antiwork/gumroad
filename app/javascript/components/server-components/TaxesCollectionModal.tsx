@@ -7,6 +7,9 @@ import { register } from "$app/utils/serverComponentUtil";
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 
 type Props = {
   taxesOwed: string | null;
@@ -68,13 +71,13 @@ export const TaxesCollectionModal = ({ taxesOwed, creditCreationDate, name }: Pr
           <div className="flex flex-col gap-4">
             After opt-in, a negative credit in the amount of {taxesOwed || ""} will be applied to your account on{" "}
             {creditCreationDate || ""}.
-            <fieldset>
-              <label htmlFor={`${uid}optInFullName`}>
+            <Fieldset>
+              <Label htmlFor={`${uid}optInFullName`}>
                 <span>
                   Type your full name to opt-in: <b>{name || ""}</b>
                 </span>
-              </label>
-              <input
+              </Label>
+              <Input
                 id={`${uid}optInFullName`}
                 type="text"
                 aria-invalid={error.length !== 0}
@@ -86,8 +89,8 @@ export const TaxesCollectionModal = ({ taxesOwed, creditCreationDate, name }: Pr
                 }}
                 maxLength={100}
               />
-              {error ? <small>{error}</small> : null}
-            </fieldset>
+              {error ? <FieldsetDescription>{error}</FieldsetDescription> : null}
+            </Fieldset>
           </div>
         </Modal>
       ) : null}

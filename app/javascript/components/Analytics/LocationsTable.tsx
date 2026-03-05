@@ -3,6 +3,7 @@ import * as React from "react";
 import { AnalyticsDataByState, LocationDataValue } from "$app/data/analytics";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
@@ -176,7 +177,7 @@ export const AnalyticsStatesTable = ({ locationData, selectedProducts, locations
         </TableBody>
       </Table>
 
-      {!items.length ? <div className="input mt-4 lg:mt-0">Nothing yet </div> : null}
+      {!items.length ? <InputGroup className="mt-4 lg:mt-0">Nothing yet </InputGroup> : null}
     </>
   );
 };

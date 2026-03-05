@@ -26,6 +26,7 @@ import { ShareTab } from "$app/components/ProductEdit/ShareTab";
 import {
   ContentUpdates,
   ExistingFileEntry,
+  parseEditSegment,
   Product,
   ProductEditContext,
   ProfileSection,
@@ -34,28 +35,31 @@ import {
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 
-const routes: RouteObject[] = [
+const buildRoutes = (editSegment: string): RouteObject[] => [
   {
-    path: "/products/:id/edit",
+    path: `/products/:id/${editSegment}`,
     element: <ProductTab />,
     handle: "product",
   },
   {
-    path: "/products/:id/edit/content",
+    path: `/products/:id/${editSegment}/content`,
     element: <ContentTab />,
     handle: "content",
   },
   {
-    path: "/products/:id/edit/share",
+    path: `/products/:id/${editSegment}/share`,
     element: <ShareTab />,
     handle: "share",
   },
   {
-    path: "/products/:id/edit/receipt",
+    path: `/products/:id/${editSegment}/receipt`,
     element: <ReceiptTab />,
     handle: "receipt",
   },
 ];
+
+const getEditSegment = (): string =>
+  typeof window !== "undefined" ? parseEditSegment(window.location.pathname) : "edit";
 
 type Props = {
   product: Product;
@@ -158,7 +162,7 @@ const ProductEditPage = (props: Props) => {
       return updated;
     });
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
-  const router = createBrowserRouter(routes);
+  const [router] = React.useState(() => createBrowserRouter(buildRoutes(getEditSegment())));
 
   const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
@@ -258,7 +262,7 @@ const ProductEditPage = (props: Props) => {
 };
 
 const ProductEditRouter = async (global: GlobalProps) => {
-  const { router, context } = await buildStaticRouter(global, routes);
+  const { router, context } = await buildStaticRouter(global, buildRoutes("edit"));
   const component = (props: Props) => (
     <ProductEditContext.Provider
       value={{
@@ -274,4 +278,6 @@ const ProductEditRouter = async (global: GlobalProps) => {
   return component;
 };
 
+export { ProductEditPage };
+export type { Props as ProductEditPageProps };
 export default register({ component: ProductEditPage, ssrComponent: ProductEditRouter, propParser: createCast() });

@@ -1,5 +1,4 @@
 import { useForm } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
@@ -10,6 +9,8 @@ import { Button } from "$app/components/Button";
 import { ButtonColor } from "$app/components/design";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 
 export const FollowUserForm = ({
   creatorProfile,
@@ -48,9 +49,9 @@ export const FollowUserForm = ({
 
   return (
     <form onSubmit={followUser} style={{ flexGrow: 1 }} noValidate>
-      <fieldset className={cx({ danger: form.errors.email != null })}>
+      <Fieldset state={form.errors.email != null ? "danger" : undefined}>
         <div className="flex gap-2">
-          <input
+          <Input
             ref={emailInputRef}
             type="email"
             value={form.data.email}
@@ -71,7 +72,7 @@ export const FollowUserForm = ({
                   : "Subscribe"}
           </Button>
         </div>
-      </fieldset>
+      </Fieldset>
     </form>
   );
 };

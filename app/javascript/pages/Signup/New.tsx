@@ -9,6 +9,9 @@ import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { Separator } from "$app/components/Separator";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
 
@@ -83,31 +86,31 @@ function SignupPage() {
         <Separator>
           <span>or</span>
         </Separator>
-        <section>
+        <section className="grid gap-8 py-12">
           <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-email`}>Email</label>
-            </legend>
-            <input
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-email`}>Email</Label>
+            </FieldsetTitle>
+            <Input
               id={`${uid}-email`}
               type="email"
               value={form.data.user.email}
               onChange={(e) => form.setData("user.email", e.target.value)}
               required
             />
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-password`}>Password</label>
-            </legend>
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-password`}>Password</Label>
+            </FieldsetTitle>
             <PasswordInput
               id={`${uid}-password`}
               value={form.data.user.password}
               onChange={(e) => form.setData("user.password", e.target.value)}
               required
             />
-          </fieldset>
+          </Fieldset>
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Creating..." : "Create account"}
           </Button>
