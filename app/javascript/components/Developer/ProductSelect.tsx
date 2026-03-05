@@ -1,5 +1,9 @@
 import * as React from "react";
 
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Select } from "$app/components/ui/Select";
+
 export type Product = {
   name: string;
   script_base_url: string;
@@ -29,11 +33,11 @@ export const ProductSelect = ({
   };
 
   return (
-    <fieldset>
-      <legend>
-        <label htmlFor={uid}>Choose your product</label>
-      </legend>
-      <select id={uid} value={selectedProductUrl} onChange={dispatchChangeEvent}>
+    <Fieldset>
+      <FieldsetTitle>
+        <Label htmlFor={uid}>Choose your product</Label>
+      </FieldsetTitle>
+      <Select id={uid} value={selectedProductUrl} onChange={dispatchChangeEvent}>
         <optgroup label="Your products">
           {products.map((product) => (
             <option key={product.url} value={product.url}>
@@ -51,7 +55,7 @@ export const ProductSelect = ({
             ))}
           </optgroup>
         ) : null}
-      </select>
-    </fieldset>
+      </Select>
+    </Fieldset>
   );
 };

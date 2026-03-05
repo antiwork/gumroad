@@ -7,6 +7,8 @@ import { AutocompleteSearchResults, deleteAutocompleteSearch } from "$app/data/d
 import { escapeRegExp } from "$app/utils";
 
 import { ComboBox } from "$app/components/ComboBox";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
@@ -72,9 +74,9 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
       onToggle={setAutocompleteOpen}
       editable
       input={(props) => (
-        <div className="input">
+        <InputGroup>
           <SearchIcon className="size-5" />
-          <input
+          <Input
             {...props}
             type="search"
             className="cursor-text!"
@@ -93,7 +95,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
             }}
             aria-autocomplete="list"
           />
-        </div>
+        </InputGroup>
       )}
       options={options}
       option={(item, props, index) => (
@@ -122,7 +124,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
               />
               <div>
                 {highlightQuery(item.name)}
-                <small>{item.seller_name ? `Product by ${item.seller_name}` : "Product"}</small>
+                <small className="text-muted">{item.seller_name ? `Product by ${item.seller_name}` : "Product"}</small>
               </div>
             </a>
           )}

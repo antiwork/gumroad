@@ -11,7 +11,7 @@ class LinksController < ApplicationController
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
-  skip_before_action :check_suspended, only: %i[index show edit destroy increment_views track_user_action]
+  skip_before_action :check_suspended, only: %i[index show edit edit_new destroy increment_views track_user_action]
 
   PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
@@ -32,7 +32,7 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new, :show, :cart_items_count]
+  layout "inertia", only: %i[index new show cart_items_count edit_new]
 
   def index
     authorize Link
@@ -293,6 +293,19 @@ class LinksController < ApplicationController
 
     ai_generated = params[:ai_generated] == "true"
     @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
+  end
+
+  def edit_new
+    fetch_product_by_unique_permalink
+    authorize @product
+
+    return redirect_to edit_bundle_product_path(@product.external_id) if @product.is_bundle?
+
+    set_meta_tag(title: @product.name)
+
+    ai_generated = params[:ai_generated] == "true"
+    presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
+    render inertia: "Products/Edit", props: presenter.edit_props
   end
 
   def update

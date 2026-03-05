@@ -5,6 +5,9 @@ import { cast } from "ts-safe-cast";
 import { Layout } from "$app/components/Authentication/Layout";
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Radio } from "$app/components/ui/Radio";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type UserEmail = { email: string; source: string };
@@ -55,7 +58,7 @@ function SubscriptionsMagicLink() {
       headerActions={<a href={Routes.login_path()}>Log in</a>}
     >
       <form onSubmit={sendMagicLink}>
-        <section>
+        <section className="grid gap-8 pb-12">
           {hasSentEmail ? (
             <>
               <Button color="primary" type="submit" disabled={form.processing}>
@@ -79,21 +82,20 @@ function SubscriptionsMagicLink() {
           ) : (
             <>
               {user_emails.length > 1 ? (
-                <fieldset>
-                  <legend>Choose an email</legend>
+                <Fieldset>
+                  <FieldsetTitle>Choose an email</FieldsetTitle>
                   {user_emails.map((userEmail) => (
-                    <label key={userEmail.source}>
-                      <input
-                        type="radio"
+                    <Label key={userEmail.source}>
+                      <Radio
                         name="email_source"
                         value={userEmail.source}
                         onChange={() => form.setData("email_source", userEmail.source)}
                         checked={userEmail.source === selectedEmail.source}
                       />
                       {userEmail.email}
-                    </label>
+                    </Label>
                   ))}
-                </fieldset>
+                </Fieldset>
               ) : null}
               <Button color="primary" type="submit" disabled={form.processing}>
                 {form.processing ? <LoadingSpinner /> : null}

@@ -215,7 +215,14 @@ export const EmailAttachments = ({
       ) : null}
       <Button color="primary" asChild>
         <label>
-          <input type="file" name="file" tabIndex={-1} multiple onChange={(e) => onAttachFiles(e.target)} />
+          <input
+            type="file"
+            name="file"
+            tabIndex={-1}
+            className="sr-only"
+            multiple
+            onChange={(e) => onAttachFiles(e.target)}
+          />
           <Paperclip className="size-5" />
           Attach files
         </label>

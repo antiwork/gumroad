@@ -565,7 +565,9 @@ const InvalidateActiveSessionsSection = () => {
         >
           Sign out from all active sessions
         </button>
-        <small>You will be signed out from all your active sessions including this session.</small>
+        <FieldsetDescription>
+          You will be signed out from all your active sessions including this session.
+        </FieldsetDescription>
       </Fieldset>
       {isConfirmationDialogOpen ? (
         <Modal

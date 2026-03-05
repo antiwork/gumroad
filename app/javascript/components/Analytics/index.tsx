@@ -21,6 +21,7 @@ import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDat
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Select } from "$app/components/ui/Select";
 
@@ -182,14 +183,14 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
             </>
           ) : (
             <>
-              <div className="input">
+              <InputGroup>
                 <LoadingSpinner />
                 Loading charts...
-              </div>
-              <div className="input">
+              </InputGroup>
+              <InputGroup>
                 <LoadingSpinner />
                 Loading referrers...
-              </div>
+              </InputGroup>
             </>
           )}
           {data?.byState ? (
@@ -200,10 +201,10 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
               stateNames={state_names}
             />
           ) : (
-            <div className="input">
+            <InputGroup>
               <LoadingSpinner />
               Loading locations...
-            </div>
+            </InputGroup>
           )}
         </div>
       ) : (

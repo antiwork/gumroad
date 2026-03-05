@@ -19,6 +19,9 @@ import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
 import { CardContent } from "$app/components/ui/Card";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Radio } from "$app/components/ui/Radio";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
 import { CardWishlist } from "$app/components/Wishlist/Card";
@@ -481,15 +484,15 @@ function DiscoverIndex() {
                   <CardContent asChild details>
                     <details>
                       <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Rating</summary>
-                      <fieldset role="group">
+                      <Fieldset role="group">
                         {range(4, 0).map((number) => (
-                          <label key={number}>
+                          <Label key={number} className="w-full">
                             <span className="flex shrink-0 items-center gap-1">
                               <RatingStars rating={number} />
                               and up
                             </span>
-                            <input
-                              type="radio"
+                            <Radio
+                              wrapperClassName="ml-auto"
                               value={number}
                               aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
                               checked={number === state.params.rating}
@@ -500,9 +503,9 @@ function DiscoverIndex() {
                                 )
                               }
                             />
-                          </label>
+                          </Label>
                         ))}
-                      </fieldset>
+                      </Fieldset>
                     </details>
                   </CardContent>
                   {hasOfferCode ? (
