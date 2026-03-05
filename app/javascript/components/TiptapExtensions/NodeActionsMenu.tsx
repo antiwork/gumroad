@@ -33,7 +33,7 @@ export const NodeActionsWrapper = ({
             "[&:hover>[data-actions-menu]]:lg:block",
             "[&:has([data-child-area]:hover)>[data-actions-menu]]:lg:hidden",
           ],
-          selected && "relative rounded outline-2 outline-accent [&_*::selection]:bg-none",
+          selected && "relative rounded outline-2 outline-accent [&_*::selection]:bg-transparent",
           className,
         )}
         {...rest}
