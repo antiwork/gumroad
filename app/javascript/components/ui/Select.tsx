@@ -21,7 +21,7 @@ export const Select = React.forwardRef<
       >
         {children}
       </select>
-      <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-5 -translate-y-1/2" />
+      <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-5 -translate-y-1/2 text-muted" />
     </div>
   );
 });

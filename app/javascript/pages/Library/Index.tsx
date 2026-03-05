@@ -550,7 +550,7 @@ export default function LibraryPage() {
                   {archivedCount > 0 ? (
                     <CardContent className="archived">
                       <Fieldset role="group" className="grow basis-0">
-                        <Label className="filter-archived">
+                        <Label className="justify-between">
                           Show archived only
                           <Checkbox
                             checked={state.search.showArchivedOnly}

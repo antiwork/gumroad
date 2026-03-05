@@ -244,10 +244,7 @@ const OverlayPanel = ({ selectedProduct }: PanelProps) => {
       </div>
       <CodeContainer codeToCopy={codeToCopy} />
       <Fieldset className="grid gap-4">
-        <Label>
-          <Switch checked={isWanted} onChange={(e) => setIsWanted(e.target.checked)} />
-          Send directly to checkout page
-        </Label>
+        <Switch label="Send directly to checkout page" checked={isWanted} onChange={(e) => setIsWanted(e.target.checked)} />
       </Fieldset>
     </>
   );

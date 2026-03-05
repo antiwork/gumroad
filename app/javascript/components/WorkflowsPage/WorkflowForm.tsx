@@ -342,7 +342,11 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
             <FieldsetTitle>
               <Label htmlFor="trigger">Trigger</Label>
             </FieldsetTitle>
-            <Tabs variant="buttons" className="gap-4 sm:grid-cols-2 md:grid-flow-row md:grid-cols-3" role="radiogroup">
+            <Tabs
+              variant="buttons"
+              className="gap-4 sm:grid-cols-2 md:grid-flow-row md:grid-cols-3 2xl:grid-cols-5"
+              role="radiogroup"
+            >
               {workflow && workflow.workflow_type === "audience" ? (
                 <Tab isSelected={formState.trigger === "legacy_audience"} asChild>
                   <Button

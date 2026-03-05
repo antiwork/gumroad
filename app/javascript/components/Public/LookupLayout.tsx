@@ -130,7 +130,6 @@ const LookupLayout = ({ children, title, type }: {
               <Label htmlFor="email">What email address did you use?</Label>
               <Input
                 id="email"
-                className="required"
                 placeholder="Email address"
                 type="text"
                 value={email.value}
@@ -142,7 +141,6 @@ const LookupLayout = ({ children, title, type }: {
                 <Label htmlFor="cc_last_four">Last 4 digits of your card</Label>
                 <Input
                   id="cc_last_four"
-                  className="required"
                   maxLength={4}
                   placeholder="4242"
                   type="tel"
