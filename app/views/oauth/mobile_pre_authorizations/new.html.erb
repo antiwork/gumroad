@@ -1,31 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in to Gumroad</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f9f9f9; }
-    .card { text-align: center; padding: 2rem; max-width: 360px; width: 100%; }
-    .avatar { width: 72px; height: 72px; border-radius: 50%; margin-bottom: 1rem; }
-    h2 { font-size: 1.25rem; margin-bottom: 0.25rem; }
-    .email { color: #666; margin-bottom: 1.5rem; }
-    .actions { display: flex; flex-direction: column; gap: 0.75rem; }
-    .btn { display: block; padding: 0.75rem 1.5rem; border-radius: 0.25rem; border: 1px solid #e5e5e5; text-decoration: none; font-size: 1rem; text-align: center; cursor: pointer; }
-    .btn-primary { background: #ff90e8; color: #000; border-color: #ff90e8; }
-    .btn-secondary { background: #fff; color: #000; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <%= image_tag(@user.avatar_url, class: "avatar", alt: @user.display_name) %>
-    <h2>Continue as <%= @user.display_name %>?</h2>
-    <p class="email"><%= @user.email %></p>
-    <div class="actions">
-      <a href="<%= @oauth_authorize_url %>" class="btn btn-primary">Continue</a>
-      <a href="/oauth/mobile_pre_authorize/switch_account?<%= request.query_string %>" class="btn btn-secondary">Use a different account</a>
+<main class="stack">
+  <header>
+    <div>
+      <%= image_tag(@user.avatar_url, size: "72", alt: @user.display_name, class: "rounded-full") %>
     </div>
-  </div>
-</body>
-</html>
+    <h2>
+      Continue as
+      <strong><%= @user.display_name %></strong>?
+    </h2>
+    <p><%= @user.email %></p>
+  </header>
+  <footer>
+    <a href="<%= @oauth_authorize_url %>" class="inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-snug">Continue</a>
+    <a href="<%= switch_account_oauth_mobile_pre_authorization_path %>?<%= request.query_string %>" class="inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-snug">Use a different account</a>
+  </footer>
+</main>

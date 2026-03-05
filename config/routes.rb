@@ -27,8 +27,11 @@ Rails.application.routes.draw do
     controllers tokens: "oauth/tokens"
   end
 
-  get "oauth/mobile_pre_authorize", to: "oauth/mobile_pre_authorizations#new"
-  get "oauth/mobile_pre_authorize/switch_account", to: "oauth/mobile_pre_authorizations#switch_account"
+  namespace :oauth do
+    resource :mobile_pre_authorization, only: [:new] do
+      get :switch_account, on: :member
+    end
+  end
 
   # third party analytics (near the top to matches constraint first)
   constraints(host: /#{THIRD_PARTY_ANALYTICS_DOMAIN}/o) do
