@@ -44,19 +44,6 @@ select[multiple].chosen-fallback {
   opacity: $disabled-opacity;
 }
 
-// Temporary styles until we have `:has`
-@each $name, $color in $states {
-  label.#{$name} {
-    color: $color;
-    a {
-      color: $color;
-    }
-
-    input[type="checkbox"]:not([role="switch"]) {
-      border-color: $color;
-    }
-  }
-}
 
 body#overlay-page {
   display: flex;
