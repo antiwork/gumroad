@@ -37,7 +37,7 @@ class PurchasesController < ApplicationController
 
   def confirm
     ActiveRecord::Base.connection.stick_to_primary!
-    @purchase = Purchase.find_by_external_id(params[:id])
+    @purchase = Purchase.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless @purchase
 
     error = Purchase::ConfirmService.new(purchase: @purchase, params:).perform

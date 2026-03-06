@@ -1,16 +1,21 @@
+import { ChevronDown, ChevronUp, LayersAlt, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newVersionId = 0;
@@ -52,7 +57,7 @@ export const VersionsEditor = ({
         ]);
       }}
     >
-      <Icon name="plus" />
+      <Plus className="size-5" />
       Add version
     </Button>
   );
@@ -132,28 +137,28 @@ const VersionEditor = ({
     <Row role="listitem">
       <RowContent>
         <ReorderingHandle />
-        <Icon name="stack-fill" />
+        <LayersAlt pack="filled" className="size-5" />
         <h3>{version.name || "Untitled"}</h3>
       </RowContent>
       <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
-          <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
-            <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
+          <Button size="icon" onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
+            {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
         </WithTooltip>
         <WithTooltip tip="Remove">
-          <Button onClick={onDelete} aria-label="Remove version">
-            <Icon name="trash2" />
+          <Button size="icon" onClick={onDelete} aria-label="Remove version">
+            <Trash className="size-5" />
           </Button>
         </WithTooltip>
       </RowActions>
       {isOpen ? (
         <RowDetails asChild>
           <Drawer className="grid gap-6">
-            <fieldset>
-              <label htmlFor={`${uid}-name`}>Name</label>
-              <div className="input">
-                <input
+            <Fieldset>
+              <Label htmlFor={`${uid}-name`}>Name</Label>
+              <InputGroup>
+                <Input
                   id={`${uid}-name`}
                   type="text"
                   value={version.name}
@@ -163,19 +168,19 @@ const VersionEditor = ({
                 <a href={url} target="_blank" rel="noreferrer">
                   Share
                 </a>
-              </div>
-            </fieldset>
-            <fieldset>
-              <label htmlFor={`${uid}-description`}>Description</label>
-              <textarea
+              </InputGroup>
+            </Fieldset>
+            <Fieldset>
+              <Label htmlFor={`${uid}-description`}>Description</Label>
+              <Textarea
                 id={`${uid}-description`}
                 value={version.description}
                 onChange={(evt) => updateVersion({ description: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
             <section className="grid grid-flow-col items-end gap-6">
-              <fieldset>
-                <label htmlFor={`${uid}-price`}>Additional amount</label>
+              <Fieldset>
+                <Label htmlFor={`${uid}-price`}>Additional amount</Label>
                 <PriceInput
                   id={`${uid}-price`}
                   currencyCode={currencyType}
@@ -183,22 +188,22 @@ const VersionEditor = ({
                   onChange={(price_difference_cents) => updateVersion({ price_difference_cents })}
                   placeholder="0"
                 />
-              </fieldset>
-              <fieldset>
-                <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
+              </Fieldset>
+              <Fieldset>
+                <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>
                 <NumberInput
                   onChange={(value) => updateVersion({ max_purchase_count: value })}
                   value={version.max_purchase_count}
                 >
                   {(inputProps) => (
-                    <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
+                    <Input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
                   )}
                 </NumberInput>
-              </fieldset>
+              </Fieldset>
             </section>
             {integrations.length > 0 ? (
-              <fieldset>
-                <legend>Integrations</legend>
+              <Fieldset>
+                <FieldsetTitle>Integrations</FieldsetTitle>
                 {integrations.map((integration) => (
                   <Switch
                     checked={version.integrations[integration]}
@@ -211,7 +216,7 @@ const VersionEditor = ({
                     }
                   />
                 ))}
-              </fieldset>
+              </Fieldset>
             ) : null}
           </Drawer>
         </RowDetails>

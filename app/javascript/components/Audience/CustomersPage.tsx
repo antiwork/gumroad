@@ -1,3 +1,13 @@
+import {
+  ArrowDown,
+  ArrowInDownSquareHalf,
+  ArrowLeft,
+  ArrowUpRightSquare,
+  MenuFilter,
+  Paperclip,
+  Trash,
+  Truck,
+} from "@boxicons/react";
 import { Blob, DirectUpload } from "@rails/activestorage";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
@@ -45,15 +55,16 @@ import {
   updateOption,
   updatePurchase,
 } from "$app/data/customers";
-import { classNames } from "$app/utils/classNames";
 import {
   CurrencyCode,
   formatPriceCentsWithCurrencySymbol,
   formatPriceCentsWithoutCurrencySymbol,
+  getIsSingleUnitCurrency,
 } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { isValidEmail } from "$app/utils/email";
 import FileUtils from "$app/utils/file";
+import { priceCentsToUnit } from "$app/utils/price";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -63,7 +74,6 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { FileKindIcon } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
@@ -79,10 +89,15 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+import { Select as FormSelect } from "$app/components/ui/Select";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -265,8 +280,8 @@ const CustomersPage = ({
               <PopoverAnchor>
                 <WithTooltip tip="Filter">
                   <PopoverTrigger aria-label="Filter" asChild>
-                    <Button>
-                      <Icon name="filter" />
+                    <Button size="icon">
+                      <MenuFilter className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -304,8 +319,8 @@ const CustomersPage = ({
                       }}
                       className="grow"
                     >
-                      <fieldset>
-                        <label htmlFor={`${uid}-minimum-amount`}>Paid more than</label>
+                      <Fieldset>
+                        <Label htmlFor={`${uid}-minimum-amount`}>Paid more than</Label>
                         <PriceInput
                           id={`${uid}-minimum-amount`}
                           currencyCode={currency_type}
@@ -313,9 +328,9 @@ const CustomersPage = ({
                           onChange={(minimumAmount) => updateQuery({ minimumAmount })}
                           placeholder="0"
                         />
-                      </fieldset>
-                      <fieldset>
-                        <label htmlFor={`${uid}-maximum-amount`}>Paid less than</label>
+                      </Fieldset>
+                      <Fieldset>
+                        <Label htmlFor={`${uid}-maximum-amount`}>Paid less than</Label>
                         <PriceInput
                           id={`${uid}-maximum-amount`}
                           currencyCode={currency_type}
@@ -323,7 +338,7 @@ const CustomersPage = ({
                           onChange={(maximumAmount) => updateQuery({ maximumAmount })}
                           placeholder="0"
                         />
-                      </fieldset>
+                      </Fieldset>
                     </div>
                   </CardContent>
                   <CardContent>
@@ -335,32 +350,36 @@ const CustomersPage = ({
                       }}
                       className="grow"
                     >
-                      <fieldset>
-                        <label htmlFor={`${uid}-after-date`}>After</label>
+                      <Fieldset>
+                        <Label htmlFor={`${uid}-after-date`}>After</Label>
                         <DateInput
                           id={`${uid}-after-date`}
                           value={createdAfter}
                           onChange={(createdAfter) => updateQuery({ createdAfter })}
                           max={createdBefore || undefined}
                         />
-                        <small suppressHydrationWarning>{`00:00  ${timeZoneAbbreviation}`}</small>
-                      </fieldset>
-                      <fieldset>
-                        <label htmlFor={`${uid}-before-date`}>Before</label>
+                        <FieldsetDescription
+                          suppressHydrationWarning
+                        >{`00:00  ${timeZoneAbbreviation}`}</FieldsetDescription>
+                      </Fieldset>
+                      <Fieldset>
+                        <Label htmlFor={`${uid}-before-date`}>Before</Label>
                         <DateInput
                           id={`${uid}-before-date`}
                           value={createdBefore}
                           onChange={(createdBefore) => updateQuery({ createdBefore })}
                           min={createdAfter || undefined}
                         />
-                        <small suppressHydrationWarning>{`11:59 ${timeZoneAbbreviation}`}</small>
-                      </fieldset>
+                        <FieldsetDescription
+                          suppressHydrationWarning
+                        >{`11:59 ${timeZoneAbbreviation}`}</FieldsetDescription>
+                      </Fieldset>
                     </div>
                   </CardContent>
                   <CardContent>
-                    <fieldset className="grow basis-0">
-                      <label htmlFor={`${uid}-country`}>From</label>
-                      <select
+                    <Fieldset className="grow basis-0">
+                      <Label htmlFor={`${uid}-country`}>From</Label>
+                      <FormSelect
                         id={`${uid}-country`}
                         value={country ?? "Anywhere"}
                         onChange={(evt) =>
@@ -373,12 +392,12 @@ const CustomersPage = ({
                             {country}
                           </option>
                         ))}
-                      </select>
-                    </fieldset>
+                      </FormSelect>
+                    </Fieldset>
                   </CardContent>
                   <CardContent>
                     <h4 className="font-bold">
-                      <label htmlFor={`${uid}-active-customers-only`}>Show active customers only</label>
+                      <Label htmlFor={`${uid}-active-customers-only`}>Show active customers only</Label>
                     </h4>
                     <Switch
                       id={`${uid}-active-customers-only`}
@@ -393,8 +412,8 @@ const CustomersPage = ({
               <PopoverAnchor>
                 <WithTooltip tip="Export">
                   <PopoverTrigger aria-label="Export" asChild>
-                    <Button>
-                      <Icon name="download" />
+                    <Button size="icon">
+                      <ArrowInDownSquareHalf className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -435,7 +454,7 @@ const CustomersPage = ({
         {customers.length > 0 ? (
           <section className="flex flex-col gap-4">
             <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
-              <TableCaption>{`All sales (${count})`}</TableCaption>
+              <TableCaption>{`All sales (${count.toLocaleString()})`}</TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
@@ -462,7 +481,11 @@ const CustomersPage = ({
                       <TableCell>
                         {customer.shipping && !customer.shipping.tracking.shipped ? (
                           <WithTooltip tip="Not Shipped">
-                            <Icon name="truck" style={{ marginRight: "var(--spacer-2)" }} aria-label="Not Shipped" />
+                            <Truck
+                              style={{ marginRight: "var(--spacer-2)" }}
+                              aria-label="Not Shipped"
+                              className="size-5"
+                            />
                           </WithTooltip>
                         ) : null}
                         {customer.email.length <= 30 ? customer.email : `${customer.email.slice(0, 27)}...`}
@@ -601,10 +624,10 @@ const ProductSelect = ({
 }) => {
   const uid = React.useId();
   return (
-    <fieldset className={className}>
-      <legend>
-        <label htmlFor={uid}>{label}</label>
-      </legend>
+    <Fieldset className={className}>
+      <FieldsetTitle>
+        <Label htmlFor={uid}>{label}</Label>
+      </FieldsetTitle>
       <Select
         inputId={uid}
         options={products.flatMap((product) => [
@@ -637,7 +660,7 @@ const ProductSelect = ({
         isMulti
         isClearable
       />
-    </fieldset>
+    </Fieldset>
   );
 };
 
@@ -777,7 +800,7 @@ const CustomerDrawer = ({
         <div className="flex gap-4">
           {onBack ? (
             <button onClick={onBack} aria-label="Return to bundle" className="cursor-pointer all-unset">
-              <Icon name="arrow-left" style={{ fontSize: "var(--big-icon-size)" }} />
+              <ArrowLeft style={{ fontSize: "var(--big-icon-size)" }} className="size-5" />
             </button>
           ) : null}
           <h2>{customer.product.name}</h2>
@@ -889,7 +912,7 @@ const CustomerDrawer = ({
                   aria-label="Transaction"
                   className="grow"
                 >
-                  <Icon name="arrow-up-right-square" />
+                  <ArrowUpRightSquare className="size-5" />
                 </a>
               ) : null}
             </h3>
@@ -1241,7 +1264,7 @@ const CustomerDrawer = ({
                             {post.name}
                           </a>
                         </h5>
-                        <small>{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
+                        <small className="text-muted">{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
                       </div>
                       <Button
                         color="primary"
@@ -1301,7 +1324,7 @@ const CustomerDrawer = ({
                             email.name
                           )}
                         </h5>
-                        <small>{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
+                        <small className="text-muted">{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
                       </div>
                       {email.type === "receipt" ? (
                         <Button
@@ -1410,71 +1433,71 @@ const AddressSection = ({
         {isEditing ? (
           <CardContent>
             <div className="flex grow flex-col gap-4">
-              <fieldset>
-                <legend>
-                  <label htmlFor={`${uid}-full-name`}>Full name</label>
-                </legend>
-                <input
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-full-name`}>Full name</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-full-name`}
                   type="text"
                   placeholder="Full name"
                   value={address.full_name}
                   onChange={(evt) => updateShipping({ full_name: evt.target.value })}
                 />
-              </fieldset>
-              <fieldset>
-                <legend>
-                  <label htmlFor={`${uid}-street-address`}>Street address</label>
-                </legend>
-                <input
+              </Fieldset>
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-street-address`}>Street address</Label>
+                </FieldsetTitle>
+                <Input
                   id={`${uid}-street-address`}
                   type="text"
                   placeholder="Street address"
                   value={address.street_address}
                   onChange={(evt) => updateShipping({ street_address: evt.target.value })}
                 />
-              </fieldset>
+              </Fieldset>
               <div style={{ display: "grid", gridAutoFlow: "column", gridAutoColumns: "1fr", gap: "var(--spacer-2)" }}>
-                <fieldset>
-                  <legend>
-                    <label htmlFor={`${uid}-city`}>City</label>
-                  </legend>
-                  <input
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-city`}>City</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={`${uid}-city`}
                     type="text"
                     placeholder="City"
                     value={address.city}
                     onChange={(evt) => updateShipping({ city: evt.target.value })}
                   />
-                </fieldset>
-                <fieldset>
-                  <legend>
-                    <label htmlFor={`${uid}-state`}>State</label>
-                  </legend>
-                  <input
+                </Fieldset>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-state`}>State</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={`${uid}-state`}
                     type="text"
                     placeholder="State"
                     value={address.state}
                     onChange={(evt) => updateShipping({ state: evt.target.value })}
                   />
-                </fieldset>
-                <fieldset>
-                  <legend>
-                    <label htmlFor={`${uid}-zip-code`}>ZIP code</label>
-                  </legend>
-                  <input
+                </Fieldset>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-zip-code`}>ZIP code</Label>
+                  </FieldsetTitle>
+                  <Input
                     id={`${uid}-zip-code`}
                     type="text"
                     placeholder="ZIP code"
                     value={address.zip_code}
                     onChange={(evt) => updateShipping({ zip_code: evt.target.value })}
                   />
-                </fieldset>
+                </Fieldset>
               </div>
-              <fieldset>
-                <label htmlFor={`${uid}-country`}>Country</label>
-                <select
+              <Fieldset>
+                <Label htmlFor={`${uid}-country`}>Country</Label>
+                <FormSelect
                   id={`${uid}-country`}
                   value={address.country}
                   onChange={(evt) => updateShipping({ country: evt.target.value })}
@@ -1484,8 +1507,8 @@ const AddressSection = ({
                       {country}
                     </option>
                   ))}
-                </select>
-              </fieldset>
+                </FormSelect>
+              </Fieldset>
               <div
                 style={{
                   width: "100%",
@@ -1566,8 +1589,8 @@ const TrackingSection = ({
           )
         ) : (
           <CardContent>
-            <fieldset className="grow basis-0">
-              <input
+            <Fieldset className="grow basis-0">
+              <Input
                 type="text"
                 placeholder="Tracking URL (optional)"
                 value={url}
@@ -1576,7 +1599,7 @@ const TrackingSection = ({
               <Button color="primary" disabled={isLoading} onClick={() => void handleSave()}>
                 Mark as shipped
               </Button>
-            </fieldset>
+            </Fieldset>
           </CardContent>
         )}
       </section>
@@ -1628,8 +1651,8 @@ const EmailSection = ({
         </CardContent>
         {isEditing ? (
           <CardContent asChild>
-            <fieldset>
-              <input
+            <Fieldset>
+              <Input
                 type="text"
                 value={email}
                 onChange={(evt) => setEmail(evt.target.value)}
@@ -1652,7 +1675,7 @@ const EmailSection = ({
                   Save
                 </Button>
               </div>
-            </fieldset>
+            </Fieldset>
           </CardContent>
         ) : (
           <CardContent asChild>
@@ -1663,7 +1686,7 @@ const EmailSection = ({
                   Edit
                 </button>
               ) : (
-                <small>
+                <small className="text-muted">
                   You cannot change the email of this purchase, because it was made by an existing user. Please ask them
                   to go to gumroad.com/settings to update their email.
                 </small>
@@ -1674,11 +1697,11 @@ const EmailSection = ({
         {onChangeCanContact ? (
           <CardContent asChild>
             <section>
-              <fieldset role="group" className="grow basis-0">
-                <label>
+              <Fieldset role="group" className="grow basis-0">
+                <Label>
                   Receives emails
-                  <input
-                    type="checkbox"
+                  <Checkbox
+                    wrapperClassName="ml-auto"
                     checked={canContact}
                     onChange={(evt) => {
                       setIsLoading(true);
@@ -1686,8 +1709,8 @@ const EmailSection = ({
                     }}
                     disabled={isLoading}
                   />
-                </label>
-              </fieldset>
+                </Label>
+              </Fieldset>
             </section>
           </CardContent>
         ) : null}
@@ -1920,8 +1943,8 @@ const OptionSection = ({
           <section>
             {options.length > 0 ? (
               isEditing ? (
-                <fieldset className={classNames({ danger: selectedOptionId.error }, "grow basis-0")}>
-                  <select
+                <Fieldset state={selectedOptionId.error ? "danger" : undefined} className="grow basis-0">
+                  <FormSelect
                     value={selectedOptionId.value ?? "None selected"}
                     name={title}
                     onChange={(evt) => setSelectedOptionId({ value: evt.target.value })}
@@ -1933,7 +1956,7 @@ const OptionSection = ({
                         {option.name}
                       </option>
                     ))}
-                  </select>
+                  </FormSelect>
                   <div
                     style={{
                       width: "100%",
@@ -1949,7 +1972,7 @@ const OptionSection = ({
                       Save
                     </Button>
                   </div>
-                </fieldset>
+                </Fieldset>
               ) : (
                 <>
                   <h5>{option?.name ?? "None selected"}</h5>
@@ -2089,9 +2112,9 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
         </CardContent>
         {isEditing ? (
           <CardContent asChild>
-            <fieldset>
+            <Fieldset>
               <NumberInput value={seats} onChange={(seats) => setSeats(seats ?? 0)}>
-                {(props) => <input type="number" {...props} min={1} aria-label="Seats" className="grow" />}
+                {(props) => <Input type="number" {...props} min={1} aria-label="Seats" className="grow" />}
               </NumberInput>
               <div
                 style={{
@@ -2108,7 +2131,7 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
                   Save
                 </Button>
               </div>
-            </fieldset>
+            </Fieldset>
           </CardContent>
         ) : (
           <CardContent asChild>
@@ -2278,7 +2301,7 @@ const RefundForm = ({
     }
     try {
       setIsLoading(true);
-      await refund(purchaseId, refundAmountCents.value / 100.0);
+      await refund(purchaseId, priceCentsToUnit(refundAmountCents.value, getIsSingleUnitCurrency(currencyType)));
       const refundAmountRemaining = amountRefundable - refundAmountCents.value;
       onChange(refundAmountRemaining);
       setRefundAmountCents({ value: refundAmountRemaining });
@@ -2299,7 +2322,7 @@ const RefundForm = ({
 
   return (
     <>
-      <fieldset className={classNames({ danger: refundAmountCents.error }, className)}>
+      <Fieldset state={refundAmountCents.error ? "danger" : undefined} className={className}>
         <PriceInput
           cents={refundAmountCents.value}
           onChange={(value) => setRefundAmountCents({ value })}
@@ -2336,7 +2359,7 @@ const RefundForm = ({
             </a>
           </Alert>
         ) : null}
-      </fieldset>
+      </Fieldset>
       <div style={{ display: "contents" }}>
         <Modal
           usePortal
@@ -2402,7 +2425,7 @@ const ChargeRow = ({
             rel="noreferrer"
             aria-label="Transaction"
           >
-            <Icon name="arrow-up-right-square" />
+            <ArrowUpRightSquare className="size-5" />
           </a>
           {purchase.partially_refunded ? (
             <Pill size="small">Partial refund</Pill>
@@ -2562,8 +2585,8 @@ const CallSection = ({ call, onChange }: { call: Call; onChange: (call: Call) =>
               }}
               className="grow"
             >
-              <fieldset>
-                <input
+              <Fieldset>
+                <Input
                   type="text"
                   value={callUrl}
                   onChange={(evt) => setCallUrl(evt.target.value)}
@@ -2572,7 +2595,7 @@ const CallSection = ({ call, onChange }: { call: Call; onChange: (call: Call) =>
                 <Button color="primary" type="submit" disabled={isLoading}>
                   {isLoading ? "Saving..." : "Save"}
                 </Button>
-              </fieldset>
+              </Fieldset>
             </form>
           </section>
         </CardContent>
@@ -2595,18 +2618,19 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
     </RowContent>
     <RowActions>
       {onDelete ? (
-        <Button color="danger" onClick={onDelete} disabled={disabled} aria-label="Delete">
-          <Icon name="trash2" />
+        <Button color="danger" size="icon" onClick={onDelete} disabled={disabled} aria-label="Delete">
+          <Trash className="size-5" />
         </Button>
       ) : null}
       <NavigationButton
+        size="icon"
         href={Routes.s3_utility_cdn_url_for_blob_path({ key: file.key })}
         download
         target="_blank"
         disabled={disabled}
         aria-label="Download"
       >
-        <Icon name="download-fill" />
+        <ArrowDown pack="filled" className="size-5" />
       </NavigationButton>
     </RowActions>
   </Row>
@@ -2733,7 +2757,7 @@ const CommissionSection = ({
                   multiple
                   style={{ display: "none" }}
                 />
-                <Icon name="paperclip" /> Upload files
+                <Paperclip className="size-5" /> Upload files
               </label>
               {commission.status === "in_progress" ? (
                 <Button color="primary" disabled={isLoading} onClick={() => void handleCompletion()}>

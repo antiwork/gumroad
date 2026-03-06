@@ -202,17 +202,16 @@ describe("Product Edit Scenario", type: :system, js: true) do
       click_on "Upsell"
     end
 
-    # The product itself should be listed but disabled, variants listed with icon
     within_modal do
       find(:combo_box, "Product").click
       product_option = find("[role='option']", text: "Sample product", exact_text: true)
-      expect(product_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(product_option["aria-disabled"]).to eq("true")
 
       variant1_option = find("[role='option']", text: "Sample product (#{variant1.name})")
-      expect(variant1_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(variant1_option["aria-disabled"]).to eq("false")
 
       variant2_option = find("[role='option']", text: "Sample product (#{variant2.name})")
-      expect(variant2_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(variant2_option["aria-disabled"]).to eq("false")
     end
 
     discount_amount_cents = 100

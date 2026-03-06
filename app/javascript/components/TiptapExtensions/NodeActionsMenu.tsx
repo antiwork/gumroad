@@ -1,10 +1,10 @@
+import { ArrowDown, ArrowUp, ChevronLeft, DotsVerticalRounded, Trash } from "@boxicons/react";
 import { Editor } from "@tiptap/core";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 
 export const NodeActionsMenu = ({
@@ -22,8 +22,8 @@ export const NodeActionsMenu = ({
       <div className="actions-menu">
         <PopoverAnchor>
           <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
-            <Button small color="filled">
-              <Icon name="outline-drag" />
+            <Button size="sm" color="filled">
+              <DotsVerticalRounded pack="filled" className="size-5" />
             </Button>
           </PopoverTrigger>
         </PopoverAnchor>
@@ -36,7 +36,7 @@ export const NodeActionsMenu = ({
             {actions && selectedActionIndex !== null ? (
               <>
                 <div onClick={() => setSelectedActionIndex(null)} role="menuitem">
-                  <Icon name="outline-cheveron-left" />
+                  <ChevronLeft className="size-5" />
                   <span>Back</span>
                 </div>
                 {assertDefined(actions[selectedActionIndex]).menu(() => setOpen(false))}
@@ -44,11 +44,11 @@ export const NodeActionsMenu = ({
             ) : (
               <>
                 <div onClick={() => editor.commands.moveNodeUp()} role="menuitem">
-                  <Icon name="arrow-up" />
+                  <ArrowUp className="size-5" />
                   <span>Move up</span>
                 </div>
                 <div onClick={() => editor.commands.moveNodeDown()} role="menuitem">
-                  <Icon name="arrow-down" />
+                  <ArrowDown className="size-5" />
                   <span>Move down</span>
                 </div>
                 {actions?.map(({ item }, index) => (
@@ -61,7 +61,7 @@ export const NodeActionsMenu = ({
                   onClick={() => editor.commands.deleteSelection()}
                   role="menuitem"
                 >
-                  <Icon name="trash2" />
+                  <Trash className="size-5" />
                   <span>Delete</span>
                 </div>
               </>

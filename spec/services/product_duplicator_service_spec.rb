@@ -358,6 +358,16 @@ describe ProductDuplicatorService do
     end
   end
 
+  describe "error handling" do
+    it "stores the error message on failure and re-raises" do
+      service = ProductDuplicatorService.new(product.id)
+      allow(service).to receive(:post_process_attachments).and_raise(StandardError, "Something broke")
+
+      expect { service.duplicate }.to raise_error(StandardError, "Something broke")
+      expect(ProductDuplicatorService.new(product.id).recently_failed_error_message).to eq("Something broke")
+    end
+  end
+
   describe "public files" do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller) }

@@ -1,3 +1,4 @@
+import { FileDetail, Paperclip, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
@@ -14,12 +15,15 @@ import {
 import FileUtils from "$app/utils/file";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Radio } from "$app/components/ui/Radio";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+import { Textarea } from "$app/components/ui/Textarea";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "pdf"];
@@ -237,23 +241,22 @@ export default function Show() {
         </Alert>
       </CardContent>
       <CardContent>
-        <fieldset className="grow basis-0">
-          <legend>
-            <label htmlFor={reasonForWinningUID}>Why should you win this dispute?</label>
-          </legend>
+        <Fieldset className="grow basis-0">
+          <FieldsetTitle>
+            <Label htmlFor={reasonForWinningUID}>Why should you win this dispute?</Label>
+          </FieldsetTitle>
           {disputeReason.reasonsForWinning.map((option) => (
-            <label key={option}>
-              <input
-                type="radio"
+            <Label key={option}>
+              <Radio
                 name="reasonForWinning"
                 value={option}
                 onChange={(evt) => setReasonForWinningOption(cast<ReasonForWinningOption>(evt.target.value))}
               />
               {reasonForWinningOptions[option]}
-            </label>
+            </Label>
           ))}
           {reasonForWinningOption === "other" ? (
-            <textarea
+            <Textarea
               id={reasonForWinningUID}
               maxLength={TEXTAREA_MAX_LENGTH}
               rows={TEXTAREA_ROWS}
@@ -261,28 +264,26 @@ export default function Show() {
               onChange={(evt) => updateFormData({ reason_for_winning: evt.target.value })}
             />
           ) : null}
-        </fieldset>
+        </Fieldset>
       </CardContent>
       {disputable.is_subscription && dispute_evidence.dispute_reason === "subscription_canceled" ? (
         <CardContent>
-          <fieldset className="grow basis-0">
-            <legend>
-              <label htmlFor={cancellationRebuttalUID}>Why was the customer's subscription not canceled?</label>
-            </legend>
+          <Fieldset className="grow basis-0">
+            <FieldsetTitle>
+              <Label htmlFor={cancellationRebuttalUID}>Why was the customer's subscription not canceled?</Label>
+            </FieldsetTitle>
             {Object.entries(cancellationRebuttalOptions).map(([option, message]) => (
-              <label key={option}>
-                <input
-                  type="radio"
+              <Label key={option}>
+                <Radio
                   name="cancellationRebuttal"
                   value={option}
                   onChange={(evt) => setCancellationRebuttalOption(cast<CancellationRebuttalOption>(evt.target.value))}
                 />
-
                 {message}
-              </label>
+              </Label>
             ))}
             {cancellationRebuttalOption === "other" ? (
-              <textarea
+              <Textarea
                 id={cancellationRebuttalUID}
                 maxLength={TEXTAREA_MAX_LENGTH}
                 rows={TEXTAREA_ROWS}
@@ -290,30 +291,30 @@ export default function Show() {
                 onChange={(evt) => updateFormData({ cancellation_rebuttal: evt.target.value })}
               />
             ) : null}
-          </fieldset>
+          </Fieldset>
         </CardContent>
       ) : null}
       {"refusalRequiresExplanation" in disputeReason ? (
         <CardContent>
-          <fieldset className="grow basis-0">
-            <legend>
-              <label htmlFor={refundRefusalExplanationUID}>Why is the customer not entitled to a refund?</label>
-            </legend>
-            <textarea
+          <Fieldset className="grow basis-0">
+            <FieldsetTitle>
+              <Label htmlFor={refundRefusalExplanationUID}>Why is the customer not entitled to a refund?</Label>
+            </FieldsetTitle>
+            <Textarea
               id={refundRefusalExplanationUID}
               maxLength={TEXTAREA_MAX_LENGTH}
               rows={TEXTAREA_ROWS}
               value={form.data.dispute_evidence.refund_refusal_explanation}
               onChange={(evt) => updateFormData({ refund_refusal_explanation: evt.target.value })}
             />
-          </fieldset>
+          </Fieldset>
         </CardContent>
       ) : null}
       <CardContent>
-        <fieldset className="grow basis-0">
-          <legend>
-            <label>Do you have additional evidence you'd like to provide?</label>
-          </legend>
+        <Fieldset className="grow basis-0">
+          <FieldsetTitle>
+            <Label>Do you have additional evidence you'd like to provide?</Label>
+          </FieldsetTitle>
 
           <Files blobs={blobs} onRemoveFile={removeEvidenceFile} isSubmitting={form.processing} />
 
@@ -323,6 +324,7 @@ export default function Show() {
                 ref={fileInputRef}
                 type="file"
                 accept={ALLOWED_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
+                className="sr-only"
                 tabIndex={-1}
                 onChange={handleFileUpload}
               />
@@ -333,7 +335,7 @@ export default function Show() {
                   </>
                 ) : (
                   <>
-                    <Icon name="paperclip" /> Upload customer communication
+                    <Paperclip className="size-5" /> Upload customer communication
                   </>
                 )}
               </Button>
@@ -346,7 +348,7 @@ export default function Show() {
               </p>
             </>
           ) : null}
-        </fieldset>
+        </Fieldset>
       </CardContent>
       <CardContent>
         <Button
@@ -393,7 +395,7 @@ const Files = ({
       {eligibleBlobs.map((blob) => (
         <Row role="listitem" key={blob.key}>
           <RowContent>
-            <Icon name="solid-document-text" className="type-icon" />
+            <FileDetail pack="filled" className="type-icon size-5" />
             <div>
               <h4>{blob.title}</h4>
               <ul className="inline">
@@ -408,13 +410,14 @@ const Files = ({
             </NavigationButton>
             {blob.signed_id ? (
               <Button
+                size="icon"
                 color="danger"
                 outline
                 aria-label="Remove"
                 disabled={isRemovingFile || isSubmitting}
                 onClick={handleFileRemove}
               >
-                <Icon name="trash2" />
+                <Trash className="size-5" />
               </Button>
             ) : null}
           </RowActions>

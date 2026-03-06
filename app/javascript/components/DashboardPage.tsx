@@ -1,3 +1,4 @@
+import { CheckCircle, ChevronsDownUp, ChevronsUpDown, Circle } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -7,7 +8,6 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
 import { EmailBlastIcon } from "$app/components/icons/getting-started/EmailBlastIcon";
 import { FirstFollowerIcon } from "$app/components/icons/getting-started/FirstFollowerIcon";
@@ -169,20 +169,27 @@ const GettingStartedItem = ({
 }: GettingStartedItemProps) => {
   const commonClasses = "relative";
 
-  const iconName = completed ? "solid-check-circle" : "circle";
   const iconClasses = completed ? "text-green" : "text-dark-gray";
+  const StatusIcon = completed ? CheckCircle : Circle;
+  const statusIconPack = completed ? "filled" : undefined;
 
   const content = minimized ? (
     <div className="flex w-full items-center gap-2">
       <IconComponent isChecked={completed} width={36} height={36} className="flex-none" />
       <span className="mb-1 flex-1 text-left leading-tight font-semibold">{name}</span>
-      <Icon name={iconName} className={cx("flex-none", iconClasses)} />
+      <StatusIcon
+        {...(statusIconPack ? { pack: statusIconPack } : {})}
+        className={cx("size-5 flex-none", iconClasses)}
+      />
     </div>
   ) : (
     <div className="my-3 flex flex-col items-center gap-1">
       <IconComponent isChecked={completed} width={60} height={60} />
       <span className="leading-tight font-semibold">{name}</span>
-      <Icon name={iconName} className={cx("absolute top-2 right-2", iconClasses)} />
+      <StatusIcon
+        {...(statusIconPack ? { pack: statusIconPack } : {})}
+        className={cx("absolute top-2 right-2 size-5", iconClasses)}
+      />
       <p className="text-sm opacity-80">{description}</p>
     </div>
   );
@@ -355,10 +362,11 @@ export const DashboardPage = ({
                   style={{ display: "flex", alignItems: "center", gap: "var(--spacer-1)" }}
                 >
                   <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
-                  <Icon
-                    name={gettingStartedMinimized ? "arrows-expand" : "arrows-collapse"}
-                    style={{ width: "20px", height: "20px" }}
-                  />
+                  {gettingStartedMinimized ? (
+                    <ChevronsUpDown className="size-5" style={{ width: "20px", height: "20px" }} />
+                  ) : (
+                    <ChevronsDownUp className="size-5" style={{ width: "20px", height: "20px" }} />
+                  )}
                 </a>
               </div>
               <div className="grid w-full grid-cols-1 gap-4 min-[2000px]:grid-cols-8 sm:grid-cols-2 xl:grid-cols-4">

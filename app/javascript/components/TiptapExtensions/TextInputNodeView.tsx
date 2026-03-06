@@ -4,6 +4,9 @@ import { cast } from "ts-safe-cast";
 
 import { TextInput } from "$app/components/Download/CustomField/TextInput";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewProps) => {
   const label = cast<string | null>(node.attrs.label);
@@ -17,13 +20,13 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
 
   return (
     <NodeViewWrapper data-drag-handle data-input-embed>
-      <fieldset>
+      <Fieldset>
         {editor.isEditable ? (
           <>
             <NodeActionsMenu editor={editor} />
 
             <fieldset className="m-0 min-w-0 flex-1 border-0 p-0">
-              <input
+              <Input
                 value={label ?? ""}
                 placeholder="Title"
                 onChange={(evt) => updateAttributes({ label: evt.target.value })}
@@ -39,13 +42,13 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
                   borderRadius: 0,
                 }}
               />
-              {type === "shortAnswer" ? <input {...sharedProps} /> : <textarea {...sharedProps} />}
+              {type === "shortAnswer" ? <Input {...sharedProps} /> : <Textarea {...sharedProps} />}
             </fieldset>
           </>
         ) : (
           <TextInput customFieldId={customFieldId ?? ""} type={type} label={label ?? ""} />
         )}
-      </fieldset>
+      </Fieldset>
     </NodeViewWrapper>
   );
 };

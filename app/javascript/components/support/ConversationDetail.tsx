@@ -1,3 +1,4 @@
+import { ArrowLeft, ChevronDown, ChevronUp, Paperclip, Trash } from "@boxicons/react";
 import type { Message } from "@helperai/client";
 import { useConversation, useRealtimeEvents, useCreateMessage, MessageContent } from "@helperai/react";
 import cx from "classnames";
@@ -11,9 +12,10 @@ import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export const ALLOWED_ATTACHMENT_MIMETYPES = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
 
@@ -44,7 +46,7 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
         onClick={() => setIsExpanded((v) => !v)}
       >
         <Button outline aria-expanded={isExpanded} aria-label={isExpanded ? "Collapse message" : "Expand message"}>
-          {isExpanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
+          {isExpanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
         </Button>
       </RowActions>
       {isExpanded ? (
@@ -118,7 +120,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
     <div>
       <header className="flex flex-col gap-4 border-b border-border p-4 md:p-8">
         <a className="no-underline" onClick={onBack}>
-          <Icon name="arrow-left" /> Go back to Support tickets
+          <ArrowLeft className="size-5" /> Go back to Support tickets
         </a>
         <h1 className="text-2xl">{conversation.subject}</h1>
       </header>
@@ -135,8 +137,8 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
         </Rows>
 
         <form className="mt-4 flex flex-col gap-2" onSubmit={(e) => void handleSubmit(e)}>
-          <label htmlFor="reply">Reply</label>
-          <textarea
+          <Label htmlFor="reply">Reply</Label>
+          <Textarea
             className="mb-2 flex-1 rounded-sm border px-3 py-2"
             placeholder="Write a reply"
             id="reply"
@@ -149,6 +151,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
             type="file"
             multiple
             accept={ALLOWED_ATTACHMENT_MIMETYPES}
+            className="sr-only"
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               if (files.length === 0) return;
@@ -176,7 +179,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
                       aria-label="Remove"
                       onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
                     >
-                      <Icon name="trash2" />
+                      <Trash className="size-5" />
                     </Button>
                   </RowActions>
                 </Row>
@@ -185,7 +188,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
           ) : null}
           <div className="flex gap-2">
             <Button onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-              <Icon name="paperclip" /> Attach files
+              <Paperclip className="size-5" /> Attach files
             </Button>
             <Button type="submit" color="primary" disabled={isSubmitting || !input.trim()}>
               {isSubmitting ? "Sending..." : "Send reply"}

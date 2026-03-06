@@ -9,7 +9,11 @@ import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Select as FormSelect } from "$app/components/ui/Select";
 import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 export type RefundPolicy = {
@@ -59,9 +63,9 @@ export const RefundPolicySelector = ({
       }
     >
       <Dropdown className="flex flex-col gap-4">
-        <fieldset>
-          <legend className="flex justify-between">
-            <label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</label>
+        <Fieldset>
+          <FieldsetTitle className="flex justify-between">
+            <Label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</Label>
             {refundPolicies.length > 0 ? (
               <Popover>
                 <PopoverTrigger className="underline">Copy from other products</PopoverTrigger>
@@ -96,8 +100,8 @@ export const RefundPolicySelector = ({
                 </PopoverContent>
               </Popover>
             ) : null}
-          </legend>
-          <select
+          </FieldsetTitle>
+          <FormSelect
             id={`${uid}-max-refund-period-in-days`}
             value={refundPolicy.max_refund_period_in_days}
             onChange={(evt) => {
@@ -117,13 +121,13 @@ export const RefundPolicySelector = ({
                 {value}
               </option>
             ))}
-          </select>
-        </fieldset>
-        <fieldset>
-          <legend>
-            <label htmlFor={`${uid}-refund-policy-fine-print`}>Fine print (optional)</label>
-          </legend>
-          <textarea
+          </FormSelect>
+        </Fieldset>
+        <Fieldset>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}-refund-policy-fine-print`}>Fine print (optional)</Label>
+          </FieldsetTitle>
+          <Textarea
             id={`${uid}-refund-policy-fine-print`}
             maxLength={3000}
             rows={10}
@@ -132,7 +136,7 @@ export const RefundPolicySelector = ({
             onMouseEnter={() => setShowPreview(true)}
             onMouseLeave={() => setShowPreview(false)}
           />
-        </fieldset>
+        </Fieldset>
       </Dropdown>
     </Details>
   );

@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, Music } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
@@ -9,10 +10,12 @@ import FileUtils, { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { Button } from "$app/components/Button";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { usePublicFilesSettings } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 const NodeView = ({ editor, node }: NodeViewProps) => {
@@ -64,8 +67,8 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
             </Button>
           ) : null}
           {editor.isEditable && !isUploading ? (
-            <Button onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
-              <Icon name={expanded ? "outline-cheveron-up" : "outline-cheveron-down"} />
+            <Button size="icon" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
+              {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
             </Button>
           ) : null}
           {FileUtils.isAudioExtension(file.extension) ? (
@@ -81,18 +84,18 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
         ) : null}
         {expanded ? (
           <RowDetails className="drawer flex flex-col gap-4">
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-name`}>Name</label>
-              </legend>
-              <input
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-name`}>Name</Label>
+              </FieldsetTitle>
+              <Input
                 type="text"
                 id={`${uid}-name`}
                 value={file.name}
                 onChange={(e) => updateFile?.(id, { name: e.target.value })}
                 placeholder="Enter file name"
               />
-            </fieldset>
+            </Fieldset>
           </RowDetails>
         ) : null}
       </Row>
@@ -125,13 +128,14 @@ export const PublicFileEmbed = TiptapNode.create({
       <>
         <MenuItem
           name="Insert audio"
-          icon="music-note-beamed"
+          icon={<Music className="size-5" />}
           active={editor.isActive("public-file-embed")}
           onClick={() => inputRef.current?.click()}
         />
         <input
           ref={inputRef}
           type="file"
+          className="sr-only"
           accept={FILE_TYPE_EXTENSIONS_MAP.audio.map((ext) => `.${ext.toLowerCase()}`).join(",")}
           onChange={(e) => {
             const files = [...(e.target.files || [])];

@@ -448,7 +448,7 @@ describe Subscription::UpdaterService, :vcr do
               expect(response[:success]).to be true
               expect(response[:requires_card_action]).to be true
               expect(response[:client_secret]).to be_present
-              expect(response[:purchase][:id]).to eq(last_purchase.external_id)
+              expect(Purchase.find_by_secure_external_id(response[:purchase][:id], scope: "confirm")).to eq(last_purchase)
               expect(PostToPingEndpointsWorker.jobs.size).to eq(0)
             end
           end
@@ -825,7 +825,7 @@ describe Subscription::UpdaterService, :vcr do
             expect(response[:success]).to be true
             expect(response[:requires_card_action]).to be true
             expect(response[:client_secret]).to be_present
-            expect(response[:purchase][:id]).to eq(last_purchase.external_id)
+            expect(Purchase.find_by_secure_external_id(response[:purchase][:id], scope: "confirm")).to eq(last_purchase)
             expect(PostToPingEndpointsWorker.jobs.size).to eq(0)
           end
         end
@@ -924,7 +924,7 @@ describe Subscription::UpdaterService, :vcr do
               expect(response[:success]).to be true
               expect(response[:requires_card_action]).to be true
               expect(response[:client_secret]).to be_present
-              expect(response[:purchase][:id]).to eq(@subscription.purchases.in_progress.last.external_id)
+              expect(Purchase.find_by_secure_external_id(response[:purchase][:id], scope: "confirm")).to eq(@subscription.purchases.in_progress.last)
               expect(PostToPingEndpointsWorker.jobs.size).to eq(0)
             end
           end

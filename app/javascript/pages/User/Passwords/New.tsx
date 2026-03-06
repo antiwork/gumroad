@@ -6,6 +6,9 @@ import { Layout } from "$app/components/Authentication/Layout";
 import { SocialAuth } from "$app/components/Authentication/SocialAuth";
 import { Button } from "$app/components/Button";
 import { Separator } from "$app/components/Separator";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type PageProps = {
@@ -41,13 +44,13 @@ function ForgotPasswordPage() {
         <Separator>
           <span>or</span>
         </Separator>
-        <section>
+        <section className="grid gap-8 py-12">
           <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={uid}>Email to send reset instructions to</label>
-            </legend>
-            <input
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={uid}>Email to send reset instructions to</Label>
+            </FieldsetTitle>
+            <Input
               id={uid}
               type="email"
               value={form.data.user.email}
@@ -56,7 +59,7 @@ function ForgotPasswordPage() {
               autoFocus
               autoComplete="email"
             />
-          </fieldset>
+          </Fieldset>
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Sending..." : "Send"}
           </Button>

@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight, FileDetail, RefreshCcw } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
@@ -9,7 +10,6 @@ import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
 import { TrackClick } from "$app/components/Download/Interactions";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
@@ -71,14 +71,8 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
             aria-expanded={expanded}
             contentEditable={false}
           >
-            {total > 0 ? (
-              expanded ? (
-                <Icon name="outline-cheveron-down" />
-              ) : (
-                <Icon name="outline-cheveron-right" />
-              )
-            ) : null}
-            <Icon name="file-earmark-medical-fill" className={cx("type-icon", { "text-muted": total === 0 })} />
+            {total > 0 ? expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" /> : null}
+            <FileDetail pack="filled" className={cx("type-icon", { "text-muted": total === 0 })} />
             <div>
               {isLoading || total > 0 ? (
                 <>
@@ -104,7 +98,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
               disabled={isLoading}
               onClick={() => void fetchMorePosts?.(true)}
             >
-              <Icon name="outline-refresh" />
+              <RefreshCcw className="size-5" />
             </Button>
           </RowActions>
         ) : null}
@@ -114,7 +108,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
             <Drawer id={uid}>
               {posts.map((post) => (
                 <RowContent key={post.id}>
-                  <Icon name="file-earmark-medical-fill" className="type-icon" />
+                  <FileDetail pack="filled" className="type-icon size-5" />
                   <div>
                     {editor.isEditable ? (
                       <a href={post.url} target="_blank" rel="noreferrer">
@@ -150,7 +144,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
               ))}
               {hasMorePosts && fetchMorePosts ? (
                 <div>
-                  <Button small outline color="primary" disabled={isLoading} onClick={() => void fetchMorePosts()}>
+                  <Button size="sm" outline color="primary" disabled={isLoading} onClick={() => void fetchMorePosts()}>
                     Load more
                   </Button>
                 </div>

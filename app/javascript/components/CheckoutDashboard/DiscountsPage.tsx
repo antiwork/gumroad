@@ -1,3 +1,4 @@
+import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -24,7 +25,6 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
@@ -37,10 +37,16 @@ import { Skeleton } from "$app/components/Skeleton";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
@@ -233,6 +239,9 @@ const DiscountsPage = ({
   });
 
   const [searchQuery, setSearchQuery] = React.useState<string | null>(initialQueryParams.query);
+  const hasSearchableContent = offerCodes.length > 0 || !!searchQuery;
+  const isSearchVisible = React.useRef(hasSearchableContent);
+  isSearchVisible.current ||= hasSearchableContent;
 
   const loadDiscounts = asyncVoid(async ({ page, query, sort, keepUrl }: QueryParams & { keepUrl?: boolean }) => {
     try {
@@ -297,7 +306,7 @@ const DiscountsPage = ({
       pages={pages}
       actions={
         <>
-          {offerCodes.length > 0 || searchQuery ? (
+          {isSearchVisible.current ? (
             <Search
               onSearch={(query) => {
                 setSearchQuery(query);
@@ -377,9 +386,9 @@ const DiscountsPage = ({
                             </Pill>
                             <b>{offerCode.name}</b>
                           </div>
-                          <small>
+                          <FieldsetDescription>
                             {formatAmount(offerCode)} off of {formatProducts(offerCode)}
-                          </small>
+                          </FieldsetDescription>
                         </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap" aria-busy={!statistics}>
@@ -409,6 +418,7 @@ const DiscountsPage = ({
                       <TableCell>
                         <div className="flex flex-wrap gap-3 lg:justify-end">
                           <Button
+                            size="icon"
                             aria-label="Edit"
                             disabled={!offerCode.can_update || isLoading}
                             onClick={() => {
@@ -416,7 +426,7 @@ const DiscountsPage = ({
                               setView("edit");
                             }}
                           >
-                            <Icon name="pencil" />
+                            <Pencil className="size-5" />
                           </Button>
                           <Popover
                             open={popoverOfferCodeId === offerCode.id}
@@ -425,8 +435,12 @@ const DiscountsPage = ({
                             }}
                           >
                             <PopoverTrigger asChild>
-                              <Button aria-label="Open discount action menu" onClick={(e) => e.stopPropagation()}>
-                                <Icon name="three-dots" />
+                              <Button
+                                size="icon"
+                                aria-label="Open discount action menu"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <DotsHorizontalRounded className="size-5" />
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -440,7 +454,7 @@ const DiscountsPage = ({
                                     setView("create");
                                   }}
                                 >
-                                  <Icon name="outline-duplicate" />
+                                  <Copy className="size-5" />
                                   &ensp;Duplicate
                                 </div>
                                 <div
@@ -460,7 +474,7 @@ const DiscountsPage = ({
                                     setIsLoading(false);
                                   })}
                                 >
-                                  <Icon name="trash2" />
+                                  <Trash className="size-5" />
                                   &ensp;Delete
                                 </div>
                               </div>
@@ -584,8 +598,8 @@ const DiscountsPage = ({
                           copyTooltip="Copy link with discount"
                           text={`${product.url}/${selectedOfferCode.code}`}
                         >
-                          <Button aria-label="Copy link with discount">
-                            <Icon name="link" />
+                          <Button size="icon" aria-label="Copy link with discount">
+                            <Link className="size-5" />
                           </Button>
                         </CopyToClipboard>
                       </CardContent>
@@ -862,7 +876,6 @@ const Form = ({
         actions={
           <>
             <Button onClick={cancel} disabled={isLoading}>
-              <Icon name="x-square" />
               Cancel
             </Button>
             <Button color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -872,8 +885,9 @@ const Form = ({
         }
       />
       <form>
-        <section className="p-8!">
-          <header>
+        <FormSection
+          className="p-8!"
+          header={
             <div className="flex flex-col gap-4">
               <div>Create a discount code so your audience can buy your products at a reduced price.</div>
               <div>
@@ -886,12 +900,13 @@ const Form = ({
                 </a>
               </div>
             </div>
-          </header>
-          <fieldset className={cx({ danger: name.error })}>
-            <legend>
-              <label htmlFor={`${uid}name`}>Name</label>
-            </legend>
-            <input
+          }
+        >
+          <Fieldset state={name.error ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}name`}>Name</Label>
+            </FieldsetTitle>
+            <Input
               type="text"
               id={`${uid}name`}
               placeholder="Black Friday"
@@ -900,13 +915,13 @@ const Form = ({
               onChange={(evt) => setName({ value: evt.target.value })}
               aria-invalid={name.error}
             />
-          </fieldset>
-          <fieldset className={cx({ danger: code.error })}>
-            <legend>
-              <label htmlFor={`${uid}code`}>Discount code</label>
-            </legend>
+          </Fieldset>
+          <Fieldset state={code.error ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}code`}>Discount code</Label>
+            </FieldsetTitle>
             <div className="grid grid-cols-[1fr_auto] gap-2">
-              <input
+              <Input
                 type="text"
                 id={`${uid}code`}
                 value={code.value}
@@ -924,7 +939,7 @@ const Form = ({
                 aria-label="Generate new discount"
                 disabled={readOnlyCode || isBlackFridayMode}
               >
-                <Icon name="outline-refresh" />
+                <RefreshCcw className="size-5" />
               </Button>
             </div>
             {isBlackFridayMode ? (
@@ -932,11 +947,11 @@ const Form = ({
                 By using this discount, your product will be featured in Black Friday Deals on Discover.
               </Alert>
             ) : null}
-          </fieldset>
-          <fieldset className={cx({ danger: selectedProductIds.error })}>
-            <legend>
-              <label htmlFor={`${uid}products`}>Products</label>
-            </legend>
+          </Fieldset>
+          <Fieldset state={selectedProductIds.error ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}products`}>Products</Label>
+            </FieldsetTitle>
             <Select
               ref={selectedProductsFieldRef}
               inputId={`${uid}products`}
@@ -967,9 +982,8 @@ const Form = ({
               isDisabled={universal}
               aria-invalid={selectedProductIds.error}
             />
-            <label>
-              <input
-                type="checkbox"
+            <Label>
+              <Checkbox
                 checked={universal}
                 onChange={(evt) => {
                   setUniversal(evt.target.checked);
@@ -978,13 +992,13 @@ const Form = ({
                 aria-invalid={selectedProductIds.error}
               />
               All products
-            </label>
-          </fieldset>
+            </Label>
+          </Fieldset>
           {canSetDuration ? (
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}duration`}>Discount duration for memberships</label>
-              </legend>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}duration`}>Discount duration for memberships</Label>
+              </FieldsetTitle>
               <TypeSafeOptionSelect
                 id={`${uid}duration`}
                 value={durationInBillingCycles === null ? "forever" : "once"}
@@ -994,10 +1008,10 @@ const Form = ({
                   { id: "once", label: "Once (first billing period only)" },
                 ]}
               />
-            </fieldset>
+            </Fieldset>
           ) : null}
-          <fieldset>
-            <legend>Type</legend>
+          <Fieldset>
+            <FieldsetTitle>Type</FieldsetTitle>
             <DiscountInput
               discount={discount}
               setDiscount={setDiscount}
@@ -1016,29 +1030,25 @@ const Form = ({
                 !selectedProducts.every(({ currency_type }) => currency_type === currencyCode)
               }
             />
-          </fieldset>
-          <fieldset className="gap-4">
-            <legend>Settings</legend>
+          </Fieldset>
+          <Fieldset className="gap-4">
+            <FieldsetTitle>Settings</FieldsetTitle>
             <Details
               className="toggle"
               open={limitQuantity}
               summary={
-                <label>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={limitQuantity}
-                    onChange={(evt) => setLimitQuantity(evt.target.checked)}
-                  />
-                  Limit quantity
-                </label>
+                <Switch
+                  checked={limitQuantity}
+                  onChange={(evt) => setLimitQuantity(evt.target.checked)}
+                  label="Limit quantity"
+                />
               }
             >
               <Dropdown>
-                <fieldset className={cx({ danger: maxQuantity.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}quantity`}>Quantity</label>
-                  </legend>
+                <Fieldset state={maxQuantity.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}quantity`}>Quantity</Label>
+                  </FieldsetTitle>
                   <NumberInput
                     value={maxQuantity.value}
                     onChange={(value) => {
@@ -1046,32 +1056,28 @@ const Form = ({
                     }}
                   >
                     {(props) => (
-                      <input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
+                      <Input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
                     )}
                   </NumberInput>
-                </fieldset>
+                </Fieldset>
               </Dropdown>
             </Details>
             <Details
               className="toggle"
               open={limitValidity}
               summary={
-                <label>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={limitValidity}
-                    onChange={(evt) => setLimitValidity(evt.target.checked)}
-                  />
-                  Limit validity period
-                </label>
+                <Switch
+                  checked={limitValidity}
+                  onChange={(evt) => setLimitValidity(evt.target.checked)}
+                  label="Limit validity period"
+                />
               }
             >
               <Dropdown className="gap-4 lg:grid-cols-2">
-                <fieldset>
-                  <legend>
-                    <label htmlFor={`${uid}validAt`}>Valid from</label>
-                  </legend>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}validAt`}>Valid from</Label>
+                  </FieldsetTitle>
                   <DateInput
                     withTime
                     id={`${uid}validAt`}
@@ -1080,19 +1086,15 @@ const Form = ({
                       if (date) setValidAt(date);
                     }}
                   />
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={hasNoEndDate}
-                      onChange={(evt) => setHasNoEndDate(evt.target.checked)}
-                    />
+                  <Label>
+                    <Checkbox checked={hasNoEndDate} onChange={(evt) => setHasNoEndDate(evt.target.checked)} />
                     No end date
-                  </label>
-                </fieldset>
-                <fieldset className={cx({ danger: expiresAt.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}expiresAt`}>Valid until</label>
-                  </legend>
+                  </Label>
+                </Fieldset>
+                <Fieldset state={expiresAt.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}expiresAt`}>Valid until</Label>
+                  </FieldsetTitle>
                   <DateInput
                     withTime
                     id={`${uid}expiresAt`}
@@ -1103,29 +1105,25 @@ const Form = ({
                     disabled={hasNoEndDate}
                     aria-invalid={expiresAt.error ?? false}
                   />
-                </fieldset>
+                </Fieldset>
               </Dropdown>
             </Details>
             <Details
               className="toggle"
               open={hasMinimumAmount}
               summary={
-                <label>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={hasMinimumAmount}
-                    onChange={(evt) => setHasMinimumAmount(evt.target.checked)}
-                  />
-                  Set a minimum qualifying amount
-                </label>
+                <Switch
+                  checked={hasMinimumAmount}
+                  onChange={(evt) => setHasMinimumAmount(evt.target.checked)}
+                  label="Set a minimum qualifying amount"
+                />
               }
             >
               <Dropdown>
-                <fieldset className={cx({ danger: minimumAmount.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}minimumAmount`}>Minimum amount</label>
-                  </legend>
+                <Fieldset state={minimumAmount.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}minimumAmount`}>Minimum amount</Label>
+                  </FieldsetTitle>
                   <PriceInput
                     id={`${uid}minimumAmount`}
                     currencyCode={currencyCode}
@@ -1134,29 +1132,25 @@ const Form = ({
                     placeholder="0"
                     hasError={minimumAmount.error ?? false}
                   />
-                </fieldset>
+                </Fieldset>
               </Dropdown>
             </Details>
             <Details
               className="toggle"
               open={hasMinimumQuantity}
               summary={
-                <label>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={hasMinimumQuantity}
-                    onChange={(evt) => setHasMinimumQuantity(evt.target.checked)}
-                  />
-                  Set a minimum quantity
-                </label>
+                <Switch
+                  checked={hasMinimumQuantity}
+                  onChange={(evt) => setHasMinimumQuantity(evt.target.checked)}
+                  label="Set a minimum quantity"
+                />
               }
             >
               <Dropdown>
-                <fieldset className={cx({ danger: minimumQuantity.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</label>
-                  </legend>
+                <Fieldset state={minimumQuantity.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</Label>
+                  </FieldsetTitle>
                   <NumberInput
                     value={minimumQuantity.value}
                     onChange={(value) => {
@@ -1164,7 +1158,7 @@ const Form = ({
                     }}
                   >
                     {(props) => (
-                      <input
+                      <Input
                         id={`${uid}minimumQuantity`}
                         placeholder="0"
                         aria-invalid={minimumQuantity.error}
@@ -1172,11 +1166,11 @@ const Form = ({
                       />
                     )}
                   </NumberInput>
-                </fieldset>
+                </Fieldset>
               </Dropdown>
             </Details>
-          </fieldset>
-        </section>
+          </Fieldset>
+        </FormSection>
       </form>
     </div>
   );

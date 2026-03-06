@@ -1,5 +1,4 @@
 import { router } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -8,6 +7,10 @@ import { assertResponseError, request } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Select } from "$app/components/ui/Select";
 
 type Props = {
   country: string | null;
@@ -66,34 +69,33 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
         }
       >
         <div className="flex flex-col gap-4">
-          <fieldset className={cx({ danger: !!error })}>
-            <legend>
-              <label htmlFor={`${uid}country`}>Country</label>
-            </legend>
-            <select id={`${uid}country`} value={country} onChange={(e) => setCountry(e.target.value)} disabled={saving}>
+          <Fieldset state={error ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}country`}>Country</Label>
+            </FieldsetTitle>
+            <Select id={`${uid}country`} value={country} onChange={(e) => setCountry(e.target.value)} disabled={saving}>
               {Object.entries(countries).map(([code, name]) => (
                 <option key={code} value={code} disabled={name.includes("(not supported)")}>
                   {name}
                 </option>
               ))}
-            </select>
-            {error ? <small>{error}</small> : null}
-          </fieldset>
-          <fieldset>
-            <legend>To ensure prompt payouts, please check off each item:</legend>
+            </Select>
+            {error ? <FieldsetDescription>{error}</FieldsetDescription> : null}
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>To ensure prompt payouts, please check off each item:</FieldsetTitle>
             {checkboxes.map((item, i) => (
-              <label key={item}>
-                <input
-                  type="checkbox"
+              <Label key={item}>
+                <Checkbox
                   checked={checked.includes(i)}
                   onChange={(e) =>
                     setChecked(e.target.checked ? [...checked, i] : checked.filter((item) => item !== i))
                   }
                 />{" "}
                 {item}
-              </label>
+              </Label>
             ))}
-          </fieldset>
+          </Fieldset>
           <h4>You may have to forfeit your balance if you want to change your country in the future.</h4>
         </div>
       </Modal>

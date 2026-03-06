@@ -1,3 +1,4 @@
+import { Image as ImageIcon } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorView } from "@tiptap/pm/view";
@@ -6,6 +7,7 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { assertDefined } from "$app/utils/assert";
+import FileUtils from "$app/utils/file";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import {
@@ -14,6 +16,7 @@ import {
   MenuItem,
   useImageUploadSettings,
 } from "$app/components/RichTextEditor";
+import { showAlert } from "$app/components/server-components/Alert";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 
 const forEachImage = (
@@ -47,11 +50,24 @@ export const uploadImages = ({
 }) => {
   if (!imageSettings || !files.length) return;
 
+  const { maxFileSize } = imageSettings;
+  const validFiles = maxFileSize
+    ? files.filter((file) => {
+        if (file.size > maxFileSize) {
+          showAlert(`File is too large (max allowed size is ${FileUtils.getReadableFileSize(maxFileSize)})`, "error");
+          return false;
+        }
+        return true;
+      })
+    : files;
+
+  if (!validFiles.length) return;
+
   const insertAt = getInsertAtFromSelection(view.state.selection);
   const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
 
   // We reverse the files so their order in the editor is the same as the order they were selected
-  const filesWithUrls = [...files].reverse().map((file) => {
+  const filesWithUrls = [...validFiles].reverse().map((file) => {
     const src = URL.createObjectURL(file);
     const node = imageSchema.create({ src, uploading: true });
     view.dispatch(view.state.tr.insert(insertAt, node));
@@ -208,11 +224,12 @@ export const Image = TiptapNode.create({
       <>
         <MenuItem
           name="Insert image"
-          icon="image"
+          icon={<ImageIcon className="size-5" />}
           active={editor.isActive("image")}
           onClick={() => inputRef.current?.click()}
         />
         <input
+          className="sr-only"
           ref={inputRef}
           multiple
           type="file"

@@ -3,6 +3,7 @@
 class CustomersController < Sellers::BaseController
   include CurrencyHelper
 
+  skip_before_action :check_suspended
   before_action :authorize
   before_action :set_on_page_type
 

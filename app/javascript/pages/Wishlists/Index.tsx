@@ -1,9 +1,9 @@
+import { InfoCircle, Trash } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -75,7 +75,7 @@ export default function WishlistsPage() {
                     }
                     position="top"
                   >
-                    <Icon name="info-circle" />
+                    <InfoCircle className="size-5" />
                   </WithTooltip>
                 </TableHead>
                 <TableHead />
@@ -108,7 +108,7 @@ export default function WishlistsPage() {
                         aria-label="Delete wishlist"
                         onClick={() => setConfirmingDeleteWishlist(wishlist)}
                       >
-                        <Icon name="trash2" />
+                        <Trash className="size-5" />
                       </Button>
                     </div>
                   </TableCell>

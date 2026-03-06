@@ -1,3 +1,4 @@
+import { Copy, DotsHorizontalRounded, Link as LinkIcon, Pencil, Trash } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
 
@@ -7,7 +8,6 @@ import { classNames } from "$app/utils/classNames";
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
@@ -320,22 +320,22 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
   return (
     <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
       <CopyToClipboard copyTooltip="Copy short link" text={link.short_url}>
-        <Button aria-label="Copy link">
-          <Icon name="link" />
+        <Button size="icon" aria-label="Copy link">
+          <LinkIcon className="size-5" />
         </Button>
       </CopyToClipboard>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverAnchor>
           <PopoverTrigger aria-label="Open action menu" asChild>
-            <Button>
-              <Icon name="three-dots" />
+            <Button size="icon">
+              <DotsHorizontalRounded className="size-5" />
             </Button>
           </PopoverTrigger>
         </PopoverAnchor>
         <PopoverContent className="w-48 border-none p-0 shadow-none">
           <div role="menu" className="grid gap-1">
             <Link href={Routes.edit_dashboard_utm_link_path(link.id)} role="menuitem" className="no-underline">
-              <Icon name="pencil" />
+              <Pencil className="size-5" />
               &ensp;Edit
             </Link>
             <Link
@@ -343,11 +343,11 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
               role="menuitem"
               className="no-underline"
             >
-              <Icon name="outline-duplicate" />
+              <Copy className="size-5" />
               &ensp;Duplicate
             </Link>
             <div className="danger" role="menuitem" onClick={onDelete}>
-              <Icon name="trash2" />
+              <Trash className="size-5" />
               &ensp;Delete
             </div>
           </div>
@@ -462,7 +462,7 @@ const UtmLinkDetails = ({
             <h3 className="grow">Short link</h3>
             <CopyToClipboard text={utmLink.short_url} copyTooltip="Copy short link">
               <Button aria-label="Copy short link">
-                <Icon name="link" />
+                <LinkIcon className="size-5" />
               </Button>
             </CopyToClipboard>
           </CardContent>
@@ -477,7 +477,7 @@ const UtmLinkDetails = ({
             <h3 className="grow">UTM link</h3>
             <CopyToClipboard text={utmLink.utm_url} copyTooltip="Copy UTM link">
               <Button aria-label="Copy UTM link">
-                <Icon name="link" />
+                <LinkIcon className="size-5" />
               </Button>
             </CopyToClipboard>
           </CardContent>

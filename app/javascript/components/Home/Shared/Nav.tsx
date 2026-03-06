@@ -1,3 +1,4 @@
+import { ArrowUpRight, Star } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
@@ -5,8 +6,6 @@ import { LoggedInUser } from "$app/types/user";
 import { classNames } from "$app/utils/classNames";
 import { request } from "$app/utils/request";
 
-import arrowDiagonalIcon from "$assets/images/icons/arrow-diagonal-up-right.svg";
-import starIcon from "$assets/images/icons/solid-star.svg";
 import logoSvg from "$assets/images/logo.svg";
 
 type PageProps = {
@@ -154,7 +153,7 @@ export const HomeNav = () => {
         }
       })
       .catch((error: unknown) => {
-        console.error('Error fetching GitHub stars:', error); // eslint-disable-line
+        console.error("Error fetching GitHub stars:", error); // eslint-disable-line
       });
   }, []);
 
@@ -202,12 +201,12 @@ export const HomeNav = () => {
                 <span className="text-base leading-none font-medium" data-github-stars-count-value>
                   {stars}
                 </span>
-                <img src={starIcon} className="dark:invert" width="18" height="18" alt="" />
+                <Star pack="filled" className="size-4.5" />
               </div>
             ) : (
               <div data-github-stars-arrow className="flex items-center gap-1.5">
                 <span className="text-base leading-none font-medium">GitHub</span>
-                <img src={arrowDiagonalIcon} className="dark:invert" width="14" height="14" alt="" />
+                <ArrowUpRight className="size-3.5" />
               </div>
             )}
           </a>

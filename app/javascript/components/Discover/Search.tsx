@@ -1,3 +1,4 @@
+import { Clock, Search as SearchIcon, X } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -6,7 +7,8 @@ import { AutocompleteSearchResults, deleteAutocompleteSearch } from "$app/data/d
 import { escapeRegExp } from "$app/utils";
 
 import { ComboBox } from "$app/components/ComboBox";
-import { Icon } from "$app/components/Icons";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
@@ -25,10 +27,14 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
     router.reload({
       only: ["autocomplete_results"],
       data: { query: enteredQuery },
+      replace: true,
     });
   }, 300);
 
-  useOnChange(() => fetchAutocomplete(), [enteredQuery]);
+  useOnChange(() => {
+    if (enteredQuery) fetchAutocomplete();
+    else fetchAutocomplete.cancel();
+  }, [enteredQuery]);
   useOnChange(() => {
     if (autocompleteOpen && !autocompleteResults) fetchAutocomplete();
   }, [autocompleteOpen]);
@@ -68,9 +74,9 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
       onToggle={setAutocompleteOpen}
       editable
       input={(props) => (
-        <div className="input">
-          <Icon name="solid-search" />
-          <input
+        <InputGroup>
+          <SearchIcon className="size-5" />
+          <Input
             {...props}
             type="search"
             className="cursor-text!"
@@ -89,7 +95,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
             }}
             aria-autocomplete="list"
           />
-        </div>
+        </InputGroup>
       )}
       options={options}
       option={(item, props, index) => (
@@ -102,11 +108,11 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
           {typeof item === "string" ? (
             <div {...props}>
               <a href={Routes.discover_path({ query: item })} className="flex flex-1 items-center no-underline">
-                <Icon name="clock-history" className="mr-2 text-muted" />
+                <Clock className="mr-2 size-5 text-muted" />
                 {highlightQuery(item)}
               </a>
               <button onClick={() => deleteRecentSearch(item)} aria-label="Remove" className="cursor-pointer all-unset">
-                <Icon name="x" className="text-muted" />
+                <X className="size-5 text-muted" />
               </button>
             </div>
           ) : (
@@ -118,7 +124,7 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
               />
               <div>
                 {highlightQuery(item.name)}
-                <small>{item.seller_name ? `Product by ${item.seller_name}` : "Product"}</small>
+                <small className="text-muted">{item.seller_name ? `Product by ${item.seller_name}` : "Product"}</small>
               </div>
             </a>
           )}

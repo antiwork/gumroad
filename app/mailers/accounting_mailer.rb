@@ -99,6 +99,15 @@ class AccountingMailer < ApplicationMailer
          subject: "Outstanding balances"
   end
 
+  def global_sales_tax_summary_report(month, year, s3_read_url)
+    @subject_and_title = "Global Sales Tax Summary Report for #{month}/#{year}"
+    @s3_url = s3_read_url
+
+    mail subject: @subject_and_title,
+         to: "salestax@gumroad.com",
+         cc: %w[steven.olson@gumroad.com]
+  end
+
   def ytd_sales_report(csv_data, recipient_email)
     attachments["ytd_sales_by_country_state.csv"] = {
       data: ::Base64.encode64(csv_data),

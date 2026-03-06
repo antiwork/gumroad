@@ -1,20 +1,20 @@
+import { ArrowLeft, ChevronDown, ChevronUp, Clock, Envelope, Eye, Trash, XSquare } from "@boxicons/react";
 import { Link, useForm } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import { findChildren, Node as TiptapNode } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { EditorContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import {
-  WorkflowFormContext,
-  Workflow,
-  InstallmentDeliveryTimePeriod,
-  INSTALLMENT_DELIVERY_TIME_PERIODS,
-  Installment,
-  SaveActionName,
   AbandonedCartProduct,
+  Installment,
+  INSTALLMENT_DELIVERY_TIME_PERIODS,
+  InstallmentDeliveryTimePeriod,
+  SaveActionName,
+  Workflow,
+  WorkflowFormContext,
 } from "$app/types/workflow";
 import { assert, assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
@@ -23,7 +23,7 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartItemList";
+import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import {
@@ -36,21 +36,24 @@ import {
   useFiles,
 } from "$app/components/EmailAttachments";
 import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
-import { Icon } from "$app/components/Icons";
+import { Logo } from "$app/components/Logo";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Select } from "$app/components/ui/Select";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { WithTooltip } from "$app/components/WithTooltip";
 import {
-  Layout,
   EditPageNavigation,
+  Layout,
   PublishButton,
   sendToPastCustomersCheckboxLabel,
 } from "$app/components/WorkflowsPage";
@@ -269,12 +272,12 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                 <Link href={Routes.workflows_path()} inert={isBusy || undefined}>
                   {workflow.published ? (
                     <>
-                      <Icon name="x-square" />
+                      <XSquare className="size-5" />
                       Cancel
                     </>
                   ) : (
                     <>
-                      <Icon name="arrow-left" />
+                      <ArrowLeft className="size-5" />
                       Back
                     </>
                   )}
@@ -453,29 +456,30 @@ const EmailRow = ({
   return (
     <Row role="listitem" ref={selfRef} aria-label="Email">
       <RowContent>
-        <Icon name="envelope-fill" className="type-icon" />
+        <Envelope pack="filled" className="type-icon size-5" />
         <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
       </RowContent>
       <RowActions>
         {isAbandonedCartWorkflow ? null : (
           <Button
+            size="icon"
             outline
             disabled={(expanded && hasUploadingImages) || false}
             aria-label="Edit"
             onClick={toggleExpanded}
           >
-            <Icon name={expanded ? "outline-cheveron-up" : "outline-cheveron-down"} />
+            {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
         )}
         <WithTooltip tip="Send email preview">
-          <Button outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
-            <Icon name="eye-fill" />
+          <Button size="icon" outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
+            <Eye className="size-5" />
           </Button>
         </WithTooltip>
         {isAbandonedCartWorkflow ? null : (
           <WithTooltip tip="Delete">
-            <Button outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
-              <Icon name="trash2" />
+            <Button size="icon" outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
+              <Trash className="size-5" />
             </Button>
           </WithTooltip>
         )}
@@ -496,7 +500,7 @@ const EmailRow = ({
                   value={email.delayed_delivery_time_duration}
                 >
                   {(inputProps) => (
-                    <input
+                    <Input
                       type="text"
                       autoComplete="off"
                       placeholder="0"
@@ -506,7 +510,7 @@ const EmailRow = ({
                     />
                   )}
                 </NumberInput>
-                <select
+                <Select
                   value={email.delayed_delivery_time_period}
                   aria-label="Period"
                   onChange={(e) => onChange({ delayed_delivery_time_period: cast(e.target.value) })}
@@ -517,11 +521,11 @@ const EmailRow = ({
                       {`${period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
-            <fieldset className={cx({ danger: invalidFieldNames.includes("name") })}>
-              <input
+            <Fieldset state={invalidFieldNames.includes("name") ? "danger" : undefined}>
+              <Input
                 ref={nameInputRef}
                 type="text"
                 placeholder="Subject"
@@ -530,10 +534,10 @@ const EmailRow = ({
                 onChange={(e) => onChange({ name: e.target.value })}
                 onFocus={() => onFocus("name")}
               />
-            </fieldset>
+            </Fieldset>
             <RichTextEditor
               id={email.id}
-              className="textarea"
+              className="textarea bg-filled block w-full rounded border border-border px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
               ariaLabel="Email message"
               placeholder="Write a personalized message..."
               extensions={[...(isAbandonedCartWorkflow ? [AbandonedCartProductList] : [])]}
@@ -585,7 +589,7 @@ const EmailPreview = ({
     <section className="flex flex-col gap-4" ref={selfRef}>
       <Separator>
         <div className="flex gap-2">
-          <Icon name="outline-clock" />
+          <Clock className="size-5" />
           {email.delayed_delivery_time_duration}{" "}
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
         </div>
@@ -598,7 +602,7 @@ const EmailPreview = ({
         <div className="flex flex-col items-center gap-4">
           <p>{gumroadAddress}</p>
           <p>
-            Powered by <span style={{ marginLeft: "var(--spacer-1)" }} className="logo-full" />
+            Powered by <Logo className="ml-1" />
           </p>
         </div>
       </div>

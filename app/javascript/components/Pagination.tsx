@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from "@boxicons/react";
 import { range } from "lodash-es";
 import * as React from "react";
 
@@ -5,8 +6,6 @@ import { isOpenTuple, last } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
-
 export type PaginationProps = { pages: number; page: number };
 
 type Props = {
@@ -18,7 +17,7 @@ type Props = {
 const PageNumber = ({ page, isCurrent, onClick }: { page: number; isCurrent: boolean; onClick: () => void }) => (
   <li>
     <Button
-      small
+      size="sm"
       color={isCurrent ? "primary" : undefined}
       aria-current={isCurrent ? "page" : undefined}
       onClick={() => (isCurrent ? null : onClick())}
@@ -52,8 +51,8 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
 
   return (
     <div role="navigation" aria-label="Pagination" className="flex w-full justify-center gap-2">
-      <Button small disabled={pagination.page - 1 === 0} onClick={() => onChangePage(pagination.page - 1)}>
-        <Icon name="outline-cheveron-left" />
+      <Button size="sm" disabled={pagination.page - 1 === 0} onClick={() => onChangePage(pagination.page - 1)}>
+        <ChevronLeft className="size-5" />
         Previous
       </Button>
       <menu className="hidden! flex-1 justify-center gap-2 lg:flex!">
@@ -77,9 +76,13 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
           </>
         ) : null}
       </menu>
-      <Button small disabled={pagination.page + 1 > pagination.pages} onClick={() => onChangePage(pagination.page + 1)}>
+      <Button
+        size="sm"
+        disabled={pagination.page + 1 > pagination.pages}
+        onClick={() => onChangePage(pagination.page + 1)}
+      >
         Next
-        <Icon name="outline-cheveron-right" />
+        <ChevronRight className="size-5" />
       </Button>
     </div>
   );

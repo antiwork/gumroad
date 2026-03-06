@@ -53,6 +53,28 @@ describe TaxCenterController, type: :controller, inertia: true do
         expect(flash[:alert]).to eq("Tax center is not enabled for your account.")
       end
     end
+
+    context "when seller is suspended for TOS violation" do
+      let(:admin_user) { create(:user) }
+      let!(:product) { create(:product, user: seller) }
+
+      before do
+        seller.flag_for_tos_violation(author_id: admin_user.id, product_id: product.id)
+        seller.suspend_for_tos_violation(author_id: admin_user.id)
+        sign_in seller
+        cookies.encrypted[:current_seller_id] = seller.id
+        # NOTE: The invalidate_active_sessions! callback from suspending the user, interferes
+        # with the login mechanism, this is a hack get the `sign_in user` method work correctly
+        request.env["warden"].session["last_sign_in_at"] = DateTime.current.to_i
+      end
+
+      it "renders successfully" do
+        get :index
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("TaxCenter/Index")
+      end
+    end
   end
 
   describe "GET download" do
@@ -186,6 +208,36 @@ describe TaxCenterController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(dashboard_path)
         expect(flash[:alert]).to eq("Tax center is not enabled for your account.")
+      end
+    end
+
+    context "when seller is suspended for TOS violation" do
+      let(:admin_user) { create(:user) }
+      let!(:product) { create(:product, user: seller) }
+
+      before do
+        seller.flag_for_tos_violation(author_id: admin_user.id, product_id: product.id)
+        seller.suspend_for_tos_violation(author_id: admin_user.id)
+        sign_in seller
+        cookies.encrypted[:current_seller_id] = seller.id
+        # NOTE: The invalidate_active_sessions! callback from suspending the user, interferes
+        # with the login mechanism, this is a hack get the `sign_in user` method work correctly
+        request.env["warden"].session["last_sign_in_at"] = DateTime.current.to_i
+      end
+
+      it "sends the tax form PDF file" do
+        pdf_tempfile = Tempfile.new(["tax_form", ".pdf"])
+        pdf_tempfile.write("PDF content")
+        pdf_tempfile.rewind
+
+        allow_any_instance_of(StripeTaxFormsApi).to receive(:download_tax_form).and_return(pdf_tempfile)
+
+        get :download, params: { year:, form_type: }
+
+        expect(response).to be_successful
+
+        pdf_tempfile.close
+        pdf_tempfile.unlink
       end
     end
   end

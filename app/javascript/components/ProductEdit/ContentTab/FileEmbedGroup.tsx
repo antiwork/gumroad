@@ -1,3 +1,4 @@
+import { Check, ChevronDown, ChevronRight, Dropbox as DropboxIcon, Folder, Pencil } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
@@ -13,11 +14,11 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Input } from "$app/components/ui/Input";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -149,10 +150,10 @@ const FileEmbedGroupNodeView = ({
         <Row role="treeitem" aria-expanded={expanded} className={cx({ selected })}>
           {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
           <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
-            <Icon name={expanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
-            <Icon name="solid-folder-open" className="type-icon" />
+            {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+            <Folder pack="filled" className="type-icon size-5" />
             {editing ? (
-              <input
+              <Input
                 type="text"
                 ref={inputRef}
                 defaultValue={node.attrs.name ? String(node.attrs.name) : ""}
@@ -180,7 +181,7 @@ const FileEmbedGroupNodeView = ({
                     <PopoverTrigger asChild>
                       <Button>
                         Download all
-                        <Icon name="outline-cheveron-down" />
+                        <ChevronDown className="size-5" />
                       </Button>
                     </PopoverTrigger>
                   </PopoverAnchor>
@@ -204,7 +205,7 @@ const FileEmbedGroupNodeView = ({
                         <Button onClick={() => void download()}>Download as ZIP</Button>
                       )}
                       <Button disabled={downloading} onClick={() => void saveToDropbox()}>
-                        <Icon name="dropbox" />
+                        <DropboxIcon pack="brands" className="size-5" />
                         Save to Dropbox
                       </Button>
                     </div>
@@ -213,6 +214,7 @@ const FileEmbedGroupNodeView = ({
               ) : null}
               {editor.isEditable ? (
                 <Button
+                  size="icon"
                   aria-label="Edit"
                   onMouseDown={(e) => {
                     // NoOp if the user is already editing the name since it will
@@ -226,7 +228,7 @@ const FileEmbedGroupNodeView = ({
                     requestAnimationFrame(() => inputRef.current?.focus());
                   }}
                 >
-                  <Icon name={editing ? "outline-check" : "pencil"} />
+                  {editing ? <Check className="size-5" /> : <Pencil className="size-5" />}
                 </Button>
               ) : null}
             </RowActions>

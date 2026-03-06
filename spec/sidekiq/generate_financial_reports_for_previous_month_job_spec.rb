@@ -11,6 +11,7 @@ describe GenerateFinancialReportsForPreviousMonthJob do
       expect(GenerateFeesByCreatorLocationReportJob.jobs.size).to eq(0)
       expect(CreateUsStatesSalesSummaryReportJob.jobs.size).to eq(0)
       expect(GenerateCanadaSalesReportJob.jobs.size).to eq(0)
+      expect(CreateGlobalSalesTaxSummaryReportJob.jobs.size).to eq(0)
     end
 
     it "generates reports when the Rails environment is production" do
@@ -22,6 +23,7 @@ describe GenerateFinancialReportsForPreviousMonthJob do
       expect(GenerateFeesByCreatorLocationReportJob).to have_enqueued_sidekiq_job(an_instance_of(Integer), an_instance_of(Integer))
       expect(CreateUsStatesSalesSummaryReportJob).to have_enqueued_sidekiq_job(Compliance::Countries::TAXABLE_US_STATE_CODES, an_instance_of(Integer), an_instance_of(Integer))
       expect(GenerateCanadaSalesReportJob).to have_enqueued_sidekiq_job(an_instance_of(Integer), an_instance_of(Integer))
+      expect(CreateGlobalSalesTaxSummaryReportJob).to have_enqueued_sidekiq_job(an_instance_of(Integer), an_instance_of(Integer))
     end
   end
 end

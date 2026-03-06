@@ -13,6 +13,9 @@ import { Modal } from "$app/components/Modal";
 import { RecurrencePriceValue } from "$app/components/ProductEdit/state";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 export type ProductOption = {
@@ -129,10 +132,10 @@ export const UpsellSelectModal = ({
         </>
       }
     >
-      <fieldset>
-        <legend>
-          <label htmlFor="product-select">Product</label>
-        </legend>
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor="product-select">Product</Label>
+        </FieldsetTitle>
         <Select
           inputId="product-select"
           options={productOptions}
@@ -148,25 +151,21 @@ export const UpsellSelectModal = ({
           isClearable
           isDisabled={products.length === 0}
         />
-      </fieldset>
+      </Fieldset>
 
-      <fieldset>
-        <legend>
-          <label htmlFor="discount">Discount</label>
-        </legend>
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor="discount">Discount</Label>
+        </FieldsetTitle>
         <Details
           className="toggle"
           open={!!discount}
           summary={
-            <label>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={!!discount}
-                onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
-              />
-              Add a discount to the offered product
-            </label>
+            <Switch
+              checked={!!discount}
+              onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
+              label="Add a discount to the offered product"
+            />
           }
         >
           {discount && selectedProduct ? (
@@ -179,7 +178,7 @@ export const UpsellSelectModal = ({
             </Dropdown>
           ) : null}
         </Details>
-      </fieldset>
+      </Fieldset>
     </Modal>
   );
 };

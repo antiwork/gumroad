@@ -4,8 +4,6 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-import { Icon } from "$app/components/Icons";
-
 const tabsVariants = cva("", {
   variants: {
     variant: {
@@ -39,7 +37,7 @@ const tabVariants = cva("", {
     {
       variant: "buttons",
       active: true,
-      className: "shadow -translate-1",
+      className: "shadow -translate-1 hover:-translate-2!",
     },
   ],
   defaultVariants: {
@@ -63,10 +61,8 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(({ children, cla
 ));
 Tabs.displayName = "Tabs";
 
-export const TabIcon = ({ name }: { name: IconName }) => (
-  <div className="flex-shrink-0 text-xl">
-    <Icon name={name} />
-  </div>
+export const TabIcon = ({ children }: { children: React.ReactNode }) => (
+  <div className="flex-shrink-0 text-xl">{children}</div>
 );
 
 interface TabProps extends Omit<React.HTMLProps<HTMLAnchorElement>, "selected"> {

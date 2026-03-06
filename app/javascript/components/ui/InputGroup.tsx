@@ -23,7 +23,7 @@ const inputGroupVariants = cva(
         false: "",
       },
       readOnly: {
-        true: "bg-body",
+        true: "bg-inherit border-none px-0",
         false: "",
       },
     },

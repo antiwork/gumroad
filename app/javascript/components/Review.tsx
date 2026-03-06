@@ -1,8 +1,8 @@
+import { CheckCircle } from "@boxicons/react";
 import * as React from "react";
 
 import { Review as ReviewType } from "$app/data/product_reviews";
 
-import { Icon } from "$app/components/Icons";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
@@ -30,7 +30,7 @@ const ReviewUserAttribution = ({
     <h5>{name}</h5>
     {isBuyer ? (
       <WithTooltip tip="Verified Buyer">
-        <Icon name="solid-check-circle" aria-label="Verified Buyer" />
+        <CheckCircle pack="filled" aria-label="Verified Buyer" className="size-5" />
       </WithTooltip>
     ) : null}
   </section>
@@ -54,12 +54,12 @@ export const Review = ({
     <>
       <section className="grid gap-2">
         <span
-          className="flex shrink-0 items-center gap-1"
+          className="flex shrink-0 items-center"
           aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}
         >
           <RatingStars rating={review.rating} />
           {review.is_new ? (
-            <Pill size="small" color="primary">
+            <Pill size="small" color="primary" className="ml-1">
               New
             </Pill>
           ) : null}
@@ -91,7 +91,7 @@ export const Review = ({
               }))
             }
             onEditingChange={setIsEditing}
-            buttonProps={{ small: true }}
+            buttonProps={{ size: "sm" }}
           />
         </section>
       ) : null}

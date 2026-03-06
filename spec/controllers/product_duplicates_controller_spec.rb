@@ -96,7 +96,19 @@ describe ProductDuplicatesController do
 
       get :show, params: { id: product.unique_permalink }
 
-      expect(response.parsed_body).to eq({ success: false, status: ProductDuplicatorService::DUPLICATION_FAILED }.as_json)
+      expect(response.parsed_body).to eq({ success: false, status: ProductDuplicatorService::DUPLICATION_FAILED, error_message: nil }.as_json)
+    end
+
+    it "returns the stored error message when duplication failed" do
+      ProductDuplicatorService.new(product.id).store_duplication_error("Validation failed: Name can't be blank")
+
+      get :show, params: { id: product.unique_permalink }
+
+      expect(response.parsed_body).to eq({
+        success: false,
+        status: ProductDuplicatorService::DUPLICATION_FAILED,
+        error_message: "Validation failed: Name can't be blank"
+      }.as_json)
     end
 
     it "successfully returns a recently duplicated product" do

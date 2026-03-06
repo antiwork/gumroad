@@ -9,6 +9,8 @@ import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/Product
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
 import { ProductEditContext } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
 
 export const PriceEditor = ({
@@ -45,8 +47,8 @@ export const PriceEditor = ({
   const productEditContext = React.useContext(ProductEditContext);
 
   return (
-    <fieldset>
-      <label htmlFor={`${uid}-price-cents`}>Amount</label>
+    <Fieldset>
+      <Label htmlFor={`${uid}-price-cents`}>Amount</Label>
       <PriceInput
         id={`${uid}-price-cents`}
         currencyCode={currencyType}
@@ -72,12 +74,12 @@ export const PriceEditor = ({
         }
       >
         <Dropdown className="gap-4 lg:grid-cols-2">
-          <fieldset>
-            <label htmlFor={`${uid}-minimum-amount`}>Minimum amount</label>
+          <Fieldset>
+            <Label htmlFor={`${uid}-minimum-amount`}>Minimum amount</Label>
             <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
-          </fieldset>
-          <fieldset>
-            <label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</label>
+          </Fieldset>
+          <Fieldset>
+            <Label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</Label>
             <PriceInput
               id={`${uid}-suggested-price-cents`}
               placeholder={formatPriceCentsWithoutCurrencySymbol(currencyType, priceCents)}
@@ -85,7 +87,7 @@ export const PriceEditor = ({
               cents={suggestedPriceCents}
               onChange={setSuggestedPriceCents}
             />
-          </fieldset>
+          </Fieldset>
         </Dropdown>
       </Details>
       {eligibleForInstallmentPlans ? (
@@ -99,6 +101,6 @@ export const PriceEditor = ({
         />
       ) : null}
       {productEditContext ? <DefaultDiscountCodeSelector /> : null}
-    </fieldset>
+    </Fieldset>
   );
 };

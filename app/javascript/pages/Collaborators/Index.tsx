@@ -1,3 +1,4 @@
+import { Pencil, Shield, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -8,7 +9,6 @@ import { formatCommission, formatProductNames } from "$app/utils/collaboratorFor
 import { Button } from "$app/components/Button";
 import CollaboratorDetailsSheet from "$app/components/Collaborators/CollaboratorDetailsSheet";
 import { Layout } from "$app/components/Collaborators/Layout";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -99,10 +99,11 @@ const CollaboratorsPage = () => {
                         </div>
                         {collaborator.setup_incomplete ? (
                           <WithTooltip tip="Not receiving payouts" position="top">
-                            <Icon
-                              name="solid-shield-exclamation"
+                            <Shield
+                              pack="filled"
                               style={{ color: "rgb(var(--warning))" }}
                               aria-label="Not receiving payouts"
+                              className="size-5"
                             />
                           </WithTooltip>
                         ) : null}
@@ -119,20 +120,22 @@ const CollaboratorsPage = () => {
                       <div className="flex flex-wrap gap-3 lg:justify-end">
                         <NavigationButtonInertia
                           href={Routes.edit_collaborator_path(collaborator.id)}
+                          size="icon"
                           aria-label="Edit"
                           disabled={disableActions}
                         >
-                          <Icon name="pencil" />
+                          <Pencil className="size-5" />
                         </NavigationButtonInertia>
 
                         <Button
                           type="submit"
+                          size="icon"
                           color="danger"
                           onClick={() => remove(collaborator.id)}
                           aria-label="Delete"
                           disabled={disableActions}
                         >
-                          <Icon name="trash2" />
+                          <Trash className="size-5" />
                         </Button>
                       </div>
                     </TableCell>

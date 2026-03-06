@@ -1,4 +1,4 @@
-import { router } from "@inertiajs/react";
+import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
 import { Product, SortKey } from "$app/data/products";
@@ -19,8 +19,6 @@ import {
   TableHeader,
   TableRow,
 } from "$app/components/ui/Table";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
-import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -46,7 +44,7 @@ export const ProductsPageProductsTable = (props: {
         products_sort_direction: newSort?.direction,
         products_page: undefined,
       },
-      only: ["products_data"],
+      only: ["products_data", "has_products"],
       onBefore: () => setSort(newSort),
       onStart: () => setIsLoading(true),
       onFinish: () => setIsLoading(false),
@@ -63,7 +61,7 @@ export const ProductsPageProductsTable = (props: {
         products_sort_direction: sort?.direction,
         query: props.query || undefined,
       },
-      only: ["products_data"],
+      only: ["products_data", "has_products"],
       onStart: () => setIsLoading(true),
       onFinish: () => {
         setIsLoading(false);
@@ -71,12 +69,6 @@ export const ProductsPageProductsTable = (props: {
       },
     });
   };
-
-  const debouncedLoadProducts = useDebouncedCallback(() => loadProducts(1), 300);
-
-  useOnChange(() => {
-    if (props.query !== null) debouncedLoadProducts();
-  }, [props.query]);
 
   const reloadProducts = () => loadProducts(pagination.page);
 
@@ -104,6 +96,7 @@ export const ProductsPageProductsTable = (props: {
             <TableHead {...thProps("status")} title="Sort by Status">
               Status
             </TableHead>
+            <TableHead />
           </TableRow>
         </TableHeader>
 
@@ -114,23 +107,29 @@ export const ProductsPageProductsTable = (props: {
                 href={product.can_edit ? product.edit_url : product.url}
                 thumbnail={product.thumbnail?.url ?? null}
               />
-              <TableCell className="w-full" hideLabel>
+              <TableCell hideLabel>
                 <div>
                   {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
-                  <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
-                    <h4 className="font-bold">{product.name}</h4>
-                  </a>
+                  {product.can_edit ? (
+                    <Link href={product.edit_url} style={{ textDecoration: "none" }}>
+                      <h4 className="font-bold">{product.name}</h4>
+                    </Link>
+                  ) : (
+                    <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
+                      <h4 className="font-bold">{product.name}</h4>
+                    </a>
+                  )}
 
-                  <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
+                  <Link href={product.url} title={product.url} target="_blank" rel="noreferrer">
                     <small>{product.url_without_protocol}</small>
-                  </a>
+                  </Link>
                 </div>
               </TableCell>
 
               <TableCell className="whitespace-nowrap">
-                <a href={Routes.customers_link_id_path(product.permalink)}>
+                <Link href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(locale)}
-                </a>
+                </Link>
 
                 {product.remaining_for_sale_count ? (
                   <small>{product.remaining_for_sale_count.toLocaleString(locale)} remaining</small>
