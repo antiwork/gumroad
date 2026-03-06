@@ -36,6 +36,20 @@ describe Admin::UsersController, type: :controller, inertia: true do
       expect(@user.reload.verified).to be(false)
     end
 
+    it "sends top creator announcement email when verifying" do
+      expect {
+        get :verify, params: @params
+      }.to have_enqueued_mail(CreatorMailer, :top_creator_announcement).with(user_id: @user.id)
+    end
+
+    it "does not send email when unverifying" do
+      @user.update!(verified: true)
+
+      expect {
+        get :verify, params: @params
+      }.not_to have_enqueued_mail(CreatorMailer, :top_creator_announcement)
+    end
+
     context "when error is raised" do
       before do
         allow_any_instance_of(User).to receive(:save!).and_raise("Error!")
