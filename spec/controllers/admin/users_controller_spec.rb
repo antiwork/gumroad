@@ -37,17 +37,17 @@ describe Admin::UsersController, type: :controller, inertia: true do
     end
 
     it "sends top creator announcement email when verifying" do
-      expect {
+      expect do
         get :verify, params: @params
-      }.to have_enqueued_mail(CreatorMailer, :top_creator_announcement).with(user_id: @user.id)
+      end.to have_enqueued_mail(CreatorMailer, :top_creator_announcement).with(user_id: @user.id)
     end
 
     it "does not send email when unverifying" do
       @user.update!(verified: true)
 
-      expect {
+      expect do
         get :verify, params: @params
-      }.not_to have_enqueued_mail(CreatorMailer, :top_creator_announcement)
+      end.not_to have_enqueued_mail(CreatorMailer, :top_creator_announcement)
     end
 
     context "when error is raised" do
