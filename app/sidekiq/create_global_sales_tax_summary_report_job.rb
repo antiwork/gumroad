@@ -13,7 +13,7 @@ class CreateGlobalSalesTaxSummaryReportJob
     state: "COALESCE(HEX(CAST(purchases.state AS BINARY)), '__NULL__')",
     ip_state: "COALESCE(HEX(CAST(purchases.ip_state AS BINARY)), '__NULL__')"
   }.freeze
-  QUERY_CHUNK_DAYS = 7
+  QUERY_CHUNK_DAYS = 1
 
   def perform(month, year)
     raise ArgumentError, "Invalid month" unless month.in?(1..12)
