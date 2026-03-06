@@ -327,7 +327,7 @@ RSpec.configure do |config|
   config.around(:each, :shipping) do |example|
     vcr_turned_on do
       only_matching_vcr_request_from(["easypost", "taxjar"]) do
-        VCR.use_cassette("ShippingScenarios/#{example.description}") do
+        VCR.use_cassette("ShippingScenarios/#{example.description}", allow_playback_repeats: example.metadata[:js]) do
           # Debug flaky specs.
           puts "*" * 100
           puts example.full_description
