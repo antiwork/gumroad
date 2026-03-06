@@ -253,41 +253,39 @@ export default function SettingsPage() {
             </Button>
           )}
         >
-          <div className="max-h-[calc(100vh-8rem)] overflow-y-auto">
-            <Preview
-              scaleFactor={0.35}
-              style={{
-                border: "var(--border)",
-                fontFamily: profileSettings.font === "ABC Favorit" ? undefined : profileSettings.font,
-                "--accent": hexToRgb(profileSettings.highlight_color),
-                "--contrast-accent": hexToRgb(getContrastColor(profileSettings.highlight_color)),
-                "--filled": hexToRgb(profileSettings.background_color),
-                "--color": hexToRgb(getContrastColor(profileSettings.background_color)),
-                "--primary": "var(--color)",
-                "--body-bg": "rgb(var(--filled))",
-                "--contrast-primary": "var(--filled)",
-                "--contrast-filled": "var(--color)",
-                "--color-body": "var(--body-bg)",
-                "--color-background": "rgb(var(--filled))",
-                "--color-foreground": "rgb(var(--color))",
-                "--color-border": "rgb(var(--color) / var(--border-alpha))",
-                "--color-accent": "rgb(var(--accent))",
-                "--color-accent-foreground": "rgb(var(--contrast-accent))",
-                "--color-primary": "rgb(var(--primary))",
-                "--color-primary-foreground": "rgb(var(--contrast-primary))",
-                "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
-                "--color-muted": "rgb(var(--color) / var(--gray-3))",
-                backgroundColor: "rgb(var(--filled))",
-                color: "rgb(var(--color))",
-              }}
-            >
-              <Profile
-                creator_profile={creatorProfile}
-                {...(() => ({ profile_settings, settings_pages, ...profileProps }))()}
-                bio={profileSettings.bio}
-              />
-            </Preview>
-          </div>
+          <Preview
+            scaleFactor={0.35}
+            style={{
+              border: "var(--border)",
+              fontFamily: profileSettings.font === "ABC Favorit" ? undefined : profileSettings.font,
+              "--accent": hexToRgb(profileSettings.highlight_color),
+              "--contrast-accent": hexToRgb(getContrastColor(profileSettings.highlight_color)),
+              "--filled": hexToRgb(profileSettings.background_color),
+              "--color": hexToRgb(getContrastColor(profileSettings.background_color)),
+              "--primary": "var(--color)",
+              "--body-bg": "rgb(var(--filled))",
+              "--contrast-primary": "var(--filled)",
+              "--contrast-filled": "var(--color)",
+              "--color-body": "var(--body-bg)",
+              "--color-background": "rgb(var(--filled))",
+              "--color-foreground": "rgb(var(--color))",
+              "--color-border": "rgb(var(--color) / var(--border-alpha))",
+              "--color-accent": "rgb(var(--accent))",
+              "--color-accent-foreground": "rgb(var(--contrast-accent))",
+              "--color-primary": "rgb(var(--primary))",
+              "--color-primary-foreground": "rgb(var(--contrast-primary))",
+              "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
+              "--color-muted": "rgb(var(--color) / var(--gray-3))",
+              backgroundColor: "rgb(var(--filled))",
+              color: "rgb(var(--color))",
+            }}
+          >
+            <Profile
+              creator_profile={creatorProfile}
+              {...(() => ({ profile_settings, settings_pages, ...profileProps }))()}
+              bio={profileSettings.bio}
+            />
+          </Preview>
         </PreviewSidebar>
       </WithPreviewSidebar>
     </SettingsLayout>
