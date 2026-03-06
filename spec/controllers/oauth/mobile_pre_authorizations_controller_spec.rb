@@ -18,7 +18,7 @@ describe Oauth::MobilePreAuthorizationsController do
         expect(response).to have_http_status(:ok)
         expect(response.body).to include(@user.display_name)
         expect(response.body).to include(@user.email)
-        expect(response.body).to include("/oauth/authorize?client_id=abc&amp;redirect_uri=https%3A%2F%2Ffoo&amp;response_type=code")
+        expect(response.body).to include("/oauth/authorize?client_id=abc&amp;redirect_uri=gumroadmobile%3A%2F%2F&amp;response_type=code")
         expect(response.body).to include("Continue")
         expect(response.body).to include("Use a different account")
       end
@@ -28,7 +28,7 @@ describe Oauth::MobilePreAuthorizationsController do
       it "redirects to the oauth authorize url with query params" do
         get :new, params: { client_id: "abc", redirect_uri: "gumroadmobile://", response_type: "code" }
 
-        expect(response).to redirect_to("/oauth/authorize?client_id=abc&redirect_uri=https%3A%2F%2Ffoo&response_type=code")
+        expect(response).to redirect_to("/oauth/authorize?client_id=abc&redirect_uri=gumroadmobile%3A%2F%2F&response_type=code")
       end
     end
   end
@@ -44,7 +44,7 @@ describe Oauth::MobilePreAuthorizationsController do
         get :switch_account, params: { client_id: "abc", redirect_uri: "gumroadmobile://", response_type: "code" }
 
         expect(controller.user_signed_in?).to eq(false)
-        expect(response).to redirect_to("/oauth/authorize?client_id=abc&redirect_uri=https%3A%2F%2Ffoo&response_type=code")
+        expect(response).to redirect_to("/oauth/authorize?client_id=abc&redirect_uri=gumroadmobile%3A%2F%2F&response_type=code")
       end
     end
 
@@ -52,7 +52,7 @@ describe Oauth::MobilePreAuthorizationsController do
       it "redirects to oauth authorize with query params" do
         get :switch_account, params: { client_id: "abc", redirect_uri: "gumroadmobile://", response_type: "code" }
 
-        expect(response).to redirect_to("/oauth/authorize?client_id=abc&redirect_uri=https%3A%2F%2Ffoo&response_type=code")
+        expect(response).to redirect_to("/oauth/authorize?client_id=abc&redirect_uri=gumroadmobile%3A%2F%2F&response_type=code")
       end
     end
   end
