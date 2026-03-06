@@ -74,7 +74,12 @@ describe("Product Page - Shipping physical preoder", type: :system, js: true, sh
   it "charges the proper amount with taxes for preorder" do
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true)
+    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+      expect(page).to have_text("Subtotal US$16", normalize_ws: true)
+      expect(page).to have_text("Sales tax US$1.07", normalize_ws: true)
+      expect(page).to have_text("Shipping rate US$4", normalize_ws: true)
+      expect(page).to have_text("Total US$21.07", normalize_ws: true)
+    end
 
     expect(page).to have_text("Your purchase was successful!")
     expect(page).to have_text("physical preorder $16", normalize_ws: true)
