@@ -20,6 +20,7 @@ import {
   Search,
   Workflow,
 } from "@boxicons/react";
+import { type LinkPrefetchOption } from "@inertiajs/core";
 import { Link } from "@inertiajs/react";
 import * as React from "react";
 
@@ -34,6 +35,8 @@ import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Nav as NavFramework, NavSection } from "$app/components/Nav";
 import { useRunOnce } from "$app/components/useRunOnce";
+
+const EAGER_PREFETCH: LinkPrefetchOption[] = ["mount", "hover"];
 
 type Props = {
   title: string;
@@ -57,7 +60,7 @@ export const ClientNavLink = ({
   exactHrefMatch?: boolean;
   additionalPatterns?: string[];
   onClick?: (event: React.MouseEvent) => void;
-  prefetch?: boolean | "mount" | "hover" | "click" | ("mount" | "hover" | "click")[];
+  prefetch?: boolean | LinkPrefetchOption | LinkPrefetchOption[];
 }) => {
   const currentPath = window.location.pathname + window.location.search;
 
@@ -134,14 +137,14 @@ export const Nav = (props: Props) => {
           icon={<ArchiveAlt pack="filled" className="size-5" />}
           href={Routes.products_url(routeParams)}
           additionalPatterns={["/bundles/"]}
-          prefetch={["mount", "hover"]}
+          prefetch={EAGER_PREFETCH}
         />
         {loggedInUser?.policies.collaborator.create ? (
           <ClientNavLink
             text="Collaborators"
             icon={<Handshake pack="filled" className="size-5" />}
             href={Routes.collaborators_url(routeParams)}
-            prefetch={["mount", "hover"]}
+            prefetch={EAGER_PREFETCH}
           />
         ) : null}
         <ClientNavLink
@@ -149,20 +152,20 @@ export const Nav = (props: Props) => {
           icon={<Cart pack="filled" className="size-5" />}
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
-          prefetch={["mount", "hover"]}
+          prefetch={EAGER_PREFETCH}
         />
         <ClientNavLink
           text="Emails"
           icon={<Envelope pack="filled" className="size-5" />}
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
-          prefetch={["mount", "hover"]}
+          prefetch={EAGER_PREFETCH}
         />
         <ClientNavLink
           text="Workflows"
           icon={<Workflow pack="filled" className="size-5" />}
           href={Routes.workflows_url(routeParams)}
-          prefetch={["mount", "hover"]}
+          prefetch={EAGER_PREFETCH}
         />
         <ClientNavLink
           text="Sales"
@@ -178,7 +181,7 @@ export const Nav = (props: Props) => {
             Routes.dashboard_utm_links_url(routeParams),
             Routes.churn_dashboard_url(routeParams),
           ]}
-          prefetch={["mount", "hover"]}
+          prefetch={EAGER_PREFETCH}
         />
         {loggedInUser?.policies.balance.index ? (
           <ClientNavLink
@@ -204,7 +207,7 @@ export const Nav = (props: Props) => {
           icon={<Search className="size-5" />}
           href={discoverUrl}
           exactHrefMatch
-          prefetch={["mount", "hover"]}
+          prefetch={EAGER_PREFETCH}
         />
         {currentSeller?.id === loggedInUser?.id ? (
           <ClientNavLink
