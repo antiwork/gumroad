@@ -48,6 +48,7 @@ export const ClientNavLink = ({
   exactHrefMatch,
   additionalPatterns = [],
   onClick,
+  prefetch = "hover",
 }: {
   text: string;
   icon?: React.ReactNode;
@@ -56,6 +57,7 @@ export const ClientNavLink = ({
   exactHrefMatch?: boolean;
   additionalPatterns?: string[];
   onClick?: (event: React.MouseEvent) => void;
+  prefetch?: boolean | "mount" | "hover" | "click" | ("mount" | "hover" | "click")[];
 }) => {
   const currentPath = window.location.pathname + window.location.search;
 
@@ -71,6 +73,7 @@ export const ClientNavLink = ({
     <Link
       aria-current={ariaCurrent}
       href={href}
+      prefetch={prefetch}
       title={text}
       {...(onClick && { onClick })}
       className={classNames(
@@ -131,12 +134,14 @@ export const Nav = (props: Props) => {
           icon={<ArchiveAlt pack="filled" className="size-5" />}
           href={Routes.products_url(routeParams)}
           additionalPatterns={["/bundles/"]}
+          prefetch={["mount", "hover"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
           <ClientNavLink
             text="Collaborators"
             icon={<Handshake pack="filled" className="size-5" />}
             href={Routes.collaborators_url(routeParams)}
+            prefetch={["mount", "hover"]}
           />
         ) : null}
         <ClientNavLink
@@ -144,17 +149,20 @@ export const Nav = (props: Props) => {
           icon={<Cart pack="filled" className="size-5" />}
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
+          prefetch={["mount", "hover"]}
         />
         <ClientNavLink
           text="Emails"
           icon={<Envelope pack="filled" className="size-5" />}
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
+          prefetch={["mount", "hover"]}
         />
         <ClientNavLink
           text="Workflows"
           icon={<Workflow pack="filled" className="size-5" />}
           href={Routes.workflows_url(routeParams)}
+          prefetch={["mount", "hover"]}
         />
         <ClientNavLink
           text="Sales"
@@ -170,6 +178,7 @@ export const Nav = (props: Props) => {
             Routes.dashboard_utm_links_url(routeParams),
             Routes.churn_dashboard_url(routeParams),
           ]}
+          prefetch={["mount", "hover"]}
         />
         {loggedInUser?.policies.balance.index ? (
           <ClientNavLink
@@ -190,7 +199,13 @@ export const Nav = (props: Props) => {
         ) : null}
       </NavSection>
       <NavSection>
-        <ClientNavLink text="Discover" icon={<Search className="size-5" />} href={discoverUrl} exactHrefMatch />
+        <ClientNavLink
+          text="Discover"
+          icon={<Search className="size-5" />}
+          href={discoverUrl}
+          exactHrefMatch
+          prefetch={["mount", "hover"]}
+        />
         {currentSeller?.id === loggedInUser?.id ? (
           <ClientNavLink
             text="Library"
