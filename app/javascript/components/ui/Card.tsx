@@ -44,11 +44,7 @@ export const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
     return (
       <Component
         ref={ref}
-        className={classNames(
-          "p-4",
-          details ? "block" : "flex flex-wrap items-center justify-between gap-4",
-          className,
-        )}
+        className={classNames("flex flex-wrap items-center justify-between gap-4 p-4", details && "block", className)}
         {...rest}
       >
         {children}

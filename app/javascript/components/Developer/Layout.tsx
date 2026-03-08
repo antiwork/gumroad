@@ -1,9 +1,11 @@
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
+import { LoggedInUser } from "$app/types/user";
+
 import { HomeNav } from "$app/components/Home/Shared/Nav";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 const pageNames = {
   widgets: "Widgets",
@@ -18,12 +20,10 @@ export const Layout = ({
   currentPage: keyof typeof pageNames;
   children: React.ReactNode;
 }) => {
-  const { props } = usePage<{ current_user?: unknown }>();
-  const isLoggedIn = !!props.current_user;
-
+  const { props } = usePage<{ current_user?: LoggedInUser }>();
   return (
     <div>
-      {isLoggedIn ? null : <HomeNav />}
+      {props.current_user ? null : <HomeNav />}
       <PageHeader title={pageNames[currentPage]}>
         <Tabs>
           <Tab isSelected={currentPage === "widgets"} asChild>
