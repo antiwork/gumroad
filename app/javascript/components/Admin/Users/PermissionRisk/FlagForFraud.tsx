@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
+import { Details } from "$app/components/Details";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -18,10 +19,7 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
     !hide && (
       <>
         <hr />
-        <details>
-          <summary>
-            <h3>Flag for fraud</h3>
-          </summary>
+        <Details summary={<h3>Flag for fraud</h3>}>
           <Form
             url={Routes.flag_for_fraud_admin_user_path(user.external_id)}
             method="POST"
@@ -44,7 +42,7 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
               </Fieldset>
             )}
           </Form>
-        </details>
+        </Details>
       </>
     )
   );

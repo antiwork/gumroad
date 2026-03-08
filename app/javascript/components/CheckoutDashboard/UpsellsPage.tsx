@@ -857,7 +857,7 @@ const Form = ({
                 <Fieldset>
                   <FieldsetTitle>Settings</FieldsetTitle>
                   <Details
-                    className="toggle"
+                    toggle
                     open={!!discount}
                     summary={
                       <Switch

@@ -3,6 +3,7 @@ import * as React from "react";
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
+import { Details } from "$app/components/Details";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -18,10 +19,7 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
   return (
     <>
       <hr />
-      <details>
-        <summary>
-          <h3>Custom fee</h3>
-        </summary>
+      <Details summary={<h3>Custom fee</h3>}>
         <Form
           url={Routes.set_custom_fee_admin_user_path(user.external_id)}
           method="POST"
@@ -54,7 +52,7 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
             </Fieldset>
           )}
         </Form>
-      </details>
+      </Details>
     </>
   );
 };

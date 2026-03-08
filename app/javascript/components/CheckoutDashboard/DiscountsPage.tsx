@@ -1034,7 +1034,7 @@ const Form = ({
           <Fieldset className="gap-4">
             <FieldsetTitle>Settings</FieldsetTitle>
             <Details
-              className="toggle"
+              toggle
               open={limitQuantity}
               summary={
                 <Switch
@@ -1063,7 +1063,7 @@ const Form = ({
               </Dropdown>
             </Details>
             <Details
-              className="toggle"
+              toggle
               open={limitValidity}
               summary={
                 <Switch
@@ -1109,7 +1109,7 @@ const Form = ({
               </Dropdown>
             </Details>
             <Details
-              className="toggle"
+              toggle
               open={hasMinimumAmount}
               summary={
                 <Switch
@@ -1136,7 +1136,7 @@ const Form = ({
               </Dropdown>
             </Details>
             <Details
-              className="toggle"
+              toggle
               open={hasMinimumQuantity}
               summary={
                 <Switch

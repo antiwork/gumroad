@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 
+import { Details } from "$app/components/Details";
 import { type Product } from "$app/components/Admin/Products/Product";
 import { Alert } from "$app/components/ui/Alert";
 
@@ -18,10 +19,7 @@ const AdminUsersProductsDescription = ({ product }: Props) => {
   return (
     <>
       <hr />
-      <details>
-        <summary>
-          <h3>Description</h3>
-        </summary>
+      <Details summary={<h3>Description</h3>}>
         {product.html_safe_description && strippedHtmlSafeDescription ? (
           <div dangerouslySetInnerHTML={{ __html: product.html_safe_description }} />
         ) : (
@@ -29,7 +27,7 @@ const AdminUsersProductsDescription = ({ product }: Props) => {
             No description provided.
           </Alert>
         )}
-      </details>
+      </Details>
     </>
   );
 };

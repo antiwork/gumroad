@@ -43,6 +43,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { Button } from "$app/components/Button";
+import { Details } from "$app/components/Details";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
@@ -923,26 +924,14 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <Card>
                       {product.native_type === "membership" ? (
                         <CardContent asChild details>
-                          <details>
-                            <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2" inert>
-                              Membership
-                            </summary>
-                          </details>
+                          <Details chevronPosition="right" summaryProps={{ className: "grow", inert: true }} summary="Membership" />
                         </CardContent>
                       ) : null}
                       <CardContent asChild details>
-                        <details>
-                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
-                            Receipt
-                          </summary>
-                        </details>
+                        <Details chevronPosition="right" summaryProps={{ className: "grow", inert: true }} summary="Receipt" />
                       </CardContent>
                       <CardContent asChild details>
-                        <details>
-                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
-                            Library
-                          </summary>
-                        </details>
+                        <Details chevronPosition="right" summaryProps={{ className: "grow", inert: true }} summary="Library" />
                       </CardContent>
                     </Card>
                     <EntityInfo

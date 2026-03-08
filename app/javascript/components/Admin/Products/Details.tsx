@@ -3,6 +3,7 @@ import { cast } from "ts-safe-cast";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
+import { Details } from "$app/components/Details";
 import { type DetailsProps } from "$app/components/Admin/Products/AttributesAndInfo";
 import AdminProductAttributesAndInfo from "$app/components/Admin/Products/AttributesAndInfo";
 import { type Product } from "$app/components/Admin/Products/Product";
@@ -28,9 +29,9 @@ const AdminProductDetails = ({ product }: Props) => {
     },
   });
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
+  const onToggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
       void fetchDetails();
     }
   };
@@ -38,12 +39,9 @@ const AdminProductDetails = ({ product }: Props) => {
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
-          <h3>Details</h3>
-        </summary>
+      <Details open={open} onToggle={onToggle} summary={<h3>Details</h3>}>
         {isLoading || !details ? <LoadingSpinner /> : <AdminProductAttributesAndInfo productData={details} />}
-      </details>
+      </Details>
     </>
   );
 };

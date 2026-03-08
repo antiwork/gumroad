@@ -9,6 +9,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { Details } from "$app/components/Details";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card as UICard, CardContent } from "$app/components/ui/Card";
@@ -257,8 +258,7 @@ export const CardGrid = ({
           {prependFilters}
           {hideSort ? null : (
             <CardContent asChild details>
-              <details>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Sort by</summary>
+              <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Sort by">
                 <Fieldset role="group">
                   {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
                     <Label key={key} className="w-full">
@@ -273,13 +273,12 @@ export const CardGrid = ({
                     </Label>
                   ))}
                 </Fieldset>
-              </details>
+              </Details>
             </CardContent>
           )}
           {results?.tags_data.length || searchParams.tags?.length || tagsOpen ? (
             <CardContent asChild details>
-              <details onToggle={() => setTagsOpen(!tagsOpen)}>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Tags</summary>
+              <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Tags" open={tagsOpen} onToggle={setTagsOpen}>
                 <Fieldset role="group">
                   <Label className="w-full">
                     All Products
@@ -299,13 +298,12 @@ export const CardGrid = ({
                     />
                   ) : null}
                 </Fieldset>
-              </details>
+              </Details>
             </CardContent>
           ) : null}
           {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
             <CardContent asChild details>
-              <details onToggle={() => setFiletypesOpen(!filetypesOpen)}>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Contains</summary>
+              <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Contains" open={filetypesOpen} onToggle={setFiletypesOpen}>
                 <Fieldset role="group">
                   {results ? (
                     <FilterCheckboxes
@@ -316,12 +314,11 @@ export const CardGrid = ({
                     />
                   ) : null}
                 </Fieldset>
-              </details>
+              </Details>
             </CardContent>
           ) : null}
           <CardContent asChild details>
-            <details>
-              <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Price</summary>
+            <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Price">
               <div
                 style={{
                   display: "grid",
@@ -365,7 +362,7 @@ export const CardGrid = ({
                   </InputGroup>
                 </Fieldset>
               </div>
-            </details>
+            </Details>
           </CardContent>
           {appendFilters}
         </UICard>

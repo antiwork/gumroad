@@ -101,7 +101,7 @@ export default function ThirdPartyAnalyticsPage() {
           }
         >
           <Details
-            className="toggle"
+            toggle
             open={!thirdPartyAnalytics.disable_third_party_analytics}
             summary={
               <Switch
@@ -154,7 +154,7 @@ export default function ThirdPartyAnalyticsPage() {
         </FormSection>
         <FormSection header={<h2>Domain verification</h2>}>
           <Details
-            className="toggle"
+            toggle
             open={thirdPartyAnalytics.enable_verify_domain_third_party_services}
             summary={
               <Switch

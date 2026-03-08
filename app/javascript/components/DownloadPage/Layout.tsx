@@ -9,6 +9,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { Details } from "$app/components/Details";
 import { PageListLayout } from "$app/components/Download/PageListLayout";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -145,10 +146,7 @@ export const Layout = ({
               {content_unavailability_reason_code === null && purchase.membership ? (
                 purchase.membership.is_installment_plan ? (
                   <CardContent asChild details>
-                    <details>
-                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
-                        Installment plan
-                      </summary>
+                    <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Installment plan">
                       {purchase.membership.is_installment_plan_completed ? (
                         "This installment plan has been paid in full."
                       ) : (
@@ -156,14 +154,11 @@ export const Layout = ({
                           Manage
                         </NavigationButton>
                       )}
-                    </details>
+                    </Details>
                   </CardContent>
                 ) : (
                   <CardContent asChild details>
-                    <details>
-                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
-                        Membership
-                      </summary>
+                    <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Membership">
                       <div style={{ display: "grid" }}>
                         {purchase.membership.has_active_subscription ? (
                           <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
@@ -177,14 +172,13 @@ export const Layout = ({
                           </NavigationButton>
                         ) : null}
                       </div>
-                    </details>
+                    </Details>
                   </CardContent>
                 )
               ) : null}
               {receiptPurchaseId ? (
                 <CardContent asChild details>
-                  <details>
-                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Receipt</summary>
+                  <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Receipt">
                     <div className="flex flex-col gap-4">
                       <NavigationButton
                         href={
@@ -199,18 +193,17 @@ export const Layout = ({
                         {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                       </Button>
                     </div>
-                  </details>
+                  </Details>
                 </CardContent>
               ) : null}
               {loggedInUser !== null ? (
                 <CardContent asChild details>
-                  <details>
-                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Library</summary>
+                  <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Library">
                     <div className="flex flex-col gap-4">
                       <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
                       <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
                     </div>
-                  </details>
+                  </Details>
                 </CardContent>
               ) : null}
             </Card>

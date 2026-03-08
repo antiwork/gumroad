@@ -1,6 +1,7 @@
 import React from "react";
 
 import type { User } from "$app/components/Admin/Users/User";
+import { Details } from "$app/components/Details";
 import { Alert } from "$app/components/ui/Alert";
 
 type BioProps = {
@@ -10,10 +11,7 @@ type BioProps = {
 const Bio = ({ user }: BioProps) => (
   <>
     <hr />
-    <details>
-      <summary>
-        <h3>Bio</h3>
-      </summary>
+    <Details summary={<h3>Bio</h3>}>
       {user.bio ? (
         <div>{user.bio}</div>
       ) : (
@@ -21,7 +19,7 @@ const Bio = ({ user }: BioProps) => (
           No bio provided.
         </Alert>
       )}
-    </details>
+    </Details>
   </>
 );
 

@@ -45,7 +45,7 @@ export const RefundPolicySelector = ({
 
   return (
     <Details
-      className="toggle"
+      toggle
       open={isEnabled}
       summary={
         <Switch

@@ -3,6 +3,7 @@ import * as React from "react";
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
+import { Details } from "$app/components/Details";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -16,10 +17,7 @@ type AdminUserAddCreditProps = {
 const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
   <>
     <hr />
-    <details>
-      <summary>
-        <h3>Add credits</h3>
-      </summary>
+    <Details summary={<h3>Add credits</h3>}>
       <Form
         url={Routes.add_credit_admin_user_path(user.external_id)}
         method="POST"
@@ -43,7 +41,7 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
           </Fieldset>
         )}
       </Form>
-    </details>
+    </Details>
   </>
 );
 

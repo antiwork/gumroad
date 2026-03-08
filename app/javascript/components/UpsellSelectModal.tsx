@@ -158,7 +158,7 @@ export const UpsellSelectModal = ({
           <Label htmlFor="discount">Discount</Label>
         </FieldsetTitle>
         <Details
-          className="toggle"
+          toggle
           open={!!discount}
           summary={
             <Switch

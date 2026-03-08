@@ -4,6 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { request } from "$app/utils/request";
 
+import { Details } from "$app/components/Details";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -60,9 +61,9 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
     setIsLoading(false);
   };
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
+  const onToggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
       void fetchUserGuids();
     }
   };
@@ -70,12 +71,9 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
-          <h3>GUIDs</h3>
-        </summary>
+      <Details open={open} onToggle={onToggle} summary={<h3>GUIDs</h3>}>
         <UserGuidsContent userGuids={userGuids} isLoading={isLoading} />
-      </details>
+      </Details>
     </>
   );
 };

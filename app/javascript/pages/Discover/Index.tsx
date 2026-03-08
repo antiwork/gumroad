@@ -12,6 +12,7 @@ import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 
+import { Details } from "$app/components/Details";
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
 import { HomeFooter } from "$app/components/Home/Shared/Footer";
@@ -482,8 +483,7 @@ function DiscoverIndex() {
               appendFilters={
                 <>
                   <CardContent asChild details>
-                    <details>
-                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Rating</summary>
+                    <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Rating">
                       <Fieldset role="group">
                         {range(4, 0).map((number) => (
                           <Label key={number} className="w-full">
@@ -506,14 +506,11 @@ function DiscoverIndex() {
                           </Label>
                         ))}
                       </Fieldset>
-                    </details>
+                    </Details>
                   </CardContent>
                   {hasOfferCode ? (
                     <CardContent asChild details>
-                      <details open>
-                        <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
-                          Offer code
-                        </summary>
+                      <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Offer code" open>
                         <div className="flex items-center justify-between gap-2 py-1">
                           <span>{props.black_friday_offer_code}</span>
                           <button
@@ -524,7 +521,7 @@ function DiscoverIndex() {
                             <X className="size-4" />
                           </button>
                         </div>
-                      </details>
+                      </Details>
                     </CardContent>
                   ) : null}
                 </>

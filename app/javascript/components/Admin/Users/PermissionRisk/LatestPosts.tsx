@@ -4,6 +4,7 @@ import { cast } from "ts-safe-cast";
 import { request } from "$app/utils/request";
 
 import type { User } from "$app/components/Admin/Users/User";
+import { Details } from "$app/components/Details";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -61,9 +62,9 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
     setIsLoading(false);
   };
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
+  const onToggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
       void fetchPosts();
     }
   };
@@ -71,12 +72,9 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
-          <h3>Last posts</h3>
-        </summary>
+      <Details open={open} onToggle={onToggle} summary={<h3>Last posts</h3>}>
         <LatestPostsContent posts={posts} isLoading={isLoading} />
-      </details>
+      </Details>
     </>
   );
 };

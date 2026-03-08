@@ -303,7 +303,7 @@ const TierEditor = ({
                   label="Allow customers to pay what they want"
                 />
               }
-              className="toggle"
+              toggle
               open={tier.customizable_price}
             >
               <Dropdown>
@@ -446,7 +446,7 @@ You can modify or cancel your membership at any time.`;
           label="Apply price changes to existing customers"
         />
       }
-      className="toggle"
+      toggle
       open={tier.apply_price_changes_to_existing_memberships}
     >
       <Dropdown>

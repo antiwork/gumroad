@@ -3,6 +3,7 @@ import { cast } from "ts-safe-cast";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
+import { Details } from "$app/components/Details";
 import AdminFlagForTosViolationsContent, {
   type TosViolationFlags,
 } from "$app/components/Admin/Products/FlagForTosViolations/Content";
@@ -48,9 +49,9 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
     fetchIfFlagged();
   }, [flaggedForTosViolation]);
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
+  const onToggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
       fetchIfFlagged();
     }
   };
@@ -63,10 +64,7 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
-          <h3>Flag for TOS violation</h3>
-        </summary>
+      <Details open={open} onToggle={onToggle} summary={<h3>Flag for TOS violation</h3>}>
         {shouldShowForm ? (
           <AdminFlagForTosViolationsForm
             user_external_id={product.user.external_id}
@@ -80,7 +78,7 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
         ) : null}
 
         <AdminFlagForTosViolationsContent isLoading={isLoading} tosViolationFlags={tos_violation_flags} />
-      </details>
+      </Details>
     </>
   );
 };
