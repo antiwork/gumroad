@@ -10,21 +10,6 @@
 button[draggable="true"] {
   -webkit-user-drag: element;
 }
-// quick UX improvement for native select[multiple] while we're migrating to the new design
-select[multiple].chosen-fallback {
-  background-image: none;
-  max-height: $form-element-height * 4;
-  option {
-    white-space: normal;
-  }
-}
-
-// Fix dropdown arrow positioning for post publish date input
-.post-letter--create > .popover[open] {
-  &::before {
-    left: 25%;
-  }
-}
 
 [role="tab"][aria-selected="true"][draggable="true"]::after {
   transform: translate(-50%);
