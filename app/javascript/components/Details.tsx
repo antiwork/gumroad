@@ -36,7 +36,7 @@ export const Details = React.forwardRef<HTMLDetailsElement, Props>(
         <summary
           {...summaryProps}
           className={classNames(
-            "[all:inherit] [outline:revert] grid cursor-pointer [list-style:none] [&::marker]:hidden [&::-webkit-details-marker]:hidden",
+            "grid cursor-pointer [list-style:none] [&::-webkit-details-marker]:hidden [&::marker]:hidden",
             toggle ? "grid-cols-[1fr]" : chevronPosition === "right" ? "grid-cols-[1fr_auto]" : "grid-cols-[auto_1fr]",
             isOpen && !toggle ? "mb-2" : "",
             summaryProps?.className,
@@ -49,13 +49,9 @@ export const Details = React.forwardRef<HTMLDetailsElement, Props>(
             onToggle(!open);
           }}
         >
-          {!toggle && chevronPosition === "left" ? (
-            <Chevron className="shrink-0 mr-1 size-[1em] min-h-[max(1lh,1em)]" />
-          ) : null}
+          {!toggle && chevronPosition === "left" ? <Chevron className="mr-1 size-5 shrink-0" /> : null}
           {summary}
-          {!toggle && chevronPosition === "right" ? (
-            <Chevron className="shrink-0 ml-1 size-[1em] min-h-[max(1lh,1em)] col-start-2" />
-          ) : null}
+          {!toggle && chevronPosition === "right" ? <Chevron className="col-start-2 ml-1 size-5 shrink-0" /> : null}
         </summary>
         {children}
       </details>
