@@ -3,58 +3,58 @@ import React from "react";
 import { ApiResource } from "$app/components/ApiDocumentation/ApiResource";
 import { Authentication } from "$app/components/ApiDocumentation/Authentication";
 import {
-    CreateCustomField,
-    DeleteCustomField,
-    GetCustomFields,
-    UpdateCustomField,
+  GetCustomFields,
+  CreateCustomField,
+  UpdateCustomField,
+  DeleteCustomField,
 } from "$app/components/ApiDocumentation/Endpoints/CustomFields";
 import {
-    DecrementUsesCount,
-    DisableLicense,
-    EnableLicense,
-    RotateLicense,
-    VerifyLicense,
+  VerifyLicense,
+  EnableLicense,
+  DisableLicense,
+  DecrementUsesCount,
+  RotateLicense,
 } from "$app/components/ApiDocumentation/Endpoints/Licenses";
 import {
-    CreateOfferCode,
-    DeleteOfferCode,
-    GetOfferCode,
-    GetOfferCodes,
-    UpdateOfferCode,
+  GetOfferCodes,
+  GetOfferCode,
+  CreateOfferCode,
+  UpdateOfferCode,
+  DeleteOfferCode,
 } from "$app/components/ApiDocumentation/Endpoints/OfferCodes";
-import { GetPayout, GetPayouts, GetUpcomingPayouts } from "$app/components/ApiDocumentation/Endpoints/Payouts";
+import {GetPayouts, GetPayout, GetUpcomingPayouts} from "$app/components/ApiDocumentation/Endpoints/Payouts";
 import {
-    DeleteProduct,
-    DisableProduct,
-    EnableProduct,
-    GetProduct,
-    GetProducts,
+  GetProducts,
+  GetProduct,
+  DeleteProduct,
+  EnableProduct,
+  DisableProduct,
 } from "$app/components/ApiDocumentation/Endpoints/Products";
 import {
-    CreateResourceSubscription,
-    DeleteResourceSubscription,
-    GetResourceSubscriptions,
+  CreateResourceSubscription,
+  GetResourceSubscriptions,
+  DeleteResourceSubscription,
 } from "$app/components/ApiDocumentation/Endpoints/ResourceSubscriptions";
 import {
-    GetSale,
-    GetSales,
-    MarkSaleAsShipped,
-    RefundSale,
-    ResendReceipt,
+  GetSales,
+  GetSale,
+  MarkSaleAsShipped,
+  RefundSale,
+  ResendReceipt,
 } from "$app/components/ApiDocumentation/Endpoints/Sales";
-import { GetSubscriber, GetSubscribers } from "$app/components/ApiDocumentation/Endpoints/Subscribers";
+import { GetSubscribers, GetSubscriber } from "$app/components/ApiDocumentation/Endpoints/Subscribers";
 import { GetUser } from "$app/components/ApiDocumentation/Endpoints/User";
 import {
-    CreateVariant,
-    CreateVariantCategory,
-    DeleteVariant,
-    DeleteVariantCategory,
-    GetVariant,
-    GetVariantCategories,
-    GetVariantCategory,
-    GetVariants,
-    UpdateVariant,
-    UpdateVariantCategory,
+  CreateVariantCategory,
+  GetVariantCategory,
+  UpdateVariantCategory,
+  DeleteVariantCategory,
+  GetVariantCategories,
+  CreateVariant,
+  GetVariant,
+  UpdateVariant,
+  DeleteVariant,
+  GetVariants,
 } from "$app/components/ApiDocumentation/Endpoints/Variants";
 import { Errors } from "$app/components/ApiDocumentation/Errors";
 import { Introduction } from "$app/components/ApiDocumentation/Introduction";
