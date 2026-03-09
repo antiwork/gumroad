@@ -21,7 +21,7 @@ export const Navigation = () => (
       </li>
       <li>
         <a href="#api-methods">Methods</a>
-        <menu className="mt-3 grid gap-3 pl-4 text-sm leading-[1.3]">
+        <menu className="mt-3 grid gap-3 pl-4 text-sm">
           <li>
             <a href="#products">Products</a>
           </li>
