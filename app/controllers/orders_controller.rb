@@ -38,7 +38,7 @@ class OrdersController < ApplicationController
   def confirm
     ActiveRecord::Base.connection.stick_to_primary!
 
-    order = Order.find_by_external_id(params[:id])
+    order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
     confirm_responses, offer_codes = Order::ConfirmService.new(order:, params:).perform
