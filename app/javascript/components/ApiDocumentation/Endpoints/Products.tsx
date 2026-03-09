@@ -7,11 +7,21 @@ import { ApiResponseFields, renderFields } from "../ApiResponseFields";
 import { PRODUCT_FIELDS } from "../responseFieldDefinitions";
 
 const ProductResponseFields = () => (
-  <ApiResponseFields>{renderFields([{ name: "success", type: "boolean", description: "Whether the request succeeded" }, { name: "products", type: "array", description: "Array of product objects", children: PRODUCT_FIELDS }])}</ApiResponseFields>
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "products", type: "array", description: "Array of product objects", children: PRODUCT_FIELDS },
+    ])}
+  </ApiResponseFields>
 );
 
 const SingleProductResponseFields = () => (
-  <ApiResponseFields>{renderFields([{ name: "success", type: "boolean", description: "Whether the request succeeded" }, { name: "product", type: "object", description: "The product object", children: PRODUCT_FIELDS }])}</ApiResponseFields>
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "product", type: "object", description: "The product object", children: PRODUCT_FIELDS },
+    ])}
+  </ApiResponseFields>
 );
 
 export const GetProducts = () => (

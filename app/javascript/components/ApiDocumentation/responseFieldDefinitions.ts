@@ -22,7 +22,7 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
     type: "object",
     description: "Country-code-keyed prices adjusted for purchasing power parity",
   },
-  { name: "currency", type: "string", description: "ISO currency code (e.g. \"usd\")" },
+  { name: "currency", type: "string", description: 'ISO currency code (e.g. "usd")' },
   { name: "short_url", type: "string", description: "Short Gumroad URL for the product" },
   { name: "thumbnail_url", type: "string | null", description: "URL of the product thumbnail image" },
   { name: "tags", type: "array", description: "Tags associated with the product" },
@@ -52,7 +52,7 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
     type: "array",
     description: "Variant categories and their options",
     children: [
-      { name: "title", type: "string", description: "Variant category title (e.g. \"Tier\")" },
+      { name: "title", type: "string", description: 'Variant category title (e.g. "Tier")' },
       {
         name: "options",
         type: "array",
@@ -112,7 +112,7 @@ export const SALE_FIELDS: FieldDefinition[] = [
   { name: "subscription_duration", type: "string | null", description: "Subscription billing interval if applicable" },
   { name: "formatted_display_price", type: "string", description: "Human-readable display price" },
   { name: "formatted_total_price", type: "string", description: "Human-readable total price" },
-  { name: "currency_symbol", type: "string", description: "Currency symbol (e.g. \"$\")" },
+  { name: "currency_symbol", type: "string", description: 'Currency symbol (e.g. "$")' },
   {
     name: "amount_refundable_in_currency",
     type: "string",
@@ -142,14 +142,14 @@ export const SALE_FIELDS: FieldDefinition[] = [
   { name: "discover_fee_charged", type: "boolean", description: "Whether a Gumroad Discover fee was charged" },
   { name: "is_gift_sender_purchase", type: "boolean", description: "Whether this purchase was sent as a gift" },
   { name: "is_gift_receiver_purchase", type: "boolean", description: "Whether this purchase was received as a gift" },
-  { name: "referrer", type: "string", description: "Referrer URL or \"direct\"" },
+  { name: "referrer", type: "string", description: 'Referrer URL or "direct"' },
   {
     name: "card",
     type: "object",
     description: "Payment card details",
     children: [
-      { name: "visual", type: "string | null", description: "Masked card number (e.g. \"**** **** **** 4242\")" },
-      { name: "type", type: "string | null", description: "Card type (e.g. \"visa\", \"mastercard\")" },
+      { name: "visual", type: "string | null", description: 'Masked card number (e.g. "**** **** **** 4242")' },
+      { name: "type", type: "string | null", description: 'Card type (e.g. "visa", "mastercard")' },
     ],
   },
   { name: "product_rating", type: "number | null", description: "Rating given by the buyer" },
@@ -177,7 +177,7 @@ export const SALE_FIELDS: FieldDefinition[] = [
     description: "Offer code used for the purchase",
     children: [
       { name: "name", type: "string", description: "Offer code name" },
-      { name: "displayed_amount_off", type: "string", description: "Formatted discount amount (e.g. \"50%\")" },
+      { name: "displayed_amount_off", type: "string", description: 'Formatted discount amount (e.g. "50%")' },
     ],
   },
   { name: "quantity", type: "number", description: "Number of units purchased" },
@@ -196,12 +196,15 @@ export const SUBSCRIBER_FIELDS: FieldDefinition[] = [
     type: "string | null",
     description: "Timestamp when the user requested cancellation",
   },
-  { name: "charge_occurrence_count", type: "number | null", description: "Number of charges made for this subscription" },
+  {
+    name: "charge_occurrence_count",
+    type: "number | null",
+    description: "Number of charges made for this subscription",
+  },
   {
     name: "recurrence",
     type: "string",
-    description:
-      "Subscription duration (e.g. \"monthly\", \"quarterly\", \"biannually\", \"yearly\", \"every_two_years\")",
+    description: 'Subscription duration (e.g. "monthly", "quarterly", "biannually", "yearly", "every_two_years")',
   },
   { name: "cancelled_at", type: "string | null", description: "Timestamp when the subscription was cancelled" },
   { name: "ended_at", type: "string | null", description: "Timestamp when the subscription ended" },
@@ -216,7 +219,7 @@ export const SUBSCRIBER_FIELDS: FieldDefinition[] = [
     name: "status",
     type: "string",
     description:
-      "Subscription status: \"alive\", \"pending_cancellation\", \"pending_failure\", \"failed_payment\", \"fixed_subscription_period_ended\", or \"cancelled\"",
+      'Subscription status: "alive", "pending_cancellation", "pending_failure", "failed_payment", "fixed_subscription_period_ended", or "cancelled"',
   },
 ];
 
@@ -233,14 +236,14 @@ export const LICENSE_PURCHASE_FIELDS: FieldDefinition[] = [
   { name: "quantity", type: "number", description: "Number of units purchased" },
   { name: "discover_fee_charged", type: "boolean", description: "Whether a Gumroad Discover fee was charged" },
   { name: "can_contact", type: "boolean", description: "Whether the seller can contact the buyer" },
-  { name: "referrer", type: "string", description: "Referrer URL or \"direct\"" },
+  { name: "referrer", type: "string", description: 'Referrer URL or "direct"' },
   {
     name: "card",
     type: "object",
     description: "Payment card details",
     children: [
       { name: "visual", type: "string | null", description: "Masked card number" },
-      { name: "type", type: "string | null", description: "Card type (e.g. \"visa\")" },
+      { name: "type", type: "string | null", description: 'Card type (e.g. "visa")' },
     ],
   },
   { name: "order_number", type: "number", description: "Numeric order identifier" },
@@ -289,18 +292,18 @@ export const LICENSE_PURCHASE_FIELDS: FieldDefinition[] = [
 export const PAYOUT_FIELDS: FieldDefinition[] = [
   { name: "id", type: "string | null", description: "Unique identifier for the payout (null for upcoming payouts)" },
   { name: "amount", type: "string", description: "Payout amount as a decimal string" },
-  { name: "currency", type: "string", description: "ISO currency code (e.g. \"USD\")" },
+  { name: "currency", type: "string", description: 'ISO currency code (e.g. "USD")' },
   {
     name: "status",
     type: "string",
-    description: "Payout status: \"payable\", \"completed\", \"pending\", or \"failed\"",
+    description: 'Payout status: "payable", "completed", "pending", or "failed"',
   },
   { name: "created_at", type: "string", description: "ISO 8601 timestamp of when the payout was created" },
   { name: "processed_at", type: "string | null", description: "ISO 8601 timestamp of when the payout was processed" },
   {
     name: "payment_processor",
     type: "string",
-    description: "Payment processor used (e.g. \"stripe\", \"paypal\")",
+    description: 'Payment processor used (e.g. "stripe", "paypal")',
   },
   {
     name: "bank_account_visual",
@@ -319,18 +322,18 @@ export const PAYOUT_FIELDS: FieldDefinition[] = [
 export const PAYOUT_DETAIL_FIELDS: FieldDefinition[] = [
   { name: "id", type: "string | null", description: "Unique identifier for the payout (null for upcoming payouts)" },
   { name: "amount", type: "string", description: "Payout amount as a decimal string" },
-  { name: "currency", type: "string", description: "ISO currency code (e.g. \"USD\")" },
+  { name: "currency", type: "string", description: 'ISO currency code (e.g. "USD")' },
   {
     name: "status",
     type: "string",
-    description: "Payout status: \"payable\", \"completed\", \"pending\", or \"failed\"",
+    description: 'Payout status: "payable", "completed", "pending", or "failed"',
   },
   { name: "created_at", type: "string", description: "ISO 8601 timestamp of when the payout was created" },
   { name: "processed_at", type: "string | null", description: "ISO 8601 timestamp of when the payout was processed" },
   {
     name: "payment_processor",
     type: "string",
-    description: "Payment processor used (e.g. \"stripe\", \"paypal\")",
+    description: 'Payment processor used (e.g. "stripe", "paypal")',
   },
   {
     name: "sales",
@@ -360,7 +363,7 @@ export const PAYOUT_DETAIL_FIELDS: FieldDefinition[] = [
         name: "type",
         type: "string",
         description:
-          "Transaction type (e.g. \"Sale\", \"Chargeback\", \"Full Refund\", \"Partial Refund\", \"Affiliate Credit\", \"Payout Fee\", etc.)",
+          'Transaction type (e.g. "Sale", "Chargeback", "Full Refund", "Partial Refund", "Affiliate Credit", "Payout Fee", etc.)',
       },
       { name: "date", type: "string", description: "Transaction date (YYYY-MM-DD)" },
       { name: "purchase_id", type: "string", description: "Associated purchase ID" },
@@ -412,7 +415,7 @@ export const OFFER_CODE_FIELDS: FieldDefinition[] = [
 
 export const CUSTOM_FIELD_FIELDS: FieldDefinition[] = [
   { name: "name", type: "string", description: "Name of the custom field" },
-  { name: "required", type: "string", description: "Whether this field is required (\"true\" or \"false\")" },
+  { name: "required", type: "string", description: 'Whether this field is required ("true" or "false")' },
 ];
 
 export const VARIANT_CATEGORY_FIELDS: FieldDefinition[] = [
@@ -436,7 +439,7 @@ export const RESOURCE_SUBSCRIPTION_FIELDS: FieldDefinition[] = [
   {
     name: "resource_name",
     type: "string",
-    description: "Subscribed resource name (e.g. \"sale\", \"refund\", \"dispute\")",
+    description: 'Subscribed resource name (e.g. "sale", "refund", "dispute")',
   },
   { name: "post_url", type: "string", description: "URL where webhook notifications are sent" },
 ];
