@@ -1,7 +1,9 @@
+import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 
 export type Attribute = { name: string; value: string };
@@ -29,14 +31,14 @@ export const AttributesEditor = ({
 
   const addButton = (
     <Button color="primary" onClick={() => setCustomAttributes([...customAttributes, { name: "", value: "" }])}>
-      <Icon name="plus" />
+      <Plus className="size-5" />
       Add detail
     </Button>
   );
 
   return (
-    <fieldset>
-      <legend>Additional details</legend>
+    <Fieldset>
+      <FieldsetTitle>Additional details</FieldsetTitle>
       {(fileAttributes?.length ?? 0) > 0 || customAttributes.length > 0 ? (
         <>
           {fileAttributes?.map((attribute, idx) => (
@@ -63,7 +65,7 @@ export const AttributesEditor = ({
           {addButton}
         </Placeholder>
       )}
-    </fieldset>
+    </Fieldset>
   );
 };
 
@@ -77,20 +79,20 @@ const AttributeEditor = ({
   onDelete: () => void;
 }) => (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr max-content", gap: "var(--spacer-2)" }}>
-    <input
+    <Input
       type="text"
       value={attribute.name}
       onChange={(evt) => onUpdate?.({ name: evt.target.value })}
       disabled={!onUpdate}
     />
-    <input
+    <Input
       type="text"
       value={attribute.value}
       onChange={(evt) => onUpdate?.({ value: evt.target.value })}
       disabled={!onUpdate}
     />
     <Button onClick={onDelete}>
-      <Icon name="trash2" />
+      <Trash className="size-5" />
     </Button>
   </div>
 );

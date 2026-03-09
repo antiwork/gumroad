@@ -1,8 +1,8 @@
+import { FileDetail, FileZip, Image, MusicAlt, PlayCircle, type BoxIconProps } from "@boxicons/react";
 import * as React from "react";
 
 import { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
 
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 
 type Props = {
@@ -31,19 +31,14 @@ export const FileRowContent = ({ extension, name, details, externalLinkUrl, isUp
   </>
 );
 
-const ICON_EXTENSIONS_MAP = {
-  "file-earmark-image-fill": FILE_TYPE_EXTENSIONS_MAP.image,
-  "file-earmark-music-fill": FILE_TYPE_EXTENSIONS_MAP.audio,
-  "file-earmark-play-fill": FILE_TYPE_EXTENSIONS_MAP.video,
-  "file-earmark-zip-fill": FILE_TYPE_EXTENSIONS_MAP.zip,
+const FILE_KIND_ICONS: [React.ComponentType<BoxIconProps>, string[]][] = [
+  [Image, FILE_TYPE_EXTENSIONS_MAP.image],
+  [MusicAlt, FILE_TYPE_EXTENSIONS_MAP.audio],
+  [PlayCircle, FILE_TYPE_EXTENSIONS_MAP.video],
+  [FileZip, FILE_TYPE_EXTENSIONS_MAP.zip],
+];
+export const FileKindIcon = ({ extension }: { extension: string | null }) => {
+  const match = extension && FILE_KIND_ICONS.find(([, exts]) => exts.includes(extension));
+  const Component = match ? match[0] : FileDetail;
+  return <Component pack="filled" className="type-icon size-5" />;
 };
-export const FileKindIcon = ({ extension }: { extension: string | null }) => (
-  <Icon
-    name={
-      (extension &&
-        Object.entries(ICON_EXTENSIONS_MAP).find(([_, extensions]) => extensions.includes(extension))?.[0]) ||
-      "file-earmark-text-fill"
-    }
-    className="type-icon"
-  />
-);

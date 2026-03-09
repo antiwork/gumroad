@@ -158,26 +158,6 @@ describe ContactingCreatorMailer do
     end
   end
 
-  describe "negative_revenue_sale_failure", :vcr do
-    before do
-      product = create(:product, price_cents: 100, user: create(:user, email: "seller@gr.co"))
-      affiliate = create(:direct_affiliate, affiliate_basis_points: 7500, products: [product])
-      allow_any_instance_of(Purchase).to receive(:determine_affiliate_balance_cents).and_return(90)
-      @purchase = create(:purchase, link: product, seller: product.user, affiliate:, save_card: false, chargeable: create(:chargeable))
-      @purchase.process!
-    end
-
-    it "sends the correct sale failure email" do
-      mail = ContactingCreatorMailer.negative_revenue_sale_failure(@purchase.id)
-
-      expect(mail.to).to eq ["seller@gr.co"]
-      expect(mail.subject).to eq "A sale failed because of negative net revenue"
-      expect(mail.body.encoded).to include "A customer (#{@purchase.email}) attempted to purchase your product (#{@purchase.link.name}) for #{@purchase.formatted_display_price}."
-      expect(mail.body.encoded).to include "But the purchase was blocked because your net revenue from it was not positive."
-      expect(mail.body.encoded).to include "You should either increase the sale price of your product, or reduce the applicable discount and/or affiliate commission."
-    end
-  end
-
   describe "preorder_release_reminder" do
     let(:preorder_link) { create(:preorder_link) }
     let(:product) { preorder_link.link }

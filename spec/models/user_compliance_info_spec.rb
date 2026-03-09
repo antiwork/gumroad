@@ -290,6 +290,24 @@ describe UserComplianceInfo do
           uci.valid?
           expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
         end
+
+        it "allows prolonged vowel mark (ー U+30FC)" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { first_name_kana: "テイラー" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+
+        it "allows full-width space (U+3000)" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { first_name_kana: "ジョン\u3000トレッゲサー" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+
+        it "allows half-width katakana (U+FF65-U+FF9F)" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { first_name_kana: "ｶﾀｶﾅ" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
       end
 
       describe "address kana fields" do
@@ -317,6 +335,18 @@ describe UserComplianceInfo do
           uci.valid?
           expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
         end
+
+        it "allows full-width space in address kana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { street_address_kana: "シブヤ\u3000ヒカリエ" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
+
+        it "allows prolonged vowel mark in address kana" do
+          uci = build(:user_compliance_info, country: "Japan", json_data: { street_address_kana: "シブヤヒカリエドオリー" })
+          uci.valid?
+          expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
+        end
       end
     end
 
@@ -326,6 +356,50 @@ describe UserComplianceInfo do
         uci.valid?
         expect(uci.errors[:base]).not_to include(a_string_matching(/Kana/))
       end
+    end
+  end
+
+  describe "street_address_kana_must_contain_katakana" do
+    it "rejects Latin-only street_address_kana" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { street_address_kana: "Shibuya" })
+      uci.valid?
+      expect(uci.errors[:base]).to include("Street address (Kana) must include katakana characters")
+    end
+
+    it "accepts street_address_kana with katakana" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { street_address_kana: "シブヤ" })
+      uci.valid?
+      expect(uci.errors[:base]).not_to include(a_string_matching(/must include katakana/))
+    end
+
+    it "accepts street_address_kana with mixed katakana and Latin" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { street_address_kana: "シブヤ1-2-3" })
+      uci.valid?
+      expect(uci.errors[:base]).not_to include(a_string_matching(/must include katakana/))
+    end
+
+    it "does not apply to building_number_kana" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { building_number_kana: "123" })
+      uci.valid?
+      expect(uci.errors[:base]).not_to include(a_string_matching(/must include katakana/))
+    end
+
+    it "rejects Latin-only business_street_address_kana" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { business_street_address_kana: "Chiyoda" })
+      uci.valid?
+      expect(uci.errors[:base]).to include("Business street address (Kana) must include katakana characters")
+    end
+
+    it "accepts business_street_address_kana with katakana" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { business_street_address_kana: "チヨダ" })
+      uci.valid?
+      expect(uci.errors[:base]).not_to include(a_string_matching(/must include katakana/))
+    end
+
+    it "accepts business_street_address_kana with mixed katakana and Latin" do
+      uci = build(:user_compliance_info, country: "Japan", json_data: { business_street_address_kana: "チヨダ1-2" })
+      uci.valid?
+      expect(uci.errors[:base]).not_to include(a_string_matching(/must include katakana/))
     end
   end
 

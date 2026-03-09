@@ -1,3 +1,4 @@
+import { Pencil, Trash } from "@boxicons/react";
 import CharacterCount from "@tiptap/extension-character-count";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { isEqual } from "lodash-es";
@@ -11,7 +12,6 @@ import { assertResponseError } from "$app/utils/request";
 import AutoLink from "$app/components/AutoLink";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { ProfileProps, TabWithId, useTabs } from "$app/components/Profile";
 import { SectionLayout } from "$app/components/Profile/Sections";
@@ -19,21 +19,21 @@ import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
 import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import {
+  Action,
   AddSectionButton,
   EditorMenu,
   EditorSubmenu,
-  PageProps as SectionsProps,
-  ReducerContext as SectionReducerContext,
-  Action,
   EditSection,
-  useSectionImageUploadSettings,
+  ReducerContext as SectionReducerContext,
+  PageProps as SectionsProps,
   SectionToolbar,
+  useSectionImageUploadSettings,
 } from "./EditSections";
 import { FollowFormBlock } from "./FollowForm";
 
@@ -75,8 +75,8 @@ const EditTab = ({
         </h4>
       </RowContent>
       <RowActions>
-        <Button small color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
-          <Icon name="trash2" />
+        <Button size="icon" color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
+          <Trash className="size-5" />
         </Button>
       </RowActions>
       {confirmingDelete ? (
@@ -256,10 +256,11 @@ export const EditProfile = (props: Props) => {
         <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
           <NavigationButton
             color="filled"
+            size="icon"
             href={Routes.settings_profile_url({ host: appDomain })}
             aria-label="Edit profile"
           >
-            <Icon name="pencil" />
+            <Pencil className="size-5" />
           </NavigationButton>
         </WithTooltip>
       </div>

@@ -1,8 +1,8 @@
+import { Trash } from "@boxicons/react";
 import cx from "classnames";
 import React, { useEffect, useRef, useState } from "react";
 import { useReactMediaRecorder } from "react-media-recorder";
 
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import {
   ReviewVideoRecorderContainer,
@@ -110,7 +110,7 @@ const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; dis
     onClick={onClick}
     disabled={disabled}
   >
-    <Icon name="trash2" className="text-sm text-white" />
+    <Trash className="size-5 text-sm text-white" />
   </button>
 );
 

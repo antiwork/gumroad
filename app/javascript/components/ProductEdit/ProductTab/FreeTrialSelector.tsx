@@ -3,6 +3,8 @@ import * as React from "react";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
 
 const PERMITTED_DURATIONS = ["week", "month"] as const;
 const DEFAULT_DURATION = 1;
@@ -25,10 +27,10 @@ export const FreeTrialSelector = () => {
       }
       label="Offer a free trial"
       dropdown={
-        <fieldset>
-          <legend>
-            <label htmlFor={uid}>Charge members after</label>
-          </legend>
+        <Fieldset>
+          <FieldsetTitle>
+            <Label htmlFor={uid}>Charge members after</Label>
+          </FieldsetTitle>
           <TypeSafeOptionSelect
             id={uid}
             value={product.free_trial_duration_unit || DEFAULT_DURATION_UNIT}
@@ -40,7 +42,7 @@ export const FreeTrialSelector = () => {
               label: option === "month" ? "one month" : "one week",
             }))}
           />
-        </fieldset>
+        </Fieldset>
       }
     />
   );

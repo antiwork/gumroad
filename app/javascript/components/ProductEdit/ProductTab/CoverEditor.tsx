@@ -1,3 +1,4 @@
+import { ArrowUp, Link as LinkIcon, Plus } from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import classNames from "classnames";
 import * as React from "react";
@@ -11,12 +12,13 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Covers } from "$app/components/Product/Covers";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Tab, TabIcon, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -51,7 +53,7 @@ export const CoverEditor = ({
   };
 
   return (
-    <section className="p-4! md:p-8!">
+    <section className="grid gap-8 border-t border-border p-4 md:p-8">
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Cover</h2>
@@ -96,7 +98,7 @@ export const CoverEditor = ({
                 <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
                   <PopoverTrigger disabled={!canAddPreview || isUploading} asChild>
                     <Button aria-label="Add cover">
-                      <Icon name="plus" />
+                      <Plus className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -160,6 +162,7 @@ const CoverUploader = ({
             <label>
               <input
                 type="file"
+                className="sr-only"
                 multiple
                 accept={ALLOWED_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
                 disabled={isUploading}
@@ -193,7 +196,9 @@ const CoverUploader = ({
                   setIsSelecting(false);
                 })}
               />
-              <TabIcon name="upload-fill" />
+              <TabIcon>
+                <ArrowUp pack="filled" className="size-5" />
+              </TabIcon>
               Computer files
             </label>
           </Tab>
@@ -205,11 +210,13 @@ const CoverUploader = ({
             isSelected={uploader?.type === "url"}
             aria-controls={`${uid}-url`}
           >
-            <TabIcon name="link" />
+            <TabIcon>
+              <LinkIcon className="size-5" />
+            </TabIcon>
             External link
           </Tab>
         </Tabs>
-        <fieldset
+        <Fieldset
           role="tabpanel"
           className="mt-4 rounded-sm border border-border p-4"
           id={`${uid}-url`}
@@ -217,7 +224,7 @@ const CoverUploader = ({
         >
           {uploader?.type === "url" ? (
             <div className="flex gap-2">
-              <input
+              <Input
                 type="url"
                 placeholder="https://"
                 value={uploader.value}
@@ -235,18 +242,18 @@ const CoverUploader = ({
                 }}
                 aria-label="Upload"
               >
-                <Icon name="upload-fill" />
+                <Plus pack="filled" className="size-5" />
               </Button>
             </div>
           ) : null}
-          <small>We support media from sites such as YouTube, Vimeo, and Soundcloud.</small>
-        </fieldset>
+          <FieldsetDescription>We support media from sites such as YouTube, Vimeo, and Soundcloud.</FieldsetDescription>
+        </Fieldset>
       </div>
     )
   ) : (
     <>
       <Button color="primary" onClick={() => setIsSelecting(true)}>
-        <Icon name="upload-fill" /> Upload images or videos
+        <Plus pack="filled" className="size-5" /> Upload images or videos
       </Button>
       Images should be horizontal, at least 1280x720px, and 72 DPI (dots per inch).
     </>

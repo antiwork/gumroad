@@ -1,3 +1,4 @@
+import { Check, X } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -10,7 +11,6 @@ import { formatCommission, formatProductNames } from "$app/utils/collaboratorFor
 import { Button } from "$app/components/Button";
 import CollaboratorDetailsSheet from "$app/components/Collaborators/CollaboratorDetailsSheet";
 import { Layout } from "$app/components/Collaborators/Layout";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -59,11 +59,11 @@ const IncomingCollaboratorsTableRow = ({
     <TableCell>
       {incomingCollaborator.invitation_accepted ? null : (
         <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
-          <Button type="submit" aria-label="Accept" onClick={onAccept} disabled={disabled}>
-            <Icon name="outline-check" />
+          <Button type="submit" size="icon" aria-label="Accept" onClick={onAccept} disabled={disabled}>
+            <Check className="size-5" />
           </Button>
-          <Button type="submit" color="danger" aria-label="Decline" onClick={onReject} disabled={disabled}>
-            <Icon name="x" />
+          <Button type="submit" size="icon" color="danger" aria-label="Decline" onClick={onReject} disabled={disabled}>
+            <X className="size-5" />
           </Button>
         </div>
       )}

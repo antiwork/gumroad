@@ -38,19 +38,22 @@ describe Products::ArchivedController, inertia: true do
       expect(response).to have_http_status(:ok)
       expect(controller.send(:page_title)).to eq("Archived products")
       expect(inertia).to render_component("Products/Archived/Index")
-      expect(inertia.props).to include(
-        :can_create_product,
-        :products_data,
-        :memberships_data
-      )
-      expect(inertia.props[:products_data]).to include(:products, :pagination, :sort)
-      expect(inertia.props[:memberships_data]).to include(:memberships, :pagination, :sort)
+      expect(inertia.props).to include(:can_create_product)
+      expect(inertia.props).not_to include(:products_data, :memberships_data)
+
+      request.headers["X-Inertia"] = "true"
+      request.headers["X-Inertia-Partial-Data"] = "products_data,memberships_data"
+      request.headers["X-Inertia-Partial-Component"] = "Products/Archived/Index"
+      get :index
+
+      expect(inertia.props["products_data"]).to include("products", "pagination", "sort")
+      expect(inertia.props["memberships_data"]).to include("memberships", "pagination", "sort")
     end
 
     context "when there are no archived products" do
       before do
-        archived_membership.update(archived: false)
-        archived_product.update(archived: false)
+        archived_membership.update!(archived: false)
+        archived_product.update!(archived: false)
       end
 
       it "redirects to products page" do

@@ -71,10 +71,6 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.notify(Purchase.last&.id)
   end
 
-  def negative_revenue_sale_failure
-    ContactingCreatorMailer.negative_revenue_sale_failure(Purchase.last&.id)
-  end
-
   def purchase_refunded_for_fraud
     ContactingCreatorMailer.purchase_refunded_for_fraud(Purchase.last&.id)
   end

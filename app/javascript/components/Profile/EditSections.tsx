@@ -1,3 +1,18 @@
+import {
+  ArrowDown,
+  ArrowUp,
+  Bell,
+  Box,
+  ChevronLeft,
+  ChevronRight,
+  DotsHorizontalRounded,
+  Envelope,
+  FileDetail,
+  Grid,
+  Link,
+  Plus,
+  Trash,
+} from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import { EditorContent } from "@tiptap/react";
 import { debounce, isEqual, sortBy } from "lodash-es";
@@ -22,7 +37,6 @@ import { classNames } from "$app/utils/classNames";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Props as ProductProps } from "$app/components/Product";
 import { CardGrid, SORT_BY_LABELS, useSearchReducer } from "$app/components/Product/CardGrid";
@@ -32,7 +46,12 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
 import { useOnChange } from "$app/components/useOnChange";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 
@@ -163,14 +182,14 @@ export const EditorMenu = ({
       }}
     >
       <PopoverTrigger aria-label={label} className={sectionButtonClasses}>
-        <Icon name="three-dots" />
+        <DotsHorizontalRounded className="size-5" />
       </PopoverTrigger>
       <PopoverContent className="p-0!" arrowClassName="dark:fill-[rgb(var(--parent-color)/var(--border-alpha))]">
         {isSubmenu(activeSubmenu) ? (
           <div className="flex w-75 flex-col gap-4 p-4">
             <h4 className="grid grid-cols-[1em_1fr_1em]">
               <button className="cursor-pointer all-unset" onClick={() => setMenuState("menu")} aria-label="Go back">
-                <Icon name="outline-cheveron-left" />
+                <ChevronLeft className="size-5" />
               </button>
               <div className="text-center">{activeSubmenu.props.heading}</div>
             </h4>
@@ -187,7 +206,7 @@ export const EditorMenu = ({
                   >
                     <h5 className="grow font-bold">{item.props.heading}</h5>
                     <div>
-                      {item.props.text} <Icon name="outline-cheveron-right" />
+                      {item.props.text} <ChevronRight className="size-5" />
                     </div>
                   </button>
                 </CardContent>
@@ -266,28 +285,24 @@ export const SectionLayout = ({
       <SectionToolbar>
         <EditorMenu label="Edit section" onClose={onClose}>
           <EditorSubmenu heading="Name" text={section.header}>
-            <fieldset>
-              <input
+            <Fieldset>
+              <Input
                 placeholder="Name"
                 value={section.header}
                 onChange={(e) => updateSection({ header: e.target.value })}
               />
-            </fieldset>
-            <label>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={!section.hide_header}
-                onChange={() => updateSection({ hide_header: !section.hide_header })}
-              />
-              Display above section
-            </label>
+            </Fieldset>
+            <Switch
+              checked={!section.hide_header}
+              onChange={() => updateSection({ hide_header: !section.hide_header })}
+              label="Display above section"
+            />
           </EditorSubmenu>
           {menuItems}
           <CardContent asChild>
             <button className="cursor-pointer all-unset" onClick={copyLink}>
               <h5 className="grow font-bold">{linkCopied ? "Copied!" : "Copy link"}</h5>
-              <Icon name="link" />
+              <Link className="size-5" />
             </button>
           </CardContent>
           <CardContent asChild>
@@ -297,7 +312,7 @@ export const SectionLayout = ({
               style={{ color: "rgb(var(--danger))" }}
             >
               <h5 className="grow font-bold">Remove</h5>
-              <Icon name="trash2" />
+              <Trash className="size-5" />
             </button>
           </CardContent>
         </EditorMenu>
@@ -307,7 +322,7 @@ export const SectionLayout = ({
           onClick={() => move("move-section-up")}
           className={sectionButtonClasses}
         >
-          <Icon name="arrow-up" />
+          <ArrowUp className="size-5" />
         </button>
         <button
           aria-label="Move section down"
@@ -315,7 +330,7 @@ export const SectionLayout = ({
           onClick={() => move("move-section-down")}
           className={sectionButtonClasses}
         >
-          <Icon name="arrow-down" />
+          <ArrowDown className="size-5" />
         </button>
       </SectionToolbar>
       <div ref={scrollRef} className="absolute" />
@@ -354,10 +369,10 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
 
   return (
     <div className="flex flex-col gap-4 overflow-auto" style={{ maxHeight: "min(100vh, 500px)" }}>
-      <fieldset>
-        <legend>
-          <label htmlFor={`${uid}-defaultProductSort`}>Default sort order</label>
-        </legend>
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-defaultProductSort`}>Default sort order</Label>
+        </FieldsetTitle>
         <TypeSafeOptionSelect
           id={`${uid}-defaultProductSort`}
           value={section.default_product_sort}
@@ -367,25 +382,17 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
             label: SORT_BY_LABELS[key],
           }))}
         />
-      </fieldset>
-      <label>
-        <input
-          type="checkbox"
-          role="switch"
-          checked={section.show_filters}
-          onChange={() => updateSection({ show_filters: !section.show_filters })}
-        />
-        Show product filters
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          role="switch"
-          checked={section.add_new_products}
-          onChange={() => updateSection({ add_new_products: !section.add_new_products })}
-        />
-        Add new products by default
-      </label>
+      </Fieldset>
+      <Switch
+        checked={section.show_filters}
+        onChange={() => updateSection({ show_filters: !section.show_filters })}
+        label="Show product filters"
+      />
+      <Switch
+        checked={section.add_new_products}
+        onChange={() => updateSection({ add_new_products: !section.add_new_products })}
+        label="Add new products by default"
+      />
       {products.length > 0 ? (
         <Sortable list={products} setList={setProducts} tag={ProductList} handle="[aria-grabbed]">
           {products.map((product) => {
@@ -397,7 +404,7 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
                 className={classNames(product.chosen && "border border-border")}
                 asChild
               >
-                <label>
+                <Label>
                   <RowContent>
                     {section.default_product_sort === "page_layout" ? (
                       <RowDragHandle aria-grabbed={product.chosen} />
@@ -405,9 +412,8 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
                     <span className="text-singleline">{product.name}</span>
                   </RowContent>
                   <RowActions>
-                    <input
+                    <Checkbox
                       id={productVisibilityUID}
-                      type="checkbox"
                       checked={section.shown_products.includes(product.id)}
                       onChange={() => {
                         updateSection({
@@ -420,7 +426,7 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
                       }}
                     />
                   </RowActions>
-                </label>
+                </Label>
               </Row>
             );
           })}
@@ -563,7 +569,7 @@ const SubscribeSectionView = ({ section }: { section: SubscribeSection }) => {
       section={section}
       menuItems={[
         <EditorSubmenu key="0" heading="Button Label" text={section.button_label}>
-          <input
+          <Input
             type="text"
             placeholder="Subscribe"
             aria-label="Button Label"
@@ -688,7 +694,7 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
             "rounded-b border",
           )}
         >
-          <Icon name="plus" />
+          <Plus className="size-5" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -698,27 +704,27 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
       >
         <div role="menu" onClick={() => setOpen(false)}>
           <div role="menuitem" onClick={() => addSection("SellerProfileProductsSection")}>
-            <Icon name="grid" />
+            <Grid className="size-5" />
             &ensp; Products
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfilePostsSection")}>
-            <Icon name="envelope-fill" />
+            <Envelope pack="filled" className="size-5" />
             &ensp; Posts
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileFeaturedProductSection")}>
-            <Icon name="box" />
+            <Box className="size-5" />
             &ensp; Featured Product
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileRichTextSection")}>
-            <Icon name="file-earmark-text" />
+            <FileDetail className="size-5" />
             &ensp; Rich text
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileSubscribeSection")}>
-            <Icon name="solid-bell" />
+            <Bell pack="filled" className="size-5" />
             &ensp; Subscribe
           </div>
           <div role="menuitem" onClick={() => addSection("SellerProfileWishlistsSection")}>
-            <Icon name="file-text-fill" />
+            <FileDetail pack="filled" className="size-5" />
             &ensp; Wishlists
           </div>
         </div>

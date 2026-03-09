@@ -19,7 +19,9 @@ class Order::ChargeService
     # All remaining purchases need to be charged that are still in progress
     # Create a combined charge for all purchases belonging to the same seller
     # i.e. one charge per seller
-    purchases_by_seller = order.purchases.group_by(&:seller_id)
+    # Exclude purchases that already have a payment intent (e.g. subscription restarts
+    # requiring SCA — they are confirmed later via Order::ConfirmService)
+    purchases_by_seller = order.purchases.reject { _1.processor_payment_intent.present? }.group_by(&:seller_id)
 
     purchases_by_seller.each do |seller_id, seller_purchases|
       charge = order.charges.create!(seller_id:)
@@ -263,7 +265,7 @@ class Order::ChargeService
           requires_card_action: true,
           client_secret: charge_intent.client_secret,
           order: {
-            id: order.external_id,
+            id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: order.charges.last.merchant_account.is_a_stripe_connect_account? ? order.charges.last.merchant_account.charge_processor_merchant_id : nil
           }
         }
@@ -273,7 +275,7 @@ class Order::ChargeService
           requires_card_setup: true,
           client_secret: setup_intent.client_secret,
           order: {
-            id: order.external_id,
+            id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: order.purchases.last.merchant_account.is_a_stripe_connect_account? ? order.purchases.last.merchant_account.charge_processor_merchant_id : nil
           }
         }

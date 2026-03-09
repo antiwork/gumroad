@@ -1,3 +1,4 @@
+import { Shield } from "@boxicons/react";
 import { usePage, router } from "@inertiajs/react";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -21,7 +22,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Option, Select } from "$app/components/Select";
@@ -321,10 +321,11 @@ const TeamMembersSection = ({
                         tip="Invitation has expired. You can resend the invitation from the member's menu options."
                         position="top"
                       >
-                        <Icon
-                          name="solid-shield-exclamation"
+                        <Shield
+                          pack="filled"
                           style={{ color: "rgb(var(--warning))" }}
                           aria-label="Invitation has expired. You can resend the invitation from the member's menu options."
+                          className="size-5"
                         />
                       </WithTooltip>
                     ) : null}

@@ -104,16 +104,16 @@ const AdminProductPurchasesContent = ({
         </div>
         <div className="flex items-center gap-2">
           {!allSelectableSelected && selectablePurchases.length > 0 ? (
-            <Button small outline onClick={selectAll} disabled={isMassRefunding}>
+            <Button size="sm" outline onClick={selectAll} disabled={isMassRefunding}>
               Select all
             </Button>
           ) : null}
           {selectedCount > 0 ? (
-            <Button small outline onClick={clearSelection} disabled={isMassRefunding}>
+            <Button size="sm" outline onClick={clearSelection} disabled={isMassRefunding}>
               Clear selection
             </Button>
           ) : null}
-          <Button small onClick={() => void handleMassRefund()} disabled={selectedCount === 0 || isMassRefunding}>
+          <Button size="sm" onClick={() => void handleMassRefund()} disabled={selectedCount === 0 || isMassRefunding}>
             {isMassRefunding ? "Starting..." : "Refund for Fraud"}
           </Button>
         </div>
@@ -134,7 +134,7 @@ const AdminProductPurchasesContent = ({
       {isLoading ? <LoadingSpinner /> : null}
 
       {hasMore ? (
-        <Button small onClick={onLoadMore} disabled={isLoading}>
+        <Button size="sm" onClick={onLoadMore} disabled={isLoading}>
           {isLoading ? "Loading..." : "Load more"}
         </Button>
       ) : null}

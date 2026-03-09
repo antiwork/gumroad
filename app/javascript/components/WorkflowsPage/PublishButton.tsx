@@ -1,10 +1,11 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { type SaveActionName } from "$app/types/workflow";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Fieldset } from "$app/components/ui/Fieldset";
 import { Switch } from "$app/components/ui/Switch";
 
 type PublishButtonProps = {
@@ -40,12 +41,12 @@ export const PublishButton = ({
         <PopoverTrigger disabled={isDisabled} asChild>
           <Button color="accent">
             Publish
-            <Icon name="outline-cheveron-down" />
+            <ChevronDown className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent sideOffset={4}>
-        <fieldset>
+        <Fieldset>
           <Button color="accent" onClick={() => onClick("save_and_publish")} disabled={isDisabled}>
             Publish now
           </Button>
@@ -54,7 +55,7 @@ export const PublishButton = ({
             onChange={(e) => sendToPastCustomers.toggle(e.target.checked)}
             label={sendToPastCustomers.label}
           />
-        </fieldset>
+        </Fieldset>
       </PopoverContent>
     </Popover>
   );

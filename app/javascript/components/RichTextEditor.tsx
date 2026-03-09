@@ -1,3 +1,23 @@
+import {
+  Bold,
+  CartPlus,
+  ChevronDown,
+  Code,
+  FontFamily,
+  Heading1,
+  Heading2,
+  Heading3,
+  Italic,
+  ListOl,
+  ListUl,
+  Minus,
+  QuoteLeftAlt,
+  Redo,
+  Star,
+  Strikethrough,
+  Underline as UnderlineIcon,
+  Undo,
+} from "@boxicons/react";
 import { Content, createDocument, Editor, isList } from "@tiptap/core";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
@@ -7,16 +27,14 @@ import { EditorState, Selection } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { EditorContent, Extensions, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import cx from "classnames";
 import { partition } from "lodash-es";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { Separator } from "$app/components/Separator";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { CodeBlock } from "$app/components/TiptapExtensions/CodeBlock";
 import { Image, uploadImages } from "$app/components/TiptapExtensions/Image";
@@ -24,7 +42,7 @@ import { Link, Button as TiptapButton } from "$app/components/TiptapExtensions/L
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
-import { WithTooltip, Position } from "$app/components/WithTooltip";
+import { Position, WithTooltip } from "$app/components/WithTooltip";
 
 import { Raw } from "./TiptapExtensions/MediaEmbed";
 
@@ -40,6 +58,7 @@ export type ImageUploadSettings = {
   allowedExtensions: string[];
   onUpload: (file: File, src?: string) => Promise<string> | undefined;
   isUploading?: boolean;
+  maxFileSize?: number;
 };
 
 const ToolbarTooltipContext = React.createContext<null | [boolean, (show: boolean) => void]>(null);
@@ -90,7 +109,7 @@ export const MenuItem = ({
   position,
 }: {
   name: string;
-  icon: IconName;
+  icon: React.ReactNode;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
@@ -99,13 +118,13 @@ export const MenuItem = ({
   <MenuItemTooltip tip={name} position={position}>
     <button
       type="button"
-      className="toolbar-item cursor-pointer all-unset"
+      className="cursor-pointer rounded px-2 py-1 all-unset hover:bg-active-bg aria-pressed:text-accent"
       aria-pressed={active}
       disabled={disabled}
       aria-label={name}
       onClick={onClick}
     >
-      <Icon name={icon} />
+      {icon}
     </button>
   </MenuItemTooltip>
 );
@@ -116,19 +135,19 @@ export const PopoverMenuItem = ({
   children,
 }: {
   name: string;
-  icon: IconName;
+  icon: React.ReactNode;
   children: React.ReactNode;
 }) => (
   <Popover>
     <PopoverTrigger aria-label={name} className="all-unset">
       <MenuItemTooltip tip={name}>
-        <div className="toolbar-item flex items-center gap-2">
-          <Icon name={icon} />
+        <div className="flex items-center gap-2 rounded px-2 py-1 hover:bg-active-bg">
+          {icon}
           <span>{name}</span>
         </div>
       </MenuItemTooltip>
     </PopoverTrigger>
-    <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+    <PopoverContent usePortal sideOffset={4} className="border-0 p-0 shadow-none">
       {children}
     </PopoverContent>
   </Popover>
@@ -262,7 +281,11 @@ export const useRichTextEditor = ({
     editable,
     editorProps: {
       attributes: {
-        ...(className ? { class: className } : {}),
+        class: classNames(
+          "min-h-full focus-within:outline-none",
+          editable && "whitespace-break-spaces rounded-t-none",
+          className,
+        ),
         ...(ariaLabel ? { "aria-label": ariaLabel } : {}),
         ...(id ? { id } : {}),
       },
@@ -372,14 +395,14 @@ export const RichTextEditorToolbar = ({
     return () => void editor.off("transaction", handleTransaction);
   }, [editor]);
 
-  const textFormatOptions: { name: string; icon: IconName; type: string; attrs?: object }[] = [
-    { name: "Text", icon: "fonts", type: "paragraph" },
-    { name: "Header", icon: "h1", type: "heading", attrs: { level: 1 } },
-    { name: "Title", icon: "h2", type: "heading", attrs: { level: 2 } },
-    { name: "Subtitle", icon: "h3", type: "heading", attrs: { level: 3 } },
-    { name: "Bulleted list", icon: "unordered-list", type: "bulletList" },
-    { name: "Numbered list", icon: "ordered-list", type: "orderedList" },
-    { name: "Code block", icon: "code", type: "codeBlock" },
+  const textFormatOptions: { name: string; icon: React.ReactNode; type: string; attrs?: object }[] = [
+    { name: "Text", icon: <FontFamily className="size-5" />, type: "paragraph" },
+    { name: "Header", icon: <Heading1 className="size-5" />, type: "heading", attrs: { level: 1 } },
+    { name: "Title", icon: <Heading2 className="size-5" />, type: "heading", attrs: { level: 2 } },
+    { name: "Subtitle", icon: <Heading3 className="size-5" />, type: "heading", attrs: { level: 3 } },
+    { name: "Bulleted list", icon: <ListUl className="size-5" />, type: "bulletList" },
+    { name: "Numbered list", icon: <ListOl className="size-5" />, type: "orderedList" },
+    { name: "Code block", icon: <Code className="size-5" />, type: "codeBlock" },
   ];
   const activeFormatOption = [...textFormatOptions]
     .reverse()
@@ -398,12 +421,26 @@ export const RichTextEditorToolbar = ({
     <ToolbarTooltipContext.Provider value={showTooltipState}>
       <div
         role="toolbar"
-        className={cx("rich-text-editor-toolbar", color, className)}
+        className={classNames(
+          "sticky top-0 z-1 flex flex-wrap gap-1 px-2 py-1 text-foreground",
+          color === "ghost" ? "bg-background" : "bg-primary text-primary-foreground",
+          className,
+        )}
+        style={
+          color === "primary"
+            ? {
+                // Fix muted to work with the inverted background. This is necessary because muted is currently semitransparent,
+                // but when we're fully in Tailwind we can remove the --gray-3 definition, make muted a solid color, and remove this.
+                "--color-muted":
+                  "color-mix(in srgb, var(--color-primary-foreground) calc(var(--gray-3) * 100%), transparent)",
+              }
+            : {}
+        }
         onMouseLeave={() => setShowTooltip(false)}
       >
         <Popover>
-          <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
-            {activeFormatOption?.name ?? "Text"} <Icon name="outline-cheveron-down" />
+          <PopoverTrigger aria-label="Text formats" className="rounded px-2 py-1 all-unset hover:bg-active-bg">
+            {activeFormatOption?.name ?? "Text"} <ChevronDown className="size-5" />
           </PopoverTrigger>
           <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
             <div role="menu">
@@ -412,6 +449,7 @@ export const RichTextEditorToolbar = ({
                   <div
                     role="menuitemradio"
                     aria-checked={option === activeFormatOption}
+                    className="aria-checked:bg-active-bg"
                     onClick={() => {
                       const commands = editor.chain();
                       if (isList(option.type, editor.extensionManager.extensions))
@@ -420,7 +458,7 @@ export const RichTextEditorToolbar = ({
                       commands.focus().run();
                     }}
                   >
-                    <Icon name={option.icon} />
+                    {option.icon}
                     <span>{option.name}</span>
                   </div>
                 </PopoverClose>
@@ -428,38 +466,46 @@ export const RichTextEditorToolbar = ({
             </div>
           </PopoverContent>
         </Popover>
-        <Separator aria-orientation="vertical" />
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          className="m-2 hidden border-r border-solid border-muted sm:flex"
+        />
         <MenuItem
           name="Bold"
-          icon="bold"
+          icon={<Bold className="size-5" />}
           active={editor.isActive("bold")}
           onClick={() => editor.chain().focus().toggleBold().run()}
         />
         <MenuItem
           name="Italic"
-          icon="italic"
+          icon={<Italic className="size-5" />}
           active={editor.isActive("italic")}
           onClick={() => editor.chain().focus().toggleItalic().run()}
         />
         <MenuItem
           name="Underline"
-          icon="underline"
+          icon={<UnderlineIcon className="size-5" />}
           active={editor.isActive("underline")}
           onClick={() => editor.chain().focus().toggleUnderline().run()}
         />
         <MenuItem
           name="Strikethrough"
-          icon="strikethrough"
+          icon={<Strikethrough className="size-5" />}
           active={editor.isActive("strike")}
           onClick={() => editor.chain().focus().toggleStrike().run()}
         />
         <MenuItem
           name="Quote"
-          icon="quote"
+          icon={<QuoteLeftAlt pack="filled" className="size-5" />}
           active={editor.isActive("blockquote")}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         />
-        <Separator aria-orientation="vertical" />
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          className="m-2 hidden border-r border-solid border-muted sm:flex"
+        />
         {custom ?? (
           <>
             {topMenuItems.map((extension, i) => (
@@ -467,7 +513,7 @@ export const RichTextEditorToolbar = ({
                 {extension.name === "horizontalRule" ? (
                   <MenuItem
                     name="Divider"
-                    icon="horizontal-rule"
+                    icon={<Minus className="size-5" />}
                     onClick={() => editor.chain().focus().setHorizontalRule().run()}
                   />
                 ) : (
@@ -478,10 +524,14 @@ export const RichTextEditorToolbar = ({
 
             {insertMenuItems.length > 1 ? (
               <>
-                <Separator aria-orientation="vertical" />
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="m-2 hidden border-r border-muted sm:flex"
+                />
                 <Popover>
-                  <PopoverTrigger className="toolbar-item all-unset">
-                    Insert <Icon name="outline-cheveron-down" />
+                  <PopoverTrigger className="rounded px-2 py-1 all-unset hover:bg-active-bg">
+                    Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
                     <div role="menu">
@@ -490,7 +540,7 @@ export const RichTextEditorToolbar = ({
                           {item.name === "horizontalRule" ? (
                             <PopoverClose asChild>
                               <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                                <Icon name="horizontal-rule" />
+                                <Minus className="size-5" />
                                 <span>Divider</span>
                               </div>
                             </PopoverClose>
@@ -503,14 +553,14 @@ export const RichTextEditorToolbar = ({
                       ))}
                       <PopoverClose asChild>
                         <div role="menuitem" onClick={() => setIsUpsellModalOpen(true)}>
-                          <Icon name="cart-plus" />
+                          <CartPlus className="size-5" />
                           <span>Upsell</span>
                         </div>
                       </PopoverClose>
                       {productId ? (
                         <PopoverClose asChild>
                           <div role="menuitem" onClick={() => setIsReviewModalOpen(true)}>
-                            <Icon name="solid-star" />
+                            <Star pack="filled" className="size-5" />
                             <span>Reviews</span>
                           </div>
                         </PopoverClose>
@@ -525,14 +575,14 @@ export const RichTextEditorToolbar = ({
         <div className="ml-auto flex">
           <MenuItem
             name="Undo last change"
-            icon="undo"
+            icon={<Undo className="size-5" />}
             active={editor.isActive("undo")}
             disabled={undoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().undo().run()}
           />
           <MenuItem
             name="Redo last undone change"
-            icon="redo"
+            icon={<Redo className="size-5" />}
             active={editor.isActive("redo")}
             disabled={redoDepth(editor.state) === 0}
             onClick={() => editor.chain().focus().redo().run()}
@@ -588,8 +638,10 @@ export const RichTextEditor = ({
   });
 
   return (
-    <div className="rich-text-editor" data-gumroad-ignore>
-      {editor ? <RichTextEditorToolbar editor={editor} /> : null}
+    <div className="grid min-h-56 grid-rows-[max-content_1fr] rounded" data-gumroad-ignore>
+      {editor ? (
+        <RichTextEditorToolbar editor={editor} className="rounded-t rounded-b-none border border-b-0 border-border" />
+      ) : null}
       <EditorContent className="rich-text" editor={editor} />
     </div>
   );

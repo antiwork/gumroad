@@ -73,6 +73,16 @@ describe BestOfferCodeService do
           expect(subject.result).to be_nil
         end
       end
+
+      context "and it is expired" do
+        before do
+          default_offer_code.update_column(:expires_at, 1.day.ago)
+        end
+
+        it "returns nil rather than an error (buyer did not apply the code)" do
+          expect(subject.result).to be_nil
+        end
+      end
     end
 
     context "when both codes are provided" do
@@ -250,6 +260,20 @@ describe BestOfferCodeService do
       it "treats expired url_code as invalid" do
         expect(subject.result&.dig(:code)).to eq(default_offer_code.code)
         expect(subject.result&.dig(:valid)).to be(true)
+      end
+
+      context "when the default code is also expired" do
+        let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 200, valid_at: 2.days.ago, currency_type: product.price_currency_type) }
+        let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 300, valid_at: 2.days.ago, currency_type: product.price_currency_type) }
+
+        before do
+          url_offer_code.update_column(:expires_at, 1.day.ago)
+          default_offer_code.update_column(:expires_at, 1.day.ago)
+        end
+
+        it "returns the url_code's error (buyer explicitly applied it)" do
+          expect(subject.result).to eq({ valid: false, error_code: :inactive })
+        end
       end
     end
 

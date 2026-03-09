@@ -1,3 +1,4 @@
+import { Copy } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -8,7 +9,6 @@ import BlockedUserTooltip from "$app/components/Admin/Users/BlockedUserTooltip";
 import AdminUserStats from "$app/components/Admin/Users/Stats";
 import type { User } from "$app/components/Admin/Users/User";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type HeaderProps = {
@@ -48,7 +48,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
               <li className="space-x-1">
                 <span>Email: {user.form_email}</span>
                 <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy email" text={user.form_email}>
-                  <Icon name="outline-duplicate" />
+                  <Copy className="size-5" />
                 </CopyToClipboard>
                 <BlockedUserTooltip user={user} position="bottom" />
               </li>
@@ -57,7 +57,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
               <li className="space-x-1">
                 <span>Support email: {user.support_email}</span>
                 <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy support email" text={user.support_email}>
-                  <Icon name="outline-duplicate" />
+                  <Copy className="size-5" />
                 </CopyToClipboard>
               </li>
             ) : null}

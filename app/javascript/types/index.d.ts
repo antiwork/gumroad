@@ -26,6 +26,7 @@ declare namespace NodeJS {
 declare namespace React {
   interface HTMLAttributes<T> extends AriaAttributes, DOMAttributes<T> {
     inert?: boolean | undefined;
+    "scroll-region"?: string | undefined;
   }
   interface ImgHTMLAttributes<T> extends HTMLAttributes<T> {
     fetchpriority?: HTMLImageElement["fetchPriority"];

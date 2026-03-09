@@ -760,6 +760,14 @@ describe SettingsPresenter do
       end
     end
 
+    context "when the seller is a business with a different personal and business country" do
+      it "returns payout_currency based on the business country, not the personal country" do
+        create(:user_compliance_info_business, user: seller, country: "United States", business_country: "Canada")
+
+        expect(presenter.payments_props[:user][:payout_currency]).to eq("cad")
+      end
+    end
+
     context "when the seller is from Brazil" do
       before do
         @user_compliance_info = create(:user_compliance_info, user: seller, country: "Brazil")
@@ -809,6 +817,19 @@ describe SettingsPresenter do
 
       it "returns the payout threshold" do
         expect(presenter.payments_props[:payout_threshold_cents]).to eq(5000)
+      end
+    end
+
+    context "when seller is in a cross-border payout country with a stored threshold below the country minimum" do
+      let!(:compliance_info) { create(:user_compliance_info_korea, user: seller) }
+
+      before do
+        seller.update!(payout_threshold_cents: 1000)
+      end
+
+      it "returns the stored payout threshold, not the effective minimum" do
+        expect(seller.minimum_payout_amount_cents).to be > 1000
+        expect(presenter.payments_props[:payout_threshold_cents]).to eq(1000)
       end
     end
 

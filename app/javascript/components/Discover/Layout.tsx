@@ -1,3 +1,4 @@
+import { BookmarkHeart } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
@@ -9,7 +10,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Nav } from "$app/components/Discover/Nav";
 import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
+import { Logo } from "$app/components/Logo";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 const UserActionButtons: React.FC = () => {
@@ -19,7 +20,7 @@ const UserActionButtons: React.FC = () => {
     return (
       <>
         <NavigationButton href={Routes.library_url()} className="flex-1 lg:flex-none">
-          <Icon name="bookmark-heart-fill" /> Library
+          <BookmarkHeart pack="filled" className="size-5" /> Library
         </NavigationButton>
         {currentSeller.has_published_products ? null : (
           <NavigationButton href={Routes.products_url()} color="primary" className="flex-1 lg:flex-none">
@@ -136,11 +137,9 @@ export const Layout: React.FC<{
   const userActionButtons = <UserActionButtons />;
 
   const logoLink = (
-    <a
-      href={Routes.discover_url({ host: discoverDomain })}
-      className="logo-full flex aspect-157/22 w-[245px]! shrink-0 items-center"
-      aria-label="Gumroad"
-    />
+    <a href={Routes.discover_url({ host: discoverDomain })} className="shrink-0" aria-label="Gumroad">
+      <Logo className="h-auto w-[245px]" />
+    </a>
   );
   const searchBar = (
     <div className="min-w-0 grow">

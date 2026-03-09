@@ -1,4 +1,3 @@
-import cx from "classnames";
 import { uniqBy } from "lodash-es";
 import * as React from "react";
 
@@ -7,6 +6,10 @@ import { CustomFieldDescriptor } from "$app/parsers/product";
 import { Creator } from "$app/components/Checkout/cartState";
 import { Product, getCustomFieldKey, getErrors, isProcessing, useState } from "$app/components/Checkout/payment";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 
 const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldKey: string }) => {
   const [state, dispatch] = useState();
@@ -17,11 +20,11 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
   switch (field.type) {
     case "text": {
       return (
-        <fieldset className={cx({ danger: hasError })}>
-          <legend>
-            <label htmlFor={uid}>{field.name}</label>
-          </legend>
-          <input
+        <Fieldset state={hasError ? "danger" : undefined}>
+          <FieldsetTitle>
+            <Label htmlFor={uid}>{field.name}</Label>
+          </FieldsetTitle>
+          <Input
             id={uid}
             type="text"
             aria-invalid={hasError}
@@ -30,15 +33,14 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
             onChange={(e) => dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.value })}
             disabled={isProcessing(state)}
           />
-        </fieldset>
+        </Fieldset>
       );
     }
     case "checkbox": {
       return (
-        <fieldset className={cx({ danger: hasError })}>
-          <label>
-            <input
-              type="checkbox"
+        <Fieldset state={hasError ? "danger" : undefined}>
+          <Label>
+            <Checkbox
               checked={value === "true"}
               aria-invalid={hasError}
               onChange={(e) =>
@@ -48,16 +50,15 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
               disabled={isProcessing(state)}
             />
             {field.required ? field.name : `${field.name} (optional)`}
-          </label>
-        </fieldset>
+          </Label>
+        </Fieldset>
       );
     }
     case "terms": {
       return (
-        <fieldset className={cx({ danger: hasError })}>
-          <label>
-            <input
-              type="checkbox"
+        <Fieldset state={hasError ? "danger" : undefined}>
+          <Label>
+            <Checkbox
               checked={value === "true"}
               aria-invalid={hasError}
               onChange={(e) =>
@@ -70,8 +71,8 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
             <a href={field.name} target="_blank" rel="noreferrer">
               Terms and Conditions
             </a>
-          </label>
-        </fieldset>
+          </Label>
+        </Fieldset>
       );
     }
   }
@@ -148,10 +149,10 @@ const SellerCustomFields = ({ seller, className }: { seller: Creator; className?
           <CustomField key={field.id} field={field} fieldKey={field.id} />
         ))}
         {customFieldGroups.map(({ product, customFields }) => (
-          <fieldset key={`${product.permalink}-${product.bundleProductId}`}>
-            <legend>
-              <label>{product.name}</label>
-            </legend>
+          <Fieldset key={`${product.permalink}-${product.bundleProductId}`}>
+            <FieldsetTitle>
+              <Label>{product.name}</Label>
+            </FieldsetTitle>
             <Card>
               <CardContent>
                 <section className="flex grow flex-col gap-4">
@@ -161,7 +162,7 @@ const SellerCustomFields = ({ seller, className }: { seller: Creator; className?
                 </section>
               </CardContent>
             </Card>
-          </fieldset>
+          </Fieldset>
         ))}
       </section>
     </div>

@@ -2,6 +2,9 @@
 
 describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
   before do
+    MerchantAccount.find_or_create_by!(user_id: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) do |ma|
+      ma.charge_processor_alive_at = Time.current
+    end
     @initial_balance = 200
     @seller = create(:user, unpaid_balance_cents: @initial_balance)
     @product = create(:product, user: @seller)

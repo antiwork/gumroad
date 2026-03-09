@@ -1,4 +1,5 @@
-import { Editor, Node as TiptapNode, Extension } from "@tiptap/core";
+import { PlayCircle, Trash, TwitterX, Video } from "@boxicons/react";
+import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -10,11 +11,13 @@ import { assertResponseError, request } from "$app/utils/request";
 import { sanitizeHtml } from "$app/utils/sanitize";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 declare module "@tiptap/core" {
@@ -33,7 +36,7 @@ const MEDIA_EMBED_SUPPORTING_PROVIDERS = ["YouTube", "Vimeo", "Wistia, Inc.", "D
 const VideoEmbed = Extension.create({
   menuItem: (editor) => (
     <WithDialog editor={editor} type="embed">
-      <MenuItem name="Insert video" icon="embed" />
+      <MenuItem name="Insert video" icon={<Video className="size-5" />} />
     </WithDialog>
   ),
 });
@@ -80,7 +83,7 @@ export const Raw = TiptapNode.create({
   },
   menuItem: (editor) => (
     <WithDialog editor={editor} type="twitter">
-      <MenuItem name="Insert post" icon="twitter" />
+      <MenuItem name="Insert post" icon={<TwitterX pack="brands" className="size-5" />} />
     </WithDialog>
   ),
   submenu: {
@@ -88,8 +91,8 @@ export const Raw = TiptapNode.create({
     item: (editor) => (
       <WithDialog editor={editor} type="twitter">
         <div role="menuitem">
-          <Icon name="twitter" />
-          <span>Twitter post</span>
+          <TwitterX pack="brands" className="size-5" />
+          <span>X post</span>
         </div>
       </WithDialog>
     ),
@@ -124,7 +127,7 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
 
     const fields = (
       <>
-        <input
+        <Input
           id={inputUid}
           ref={inputRef}
           className="top-level-input"
@@ -175,12 +178,12 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
       </>
     );
     return (
-      <fieldset>
-        <legend>
-          <label htmlFor={inputUid}>{type === "embed" ? "Video URL" : "Tweet URL"}</label>
-        </legend>
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor={inputUid}>{type === "embed" ? "Video URL" : "Tweet URL"}</Label>
+        </FieldsetTitle>
         {horizontalLayout ? <div className="flex gap-2">{fields}</div> : fields}
-      </fieldset>
+      </Fieldset>
     );
   },
 );
@@ -249,7 +252,7 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
         <Row className="embed">
           <RowDetails className="preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(cast(node.attrs.html)) }} />
           <RowContent className="content">
-            <Icon name="file-earmark-play-fill" className="type-icon" />
+            <PlayCircle pack="filled" className="type-icon size-5" />
             <div>
               <h4 className="text-singleline">{node.attrs.title}</h4>
               {node.attrs.url ? (
@@ -263,8 +266,8 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
           </RowContent>
           {editor.isEditable ? (
             <RowActions>
-              <Button color="danger" outline aria-label="Remove" onClick={deleteNode}>
-                <Icon name="trash2" />
+              <Button size="icon" color="danger" outline aria-label="Remove" onClick={deleteNode}>
+                <Trash className="size-5" />
               </Button>
             </RowActions>
           ) : null}

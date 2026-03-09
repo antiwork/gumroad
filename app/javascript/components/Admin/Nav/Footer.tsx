@@ -1,3 +1,4 @@
+import { ArrowRight } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
@@ -5,7 +6,6 @@ import { cast } from "ts-safe-cast";
 import { CurrentUser } from "$app/types/user";
 import { assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -61,12 +61,12 @@ const AdminNavFooter = () => {
           </>
         ) : null}
         <Link role="menuitem" href={Routes.logout_url()} method="delete" className="all-unset">
-          <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
+          <ArrowRight pack="filled" className="mr-3 ml-1 size-5" />
           Logout
         </Link>
         {loggedInUser?.isImpersonating ? (
           <a role="menuitem" href="#" onClick={handleUnbecome} className="w-full">
-            <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
+            <ArrowRight pack="filled" className="mr-3 ml-1 size-5" />
             Unbecome
           </a>
         ) : null}

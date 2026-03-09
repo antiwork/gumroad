@@ -512,9 +512,9 @@ describe "Purchase Process", :vcr do
         affiliate_purchase.process!
       end
 
-      it "creates a purchase object with the correct error code" do
-        expect(affiliate_purchase.error_code).to eq "net_negative_seller_revenue"
-        expect(affiliate_purchase.errors.to_a).to eq(["Your purchase failed because the product is not correctly set up. Please contact the creator for more information."])
+      it "does not block the purchase" do
+        expect(affiliate_purchase.error_code).to be_nil
+        expect(affiliate_purchase.errors).to be_empty
       end
     end
 

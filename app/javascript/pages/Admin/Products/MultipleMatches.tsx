@@ -1,8 +1,8 @@
+import { ArrowUpRightSquare } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
-import { Icon } from "$app/components/Icons";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type ProductMatchProps = {
@@ -27,7 +27,7 @@ const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
           {product.name}
         </Link>
         <a href={product.long_url} target="_blank" rel="noreferrer noopener">
-          <Icon name="arrow-up-right-square" />
+          <ArrowUpRightSquare className="size-5" />
         </a>
       </TableCell>
 

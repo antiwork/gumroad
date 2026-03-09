@@ -259,7 +259,6 @@ class ApplicationController < ActionController::Base
     end
 
     def check_suspended
-      return nil if request.path.in?([balance_path, settings_main_path]) || params[:controller] == "payouts"
       return head(:ok) if !request.format.html? && !request.format.json?
 
       respond_to do |format|

@@ -26,7 +26,7 @@ export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
   return (
     <label className={buttonVariants({ size: "default", color: "primary" })}>
       <input
-        className="subtitles-file"
+        className="subtitles-file sr-only"
         type="file"
         name="file"
         accept={acceptedSubtitleExtensions}

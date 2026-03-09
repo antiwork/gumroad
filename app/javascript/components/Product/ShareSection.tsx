@@ -1,6 +1,8 @@
+import { Check, ChevronDown, FileDetail, Link, Plus, Share } from "@boxicons/react";
 import * as React from "react";
 
 import { Wishlist, addToWishlist, createWishlist } from "$app/data/wishlists";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -8,7 +10,6 @@ import { ComboBox } from "$app/components/ComboBox";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Product, WishlistForProduct } from "$app/components/Product";
@@ -16,6 +17,7 @@ import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
+import { Input } from "$app/components/ui/Input";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
 
@@ -97,17 +99,20 @@ export const ShareSection = ({
           input={(props) => (
             <div
               {...props}
-              className={`input ${dropdownState.state !== "closed" ? "!rounded-b-none" : ""}`}
+              className={classNames(
+                "flex cursor-pointer items-center rounded border border-border bg-background px-4 py-3",
+                dropdownState.state !== "closed" && "rounded-b-none",
+              )}
               aria-label="Add to wishlist"
             >
-              <span className="fake-input text-singleline">
+              <span className="text-singleline flex-1">
                 {saveState.type === "success"
                   ? saveState.wishlist.name
                   : saveState.type === "saving"
                     ? "Adding to wishlist..."
                     : "Add to wishlist"}
               </span>
-              <Icon name="outline-cheveron-down" />
+              <ChevronDown className="size-5" />
             </div>
           )}
           disabled={saveState.type === "saving"}
@@ -123,7 +128,7 @@ export const ShareSection = ({
                 }}
               >
                 <div>
-                  <Icon name="file-text" /> {wishlist.name}
+                  <FileDetail className="size-5" /> {wishlist.name}
                 </div>
               </div>
             ) : dropdownState.state === "creating" ? (
@@ -139,23 +144,22 @@ export const ShareSection = ({
                   void addProduct(newWishlist(dropdownState.newWishlistName));
                 }}
               >
-                <input
+                <Input
                   type="text"
                   autoFocus
                   placeholder="Wishlist name"
                   value={dropdownState.newWishlistName}
                   onChange={(e) => setDropdownState({ state: "creating", newWishlistName: e.target.value })}
-                  className="input"
                   aria-label="Wishlist name"
                 />
-                <Button type="submit" aria-label="Create wishlist" color="primary">
-                  <Icon name="outline-check" />
+                <Button type="submit" size="icon" aria-label="Create wishlist" color="primary">
+                  <Check className="size-5" />
                 </Button>
               </form>
             ) : (
               <div {...props} onClick={() => setDropdownState({ state: "creating", newWishlistName: "" })}>
                 <div>
-                  <Icon name="plus" /> New wishlist
+                  <Plus className="size-5" /> New wishlist
                 </div>
               </div>
             )
@@ -177,8 +181,8 @@ export const ShareSection = ({
         <Popover>
           <PopoverAnchor>
             <PopoverTrigger aria-label="Share" asChild>
-              <Button>
-                <Icon name="share" />
+              <Button size="icon">
+                <Share className="size-5" />
               </Button>
             </PopoverTrigger>
           </PopoverAnchor>
@@ -188,7 +192,7 @@ export const ShareSection = ({
               <FacebookShareButton url={product.long_url} text={product.name} />
               <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
                 <Button aria-label="Copy product URL">
-                  <Icon name="link" /> Copy link
+                  <Link className="size-5" /> Copy link
                 </Button>
               </CopyToClipboard>
             </div>

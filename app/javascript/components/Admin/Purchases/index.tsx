@@ -1,3 +1,4 @@
+import { ArrowUpRightSquare, Copy } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -11,7 +12,6 @@ import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
 import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceiptForm";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Input } from "$app/components/ui/Input";
 
@@ -83,8 +83,8 @@ export type Purchase = PurchaseStatesInfo & {
   subscription: {
     id: number;
     external_id: string;
-    cancelled_at: string | null;
     cancelled_by_buyer: boolean | null;
+    user_requested_cancellation_at: string | null;
     ended_at: string | null;
     failed_at: string | null;
   } | null;
@@ -133,7 +133,7 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
       </Link>{" "}
       {purchase.variants_list}{" "}
       <Link href={purchase.product.long_url}>
-        <Icon name="arrow-up-right-square" />
+        <ArrowUpRightSquare className="size-5" />
       </Link>
     </h2>
     <ul className="inline">
@@ -157,7 +157,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dd>
             {purchase.seller.support_email}{" "}
             <CopyToClipboard text={purchase.seller.support_email}>
-              <Icon name="outline-duplicate" />
+              <Copy className="size-5" />
             </CopyToClipboard>
           </dd>
         </>
@@ -167,7 +167,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {purchase.seller.email}{" "}
         <CopyToClipboard text={purchase.seller.email}>
-          <Icon name="outline-duplicate" />
+          <Copy className="size-5" />
         </CopyToClipboard>
       </dd>
 
@@ -404,9 +404,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Cancelled</dt>
           <dd>
-            <BooleanIcon value={!!purchase.subscription.cancelled_at} />
-            {purchase.subscription.cancelled_at
-              ? ` (on ${purchase.subscription.cancelled_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
+            <BooleanIcon value={!!purchase.subscription.user_requested_cancellation_at} />
+            {purchase.subscription.user_requested_cancellation_at
+              ? ` (on ${purchase.subscription.user_requested_cancellation_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
               : null}
           </dd>
 
@@ -587,10 +587,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
       </>
     ) : null}
-    {purchase.subscription &&
-    !purchase.subscription.cancelled_at &&
-    !purchase.subscription.ended_at &&
-    !purchase.subscription.failed_at ? (
+    {purchase.subscription && !purchase.subscription.ended_at && !purchase.subscription.failed_at ? (
       <>
         <AdminActionButton
           label="Cancel subscription for buyer"
@@ -639,7 +636,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       />
     ) : null}
     {purchase.successful ? (
-      <Button asChild small>
+      <Button asChild size="sm">
         <a href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" rel="noopener noreferrer">
           Go to Receipt
         </a>
