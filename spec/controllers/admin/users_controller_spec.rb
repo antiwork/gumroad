@@ -50,6 +50,21 @@ describe Admin::UsersController, type: :controller, inertia: true do
       end.not_to have_enqueued_mail(CreatorMailer, :top_creator_announcement)
     end
 
+    context "when email enqueue fails" do
+      before do
+        mail_double = double("mail")
+        allow(mail_double).to receive(:deliver_later).and_raise(Redis::ConnectionError, "connection refused")
+        allow(CreatorMailer).to receive(:top_creator_announcement).and_return(mail_double)
+      end
+
+      it "still returns success and keeps the user verified" do
+        get :verify, params: @params
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@user.reload.verified).to be(true)
+      end
+    end
+
     context "when error is raised" do
       before do
         allow_any_instance_of(User).to receive(:save!).and_raise("Error!")
