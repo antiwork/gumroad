@@ -10,36 +10,37 @@ concurrency:
 
 jobs:
   close-support:
-    if: >-
-      github.event.issue.author_association != 'MEMBER' &&
-      github.event.issue.author_association != 'OWNER'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
       id-token: write
     steps:
-      - name: Check if issue is still open
-        id: check-open
+      - name: Check if author is a collaborator or issue was closed
+        id: check-skip
         uses: actions/github-script@v7
         with:
           script: |
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: context.payload.issue.user.login
+              });
+              const level = data.permission;
+              if (level === 'admin' || level === 'write') return true;
+            } catch {}
+
             const issue = await github.rest.issues.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: ${{ github.event.issue.number }}
             });
-            return issue.data.state === 'open';
+            return issue.data.state !== 'open';
           result-encoding: string
 
-      - name: Checkout repository
-        if: steps.check-open.outputs.result == 'true'
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
       - name: Detect support requests
-        if: steps.check-open.outputs.result == 'true'
+        if: steps.check-skip.outputs.result == 'false'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

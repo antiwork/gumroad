@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
+import { Input } from "$app/components/ui/Input";
 
 type Props = {
   country: string;
@@ -42,7 +43,7 @@ export const UpdateCountryConfirmationModal = ({ country, balance, open, onClose
                 <label htmlFor="confirmation-input" className="sr-only">
                   Type "I understand" to confirm
                 </label>
-                <input
+                <Input
                   id="confirmation-input"
                   type="text"
                   value={confirmText}

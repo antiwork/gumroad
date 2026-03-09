@@ -4,6 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { ArticleLink } from "$app/components/HelpCenterPage/types";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
+import { Input } from "$app/components/ui/Input";
 
 import { HelpCenterLayout } from "../Layout";
 
@@ -73,7 +74,7 @@ export default function HelpCenterIndex() {
 
   return (
     <HelpCenterLayout>
-      <input
+      <Input
         type="text"
         autoFocus
         value={searchTerm}

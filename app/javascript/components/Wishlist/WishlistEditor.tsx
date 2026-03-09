@@ -5,6 +5,9 @@ import { updateWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 
 export const WishlistEditor = ({
@@ -52,19 +55,19 @@ export const WishlistEditor = ({
         </small>
       ) : null}
 
-      <fieldset>
-        <label htmlFor={`${uid}-name`}>Name</label>
-        <input
+      <Fieldset>
+        <Label htmlFor={`${uid}-name`}>Name</Label>
+        <Input
           id={`${uid}-name`}
           type="text"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onBlur={() => void update()}
         />
-      </fieldset>
-      <fieldset>
-        <label htmlFor={`${uid}-description`}>Description</label>
-        <input
+      </Fieldset>
+      <Fieldset>
+        <Label htmlFor={`${uid}-description`}>Description</Label>
+        <Input
           id={`${uid}-description`}
           type="text"
           value={newDescription}
@@ -72,7 +75,7 @@ export const WishlistEditor = ({
           onChange={(e) => setNewDescription(e.target.value)}
           onBlur={() => void update()}
         />
-      </fieldset>
+      </Fieldset>
     </Sheet>
   );
 };

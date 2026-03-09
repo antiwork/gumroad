@@ -239,6 +239,9 @@ const DiscountsPage = ({
   });
 
   const [searchQuery, setSearchQuery] = React.useState<string | null>(initialQueryParams.query);
+  const hasSearchableContent = offerCodes.length > 0 || !!searchQuery;
+  const isSearchVisible = React.useRef(hasSearchableContent);
+  isSearchVisible.current ||= hasSearchableContent;
 
   const loadDiscounts = asyncVoid(async ({ page, query, sort, keepUrl }: QueryParams & { keepUrl?: boolean }) => {
     try {
@@ -303,7 +306,7 @@ const DiscountsPage = ({
       pages={pages}
       actions={
         <>
-          {offerCodes.length > 0 || searchQuery ? (
+          {isSearchVisible.current ? (
             <Search
               onSearch={(query) => {
                 setSearchQuery(query);

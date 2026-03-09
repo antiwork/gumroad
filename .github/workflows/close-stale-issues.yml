@@ -1,0 +1,91 @@
+name: Close stale issues
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  close-stale-issues:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const MS_PER_DAY = 24 * 60 * 60 * 1000;
+            const STALE_DAYS = 7;
+            const CLOSE_DAYS = 8;
+            const now = Date.now();
+            const { owner, repo } = context.repo;
+
+            // Ensure stale label exists
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: "stale" });
+            } catch {
+              await github.rest.issues.createLabel({
+                owner, repo, name: "stale", color: "ededed",
+                description: "Inactive issue — will be closed soon"
+              });
+              core.info("Created label: stale");
+            }
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: "open", per_page: 100
+            });
+
+            for (const issue of issues) {
+              if (issue.pull_request) {
+                continue;
+              }
+
+              const events = await github.paginate(github.rest.issues.listEventsForTimeline, {
+                owner, repo, issue_number: issue.number, per_page: 100
+              });
+
+              let lastActivity = new Date(issue.created_at).getTime();
+
+              for (const event of events) {
+                if (event.event === "commented" && event.user?.type !== "Bot") {
+                  const ts = new Date(event.created_at).getTime();
+                  if (ts > lastActivity) lastActivity = ts;
+                }
+              }
+
+              const staleDays = (now - lastActivity) / MS_PER_DAY;
+              const lastActivityDate = new Date(lastActivity).toISOString().split("T")[0];
+              core.info(`#${issue.number} — last activity: ${lastActivityDate}, stale days: ${staleDays.toFixed(1)}`);
+
+              const hasStaleLabel = issue.labels.some(l => l.name === "stale");
+
+              // Activity resumed — remove stale label
+              if (hasStaleLabel && staleDays < STALE_DAYS) {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: issue.number, name: "stale"
+                });
+                core.info(`#${issue.number} — removed stale label (activity resumed)`);
+
+              // Grace period expired — close
+              } else if (hasStaleLabel && staleDays >= CLOSE_DAYS) {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: issue.number,
+                  body: "Closing this issue due to inactivity. Feel free to reopen if you'd like to continue the discussion!"
+                });
+                await github.rest.issues.update({
+                  owner, repo, issue_number: issue.number, state: "closed"
+                });
+                core.info(`#${issue.number} — closed (stale for ${staleDays.toFixed(1)} days)`);
+
+              // Newly stale — warn
+              } else if (!hasStaleLabel && staleDays >= STALE_DAYS) {
+                await github.rest.issues.addLabels({
+                  owner, repo, issue_number: issue.number, labels: ["stale"]
+                });
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: issue.number,
+                  body: "This issue has been inactive for 7 days and has been marked as stale. It will be closed in 24 hours if there is no new activity."
+                });
+                core.info(`#${issue.number} — marked stale (${staleDays.toFixed(1)} days inactive)`);
+              }
+            }

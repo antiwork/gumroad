@@ -12,7 +12,7 @@ import { Button } from "$app/components/Button";
 import { TrackClick } from "$app/components/Download/Interactions";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Drawer } from "$app/components/SortableList";
-import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -59,100 +59,108 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
-      <Row className={cx("embed", { selected })}>
-        {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-        <RowContent className="content cursor-pointer all-unset" asChild>
-          <button
-            onClick={(e) => {
-              if (e.target instanceof HTMLAnchorElement) return;
-              setExpanded(!expanded);
-            }}
-            aria-controls={uid}
-            aria-expanded={expanded}
-            contentEditable={false}
-          >
-            {total > 0 ? expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" /> : null}
-            <FileDetail pack="filled" className={cx("type-icon", { "text-muted": total === 0 })} />
-            <div>
-              {isLoading || total > 0 ? (
-                <>
-                  <h4>Posts</h4>
-                  {isLoading ? <LoadingSpinner /> : <span>{`${total} ${total === 1 ? "post" : "posts"}`}</span>}
-                </>
-              ) : (
-                <>
-                  <h4 className="text-muted">Posts (emails) sent to customers of this product will appear here</h4>
-                  <a href={Routes.new_email_path({ product: productPermalink })}>Create an email</a>
-                </>
-              )}
-            </div>
-          </button>
-        </RowContent>
-
-        {editor.isEditable ? (
-          <RowActions>
-            <Button
-              outline
-              color="primary"
-              aria-label="Refresh"
-              disabled={isLoading}
-              onClick={() => void fetchMorePosts?.(true)}
+      <NodeActionsWrapper selected={selected} isEditable={editor.isEditable} asChild>
+        <Row className="embed">
+          {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
+          <RowContent className="content cursor-pointer all-unset" asChild>
+            <button
+              onClick={(e) => {
+                if (e.target instanceof HTMLAnchorElement) return;
+                setExpanded(!expanded);
+              }}
+              aria-controls={uid}
+              aria-expanded={expanded}
+              contentEditable={false}
             >
-              <RefreshCcw className="size-5" />
-            </Button>
-          </RowActions>
-        ) : null}
+              {total > 0 ? expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" /> : null}
+              <FileDetail pack="filled" className={cx("type-icon", { "text-muted": total === 0 })} />
+              <div>
+                {isLoading || total > 0 ? (
+                  <>
+                    <h4>Posts</h4>
+                    {isLoading ? <LoadingSpinner /> : <span>{`${total} ${total === 1 ? "post" : "posts"}`}</span>}
+                  </>
+                ) : (
+                  <>
+                    <h4 className="text-muted">Posts (emails) sent to customers of this product will appear here</h4>
+                    <a href={Routes.new_email_path({ product: productPermalink })}>Create an email</a>
+                  </>
+                )}
+              </div>
+            </button>
+          </RowContent>
 
-        {expanded && total > 0 ? (
-          <RowDetails asChild>
-            <Drawer id={uid}>
-              {posts.map((post) => (
-                <RowContent key={post.id}>
-                  <FileDetail pack="filled" className="type-icon size-5" />
-                  <div>
-                    {editor.isEditable ? (
-                      <a href={post.url} target="_blank" rel="noreferrer">
-                        <strong>{post.name}</strong>
-                      </a>
-                    ) : (
-                      <TrackClick eventName="post_click" post={post}>
+          {editor.isEditable ? (
+            <RowActions>
+              <Button
+                outline
+                color="primary"
+                aria-label="Refresh"
+                disabled={isLoading}
+                onClick={() => void fetchMorePosts?.(true)}
+              >
+                <RefreshCcw className="size-5" />
+              </Button>
+            </RowActions>
+          ) : null}
+
+          {expanded && total > 0 ? (
+            <RowDetails asChild>
+              <Drawer id={uid}>
+                {posts.map((post) => (
+                  <RowContent key={post.id}>
+                    <FileDetail pack="filled" className="type-icon size-5" />
+                    <div>
+                      {editor.isEditable ? (
                         <a href={post.url} target="_blank" rel="noreferrer">
                           <strong>{post.name}</strong>
                         </a>
-                      </TrackClick>
-                    )}
-                    <div>
-                      {post.date.type === "date" ? (
-                        <ul className="inline">
-                          <li>
-                            {parseISO(post.date.value).toLocaleDateString(userAgentInfo.locale, {
-                              month: "long",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </li>
-                          <li>{formatDistanceToNow(parseISO(post.date.value))} ago</li>
-                        </ul>
-                      ) : post.date.time_duration === 0 ? (
-                        "Available immediately after purchase"
                       ) : (
-                        `Available ${post.date.time_duration} ${post.date.time_period}${post.date.time_duration === 1 ? "" : "s"} after purchase`
+                        <TrackClick eventName="post_click" post={post}>
+                          <a href={post.url} target="_blank" rel="noreferrer">
+                            <strong>{post.name}</strong>
+                          </a>
+                        </TrackClick>
                       )}
+                      <div>
+                        {post.date.type === "date" ? (
+                          <ul className="inline">
+                            <li>
+                              {parseISO(post.date.value).toLocaleDateString(userAgentInfo.locale, {
+                                month: "long",
+                                day: "numeric",
+                                year: "numeric",
+                              })}
+                            </li>
+                            <li>{formatDistanceToNow(parseISO(post.date.value))} ago</li>
+                          </ul>
+                        ) : post.date.time_duration === 0 ? (
+                          "Available immediately after purchase"
+                        ) : (
+                          `Available ${post.date.time_duration} ${post.date.time_period}${post.date.time_duration === 1 ? "" : "s"} after purchase`
+                        )}
+                      </div>
                     </div>
+                  </RowContent>
+                ))}
+                {hasMorePosts && fetchMorePosts ? (
+                  <div>
+                    <Button
+                      size="sm"
+                      outline
+                      color="primary"
+                      disabled={isLoading}
+                      onClick={() => void fetchMorePosts()}
+                    >
+                      Load more
+                    </Button>
                   </div>
-                </RowContent>
-              ))}
-              {hasMorePosts && fetchMorePosts ? (
-                <div>
-                  <Button size="sm" outline color="primary" disabled={isLoading} onClick={() => void fetchMorePosts()}>
-                    Load more
-                  </Button>
-                </div>
-              ) : null}
-            </Drawer>
-          </RowDetails>
-        ) : null}
-      </Row>
+                ) : null}
+              </Drawer>
+            </RowDetails>
+          ) : null}
+        </Row>
+      </NodeActionsWrapper>
     </NodeViewWrapper>
   );
 };

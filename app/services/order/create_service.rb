@@ -74,7 +74,7 @@ class Order::CreateService
             order.save!
             sca_response = sca_response.except(:purchase).merge(
               order: {
-                id: order.external_id,
+                id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
                 stripe_connect_account_id: sca_response.dig(:purchase, :stripe_connect_account_id)
               }
             )

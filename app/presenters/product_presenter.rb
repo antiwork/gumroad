@@ -264,6 +264,7 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      dropbox_api_key: DROPBOX_PICKER_API_KEY,
       ai_generated:,
     }
   end

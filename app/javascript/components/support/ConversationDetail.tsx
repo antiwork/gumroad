@@ -13,7 +13,9 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export const ALLOWED_ATTACHMENT_MIMETYPES = "image/png,image/jpeg,image/gif,image/webp,application/pdf";
 
@@ -135,8 +137,8 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
         </Rows>
 
         <form className="mt-4 flex flex-col gap-2" onSubmit={(e) => void handleSubmit(e)}>
-          <label htmlFor="reply">Reply</label>
-          <textarea
+          <Label htmlFor="reply">Reply</Label>
+          <Textarea
             className="mb-2 flex-1 rounded-sm border px-3 py-2"
             placeholder="Write a reply"
             id="reply"
@@ -149,6 +151,7 @@ export function ConversationDetail({ conversationSlug, onBack }: { conversationS
             type="file"
             multiple
             accept={ALLOWED_ATTACHMENT_MIMETYPES}
+            className="sr-only"
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               if (files.length === 0) return;

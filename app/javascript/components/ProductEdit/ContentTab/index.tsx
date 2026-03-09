@@ -66,7 +66,6 @@ import {
   validateUrl,
 } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider, useS3UploadConfig } from "$app/components/S3UploadConfig";
-import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
@@ -698,12 +697,16 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     />
                   </div>
                 </Modal>
-                <Separator aria-orientation="vertical" />
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="m-2 hidden border-r border-solid border-muted sm:flex"
+                />
                 <Popover
                   open={insertMenuState != null}
                   onOpenChange={(open) => setInsertMenuState(open ? "open" : null)}
                 >
-                  <PopoverTrigger className="toolbar-item all-unset">
+                  <PopoverTrigger className="rounded px-2 py-1 all-unset hover:bg-active-bg">
                     Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -796,8 +799,15 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     </div>
                   </PopoverContent>
                 </Popover>
-                <Separator aria-orientation="vertical" />
-                <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="m-2 hidden border-r border-solid border-muted sm:flex"
+                />
+                <button
+                  className="cursor-pointer rounded px-2 py-1 all-unset hover:bg-active-bg"
+                  onClick={handleCreatePageClick}
+                >
                   <Plus className="size-5" /> Page
                 </button>
               </>

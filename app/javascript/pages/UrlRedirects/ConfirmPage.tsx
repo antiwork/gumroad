@@ -4,6 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
 import { Layout, LayoutProps } from "$app/components/DownloadPage/Layout";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 
 type ConfirmationInfo = {
@@ -88,7 +89,7 @@ const EmailConfirmation = ({
         <input type="hidden" name="id" value={data.id} />
         <input type="hidden" name="destination" value={data.destination} />
         <input type="hidden" name="display" value={data.display} />
-        <input
+        <Input
           type="text"
           name="email"
           placeholder="Email address"
