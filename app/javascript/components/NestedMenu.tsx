@@ -334,7 +334,10 @@ const OverlayMenu = ({
         modal
         className="w-[calc(20rem+3rem)] bg-transparent p-0 pr-12 md:left-0 md:border-l-0"
       >
-        <Dialog.Close className="all-unset absolute top-4 right-4 z-40 cursor-pointer bg-transparent" aria-label="Close Menu">
+        <Dialog.Close
+          className="absolute top-4 right-4 z-40 cursor-pointer bg-transparent all-unset"
+          aria-label="Close Menu"
+        >
           <X className="size-6 text-white" />
         </Dialog.Close>
         <ItemsList
