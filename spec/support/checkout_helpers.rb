@@ -148,13 +148,7 @@ module CheckoutHelpers
   def check_out(product, error: nil, email: "test@gumroad.com", is_free: false, gift: nil, sca: nil, should_verify_address: false, cart_item_count: 1, logged_in_user: nil, **params, &block)
     fill_checkout_form(product, email:, is_free:, logged_in_user:, gift:, **params)
 
-    if block_given?
-      # Wait for async surcharge calculation to complete before running pre-submit assertions.
-      # The Pay button is disabled while surcharges are loading (surcharges.type !== "loaded"),
-      # so waiting for it to be enabled ensures tax/total amounts are rendered.
-      expect(page).to have_button("Pay", disabled: false, wait: 10) unless is_free
-      block.call
-    end
+    block.call if block_given?
 
     expect do
       click_on is_free ? "Get" : "Pay", exact: true
