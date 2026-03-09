@@ -17,7 +17,7 @@ export const stateBorderStyles: Record<FieldsetState, string> = {
   info: "border-info",
 };
 
-const fieldsetStyles = "flex flex-col border-none gap-2 [&[role=group]_label_input]:ml-auto";
+const fieldsetStyles = "flex flex-col border-none gap-2";
 
 export const Fieldset = React.forwardRef<
   HTMLFieldSetElement,

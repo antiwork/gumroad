@@ -122,3 +122,20 @@
     transform: translateX(-50%);
   }
 }
+
+/* Reset Tiptap's default grab cursor on draggable React node views */
+.ProseMirror .react-renderer[draggable] {
+  @apply cursor-auto;
+}
+
+/* Chrome-specific workaround to prevent highlighting the br ProseMirror creates in empty figure captions */
+.ProseMirror[contenteditable="true"] figure br::selection {
+  @apply bg-transparent;
+}
+
+/* Tiptap placeholder plugin */
+.ProseMirror p.is-editor-empty:first-child::before,
+.ProseMirror .node-image.is-empty .figcaption::before {
+  content: attr(data-placeholder);
+  @apply pointer-events-none float-left h-0 text-muted;
+}

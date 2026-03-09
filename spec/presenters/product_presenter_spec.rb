@@ -457,7 +457,7 @@ describe ProductPresenter do
           successful_sales_count: 0,
           ratings: {
             count: 0,
-            average: 0,
+            average: 0.0,
             percentages: [0, 0, 0, 0, 0],
           },
           seller: UserPresenter.new(user: product.user).author_byline_props,
@@ -474,6 +474,7 @@ describe ProductPresenter do
           },
           cancellation_discounts_enabled: false,
           ai_generated: false,
+          dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
       )
     end
@@ -692,7 +693,7 @@ describe ProductPresenter do
             successful_sales_count: 0,
             ratings: {
               count: 1,
-              average: 5,
+              average: 5.0,
               percentages: [0, 0, 0, 0, 100],
             },
             seller: UserPresenter.new(user: membership.user).author_byline_props,
@@ -709,6 +710,7 @@ describe ProductPresenter do
             },
             cancellation_discounts_enabled: true,
             ai_generated: false,
+            dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
         )
       end
@@ -905,7 +907,7 @@ describe ProductPresenter do
             successful_sales_count: 0,
             ratings: {
               count: 0,
-              average: 0,
+              average: 0.0,
               percentages: [0, 0, 0, 0, 0],
             },
             seller: UserPresenter.new(user: new_product.user).author_byline_props,
@@ -922,6 +924,7 @@ describe ProductPresenter do
             },
             cancellation_discounts_enabled: false,
             ai_generated: false,
+            dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
         )
       end

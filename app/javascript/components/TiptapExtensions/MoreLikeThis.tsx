@@ -1,7 +1,6 @@
 import { Archive, Cog } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -9,7 +8,7 @@ import { getRecommendedProducts, RecommendationType } from "$app/data/recommende
 import { CardProduct } from "$app/parsers/product";
 
 import { Card } from "$app/components/Product/Card";
-import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -73,7 +72,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
 
   return (
     <NodeViewWrapper>
-      <div className={cx({ selected })}>
+      <NodeActionsWrapper selected={selected} isEditable={editor.isEditable}>
         {editor.isEditable ? (
           <NodeActionsMenu
             editor={editor}
@@ -150,7 +149,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
             <p>No products found</p>
           </Placeholder>
         )}
-      </div>
+      </NodeActionsWrapper>
     </NodeViewWrapper>
   );
 };

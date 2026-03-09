@@ -777,6 +777,128 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
       expect(find_link("Button with custom query parameters", href: "https://example.com/?test=123&#{sale_info_query_params}", target: "_blank")[:rel]).to eq("noopener noreferrer nofollow")
     end
 
+    it "appends purchase_id to Gumroad post URLs in links and buttons" do
+      post_url = "#{PROTOCOL}://#{@user.username}.#{ROOT_DOMAIN}/p/test-post"
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(description: [
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "text" => "Post link",
+                                           "type" => "text",
+                                           "marks" => [
+                                             {
+                                               "type" => "link",
+                                               "attrs" => {
+                                                 "rel" => "noopener noreferrer nofollow",
+                                                 "href" => post_url,
+                                                 "class" => nil,
+                                                 "target" => "_blank",
+                                               },
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "type" => "tiptap-link",
+                                           "attrs" => {
+                                             "href" => post_url,
+                                           },
+                                           "content" => [
+                                             {
+                                               "text" => "Tiptap post link",
+                                               "type" => "text",
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                     {
+                                       "type" => "button",
+                                       "attrs" => {
+                                         "href" => post_url,
+                                       },
+                                       "content" => [
+                                         {
+                                           "text" => "Post button",
+                                           "type" => "text",
+                                         },
+                                       ],
+                                     },
+                                   ])
+
+      visit("/d/#{@url_redirect.token}")
+      expected_url = "#{post_url}?purchase_id=#{CGI.escape(@purchase.external_id)}"
+      expect(page).to have_link("Post link", href: expected_url)
+      expect(page).to have_link("Tiptap post link", href: expected_url)
+      expect(page).to have_link("Post button", href: expected_url)
+    end
+
+    it "does not append purchase_id to non-Gumroad URLs with /p/ paths" do
+      external_url = "https://example.com/p/some-post"
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(description: [
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "text" => "External link",
+                                           "type" => "text",
+                                           "marks" => [
+                                             {
+                                               "type" => "link",
+                                               "attrs" => {
+                                                 "rel" => "noopener noreferrer nofollow",
+                                                 "href" => external_url,
+                                                 "class" => nil,
+                                                 "target" => "_blank",
+                                               },
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                   ])
+
+      visit("/d/#{@url_redirect.token}")
+      expect(page).to have_link("External link", href: external_url)
+    end
+
+    it "does not append purchase_id to Gumroad URLs without /p/ paths" do
+      gumroad_product_url = "#{PROTOCOL}://#{@user.username}.#{ROOT_DOMAIN}/l/test-product"
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(description: [
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "text" => "Product link",
+                                           "type" => "text",
+                                           "marks" => [
+                                             {
+                                               "type" => "link",
+                                               "attrs" => {
+                                                 "rel" => "noopener noreferrer nofollow",
+                                                 "href" => gumroad_product_url,
+                                                 "class" => nil,
+                                                 "target" => "_blank",
+                                               },
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                   ])
+
+      visit("/d/#{@url_redirect.token}")
+      expect(page).to have_link("Product link", href: gumroad_product_url)
+    end
+
     it "shows license key within the content and not outside of the content" do
       product_rich_content = @product.alive_rich_contents.first
       product_rich_content.update!(title: "Page 1", description: [

@@ -1,7 +1,12 @@
-import cx from "classnames";
 import * as React from "react";
 
 import { NumberInput } from "$app/components/NumberInput";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
+import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 export type AffiliateProduct = {
@@ -48,12 +53,15 @@ export const AffiliateForm = ({
   onUpdateDestinationUrl,
   onUpdateProduct,
 }: Props) => (
-  <section className="p-4! md:p-8!">
-    <header
-      dangerouslySetInnerHTML={{
-        __html: `${headerText} <a href='/help/article/333-affiliates-on-gumroad' target='_blank' rel='noreferrer'>Learn more</a>`,
-      }}
-    />
+  <FormSection
+    header={
+      <span
+        dangerouslySetInnerHTML={{
+          __html: `${headerText} <a href='/help/article/333-affiliates-on-gumroad' target='_blank' rel='noreferrer'>Learn more</a>`,
+        }}
+      />
+    }
+  >
     {emailField}
     <Table>
       <TableHeader>
@@ -71,24 +79,22 @@ export const AffiliateForm = ({
       <TableBody>
         <TableRow>
           <TableCell>
-            <input
+            <Switch
               id={`${uid}enableAllProducts`}
-              type="checkbox"
-              role="switch"
               checked={applyToAllProducts}
               onChange={(e) => onToggleAllProducts(e.target.checked)}
               aria-label="Enable all products"
             />
           </TableCell>
           <TableCell>
-            <label htmlFor={`${uid}enableAllProducts`}>All products</label>
+            <Label htmlFor={`${uid}enableAllProducts`}>All products</Label>
           </TableCell>
           <TableCell>
-            <fieldset className={cx({ danger: errors["affiliate.fee_percent"] })}>
+            <Fieldset state={errors["affiliate.fee_percent"] ? "danger" : undefined}>
               <NumberInput onChange={(value) => onUpdateFeePercent(value)} value={data.fee_percent}>
                 {(inputProps) => (
-                  <div className={cx("input", { disabled: processing || !applyToAllProducts })}>
-                    <input
+                  <InputGroup disabled={processing || !applyToAllProducts}>
+                    <Input
                       type="text"
                       autoComplete="off"
                       placeholder="Commission"
@@ -96,29 +102,27 @@ export const AffiliateForm = ({
                       {...inputProps}
                     />
                     <div className="pill">%</div>
-                  </div>
+                  </InputGroup>
                 )}
               </NumberInput>
-            </fieldset>
+            </Fieldset>
           </TableCell>
           <TableCell>
-            <fieldset className={cx({ danger: errors["affiliate.destination_url"] })}>
-              <input
+            <Fieldset state={errors["affiliate.destination_url"] ? "danger" : undefined}>
+              <Input
                 type="url"
                 value={data.destination_url || ""}
                 placeholder="https://link.com"
                 onChange={(e) => onUpdateDestinationUrl(e.target.value)}
                 disabled={processing || !applyToAllProducts}
               />
-            </fieldset>
+            </Fieldset>
           </TableCell>
         </TableRow>
         {data.products.map((product) => (
           <TableRow key={product.id}>
             <TableCell>
-              <input
-                type="checkbox"
-                role="switch"
+              <Switch
                 checked={product.enabled}
                 onChange={(e) => onUpdateProduct(product.id, { enabled: e.target.checked })}
                 disabled={processing}
@@ -132,8 +136,8 @@ export const AffiliateForm = ({
                 value={product.fee_percent}
               >
                 {(inputProps) => (
-                  <div className={cx("input", { disabled: processing || !product.enabled })}>
-                    <input
+                  <InputGroup disabled={processing || !product.enabled}>
+                    <Input
                       type="text"
                       autoComplete="off"
                       placeholder="Commission"
@@ -141,12 +145,12 @@ export const AffiliateForm = ({
                       {...inputProps}
                     />
                     <div className="pill">%</div>
-                  </div>
+                  </InputGroup>
                 )}
               </NumberInput>
             </TableCell>
             <TableCell>
-              <input
+              <Input
                 type="text"
                 placeholder="https://link.com"
                 value={product.destination_url || ""}
@@ -158,5 +162,5 @@ export const AffiliateForm = ({
         ))}
       </TableBody>
     </Table>
-  </section>
+  </FormSection>
 );

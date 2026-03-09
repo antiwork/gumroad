@@ -30,6 +30,7 @@ import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
+import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const nativeTypeIcons = require.context("$assets/images/native_types/");
@@ -271,15 +272,15 @@ const NewProductPage = () => {
                 </PopoverAnchor>
                 <PopoverContent>
                   <div className="w-96 max-w-full">
-                    <fieldset>
-                      <legend>
-                        <label htmlFor={`ai-prompt-${formUID}`}>Create a product with AI</label>
-                      </legend>
+                    <Fieldset>
+                      <FieldsetTitle>
+                        <Label htmlFor={`ai-prompt-${formUID}`}>Create a product with AI</Label>
+                      </FieldsetTitle>
                       <p>
                         Got an idea? Give clear instructions, and let AI create your product—quick and easy! Customize
                         it to make it yours.
                       </p>
-                      <textarea
+                      <Textarea
                         id={`ai-prompt-${formUID}`}
                         placeholder="e.g., a 'Coding with AI using Cursor for Designers' ebook with 5 chapters for $35'."
                         value={form.data.link.ai_prompt}
@@ -289,7 +290,7 @@ const NewProductPage = () => {
                         className="w-full resize-y"
                         autoFocus
                       />
-                    </fieldset>
+                    </Fieldset>
                     <div className="mt-3 flex justify-end gap-2">
                       <Button onClick={() => setAiPopoverOpen(false)} disabled={isGeneratingUsingAi}>
                         Cancel

@@ -13,6 +13,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
+import { useDomains } from "$app/components/DomainSettings";
 import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
 import { License, useContentFiles } from "$app/components/DownloadPage/WithContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -41,15 +42,16 @@ export const RichContentView = ({
   saleInfo: SaleInfo | null;
   license: License | null;
 }) => {
+  const { rootDomain } = useDomains();
   const editor = useRichTextEditor({
     ariaLabel: "Product content",
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- to be fixed with product edit refactor
     initialValue: richContent as Content,
     editable: false,
     extensions: [
-      Link.configure({ saleInfo }),
-      TiptapLink.configure({ saleInfo }),
-      TiptapButton.configure({ saleInfo }),
+      Link.configure({ saleInfo, rootDomain }),
+      TiptapLink.configure({ saleInfo, rootDomain }),
+      TiptapButton.configure({ saleInfo, rootDomain }),
       FileEmbed,
       FileEmbedGroup,
       ExternalMediaFileEmbed,
@@ -76,25 +78,38 @@ export const RichContentView = ({
 
 const SALE_INFO_PLACEHOLDER_QUERY_PARAM = "__sale_info__";
 
-const addSaleInfoQueryParams = (href: string, saleInfo: SaleInfo | null) => {
+const isGumroadPostUrl = (url: URL, rootDomain: string) => {
+  const isGumroadDomain = url.host.endsWith(`.${rootDomain}`) || url.host === rootDomain;
+  const isPostPath = /^\/([^/]+\/)?p\/[^/]+$/u.test(url.pathname);
+  return isGumroadDomain && isPostPath;
+};
+
+const addSaleInfoQueryParams = (href: string, saleInfo: SaleInfo | null, rootDomain: string) => {
   if (!saleInfo) return href;
 
   try {
     const url = new URL(href);
-    if (!url.searchParams.has(SALE_INFO_PLACEHOLDER_QUERY_PARAM)) return href;
 
-    url.searchParams.delete(SALE_INFO_PLACEHOLDER_QUERY_PARAM);
-    url.searchParams.set("sale_id", saleInfo.sale_id);
-    url.searchParams.set("product_id", saleInfo.product_id || "");
-    url.searchParams.set("product_permalink", saleInfo.product_permalink || "");
+    if (url.searchParams.has(SALE_INFO_PLACEHOLDER_QUERY_PARAM)) {
+      url.searchParams.delete(SALE_INFO_PLACEHOLDER_QUERY_PARAM);
+      url.searchParams.set("sale_id", saleInfo.sale_id);
+      url.searchParams.set("product_id", saleInfo.product_id || "");
+      url.searchParams.set("product_permalink", saleInfo.product_permalink || "");
+      return url.href;
+    }
 
-    return url.href;
+    if (isGumroadPostUrl(url, rootDomain)) {
+      url.searchParams.set("purchase_id", saleInfo.sale_id);
+      return url.href;
+    }
+
+    return href;
   } catch {
     return href;
   }
 };
 
-const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null }>({
+const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null; rootDomain: string }>({
   name: "link",
   addAttributes: () => ({
     href: { default: null },
@@ -107,7 +122,7 @@ const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null }>({
       "a",
       {
         ...HTMLAttributes,
-        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo),
+        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo, this.options.rootDomain),
         target: "_blank",
       },
       0,
@@ -115,7 +130,7 @@ const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null }>({
   },
 });
 
-const TiptapLink = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
+const TiptapLink = TiptapNode.create<{ saleInfo: SaleInfo | null; rootDomain: string }>({
   name: "tiptap-link",
   group: "inline",
   inline: true,
@@ -128,14 +143,14 @@ const TiptapLink = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
         ...HTMLAttributes,
         target: "_blank",
         rel: "noopener noreferrer nofollow",
-        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo),
+        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo, this.options.rootDomain),
       },
       0,
     ];
   },
 });
 
-const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
+const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null; rootDomain: string }>({
   name: "button",
   group: "block",
   content: "inline+",
@@ -151,7 +166,11 @@ const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
           class: buttonVariants({ size: "default", color: "primary" }),
           target: "_blank",
           rel: "noopener noreferrer nofollow",
-          href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo),
+          href: addSaleInfoQueryParams(
+            cast<string>(HTMLAttributes.href),
+            this.options.saleInfo,
+            this.options.rootDomain,
+          ),
         },
         0,
       ],

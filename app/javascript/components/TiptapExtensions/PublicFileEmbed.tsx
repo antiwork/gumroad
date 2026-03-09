@@ -2,7 +2,6 @@ import { ChevronDown, ChevronUp, Music } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeSelection } from "@tiptap/pm/state";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
-import cx from "classnames";
 import * as React from "react";
 
 import FileUtils, { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
@@ -12,7 +11,7 @@ import { Button } from "$app/components/Button";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { usePublicFilesSettings } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { MenuItem } from "$app/components/RichTextEditor";
-import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -36,69 +35,75 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper contentEditable={false}>
-      <Row className={cx("embed", { selected })}>
-        {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-        <RowContent className="content">
-          <FileRowContent
-            extension={file.extension}
-            name={file.name.trim() || "Untitled"}
-            externalLinkUrl={null}
-            isUploading={isUploading}
-            hideIcon={false}
-            details={
-              <>
-                {file.extension ? <li>{file.extension}</li> : null}
+      <NodeActionsWrapper selected={selected} isEditable={editor.isEditable} asChild>
+        <Row className="embed">
+          {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
+          <RowContent className="content">
+            <FileRowContent
+              extension={file.extension}
+              name={file.name.trim() || "Untitled"}
+              externalLinkUrl={null}
+              isUploading={isUploading}
+              hideIcon={false}
+              details={
+                <>
+                  {file.extension ? <li>{file.extension}</li> : null}
 
-                <li>
-                  {isUploading
-                    ? `${((uploadProgress?.percent ?? 0) * 100).toFixed(0)}% of ${FileUtils.getFullFileSizeString(
-                        file.file_size ?? 0,
-                      )}`
-                    : FileUtils.getFullFileSizeString(file.file_size ?? 0)}
-                </li>
-              </>
-            }
-          />
-        </RowContent>
-        <RowActions>
-          {isUploading ? (
-            <Button color="danger" onClick={() => cancelUpload?.(id)}>
-              Cancel
-            </Button>
+                  <li>
+                    {isUploading
+                      ? `${((uploadProgress?.percent ?? 0) * 100).toFixed(0)}% of ${FileUtils.getFullFileSizeString(
+                          file.file_size ?? 0,
+                        )}`
+                      : FileUtils.getFullFileSizeString(file.file_size ?? 0)}
+                  </li>
+                </>
+              }
+            />
+          </RowContent>
+          <RowActions>
+            {isUploading ? (
+              <Button color="danger" onClick={() => cancelUpload?.(id)}>
+                Cancel
+              </Button>
+            ) : null}
+            {editor.isEditable && !isUploading ? (
+              <Button
+                size="icon"
+                onClick={() => setExpanded(!expanded)}
+                aria-label={expanded ? "Close drawer" : "Edit"}
+              >
+                {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+              </Button>
+            ) : null}
+            {FileUtils.isAudioExtension(file.extension) ? (
+              <Button color="primary" onClick={() => setShowAudioPlayer(!showAudioPlayer)}>
+                {showAudioPlayer ? "Close" : "Play"}
+              </Button>
+            ) : null}
+          </RowActions>
+          {FileUtils.isAudioExtension(file.extension) && showAudioPlayer && file.url ? (
+            <RowDetails>
+              <AudioPlayer src={file.url} />
+            </RowDetails>
           ) : null}
-          {editor.isEditable && !isUploading ? (
-            <Button size="icon" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
-              {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
-            </Button>
+          {expanded ? (
+            <RowDetails className="drawer flex flex-col gap-4">
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-name`}>Name</Label>
+                </FieldsetTitle>
+                <Input
+                  type="text"
+                  id={`${uid}-name`}
+                  value={file.name}
+                  onChange={(e) => updateFile?.(id, { name: e.target.value })}
+                  placeholder="Enter file name"
+                />
+              </Fieldset>
+            </RowDetails>
           ) : null}
-          {FileUtils.isAudioExtension(file.extension) ? (
-            <Button color="primary" onClick={() => setShowAudioPlayer(!showAudioPlayer)}>
-              {showAudioPlayer ? "Close" : "Play"}
-            </Button>
-          ) : null}
-        </RowActions>
-        {FileUtils.isAudioExtension(file.extension) && showAudioPlayer && file.url ? (
-          <RowDetails>
-            <AudioPlayer src={file.url} />
-          </RowDetails>
-        ) : null}
-        {expanded ? (
-          <RowDetails className="drawer flex flex-col gap-4">
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-name`}>Name</Label>
-              </FieldsetTitle>
-              <Input
-                type="text"
-                id={`${uid}-name`}
-                value={file.name}
-                onChange={(e) => updateFile?.(id, { name: e.target.value })}
-                placeholder="Enter file name"
-              />
-            </Fieldset>
-          </RowDetails>
-        ) : null}
-      </Row>
+        </Row>
+      </NodeActionsWrapper>
     </NodeViewWrapper>
   );
 };

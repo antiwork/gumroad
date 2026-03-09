@@ -1,13 +1,15 @@
 import { useForm, usePage } from "@inertiajs/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
-
-import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Select } from "$app/components/ui/Select";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type NewInvoicePageProps = {
   form_data: {
@@ -89,74 +91,74 @@ const PurchaseNewInvoicePage = () => {
               </header>
             </CardContent>
             <CardContent>
-              <fieldset className={classNames({ danger: form.errors["address_fields.full_name"] }, "grow basis-0")}>
-                <label htmlFor="full_name">Full name</label>
-                <input
+              <Fieldset state={form.errors["address_fields.full_name"] ? "danger" : undefined} className="grow basis-0">
+                <Label htmlFor="full_name">Full name</Label>
+                <Input
                   id="full_name"
                   placeholder="Full name"
                   type="text"
                   value={form.data.address_fields.full_name}
                   onChange={(e) => form.setData("address_fields.full_name", e.target.value)}
                 />
-              </fieldset>
+              </Fieldset>
               {form_metadata.display_vat_id ? (
-                <fieldset className="flex-1">
-                  <legend>
-                    <label htmlFor="chargeable_vat_id">{form_metadata.vat_id_label}</label>
-                  </legend>
-                  <input
+                <Fieldset className="flex-1">
+                  <FieldsetTitle>
+                    <Label htmlFor="chargeable_vat_id">{form_metadata.vat_id_label}</Label>
+                  </FieldsetTitle>
+                  <Input
                     id="chargeable_vat_id"
                     type="text"
                     value={form.data.vat_id}
                     onChange={(e) => form.setData("vat_id", e.target.value)}
                   />
-                </fieldset>
+                </Fieldset>
               ) : null}
-              <fieldset className={classNames({ danger: form.errors["address_fields.street_address"] }, "flex-1")}>
-                <label htmlFor="street_address">Street address</label>
-                <input
+              <Fieldset state={form.errors["address_fields.street_address"] ? "danger" : undefined} className="flex-1">
+                <Label htmlFor="street_address">Street address</Label>
+                <Input
                   id="street_address"
                   type="text"
                   placeholder="Street address"
                   value={form.data.address_fields.street_address}
                   onChange={(e) => form.setData("address_fields.street_address", e.target.value)}
                 />
-              </fieldset>
+              </Fieldset>
               <div style={{ display: "grid", gap: "var(--spacer-2)", gridTemplateColumns: "2fr 1fr 1fr" }}>
-                <fieldset className={cx({ danger: form.errors["address_fields.city"] })}>
-                  <label htmlFor="city">City</label>
-                  <input
+                <Fieldset state={form.errors["address_fields.city"] ? "danger" : undefined}>
+                  <Label htmlFor="city">City</Label>
+                  <Input
                     id="city"
                     type="text"
                     placeholder="City"
                     value={form.data.address_fields.city}
                     onChange={(e) => form.setData("address_fields.city", e.target.value)}
                   />
-                </fieldset>
-                <fieldset className={cx({ danger: form.errors["address_fields.state"] })}>
-                  <label htmlFor="state">State</label>
-                  <input
+                </Fieldset>
+                <Fieldset state={form.errors["address_fields.state"] ? "danger" : undefined}>
+                  <Label htmlFor="state">State</Label>
+                  <Input
                     id="state"
                     type="text"
                     placeholder="State"
                     value={form.data.address_fields.state}
                     onChange={(e) => form.setData("address_fields.state", e.target.value)}
                   />
-                </fieldset>
-                <fieldset className={cx({ danger: form.errors["address_fields.zip_code"] })}>
-                  <label htmlFor="zip_code">ZIP code</label>
-                  <input
+                </Fieldset>
+                <Fieldset state={form.errors["address_fields.zip_code"] ? "danger" : undefined}>
+                  <Label htmlFor="zip_code">ZIP code</Label>
+                  <Input
                     id="zip_code"
                     type="text"
                     placeholder="ZIP code"
                     value={form.data.address_fields.zip_code}
                     onChange={(e) => form.setData("address_fields.zip_code", e.target.value)}
                   />
-                </fieldset>
+                </Fieldset>
               </div>
-              <fieldset className={cx({ danger: form.errors["address_fields.country_code"] })}>
-                <label htmlFor="country">Country</label>
-                <select
+              <Fieldset state={form.errors["address_fields.country_code"] ? "danger" : undefined}>
+                <Label htmlFor="country">Country</Label>
+                <Select
                   id="country"
                   value={form.data.address_fields.country_code}
                   onChange={(e) => form.setData("address_fields.country_code", e.target.value)}
@@ -167,20 +169,20 @@ const PurchaseNewInvoicePage = () => {
                       {name}
                     </option>
                   ))}
-                </select>
-              </fieldset>
-              <fieldset className="flex-1">
-                <legend>
-                  <label htmlFor="additional_notes">Additional notes</label>
-                </legend>
-                <textarea
+                </Select>
+              </Fieldset>
+              <Fieldset className="flex-1">
+                <FieldsetTitle>
+                  <Label htmlFor="additional_notes">Additional notes</Label>
+                </FieldsetTitle>
+                <Textarea
                   id="additional_notes"
                   name="additional_notes"
                   placeholder="Enter anything else you'd like to appear on your invoice (Optional)"
                   value={form.data.additional_notes}
                   onChange={(e) => form.setData("additional_notes", e.target.value)}
                 />
-              </fieldset>
+              </Fieldset>
             </CardContent>
             <CardContent>
               <h5 className="grow font-bold">{supplier_info.heading}</h5>

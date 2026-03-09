@@ -3,7 +3,7 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { TextInput } from "$app/components/Download/CustomField/TextInput";
-import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Textarea } from "$app/components/ui/Textarea";
@@ -20,9 +20,9 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
 
   return (
     <NodeViewWrapper data-drag-handle data-input-embed>
-      <Fieldset>
-        {editor.isEditable ? (
-          <>
+      {editor.isEditable ? (
+        <NodeActionsWrapper asChild>
+          <Fieldset>
             <NodeActionsMenu editor={editor} />
 
             <fieldset className="m-0 min-w-0 flex-1 border-0 p-0">
@@ -44,11 +44,13 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
               />
               {type === "shortAnswer" ? <Input {...sharedProps} /> : <Textarea {...sharedProps} />}
             </fieldset>
-          </>
-        ) : (
+          </Fieldset>
+        </NodeActionsWrapper>
+      ) : (
+        <Fieldset>
           <TextInput customFieldId={customFieldId ?? ""} type={type} label={label ?? ""} />
-        )}
-      </Fieldset>
+        </Fieldset>
+      )}
     </NodeViewWrapper>
   );
 };
