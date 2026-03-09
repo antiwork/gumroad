@@ -1,5 +1,8 @@
 import React from "react";
 
+import { Details } from "$app/components/Details";
+import { Card, CardContent } from "$app/components/ui/Card";
+
 export type FieldDefinition = {
   name: string;
   type: string;
@@ -9,10 +12,11 @@ export type FieldDefinition = {
 };
 
 export const ApiResponseFields = ({ children }: { children: React.ReactNode }) => (
-  <div className="parameters">
-    <h4>Response fields:</h4>
-    {children}
-  </div>
+  <Card>
+    <CardContent>
+      <Details summary={<h4>Response fields</h4>}>{children}</Details>
+    </CardContent>
+  </Card>
 );
 
 export const ApiResponseField = ({
@@ -28,7 +32,7 @@ export const ApiResponseField = ({
   condition?: string;
   children?: React.ReactNode;
 }) => (
-  <div>
+  <div className="leading-7">
     <p>
       <strong>{name}</strong> <em>({type})</em> — {description}
       {condition ? <span className="text-muted"> ({condition})</span> : null}
