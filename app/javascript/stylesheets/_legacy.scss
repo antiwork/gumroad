@@ -16,12 +16,6 @@ button[draggable="true"] {
   visibility: hidden;
 }
 
-.jwplayer {
-  position: absolute !important;
-  width: 100% !important;
-  height: 100% !important;
-}
-
 [role="tree"] [role="treeitem"].sortable-ghost {
   background-color: gray(1);
   border: dashed $border-width $border-color;
@@ -55,11 +49,6 @@ body#overlay-page {
       }
     }
   }
-}
-
-// So that the `jwplayer` time tooltip isn't squished
-.jwplayer .jw-time-tip {
-  min-width: max-content;
 }
 
 body > header,
