@@ -14,7 +14,7 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
   { name: "require_shipping", type: "boolean", description: "Whether shipping info is required" },
   { name: "subscription_duration", type: "string | null", description: "Subscription billing interval" },
   { name: "published", type: "boolean", description: "Whether the product is published" },
-  { name: "url", type: "string", description: "External URL for the product" },
+  { name: "url", type: "null", description: "Deprecated, always null" },
   { name: "id", type: "string", description: "Unique identifier for the product" },
   { name: "price", type: "number", description: "Price in cents" },
   {
@@ -176,7 +176,8 @@ export const SALE_FIELDS: FieldDefinition[] = [
     type: "object | null",
     description: "Offer code used for the purchase",
     children: [
-      { name: "name", type: "string", description: "Offer code name" },
+      { name: "code", type: "string", description: "Offer code string" },
+      { name: "name", type: "string", description: "Offer code name (same as code)" },
       { name: "displayed_amount_off", type: "string", description: 'Formatted discount amount (e.g. "50%")' },
     ],
   },
@@ -185,10 +186,11 @@ export const SALE_FIELDS: FieldDefinition[] = [
 
 export const SUBSCRIBER_FIELDS: FieldDefinition[] = [
   { name: "id", type: "string", description: "Unique identifier for the subscriber" },
+  { name: "email", type: "string", description: "Email address associated with the subscription" },
   { name: "product_id", type: "string", description: "Unique identifier of the product" },
   { name: "product_name", type: "string", description: "Name of the product" },
   { name: "user_id", type: "string", description: "Unique identifier of the subscriber's user account" },
-  { name: "user_email", type: "string", description: "Email address of the subscriber" },
+  { name: "user_email", type: "string", description: "Email address of the subscriber's user account" },
   { name: "purchase_ids", type: "array", description: "Array of charge IDs belonging to this subscription" },
   { name: "created_at", type: "string", description: "ISO 8601 timestamp of when the subscription was created" },
   {
@@ -336,6 +338,18 @@ export const PAYOUT_DETAIL_FIELDS: FieldDefinition[] = [
     description: 'Payment processor used (e.g. "stripe", "paypal")',
   },
   {
+    name: "bank_account_visual",
+    type: "string | null",
+    description: "Masked bank account number",
+    condition: "present for Stripe payouts",
+  },
+  {
+    name: "paypal_email",
+    type: "string | null",
+    description: "PayPal email address",
+    condition: "present for PayPal payouts",
+  },
+  {
     name: "sales",
     type: "array",
     description: "Array of sale IDs included in this payout",
@@ -383,14 +397,15 @@ export const USER_FIELDS: FieldDefinition[] = [
   { name: "bio", type: "string | null", description: "User's bio" },
   { name: "name", type: "string", description: "User's display name" },
   { name: "twitter_handle", type: "string | null", description: "User's Twitter handle" },
-  { name: "user_id", type: "string", description: "Unique identifier for the user" },
+  { name: "id", type: "string", description: "Unique identifier for the user" },
+  { name: "user_id", type: "string", description: "Alternate user ID, not currently used" },
   {
     name: "email",
     type: "string",
     description: "User's email address",
     condition: "available with the 'view_sales' scope",
   },
-  { name: "url", type: "string", description: "User's Gumroad profile URL", condition: "only if username is set" },
+  { name: "url", type: "string", description: "User's Gumroad profile URL" },
 ];
 
 export const OFFER_CODE_FIELDS: FieldDefinition[] = [
@@ -414,8 +429,13 @@ export const OFFER_CODE_FIELDS: FieldDefinition[] = [
 ];
 
 export const CUSTOM_FIELD_FIELDS: FieldDefinition[] = [
+  { name: "id", type: "string", description: "Unique identifier for the custom field" },
+  { name: "type", type: "string", description: 'Field type (e.g. "text", "terms")' },
   { name: "name", type: "string", description: "Name of the custom field" },
-  { name: "required", type: "string", description: 'Whether this field is required ("true" or "false")' },
+  { name: "required", type: "boolean", description: "Whether this field is required" },
+  { name: "global", type: "boolean", description: "Whether this field applies globally" },
+  { name: "collect_per_product", type: "boolean", description: "Whether this field is collected per product" },
+  { name: "products", type: "array", description: "Array of product IDs this field is associated with" },
 ];
 
 export const VARIANT_CATEGORY_FIELDS: FieldDefinition[] = [
@@ -426,6 +446,7 @@ export const VARIANT_CATEGORY_FIELDS: FieldDefinition[] = [
 export const VARIANT_FIELDS: FieldDefinition[] = [
   { name: "id", type: "string", description: "Unique identifier for the variant" },
   { name: "name", type: "string", description: "Name of the variant" },
+  { name: "description", type: "string | null", description: "Description of the variant" },
   { name: "price_difference_cents", type: "number", description: "Price difference from the base price in cents" },
   {
     name: "max_purchase_count",
