@@ -330,7 +330,7 @@ export const DashboardPage = ({
         }
         className="border-b-0 sm:border-b"
       />
-      {(stripe_verification_message || show_1099_download_notice) ? (
+      {stripe_verification_message || show_1099_download_notice ? (
         <div className="grid gap-4 px-4 pt-4 md:px-8 md:pt-8">
           {stripe_verification_message ? (
             <Alert variant="warning">
@@ -341,7 +341,9 @@ export const DashboardPage = ({
             <Alert variant="info">
               Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
               {tax_center_enabled ? (
-                <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>Click here to download</Link>
+                <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>
+                  Click here to download
+                </Link>
               ) : (
                 <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>
               )}
