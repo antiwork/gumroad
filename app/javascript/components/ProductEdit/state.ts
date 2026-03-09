@@ -248,6 +248,3 @@ export type ThumbnailFile = {
   signed_id: string;
   status: { type: "saved" } | { type: "existing" } | { type: "unsaved" };
 };
-
-export const parseEditSegment = (pathname: string): string =>
-  /\/products\/[^/]+\/(edit(?:_new)?)/u.exec(pathname)?.[1] ?? "edit";

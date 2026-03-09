@@ -265,7 +265,7 @@ class Order::ChargeService
           requires_card_action: true,
           client_secret: charge_intent.client_secret,
           order: {
-            id: order.external_id,
+            id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: order.charges.last.merchant_account.is_a_stripe_connect_account? ? order.charges.last.merchant_account.charge_processor_merchant_id : nil
           }
         }
@@ -275,7 +275,7 @@ class Order::ChargeService
           requires_card_setup: true,
           client_secret: setup_intent.client_secret,
           order: {
-            id: order.external_id,
+            id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: order.purchases.last.merchant_account.is_a_stripe_connect_account? ? order.purchases.last.merchant_account.charge_processor_merchant_id : nil
           }
         }
