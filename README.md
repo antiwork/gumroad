@@ -2,7 +2,7 @@
   <picture>
     <source srcset="https://public-files.gumroad.com/logo/gumroad-dark.svg" media="(prefers-color-scheme: dark)">
     <source srcset="https://public-files.gumroad.com/logo/gumroad.svg" media="(prefers-color-scheme: light)">
-    <img src="https://public-files.gumroad.com/logo/gumroad.svg" height="100" alt="Gumroad logo">
+    <img src="https://public-files.gumroad.com/logo/gumroad.svg" width="714" alt="Gumroad logo">
   </picture>
 </p>
 
