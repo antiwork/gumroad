@@ -388,14 +388,14 @@ describe Subscription::RestartAtCheckoutService do
           allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
           allow(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
 
-          expect {
+          expect do
             described_class.new(
               subscription: subscription,
               product: expensive_product,
               params: offer_code_params,
               buyer: buyer
             ).perform
-          }.not_to change { subscription.original_purchase.purchase_offer_code_discount.reload.offer_code_amount }
+          end.not_to change { subscription.original_purchase.purchase_offer_code_discount.reload.offer_code_amount }
         end
       end
 
