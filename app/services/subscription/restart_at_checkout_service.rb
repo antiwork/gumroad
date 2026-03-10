@@ -17,6 +17,7 @@ class Subscription::RestartAtCheckoutService
 
   def perform
     result = nil
+    old_discount_attrs = snapshot_discount_attrs
 
     ActiveRecord::Base.transaction do
       sync_offer_code_discount_to_current!
@@ -29,10 +30,48 @@ class Subscription::RestartAtCheckoutService
         remote_ip: params[:remote_ip]
       ).perform
 
-      raise ActiveRecord::Rollback if !result[:success] && !result[:requires_card_action]
+      raise ActiveRecord::Rollback unless result[:success]
+    end
+
+    # When 3DS is required, revert the discount sync so it doesn't persist
+    # before the buyer confirms. Purchase::ConfirmService will re-apply
+    # the sync when 3DS succeeds.
+    if result[:requires_card_action] && old_discount_attrs.present?
+      revert_offer_code_discount_sync!(old_discount_attrs)
     end
 
     adapt_result(result)
+  end
+
+  # Re-applies the offer code discount sync after 3DS confirmation succeeds.
+  # Called from Purchase::ConfirmService when a resubscription is confirmed.
+  def self.sync_offer_code_discount!(subscription)
+    original_purchase = subscription.original_purchase
+    discount = original_purchase.purchase_offer_code_discount
+    return if discount.blank?
+
+    offer_code = discount.offer_code
+    return if offer_code.blank?
+
+    current_amount = offer_code.amount
+    current_is_percent = offer_code.is_percent?
+    current_duration = offer_code.duration_in_billing_cycles
+
+    return if discount.offer_code_amount == current_amount &&
+              discount.offer_code_is_percent == current_is_percent &&
+              discount.duration_in_billing_cycles == current_duration
+
+    discount.update!(
+      offer_code_amount: current_amount,
+      offer_code_is_percent: current_is_percent,
+      duration_in_billing_cycles: current_duration
+    )
+
+    pre_discount_price = original_purchase.minimum_paid_price_cents_per_unit_before_discount
+    new_discount_off = offer_code.amount_off(pre_discount_price)
+    new_displayed_price = [(pre_discount_price - new_discount_off) * original_purchase.quantity, 0].max
+
+    original_purchase.update!(displayed_price_cents: new_displayed_price)
   end
 
   private
@@ -56,28 +95,33 @@ class Subscription::RestartAtCheckoutService
     end
 
     def sync_offer_code_discount_to_current!
+      self.class.sync_offer_code_discount!(subscription)
+    end
+
+    def snapshot_discount_attrs
+      original_purchase = subscription.original_purchase
+      discount = original_purchase.purchase_offer_code_discount
+      return nil if discount.blank?
+
+      {
+        offer_code_amount: discount.offer_code_amount,
+        offer_code_is_percent: discount.offer_code_is_percent,
+        duration_in_billing_cycles: discount.duration_in_billing_cycles,
+        displayed_price_cents: original_purchase.displayed_price_cents
+      }
+    end
+
+    def revert_offer_code_discount_sync!(old_attrs)
       original_purchase = subscription.original_purchase
       discount = original_purchase.purchase_offer_code_discount
       return if discount.blank?
 
-      offer_code = discount.offer_code
-      return if offer_code.blank?
-
-      current_amount = offer_code.amount
-      current_is_percent = offer_code.is_percent?
-
-      return if discount.offer_code_amount == current_amount && discount.offer_code_is_percent == current_is_percent
-
       discount.update!(
-        offer_code_amount: current_amount,
-        offer_code_is_percent: current_is_percent
+        offer_code_amount: old_attrs[:offer_code_amount],
+        offer_code_is_percent: old_attrs[:offer_code_is_percent],
+        duration_in_billing_cycles: old_attrs[:duration_in_billing_cycles]
       )
-
-      pre_discount_price = original_purchase.minimum_paid_price_cents_per_unit_before_discount
-      new_discount_off = offer_code.amount_off(pre_discount_price)
-      new_displayed_price = [(pre_discount_price - new_discount_off) * original_purchase.quantity, 0].max
-
-      original_purchase.update!(displayed_price_cents: new_displayed_price)
+      original_purchase.update!(displayed_price_cents: old_attrs[:displayed_price_cents])
     end
 
     def default_variant_ids

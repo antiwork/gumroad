@@ -380,6 +380,70 @@ describe Subscription::RestartAtCheckoutService do
           expect(discount.offer_code_amount).to eq(25)
           expect(original_purchase.reload.displayed_price_cents).to eq(original_displayed_price)
         end
+
+        it "reverts the sync when 3DS confirmation is required" do
+          original_purchase = subscription.original_purchase
+          original_displayed_price = original_purchase.displayed_price_cents
+
+          updater_service = instance_double(Subscription::UpdaterService)
+          allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+          allow(updater_service).to receive(:perform).and_return({
+            success: true,
+            requires_card_action: true,
+            client_secret: "pi_secret_123"
+          })
+
+          described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: offer_code_params,
+            buyer: buyer
+          ).perform
+
+          discount = original_purchase.purchase_offer_code_discount.reload
+          expect(discount.offer_code_amount).to eq(25)
+          expect(discount.offer_code_is_percent).to be true
+          expect(original_purchase.reload.displayed_price_cents).to eq(original_displayed_price)
+        end
+      end
+
+      context "when offer code duration has changed" do
+        before do
+          offer_code.update!(duration_in_months: 3)
+          subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_months: 1)
+        end
+
+        it "syncs the duration_in_billing_cycles to the current offer code value" do
+          updater_service = instance_double(Subscription::UpdaterService)
+          allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+          allow(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
+
+          described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: offer_code_params,
+            buyer: buyer
+          ).perform
+
+          discount = subscription.original_purchase.purchase_offer_code_discount.reload
+          expect(discount.duration_in_billing_cycles).to eq(3)
+        end
+
+        it "rolls back duration changes when UpdaterService fails" do
+          updater_service = instance_double(Subscription::UpdaterService)
+          allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+          allow(updater_service).to receive(:perform).and_return({ success: false, error_message: "Something went wrong" })
+
+          described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: offer_code_params,
+            buyer: buyer
+          ).perform
+
+          discount = subscription.original_purchase.purchase_offer_code_discount.reload
+          expect(discount.duration_in_billing_cycles).to eq(1)
+        end
       end
 
       context "when offer code percentage has not changed" do
@@ -420,6 +484,52 @@ describe Subscription::RestartAtCheckoutService do
           expect(discount.offer_code_amount).to eq(2_00)
           expect(discount.offer_code_is_percent).to be false
         end
+      end
+    end
+
+    describe ".sync_offer_code_discount!" do
+      let(:expensive_product) { create(:membership_product, user: seller, price_cents: 10_00) }
+      let(:offer_code) { create(:offer_code, amount_cents: nil, amount_percentage: 25, duration_in_months: 1, products: [expensive_product], user: seller) }
+
+      let!(:subscription) do
+        sub = create_subscription_for_product(
+          product: expensive_product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+        original_purchase = sub.original_purchase
+        original_purchase.offer_code = offer_code
+        pre_discount_price = original_purchase.minimum_paid_price_cents_per_unit_before_discount
+        discounted_price = (pre_discount_price * 0.75).round
+        original_purchase.update!(displayed_price_cents: discounted_price)
+        original_purchase.create_purchase_offer_code_discount!(
+          offer_code: offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: pre_discount_price,
+          duration_in_months: 1
+        )
+        sub
+      end
+
+      it "syncs percentage, type, and duration from the current offer code" do
+        offer_code.update!(amount_percentage: 50, duration_in_months: 3)
+
+        described_class.sync_offer_code_discount!(subscription)
+
+        discount = subscription.original_purchase.purchase_offer_code_discount.reload
+        expect(discount.offer_code_amount).to eq(50)
+        expect(discount.offer_code_is_percent).to be true
+        expect(discount.duration_in_billing_cycles).to eq(3)
+      end
+
+      it "is a no-op when nothing has changed" do
+        expect {
+          described_class.sync_offer_code_discount!(subscription)
+        }.not_to change { subscription.original_purchase.purchase_offer_code_discount.reload.updated_at }
       end
     end
 
