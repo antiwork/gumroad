@@ -85,6 +85,7 @@ export const SalesChart = ({
       tooltipPosition={tooltip?.position ?? null}
       data={dataPoints}
       maxBarSize={40}
+      margin={{ top: 32, right: 0, bottom: 16, left: 16 }}
       {...events}
     >
       <XAxis {...xAxisProps} dataKey="label" />
