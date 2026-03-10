@@ -412,10 +412,10 @@ describe Subscription::RestartAtCheckoutService do
 
           # Create a different purchase to simulate UpdaterService swapping original_purchase
           different_purchase = create(:free_purchase,
-            link: expensive_product,
-            purchaser: buyer,
-            email: email,
-            subscription: subscription
+                                      link: expensive_product,
+                                      purchaser: buyer,
+                                      email: email,
+                                      subscription: subscription
           )
           different_purchase.update_columns(displayed_price_cents: 20_00)
 
