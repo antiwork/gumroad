@@ -405,6 +405,45 @@ describe Subscription::RestartAtCheckoutService do
           expect(discount.offer_code_is_percent).to be true
           expect(original_purchase.reload.displayed_price_cents).to eq(original_displayed_price)
         end
+
+        it "reverts the snapshotted purchase when original_purchase changes during 3DS" do
+          old_purchase = subscription.original_purchase
+          old_displayed_price = old_purchase.displayed_price_cents
+
+          # Create a different purchase to simulate UpdaterService swapping original_purchase
+          different_purchase = create(:free_purchase,
+            link: expensive_product,
+            purchaser: buyer,
+            email: email,
+            subscription: subscription
+          )
+          different_purchase.update_columns(displayed_price_cents: 20_00)
+
+          updater_service = instance_double(Subscription::UpdaterService)
+          allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
+          allow(updater_service).to receive(:perform) do
+            # Simulate UpdaterService replacing the original purchase mid-flow.
+            # After this, subscription.original_purchase returns the new purchase.
+            allow(subscription).to receive(:original_purchase).and_return(different_purchase)
+            { success: true, requires_card_action: true, client_secret: "pi_secret_123" }
+          end
+
+          described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: offer_code_params,
+            buyer: buyer
+          ).perform
+
+          # The old (snapshotted) purchase should be reverted to pre-sync values
+          old_discount = old_purchase.purchase_offer_code_discount.reload
+          expect(old_discount.offer_code_amount).to eq(25)
+          expect(old_discount.offer_code_is_percent).to be true
+          expect(old_purchase.reload.displayed_price_cents).to eq(old_displayed_price)
+
+          # The new original_purchase should remain untouched
+          expect(different_purchase.reload.displayed_price_cents).to eq(20_00)
+        end
       end
 
       context "when offer code duration has changed" do

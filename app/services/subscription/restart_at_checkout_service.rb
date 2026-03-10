@@ -104,6 +104,7 @@ class Subscription::RestartAtCheckoutService
       return nil if discount.blank?
 
       {
+        purchase_id: original_purchase.id,
         offer_code_amount: discount.offer_code_amount,
         offer_code_is_percent: discount.offer_code_is_percent,
         duration_in_billing_cycles: discount.duration_in_billing_cycles,
@@ -112,8 +113,10 @@ class Subscription::RestartAtCheckoutService
     end
 
     def revert_offer_code_discount_sync!(old_attrs)
-      original_purchase = subscription.original_purchase
-      discount = original_purchase.purchase_offer_code_discount
+      purchase = Purchase.find_by(id: old_attrs[:purchase_id])
+      return if purchase.blank?
+
+      discount = purchase.purchase_offer_code_discount
       return if discount.blank?
 
       discount.update!(
@@ -121,7 +124,7 @@ class Subscription::RestartAtCheckoutService
         offer_code_is_percent: old_attrs[:offer_code_is_percent],
         duration_in_billing_cycles: old_attrs[:duration_in_billing_cycles]
       )
-      original_purchase.update!(displayed_price_cents: old_attrs[:displayed_price_cents])
+      purchase.update!(displayed_price_cents: old_attrs[:displayed_price_cents])
     end
 
     def default_variant_ids
