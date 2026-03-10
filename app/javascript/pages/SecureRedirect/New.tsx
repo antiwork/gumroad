@@ -44,7 +44,7 @@ const New = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col justify-between p-4">
+    <div className="flex flex-1 flex-col justify-between p-4">
       <Card asChild>
         <main className="mx-auto h-min w-full max-w-md">
           <CardContent asChild>
@@ -53,7 +53,6 @@ const New = () => {
               <p>{message}</p>
             </header>
           </CardContent>
-          <CardContent className="mini-rule legacy-only"></CardContent>
           <CardContent asChild>
             <form onSubmit={submitForm}>
               <Label htmlFor="confirmation_text" className="form-label grow">

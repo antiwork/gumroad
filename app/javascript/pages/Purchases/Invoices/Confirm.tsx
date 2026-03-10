@@ -10,7 +10,7 @@ const PurchasesInvoiceConfirmationPage = () => {
   const { url } = usePage();
 
   return (
-    <div className="flex min-h-screen flex-col justify-between p-4">
+    <div className="flex flex-1 flex-col justify-between p-4">
       <Card asChild>
         <main className="mx-auto h-min w-full max-w-md">
           <CardContent asChild>
