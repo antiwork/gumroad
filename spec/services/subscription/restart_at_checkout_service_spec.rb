@@ -388,10 +388,10 @@ describe Subscription::RestartAtCheckoutService do
           updater_service = instance_double(Subscription::UpdaterService)
           allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
           allow(updater_service).to receive(:perform).and_return({
-            success: true,
-            requires_card_action: true,
-            client_secret: "pi_secret_123"
-          })
+                                                                   success: true,
+                                                                   requires_card_action: true,
+                                                                   client_secret: "pi_secret_123"
+                                                                 })
 
           described_class.new(
             subscription: subscription,
@@ -527,9 +527,9 @@ describe Subscription::RestartAtCheckoutService do
       end
 
       it "is a no-op when nothing has changed" do
-        expect {
+        expect do
           described_class.sync_offer_code_discount!(subscription)
-        }.not_to change { subscription.original_purchase.purchase_offer_code_discount.reload.updated_at }
+        end.not_to change { subscription.original_purchase.purchase_offer_code_discount.reload.updated_at }
       end
     end
 
