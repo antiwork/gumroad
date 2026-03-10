@@ -24,10 +24,6 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
-  def edit_new?
-    edit?
-  end
-
   def show?
     new?
   end

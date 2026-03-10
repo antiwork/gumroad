@@ -16,7 +16,7 @@ jobs:
           script: |
             const MS_PER_DAY = 24 * 60 * 60 * 1000;
             const STALE_DAYS = 7;
-            const CLOSE_DAYS = 8;
+            const GRACE_HOURS = 24;
             const now = Date.now();
             const { owner, repo } = context.repo;
 
@@ -45,11 +45,23 @@ jobs:
               });
 
               let lastActivity = new Date(issue.created_at).getTime();
+              let staleLabeledAt = null;
 
               for (const event of events) {
                 if (event.event === "commented" && event.user?.type !== "Bot") {
                   const ts = new Date(event.created_at).getTime();
                   if (ts > lastActivity) lastActivity = ts;
+                }
+
+                // A linked open PR counts as activity on the issue
+                if (event.event === "cross-referenced" && event.source?.issue?.pull_request && event.source.issue.state === "open") {
+                  const ts = new Date(event.created_at).getTime();
+                  if (ts > lastActivity) lastActivity = ts;
+                }
+
+                // Track when the stale label was added
+                if (event.event === "labeled" && event.label?.name === "stale") {
+                  staleLabeledAt = new Date(event.created_at).getTime();
                 }
               }
 
@@ -58,6 +70,7 @@ jobs:
               core.info(`#${issue.number} — last activity: ${lastActivityDate}, stale days: ${staleDays.toFixed(1)}`);
 
               const hasStaleLabel = issue.labels.some(l => l.name === "stale");
+              const graceElapsedHours = staleLabeledAt ? (now - staleLabeledAt) / (60 * 60 * 1000) : 0;
 
               // Activity resumed — remove stale label
               if (hasStaleLabel && staleDays < STALE_DAYS) {
@@ -67,7 +80,7 @@ jobs:
                 core.info(`#${issue.number} — removed stale label (activity resumed)`);
 
               // Grace period expired — close
-              } else if (hasStaleLabel && staleDays >= CLOSE_DAYS) {
+              } else if (hasStaleLabel && graceElapsedHours >= GRACE_HOURS) {
                 await github.rest.issues.createComment({
                   owner, repo, issue_number: issue.number,
                   body: "Closing this issue due to inactivity. Feel free to reopen if you'd like to continue the discussion!"
@@ -75,7 +88,7 @@ jobs:
                 await github.rest.issues.update({
                   owner, repo, issue_number: issue.number, state: "closed"
                 });
-                core.info(`#${issue.number} — closed (stale for ${staleDays.toFixed(1)} days)`);
+                core.info(`#${issue.number} — closed (grace period of ${GRACE_HOURS}h elapsed)`);
 
               // Newly stale — warn
               } else if (!hasStaleLabel && staleDays >= STALE_DAYS) {
