@@ -12,14 +12,12 @@ export const ProductIconCell = ({
   thumbnail: string | null;
   placeholder?: React.ReactNode;
 }) => (
-  <TableCell hideLabel className="relative text-center text-xl lg:w-20 lg:min-w-20 lg:border-r lg:border-border">
+  <TableCell hideLabel className="text-center text-xl lg:w-20 lg:min-w-20 lg:border-r lg:border-border lg:p-0">
     <a href={href}>
       {thumbnail ? (
-        <img
-          className="max-w-20 lg:absolute lg:inset-0 lg:h-full lg:w-full lg:object-cover"
-          role="presentation"
-          src={thumbnail}
-        />
+        <div className="lg:aspect-square lg:overflow-hidden">
+          <img className="max-w-20 lg:size-full lg:object-cover" role="presentation" src={thumbnail} />
+        </div>
       ) : (
         placeholder
       )}
