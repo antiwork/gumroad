@@ -88,7 +88,7 @@ export const SalesChart = ({
       {...events}
     >
       <XAxis {...xAxisProps} dataKey="label" />
-      <YAxis {...yAxisProps} orientation="right" />
+      <YAxis {...yAxisProps} orientation="right" tickFormatter={(value: number) => value.toLocaleString()} />
       <YAxis
         {...yAxisProps}
         yAxisId="totals"
