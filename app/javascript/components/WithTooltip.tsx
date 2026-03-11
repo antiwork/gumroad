@@ -66,7 +66,7 @@ export const WithTooltip = ({ tip, children, position = "bottom", className, too
           id={id}
           {...tooltipProps}
           className={classNames(
-            "absolute z-30 hidden w-40 max-w-max rounded-md bg-primary p-3 text-primary-foreground group-focus-within/tooltip:block group-hover/tooltip:block",
+            "pointer-events-none absolute z-30 hidden w-40 max-w-max rounded-md bg-primary p-3 text-primary-foreground group-focus-within/tooltip:block group-hover/tooltip:block",
             positionClasses.tooltip,
             tooltipProps?.className,
           )}

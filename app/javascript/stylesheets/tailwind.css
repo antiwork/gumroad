@@ -93,6 +93,17 @@
   animation-fill-mode: forwards;
 }
 
+.jwplayer {
+  position: absolute !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* So that the `jwplayer` time tooltip isn't squished */
+.jwplayer .jw-time-tip {
+  min-width: max-content;
+}
+
 @keyframes parallax-scroll {
   to {
     transform: translateY(-50%);
