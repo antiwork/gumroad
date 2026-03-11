@@ -21,7 +21,7 @@ class CustomersController < Sellers::BaseController
       pagination: { page: 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil },
       count: sales.results.total
     )
-    create_user_event("customers_view")
+    create_user_event("customers_view") unless request.headers["X-Inertia-Partial-Data"]
 
     render inertia: "Customers/Index",
            props: { customers_presenter: customers_presenter.customers_props }
