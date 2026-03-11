@@ -186,7 +186,12 @@ class Payment < ApplicationRecord
   def sync_with_payout_processor
     return unless NON_TERMINAL_STATES.include?(state)
 
-    sync_with_paypal if processor == PayoutProcessorType::PAYPAL
+    case processor
+    when PayoutProcessorType::PAYPAL
+      sync_with_paypal
+    when PayoutProcessorType::STRIPE
+      sync_with_stripe
+    end
   end
 
   def as_json(options = {})
@@ -297,6 +302,57 @@ class Payment < ApplicationRecord
       end
     rescue => e
       Rails.logger.error("Error syncing PayPal payout #{id}: #{e.message}")
+      errors.add :base, e.message
+    end
+
+    def sync_with_stripe
+      return unless processor == PayoutProcessorType::STRIPE
+
+      # Payments stuck in "creating" for over 48 hours never reached Stripe.
+      # Fail them directly and unlock balances.
+      if state == CREATING
+        if created_at < 48.hours.ago
+          mark_failed!("Payment stuck in creating state")
+          StripePayoutProcessor.reverse_internal_transfer!(self)
+        end
+        return
+      end
+
+      # For processing payments, check actual status on Stripe
+      return if stripe_transfer_id.blank? || stripe_connect_account_id.blank?
+
+      stripe_payout = Stripe::Payout.retrieve(stripe_transfer_id, { stripe_account: stripe_connect_account_id })
+
+      case stripe_payout["status"]
+      when "paid"
+        return unless state == PROCESSING
+
+        self.processor_fee_cents ||= 0
+        self.arrival_date = stripe_payout["arrival_date"]
+        mark_completed!
+      when "canceled"
+        return unless state == PROCESSING
+
+        mark_cancelled!
+        StripePayoutProcessor.reverse_internal_transfer!(self)
+      when "failed"
+        case state
+        when PROCESSING
+          mark_failed!
+        when COMPLETED
+          mark_returned!
+        else
+          return
+        end
+        StripePayoutProcessor.reverse_internal_transfer!(self)
+        if stripe_payout["failure_code"].present?
+          self.failure_reason = stripe_payout["failure_code"]
+          save!
+          send_payout_failure_email
+        end
+      end
+    rescue => e
+      Rails.logger.error("Error syncing Stripe payout #{id}: #{e.message}")
       errors.add :base, e.message
     end
 

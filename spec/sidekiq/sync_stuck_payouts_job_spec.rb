@@ -2,7 +2,7 @@
 
 describe SyncStuckPayoutsJob do
   describe "#perform" do
-    context "when processor type if PayPal" do
+    context "when processor type is PayPal" do
       before do
         create(:payment, processor: PayoutProcessorType::PAYPAL, state: "completed", txn_id: "12345", processor_fee_cents: 0)
         create(:payment, processor: PayoutProcessorType::PAYPAL, state: "completed", txn_id: "67890", processor_fee_cents: 0)
@@ -45,11 +45,14 @@ describe SyncStuckPayoutsJob do
 
       it "does not try to sync Stripe payouts" do
         create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
-                         stripe_transfer_id: "tr_123", stripe_connect_account_id: "acct_123")
+                         stripe_transfer_id: "tr_123", stripe_connect_account_id: "acct_123",
+                         created_at: 3.days.ago)
         create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
-                         stripe_transfer_id: "tr_456", stripe_connect_account_id: "acct_456")
+                         stripe_transfer_id: "tr_456", stripe_connect_account_id: "acct_456",
+                         created_at: 5.days.ago)
         create(:payment, processor: PayoutProcessorType::STRIPE, state: "unclaimed",
-                         stripe_transfer_id: "tr_789", stripe_connect_account_id: "acct_789")
+                         stripe_transfer_id: "tr_789", stripe_connect_account_id: "acct_789",
+                         created_at: 5.days.ago)
 
         expect(PaypalPayoutProcessor).not_to receive(:get_latest_payment_state_from_paypal)
         expect(PaypalPayoutProcessor).not_to receive(:search_payment_on_paypal)
@@ -76,15 +79,81 @@ describe SyncStuckPayoutsJob do
       end
     end
 
-    context "when processor type if Stripe" do
-      it "syncs stuck Stripe payouts" do
-        create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
-                         stripe_transfer_id: "tr_12", stripe_connect_account_id: "acct_12")
+    context "when processor type is Stripe" do
+      it "syncs stuck Stripe payouts past the arrival date" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_12", stripe_connect_account_id: "acct_12",
+                                   created_at: 5.days.ago)
 
-        expect_any_instance_of(Payment).to receive(:sync_with_payout_processor).and_call_original
-        expect(PaypalPayoutProcessor).not_to receive(:search_payment_on_paypal)
+        stripe_payout = { "status" => "paid", "arrival_date" => 2.days.ago.to_i }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_12", { stripe_account: "acct_12" }).and_return(stripe_payout)
 
         described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(payment.reload.state).to eq("completed")
+      end
+
+      it "fails Stripe payouts stuck in creating for over 48 hours" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
+                                   stripe_transfer_id: nil, stripe_connect_account_id: nil,
+                                   created_at: 3.days.ago)
+
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(payment.reload.state).to eq("failed")
+        expect(payment.failure_reason).to eq("Payment stuck in creating state")
+        expect(StripePayoutProcessor).to have_received(:reverse_internal_transfer!).with(payment)
+      end
+
+      it "does not sync Stripe payouts still in creating under 48 hours" do
+        create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
+                         stripe_transfer_id: nil, stripe_connect_account_id: nil,
+                         created_at: 1.hour.ago)
+
+        expect(Stripe::Payout).not_to receive(:retrieve)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+      end
+
+      it "does not sync recent Stripe payouts still legitimately in transit" do
+        create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                         stripe_transfer_id: "po_recent", stripe_connect_account_id: "acct_recent",
+                         created_at: 1.hour.ago)
+
+        expect(Stripe::Payout).not_to receive(:retrieve)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+      end
+
+      it "handles failed Stripe payouts" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_fail", stripe_connect_account_id: "acct_fail",
+                                   created_at: 5.days.ago)
+
+        stripe_payout = { "status" => "failed", "failure_code" => "account_closed" }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_fail", { stripe_account: "acct_fail" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
+        allow_any_instance_of(Payment).to receive(:send_payout_failure_email)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(payment.reload.state).to eq("failed")
+      end
+
+      it "handles cancelled Stripe payouts" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_cancel", stripe_connect_account_id: "acct_cancel",
+                                   created_at: 5.days.ago)
+
+        stripe_payout = { "status" => "canceled" }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_cancel", { stripe_account: "acct_cancel" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(payment.reload.state).to eq("cancelled")
       end
 
       it "does not sync those payments that are not either in 'creating', 'processing', or 'unclaimed' state" do
@@ -99,7 +168,7 @@ describe SyncStuckPayoutsJob do
         create(:payment, processor: PayoutProcessorType::STRIPE, state: "reversed",
                          stripe_transfer_id: "tr_90", stripe_connect_account_id: "acct_90")
 
-        expect_any_instance_of(Payment).not_to receive(:sync_with_payout_processor)
+        expect(Stripe::Payout).not_to receive(:retrieve)
 
         described_class.new.perform(PayoutProcessorType::STRIPE)
       end
@@ -107,7 +176,22 @@ describe SyncStuckPayoutsJob do
       it "does not try to sync PayPal payouts" do
         create(:payment, processor: PayoutProcessorType::PAYPAL, state: "processing")
 
-        expect_any_instance_of(Payment).not_to receive(:sync_with_payout_processor)
+        expect(Stripe::Payout).not_to receive(:retrieve)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+      end
+
+      it "processes all stuck payouts even if any of them raises an error" do
+        create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                         stripe_transfer_id: "po_err1", stripe_connect_account_id: "acct_err1",
+                         created_at: 5.days.ago)
+        create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                         stripe_transfer_id: "po_err2", stripe_connect_account_id: "acct_err2",
+                         created_at: 5.days.ago)
+
+        allow(Stripe::Payout).to receive(:retrieve).and_raise(Stripe::StripeError.new("API error"))
+
+        expect(Rails.logger).to receive(:error).with(/Error syncing Stripe payout/).exactly(2).times
 
         described_class.new.perform(PayoutProcessorType::STRIPE)
       end
