@@ -17,8 +17,12 @@ class CommunitiesController < ApplicationController
     else
       render inertia: "Communities/Index", props: {
         has_products: -> { communities_presenter.has_products? },
-        communities: -> { communities_presenter.communities_props },
-        notification_settings: -> { communities_presenter.notification_settings_props }
+        communities_data: InertiaRails.defer do
+          {
+            communities: communities_presenter.communities_props,
+            notification_settings: communities_presenter.notification_settings_props,
+          }
+        end,
       }
     end
   end
@@ -28,8 +32,12 @@ class CommunitiesController < ApplicationController
 
     render inertia: "Communities/Index", props: {
       has_products: -> { communities_presenter.has_products? },
-      communities: -> { communities_presenter.communities_props },
-      notification_settings: -> { communities_presenter.notification_settings_props },
+      communities_data: InertiaRails.defer do
+        {
+          communities: communities_presenter.communities_props,
+          notification_settings: communities_presenter.notification_settings_props,
+        }
+      end,
       selectedCommunityId: @community.external_id,
       messages: messages_scroll_prop
     }

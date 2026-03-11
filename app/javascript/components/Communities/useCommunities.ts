@@ -10,10 +10,14 @@ export type CommunityDraft = {
   isSending: boolean;
 };
 
-interface PageProps {
-  has_products: boolean;
+interface CommunitiesData {
   communities: Community[];
   notification_settings: CommunityNotificationSettings;
+}
+
+interface PageProps {
+  has_products: boolean;
+  communities_data?: CommunitiesData;
   selectedCommunityId?: string;
 }
 
@@ -22,12 +26,10 @@ const sortByName = <T extends { name: string }>(items: readonly T[]) =>
 
 export const useCommunities = () => {
   const pageProps = cast<PageProps>(usePage().props);
-  const {
-    has_products,
-    communities: initialCommunities,
-    notification_settings,
-    selectedCommunityId: initialSelectedCommunityId,
-  } = pageProps;
+  const { has_products, communities_data, selectedCommunityId: initialSelectedCommunityId } = pageProps;
+
+  const initialCommunities = communities_data?.communities ?? [];
+  const notification_settings = communities_data?.notification_settings ?? {};
 
   const [communities, setCommunities] = React.useState<Community[]>(sortByName(initialCommunities));
   const [notificationSettings, setNotificationSettings] =
@@ -78,6 +80,7 @@ export const useCommunities = () => {
   );
 
   return {
+    isLoading: !communities_data,
     hasProducts: has_products,
     communities,
     notificationSettings,
