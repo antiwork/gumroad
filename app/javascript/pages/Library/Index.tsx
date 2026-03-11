@@ -20,8 +20,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
-import { Skeleton } from "$app/components/Skeleton";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { Alert } from "$app/components/ui/Alert";
 import { CardContent, Card as UICard } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
