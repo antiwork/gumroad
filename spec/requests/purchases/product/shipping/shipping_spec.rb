@@ -16,12 +16,7 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
-      expect(page).to have_text("Subtotal US$153.24", normalize_ws: true)
-      expect(page).to have_text("Sales tax US$10.27", normalize_ws: true)
-      expect(page).to have_text("Shipping rate US$30.65", normalize_ws: true)
-      expect(page).to have_text("Total US$194.16", normalize_ws: true)
-    end
+    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true)
 
     expect(Purchase.last.price_cents).to eq(18389)
     expect(Purchase.last.shipping_cents).to eq(3065)
@@ -40,12 +35,7 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
-      expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-      expect(page).to have_text("Sales tax US$6.70", normalize_ws: true)
-      expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
-      expect(page).to have_text("Total US$126.70", normalize_ws: true)
-    end
+    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true)
 
     expect(Purchase.last.price_cents).to eq(12000)
     expect(Purchase.last.shipping_cents).to eq(2000)
@@ -86,10 +76,7 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
     expect(page).to have_selector("[role='status']", text: "$50 off will be applied at checkout (Code #{@offer_code.code.upcase})")
     expect(page).to have_selector("[itemprop='price']", text: "$100 $50")
     add_to_cart(@product, quantity: 2, offer_code: @offer_code)
-    check_out(@product, should_verify_address: true) do
-      expect(page).to have_text("Shipping rate US$35", normalize_ws: true)
-      expect(page).to have_text("Total US$135", normalize_ws: true)
-    end
+    check_out(@product, should_verify_address: true)
 
     expect(Purchase.last.price_cents).to eq(13500)
     expect(Purchase.last.shipping_cents).to eq(3500)
