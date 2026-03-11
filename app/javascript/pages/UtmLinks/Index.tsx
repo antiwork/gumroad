@@ -120,10 +120,12 @@ export default function UtmLinksIndex() {
   const query = initialQuery ?? "";
 
   const onChangePage = (newPage: number) => {
+    fetchUtmLinksStats.cancel();
     router.reload({ data: { page: newPage } });
   };
 
   const onSetSort = (newSort: Sort<SortKey> | null) => {
+    fetchUtmLinksStats.cancel();
     setSort(newSort);
     router.reload({
       data: {

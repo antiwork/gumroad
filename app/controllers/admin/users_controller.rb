@@ -29,10 +29,20 @@ class Admin::UsersController < Admin::BaseController
 
   def verify
     @user.verified = !@user.verified
-    @user.save!
+    begin
+      @user.save!
+    rescue => e
+      return render json: { success: false, message: e.message }
+    end
+    if @user.verified
+      begin
+        CreatorMailer.top_creator_announcement(user_id: @user.id).deliver_later
+      rescue => e
+        Bugsnag.notify(e)
+        Rails.logger.error("Failed to enqueue top_creator_announcement for user #{@user.id}: #{e.message}")
+      end
+    end
     render json: { success: true }
-  rescue => e
-    render json: { success: false, message: e.message }
   end
 
   def enable

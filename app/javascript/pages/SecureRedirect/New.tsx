@@ -44,38 +44,39 @@ const New = () => {
   };
 
   return (
-    <>
-      <Card className="single-page-form horizontal-form">
-        <CardContent asChild>
-          <header>
-            <h2 className="grow">Confirm access</h2>
-            <p>{message}</p>
-          </header>
-        </CardContent>
-        <CardContent className="mini-rule legacy-only"></CardContent>
-        <CardContent asChild>
-          <form onSubmit={submitForm}>
-            <Label htmlFor="confirmation_text" className="form-label grow">
-              {field_name}
-            </Label>
-            <Input
-              id="confirmation_text"
-              name="confirmation_text"
-              type="text"
-              required
-              placeholder={field_name}
-              value={form.data.confirmation_text}
-              onChange={(e) => form.setData("confirmation_text", e.target.value)}
-              disabled={form.processing}
-            />
-            <Button type="submit" color="primary" disabled={form.processing}>
-              {form.processing ? "Processing..." : "Continue"}
-            </Button>
-          </form>
-        </CardContent>
+    <div className="flex flex-1 flex-col justify-between p-4">
+      <Card asChild>
+        <main className="mx-auto h-min w-full max-w-md">
+          <CardContent asChild>
+            <header>
+              <h2 className="grow">Confirm access</h2>
+              <p>{message}</p>
+            </header>
+          </CardContent>
+          <CardContent asChild>
+            <form onSubmit={submitForm}>
+              <Label htmlFor="confirmation_text" className="form-label grow">
+                {field_name}
+              </Label>
+              <Input
+                id="confirmation_text"
+                name="confirmation_text"
+                type="text"
+                required
+                placeholder={field_name}
+                value={form.data.confirmation_text}
+                onChange={(e) => form.setData("confirmation_text", e.target.value)}
+                disabled={form.processing}
+              />
+              <Button type="submit" color="primary" disabled={form.processing}>
+                {form.processing ? "Processing..." : "Continue"}
+              </Button>
+            </form>
+          </CardContent>
+        </main>
       </Card>
-      <PoweredByFooter className="mt-auto w-full !p-6 lg:!py-6" />
-    </>
+      <PoweredByFooter />
+    </div>
   );
 };
 
