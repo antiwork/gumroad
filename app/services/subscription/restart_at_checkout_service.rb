@@ -1,10 +1,5 @@
 # frozen_string_literal: true
 
-# Adapter service that transforms checkout params and delegates to UpdaterService
-# for restarting cancelled/failed subscriptions during checkout.
-#
-# This maintains separation between checkout context and manage subscription context
-# while reusing the battle-tested UpdaterService logic.
 class Subscription::RestartAtCheckoutService
   attr_reader :subscription, :product, :params, :buyer
 
@@ -33,9 +28,6 @@ class Subscription::RestartAtCheckoutService
       raise ActiveRecord::Rollback unless result[:success]
     end
 
-    # When 3DS is required, revert the discount sync so it doesn't persist
-    # before the buyer confirms. Purchase::ConfirmService will re-apply
-    # the sync when 3DS succeeds.
     if result[:requires_card_action] && old_discount_attrs.present?
       revert_offer_code_discount_sync!(old_discount_attrs)
     end
@@ -43,8 +35,6 @@ class Subscription::RestartAtCheckoutService
     adapt_result(result)
   end
 
-  # Re-applies the offer code discount sync after 3DS confirmation succeeds.
-  # Called from Purchase::ConfirmService when a resubscription is confirmed.
   def self.sync_offer_code_discount!(subscription)
     original_purchase = subscription.original_purchase
     discount = original_purchase.purchase_offer_code_discount
@@ -61,17 +51,19 @@ class Subscription::RestartAtCheckoutService
               discount.offer_code_is_percent == current_is_percent &&
               discount.duration_in_billing_cycles == current_duration
 
-    discount.update!(
-      offer_code_amount: current_amount,
-      offer_code_is_percent: current_is_percent,
-      duration_in_billing_cycles: current_duration
-    )
+    ActiveRecord::Base.transaction do
+      discount.update!(
+        offer_code_amount: current_amount,
+        offer_code_is_percent: current_is_percent,
+        duration_in_billing_cycles: current_duration
+      )
 
-    pre_discount_price = original_purchase.minimum_paid_price_cents_per_unit_before_discount
-    new_discount_off = offer_code.amount_off(pre_discount_price)
-    new_displayed_price = [(pre_discount_price - new_discount_off) * original_purchase.quantity, 0].max
+      pre_discount_price = original_purchase.minimum_paid_price_cents_per_unit_before_discount
+      new_discount_off = offer_code.amount_off(pre_discount_price)
+      new_displayed_price = [(pre_discount_price - new_discount_off) * original_purchase.quantity, 0].max
 
-    original_purchase.update!(displayed_price_cents: new_displayed_price)
+      original_purchase.update!(displayed_price_cents: new_displayed_price)
+    end
   end
 
   private
@@ -84,7 +76,7 @@ class Subscription::RestartAtCheckoutService
         price_id: params[:price_id] || subscription.price&.external_id,
         perceived_price_cents: perceived_price_cents,
         perceived_upgrade_price_cents: perceived_price_cents,
-        quantity: subscription.original_purchase.quantity,
+        quantity: params[:quantity]&.to_i.presence || subscription.original_purchase.quantity,
         use_existing_card: use_existing_card?,
         card_data_handling_mode: params[:card_data_handling_mode],
         stripe_payment_method_id: params[:stripe_payment_method_id],
@@ -119,12 +111,14 @@ class Subscription::RestartAtCheckoutService
       discount = purchase.purchase_offer_code_discount
       return if discount.blank?
 
-      discount.update!(
-        offer_code_amount: old_attrs[:offer_code_amount],
-        offer_code_is_percent: old_attrs[:offer_code_is_percent],
-        duration_in_billing_cycles: old_attrs[:duration_in_billing_cycles]
-      )
-      purchase.update!(displayed_price_cents: old_attrs[:displayed_price_cents])
+      ActiveRecord::Base.transaction do
+        discount.update!(
+          offer_code_amount: old_attrs[:offer_code_amount],
+          offer_code_is_percent: old_attrs[:offer_code_is_percent],
+          duration_in_billing_cycles: old_attrs[:duration_in_billing_cycles]
+        )
+        purchase.update!(displayed_price_cents: old_attrs[:displayed_price_cents])
+      end
     end
 
     def default_variant_ids

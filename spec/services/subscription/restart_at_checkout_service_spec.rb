@@ -252,7 +252,22 @@ describe Subscription::RestartAtCheckoutService do
         )
       end
 
-      it "passes the original purchase quantity to UpdaterService" do
+      it "uses params[:quantity] when provided" do
+        subscription.original_purchase.update!(quantity: 3)
+
+        service = described_class.new(
+          subscription: subscription,
+          product: expensive_product,
+          params: base_params.merge(price_id: expensive_product.prices.alive.first.external_id, quantity: "5"),
+          buyer: buyer
+        )
+
+        transformed_params = service.send(:updater_service_params)
+
+        expect(transformed_params[:quantity]).to eq(5)
+      end
+
+      it "falls back to original purchase quantity when params[:quantity] is not provided" do
         subscription.original_purchase.update!(quantity: 3)
 
         service = described_class.new(
