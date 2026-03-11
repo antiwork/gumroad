@@ -11,7 +11,7 @@ import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
 import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceiptForm";
 import { Button } from "$app/components/Button";
-import { Details } from "$app/components/Details";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Input } from "$app/components/ui/Input";
@@ -477,57 +477,66 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
 const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gift: Gift }) =>
   gift.is_sender_purchase ? (
     <>
-      <Details summary={<h3>Gift Sender Info</h3>}>
+      <Details>
+        <DetailsToggle><h3>Gift Sender Info</h3></DetailsToggle>
+        <DetailsContent>
+          <dl>
+            <dt>For</dt>
+            <dd>{gift.other_email}</dd>
+
+            <dt>Note</dt>
+            <dd>{gift.note}</dd>
+
+            <dt>Receiver purchase external id</dt>
+            <dd>
+              <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
+                {gift.other_purchase_external_id}
+              </Link>
+            </dd>
+          </dl>
+        </DetailsContent>
+      </Details>
+
+      <hr />
+      <Details>
+        <DetailsToggle><h3>Edit giftee email</h3></DetailsToggle>
+        <DetailsContent>
+          <Form
+            url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
+            method="POST"
+            onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
+          >
+            {(isLoading) => (
+              <div className="flex gap-2">
+                <Input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? "Updating..." : "Update"}
+                </Button>
+              </div>
+            )}
+          </Form>
+        </DetailsContent>
+      </Details>
+    </>
+  ) : (
+    <Details>
+      <DetailsToggle><h3>Gift Receiver Info</h3></DetailsToggle>
+      <DetailsContent>
         <dl>
-          <dt>For</dt>
+          <dt>From</dt>
           <dd>{gift.other_email}</dd>
 
           <dt>Note</dt>
           <dd>{gift.note}</dd>
 
-          <dt>Receiver purchase external id</dt>
+          <dt>Sender purchase external id</dt>
           <dd>
             <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
               {gift.other_purchase_external_id}
             </Link>
           </dd>
         </dl>
-      </Details>
-
-      <hr />
-      <Details summary={<h3>Edit giftee email</h3>}>
-        <Form
-          url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
-          method="POST"
-          onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
-        >
-          {(isLoading) => (
-            <div className="flex gap-2">
-              <Input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? "Updating..." : "Update"}
-              </Button>
-            </div>
-          )}
-        </Form>
-      </Details>
-    </>
-  ) : (
-    <Details summary={<h3>Gift Receiver Info</h3>}>
-      <dl>
-        <dt>From</dt>
-        <dd>{gift.other_email}</dd>
-
-        <dt>Note</dt>
-        <dd>{gift.note}</dd>
-
-        <dt>Sender purchase external id</dt>
-        <dd>
-          <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
-            {gift.other_purchase_external_id}
-          </Link>
-        </dd>
-      </dl>
+      </DetailsContent>
     </Details>
   );
 
@@ -671,8 +680,11 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     purchase.is_free_trial_purchase ? (
       <>
         <hr />
-        <Details summary={<h3>Resend receipt</h3>}>
-          <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
+        <Details>
+          <DetailsToggle><h3>Resend receipt</h3></DetailsToggle>
+          <DetailsContent>
+            <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
+          </DetailsContent>
         </Details>
       </>
     ) : null}

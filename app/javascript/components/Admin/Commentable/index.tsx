@@ -6,7 +6,7 @@ import { useLazyPaginatedFetch } from "$app/hooks/useLazyFetch";
 import type { CommentProps } from "$app/components/Admin/Commentable/Comment";
 import AdminCommentableContent from "$app/components/Admin/Commentable/Content";
 import AdminCommentableForm from "$app/components/Admin/Commentable/Form";
-import { Details } from "$app/components/Details";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 
 type AdminCommentableProps = {
   count?: number;
@@ -44,16 +44,19 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
   return (
     <>
       <hr />
-      <Details open={open} onToggle={setOpen} className="space-y-2" summary={<h3>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</h3>}>
-        <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
-        <AdminCommentableContent
-          count={commentsCount}
-          comments={comments}
-          hasLoaded={hasLoaded}
-          isLoading={isLoading}
-          hasMore={hasMore}
-          onLoadMore={() => void fetchNextPage()}
-        />
+      <Details open={open} onToggle={setOpen} className="space-y-2">
+        <DetailsToggle><h3>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</h3></DetailsToggle>
+        <DetailsContent>
+          <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
+          <AdminCommentableContent
+            count={commentsCount}
+            comments={comments}
+            hasLoaded={hasLoaded}
+            isLoading={isLoading}
+            hasMore={hasMore}
+            onLoadMore={() => void fetchNextPage()}
+          />
+        </DetailsContent>
       </Details>
     </>
   );

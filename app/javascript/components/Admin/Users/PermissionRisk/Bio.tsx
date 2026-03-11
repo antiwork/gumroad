@@ -1,7 +1,7 @@
 import React from "react";
 
 import type { User } from "$app/components/Admin/Users/User";
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Alert } from "$app/components/ui/Alert";
 
 type BioProps = {
@@ -11,14 +11,17 @@ type BioProps = {
 const Bio = ({ user }: BioProps) => (
   <>
     <hr />
-    <Details summary={<h3>Bio</h3>}>
-      {user.bio ? (
-        <div>{user.bio}</div>
-      ) : (
-        <Alert role="status" variant="info">
-          No bio provided.
-        </Alert>
-      )}
+    <Details>
+      <DetailsToggle><h3>Bio</h3></DetailsToggle>
+      <DetailsContent>
+        {user.bio ? (
+          <div>{user.bio}</div>
+        ) : (
+          <Alert role="status" variant="info">
+            No bio provided.
+          </Alert>
+        )}
+      </DetailsContent>
     </Details>
   </>
 );

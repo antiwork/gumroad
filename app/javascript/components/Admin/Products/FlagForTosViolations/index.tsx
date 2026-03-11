@@ -3,7 +3,7 @@ import { cast } from "ts-safe-cast";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
-import { Details } from "$app/components/Details";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import AdminFlagForTosViolationsContent, {
   type TosViolationFlags,
 } from "$app/components/Admin/Products/FlagForTosViolations/Content";
@@ -64,20 +64,23 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
   return (
     <>
       <hr />
-      <Details open={open} onToggle={onToggle} summary={<h3>Flag for TOS violation</h3>}>
-        {shouldShowForm ? (
-          <AdminFlagForTosViolationsForm
-            user_external_id={product.user.external_id}
-            product_external_id={product.external_id}
-            success_message={suspendTosSuccessMessage}
-            confirm_message={suspendTosConfirmMessage}
-            reasons={compliance.reasons}
-            default_reason={compliance.default_reason}
-            onSuccess={() => setFlaggedForTosViolation(true)}
-          />
-        ) : null}
+      <Details open={open} onToggle={onToggle}>
+        <DetailsToggle><h3>Flag for TOS violation</h3></DetailsToggle>
+        <DetailsContent>
+          {shouldShowForm ? (
+            <AdminFlagForTosViolationsForm
+              user_external_id={product.user.external_id}
+              product_external_id={product.external_id}
+              success_message={suspendTosSuccessMessage}
+              confirm_message={suspendTosConfirmMessage}
+              reasons={compliance.reasons}
+              default_reason={compliance.default_reason}
+              onSuccess={() => setFlaggedForTosViolation(true)}
+            />
+          ) : null}
 
-        <AdminFlagForTosViolationsContent isLoading={isLoading} tosViolationFlags={tos_violation_flags} />
+          <AdminFlagForTosViolationsContent isLoading={isLoading} tosViolationFlags={tos_violation_flags} />
+        </DetailsContent>
       </Details>
     </>
   );

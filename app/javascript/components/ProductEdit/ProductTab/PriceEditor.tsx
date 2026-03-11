@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
 import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeSelector";
@@ -58,10 +58,9 @@ export const PriceEditor = ({
       />
       {isFreeProduct ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
       <Details
-        chevronPosition="none"
-        summaryProps={{ className: "mb-0" }}
         open={isPWYW}
-        summary={
+      >
+        <DetailsToggle chevronPosition="none" className="mb-0">
           <Switch
             checked={isPWYW}
             onChange={(e) => setIsPWYW(e.target.checked)}
@@ -72,24 +71,25 @@ export const PriceEditor = ({
               </a>
             }
           />
-        }
-      >
-        <Dropdown className="gap-4 lg:grid-cols-2">
-          <Fieldset>
-            <Label htmlFor={`${uid}-minimum-amount`}>Minimum amount</Label>
-            <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
-          </Fieldset>
-          <Fieldset>
-            <Label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</Label>
-            <PriceInput
-              id={`${uid}-suggested-price-cents`}
-              placeholder={formatPriceCentsWithoutCurrencySymbol(currencyType, priceCents)}
-              currencyCode={currencyType}
-              cents={suggestedPriceCents}
-              onChange={setSuggestedPriceCents}
-            />
-          </Fieldset>
-        </Dropdown>
+        </DetailsToggle>
+        <DetailsContent>
+          <Dropdown className="gap-4 lg:grid-cols-2">
+            <Fieldset>
+              <Label htmlFor={`${uid}-minimum-amount`}>Minimum amount</Label>
+              <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
+            </Fieldset>
+            <Fieldset>
+              <Label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</Label>
+              <PriceInput
+                id={`${uid}-suggested-price-cents`}
+                placeholder={formatPriceCentsWithoutCurrencySymbol(currencyType, priceCents)}
+                currencyCode={currencyType}
+                cents={suggestedPriceCents}
+                onChange={setSuggestedPriceCents}
+              />
+            </Fieldset>
+          </Dropdown>
+        </DetailsContent>
       </Details>
       {eligibleForInstallmentPlans ? (
         <InstallmentPlanEditor

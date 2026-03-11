@@ -7,7 +7,7 @@ import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
-import { Details } from "$app/components/Details";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { RecurrencePriceValue } from "$app/components/ProductEdit/state";
@@ -158,26 +158,26 @@ export const UpsellSelectModal = ({
           <Label htmlFor="discount">Discount</Label>
         </FieldsetTitle>
         <Details
-          chevronPosition="none"
-          summaryProps={{ className: "mb-0" }}
           open={!!discount}
-          summary={
+        >
+          <DetailsToggle chevronPosition="none" className="mb-0">
             <Switch
               checked={!!discount}
               onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
               label="Add a discount to the offered product"
             />
-          }
-        >
-          {discount && selectedProduct ? (
-            <Dropdown className="max-w-sm">
-              <DiscountInput
-                discount={discount}
-                setDiscount={(newDiscount: InputtedDiscount) => setDiscount(newDiscount)}
-                currencyCode={selectedProduct.currency_code}
-              />
-            </Dropdown>
-          ) : null}
+          </DetailsToggle>
+          <DetailsContent>
+            {discount && selectedProduct ? (
+              <Dropdown className="max-w-sm">
+                <DiscountInput
+                  discount={discount}
+                  setDiscount={(newDiscount: InputtedDiscount) => setDiscount(newDiscount)}
+                  currencyCode={selectedProduct.currency_code}
+                />
+              </Dropdown>
+            ) : null}
+          </DetailsContent>
         </Details>
       </Fieldset>
     </Modal>

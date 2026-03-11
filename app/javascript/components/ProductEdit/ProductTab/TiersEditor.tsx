@@ -16,7 +16,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { DateInput } from "$app/components/DateInput";
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -295,18 +295,17 @@ const TierEditor = ({
               <Alert variant="info">Free tiers require a pay what they want price.</Alert>
             ) : null}
             <Details
-              summary={
+              open={tier.customizable_price}
+            >
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={tier.customizable_price}
                   onChange={(e) => updateTier({ customizable_price: e.target.checked })}
                   disabled={allEnabledPricesAreZero}
                   label="Allow customers to pay what they want"
                 />
-              }
-              chevronPosition="none"
-              summaryProps={{ className: "mb-0" }}
-              open={tier.customizable_price}
-            >
+              </DetailsToggle>
+              <DetailsContent>
               <Dropdown>
                 <div
                   style={{
@@ -350,6 +349,7 @@ const TierEditor = ({
                   )}
                 </div>
               </Dropdown>
+              </DetailsContent>
             </Details>
             <PriceChangeSettings tier={tier} updateTier={updateTier} />
             {integrations.length > 0 ? (
@@ -435,7 +435,9 @@ You can modify or cancel your membership at any time.`;
 
   return (
     <Details
-      summary={
+      open={tier.apply_price_changes_to_existing_memberships}
+    >
+      <DetailsToggle>
         <Switch
           checked={tier.apply_price_changes_to_existing_memberships}
           onChange={(e) =>
@@ -446,10 +448,8 @@ You can modify or cancel your membership at any time.`;
           }
           label="Apply price changes to existing customers"
         />
-      }
-      toggle
-      open={tier.apply_price_changes_to_existing_memberships}
-    >
+      </DetailsToggle>
+      <DetailsContent>
       <Dropdown>
         <div className="grid gap-6">
           {initialEffectiveDate ? (
@@ -521,6 +521,7 @@ You can modify or cancel your membership at any time.`;
           </Fieldset>
         </div>
       </Dropdown>
+      </DetailsContent>
     </Details>
   );
 };

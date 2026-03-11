@@ -9,7 +9,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { PageListLayout } from "$app/components/Download/PageListLayout";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -146,63 +146,75 @@ export const Layout = ({
               {content_unavailability_reason_code === null && purchase.membership ? (
                 purchase.membership.is_installment_plan ? (
                   <CardContent asChild details>
-                    <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Installment plan">
-                      {purchase.membership.is_installment_plan_completed ? (
-                        "This installment plan has been paid in full."
-                      ) : (
-                        <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
-                          Manage
-                        </NavigationButton>
-                      )}
+                    <Details>
+                      <DetailsToggle chevronPosition="right" className="grow">Installment plan</DetailsToggle>
+                      <DetailsContent>
+                        {purchase.membership.is_installment_plan_completed ? (
+                          "This installment plan has been paid in full."
+                        ) : (
+                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                            Manage
+                          </NavigationButton>
+                        )}
+                      </DetailsContent>
                     </Details>
                   </CardContent>
                 ) : (
                   <CardContent asChild details>
-                    <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Membership">
-                      <div style={{ display: "grid" }}>
-                        {purchase.membership.has_active_subscription ? (
-                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
-                            Manage
-                          </NavigationButton>
-                        ) : purchase.membership.is_subscription_ended ? (
-                          "This subscription has ended."
-                        ) : purchase.membership.is_subscription_cancelled_or_failed ? (
-                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
-                            Restart
-                          </NavigationButton>
-                        ) : null}
-                      </div>
+                    <Details>
+                      <DetailsToggle chevronPosition="right" className="grow">Membership</DetailsToggle>
+                      <DetailsContent>
+                        <div style={{ display: "grid" }}>
+                          {purchase.membership.has_active_subscription ? (
+                            <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                              Manage
+                            </NavigationButton>
+                          ) : purchase.membership.is_subscription_ended ? (
+                            "This subscription has ended."
+                          ) : purchase.membership.is_subscription_cancelled_or_failed ? (
+                            <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                              Restart
+                            </NavigationButton>
+                          ) : null}
+                        </div>
+                      </DetailsContent>
                     </Details>
                   </CardContent>
                 )
               ) : null}
               {receiptPurchaseId ? (
                 <CardContent asChild details>
-                  <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Receipt">
-                    <div className="flex flex-col gap-4">
-                      <NavigationButton
-                        href={
-                          purchase.email
-                            ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
-                            : Routes.receipt_purchase_url(receiptPurchaseId)
-                        }
-                      >
-                        View receipt
-                      </NavigationButton>
-                      <Button onClick={() => handleResendReceipt(receiptPurchaseId)} disabled={isResendingReceipt}>
-                        {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
-                      </Button>
-                    </div>
+                  <Details>
+                    <DetailsToggle chevronPosition="right" className="grow">Receipt</DetailsToggle>
+                    <DetailsContent>
+                      <div className="flex flex-col gap-4">
+                        <NavigationButton
+                          href={
+                            purchase.email
+                              ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
+                              : Routes.receipt_purchase_url(receiptPurchaseId)
+                          }
+                        >
+                          View receipt
+                        </NavigationButton>
+                        <Button onClick={() => handleResendReceipt(receiptPurchaseId)} disabled={isResendingReceipt}>
+                          {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
+                        </Button>
+                      </div>
+                    </DetailsContent>
                   </Details>
                 </CardContent>
               ) : null}
               {loggedInUser !== null ? (
                 <CardContent asChild details>
-                  <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Library">
-                    <div className="flex flex-col gap-4">
-                      <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
-                      <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
-                    </div>
+                  <Details>
+                    <DetailsToggle chevronPosition="right" className="grow">Library</DetailsToggle>
+                    <DetailsContent>
+                      <div className="flex flex-col gap-4">
+                        <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
+                        <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
+                      </div>
+                    </DetailsContent>
                   </Details>
                 </CardContent>
               ) : null}

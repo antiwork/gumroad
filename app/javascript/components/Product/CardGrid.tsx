@@ -9,7 +9,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card as UICard, CardContent } from "$app/components/ui/Card";
@@ -258,67 +258,78 @@ export const CardGrid = ({
           {prependFilters}
           {hideSort ? null : (
             <CardContent asChild details>
-              <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Sort by">
-                <Fieldset role="group">
-                  {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
-                    <Label key={key} className="w-full">
-                      {SORT_BY_LABELS[key]}
-                      <Radio
-                        wrapperClassName="ml-auto"
-                        disabled={disableFilters}
-                        name={`${uid}-sortBy`}
-                        checked={(searchParams.sort ?? defaults.sort) === key}
-                        onChange={() => updateParams({ sort: key })}
-                      />
-                    </Label>
-                  ))}
-                </Fieldset>
+              <Details>
+                <DetailsToggle chevronPosition="right" className="grow">Sort by</DetailsToggle>
+                <DetailsContent>
+                  <Fieldset role="group">
+                    {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
+                      <Label key={key} className="w-full">
+                        {SORT_BY_LABELS[key]}
+                        <Radio
+                          wrapperClassName="ml-auto"
+                          disabled={disableFilters}
+                          name={`${uid}-sortBy`}
+                          checked={(searchParams.sort ?? defaults.sort) === key}
+                          onChange={() => updateParams({ sort: key })}
+                        />
+                      </Label>
+                    ))}
+                  </Fieldset>
+                </DetailsContent>
               </Details>
             </CardContent>
           )}
           {results?.tags_data.length || searchParams.tags?.length || tagsOpen ? (
             <CardContent asChild details>
-              <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Tags" open={tagsOpen} onToggle={setTagsOpen}>
-                <Fieldset role="group">
-                  <Label className="w-full">
-                    All Products
-                    <Checkbox
-                      wrapperClassName="ml-auto"
-                      checked={!searchParams.tags?.length}
-                      disabled={disableFilters || !searchParams.tags?.length}
-                      onChange={() => updateParams({ tags: undefined })}
-                    />
-                  </Label>
-                  {results ? (
-                    <FilterCheckboxes
-                      filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
-                      selection={searchParams.tags ?? []}
-                      setSelection={(tags) => updateParams({ tags })}
-                      disabled={disableFilters ?? false}
-                    />
-                  ) : null}
-                </Fieldset>
+              <Details open={tagsOpen} onToggle={setTagsOpen}>
+                <DetailsToggle chevronPosition="right" className="grow">Tags</DetailsToggle>
+                <DetailsContent>
+                  <Fieldset role="group">
+                    <Label className="w-full">
+                      All Products
+                      <Checkbox
+                        wrapperClassName="ml-auto"
+                        checked={!searchParams.tags?.length}
+                        disabled={disableFilters || !searchParams.tags?.length}
+                        onChange={() => updateParams({ tags: undefined })}
+                      />
+                    </Label>
+                    {results ? (
+                      <FilterCheckboxes
+                        filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
+                        selection={searchParams.tags ?? []}
+                        setSelection={(tags) => updateParams({ tags })}
+                        disabled={disableFilters ?? false}
+                      />
+                    ) : null}
+                  </Fieldset>
+                </DetailsContent>
               </Details>
             </CardContent>
           ) : null}
           {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
             <CardContent asChild details>
-              <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Contains" open={filetypesOpen} onToggle={setFiletypesOpen}>
-                <Fieldset role="group">
-                  {results ? (
-                    <FilterCheckboxes
-                      filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
-                      selection={searchParams.filetypes ?? []}
-                      setSelection={(filetypes) => updateParams({ filetypes })}
-                      disabled={disableFilters ?? false}
-                    />
-                  ) : null}
-                </Fieldset>
+              <Details open={filetypesOpen} onToggle={setFiletypesOpen}>
+                <DetailsToggle chevronPosition="right" className="grow">Contains</DetailsToggle>
+                <DetailsContent>
+                  <Fieldset role="group">
+                    {results ? (
+                      <FilterCheckboxes
+                        filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
+                        selection={searchParams.filetypes ?? []}
+                        setSelection={(filetypes) => updateParams({ filetypes })}
+                        disabled={disableFilters ?? false}
+                      />
+                    ) : null}
+                  </Fieldset>
+                </DetailsContent>
               </Details>
             </CardContent>
           ) : null}
           <CardContent asChild details>
-            <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Price">
+            <Details>
+              <DetailsToggle chevronPosition="right" className="grow">Price</DetailsToggle>
+              <DetailsContent>
               <div
                 style={{
                   display: "grid",
@@ -362,6 +373,7 @@ export const CardGrid = ({
                   </InputGroup>
                 </Fieldset>
               </div>
+              </DetailsContent>
             </Details>
           </CardContent>
           {appendFilters}

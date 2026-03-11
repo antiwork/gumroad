@@ -12,7 +12,7 @@ import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
 import { HomeFooter } from "$app/components/Home/Shared/Footer";
@@ -483,44 +483,50 @@ function DiscoverIndex() {
               appendFilters={
                 <>
                   <CardContent asChild details>
-                    <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Rating">
-                      <Fieldset role="group">
-                        {range(4, 0).map((number) => (
-                          <Label key={number} className="w-full">
-                            <span className="flex shrink-0 items-center gap-1">
-                              <RatingStars rating={number} />
-                              and up
-                            </span>
-                            <Radio
-                              wrapperClassName="ml-auto"
-                              value={number}
-                              aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
-                              checked={number === state.params.rating}
-                              readOnly
-                              onClick={() =>
-                                updateParams(
-                                  state.params.rating === number ? { rating: undefined } : { rating: number },
-                                )
-                              }
-                            />
-                          </Label>
-                        ))}
-                      </Fieldset>
+                    <Details>
+                      <DetailsToggle chevronPosition="right" className="grow">Rating</DetailsToggle>
+                      <DetailsContent>
+                        <Fieldset role="group">
+                          {range(4, 0).map((number) => (
+                            <Label key={number} className="w-full">
+                              <span className="flex shrink-0 items-center gap-1">
+                                <RatingStars rating={number} />
+                                and up
+                              </span>
+                              <Radio
+                                wrapperClassName="ml-auto"
+                                value={number}
+                                aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
+                                checked={number === state.params.rating}
+                                readOnly
+                                onClick={() =>
+                                  updateParams(
+                                    state.params.rating === number ? { rating: undefined } : { rating: number },
+                                  )
+                                }
+                              />
+                            </Label>
+                          ))}
+                        </Fieldset>
+                      </DetailsContent>
                     </Details>
                   </CardContent>
                   {hasOfferCode ? (
                     <CardContent asChild details>
-                      <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary="Offer code" open>
-                        <div className="flex items-center justify-between gap-2 py-1">
-                          <span>{props.black_friday_offer_code}</span>
-                          <button
-                            onClick={() => updateParams({ offer_code: undefined })}
-                            className="flex cursor-pointer items-center justify-center all-unset"
-                            aria-label="Remove offer code filter"
-                          >
-                            <X className="size-4" />
-                          </button>
-                        </div>
+                      <Details open>
+                        <DetailsToggle chevronPosition="right" className="grow">Offer code</DetailsToggle>
+                        <DetailsContent>
+                          <div className="flex items-center justify-between gap-2 py-1">
+                            <span>{props.black_friday_offer_code}</span>
+                            <button
+                              onClick={() => updateParams({ offer_code: undefined })}
+                              className="flex cursor-pointer items-center justify-center all-unset"
+                              aria-label="Remove offer code filter"
+                            >
+                              <X className="size-4" />
+                            </button>
+                          </div>
+                        </DetailsContent>
                       </Details>
                     </CardContent>
                   ) : null}

@@ -4,7 +4,7 @@ import { cast } from "ts-safe-cast";
 import { request } from "$app/utils/request";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -101,8 +101,11 @@ const AdminUserEmailChanges = ({ user }: AdminUserEmailChangesProps) => {
   return (
     <>
       <hr />
-      <Details open={open} onToggle={onToggle} summary={<h3>Email changes</h3>}>
-        <EmailChanges fields={data.fields} emailChanges={data.email_changes} isLoading={isLoading} />
+      <Details open={open} onToggle={onToggle}>
+        <DetailsToggle><h3>Email changes</h3></DetailsToggle>
+        <DetailsContent>
+          <EmailChanges fields={data.fields} emailChanges={data.email_changes} isLoading={isLoading} />
+        </DetailsContent>
       </Details>
     </>
   );

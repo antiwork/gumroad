@@ -43,7 +43,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { Button } from "$app/components/Button";
-import { Details } from "$app/components/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
@@ -924,14 +924,20 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <Card>
                       {product.native_type === "membership" ? (
                         <CardContent asChild details>
-                          <Details chevronPosition="right" summaryProps={{ className: "grow", inert: true }} summary="Membership" />
+                          <Details>
+                            <DetailsToggle chevronPosition="right" className="grow" inert>Membership</DetailsToggle>
+                          </Details>
                         </CardContent>
                       ) : null}
                       <CardContent asChild details>
-                        <Details chevronPosition="right" summaryProps={{ className: "grow", inert: true }} summary="Receipt" />
+                        <Details>
+                          <DetailsToggle chevronPosition="right" className="grow" inert>Receipt</DetailsToggle>
+                        </Details>
                       </CardContent>
                       <CardContent asChild details>
-                        <Details chevronPosition="right" summaryProps={{ className: "grow", inert: true }} summary="Library" />
+                        <Details>
+                          <DetailsToggle chevronPosition="right" className="grow" inert>Library</DetailsToggle>
+                        </Details>
                       </CardContent>
                     </Card>
                     <EntityInfo

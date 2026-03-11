@@ -7,7 +7,7 @@ import { Snippet, SNIPPET_LOCATIONS, ThirdPartyAnalytics } from "$app/data/third
 import { SettingPage } from "$app/parsers/settings";
 
 import { Button } from "$app/components/Button";
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
@@ -101,17 +101,16 @@ export default function ThirdPartyAnalyticsPage() {
           }
         >
           <Details
-            chevronPosition="none"
-            summaryProps={{ className: "mb-0" }}
             open={!thirdPartyAnalytics.disable_third_party_analytics}
-            summary={
+          >
+            <DetailsToggle chevronPosition="none" className="mb-0">
               <Switch
                 checked={!thirdPartyAnalytics.disable_third_party_analytics}
                 onChange={(evt) => updateThirdPartyAnalytics({ disable_third_party_analytics: !evt.target.checked })}
                 label="Enable third-party analytics services"
               />
-            }
-          >
+            </DetailsToggle>
+            <DetailsContent>
             <Dropdown className="flex flex-col gap-4">
               <Fieldset>
                 <FieldsetTitle>
@@ -151,13 +150,14 @@ export default function ThirdPartyAnalyticsPage() {
                 Send 'Purchase' events for free ($0) sales
               </Label>
             </Dropdown>
+            </DetailsContent>
           </Details>
         </FormSection>
         <FormSection header={<h2>Domain verification</h2>}>
           <Details
-            toggle
             open={thirdPartyAnalytics.enable_verify_domain_third_party_services}
-            summary={
+          >
+            <DetailsToggle>
               <Switch
                 checked={thirdPartyAnalytics.enable_verify_domain_third_party_services}
                 onChange={(evt) =>
@@ -165,8 +165,8 @@ export default function ThirdPartyAnalyticsPage() {
                 }
                 label="Verify domain in third-party services"
               />
-            }
-          >
+            </DetailsToggle>
+            <DetailsContent>
             <Dropdown className="flex flex-col gap-4">
               <Fieldset>
                 <FieldsetTitle>
@@ -186,6 +186,7 @@ export default function ThirdPartyAnalyticsPage() {
                 </FieldsetDescription>
               </Fieldset>
             </Dropdown>
+            </DetailsContent>
           </Details>
         </FormSection>
         <FormSection

@@ -23,7 +23,7 @@ import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
-import { Details } from "$app/components/Details";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
@@ -1034,144 +1034,144 @@ const Form = ({
           <Fieldset className="gap-4">
             <FieldsetTitle>Settings</FieldsetTitle>
             <Details
-              chevronPosition="none"
               open={limitQuantity}
-              summary={
+            >
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={limitQuantity}
                   onChange={(evt) => setLimitQuantity(evt.target.checked)}
                   label="Limit quantity"
                 />
-              }
-              summaryProps={{ className: "mb-0" }}
-            >
-              <Dropdown>
-                <Fieldset state={maxQuantity.error ? "danger" : undefined}>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}quantity`}>Quantity</Label>
-                  </FieldsetTitle>
-                  <NumberInput
-                    value={maxQuantity.value}
-                    onChange={(value) => {
-                      if (value === null || value >= 0) setMaxQuantity({ value });
-                    }}
-                  >
-                    {(props) => (
-                      <Input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
-                    )}
-                  </NumberInput>
-                </Fieldset>
-              </Dropdown>
+              </DetailsToggle>
+              <DetailsContent>
+                <Dropdown>
+                  <Fieldset state={maxQuantity.error ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}quantity`}>Quantity</Label>
+                    </FieldsetTitle>
+                    <NumberInput
+                      value={maxQuantity.value}
+                      onChange={(value) => {
+                        if (value === null || value >= 0) setMaxQuantity({ value });
+                      }}
+                    >
+                      {(props) => (
+                        <Input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
+                      )}
+                    </NumberInput>
+                  </Fieldset>
+                </Dropdown>
+              </DetailsContent>
             </Details>
             <Details
-              chevronPosition="none"
               open={limitValidity}
-              summary={
+            >
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={limitValidity}
                   onChange={(evt) => setLimitValidity(evt.target.checked)}
                   label="Limit validity period"
                 />
-              }
-              summaryProps={{ className: "mb-0" }}
-            >
-              <Dropdown className="gap-4 lg:grid-cols-2">
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}validAt`}>Valid from</Label>
-                  </FieldsetTitle>
-                  <DateInput
-                    withTime
-                    id={`${uid}validAt`}
-                    value={validAt}
-                    onChange={(date) => {
-                      if (date) setValidAt(date);
-                    }}
-                  />
-                  <Label>
-                    <Checkbox checked={hasNoEndDate} onChange={(evt) => setHasNoEndDate(evt.target.checked)} />
-                    No end date
-                  </Label>
-                </Fieldset>
-                <Fieldset state={expiresAt.error ? "danger" : undefined}>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}expiresAt`}>Valid until</Label>
-                  </FieldsetTitle>
-                  <DateInput
-                    withTime
-                    id={`${uid}expiresAt`}
-                    value={expiresAt.value}
-                    onChange={(value) => {
-                      if (value) setExpiresAt({ value });
-                    }}
-                    disabled={hasNoEndDate}
-                    aria-invalid={expiresAt.error ?? false}
-                  />
-                </Fieldset>
-              </Dropdown>
+              </DetailsToggle>
+              <DetailsContent>
+                <Dropdown className="gap-4 lg:grid-cols-2">
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}validAt`}>Valid from</Label>
+                    </FieldsetTitle>
+                    <DateInput
+                      withTime
+                      id={`${uid}validAt`}
+                      value={validAt}
+                      onChange={(date) => {
+                        if (date) setValidAt(date);
+                      }}
+                    />
+                    <Label>
+                      <Checkbox checked={hasNoEndDate} onChange={(evt) => setHasNoEndDate(evt.target.checked)} />
+                      No end date
+                    </Label>
+                  </Fieldset>
+                  <Fieldset state={expiresAt.error ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}expiresAt`}>Valid until</Label>
+                    </FieldsetTitle>
+                    <DateInput
+                      withTime
+                      id={`${uid}expiresAt`}
+                      value={expiresAt.value}
+                      onChange={(value) => {
+                        if (value) setExpiresAt({ value });
+                      }}
+                      disabled={hasNoEndDate}
+                      aria-invalid={expiresAt.error ?? false}
+                    />
+                  </Fieldset>
+                </Dropdown>
+              </DetailsContent>
             </Details>
             <Details
-              chevronPosition="none"
               open={hasMinimumAmount}
-              summary={
+            >
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={hasMinimumAmount}
                   onChange={(evt) => setHasMinimumAmount(evt.target.checked)}
                   label="Set a minimum qualifying amount"
                 />
-              }
-              summaryProps={{ className: "mb-0" }}
-            >
-              <Dropdown>
-                <Fieldset state={minimumAmount.error ? "danger" : undefined}>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}minimumAmount`}>Minimum amount</Label>
-                  </FieldsetTitle>
-                  <PriceInput
-                    id={`${uid}minimumAmount`}
-                    currencyCode={currencyCode}
-                    cents={minimumAmount.value}
-                    onChange={(value) => setMinimumAmount({ value })}
-                    placeholder="0"
-                    hasError={minimumAmount.error ?? false}
-                  />
-                </Fieldset>
-              </Dropdown>
+              </DetailsToggle>
+              <DetailsContent>
+                <Dropdown>
+                  <Fieldset state={minimumAmount.error ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}minimumAmount`}>Minimum amount</Label>
+                    </FieldsetTitle>
+                    <PriceInput
+                      id={`${uid}minimumAmount`}
+                      currencyCode={currencyCode}
+                      cents={minimumAmount.value}
+                      onChange={(value) => setMinimumAmount({ value })}
+                      placeholder="0"
+                      hasError={minimumAmount.error ?? false}
+                    />
+                  </Fieldset>
+                </Dropdown>
+              </DetailsContent>
             </Details>
             <Details
-              chevronPosition="none"
               open={hasMinimumQuantity}
-              summary={
+            >
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={hasMinimumQuantity}
                   onChange={(evt) => setHasMinimumQuantity(evt.target.checked)}
                   label="Set a minimum quantity"
                 />
-              }
-              summaryProps={{ className: "mb-0" }}
-            >
-              <Dropdown>
-                <Fieldset state={minimumQuantity.error ? "danger" : undefined}>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</Label>
-                  </FieldsetTitle>
-                  <NumberInput
-                    value={minimumQuantity.value}
-                    onChange={(value) => {
-                      if (value === null || value >= 0) setMinimumQuantity({ value });
-                    }}
-                  >
-                    {(props) => (
-                      <Input
-                        id={`${uid}minimumQuantity`}
-                        placeholder="0"
-                        aria-invalid={minimumQuantity.error}
-                        {...props}
-                      />
-                    )}
-                  </NumberInput>
-                </Fieldset>
-              </Dropdown>
+              </DetailsToggle>
+              <DetailsContent>
+                <Dropdown>
+                  <Fieldset state={minimumQuantity.error ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</Label>
+                    </FieldsetTitle>
+                    <NumberInput
+                      value={minimumQuantity.value}
+                      onChange={(value) => {
+                        if (value === null || value >= 0) setMinimumQuantity({ value });
+                      }}
+                    >
+                      {(props) => (
+                        <Input
+                          id={`${uid}minimumQuantity`}
+                          placeholder="0"
+                          aria-invalid={minimumQuantity.error}
+                          {...props}
+                        />
+                      )}
+                    </NumberInput>
+                  </Fieldset>
+                </Dropdown>
+              </DetailsContent>
             </Details>
           </Fieldset>
         </FormSection>

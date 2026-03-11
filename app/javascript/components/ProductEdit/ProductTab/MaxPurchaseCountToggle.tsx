@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { NumberInput } from "$app/components/NumberInput";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -25,23 +25,23 @@ export const MaxPurchaseCountToggle = ({
 
   return (
     <Details
-      chevronPosition="none"
-      summaryProps={{ className: "mb-0" }}
       open={isEnabled}
-      summary={
-        <Switch checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} label="Limit product sales" />
-      }
     >
-      <Dropdown>
-        <Fieldset>
-          <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>
-          <WithTooltip tip="Total sales">
-            <NumberInput value={count} onChange={setCount}>
-              {(props) => <Input id={`${uid}-max-purchase-count`} placeholder="∞" {...props} />}
-            </NumberInput>
-          </WithTooltip>
-        </Fieldset>
-      </Dropdown>
+      <DetailsToggle chevronPosition="none" className="mb-0">
+        <Switch checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} label="Limit product sales" />
+      </DetailsToggle>
+      <DetailsContent>
+        <Dropdown>
+          <Fieldset>
+            <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>
+            <WithTooltip tip="Total sales">
+              <NumberInput value={count} onChange={setCount}>
+                {(props) => <Input id={`${uid}-max-purchase-count`} placeholder="∞" {...props} />}
+              </NumberInput>
+            </WithTooltip>
+          </Fieldset>
+        </Dropdown>
+      </DetailsContent>
     </Details>
   );
 };

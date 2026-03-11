@@ -6,7 +6,7 @@ import { cast } from "ts-safe-cast";
 
 import { classNames } from "$app/utils/classNames";
 
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { NavigationButton } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -227,8 +227,11 @@ const TaxCenterIndex = () => {
         <Card>
           {FAQ_ITEMS.map((item) => (
             <CardContent asChild details key={item.id}>
-              <Details chevronPosition="right" summaryProps={{ className: "grow" }} summary={item.question}>
-                <p className="text-sm">{item.answer}</p>
+              <Details>
+                <DetailsToggle chevronPosition="right" className="grow">{item.question}</DetailsToggle>
+                <DetailsContent>
+                  <p className="text-sm">{item.answer}</p>
+                </DetailsContent>
               </Details>
             </CardContent>
           ))}

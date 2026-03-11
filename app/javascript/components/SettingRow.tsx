@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Switch } from "$app/components/ui/Switch";
 
@@ -40,8 +40,11 @@ export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disab
     />
   );
   return dropdown ? (
-    <Details summary={toggle} open={value} chevronPosition="none" summaryProps={{ className: "mb-0" }}>
-      <Dropdown>{dropdown}</Dropdown>
+    <Details open={value}>
+      <DetailsToggle chevronPosition="none" className="mb-0">{toggle}</DetailsToggle>
+      <DetailsContent>
+        <Dropdown>{dropdown}</Dropdown>
+      </DetailsContent>
     </Details>
   ) : (
     toggle

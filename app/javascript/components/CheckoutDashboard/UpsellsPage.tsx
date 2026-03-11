@@ -28,7 +28,7 @@ import { UpsellModal } from "$app/components/Checkout/UpsellModal";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { Details } from "$app/components/Details";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -857,22 +857,22 @@ const Form = ({
                 <Fieldset>
                   <FieldsetTitle>Settings</FieldsetTitle>
                   <Details
-                    chevronPosition="none"
-                    summaryProps={{ className: "mb-0" }}
                     open={!!discount}
-                    summary={
+                  >
+                    <DetailsToggle chevronPosition="none" className="mb-0">
                       <Switch
                         checked={!!discount}
                         onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
                         label="Add discount to the offered product"
                       />
-                    }
-                  >
-                    {discount ? (
-                      <Dropdown>
-                        <DiscountInput discount={discount} setDiscount={setDiscount} currencyCode="usd" />
-                      </Dropdown>
-                    ) : null}
+                    </DetailsToggle>
+                    <DetailsContent>
+                      {discount ? (
+                        <Dropdown>
+                          <DiscountInput discount={discount} setDiscount={setDiscount} currencyCode="usd" />
+                        </Dropdown>
+                      ) : null}
+                    </DetailsContent>
                   </Details>
                 </Fieldset>
               </>

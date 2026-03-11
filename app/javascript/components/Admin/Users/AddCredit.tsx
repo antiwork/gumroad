@@ -3,7 +3,7 @@ import * as React from "react";
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -17,30 +17,33 @@ type AdminUserAddCreditProps = {
 const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
   <>
     <hr />
-    <Details summary={<h3>Add credits</h3>}>
-      <Form
-        url={Routes.add_credit_admin_user_path(user.external_id)}
-        method="POST"
-        confirmMessage="Are you sure you want to add credits?"
-        onSuccess={() => showAlert("Successfully added credits.", "success")}
-      >
-        {(isLoading) => (
-          <Fieldset>
-            <div className="flex gap-2">
-              <InputGroup className="flex-1">
-                <Pill className="-ml-2 shrink-0">$</Pill>
-                <Input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
-              </InputGroup>
+    <Details>
+      <DetailsToggle><h3>Add credits</h3></DetailsToggle>
+      <DetailsContent>
+        <Form
+          url={Routes.add_credit_admin_user_path(user.external_id)}
+          method="POST"
+          confirmMessage="Are you sure you want to add credits?"
+          onSuccess={() => showAlert("Successfully added credits.", "success")}
+        >
+          {(isLoading) => (
+            <Fieldset>
+              <div className="flex gap-2">
+                <InputGroup className="flex-1">
+                  <Pill className="-ml-2 shrink-0">$</Pill>
+                  <Input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
+                </InputGroup>
 
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? "Saving..." : "Add credits"}
-              </Button>
-            </div>
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? "Saving..." : "Add credits"}
+                </Button>
+              </div>
 
-            <FieldsetDescription>Subtract credits by providing a negative value</FieldsetDescription>
-          </Fieldset>
-        )}
-      </Form>
+              <FieldsetDescription>Subtract credits by providing a negative value</FieldsetDescription>
+            </Fieldset>
+          )}
+        </Form>
+      </DetailsContent>
     </Details>
   </>
 );

@@ -4,7 +4,7 @@ import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
-import { Details } from "$app/components/Details";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -45,10 +45,9 @@ export const RefundPolicySelector = ({
 
   return (
     <Details
-      chevronPosition="none"
-      summaryProps={{ className: "mb-0" }}
       open={isEnabled}
-      summary={
+    >
+      <DetailsToggle chevronPosition="none" className="mb-0">
         <Switch
           checked={isEnabled}
           onChange={(e) => setIsEnabled(e.target.checked)}
@@ -61,8 +60,8 @@ export const RefundPolicySelector = ({
             </>
           }
         />
-      }
-    >
+      </DetailsToggle>
+      <DetailsContent>
       <Dropdown className="flex flex-col gap-4">
         <Fieldset>
           <FieldsetTitle className="flex justify-between">
@@ -139,6 +138,7 @@ export const RefundPolicySelector = ({
           />
         </Fieldset>
       </Dropdown>
+      </DetailsContent>
     </Details>
   );
 };
