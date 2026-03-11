@@ -25,7 +25,8 @@ export const MaxPurchaseCountToggle = ({
 
   return (
     <Details
-      toggle
+      chevronPosition="none"
+      summaryProps={{ className: "mb-0" }}
       open={isEnabled}
       summary={
         <Switch checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} label="Limit product sales" />

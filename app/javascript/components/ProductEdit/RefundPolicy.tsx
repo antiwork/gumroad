@@ -45,7 +45,8 @@ export const RefundPolicySelector = ({
 
   return (
     <Details
-      toggle
+      chevronPosition="none"
+      summaryProps={{ className: "mb-0" }}
       open={isEnabled}
       summary={
         <Switch

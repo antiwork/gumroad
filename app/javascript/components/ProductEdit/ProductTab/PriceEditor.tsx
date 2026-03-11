@@ -58,7 +58,8 @@ export const PriceEditor = ({
       />
       {isFreeProduct ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
       <Details
-        toggle
+        chevronPosition="none"
+        summaryProps={{ className: "mb-0" }}
         open={isPWYW}
         summary={
           <Switch

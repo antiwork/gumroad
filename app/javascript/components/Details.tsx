@@ -8,12 +8,11 @@ type Props = {
   summaryProps?: React.HTMLAttributes<HTMLElement>;
   open?: boolean;
   onToggle?: (open: boolean) => void;
-  toggle?: boolean;
-  chevronPosition?: "left" | "right";
+  chevronPosition?: "left" | "right" | "none";
 } & Omit<React.ComponentProps<"details">, "onToggle">;
 
 export const Details = React.forwardRef<HTMLDetailsElement, Props>(
-  ({ children, summary, open, onToggle, summaryProps, toggle, chevronPosition = "left", className, ...props }, ref) => {
+  ({ children, summary, open, onToggle, summaryProps, chevronPosition = "left", className, ...props }, ref) => {
     const [internalOpen, setInternalOpen] = React.useState(open ?? false);
     const isOpen = onToggle ? (open ?? false) : internalOpen;
 
@@ -36,9 +35,8 @@ export const Details = React.forwardRef<HTMLDetailsElement, Props>(
         <summary
           {...summaryProps}
           className={classNames(
-            "grid cursor-pointer [list-style:none] [&::-webkit-details-marker]:hidden [&::marker]:hidden",
-            toggle ? "grid-cols-[1fr]" : chevronPosition === "right" ? "grid-cols-[1fr_auto]" : "grid-cols-[auto_1fr]",
-            isOpen && !toggle ? "mb-2" : "",
+            "flex cursor-pointer justify-between [&::-webkit-details-marker]:hidden [&::marker]:hidden",
+            isOpen && "mb-2",
             summaryProps?.className,
           )}
           onClick={(e) => {
@@ -49,9 +47,9 @@ export const Details = React.forwardRef<HTMLDetailsElement, Props>(
             onToggle(!open);
           }}
         >
-          {!toggle && chevronPosition === "left" ? <Chevron className="mr-1 size-5 shrink-0" /> : null}
+          {chevronPosition === "left" ? <Chevron className="mr-1 size-5 shrink-0" /> : null}
           {summary}
-          {!toggle && chevronPosition === "right" ? <Chevron className="col-start-2 ml-1 size-5 shrink-0" /> : null}
+          {chevronPosition === "right" ? <Chevron className="col-start-2 ml-1 size-5 shrink-0" /> : null}
         </summary>
         {children}
       </details>

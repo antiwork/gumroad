@@ -101,7 +101,8 @@ export default function ThirdPartyAnalyticsPage() {
           }
         >
           <Details
-            toggle
+            chevronPosition="none"
+            summaryProps={{ className: "mb-0" }}
             open={!thirdPartyAnalytics.disable_third_party_analytics}
             summary={
               <Switch

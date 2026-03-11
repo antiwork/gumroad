@@ -303,7 +303,8 @@ const TierEditor = ({
                   label="Allow customers to pay what they want"
                 />
               }
-              toggle
+              chevronPosition="none"
+              summaryProps={{ className: "mb-0" }}
               open={tier.customizable_price}
             >
               <Dropdown>

@@ -1034,7 +1034,7 @@ const Form = ({
           <Fieldset className="gap-4">
             <FieldsetTitle>Settings</FieldsetTitle>
             <Details
-              toggle
+              chevronPosition="none"
               open={limitQuantity}
               summary={
                 <Switch
@@ -1043,6 +1043,7 @@ const Form = ({
                   label="Limit quantity"
                 />
               }
+              summaryProps={{ className: "mb-0" }}
             >
               <Dropdown>
                 <Fieldset state={maxQuantity.error ? "danger" : undefined}>
@@ -1063,7 +1064,7 @@ const Form = ({
               </Dropdown>
             </Details>
             <Details
-              toggle
+              chevronPosition="none"
               open={limitValidity}
               summary={
                 <Switch
@@ -1072,6 +1073,7 @@ const Form = ({
                   label="Limit validity period"
                 />
               }
+              summaryProps={{ className: "mb-0" }}
             >
               <Dropdown className="gap-4 lg:grid-cols-2">
                 <Fieldset>
@@ -1109,7 +1111,7 @@ const Form = ({
               </Dropdown>
             </Details>
             <Details
-              toggle
+              chevronPosition="none"
               open={hasMinimumAmount}
               summary={
                 <Switch
@@ -1118,6 +1120,7 @@ const Form = ({
                   label="Set a minimum qualifying amount"
                 />
               }
+              summaryProps={{ className: "mb-0" }}
             >
               <Dropdown>
                 <Fieldset state={minimumAmount.error ? "danger" : undefined}>
@@ -1136,7 +1139,7 @@ const Form = ({
               </Dropdown>
             </Details>
             <Details
-              toggle
+              chevronPosition="none"
               open={hasMinimumQuantity}
               summary={
                 <Switch
@@ -1145,6 +1148,7 @@ const Form = ({
                   label="Set a minimum quantity"
                 />
               }
+              summaryProps={{ className: "mb-0" }}
             >
               <Dropdown>
                 <Fieldset state={minimumQuantity.error ? "danger" : undefined}>

@@ -40,7 +40,7 @@ export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disab
     />
   );
   return dropdown ? (
-    <Details summary={toggle} toggle open={value}>
+    <Details summary={toggle} open={value} chevronPosition="none" summaryProps={{ className: "mb-0" }}>
       <Dropdown>{dropdown}</Dropdown>
     </Details>
   ) : (

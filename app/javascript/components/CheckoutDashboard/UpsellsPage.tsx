@@ -857,7 +857,8 @@ const Form = ({
                 <Fieldset>
                   <FieldsetTitle>Settings</FieldsetTitle>
                   <Details
-                    toggle
+                    chevronPosition="none"
+                    summaryProps={{ className: "mb-0" }}
                     open={!!discount}
                     summary={
                       <Switch
