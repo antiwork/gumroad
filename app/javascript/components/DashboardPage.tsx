@@ -330,21 +330,27 @@ export const DashboardPage = ({
         }
         className="border-b-0 sm:border-b"
       />
-      {stripe_verification_message ? (
-        <Alert variant="warning">
-          {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
-        </Alert>
-      ) : null}
-      {show_1099_download_notice ? (
-        <Alert variant="info">
-          Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
-          {tax_center_enabled ? (
-            <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>Click here to download</Link>
-          ) : (
-            <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>
-          )}
-          .
-        </Alert>
+      {stripe_verification_message || show_1099_download_notice ? (
+        <div className="grid gap-4 px-4 pt-4 md:px-8 md:pt-8">
+          {stripe_verification_message ? (
+            <Alert variant="warning">
+              {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
+            </Alert>
+          ) : null}
+          {show_1099_download_notice ? (
+            <Alert variant="info">
+              Your 1099 tax form for {new Date().getFullYear() - 1} is ready!{" "}
+              {tax_center_enabled ? (
+                <Link href={Routes.tax_center_path({ year: new Date().getFullYear() - 1 })}>
+                  Click here to download
+                </Link>
+              ) : (
+                <a href={Routes.dashboard_download_tax_form_path()}>Click here to download</a>
+              )}
+              .
+            </Alert>
+          ) : null}
+        </div>
       ) : null}
 
       {loggedInUser?.policies.settings_payments_user.show
