@@ -16,7 +16,7 @@ export default function SubscribePreview() {
 
   return (
     <div className="override grid h-full w-full grid-cols-[27.5%_1fr] items-center gap-6 p-6">
-      <Avatar className="w-full!" src={avatar_url} />
+      <Avatar className="w-full! rounded-[10rem]" src={avatar_url} />
       <section className="override grid gap-3">
         <Logo className="text-sm opacity-20" />
         <h1 className="line-clamp-2 text-3xl">{title}</h1>
