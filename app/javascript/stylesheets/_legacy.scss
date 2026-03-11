@@ -23,20 +23,6 @@ button[draggable="true"] {
   opacity: $disabled-opacity;
 }
 
-body#overlay-page {
-  display: flex;
-  flex-direction: column;
-  background: transparent;
-
-  &:not(.gumroad-minimized) {
-    background: rgba(0, 0, 0, 0.5);
-  }
-
-  .product-display {
-    overflow: auto;
-  }
-}
-
 .rich-text {
   .embed {
     > .preview {
