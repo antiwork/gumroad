@@ -2,8 +2,7 @@ import { DirectUpload } from "@rails/activestorage";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
-import { StaticRouterProvider } from "react-router-dom/server";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { saveProduct } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
@@ -13,7 +12,6 @@ import { CurrencyCode } from "$app/utils/currency";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request } from "$app/utils/request";
-import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverComponentUtil";
 
 import { Seller } from "$app/components/Product";
 import { ContentTab } from "$app/components/ProductEdit/ContentTab";
@@ -26,7 +24,6 @@ import { ShareTab } from "$app/components/ProductEdit/ShareTab";
 import {
   ContentUpdates,
   ExistingFileEntry,
-  parseEditSegment,
   Product,
   ProductEditContext,
   ProfileSection,
@@ -35,31 +32,28 @@ import {
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 
-const buildRoutes = (editSegment: string): RouteObject[] => [
+const routes: RouteObject[] = [
   {
-    path: `/products/:id/${editSegment}`,
+    path: "/products/:id/edit",
     element: <ProductTab />,
     handle: "product",
   },
   {
-    path: `/products/:id/${editSegment}/content`,
+    path: "/products/:id/edit/content",
     element: <ContentTab />,
     handle: "content",
   },
   {
-    path: `/products/:id/${editSegment}/share`,
+    path: "/products/:id/edit/share",
     element: <ShareTab />,
     handle: "share",
   },
   {
-    path: `/products/:id/${editSegment}/receipt`,
+    path: "/products/:id/edit/receipt",
     element: <ReceiptTab />,
     handle: "receipt",
   },
 ];
-
-const getEditSegment = (): string =>
-  typeof window !== "undefined" ? parseEditSegment(window.location.pathname) : "edit";
 
 type Props = {
   product: Product;
@@ -162,7 +156,7 @@ const ProductEditPage = (props: Props) => {
       return updated;
     });
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
-  const [router] = React.useState(() => createBrowserRouter(buildRoutes(getEditSegment())));
+  const [router] = React.useState(() => createBrowserRouter(routes));
 
   const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
@@ -261,23 +255,5 @@ const ProductEditPage = (props: Props) => {
   );
 };
 
-const ProductEditRouter = async (global: GlobalProps) => {
-  const { router, context } = await buildStaticRouter(global, buildRoutes("edit"));
-  const component = (props: Props) => (
-    <ProductEditContext.Provider
-      value={{
-        ...createContextValue(props),
-        filesById: buildFilesById(props.id, props.product.files),
-        setCurrencyType: (_currency) => {}, // no-op
-      }}
-    >
-      <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
-    </ProductEditContext.Provider>
-  );
-  component.displayName = "ProductEditRouter";
-  return component;
-};
-
 export { ProductEditPage };
 export type { Props as ProductEditPageProps };
-export default register({ component: ProductEditPage, ssrComponent: ProductEditRouter, propParser: createCast() });

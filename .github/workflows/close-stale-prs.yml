@@ -17,7 +17,7 @@ jobs:
           script: |
             const MS_PER_DAY = 24 * 60 * 60 * 1000;
             const STALE_DAYS = 7;
-            const CLOSE_DAYS = 8;
+            const GRACE_HOURS = 24;
             const now = Date.now();
             const { owner, repo } = context.repo;
 
@@ -47,6 +47,7 @@ jobs:
               });
 
               let lastActivity = new Date(pr.created_at).getTime();
+              let staleLabeledAt = null;
 
               for (const event of events) {
                 let ts = null;
@@ -64,6 +65,11 @@ jobs:
                   case "reviewed":
                     if (event.user?.type !== "Bot") ts = new Date(event.submitted_at).getTime();
                     break;
+                  case "labeled":
+                    if (event.label?.name === "stale") {
+                      staleLabeledAt = new Date(event.created_at).getTime();
+                    }
+                    break;
                 }
 
                 if (ts && ts > lastActivity) lastActivity = ts;
@@ -74,6 +80,7 @@ jobs:
               core.info(`#${pr.number} — last activity: ${lastActivityDate}, stale days: ${staleDays.toFixed(1)}`);
 
               const hasStaleLabel = pr.labels.some(l => l.name === "stale");
+              const graceElapsedHours = staleLabeledAt ? (now - staleLabeledAt) / (60 * 60 * 1000) : 0;
 
               // Activity resumed — remove stale label
               if (hasStaleLabel && staleDays < STALE_DAYS) {
@@ -83,7 +90,7 @@ jobs:
                 core.info(`#${pr.number} — removed stale label (activity resumed)`);
 
               // Grace period expired — close
-              } else if (hasStaleLabel && staleDays >= CLOSE_DAYS) {
+              } else if (hasStaleLabel && graceElapsedHours >= GRACE_HOURS) {
                 await github.rest.issues.createComment({
                   owner, repo, issue_number: pr.number,
                   body: "Closing this PR due to inactivity. Feel free to reopen if you'd like to continue working on it!"
@@ -91,7 +98,7 @@ jobs:
                 await github.rest.pulls.update({
                   owner, repo, pull_number: pr.number, state: "closed"
                 });
-                core.info(`#${pr.number} — closed (stale for ${staleDays.toFixed(1)} days)`);
+                core.info(`#${pr.number} — closed (grace period of ${GRACE_HOURS}h elapsed)`);
 
               // Newly stale — warn
               } else if (!hasStaleLabel && staleDays >= STALE_DAYS) {

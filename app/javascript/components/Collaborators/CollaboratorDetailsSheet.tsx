@@ -5,6 +5,7 @@ import type { IncomingCollaborator } from "$app/data/incoming_collaborators";
 import { formatAsPercent } from "$app/utils/collaboratorFormatters";
 
 import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 
 type CollaboratorDetailsSheetProps = {
@@ -31,32 +32,40 @@ const CollaboratorDetailsSheet = ({
         </Alert>
       ) : null}
 
-      <section className="stack">
-        <h3>Email</h3>
-        <div>
-          <span>{isIncoming ? collaborator.seller_email : collaborator.email}</span>
-        </div>
-      </section>
+      <Card asChild>
+        <section>
+          <CardContent>
+            <h3>Email</h3>
+          </CardContent>
+          <CardContent>
+            <span>{isIncoming ? collaborator.seller_email : collaborator.email}</span>
+          </CardContent>
+        </section>
+      </Card>
 
-      <section className="stack">
-        <h3>Products</h3>
-        {collaborator.products.map((product) => {
-          const productName = product.name;
+      <Card asChild>
+        <section>
+          <CardContent>
+            <h3>Products</h3>
+          </CardContent>
+          {collaborator.products.map((product) => {
+            const productName = product.name;
 
-          return (
-            <section key={product.id}>
-              {isIncoming ? (
-                <a href={"url" in product ? product.url : "#"} target="_blank" rel="noreferrer">
-                  {productName}
-                </a>
-              ) : (
-                <div>{productName}</div>
-              )}
-              <div>{formatAsPercent(product.percent_commission)}</div>
-            </section>
-          );
-        })}
-      </section>
+            return (
+              <CardContent key={product.id}>
+                {isIncoming ? (
+                  <a href={"url" in product ? product.url : "#"} target="_blank" rel="noreferrer">
+                    {productName}
+                  </a>
+                ) : (
+                  <div>{productName}</div>
+                )}
+                <div>{formatAsPercent(product.percent_commission)}</div>
+              </CardContent>
+            );
+          })}
+        </section>
+      </Card>
 
       <section className="mt-auto flex gap-4">{actions}</section>
     </Sheet>
