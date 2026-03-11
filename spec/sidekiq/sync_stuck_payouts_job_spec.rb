@@ -80,13 +80,27 @@ describe SyncStuckPayoutsJob do
     end
 
     context "when processor type is Stripe" do
-      it "syncs stuck Stripe payouts past the arrival date" do
+      it "syncs stuck Stripe payouts past the stored arrival date" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
                                    stripe_transfer_id: "po_12", stripe_connect_account_id: "acct_12",
+                                   created_at: 2.days.ago)
+        payment.update!(arrival_date: 1.day.ago.to_i)
+
+        stripe_payout = { "status" => "paid", "arrival_date" => 1.day.ago.to_i }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_12", { stripe_account: "acct_12" }).and_return(stripe_payout)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(payment.reload.state).to eq("completed")
+      end
+
+      it "syncs stuck Stripe payouts without arrival_date using created_at fallback" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_fallback", stripe_connect_account_id: "acct_fallback",
                                    created_at: 5.days.ago)
 
         stripe_payout = { "status" => "paid", "arrival_date" => 2.days.ago.to_i }
-        allow(Stripe::Payout).to receive(:retrieve).with("po_12", { stripe_account: "acct_12" }).and_return(stripe_payout)
+        allow(Stripe::Payout).to receive(:retrieve).with("po_fallback", { stripe_account: "acct_fallback" }).and_return(stripe_payout)
 
         described_class.new.perform(PayoutProcessorType::STRIPE)
 
@@ -121,6 +135,17 @@ describe SyncStuckPayoutsJob do
         create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
                          stripe_transfer_id: "po_recent", stripe_connect_account_id: "acct_recent",
                          created_at: 1.hour.ago)
+
+        expect(Stripe::Payout).not_to receive(:retrieve)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+      end
+
+      it "does not sync Stripe payouts whose arrival date is still in the future" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_future", stripe_connect_account_id: "acct_future",
+                                   created_at: 1.day.ago)
+        payment.update!(arrival_date: 1.day.from_now.to_i)
 
         expect(Stripe::Payout).not_to receive(:retrieve)
 

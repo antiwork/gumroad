@@ -312,7 +312,9 @@ class Payment < ApplicationRecord
       # Fail them directly and unlock balances.
       if state == CREATING
         if created_at < 48.hours.ago
-          mark_failed!("Payment stuck in creating state")
+          with_lock do
+            mark_failed!("Payment stuck in creating state")
+          end
           StripePayoutProcessor.reverse_internal_transfer!(self)
         end
         return
@@ -321,36 +323,46 @@ class Payment < ApplicationRecord
       # For processing payments, check actual status on Stripe
       return if stripe_transfer_id.blank? || stripe_connect_account_id.blank?
 
+      # Fetch payout status outside the lock to avoid holding row lock during API calls
       stripe_payout = Stripe::Payout.retrieve(stripe_transfer_id, { stripe_account: stripe_connect_account_id })
 
-      case stripe_payout["status"]
-      when "paid"
-        return unless state == PROCESSING
+      needs_reverse_transfer = false
 
-        self.processor_fee_cents ||= 0
-        self.arrival_date = stripe_payout["arrival_date"]
-        mark_completed!
-      when "canceled"
-        return unless state == PROCESSING
+      # Hold the lock only for state transitions, matching the pattern in
+      # handle_stripe_event_payout_failed
+      with_lock do
+        case stripe_payout["status"]
+        when "paid"
+          return unless state == PROCESSING
 
-        mark_cancelled!
-        StripePayoutProcessor.reverse_internal_transfer!(self)
-      when "failed"
-        case state
-        when PROCESSING
-          mark_failed!
-        when COMPLETED
-          mark_returned!
-        else
-          return
-        end
-        StripePayoutProcessor.reverse_internal_transfer!(self)
-        if stripe_payout["failure_code"].present?
-          self.failure_reason = stripe_payout["failure_code"]
-          save!
-          send_payout_failure_email
+          self.processor_fee_cents ||= 0
+          self.arrival_date = stripe_payout["arrival_date"]
+          mark_completed!
+        when "canceled"
+          return unless state == PROCESSING
+
+          mark_cancelled!
+          needs_reverse_transfer = true
+        when "failed"
+          case state
+          when PROCESSING
+            mark_failed!
+          when COMPLETED
+            mark_returned!
+          else
+            return
+          end
+          needs_reverse_transfer = true
+          if stripe_payout["failure_code"].present?
+            self.failure_reason = stripe_payout["failure_code"]
+            save!
+          end
         end
       end
+
+      # External API calls outside the lock
+      StripePayoutProcessor.reverse_internal_transfer!(self) if needs_reverse_transfer
+      send_payout_failure_email if stripe_payout["status"] == "failed" && stripe_payout["failure_code"].present?
     rescue => e
       Rails.logger.error("Error syncing Stripe payout #{id}: #{e.message}")
       errors.add :base, e.message

@@ -9,9 +9,7 @@ class SyncStuckPayoutsJob
       Rails.logger.info("Syncing #{processor} payout #{payment.id} stuck in #{payment.state} state")
 
       begin
-        payment.with_lock do
-          payment.sync_with_payout_processor
-        end
+        payment.sync_with_payout_processor
       rescue => e
         Rails.logger.error("Error syncing #{processor} payout #{payment.id}: #{e.message}")
         next
@@ -29,11 +27,17 @@ class SyncStuckPayoutsJob
 
       # For Stripe: only sync payouts that are actually stuck
       # - "creating" for over 48 hours (never reached Stripe)
-      # - "processing" past their expected arrival date (missed webhook)
+      # - "processing"/"unclaimed" past their expected arrival date (missed webhook)
+      #   Uses stored arrival_date (unix timestamp) when available, falls back to
+      #   created_at + 3 days for payouts without one (covers instant payouts too)
       base_scope.where(
         "(state = 'creating' AND created_at < :creating_cutoff) OR " \
-        "(state IN ('processing', 'unclaimed') AND created_at < :processing_cutoff)",
+        "(state IN ('processing', 'unclaimed') AND (" \
+          "(JSON_EXTRACT(json_data, '$.arrival_date') IS NOT NULL AND FROM_UNIXTIME(JSON_EXTRACT(json_data, '$.arrival_date')) < :now) OR " \
+          "(JSON_EXTRACT(json_data, '$.arrival_date') IS NULL AND created_at < :processing_cutoff)" \
+        "))",
         creating_cutoff: 48.hours.ago,
+        now: Time.current,
         processing_cutoff: 3.days.ago
       )
     end
