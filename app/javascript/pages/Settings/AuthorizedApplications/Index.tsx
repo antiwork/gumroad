@@ -107,7 +107,7 @@ export default function AuthorizedApplicationsPage() {
                       <div>
                         <img
                           src={application.icon_url || placeholderAppIcon}
-                          className="application-icon"
+                          className="shrink-0 rounded border"
                           width={72}
                           height={72}
                           alt={application.name}

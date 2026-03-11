@@ -9,6 +9,7 @@ import { assertResponseError } from "$app/utils/request";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 
 type ResponseData = {
   redirect_to: string;
@@ -54,7 +55,7 @@ const AdminNavFooter = () => {
         {current_user.impersonated_user ? (
           <>
             <a role="menuitem" href={Routes.root_url()}>
-              <img className="user-avatar" src={current_user.impersonated_user.avatar_url} alt="Your avatar" />
+              <Avatar src={current_user.impersonated_user.avatar_url} alt="Your avatar" />
               <span>{current_user.impersonated_user.name}</span>
             </a>
             <hr className="my-2" />

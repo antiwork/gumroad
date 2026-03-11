@@ -10,6 +10,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { TeamMembership } from "$app/components/LoggedInUser";
 import { Logo } from "$app/components/Logo";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 import logo from "$assets/images/logo-g.svg";
@@ -216,7 +217,7 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
       aria-checked={teamMembership.is_selected}
       className="flex! min-w-0 items-center gap-2"
     >
-      <img className="user-avatar shrink-0" src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
+      <Avatar src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
       <span className="min-w-0 flex-1 truncate" title={teamMembership.seller_name}>
         {teamMembership.seller_name}
       </span>
