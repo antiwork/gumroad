@@ -32,9 +32,8 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       get :index
       expect(response).to be_successful
       expect(inertia).to render_component("Customers/Index")
-      expect(inertia.props[:customers_presenter][:pagination]).to eq(next: nil, page: 1, pages: 1)
-      expect(inertia.props[:customers_presenter][:customers]).to match_array([hash_including(id: purchase1.external_id), hash_including(id: purchase2.external_id)])
-      expect(inertia.props[:customers_presenter][:count]).to eq(2)
+      # customers_presenter is deferred (loaded async after initial page render).
+      # Data correctness is tested in customers_presenter_spec.rb.
     end
 
     context "for a specific product" do
@@ -42,8 +41,6 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
         get :index, params: { link_id: product1.unique_permalink }
         expect(response).to be_successful
         expect(inertia).to render_component("Customers/Index")
-        expect(inertia.props[:customers_presenter][:customers]).to match_array([hash_including(id: purchase1.external_id)])
-        expect(inertia.props[:customers_presenter][:product_id]).to eq(product1.external_id)
       end
     end
 

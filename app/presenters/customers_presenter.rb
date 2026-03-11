@@ -12,11 +12,18 @@ class CustomersPresenter
   end
 
   def customers_props
-    {
+    static_props.merge(
       pagination:,
-      product_id: product&.external_id,
       customers: customers.map { CustomerPresenter.new(purchase: _1).customer(pundit_user:) },
       count:,
+    )
+  end
+
+  private
+
+  def static_props
+    {
+      product_id: product&.external_id,
       products: UserPresenter.new(user: pundit_user.seller).products_for_filter_box.map do |product|
         {
           id: product.external_id,

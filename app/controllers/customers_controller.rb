@@ -13,18 +13,21 @@ class CustomersController < Sellers::BaseController
 
   def index
     product = Link.fetch(params[:link_id]) if params[:link_id].present?
-    sales = fetch_sales(products: [product].compact)
-    customers_presenter = CustomersPresenter.new(
-      pundit_user:,
-      product:,
-      customers: load_sales(sales),
-      pagination: { page: 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil },
-      count: sales.results.total
-    )
-    create_user_event("customers_view")
+    create_user_event("customers_view") unless request.headers["X-Inertia-Partial-Data"]
 
     render inertia: "Customers/Index",
-           props: { customers_presenter: customers_presenter.customers_props }
+           props: {
+             customers_presenter: InertiaRails.defer do
+               sales = fetch_sales(products: [product].compact)
+               CustomersPresenter.new(
+                 pundit_user:,
+                 product:,
+                 customers: load_sales(sales),
+                 pagination: { page: 1, pages: (sales.results.total / CUSTOMERS_PER_PAGE.to_f).ceil, next: nil },
+                 count: sales.results.total
+               ).customers_props
+             end,
+           }
   end
 
   def paged
