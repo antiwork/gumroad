@@ -20,23 +20,23 @@ describe CreatorHomePresenter do
     create(:team_membership, user: support_for_seller, seller:, role: TeamMembership::ROLE_SUPPORT)
   end
 
-  describe "#creator_home_props" do
+  describe "#inertia_props" do
     it "deduces creator name from payout info" do
-      expect(presenter.creator_home_props[:name]).to match("")
+      expect(presenter.inertia_props[:name]).to match("")
 
       create(:user_compliance_info, user: seller)
-      expect(presenter.creator_home_props[:name]).to match("Chuck")
+      expect(presenter.inertia_props[:name]).to match("Chuck")
     end
 
     it "when creator has made a sale" do
-      expect(presenter.creator_home_props[:has_sale]).to eq(false)
+      expect(presenter.inertia_props[:has_sale]).to eq(false)
 
       create(:purchase, :from_seller, seller:)
-      expect(presenter.creator_home_props[:has_sale]).to eq(true)
+      expect(presenter.inertia_props[:has_sale]).to eq(true)
     end
 
     it "includes initial user getting started stats" do
-      expect(presenter.creator_home_props[:getting_started_stats]).to match(
+      expect(presenter.inertia_props[:getting_started_stats]).to match(
         {
           "customized_profile" => false,
           "first_email" => false,
@@ -51,12 +51,12 @@ describe CreatorHomePresenter do
 
     it "doesn't consider workflow installments for first_email" do
       create(:installment, seller:, workflow_id: 1)
-      expect(presenter.creator_home_props[:getting_started_stats]["first_email"]).to eq(false)
+      expect(presenter.inertia_props[:getting_started_stats]["first_email"]).to eq(false)
     end
 
     it "doesn't consider bundle product purchases for first_sale" do
       create(:purchase, :from_seller, seller:, is_bundle_product_purchase: true)
-      expect(presenter.creator_home_props[:getting_started_stats]["first_sale"]).to eq(false)
+      expect(presenter.inertia_props[:getting_started_stats]["first_sale"]).to eq(false)
     end
 
     it "includes updated user getting started stats" do
@@ -66,7 +66,7 @@ describe CreatorHomePresenter do
       create(:purchase, :from_seller, seller:)
       create(:payment_completed, user: seller)
 
-      expect(presenter.creator_home_props[:getting_started_stats]).to match(
+      expect(presenter.inertia_props[:getting_started_stats]).to match(
         {
           "customized_profile" => true,
           "first_email" => true,
@@ -89,7 +89,7 @@ describe CreatorHomePresenter do
       create(:purchase, link: product2, price_cents: 500, created_at: Time.current)
       create(:purchase, link: product2, price_cents: 1500, created_at: 6.days.ago)
 
-      expect(presenter.creator_home_props[:sales]).to match(
+      expect(presenter.dashboard_data[:sales]).to match(
         [
           {
             "id" => product2.unique_permalink,
@@ -127,7 +127,7 @@ describe CreatorHomePresenter do
       thumbnail2 = create(:thumbnail, product: product2)
       thumbnail1.mark_deleted!
 
-      sales_data = presenter.creator_home_props[:sales]
+      sales_data = presenter.dashboard_data[:sales]
 
       product1_data = sales_data.find { |s| s["id"] == product1.unique_permalink }
       product2_data = sales_data.find { |s| s["id"] == product2.unique_permalink }
@@ -145,7 +145,7 @@ describe CreatorHomePresenter do
 
       deleted_product.update!(deleted_at: Time.current)
 
-      sales_data = presenter.creator_home_props[:sales]
+      sales_data = presenter.dashboard_data[:sales]
       expect(sales_data.map { |p| p["id"] }).to contain_exactly(active_product.unique_permalink)
       expect(sales_data).not_to include(hash_including("id" => deleted_product.unique_permalink))
     end
@@ -161,7 +161,7 @@ describe CreatorHomePresenter do
       create_list(:purchase, 2, link: product3, price_cents: product3.price_cents, created_at: 6.days.ago)
       create_list(:purchase, 7, link: product4, price_cents: product4.price_cents, created_at: 1.day.ago)
 
-      expect(presenter.creator_home_props[:sales]).to match(
+      expect(presenter.dashboard_data[:sales]).to match(
         [
           {
             "id" => product4.unique_permalink,
@@ -220,7 +220,7 @@ describe CreatorHomePresenter do
       # Grab the last 3 sales + last 3 followers events, then get the last 3 of that.
       stub_const("#{described_class}::ACTIVITY_ITEMS_LIMIT", 3)
 
-      expect(presenter.creator_home_props[:activity_items]).to match_array(
+      expect(presenter.dashboard_data[:activity_items]).to match_array(
         [
           {
             "type" => "follower_removed",
@@ -259,12 +259,12 @@ describe CreatorHomePresenter do
                                             verification_error: { code: "verification_document_fraudulent" })
 
       expect(seller.stripe_account).to be_present
-      expect(presenter.creator_home_props[:stripe_verification_message]).to eq "The document might have been altered so it could not be verified."
+      expect(presenter.inertia_props[:stripe_verification_message]).to eq "The document might have been altered so it could not be verified."
 
       seller.stripe_account.delete_charge_processor_account!
 
       expect(seller.stripe_account).to be_nil
-      expect(presenter.creator_home_props[:stripe_verification_message]).to be_nil
+      expect(presenter.inertia_props[:stripe_verification_message]).to be_nil
     end
 
     describe "balances" do
@@ -282,7 +282,7 @@ describe CreatorHomePresenter do
       end
 
       it "includes formatted balance information" do
-        balances = presenter.creator_home_props[:balances]
+        balances = presenter.dashboard_data[:balances]
 
         expect(balances[:balance]).to eq "$100"
         expect(balances[:last_seven_days_sales_total]).to eq "$50"
@@ -296,7 +296,7 @@ describe CreatorHomePresenter do
         end
 
         it "includes currency in formatted balance information" do
-          balances = presenter.creator_home_props[:balances]
+          balances = presenter.dashboard_data[:balances]
 
           expect(balances[:balance]).to eq "$100 USD"
           expect(balances[:last_seven_days_sales_total]).to eq "$50 USD"
@@ -316,7 +316,7 @@ describe CreatorHomePresenter do
       end
 
       it "includes tax forms since the seller's account was created" do
-        expect(presenter.creator_home_props[:tax_forms]).to eq(
+        expect(presenter.inertia_props[:tax_forms]).to eq(
           {
             2022 => download_url,
             2021 => download_url,
@@ -330,7 +330,7 @@ describe CreatorHomePresenter do
           [2022, 2021].include?(year)
         end
 
-        expect(presenter.creator_home_props[:tax_forms]).to eq(
+        expect(presenter.inertia_props[:tax_forms]).to eq(
           {
             2022 => download_url,
             2021 => download_url,
@@ -342,7 +342,7 @@ describe CreatorHomePresenter do
           year == 2021 ? download_url : nil
         end
 
-        expect(presenter.creator_home_props[:tax_forms]).to eq(
+        expect(presenter.inertia_props[:tax_forms]).to eq(
           {
             2021 => download_url,
           }
@@ -354,7 +354,7 @@ describe CreatorHomePresenter do
 
         create(:user_tax_form, user: seller, tax_year: 2021, tax_form_type: "us_1099_k")
 
-        props = presenter.creator_home_props
+        props = presenter.inertia_props
 
         expect(props[:tax_center_enabled]).to be(true)
         expect(props[:tax_forms]).to eq([])

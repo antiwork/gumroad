@@ -16,7 +16,7 @@ class DashboardController < Sellers::BaseController
       LargeSeller.create_if_warranted(current_seller) unless request.headers["X-Inertia-Partial-Data"]
       presenter = CreatorHomePresenter.new(pundit_user)
       render inertia: "Dashboard/Index",
-             props: { creator_home: presenter.creator_home_props }
+             props: presenter.inertia_props
     end
   end
 
