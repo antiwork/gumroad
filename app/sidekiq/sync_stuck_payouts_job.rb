@@ -22,7 +22,6 @@ class SyncStuckPayoutsJob
   end
 
   private
-
     def stuck_payments(processor)
       base_scope = Payment.where(processor:, state: %w(creating processing unclaimed))
 
