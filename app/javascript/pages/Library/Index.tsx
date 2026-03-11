@@ -1,5 +1,5 @@
 import { Archive, DotsHorizontalRounded, Search, Trash } from "@boxicons/react";
-import { router, usePage } from "@inertiajs/react";
+import { Deferred, router, usePage } from "@inertiajs/react";
 import { produce } from "immer";
 import * as React from "react";
 import { cast, is } from "ts-safe-cast";
@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
+import { Skeleton } from "$app/components/Skeleton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { CardContent, Card as UICard } from "$app/components/ui/Card";
@@ -177,12 +178,16 @@ export const DeleteProductModal = ({
   );
 };
 
-type Props = {
+type LibraryData = {
   results: Result[];
   creators: { id: string; name: string }[];
   bundles: { id: string; label: string }[];
+};
+
+type PageProps = {
   reviews_page_enabled: boolean;
   following_wishlists_enabled: boolean;
+  library_data?: LibraryData;
 };
 
 type Params = {
@@ -251,10 +256,8 @@ const extractParams = (rawParams: URLSearchParams): Params => ({
   showArchivedOnly: rawParams.get("show_archived_only") === "true",
 });
 
-export default function LibraryPage() {
-  const { results, creators, bundles, reviews_page_enabled, following_wishlists_enabled } = cast<Props>(
-    usePage().props,
-  );
+function LibraryContent({ results, creators, bundles }: LibraryData) {
+  const { reviews_page_enabled, following_wishlists_enabled } = cast<PageProps>(usePage().props);
 
   const originalLocation = useOriginalLocation();
   const discoverUrl = useDiscoverUrl();
@@ -597,5 +600,39 @@ export default function LibraryPage() {
         />
       </section>
     </Layout>
+  );
+}
+
+const LibraryContentLoading = () => {
+  const { reviews_page_enabled, following_wishlists_enabled } = cast<PageProps>(usePage().props);
+  return (
+    <Layout
+      selectedTab="purchases"
+      onScrollToBottom={() => {}}
+      reviewsPageEnabled={reviews_page_enabled}
+      followingWishlistsEnabled={following_wishlists_enabled}
+    >
+      <section className="space-y-4 p-4 md:p-8">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="h-64" />
+          ))}
+        </div>
+      </section>
+    </Layout>
+  );
+};
+
+function LibraryDeferredContent() {
+  const { library_data } = cast<PageProps>(usePage().props);
+  if (!library_data) return null;
+  return <LibraryContent {...library_data} />;
+}
+
+export default function LibraryPage() {
+  return (
+    <Deferred data={["library_data"]} fallback={<LibraryContentLoading />}>
+      <LibraryDeferredContent />
+    </Deferred>
   );
 }

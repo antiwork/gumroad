@@ -1,12 +1,26 @@
-import { usePage } from "@inertiajs/react";
+import { Deferred, usePage } from "@inertiajs/react";
 import React from "react";
 
-import { default as DashboardPage, DashboardPageProps } from "$app/components/DashboardPage";
+import { DashboardPage, type DashboardPageProps } from "$app/components/DashboardPage";
+
+type DashboardData = {
+  balances: NonNullable<DashboardPageProps["balances"]>;
+  sales: NonNullable<DashboardPageProps["sales"]>;
+  activity_items: NonNullable<DashboardPageProps["activity_items"]>;
+};
+
+type PageProps = Omit<DashboardPageProps, "balances" | "sales" | "activity_items"> & {
+  dashboard_data: DashboardData;
+};
 
 function Dashboard() {
-  const { creator_home } = usePage<{ creator_home: DashboardPageProps }>().props;
+  const { dashboard_data, ...props } = usePage<PageProps>().props;
 
-  return <DashboardPage {...creator_home} />;
+  return (
+    <Deferred data={["dashboard_data"]} fallback={<DashboardPage {...props} />}>
+      <DashboardPage {...props} {...dashboard_data} />
+    </Deferred>
+  );
 }
 
 export default Dashboard;

@@ -7,6 +7,7 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { Button, NavigationButton } from "$app/components/Button";
+import { DashboardContentLoading } from "$app/components/DashboardPage/ContentLoading";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
 import { EmailBlastIcon } from "$app/components/icons/getting-started/EmailBlastIcon";
@@ -55,14 +56,14 @@ export type DashboardPageProps = {
     first_email: boolean;
     purchased_small_bets: boolean;
   };
-  sales: ProductRow[];
-  balances: {
+  sales?: ProductRow[];
+  balances?: {
     balance: string;
     last_seven_days_sales_total: string;
     last_28_days_sales_total: string;
     total: string;
   };
-  activity_items: ActivityItem[];
+  activity_items?: ActivityItem[];
   stripe_verification_message?: string | null;
   tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
@@ -398,36 +399,42 @@ export const DashboardPage = ({
         </div>
       ) : null}
 
-      {sales.length > 0 ? (
-        <div className="p-4 md:p-8">
-          <ProductsTable sales={sales} />
-        </div>
-      ) : null}
+      {balances && activity_items ? (
+        <>
+          {sales && sales.length > 0 ? (
+            <div className="p-4 md:p-8">
+              <ProductsTable sales={sales} />
+            </div>
+          ) : null}
 
-      <div className="grid gap-4 p-4 md:p-8">
-        <h2>Activity</h2>
+          <div className="grid gap-4 p-4 md:p-8">
+            <h2>Activity</h2>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stats title="Balance" description="Your current balance available for payout" value={balances.balance} />
-          <Stats
-            title="Last 7 days"
-            description="Your total sales in the last 7 days"
-            value={balances.last_seven_days_sales_total}
-          />
-          <Stats
-            title="Last 28 days"
-            description="Your total sales in the last 28 days"
-            value={balances.last_28_days_sales_total}
-          />
-          <Stats
-            title="Total earnings"
-            description="Your all-time net earnings from all products, excluding refunds and chargebacks"
-            value={balances.total}
-          />
-        </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Stats title="Balance" description="Your current balance available for payout" value={balances.balance} />
+              <Stats
+                title="Last 7 days"
+                description="Your total sales in the last 7 days"
+                value={balances.last_seven_days_sales_total}
+              />
+              <Stats
+                title="Last 28 days"
+                description="Your total sales in the last 28 days"
+                value={balances.last_28_days_sales_total}
+              />
+              <Stats
+                title="Total earnings"
+                description="Your all-time net earnings from all products, excluding refunds and chargebacks"
+                value={balances.total}
+              />
+            </div>
 
-        <ActivityFeed items={activity_items} />
-      </div>
+            <ActivityFeed items={activity_items} />
+          </div>
+        </>
+      ) : (
+        <DashboardContentLoading />
+      )}
     </div>
   );
 };

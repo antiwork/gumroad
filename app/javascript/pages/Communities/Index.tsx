@@ -14,6 +14,7 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { ChatMessageInput } from "$app/components/Communities/ChatMessageInput";
 import { ChatMessageList } from "$app/components/Communities/ChatMessageList";
 import { CommunityList } from "$app/components/Communities/CommunityList";
+import { CommunitiesContentLoading } from "$app/components/Communities/ContentLoading";
 import { ScrollToBottomButton } from "$app/components/Communities/ScrollToBottomButton";
 import { DateSeparator } from "$app/components/Communities/Separator";
 import { useCommunities } from "$app/components/Communities/useCommunities";
@@ -86,6 +87,7 @@ function CommunitiesIndex() {
 
   const isAboveBreakpoint = useIsAboveBreakpoint("lg");
   const {
+    isLoading,
     hasProducts,
     communities,
     notificationSettings,
@@ -516,7 +518,9 @@ function CommunitiesIndex() {
       <div className="flex h-screen flex-col">
         <GoBackHeader />
 
-        {communities.length === 0 ? (
+        {isLoading ? (
+          <CommunitiesContentLoading />
+        ) : communities.length === 0 ? (
           <EmptyCommunitiesPlaceholder hasProducts={hasProducts} />
         ) : selectedCommunity ? (
           <div className="flex flex-1 overflow-hidden">
