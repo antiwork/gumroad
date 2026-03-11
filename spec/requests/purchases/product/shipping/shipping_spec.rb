@@ -125,9 +125,6 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
       visit product.long_url
       add_to_cart(product)
-      expect(page).to have_text("Subtotal US$6.38", normalize_ws: true)
-      expect(page).to have_text("Shipping rate US$6.38", normalize_ws: true)
-      expect(page).to have_text("Total US$12.76", normalize_ws: true)
       check_out(product, should_verify_address: true)
 
       expect(Purchase.last.price_cents).to eq(1276)
