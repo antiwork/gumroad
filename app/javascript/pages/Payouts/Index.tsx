@@ -1,5 +1,5 @@
 import { ArrowInDownSquareHalf, Calendar, CheckCircle, Clock, Cog } from "@boxicons/react";
-import { Link, router, usePage } from "@inertiajs/react";
+import { Deferred, Link, router, usePage } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
 
@@ -19,6 +19,7 @@ import {
   type PayoutsProps,
   type PaypalAccount,
 } from "$app/components/Payouts";
+import { PayoutsContentLoading } from "$app/components/Payouts/ContentLoading";
 import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -440,19 +441,32 @@ function PayoutLineItem({
   );
 }
 
-export default function PayoutsIndex() {
+type PayoutsData = Pick<PayoutsProps, "next_payout_period_data" | "processing_payout_periods_data" | "instant_payout">;
+
+type PayoutsPageProps = Pick<
+  PayoutsProps,
+  | "payouts_status"
+  | "payouts_paused_by"
+  | "payouts_paused_for_reason"
+  | "show_instant_payouts_notice"
+  | "tax_center_enabled"
+  | "past_payout_period_data"
+  | "pagination"
+> & {
+  payouts_data: PayoutsData;
+};
+
+function PayoutsContent() {
+  const { payouts_data, ...staticProps } = usePage<PayoutsPageProps>().props;
+  const { next_payout_period_data, processing_payout_periods_data, instant_payout } = payouts_data;
   const {
-    next_payout_period_data,
-    processing_payout_periods_data,
     payouts_status,
     payouts_paused_by,
     payouts_paused_for_reason,
-    instant_payout,
     show_instant_payouts_notice,
-    tax_center_enabled,
     past_payout_period_data,
     pagination,
-  } = usePage<PayoutsProps>().props;
+  } = staticProps;
 
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
@@ -500,40 +514,8 @@ export default function PayoutsIndex() {
 
   if (!loggedInUser) return null;
 
-  const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
-    <NavigationButtonInertia href={Routes.settings_payments_path()}>
-      <Cog pack="filled" className="size-5" />
-      Settings
-    </NavigationButtonInertia>
-  ) : null;
-
-  const bulkExportAction = loggedInUser.policies.balance.export ? <ExportPayoutsPopover /> : null;
-
   return (
-    <div>
-      <PageHeader
-        title="Payouts"
-        actions={
-          settingsAction || bulkExportAction ? (
-            <div className="flex gap-2">
-              {settingsAction}
-              {bulkExportAction}
-            </div>
-          ) : undefined
-        }
-      >
-        {tax_center_enabled ? (
-          <Tabs>
-            <Tab isSelected asChild>
-              <Link href={Routes.balance_path()}>Payouts</Link>
-            </Tab>
-            <Tab isSelected={false} asChild>
-              <Link href={Routes.tax_center_path()}>Taxes</Link>
-            </Tab>
-          </Tabs>
-        ) : null}
-      </PageHeader>
-      <div className="space-y-8 p-4 md:p-8">
+    <div className="space-y-8 p-4 md:p-8">
         {!instant_payout ? (
           show_instant_payouts_notice ? (
             <Alert variant="info" role="status">
@@ -756,6 +738,49 @@ export default function PayoutsIndex() {
           </>
         ) : null}
       </div>
+  );
+}
+
+export default function PayoutsIndex() {
+  const { tax_center_enabled } = usePage<PayoutsPageProps>().props;
+  const loggedInUser = useLoggedInUser();
+
+  const settingsAction = loggedInUser?.policies.settings_payments_user.show ? (
+    <NavigationButtonInertia href={Routes.settings_payments_path()}>
+      <Cog pack="filled" className="size-5" />
+      Settings
+    </NavigationButtonInertia>
+  ) : null;
+
+  const bulkExportAction = loggedInUser?.policies.balance.export ? <ExportPayoutsPopover /> : null;
+
+  return (
+    <div>
+      <PageHeader
+        title="Payouts"
+        actions={
+          settingsAction || bulkExportAction ? (
+            <div className="flex gap-2">
+              {settingsAction}
+              {bulkExportAction}
+            </div>
+          ) : undefined
+        }
+      >
+        {tax_center_enabled ? (
+          <Tabs>
+            <Tab isSelected asChild>
+              <Link href={Routes.balance_path()}>Payouts</Link>
+            </Tab>
+            <Tab isSelected={false} asChild>
+              <Link href={Routes.tax_center_path()}>Taxes</Link>
+            </Tab>
+          </Tabs>
+        ) : null}
+      </PageHeader>
+      <Deferred data={["payouts_data"]} fallback={<PayoutsContentLoading />}>
+        <PayoutsContent />
+      </Deferred>
     </div>
   );
 }
