@@ -278,7 +278,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       add_to_cart(@vat_link)
 
-      check_out(@vat_link, vat_id: "NL860999063B01", zip_code: nil, credit_card: { number: "4000003800000008" })
+      check_out(@vat_link, vat_id: "NL860999063B01", zip_code: nil, credit_card: { number: "4000003800000008" }) do
+        expect(page).not_to have_text("VAT US$", normalize_ws: true)
+      end
 
       purchase = Purchase.last
       expect(purchase.total_transaction_cents).to eq(100_00)
@@ -315,7 +317,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{product.unique_permalink}"
         add_to_cart(product, option: "First Tier")
         expect(page).to(have_text("VAT US$0.66", normalize_ws: true))
-        check_out(product, vat_id: "NL860999063B01", zip_code: nil, credit_card: { number: "4000003800000008" })
+        check_out(product, vat_id: "NL860999063B01", zip_code: nil, credit_card: { number: "4000003800000008" }) do
+          expect(page).not_to have_text("VAT US$", normalize_ws: true)
+        end
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(3_00)
@@ -420,7 +424,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_selector("[itemprop='offers']", text: "$100")
 
       add_to_cart(@product)
-      check_out(@product, abn_id: "51824753556", zip_code: nil, credit_card: { number: "4000000360000006" })
+      check_out(@product, abn_id: "51824753556", zip_code: nil, credit_card: { number: "4000000360000006" }) do
+        expect(page).not_to have_text("GST")
+      end
 
       purchase = Purchase.last
       expect(purchase.total_transaction_cents).to eq(100_00)
@@ -530,7 +536,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_selector("[itemprop='offers']", text: "$100")
 
         add_to_cart(@product)
-        check_out(@product, gst_id: "T9100001B", zip_code: nil, credit_card: { number: "4000007020000003" })
+        check_out(@product, gst_id: "T9100001B", zip_code: nil, credit_card: { number: "4000007020000003" }) do
+          expect(page).not_to have_text("GST US$8", normalize_ws: true)
+        end
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
@@ -2733,7 +2741,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        check_out(@product, oman_vat_number: "OM1234567890", zip_code: nil, credit_card: { number: "4000000360000006" })
+        check_out(@product, oman_vat_number: "OM1234567890", zip_code: nil, credit_card: { number: "4000000360000006" }) do
+          expect(page).not_to have_text("VAT US$", normalize_ws: true)
+        end
 
         purchase = Purchase.last
         expect(purchase.total_transaction_cents).to eq(100_00)
