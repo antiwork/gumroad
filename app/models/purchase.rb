@@ -21,10 +21,7 @@ class Purchase < ApplicationRecord
   SKU_ID_PREFIX_FOR_PRODUCT_WITH_NO_SKUS = "pid_"
 
   # Gumroad's fees per transaction
-  GUMROAD_FEE_PER_THOUSAND = 85
   GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND = 100
-
-  GUMROAD_NON_PRO_FEE_PERCENTAGE = 60
 
   GUMROAD_FLAT_FEE_PER_THOUSAND = 100
   GUMROAD_DISCOVER_FEE_PER_THOUSAND = 300
@@ -3182,14 +3179,8 @@ class Purchase < ApplicationRecord
       if flat_fee_applicable?
         calculate_custom_fee_per_thousand
         (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
-      elsif seller.tier_pricing_enabled?
-        (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round
       else
-        if charged_using_gumroad_merchant_account?
-          gumroad_fee_percentage_for_non_migrated_account
-        else
-          gumroad_fee_percentage_for_migrated_account
-        end
+        (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round
       end
     end
 
@@ -3214,14 +3205,6 @@ class Purchase < ApplicationRecord
       # 10% flat fee is applicable to this purchase if it is not a recurring charge
       # on a subscription that started before the flat fee was introduced.
       subscription.blank? || subscription.flat_fee_applicable?
-    end
-
-    def gumroad_fee_percentage_for_non_migrated_account
-      GUMROAD_FEE_PER_THOUSAND
-    end
-
-    def gumroad_fee_percentage_for_migrated_account
-      GUMROAD_NON_PRO_FEE_PERCENTAGE
     end
 
     def calculate_taxes
