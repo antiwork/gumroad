@@ -131,6 +131,7 @@ export const Nav = (props: Props) => {
           icon={<HomeAlt2 pack="filled" className="size-5" />}
           href={Routes.dashboard_url(routeParams)}
           exactHrefMatch
+          prefetch={EAGER_PREFETCH}
         />
         <ClientNavLink
           text="Products"
@@ -171,6 +172,7 @@ export const Nav = (props: Props) => {
           text="Sales"
           icon={<DollarCircle pack="filled" className="size-5" />}
           href={Routes.customers_url(routeParams)}
+          prefetch={EAGER_PREFETCH}
         />
         <ClientNavLink
           text="Analytics"
@@ -188,6 +190,7 @@ export const Nav = (props: Props) => {
             text="Payouts"
             icon={<Bank pack="filled" className="size-5" />}
             href={Routes.balance_url(routeParams)}
+            prefetch={EAGER_PREFETCH}
           />
         ) : null}
         {loggedInUser?.policies.community.index ? (
@@ -195,6 +198,7 @@ export const Nav = (props: Props) => {
             text="Community"
             icon={<MessageBubble pack="filled" className="size-5" />}
             href={Routes.communities_path()}
+            prefetch={EAGER_PREFETCH}
             onClick={() => {
               sessionStorage.setItem("communities:referrer", window.location.pathname + window.location.search);
             }}
@@ -215,6 +219,7 @@ export const Nav = (props: Props) => {
             icon={<BookmarkHeart pack="filled" className="size-5" />}
             href={Routes.library_url(routeParams)}
             additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
+            prefetch={EAGER_PREFETCH}
           />
         ) : null}
       </NavSection>
