@@ -15,14 +15,14 @@ class LibraryController < Sellers::BaseController
     authorize Purchase
 
     set_meta_tag(title: "Library")
-    purchase_results, creator_counts, bundles = LibraryPresenter.new(logged_in_user).library_cards
 
     render inertia: "Library/Index", props: {
-      results: purchase_results,
-      creators: creator_counts,
-      bundles:,
-      reviews_page_enabled: Feature.active?(:reviews_page, current_seller),
-      following_wishlists_enabled: Feature.active?(:follow_wishlists, current_seller),
+      reviews_page_enabled: -> { Feature.active?(:reviews_page, current_seller) },
+      following_wishlists_enabled: -> { Feature.active?(:follow_wishlists, current_seller) },
+      library_data: InertiaRails.defer do
+        purchase_results, creator_counts, bundles = LibraryPresenter.new(logged_in_user).library_cards
+        { results: purchase_results, creators: creator_counts, bundles: }
+      end,
     }
   end
 
