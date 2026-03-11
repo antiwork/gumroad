@@ -662,7 +662,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_text("$100")
       add_to_cart(@product)
 
-      check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" }, mva_id: "977074010MVA")
+      check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" }, mva_id: "977074010MVA") do
+        expect(page).not_to have_text("VAT US$", normalize_ws: true)
+      end
 
       purchase = Purchase.last
       expect(purchase.total_transaction_cents).to eq(100_00)
