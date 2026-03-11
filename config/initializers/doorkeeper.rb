@@ -60,6 +60,10 @@ Doorkeeper.configure do
   use_refresh_token
 
   grant_flows %w[authorization_code client_credentials password]
+
+  skip_authorization do |_resource_owner, client|
+    client.uid == OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID
+  end
 end
 
 Doorkeeper.configuration.extend(VisibleScopes)

@@ -361,6 +361,31 @@ describe CreateGlobalSalesTaxSummaryReportJob do
       end
     end
 
+    describe "chunked month processing" do
+      before do
+        product = create(:product, price_cents: 100_00, native_type: "digital")
+
+        travel_to(Time.find_zone("UTC").local(2024, 1, 2)) do
+          create_taxed_purchase(product, country: "United States", zip_code: "98121", gumroad_tax_cents: 1000)
+        end
+
+        travel_to(Time.find_zone("UTC").local(2024, 1, 28)) do
+          create_taxed_purchase(product, country: "United States", zip_code: "98184", gumroad_tax_cents: 1200)
+        end
+      end
+
+      it "aggregates purchases from different date chunks into one report row" do
+        described_class.new.perform(month, year)
+
+        actual_payload = read_csv_from_s3
+        us_wa_row = actual_payload.find { |row| row[0] == "United States" && row[1] == "WA" }
+
+        expect(us_wa_row).to be_present
+        expect(us_wa_row[3]).to eq("2")
+        expect(us_wa_row[4]).to eq("22.00")
+      end
+    end
+
     describe "binary-safe GROUP BY prevents collation merges" do
       before do
         travel_to(Time.find_zone("UTC").local(2024, 1, 15)) do

@@ -27,6 +27,12 @@ Rails.application.routes.draw do
     controllers tokens: "oauth/tokens"
   end
 
+  namespace :oauth do
+    resource :mobile_pre_authorization, only: [:new] do
+      get :switch_account, on: :member
+    end
+  end
+
   # third party analytics (near the top to matches constraint first)
   constraints(host: /#{THIRD_PARTY_ANALYTICS_DOMAIN}/o) do
     get "/:link_id", to: "third_party_analytics#index", as: :third_party_analytics
@@ -693,8 +699,6 @@ Rails.application.routes.draw do
 
     get "/products/:id/edit", to: "links#edit", as: :edit_link
     get "/products/:id/edit/*other", to: "links#edit"
-    get "/products/:id/edit_new", to: "links#edit_new", as: :edit_link_new
-    get "/products/:id/edit_new/*other", to: "links#edit_new"
     get "/products/:id/card", to: "links#card", as: :product_card
     get "/products/search", to: "links#search"
 

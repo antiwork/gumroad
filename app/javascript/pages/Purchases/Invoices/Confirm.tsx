@@ -2,6 +2,7 @@ import { Form, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Input } from "$app/components/ui/Input";
 
@@ -9,12 +10,12 @@ const PurchasesInvoiceConfirmationPage = () => {
   const { url } = usePage();
 
   return (
-    <div>
+    <div className="flex flex-1 flex-col justify-between p-4">
       <Card asChild>
-        <main className="single-page-form horizontal-form mx-auto my-4 h-min max-w-md [&>*]:flex-col [&>*]:items-stretch">
+        <main className="mx-auto h-min w-full max-w-md">
           <CardContent asChild>
             <header className="text-center">
-              <h2 className="grow">Generate invoice</h2>
+              <h2>Generate invoice</h2>
             </header>
           </CardContent>
           <CardContent asChild>
@@ -31,6 +32,7 @@ const PurchasesInvoiceConfirmationPage = () => {
           </CardContent>
         </main>
       </Card>
+      <PoweredByFooter />
     </div>
   );
 };

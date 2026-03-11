@@ -13,29 +13,94 @@ class CreateGlobalSalesTaxSummaryReportJob
     state: "COALESCE(HEX(CAST(purchases.state AS BINARY)), '__NULL__')",
     ip_state: "COALESCE(HEX(CAST(purchases.ip_state AS BINARY)), '__NULL__')"
   }.freeze
+  QUERY_CHUNK_DAYS = 1
 
   def perform(month, year)
     raise ArgumentError, "Invalid month" unless month.in?(1..12)
     raise ArgumentError, "Invalid year" unless year.in?(2014..3200)
 
+    job_started_at = monotonic_seconds
     start_date = Date.new(year, month).beginning_of_day
     end_date = Date.new(year, month).end_of_month.end_of_day
 
     aggregation = Hash.new { |h, k| h[k] = { gmv_cents: 0, order_count: 0, tax_collected_cents: 0 } }
+    base_scope = Purchase.successful
+      .not_fully_refunded
+      .not_chargedback_or_chargedback_reversed
+      .where.not(stripe_transaction_id: nil)
+      .where("gumroad_tax_cents > 0")
+      .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
 
     timeout_seconds = ($redis.get(RedisKey.create_global_sales_tax_summary_report_job_max_execution_time_seconds) || 1.hour).to_i
-    WithMaxExecutionTime.timeout_queries(seconds: timeout_seconds) do
-      purchases_scope = Purchase.successful
-        .not_fully_refunded
-        .not_chargedback_or_chargedback_reversed
-        .where.not(stripe_transaction_id: nil)
-        .where("gumroad_tax_cents > 0")
-        .where("purchases.created_at BETWEEN ? AND ?", start_date, end_date)
-        .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
+    Rails.logger.info("#{self.class.name}: start month=#{month} year=#{year} timeout_seconds=#{timeout_seconds} chunk_days=#{QUERY_CHUNK_DAYS}")
 
+    chunk_index = 0
+    WithMaxExecutionTime.timeout_queries(seconds: timeout_seconds) do
+      each_month_chunk(start_date, end_date) do |chunk_start, chunk_end|
+        chunk_index += 1
+        chunk_started_at = monotonic_seconds
+
+        purchases_scope = base_scope.where("purchases.created_at BETWEEN ? AND ?", chunk_start, chunk_end)
+        stats = process_purchases_scope(purchases_scope, aggregation)
+
+        Rails.logger.info(
+          "#{self.class.name}: chunk_complete " \
+          "month=#{month} year=#{year} index=#{chunk_index} " \
+          "start_date=#{chunk_start.to_date} end_date=#{chunk_end.to_date} " \
+          "grouped_rows=#{stats[:grouped_rows]} grouped_orders=#{stats[:grouped_orders]} total_orders=#{stats[:total_orders]} " \
+          "refund_adjustment_groups=#{stats[:refund_adjustment_groups]} " \
+          "unresolved_us_tuple_groups=#{stats[:unresolved_us_tuple_groups]} " \
+          "fallback_purchases=#{stats[:fallback_purchases]} fallback_partial_refund_purchases=#{stats[:fallback_partial_refund_purchases]} " \
+          "prefetch_seconds=#{stats[:prefetch_seconds]} aggregation_query_seconds=#{stats[:aggregation_query_seconds]} " \
+          "fallback_seconds=#{stats[:fallback_seconds]} elapsed_seconds=#{elapsed_seconds(chunk_started_at)}"
+        )
+      end
+    end
+
+    Rails.logger.info(
+      "#{self.class.name}: aggregation_complete " \
+      "month=#{month} year=#{year} chunks=#{chunk_index} aggregated_locations=#{aggregation.size} elapsed_seconds=#{elapsed_seconds(job_started_at)}"
+    )
+
+    write_and_upload_csv(aggregation, month, year)
+
+    Rails.logger.info(
+      "#{self.class.name}: complete " \
+      "month=#{month} year=#{year} aggregated_locations=#{aggregation.size} elapsed_seconds=#{elapsed_seconds(job_started_at)}"
+    )
+  end
+
+  private
+    def monotonic_seconds
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
+    def elapsed_seconds(started_at)
+      (monotonic_seconds - started_at).round(2)
+    end
+
+    def each_month_chunk(start_date, end_date)
+      chunk_start_date = start_date.to_date
+      final_date = end_date.to_date
+
+      while chunk_start_date <= final_date
+        chunk_end_date = [chunk_start_date + (QUERY_CHUNK_DAYS - 1), final_date].min
+        yield chunk_start_date.beginning_of_day, chunk_end_date.end_of_day
+        chunk_start_date = chunk_end_date + 1
+      end
+    end
+
+    def process_purchases_scope(purchases_scope, aggregation)
+      prefetch_started_at = monotonic_seconds
       refund_adjustments = prefetch_partial_refund_adjustments(purchases_scope)
+      prefetch_seconds = elapsed_seconds(prefetch_started_at)
+
+      aggregation_query_started_at = monotonic_seconds
       rows = aggregation_query_rows(purchases_scope)
+      aggregation_query_seconds = elapsed_seconds(aggregation_query_started_at)
+
       unresolved_us_tuple_keys = []
+      grouped_orders = 0
 
       rows.each do |country, ip_country, zip_code, state, ip_state,
                     country_key, ip_country_key, zip_key, state_key, ip_state_key,
@@ -65,16 +130,30 @@ class CreateGlobalSalesTaxSummaryReportJob
         bucket[:gmv_cents] += net_cents(gmv.to_i, adj&.dig(:gmv_cents))
         bucket[:order_count] += count.to_i
         bucket[:tax_collected_cents] += net_cents(tax.to_i, adj&.dig(:tax_cents))
+        grouped_orders += count.to_i
       end
 
       # US purchases with zip codes not in UsZipCodes need individual GeoIp lookup for state resolution.
-      resolve_geoip_fallback_purchases(purchases_scope, unresolved_us_tuple_keys, aggregation)
+      fallback_started_at = monotonic_seconds
+      fallback_stats = resolve_geoip_fallback_purchases(purchases_scope, unresolved_us_tuple_keys, aggregation)
+      fallback_seconds = elapsed_seconds(fallback_started_at)
+
+      total_orders = grouped_orders + fallback_stats[:fallback_purchases]
+
+      {
+        grouped_rows: rows.size,
+        grouped_orders: grouped_orders,
+        total_orders: total_orders,
+        refund_adjustment_groups: refund_adjustments.size,
+        unresolved_us_tuple_groups: unresolved_us_tuple_keys.size,
+        fallback_purchases: fallback_stats[:fallback_purchases],
+        fallback_partial_refund_purchases: fallback_stats[:fallback_partial_refund_purchases],
+        prefetch_seconds: prefetch_seconds,
+        aggregation_query_seconds: aggregation_query_seconds,
+        fallback_seconds: fallback_seconds,
+      }
     end
 
-    write_and_upload_csv(aggregation, month, year)
-  end
-
-  private
     def prefetch_partial_refund_adjustments(purchases_scope)
       key_sqls = BINARY_SAFE_KEY_COLUMNS.values
 
@@ -86,8 +165,6 @@ class CreateGlobalSalesTaxSummaryReportJob
           Arel.sql("purchases.gumroad_tax_cents"),
           *key_sqls.map { |sql| Arel.sql(sql) }
         )
-
-      Rails.logger.info("CreateGlobalSalesTaxSummaryReportJob: prefetched #{partial_purchases.size} partially refunded purchases")
       return {} if partial_purchases.empty?
 
       refund_sums = refund_totals_by_purchase(partial_purchases.map(&:first))
@@ -125,7 +202,7 @@ class CreateGlobalSalesTaxSummaryReportJob
     end
 
     def resolve_geoip_fallback_purchases(purchases_scope, unresolved_us_tuple_keys, aggregation)
-      return if unresolved_us_tuple_keys.empty?
+      return { fallback_purchases: 0, fallback_partial_refund_purchases: 0 } if unresolved_us_tuple_keys.empty?
 
       conn = ActiveRecord::Base.connection
       key_names = BINARY_SAFE_KEY_COLUMNS.keys
@@ -143,6 +220,9 @@ class CreateGlobalSalesTaxSummaryReportJob
         fallback_scope.where(stripe_partially_refunded: true).pluck(:id)
       )
 
+      fallback_purchases = 0
+      fallback_partial_refund_purchases = 0
+
       fallback_scope.select(:id, :ip_address, :total_transaction_cents, :gumroad_tax_cents, :stripe_partially_refunded)
         .find_each do |purchase|
           state_code = GeoIp.lookup(purchase.ip_address)&.region_name || ""
@@ -151,10 +231,21 @@ class CreateGlobalSalesTaxSummaryReportJob
           bucket[:gmv_cents] += net_cents(purchase.total_transaction_cents, refund&.dig(:total))
           bucket[:order_count] += 1
           bucket[:tax_collected_cents] += net_cents(purchase.gumroad_tax_cents, refund&.dig(:tax))
+
+          fallback_purchases += 1
+          fallback_partial_refund_purchases += 1 if purchase.stripe_partially_refunded?
         end
+
+      {
+        fallback_purchases: fallback_purchases,
+        fallback_partial_refund_purchases: fallback_partial_refund_purchases,
+      }
     end
 
     def write_and_upload_csv(aggregation, month, year)
+      write_started_at = monotonic_seconds
+      Rails.logger.info("#{self.class.name}: csv_write_start month=#{month} year=#{year} aggregated_locations=#{aggregation.size}")
+
       temp_file = Tempfile.new
       temp_file.write(["Country", "State/Province", "GMV", "Number of orders", "Sales tax collected"].to_csv)
 
@@ -174,11 +265,19 @@ class CreateGlobalSalesTaxSummaryReportJob
       s3_filename = "global-sales-tax-summary-#{year}-#{month}-#{SecureRandom.hex(4)}.csv"
       s3_report_key = "sales-tax/global-summary/#{s3_filename}"
       s3_object = Aws::S3::Resource.new.bucket(REPORTING_S3_BUCKET).object(s3_report_key)
+
+      upload_started_at = monotonic_seconds
       s3_object.upload_file(temp_file)
       s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.week.to_i).to_s
 
       AccountingMailer.global_sales_tax_summary_report(month, year, s3_signed_url).deliver_now
       SlackMessageWorker.perform_async("payments", "Global Sales Tax Summary Report", "Global sales tax summary report for #{year}-#{month} is ready - #{s3_signed_url}", "green")
+
+      Rails.logger.info(
+        "#{self.class.name}: csv_write_complete " \
+        "month=#{month} year=#{year} aggregated_locations=#{aggregation.size} s3_report_key=#{s3_report_key} " \
+        "upload_seconds=#{elapsed_seconds(upload_started_at)} elapsed_seconds=#{elapsed_seconds(write_started_at)}"
+      )
     ensure
       temp_file&.close
     end
