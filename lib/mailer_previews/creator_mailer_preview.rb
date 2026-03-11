@@ -62,6 +62,10 @@ class CreatorMailerPreview < ActionMailer::Preview
     )
   end
 
+  def top_creator_announcement
+    CreatorMailer.top_creator_announcement(user_id: seller&.id)
+  end
+
   private
     def seller
       @_seller ||= User.first

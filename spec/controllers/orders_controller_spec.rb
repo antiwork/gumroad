@@ -810,7 +810,7 @@ describe OrdersController, :vcr do
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["success"]).to be(true)
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["requires_card_action"]).to be(true)
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["client_secret"]).to be_present
-                expect(response.parsed_body["line_items"]["unique-uid-0"]["order"]["id"]).to eq(Order.last.external_id)
+                expect(Order.find_by_secure_external_id(response.parsed_body["line_items"]["unique-uid-0"]["order"]["id"], scope: "confirm")).to eq(Order.last)
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["order"]["stripe_connect_account_id"]).to be_nil
                 expect(response.parsed_body["can_buyer_sign_up"]).to eq(true)
               end.to change(Purchase.in_progress, :count).by(1)
@@ -834,7 +834,7 @@ describe OrdersController, :vcr do
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["success"]).to be(true)
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["requires_card_action"]).to be(true)
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["client_secret"]).to be_present
-                expect(response.parsed_body["line_items"]["unique-uid-0"]["order"]["id"]).to eq(Order.last.external_id)
+                expect(Order.find_by_secure_external_id(response.parsed_body["line_items"]["unique-uid-0"]["order"]["id"], scope: "confirm")).to eq(Order.last)
                 expect(response.parsed_body["line_items"]["unique-uid-0"]["order"]["stripe_connect_account_id"]).to eq("acct_1SOb0DEwFhlcVS6d")
                 expect(response.parsed_body["can_buyer_sign_up"]).to eq(true)
               end.to change(Purchase.in_progress, :count).by(1)
@@ -2237,10 +2237,24 @@ describe OrdersController, :vcr do
     let(:chargeable) { build(:chargeable, card: StripePaymentMethodHelper.success_sca_not_required) }
     let(:order) { create(:order) }
     let(:purchase) { create(:purchase_in_progress, chargeable:, was_product_recommended: true, recommended_by: "discover") }
+    let(:secure_id) { order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now) }
 
     before do
       order.purchases << purchase
       purchase.process!
+    end
+
+    it "returns 404 for plain external_id" do
+      expect do
+        post :confirm, params: { id: order.external_id }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "returns 404 for expired token" do
+      expired_token = order.secure_external_id(scope: "confirm", expires_at: 1.minute.ago)
+      expect do
+        post :confirm, params: { id: expired_token }
+      end.to raise_error(ActionController::RoutingError)
     end
 
     context "when purchase was marked as failed" do
@@ -2250,7 +2264,7 @@ describe OrdersController, :vcr do
 
       it "renders an error" do
         post :confirm, params: {
-          id: order.external_id
+          id: secure_id
         }
 
         expect(ChargeProcessor).not_to receive(:confirm_payment_intent!)
@@ -2265,7 +2279,7 @@ describe OrdersController, :vcr do
     context "when SCA fails" do
       it "marks purchase as failed and renders an error" do
         post :confirm, params: {
-          id: order.external_id,
+          id: secure_id,
           stripe_error: {
             code: "invalid_request_error",
             message: "We are unable to authenticate your payment method."
@@ -2287,7 +2301,7 @@ describe OrdersController, :vcr do
       end
 
       it "marks purchase as failed and renders an error" do
-        post :confirm, params: { id: order.external_id }
+        post :confirm, params: { id: secure_id }
 
         expect(purchase.reload.purchase_state).to eq("failed")
 
@@ -2300,7 +2314,7 @@ describe OrdersController, :vcr do
       it "does not delete the bundle cookie" do
         cookies["gumroad-bundle"] = "bundle cookie"
 
-        post :confirm, params: { id: order.external_id }
+        post :confirm, params: { id: secure_id }
         cookies.update(response.cookies)
 
         expect(cookies["gumroad-bundle"]).to be_present
@@ -2316,7 +2330,7 @@ describe OrdersController, :vcr do
         expect(purchase.reload.successful?).to eq(false)
         expect(Purchase::ConfirmService).to receive(:new).with(hash_including(purchase:)).and_call_original
 
-        post :confirm, params: { id: order.external_id }
+        post :confirm, params: { id: secure_id }
 
         line_items = response.parsed_body["line_items"]
         expect(line_items.values.first["success"]).to eq(true)
@@ -2330,7 +2344,7 @@ describe OrdersController, :vcr do
           expect(purchase.reload.successful?).to eq(false)
           expect(Purchase::ConfirmService).to receive(:new).with(hash_including(purchase:)).and_call_original
 
-          post :confirm, params: { id: order.external_id }
+          post :confirm, params: { id: secure_id }
           expect(purchase.reload.successful?).to eq(true)
           expect(SendChargeReceiptJob.jobs.size).to eq(0)
         end
@@ -2343,7 +2357,7 @@ describe OrdersController, :vcr do
           expect(purchase.reload.successful?).to eq(false)
           expect(Purchase::ConfirmService).to receive(:new).with(hash_including(purchase:)).and_call_original
 
-          post :confirm, params: { id: order.external_id }
+          post :confirm, params: { id: secure_id }
           expect(purchase.reload.successful?).to eq(true)
           expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
         end

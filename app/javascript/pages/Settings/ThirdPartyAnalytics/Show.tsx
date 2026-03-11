@@ -269,10 +269,11 @@ const SnippetRow = ({
         </div>
       </RowContent>
       <RowActions>
-        <Button onClick={() => setExpanded((prevExpanded) => !prevExpanded)} aria-label="Edit snippet">
+        <Button size="icon" onClick={() => setExpanded((prevExpanded) => !prevExpanded)} aria-label="Edit snippet">
           {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
         </Button>
         <Button
+          size="icon"
           onClick={() =>
             updateThirdPartyAnalytics({
               snippets: thirdPartyAnalytics.snippets.filter(({ id }) => id !== snippet.id),

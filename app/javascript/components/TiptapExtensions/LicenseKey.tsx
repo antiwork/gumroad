@@ -1,7 +1,6 @@
 import { ChevronDown, ChevronUp, Key } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
-import cx from "classnames";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
@@ -9,7 +8,7 @@ import { assertDefined } from "$app/utils/assert";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Drawer } from "$app/components/SortableList";
-import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -50,62 +49,66 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
-      <Row className={cx("embed", { selected })}>
-        {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
-        <RowContent className="content" contentEditable={false}>
-          <Key pack="filled" className="type-icon size-5" />
-          <div>
-            <h4 className="text-singleline">{licenseKey}</h4>
-            <ul className="inline">
-              <li>{editor.isEditable ? "License key (sample)" : "License key"}</li>
-              {isMultiSeatLicense && seats !== null ? <li>{`${seats} ${seats === 1 ? "Seat" : "Seats"}`}</li> : null}
-            </ul>
-          </div>
-        </RowContent>
+      <NodeActionsWrapper selected={selected} isEditable={editor.isEditable} asChild>
+        <Row className="embed">
+          {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
+          <RowContent className="content" contentEditable={false}>
+            <Key pack="filled" className="type-icon size-5" />
+            <div>
+              <h4 className="text-singleline">{licenseKey}</h4>
+              <ul className="inline">
+                <li>{editor.isEditable ? "License key (sample)" : "License key"}</li>
+                {isMultiSeatLicense && seats !== null ? <li>{`${seats} ${seats === 1 ? "Seat" : "Seats"}`}</li> : null}
+              </ul>
+            </div>
+          </RowContent>
 
-        <RowActions>
-          {licenseKey !== null ? (
-            <CopyToClipboard text={licenseKey}>
-              <Button>Copy</Button>
-            </CopyToClipboard>
+          <RowActions>
+            {licenseKey !== null ? (
+              <CopyToClipboard text={licenseKey}>
+                <Button>Copy</Button>
+              </CopyToClipboard>
+            ) : null}
+            {editor.isEditable ? (
+              <Button
+                size="icon"
+                onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+                aria-label={isDrawerOpen ? "Close drawer" : "Edit"}
+              >
+                {isDrawerOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+              </Button>
+            ) : null}
+          </RowActions>
+          {editor.isEditable && isDrawerOpen ? (
+            <RowDetails asChild>
+              <Drawer>
+                {isMultiSeatLicense !== null ? (
+                  <Switch
+                    checked={isMultiSeatLicense}
+                    onChange={(e) => assertDefined(onIsMultiSeatLicenseChange)(e.target.checked)}
+                    label="Allow customers to choose number of seats per license purchased"
+                  />
+                ) : null}
+                {productId ? (
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={`product_id-${uid}`}>
+                        Use your product ID to verify licenses through the API.
+                      </Label>
+                    </FieldsetTitle>
+                    <div className="flex gap-2">
+                      <Input id={`product_id-${uid}`} type="text" value={productId} className="flex-1" readOnly />
+                      <CopyToClipboard text={productId} tooltipPosition="bottom">
+                        <Button>Copy</Button>
+                      </CopyToClipboard>
+                    </div>
+                  </Fieldset>
+                ) : null}
+              </Drawer>
+            </RowDetails>
           ) : null}
-          {editor.isEditable ? (
-            <Button
-              size="icon"
-              onClick={() => setIsDrawerOpen(!isDrawerOpen)}
-              aria-label={isDrawerOpen ? "Close drawer" : "Edit"}
-            >
-              {isDrawerOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
-            </Button>
-          ) : null}
-        </RowActions>
-        {editor.isEditable && isDrawerOpen ? (
-          <RowDetails asChild>
-            <Drawer>
-              {isMultiSeatLicense !== null ? (
-                <Switch
-                  checked={isMultiSeatLicense}
-                  onChange={(e) => assertDefined(onIsMultiSeatLicenseChange)(e.target.checked)}
-                  label="Allow customers to choose number of seats per license purchased"
-                />
-              ) : null}
-              {productId ? (
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={`product_id-${uid}`}>Use your product ID to verify licenses through the API.</Label>
-                  </FieldsetTitle>
-                  <div className="flex gap-2">
-                    <Input id={`product_id-${uid}`} type="text" value={productId} className="flex-1" readOnly />
-                    <CopyToClipboard text={productId} tooltipPosition="bottom">
-                      <Button>Copy</Button>
-                    </CopyToClipboard>
-                  </div>
-                </Fieldset>
-              ) : null}
-            </Drawer>
-          </RowDetails>
-        ) : null}
-      </Row>
+        </Row>
+      </NodeActionsWrapper>
     </NodeViewWrapper>
   );
 };

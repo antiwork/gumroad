@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Order < ApplicationRecord
-  include ExternalId, Orderable, FlagShihTzu
+  include ExternalId, SecureExternalId, Orderable, FlagShihTzu
 
   belongs_to :purchaser, class_name: "User", optional: true
   has_many :order_purchases, dependent: :destroy

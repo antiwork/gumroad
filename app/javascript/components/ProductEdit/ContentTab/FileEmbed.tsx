@@ -35,7 +35,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
-import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -382,331 +382,345 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
       className={cx({ "relative rounded-sm border border-dashed border-accent": isDropZone })}
       contentEditable={false}
     >
-      <Row
-        className={cx("embed", { selected, [connectedFileRowClassName(isLastInGroup)]: isConnectedRow })}
-        role={isInGroup ? "treeitem" : undefined}
-      >
-        {file.is_streamable && !node.attrs.collapsed ? (
-          <RowDetails asChild>
-            {loadingVideo ? (
-              <figure className="preview">
-                <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
-                  <LoadingSpinner className="size-16" />
-                </div>
-              </figure>
-            ) : file.thumbnail ? (
-              showingVideoPlayer ? (
-                <div className="preview">
-                  <div id={`${uid}-video`}></div>
-                </div>
-              ) : (
+      <NodeActionsWrapper selected={selected} asChild>
+        <Row
+          className={cx("embed", { [connectedFileRowClassName(isLastInGroup)]: isConnectedRow })}
+          role={isInGroup ? "treeitem" : undefined}
+        >
+          {file.is_streamable && !node.attrs.collapsed ? (
+            <RowDetails asChild>
+              {loadingVideo ? (
                 <figure className="preview">
-                  <img
-                    src={file.thumbnail.url}
-                    style={{
-                      position: "absolute",
-                      height: "100%",
-                      objectFit: "cover",
-                      borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
-                    }}
-                  />
-                  <button
-                    className="cursor-pointer underline all-unset"
-                    style={{
-                      position: "absolute",
-                      top: "50%",
-                      left: "50%",
-                      transform: "translate(-50%, -50%)",
-                    }}
-                    onClick={() => setShowingVideoPlayer(true)}
-                    aria-label="Watch"
-                  >
-                    <PlayVideoIcon />
-                  </button>
-                  <div style={{ position: "absolute", top: "var(--spacer-5)", right: "var(--spacer-5)" }}>
-                    <WithTooltip tip="Replace thumbnail">
-                      <label
-                        className={buttonVariants({ size: "default", color: "primary" })}
-                        aria-label="Replace thumbnail"
-                      >
-                        {thumbnailInput}
-                        <ArrowUp pack="filled" className="size-5" />
-                      </label>
-                    </WithTooltip>
+                  <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
+                    <LoadingSpinner className="size-16" />
                   </div>
                 </figure>
-              )
-            ) : (
-              <div className="preview">
-                <Placeholder>
-                  <label className={buttonVariants({ size: "default", color: "primary" })}>
-                    {thumbnailInput}
-                    <ArrowUp pack="filled" className="size-5" />
-                    Upload a thumbnail
-                  </label>
-                  <div>
-                    The thumbnail image is shown as a preview in the embedded video player. Your image should have a
-                    16:9 aspect ratio, at least 1280x720px, and be in JPG, PNG, or GIF format.
+              ) : file.thumbnail ? (
+                showingVideoPlayer ? (
+                  <div className="preview">
+                    <div id={`${uid}-video`}></div>
                   </div>
-                  <Separator>or</Separator>
-                  <div>
-                    <Button onClick={generateThumbnail}>Generate a thumbnail</Button>
-                  </div>
-                </Placeholder>
-              </div>
-            )}
-          </RowDetails>
-        ) : null}
-        <NodeActionsMenu
-          editor={editor}
-          actions={!isInGroup || fileEmbedGroups.length > 0 || parentNode.childCount > 1 ? [folderAction] : []}
-        />
-        <RowContent className="content">
-          {file.is_streamable && node.attrs.collapsed ? (
-            <label className="thumbnail" aria-label="Upload a thumbnail">
-              {loadingVideo ? (
-                <div style={{ placeSelf: "center" }}>
-                  <LoadingSpinner className="size-12" />
-                </div>
-              ) : (
-                <>
-                  {file.thumbnail ? <img src={file.thumbnail.url} /> : null}
-                  <Placeholder>
-                    {thumbnailInput}
-                    <ArrowUp pack="filled" className="size-5" />
-                  </Placeholder>
-                </>
-              )}
-            </label>
-          ) : null}
-          <FileRowContent
-            extension={file.extension}
-            name={file.display_name}
-            externalLinkUrl={file.url}
-            isUploading={!isComplete}
-            hideIcon={file.is_streamable}
-            details={
-              <>
-                {file.extension ? <li>{file.extension}</li> : null}
-
-                <li>
-                  {file.extension === "URL"
-                    ? file.url
-                    : uploadProgress != null
-                      ? summarizeUploadProgress(uploadProgress.percent, uploadProgress.bitrate, file.file_size ?? 0)
-                      : FileUtils.getFullFileSizeString(file.file_size ?? 0)}
-                </li>
-
-                {file.is_streamable && isComplete ? (
-                  <li>
-                    <button className="cursor-pointer underline all-unset" onClick={() => setExpanded(!expanded)}>
-                      {file.subtitle_files.length}{" "}
-                      {file.subtitle_files.length === 1 ? "closed caption" : "closed captions"}
+                ) : (
+                  <figure className="preview">
+                    <img
+                      src={file.thumbnail.url}
+                      style={{
+                        position: "absolute",
+                        height: "100%",
+                        objectFit: "cover",
+                        borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
+                      }}
+                    />
+                    <button
+                      className="cursor-pointer underline all-unset"
+                      style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%)",
+                      }}
+                      onClick={() => setShowingVideoPlayer(true)}
+                      aria-label="Watch"
+                    >
+                      <PlayVideoIcon />
                     </button>
-                  </li>
-                ) : null}
-
-                {isComplete && file.is_transcoding_in_progress ? <li>Transcoding in progress</li> : null}
-              </>
-            }
-          />
-        </RowContent>
-
-        <RowActions>
-          {downloadUrl && !file.stream_only ? (
-            <NavigationButton
-              href={downloadUrl}
-              download={`${file.display_name}.${file.extension?.toLocaleLowerCase()}`}
-            >
-              Download
-            </NavigationButton>
-          ) : null}
-
-          {file.is_streamable ? (
-            <Popover>
-              <PopoverAnchor>
-                <PopoverTrigger aria-label="Thumbnail view" asChild>
-                  <Button size="icon">
-                    {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
-                  </Button>
-                </PopoverTrigger>
-              </PopoverAnchor>
-              <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-                <div role="menu">
-                  <PopoverClose asChild>
-                    <div
-                      role="menuitem"
-                      onClick={() => {
-                        updateAttributes({ collapsed: !node.attrs.collapsed });
-                      }}
-                    >
-                      {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
-                      <span>{node.attrs.collapsed ? "Expand selected" : "Collapse selected"}</span>
+                    <div style={{ position: "absolute", top: "var(--spacer-5)", right: "var(--spacer-5)" }}>
+                      <WithTooltip tip="Replace thumbnail">
+                        <label
+                          className={buttonVariants({ size: "default", color: "primary" })}
+                          aria-label="Replace thumbnail"
+                        >
+                          {thumbnailInput}
+                          <ArrowUp pack="filled" className="size-5" />
+                        </label>
+                      </WithTooltip>
                     </div>
-                  </PopoverClose>
-                  <PopoverClose asChild>
-                    <div
-                      role="menuitem"
-                      onClick={() => {
-                        editor.commands.command(({ tr }) => {
-                          const targetState = !node.attrs.collapsed;
-                          tr.doc.descendants((node, pos) => {
-                            if (node.type.name === FileEmbed.name && node.attrs.collapsed !== targetState) {
-                              tr.setNodeMarkup(pos, null, {
-                                ...node.attrs,
-                                collapsed: targetState,
-                              });
-                            }
-                          });
-                          return true;
-                        });
-                      }}
-                    >
-                      {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
-                      <span>{node.attrs.collapsed ? "Expand all thumbnails" : "Collapse all thumbnails"}</span>
+                  </figure>
+                )
+              ) : (
+                <div className="preview">
+                  <Placeholder>
+                    <label className={buttonVariants({ size: "default", color: "primary" })}>
+                      {thumbnailInput}
+                      <ArrowUp pack="filled" className="size-5" />
+                      Upload a thumbnail
+                    </label>
+                    <div>
+                      The thumbnail image is shown as a preview in the embedded video player. Your image should have a
+                      16:9 aspect ratio, at least 1280x720px, and be in JPG, PNG, or GIF format.
                     </div>
-                  </PopoverClose>
+                    <Separator>or</Separator>
+                    <div>
+                      <Button onClick={generateThumbnail}>Generate a thumbnail</Button>
+                    </div>
+                  </Placeholder>
                 </div>
-              </PopoverContent>
-            </Popover>
+              )}
+            </RowDetails>
           ) : null}
-
-          {!file.is_streamable || isComplete ? (
-            <Button size="icon" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Close drawer" : "Edit"}>
-              {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
-            </Button>
-          ) : null}
-
-          {!isComplete ? (
-            <Button color="danger" outline onClick={onCancel} aria-label="Cancel">
-              Cancel
-            </Button>
-          ) : null}
-
-          {FileUtils.isAudioExtension(file.extension) ? (
-            <Button color="primary" onClick={() => setShowingAudioDrawer(!showingAudioDrawer)}>
-              {showingAudioDrawer ? "Close" : "Play"}
-            </Button>
-          ) : null}
-
-          {file.is_streamable && node.attrs.collapsed ? (
-            <Button
-              color={showingVideoPlayer ? undefined : "primary"}
-              onClick={() => setShowingVideoPlayer(!showingVideoPlayer)}
-            >
-              {showingVideoPlayer ? "Close" : "Play"}
-            </Button>
-          ) : null}
-        </RowActions>
-
-        {file.description?.trim() && !expanded ? (
-          <RowDetails>
-            <p className="ml-2 whitespace-pre-wrap">{file.description}</p>
-          </RowDetails>
-        ) : null}
-
-        {showingAudioDrawer && downloadUrl ? (
-          <RowDetails>
-            <AudioPlayer src={downloadUrl} />
-          </RowDetails>
-        ) : null}
-
-        {expanded ? (
-          <RowDetails className="drawer flex flex-col gap-4">
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}name`}>Name</Label>
-              </FieldsetTitle>
-              <Input
-                type="text"
-                id={`${uid}name`}
-                value={file.display_name}
-                onChange={(evt) => updateFile({ display_name: evt.target.value })}
-                placeholder="Name"
-              />
-            </Fieldset>
-
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}description`}>Description</Label>
-              </FieldsetTitle>
-              <Textarea
-                id={`${uid}description`}
-                rows={3}
-                maxLength={65_535}
-                value={file.description ?? ""}
-                onChange={(evt) => updateFile({ description: evt.target.value })}
-                placeholder="Description"
-              />
-            </Fieldset>
-
-            {FileUtils.isDocumentExtension(file.extension) ? (
-              <Fieldset>
-                <FieldsetTitle>
-                  <Label htmlFor={`${uid}isbn`}>ISBN</Label>
-                </FieldsetTitle>
-                <Input
-                  type="text"
-                  id={`${uid}isbn`}
-                  value={file.isbn ?? ""}
-                  onChange={(evt) => updateFile({ isbn: evt.target.value })}
-                  placeholder="ISBN"
-                />
-              </Fieldset>
-            ) : null}
-
-            {file.is_pdf ? (
-              <Switch
-                checked={file.pdf_stamp_enabled}
-                onChange={(e) => updateFile({ pdf_stamp_enabled: e.target.checked })}
-                label={
+          <NodeActionsMenu
+            editor={editor}
+            actions={!isInGroup || fileEmbedGroups.length > 0 || parentNode.childCount > 1 ? [folderAction] : []}
+          />
+          <RowContent className="content">
+            {file.is_streamable && node.attrs.collapsed ? (
+              <label className="thumbnail" aria-label="Upload a thumbnail">
+                {loadingVideo ? (
+                  <div style={{ placeSelf: "center" }}>
+                    <LoadingSpinner className="size-12" />
+                  </div>
+                ) : (
                   <>
-                    Stamp this PDF with buyer information{" "}
-                    <a href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">
-                      Learn more
-                    </a>
+                    {file.thumbnail ? <img src={file.thumbnail.url} /> : null}
+                    <Placeholder>
+                      {thumbnailInput}
+                      <ArrowUp pack="filled" className="size-5" />
+                    </Placeholder>
                   </>
-                }
-              />
+                )}
+              </label>
+            ) : null}
+            <FileRowContent
+              extension={file.extension}
+              name={file.display_name}
+              externalLinkUrl={file.url}
+              isUploading={!isComplete}
+              hideIcon={file.is_streamable}
+              details={
+                <>
+                  {file.extension ? <li>{file.extension}</li> : null}
+
+                  <li>
+                    {file.extension === "URL"
+                      ? file.url
+                      : uploadProgress != null
+                        ? summarizeUploadProgress(uploadProgress.percent, uploadProgress.bitrate, file.file_size ?? 0)
+                        : FileUtils.getFullFileSizeString(file.file_size ?? 0)}
+                  </li>
+
+                  {file.is_streamable && isComplete ? (
+                    <li>
+                      <button className="cursor-pointer underline all-unset" onClick={() => setExpanded(!expanded)}>
+                        {file.subtitle_files.length}{" "}
+                        {file.subtitle_files.length === 1 ? "closed caption" : "closed captions"}
+                      </button>
+                    </li>
+                  ) : null}
+
+                  {isComplete && file.is_transcoding_in_progress ? <li>Transcoding in progress</li> : null}
+                </>
+              }
+            />
+          </RowContent>
+
+          <RowActions>
+            {downloadUrl && !file.stream_only ? (
+              <NavigationButton
+                href={downloadUrl}
+                download={`${file.display_name}.${file.extension?.toLocaleLowerCase()}`}
+              >
+                Download
+              </NavigationButton>
             ) : null}
 
             {file.is_streamable ? (
-              <>
-                <Fieldset>
-                  <FieldsetTitle>Subtitles</FieldsetTitle>
-                  <div className="flex flex-col gap-4">
-                    <SubtitleList
-                      subtitleFiles={file.subtitle_files}
-                      onRemoveSubtitle={removeSubtitle}
-                      onCancelSubtitleUpload={removeSubtitle}
-                      onChangeSubtitleLanguage={(url, language) =>
-                        updateFile({
-                          subtitle_files: file.subtitle_files.map((subtitle) =>
-                            subtitle.url === url ? { ...subtitle, language } : subtitle,
-                          ),
-                        })
-                      }
-                    />
-                    <SubtitleUploadBox onUploadFiles={uploadSubtitles} />
+              <Popover>
+                <PopoverAnchor>
+                  <PopoverTrigger aria-label="Thumbnail view" asChild>
+                    <Button size="icon">
+                      {node.attrs.collapsed ? <Fullscreen className="size-5" /> : <FullscreenExit className="size-5" />}
+                    </Button>
+                  </PopoverTrigger>
+                </PopoverAnchor>
+                <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+                  <div role="menu">
+                    <PopoverClose asChild>
+                      <div
+                        role="menuitem"
+                        onClick={() => {
+                          updateAttributes({ collapsed: !node.attrs.collapsed });
+                        }}
+                      >
+                        {node.attrs.collapsed ? (
+                          <Fullscreen className="size-5" />
+                        ) : (
+                          <FullscreenExit className="size-5" />
+                        )}
+                        <span>{node.attrs.collapsed ? "Expand selected" : "Collapse selected"}</span>
+                      </div>
+                    </PopoverClose>
+                    <PopoverClose asChild>
+                      <div
+                        role="menuitem"
+                        onClick={() => {
+                          editor.commands.command(({ tr }) => {
+                            const targetState = !node.attrs.collapsed;
+                            tr.doc.descendants((node, pos) => {
+                              if (node.type.name === FileEmbed.name && node.attrs.collapsed !== targetState) {
+                                tr.setNodeMarkup(pos, null, {
+                                  ...node.attrs,
+                                  collapsed: targetState,
+                                });
+                              }
+                            });
+                            return true;
+                          });
+                        }}
+                      >
+                        {node.attrs.collapsed ? (
+                          <Fullscreen className="size-5" />
+                        ) : (
+                          <FullscreenExit className="size-5" />
+                        )}
+                        <span>{node.attrs.collapsed ? "Expand all thumbnails" : "Collapse all thumbnails"}</span>
+                      </div>
+                    </PopoverClose>
                   </div>
+                </PopoverContent>
+              </Popover>
+            ) : null}
+
+            {!file.is_streamable || isComplete ? (
+              <Button
+                size="icon"
+                onClick={() => setExpanded(!expanded)}
+                aria-label={expanded ? "Close drawer" : "Edit"}
+              >
+                {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+              </Button>
+            ) : null}
+
+            {!isComplete ? (
+              <Button color="danger" outline onClick={onCancel} aria-label="Cancel">
+                Cancel
+              </Button>
+            ) : null}
+
+            {FileUtils.isAudioExtension(file.extension) ? (
+              <Button color="primary" onClick={() => setShowingAudioDrawer(!showingAudioDrawer)}>
+                {showingAudioDrawer ? "Close" : "Play"}
+              </Button>
+            ) : null}
+
+            {file.is_streamable && node.attrs.collapsed ? (
+              <Button
+                color={showingVideoPlayer ? undefined : "primary"}
+                onClick={() => setShowingVideoPlayer(!showingVideoPlayer)}
+              >
+                {showingVideoPlayer ? "Close" : "Play"}
+              </Button>
+            ) : null}
+          </RowActions>
+
+          {file.description?.trim() && !expanded ? (
+            <RowDetails>
+              <p className="ml-2 whitespace-pre-wrap">{file.description}</p>
+            </RowDetails>
+          ) : null}
+
+          {showingAudioDrawer && downloadUrl ? (
+            <RowDetails>
+              <AudioPlayer src={downloadUrl} />
+            </RowDetails>
+          ) : null}
+
+          {expanded ? (
+            <RowDetails className="drawer flex flex-col gap-4">
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}name`}>Name</Label>
+                </FieldsetTitle>
+                <Input
+                  type="text"
+                  id={`${uid}name`}
+                  value={file.display_name}
+                  onChange={(evt) => updateFile({ display_name: evt.target.value })}
+                  placeholder="Name"
+                />
+              </Fieldset>
+
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}description`}>Description</Label>
+                </FieldsetTitle>
+                <Textarea
+                  id={`${uid}description`}
+                  rows={3}
+                  maxLength={65_535}
+                  value={file.description ?? ""}
+                  onChange={(evt) => updateFile({ description: evt.target.value })}
+                  placeholder="Description"
+                />
+              </Fieldset>
+
+              {FileUtils.isDocumentExtension(file.extension) ? (
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}isbn`}>ISBN</Label>
+                  </FieldsetTitle>
+                  <Input
+                    type="text"
+                    id={`${uid}isbn`}
+                    value={file.isbn ?? ""}
+                    onChange={(evt) => updateFile({ isbn: evt.target.value })}
+                    placeholder="ISBN"
+                  />
                 </Fieldset>
+              ) : null}
+
+              {file.is_pdf ? (
                 <Switch
-                  checked={file.stream_only}
-                  onChange={(e) => updateFile({ stream_only: e.target.checked })}
+                  checked={file.pdf_stamp_enabled}
+                  onChange={(e) => updateFile({ pdf_stamp_enabled: e.target.checked })}
                   label={
                     <>
-                      Disable file downloads (stream only){" "}
-                      <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
+                      Stamp this PDF with buyer information{" "}
+                      <a href="/help/article/130-pdf-stamping" target="_blank" rel="noreferrer">
                         Learn more
                       </a>
                     </>
                   }
                 />
-              </>
-            ) : null}
-          </RowDetails>
-        ) : null}
-      </Row>
+              ) : null}
+
+              {file.is_streamable ? (
+                <>
+                  <Fieldset>
+                    <FieldsetTitle>Subtitles</FieldsetTitle>
+                    <div className="flex flex-col gap-4">
+                      <SubtitleList
+                        subtitleFiles={file.subtitle_files}
+                        onRemoveSubtitle={removeSubtitle}
+                        onCancelSubtitleUpload={removeSubtitle}
+                        onChangeSubtitleLanguage={(url, language) =>
+                          updateFile({
+                            subtitle_files: file.subtitle_files.map((subtitle) =>
+                              subtitle.url === url ? { ...subtitle, language } : subtitle,
+                            ),
+                          })
+                        }
+                      />
+                      <SubtitleUploadBox onUploadFiles={uploadSubtitles} />
+                    </div>
+                  </Fieldset>
+                  <Switch
+                    checked={file.stream_only}
+                    onChange={(e) => updateFile({ stream_only: e.target.checked })}
+                    label={
+                      <>
+                        Disable file downloads (stream only){" "}
+                        <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
+                          Learn more
+                        </a>
+                      </>
+                    }
+                  />
+                </>
+              ) : null}
+            </RowDetails>
+          ) : null}
+        </Row>
+      </NodeActionsWrapper>
       {isDropZone ? (
         <div className="absolute inset-0 bg-backdrop">
           <div

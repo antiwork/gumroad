@@ -111,6 +111,24 @@ describe Subscription::Restartable, :sidekiq_inline do
       end
     end
 
+    context "when user has a deactivated test subscription" do
+      let!(:subscription) do
+        create_subscription_with_purchase(
+          product: product,
+          purchaser: buyer,
+          is_test_subscription: true,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "returns nil (test subscriptions are excluded)" do
+        result = Subscription.restartable_for_product_and_buyer(product: product, buyer: buyer)
+        expect(result).to be_nil
+      end
+    end
+
     context "when user has no subscription" do
       it "returns nil" do
         result = Subscription.restartable_for_product_and_buyer(product: product, buyer: buyer)
@@ -170,6 +188,24 @@ describe Subscription::Restartable, :sidekiq_inline do
       it "handles email case insensitivity" do
         result = Subscription.restartable_for_product_and_email(product: product, email: buyer.email.upcase)
         expect(result).to eq(subscription)
+      end
+    end
+
+    context "when user has a deactivated test subscription" do
+      let!(:subscription) do
+        create_subscription_with_purchase(
+          product: product,
+          purchaser: buyer,
+          is_test_subscription: true,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "returns nil (test subscriptions are excluded)" do
+        result = Subscription.restartable_for_product_and_email(product: product, email: buyer.email)
+        expect(result).to be_nil
       end
     end
   end
@@ -249,6 +285,21 @@ describe Subscription::Restartable, :sidekiq_inline do
         expect(result).to be_nil
       end
     end
+
+    context "when user has a test subscription" do
+      let!(:subscription) do
+        create_subscription_with_purchase(
+          product: product,
+          purchaser: buyer,
+          is_test_subscription: true
+        )
+      end
+
+      it "returns nil (test subscriptions are excluded)" do
+        result = Subscription.active_for_product_and_buyer(product: product, buyer: buyer)
+        expect(result).to be_nil
+      end
+    end
   end
 
   describe ".active_for_product_and_email" do
@@ -265,6 +316,21 @@ describe Subscription::Restartable, :sidekiq_inline do
       it "handles email case insensitivity" do
         result = Subscription.active_for_product_and_email(product: product, email: buyer.email.upcase)
         expect(result).to eq(subscription)
+      end
+    end
+
+    context "when user has a test subscription" do
+      let!(:subscription) do
+        create_subscription_with_purchase(
+          product: product,
+          purchaser: buyer,
+          is_test_subscription: true
+        )
+      end
+
+      it "returns nil (test subscriptions are excluded)" do
+        result = Subscription.active_for_product_and_email(product: product, email: buyer.email)
+        expect(result).to be_nil
       end
     end
   end

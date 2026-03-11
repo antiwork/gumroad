@@ -8,6 +8,7 @@ module Subscription::Restartable
       .where(ended_at: nil)
       .where(user_id: buyer.id)
       .where.not(deactivated_at: nil)
+      .not_is_test_subscription
       .not_cancelled_by_admin
       .order(created_at: :desc)
       .first
@@ -21,6 +22,7 @@ module Subscription::Restartable
       .joins(:original_purchase)
       .where(purchases: { email: email.to_s.downcase.strip })
       .where.not(deactivated_at: nil)
+      .not_is_test_subscription
       .not_cancelled_by_admin
       .order(created_at: :desc)
       .first
@@ -34,6 +36,7 @@ module Subscription::Restartable
       .where(failed_at: nil)
       .where("cancelled_at IS NULL OR cancelled_at > ?", Time.current)
       .where(user_id: buyer.id)
+      .not_is_test_subscription
       .lock
       .first
   end
@@ -47,6 +50,7 @@ module Subscription::Restartable
       .where("cancelled_at IS NULL OR cancelled_at > ?", Time.current)
       .joins(:original_purchase)
       .where(purchases: { email: email.to_s.downcase.strip })
+      .not_is_test_subscription
       .lock
       .first
   end

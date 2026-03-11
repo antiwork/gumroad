@@ -3625,5 +3625,40 @@ describe Purchase::CreateService, :vcr do
         expect(restartable).to be_nil
       end
     end
+
+    context "when buyer has a test subscription" do
+      before do
+        create_subscription_for(product: membership_product, purchaser: buyer, email: email, is_test_subscription: true)
+      end
+
+      it "does not treat it as an active subscription" do
+        service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:)
+        _, error = service.send(:handle_existing_subscription)
+
+        expect(error).to be_nil
+      end
+    end
+
+    context "when buyer has a deactivated test subscription" do
+      before do
+        create_subscription_for(
+          product: membership_product,
+          purchaser: buyer,
+          email: email,
+          is_test_subscription: true,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "does not treat it as a restartable subscription" do
+        service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:)
+        purchase, error = service.send(:handle_existing_subscription)
+
+        expect(purchase).to be_nil
+        expect(error).to be_nil
+      end
+    end
   end
 end

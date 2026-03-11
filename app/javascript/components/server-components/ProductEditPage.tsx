@@ -2,8 +2,7 @@ import { DirectUpload } from "@rails/activestorage";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
-import { StaticRouterProvider } from "react-router-dom/server";
-import { cast, createCast } from "ts-safe-cast";
+import { cast } from "ts-safe-cast";
 
 import { saveProduct } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
@@ -13,7 +12,6 @@ import { CurrencyCode } from "$app/utils/currency";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { assertResponseError, request } from "$app/utils/request";
-import { buildStaticRouter, GlobalProps, register } from "$app/utils/serverComponentUtil";
 
 import { Seller } from "$app/components/Product";
 import { ContentTab } from "$app/components/ProductEdit/ContentTab";
@@ -158,7 +156,7 @@ const ProductEditPage = (props: Props) => {
       return updated;
     });
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
-  const router = createBrowserRouter(routes);
+  const [router] = React.useState(() => createBrowserRouter(routes));
 
   const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
@@ -257,21 +255,5 @@ const ProductEditPage = (props: Props) => {
   );
 };
 
-const ProductEditRouter = async (global: GlobalProps) => {
-  const { router, context } = await buildStaticRouter(global, routes);
-  const component = (props: Props) => (
-    <ProductEditContext.Provider
-      value={{
-        ...createContextValue(props),
-        filesById: buildFilesById(props.id, props.product.files),
-        setCurrencyType: (_currency) => {}, // no-op
-      }}
-    >
-      <StaticRouterProvider router={router} context={context} nonce={global.csp_nonce} />
-    </ProductEditContext.Provider>
-  );
-  component.displayName = "ProductEditRouter";
-  return component;
-};
-
-export default register({ component: ProductEditPage, ssrComponent: ProductEditRouter, propParser: createCast() });
+export { ProductEditPage };
+export type { Props as ProductEditPageProps };

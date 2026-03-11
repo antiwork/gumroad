@@ -30,6 +30,8 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { ProgressPie } from "$app/components/ProgressPie";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
@@ -757,8 +759,8 @@ const SendToKindleContainer = ({
   return (
     <div>
       <div className="flex gap-2">
-        <fieldset className={cx("flex-1", { danger: hasError })}>
-          <input
+        <Fieldset className="flex-1" state={hasError ? "danger" : undefined}>
+          <Input
             type="text"
             value={emailEntry}
             onChange={(evt) => {
@@ -768,14 +770,14 @@ const SendToKindleContainer = ({
             placeholder="e7@kindle.com"
             autoFocus
           />
-          <small>
+          <FieldsetDescription>
             You'll need to add noreply@customers.gumroad.com to your{" "}
             <a href="https://www.amazon.com/gp/help/customer/display.html?nodeId=GX9XLEVV8G4DB28H">
               list of approved personal document emails
             </a>
             .
-          </small>
-        </fieldset>
+          </FieldsetDescription>
+        </Fieldset>
         <Button color="primary" onClick={() => void sendToKindle()} style={{ alignSelf: "flex-start" }}>
           Send
         </Button>

@@ -27,15 +27,14 @@ import { EditorState, Selection } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { EditorContent, Extensions, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import cx from "classnames";
 import { partition } from "lodash-es";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { Separator } from "$app/components/Separator";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { CodeBlock } from "$app/components/TiptapExtensions/CodeBlock";
 import { Image, uploadImages } from "$app/components/TiptapExtensions/Image";
@@ -119,7 +118,7 @@ export const MenuItem = ({
   <MenuItemTooltip tip={name} position={position}>
     <button
       type="button"
-      className="toolbar-item cursor-pointer all-unset"
+      className="cursor-pointer rounded px-2 py-1 all-unset hover:bg-active-bg aria-pressed:text-accent"
       aria-pressed={active}
       disabled={disabled}
       aria-label={name}
@@ -142,7 +141,7 @@ export const PopoverMenuItem = ({
   <Popover>
     <PopoverTrigger aria-label={name} className="all-unset">
       <MenuItemTooltip tip={name}>
-        <div className="toolbar-item flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded px-2 py-1 hover:bg-active-bg">
           {icon}
           <span>{name}</span>
         </div>
@@ -282,7 +281,11 @@ export const useRichTextEditor = ({
     editable,
     editorProps: {
       attributes: {
-        ...(className ? { class: className } : {}),
+        class: classNames(
+          "min-h-full focus-within:outline-none",
+          editable && "whitespace-break-spaces rounded-t-none",
+          className,
+        ),
         ...(ariaLabel ? { "aria-label": ariaLabel } : {}),
         ...(id ? { id } : {}),
       },
@@ -418,11 +421,25 @@ export const RichTextEditorToolbar = ({
     <ToolbarTooltipContext.Provider value={showTooltipState}>
       <div
         role="toolbar"
-        className={cx("rich-text-editor-toolbar", color, className)}
+        className={classNames(
+          "sticky top-0 z-1 flex flex-wrap gap-1 px-2 py-1 text-foreground",
+          color === "ghost" ? "bg-background" : "bg-primary text-primary-foreground",
+          className,
+        )}
+        style={
+          color === "primary"
+            ? {
+                // Fix muted to work with the inverted background. This is necessary because muted is currently semitransparent,
+                // but when we're fully in Tailwind we can remove the --gray-3 definition, make muted a solid color, and remove this.
+                "--color-muted":
+                  "color-mix(in srgb, var(--color-primary-foreground) calc(var(--gray-3) * 100%), transparent)",
+              }
+            : {}
+        }
         onMouseLeave={() => setShowTooltip(false)}
       >
         <Popover>
-          <PopoverTrigger aria-label="Text formats" className="toolbar-item all-unset">
+          <PopoverTrigger aria-label="Text formats" className="rounded px-2 py-1 all-unset hover:bg-active-bg">
             {activeFormatOption?.name ?? "Text"} <ChevronDown className="size-5" />
           </PopoverTrigger>
           <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -432,6 +449,7 @@ export const RichTextEditorToolbar = ({
                   <div
                     role="menuitemradio"
                     aria-checked={option === activeFormatOption}
+                    className="aria-checked:bg-active-bg"
                     onClick={() => {
                       const commands = editor.chain();
                       if (isList(option.type, editor.extensionManager.extensions))
@@ -448,7 +466,11 @@ export const RichTextEditorToolbar = ({
             </div>
           </PopoverContent>
         </Popover>
-        <Separator aria-orientation="vertical" />
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          className="m-2 hidden border-r border-solid border-muted sm:flex"
+        />
         <MenuItem
           name="Bold"
           icon={<Bold className="size-5" />}
@@ -479,7 +501,11 @@ export const RichTextEditorToolbar = ({
           active={editor.isActive("blockquote")}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         />
-        <Separator aria-orientation="vertical" />
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          className="m-2 hidden border-r border-solid border-muted sm:flex"
+        />
         {custom ?? (
           <>
             {topMenuItems.map((extension, i) => (
@@ -498,9 +524,13 @@ export const RichTextEditorToolbar = ({
 
             {insertMenuItems.length > 1 ? (
               <>
-                <Separator aria-orientation="vertical" />
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="m-2 hidden border-r border-muted sm:flex"
+                />
                 <Popover>
-                  <PopoverTrigger className="toolbar-item all-unset">
+                  <PopoverTrigger className="rounded px-2 py-1 all-unset hover:bg-active-bg">
                     Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -608,8 +638,10 @@ export const RichTextEditor = ({
   });
 
   return (
-    <div className="rich-text-editor" data-gumroad-ignore>
-      {editor ? <RichTextEditorToolbar editor={editor} /> : null}
+    <div className="grid min-h-56 grid-rows-[max-content_1fr] rounded" data-gumroad-ignore>
+      {editor ? (
+        <RichTextEditorToolbar editor={editor} className="rounded-t rounded-b-none border border-b-0 border-border" />
+      ) : null}
       <EditorContent className="rich-text" editor={editor} />
     </div>
   );

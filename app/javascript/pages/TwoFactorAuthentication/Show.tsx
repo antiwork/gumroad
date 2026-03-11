@@ -4,6 +4,9 @@ import * as React from "react";
 import { AuthAlert } from "$app/components/AuthAlert";
 import { Layout } from "$app/components/Authentication/Layout";
 import { Button } from "$app/components/Button";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type PageProps = {
@@ -53,21 +56,22 @@ function TwoFactorAuthentication() {
       }
     >
       <form onSubmit={handleSubmit}>
-        <section>
+        <section className="grid gap-8 pb-12">
           <AuthAlert />
-          <fieldset>
-            <legend>
-              <label htmlFor={uid}>Authentication Token</label>
-            </legend>
-            <input
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={uid}>Authentication Token</Label>
+            </FieldsetTitle>
+            <Input
               id={uid}
               type="text"
+              inputMode="numeric"
               value={form.data.token}
               onChange={(e) => form.setData("token", e.target.value)}
               required
               autoFocus
             />
-          </fieldset>
+          </Fieldset>
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Logging in..." : "Login"}
           </Button>

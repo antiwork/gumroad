@@ -7,6 +7,7 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -102,6 +103,11 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
   const imageMarkup = (
     <img
       {...{ ...attrs, uploading: undefined }}
+      className={classNames(
+        "selection:bg-muted",
+        editor.isEditable && "cursor-pointer",
+        hasFocus && "outline-2 outline-accent",
+      )}
       onLoad={() => setIsImageLoaded(true)}
       onClick={handleImageClick}
       data-drag-handle
@@ -111,11 +117,7 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
-      <figure
-        ref={nodeRef}
-        data-has-focus={hasFocus || undefined}
-        style={isUploading ? { position: "relative" } : undefined}
-      >
+      <figure ref={nodeRef} style={isUploading ? { position: "relative" } : undefined}>
         {attrs.link ? (
           <a href={cast(attrs.link)} target="_blank" rel="noopener noreferrer nofollow">
             {imageMarkup}

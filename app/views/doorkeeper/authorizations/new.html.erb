@@ -1,5 +1,5 @@
-<main class="stack">
-  <header>
+<main class="grid divide-y divide-border bg-filled border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+  <header class="flex flex-col gap-4 p-4 text-center">
     <div>
       <%= image_tag OauthApplication.find(@pre_auth.client.id).icon_url || asset_path("gumroad_app.png"), size: "72" %>
     </div>
@@ -10,8 +10,8 @@
     </h2>
   </header>
   <% if @pre_auth.scopes.present? %>
-    <div class="flex flex-col gap-4">
-      <h4>This application will be able to:</h4>
+    <div class="flex flex-col gap-4 p-4">
+      <h4 class="font-bold">This application will be able to:</h4>
       <ul>
         <% @pre_auth.scopes.each do |scope| %>
           <li>
@@ -37,7 +37,7 @@
       </ul>
     </div>
   <% end %>
-  <footer>
+  <footer class="flex flex-col gap-4 p-4 text-center">
     <%= form_tag oauth_authorization_path, method: :post, style: "display: contents" do %>
       <%= hidden_field_tag :client_id, @pre_auth.client.uid %>
       <%= hidden_field_tag :redirect_uri, @pre_auth.redirect_uri %>

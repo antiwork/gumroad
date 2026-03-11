@@ -1,5 +1,4 @@
 import { Paypal } from "@boxicons/react";
-import cx from "classnames"
 import React, { useEffect, useRef } from "react"
 
 import { lookupCharges, lookupPaypalCharges } from "$app/data/charge"
@@ -8,6 +7,10 @@ import { assertResponseError } from "$app/utils/request"
 import { Button } from "$app/components/Button"
 import { showAlert } from "$app/components/server-components/Alert"
 import { Alert } from "$app/components/ui/Alert"
+import { Fieldset } from "$app/components/ui/Fieldset"
+import { FormSection } from "$app/components/ui/FormSection"
+import { Input } from "$app/components/ui/Input"
+import { Label } from "$app/components/ui/Label"
 import { PageHeader } from "$app/components/ui/PageHeader"
 
 const LookupLayout = ({ children, title, type }: {
@@ -115,53 +118,58 @@ const LookupLayout = ({ children, title, type }: {
           evt.preventDefault();
           void handleCardLookup();
         }}>
-          <section className="p-4! md:p-8!">
-            <header>
-              <h2>{type === "charge" ? "What was I charged for?" : "Look up your license key"}</h2>
-              {type === "charge" ? "Fill out this form and we'll send you a receipt for your charge." : "We'll send you a receipt including your license key."}
-            </header>
-            <fieldset className={cx({ danger: email.error })}>
-              <label htmlFor="email">What email address did you use?</label>
-              <input
+          <FormSection
+            header={
+              <>
+                <h2>{type === "charge" ? "What was I charged for?" : "Look up your license key"}</h2>
+                {type === "charge" ? "Fill out this form and we'll send you a receipt for your charge." : "We'll send you a receipt including your license key."}
+              </>
+            }
+          >
+            <Fieldset state={email.error ? "danger" : undefined}>
+              <Label htmlFor="email">What email address did you use?</Label>
+              <Input
                 id="email"
-                className="required"
                 placeholder="Email address"
                 type="text"
                 value={email.value}
                 onChange={(evt) => setEmail({ value: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
             {type === "charge" && (
-              <fieldset className={cx({ danger: last4.error })}>
-                <label htmlFor="cc_last_four">Last 4 digits of your card</label>
-                <input
+              <Fieldset state={last4.error ? "danger" : undefined}>
+                <Label htmlFor="cc_last_four">Last 4 digits of your card</Label>
+                <Input
                   id="cc_last_four"
-                  className="required"
                   maxLength={4}
                   placeholder="4242"
                   type="tel"
                   value={last4.value}
                   onChange={(evt) => setLast4({ value: evt.target.value })}
                 />
-              </fieldset>
+              </Fieldset>
             )}
             <Button color="primary" type="submit" disabled={isCardLoading}>
               {isCardLoading ? "Searching..." : "Search"}
             </Button>
-          </section>
+          </FormSection>
         </form>
         <form onSubmit={(evt) => {
           evt.preventDefault();
           void handlePaypalLookup();
         }}>
-          <section className="p-4! md:p-8!">
-            <header>
-              <h2>Did you pay with PayPal?</h2>
-              Enter the invoice ID from PayPal's email receipt and we'll look it up.
-            </header>
-            <fieldset className={cx({ danger: invoiceId.error })}>
-              <label htmlFor="invoice_id">PayPal Invoice ID</label>
-              <input
+          <FormSection
+            className="border-t!"
+            header={
+              <>
+                <h2>Did you pay with PayPal?</h2>
+                Enter the invoice ID from PayPal's email receipt and we'll look it up.
+              </>
+            }
+          >
+            <Fieldset state={invoiceId.error ? "danger" : undefined}>
+              <Label htmlFor="invoice_id">PayPal Invoice ID</Label>
+              <Input
                 id="invoice_id"
                 className="required"
                 placeholder="XXXXXXXXXXXX"
@@ -169,8 +177,8 @@ const LookupLayout = ({ children, title, type }: {
                 value={invoiceId.value}
                 onChange={(evt) => setInvoiceId({ value: evt.target.value })}
               />
-            </fieldset>
-            <fieldset>
+            </Fieldset>
+            <Fieldset>
               <Button
                 color="paypal"
                 type="submit"
@@ -179,8 +187,8 @@ const LookupLayout = ({ children, title, type }: {
                 <Paypal pack="brands" className="size-5" />
                 {isPaypalLoading ? "Searching..." : "Search"}
               </Button>
-            </fieldset>
-          </section>
+            </Fieldset>
+          </FormSection>
         </form>
         {children}
       </div>

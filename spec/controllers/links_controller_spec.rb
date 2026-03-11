@@ -208,13 +208,13 @@ describe LinksController, :vcr, inertia: true do
         let(:request_params) { { id: product.unique_permalink } }
       end
 
-      it "assigns the correct instance variables" do
+      it "renders the Inertia product edit page" do
         get :edit, params: { id: product.unique_permalink }
         expect(response).to be_successful
-
-        product_presenter = assigns(:presenter)
-        expect(product_presenter.product).to eq(product)
-        expect(product_presenter.pundit_user).to eq(controller.pundit_user)
+        expect(inertia).to render_component("Products/Edit")
+        expect(inertia.props[:id]).to eq(product.external_id)
+        expect(inertia.props[:unique_permalink]).to eq(product.unique_permalink)
+        expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
       end
 
       context "with other user not owning the product" do
@@ -250,6 +250,14 @@ describe LinksController, :vcr, inertia: true do
           sign_in bundle.user
           get :edit, params: { id: bundle.unique_permalink }
           expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
+        end
+      end
+
+      context "with wildcard sub-path" do
+        it "renders the Inertia page for sub-routes" do
+          get :edit, params: { id: product.unique_permalink, other: "content" }
+          expect(response).to be_successful
+          expect(inertia).to render_component("Products/Edit")
         end
       end
     end

@@ -140,7 +140,7 @@ export const Layout = ({
 }) => {
   const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
   const currentSeller = useCurrentSeller();
-  const rootPath = `/products/${uniquePermalink}/edit`;
+  const rootPath = Routes.edit_link_path(uniquePermalink);
 
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
