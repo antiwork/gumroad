@@ -516,228 +516,226 @@ function PayoutsContent() {
 
   return (
     <div className="space-y-8 p-4 md:p-8">
-        {!instant_payout ? (
-          show_instant_payouts_notice ? (
-            <Alert variant="info" role="status">
-              <p>
-                To enable <strong>instant</strong> payouts,{" "}
-                <a href={Routes.settings_payments_path()}>update your payout method</a> to one of the{" "}
-                <a href="https://docs.stripe.com/payouts/instant-payouts-banks">
-                  supported bank accounts or debit cards
-                </a>
-                .
-              </p>
-            </Alert>
-          ) : null
-        ) : instant_payout.payable_amount_cents >= MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
+      {!instant_payout ? (
+        show_instant_payouts_notice ? (
           <Alert variant="info" role="status">
-            <div>
-              <b>
-                You have{" "}
-                {formatPriceCentsWithCurrencySymbol("usd", instant_payout.payable_amount_cents, {
-                  symbolFormat: "short",
-                  noCentsIfWhole: false,
-                })}{" "}
-                available for instant payout:
-              </b>{" "}
-              No need to wait—get paid now!
-              <div style={{ marginTop: "var(--spacer-3)" }}>
-                {instant_payout.payable_balances.some(
-                  (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
-                ) ? (
-                  <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
-                ) : (
-                  <Button
-                    size="sm"
-                    color="primary"
-                    aria-label="Get paid now"
-                    onClick={() => setIsInstantPayoutModalOpen(true)}
-                  >
-                    Get paid!
-                  </Button>
-                )}
-              </div>
-            </div>
-            <Modal
-              open={isInstantPayoutModalOpen}
-              onClose={() => setIsInstantPayoutModalOpen(false)}
-              footer={
-                <>
-                  <Button onClick={() => setIsInstantPayoutModalOpen(false)}>Cancel</Button>
-                  <Button color="primary" disabled={isNavigating} onClick={onRequestInstantPayout}>
-                    Get paid!
-                  </Button>
-                </>
-              }
-              title="Instant payout"
-            >
-              <p>
-                You can request instant payouts 24/7, including weekends and holidays. Funds typically appear in your
-                bank account within 30 minutes, though some payouts may take longer to be credited.
-              </p>
-              <Fieldset>
-                <Label htmlFor="instant-payout-date">Pay out balance up to</Label>
-                <InputGroup className="cursor-pointer pr-0">
-                  <Calendar className="size-5" />
-                  <Select
-                    id="instant-payout-date"
-                    value={instantPayoutId}
-                    onChange={(e) => setInstantPayoutId(e.target.value)}
-                    wrapperClassName="flex-1"
-                    className="border-none outline-none"
-                  >
-                    {instant_payout.payable_balances.map((balance) => (
-                      <option key={balance.id} value={balance.id}>
-                        {new Date(balance.date).toLocaleDateString(userAgentInfo.locale, {
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </option>
-                    ))}
-                  </Select>
-                </InputGroup>
-              </Fieldset>
-              <Fieldset>
-                <FieldsetTitle>Payout details</FieldsetTitle>
-                <div className="rounded-sm border border-border bg-background not-first:border-t">
-                  <div className="grid gap-4 p-4">
-                    <div className="grid grid-flow-col justify-between gap-4">
-                      <h4 className="inline-flex flex-wrap gap-2">Sent to</h4>
-                      <div>
-                        {instant_payout.bank_account_type === "CARD" ? (
-                          <p>
-                            <span>
-                              {instant_payout.routing_number} {instant_payout.account_number}
-                            </span>
-                          </p>
-                        ) : (
-                          <div>
-                            {instant_payout.bank_name ? <p className="text-right">{instant_payout.bank_name}</p> : null}
-                            <p className="text-right">
-                              Routing number: <span>{instant_payout.routing_number}</span>
-                            </p>
-                            <p className="text-right">
-                              Account: <span>{instant_payout.account_number}</span>
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <PayoutLineItem
-                      title="Amount"
-                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}`}
-                    />
-                    <PayoutLineItem
-                      title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
-                      price={`-$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}`}
-                    />
-                  </div>
-                  <footer className="grid gap-4 border-t border-border p-4">
-                    <PayoutLineItem
-                      title="You'll receive"
-                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}`}
-                      className="text-lg"
-                    />
-                  </footer>
-                </div>
-                {instantPayoutAmountCents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
-                  <Alert variant="info" role="status">
-                    Your balance exceeds the maximum amount for a single instant payout, so we'll automatically split
-                    your balance into multiple payouts.
-                  </Alert>
-                ) : null}
-              </Fieldset>
-            </Modal>
-          </Alert>
-        ) : null}
-        {payouts_status === "paused" ? (
-          <Alert variant="warning" role="status">
             <p>
-              {payouts_paused_by === "stripe" ? (
-                <strong>
-                  Your payouts are currently paused by our payment processor. Please check your{" "}
-                  <a href="/settings/payments">Payment Settings</a> for any verification requirements.
-                </strong>
-              ) : payouts_paused_by === "admin" ? (
-                <strong>
-                  Your payouts have been paused by Gumroad admin.
-                  {payouts_paused_for_reason ? ` Reason for pause: ${payouts_paused_for_reason}` : null}
-                </strong>
-              ) : payouts_paused_by === "system" ? (
-                <strong>
-                  Your payouts have been automatically paused for a security review and will be resumed once the review
-                  completes.
-                </strong>
-              ) : (
-                <strong>
-                  You have paused your payouts. Please go to <a href="/settings/payments">Payment Settings</a> to resume
-                  payouts.
-                </strong>
-              )}
+              To enable <strong>instant</strong> payouts,{" "}
+              <a href={Routes.settings_payments_path()}>update your payout method</a> to one of the{" "}
+              <a href="https://docs.stripe.com/payouts/instant-payouts-banks">supported bank accounts or debit cards</a>
+              .
             </p>
           </Alert>
-        ) : null}
-        {next_payout_period_data != null ? (
-          next_payout_period_data.has_stripe_connect ? (
-            <Alert variant="info" role="status">
-              <p>For Stripe Connect users, all future payouts will be deposited directly to your Stripe account</p>
-            </Alert>
-          ) : (
-            <section className="grid gap-4">
-              {next_payout_period_data.payout_note &&
-              !["processing", "paused"].includes(next_payout_period_data.status) ? (
+        ) : null
+      ) : instant_payout.payable_amount_cents >= MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
+        <Alert variant="info" role="status">
+          <div>
+            <b>
+              You have{" "}
+              {formatPriceCentsWithCurrencySymbol("usd", instant_payout.payable_amount_cents, {
+                symbolFormat: "short",
+                noCentsIfWhole: false,
+              })}{" "}
+              available for instant payout:
+            </b>{" "}
+            No need to wait—get paid now!
+            <div style={{ marginTop: "var(--spacer-3)" }}>
+              {instant_payout.payable_balances.some(
+                (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
+              ) ? (
+                <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
+              ) : (
+                <Button
+                  size="sm"
+                  color="primary"
+                  aria-label="Get paid now"
+                  onClick={() => setIsInstantPayoutModalOpen(true)}
+                >
+                  Get paid!
+                </Button>
+              )}
+            </div>
+          </div>
+          <Modal
+            open={isInstantPayoutModalOpen}
+            onClose={() => setIsInstantPayoutModalOpen(false)}
+            footer={
+              <>
+                <Button onClick={() => setIsInstantPayoutModalOpen(false)}>Cancel</Button>
+                <Button color="primary" disabled={isNavigating} onClick={onRequestInstantPayout}>
+                  Get paid!
+                </Button>
+              </>
+            }
+            title="Instant payout"
+          >
+            <p>
+              You can request instant payouts 24/7, including weekends and holidays. Funds typically appear in your bank
+              account within 30 minutes, though some payouts may take longer to be credited.
+            </p>
+            <Fieldset>
+              <Label htmlFor="instant-payout-date">Pay out balance up to</Label>
+              <InputGroup className="cursor-pointer pr-0">
+                <Calendar className="size-5" />
+                <Select
+                  id="instant-payout-date"
+                  value={instantPayoutId}
+                  onChange={(e) => setInstantPayoutId(e.target.value)}
+                  wrapperClassName="flex-1"
+                  className="border-none outline-none"
+                >
+                  {instant_payout.payable_balances.map((balance) => (
+                    <option key={balance.id} value={balance.id}>
+                      {new Date(balance.date).toLocaleDateString(userAgentInfo.locale, {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </option>
+                  ))}
+                </Select>
+              </InputGroup>
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>Payout details</FieldsetTitle>
+              <div className="rounded-sm border border-border bg-background not-first:border-t">
+                <div className="grid gap-4 p-4">
+                  <div className="grid grid-flow-col justify-between gap-4">
+                    <h4 className="inline-flex flex-wrap gap-2">Sent to</h4>
+                    <div>
+                      {instant_payout.bank_account_type === "CARD" ? (
+                        <p>
+                          <span>
+                            {instant_payout.routing_number} {instant_payout.account_number}
+                          </span>
+                        </p>
+                      ) : (
+                        <div>
+                          {instant_payout.bank_name ? <p className="text-right">{instant_payout.bank_name}</p> : null}
+                          <p className="text-right">
+                            Routing number: <span>{instant_payout.routing_number}</span>
+                          </p>
+                          <p className="text-right">
+                            Account: <span>{instant_payout.account_number}</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <PayoutLineItem
+                    title="Amount"
+                    price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}`}
+                  />
+                  <PayoutLineItem
+                    title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
+                    price={`-$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}`}
+                  />
+                </div>
+                <footer className="grid gap-4 border-t border-border p-4">
+                  <PayoutLineItem
+                    title="You'll receive"
+                    price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}`}
+                    className="text-lg"
+                  />
+                </footer>
+              </div>
+              {instantPayoutAmountCents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
                 <Alert variant="info" role="status">
-                  <p>{next_payout_period_data.payout_note}</p>
+                  Your balance exceeds the maximum amount for a single instant payout, so we'll automatically split your
+                  balance into multiple payouts.
                 </Alert>
               ) : null}
-              {next_payout_period_data.status === "not_payable" ? (
-                past_payout_period_data.length > 0 ? (
-                  <Alert variant="info" role="status">
-                    <p>
-                      Reach a balance of at least{" "}
-                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
-                        symbolFormat: "short",
-                      })}{" "}
-                      to be paid out for your sales.
-                    </p>
-                  </Alert>
-                ) : (
-                  <PeriodEmpty />
-                )
+            </Fieldset>
+          </Modal>
+        </Alert>
+      ) : null}
+      {payouts_status === "paused" ? (
+        <Alert variant="warning" role="status">
+          <p>
+            {payouts_paused_by === "stripe" ? (
+              <strong>
+                Your payouts are currently paused by our payment processor. Please check your{" "}
+                <a href="/settings/payments">Payment Settings</a> for any verification requirements.
+              </strong>
+            ) : payouts_paused_by === "admin" ? (
+              <strong>
+                Your payouts have been paused by Gumroad admin.
+                {payouts_paused_for_reason ? ` Reason for pause: ${payouts_paused_for_reason}` : null}
+              </strong>
+            ) : payouts_paused_by === "system" ? (
+              <strong>
+                Your payouts have been automatically paused for a security review and will be resumed once the review
+                completes.
+              </strong>
+            ) : (
+              <strong>
+                You have paused your payouts. Please go to <a href="/settings/payments">Payment Settings</a> to resume
+                payouts.
+              </strong>
+            )}
+          </p>
+        </Alert>
+      ) : null}
+      {next_payout_period_data != null ? (
+        next_payout_period_data.has_stripe_connect ? (
+          <Alert variant="info" role="status">
+            <p>For Stripe Connect users, all future payouts will be deposited directly to your Stripe account</p>
+          </Alert>
+        ) : (
+          <section className="grid gap-4">
+            {next_payout_period_data.payout_note &&
+            !["processing", "paused"].includes(next_payout_period_data.status) ? (
+              <Alert variant="info" role="status">
+                <p>{next_payout_period_data.payout_note}</p>
+              </Alert>
+            ) : null}
+            {next_payout_period_data.status === "not_payable" ? (
+              past_payout_period_data.length > 0 ? (
+                <Alert variant="info" role="status">
+                  <p>
+                    Reach a balance of at least{" "}
+                    {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
+                      symbolFormat: "short",
+                    })}{" "}
+                    to be paid out for your sales.
+                  </p>
+                </Alert>
               ) : (
-                <Period payoutPeriodData={next_payout_period_data} />
-              )}
-            </section>
-          )
-        ) : null}
-        {processing_payout_periods_data.length > 0 ? (
+                <PeriodEmpty />
+              )
+            ) : (
+              <Period payoutPeriodData={next_payout_period_data} />
+            )}
+          </section>
+        )
+      ) : null}
+      {processing_payout_periods_data.length > 0 ? (
+        <section>
+          <section className="flex flex-col gap-4">
+            {processing_payout_periods_data.map((processingPayoutPeriodData, idx) => (
+              <Period key={idx} payoutPeriodData={processingPayoutPeriodData} />
+            ))}
+          </section>
+        </section>
+      ) : null}
+      {past_payout_period_data.length > 0 ? (
+        <>
           <section>
+            <h2>Past payouts</h2>
             <section className="flex flex-col gap-4">
-              {processing_payout_periods_data.map((processingPayoutPeriodData, idx) => (
-                <Period key={idx} payoutPeriodData={processingPayoutPeriodData} />
+              {past_payout_period_data.map((payoutPeriodData, idx) => (
+                <Period key={idx} payoutPeriodData={payoutPeriodData} />
               ))}
             </section>
           </section>
-        ) : null}
-        {past_payout_period_data.length > 0 ? (
-          <>
-            <section>
-              <h2>Past payouts</h2>
-              <section className="flex flex-col gap-4">
-                {past_payout_period_data.map((payoutPeriodData, idx) => (
-                  <Period key={idx} payoutPeriodData={payoutPeriodData} />
-                ))}
-              </section>
-            </section>
-            {pagination.page < pagination.pages ? (
-              <Button color="primary" onClick={loadNextPage} disabled={isNavigating}>
-                Show older payouts
-              </Button>
-            ) : null}
-          </>
-        ) : null}
-      </div>
+          {pagination.page < pagination.pages ? (
+            <Button color="primary" onClick={loadNextPage} disabled={isNavigating}>
+              Show older payouts
+            </Button>
+          ) : null}
+        </>
+      ) : null}
+    </div>
   );
 }
 
