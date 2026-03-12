@@ -3,7 +3,6 @@ import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { cast, is } from "ts-safe-cast";
 
 import { asyncVoid } from "$app/utils/promise";
@@ -216,22 +215,18 @@ const WithDialog = ({
   const [open, setOpen] = React.useState(false);
   return (
     <>
-      {open
-        ? // TODO (maya) remove this once popovers no longer use details
-          createPortal(
-            <Modal open onClose={() => setOpen(false)} title={`Insert ${type === "embed" ? "video" : "post"}`}>
-              <EmbedMediaForm
-                type={type}
-                onEmbedReceived={(data) => {
-                  insertMediaEmbed(editor, data);
-                  setOpen(false);
-                }}
-                onClose={() => setOpen(false)}
-              />
-            </Modal>,
-            document.body,
-          )
-        : null}
+      {open ? (
+        <Modal open onClose={() => setOpen(false)} title={`Insert ${type === "embed" ? "video" : "post"}`}>
+          <EmbedMediaForm
+            type={type}
+            onEmbedReceived={(data) => {
+              insertMediaEmbed(editor, data);
+              setOpen(false);
+            }}
+            onClose={() => setOpen(false)}
+          />
+        </Modal>
+      ) : null}
       <div onClick={() => setOpen(true)}>{children}</div>
     </>
   );
