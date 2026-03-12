@@ -2,13 +2,13 @@ import * as React from "react";
 
 import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
 import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/ProductTab/DefaultDiscountCodeSelector";
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
 import { ProductEditContext } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
@@ -57,9 +57,7 @@ export const PriceEditor = ({
         currencyCodeSelector={currencyCodeSelector}
       />
       {isFreeProduct ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
-      <Details
-        open={isPWYW}
-      >
+      <Details open={isPWYW}>
         <DetailsToggle chevronPosition="none" className="mb-0">
           <Switch
             checked={isPWYW}

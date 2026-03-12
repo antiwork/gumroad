@@ -4,6 +4,7 @@ import { cast } from "ts-safe-cast";
 import { useLazyPaginatedFetch } from "$app/hooks/useLazyFetch";
 
 import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
+
 import AdminProductPurchasesContent from "./Content";
 import { type ProductPurchase } from "./Purchase";
 
@@ -44,7 +45,9 @@ const AdminProductPurchases = ({
     <>
       <hr />
       <Details open={open} onToggle={setOpen}>
-        <DetailsToggle><h3>{isAffiliateUser ? "Affiliate purchases" : "Purchases"}</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>{isAffiliateUser ? "Affiliate purchases" : "Purchases"}</h3>
+        </DetailsToggle>
         <DetailsContent>
           <AdminProductPurchasesContent
             purchases={purchases}

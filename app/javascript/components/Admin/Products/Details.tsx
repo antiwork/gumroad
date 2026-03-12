@@ -3,11 +3,11 @@ import { cast } from "ts-safe-cast";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { type DetailsProps } from "$app/components/Admin/Products/AttributesAndInfo";
 import AdminProductAttributesAndInfo from "$app/components/Admin/Products/AttributesAndInfo";
 import { type Product } from "$app/components/Admin/Products/Product";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 
 type Props = {
   product: Product;
@@ -40,7 +40,9 @@ const AdminProductDetails = ({ product }: Props) => {
     <>
       <hr />
       <Details open={open} onToggle={onToggle}>
-        <DetailsToggle><h3>Details</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>Details</h3>
+        </DetailsToggle>
         <DetailsContent>
           {isLoading || !details ? <LoadingSpinner /> : <AdminProductAttributesAndInfo productData={details} />}
         </DetailsContent>

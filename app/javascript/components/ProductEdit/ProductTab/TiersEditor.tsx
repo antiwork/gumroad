@@ -16,7 +16,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { DateInput } from "$app/components/DateInput";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -27,6 +26,7 @@ import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Alert } from "$app/components/ui/Alert";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -294,9 +294,7 @@ const TierEditor = ({
             {allEnabledPricesAreZero ? (
               <Alert variant="info">Free tiers require a pay what they want price.</Alert>
             ) : null}
-            <Details
-              open={tier.customizable_price}
-            >
+            <Details open={tier.customizable_price}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={tier.customizable_price}
@@ -306,49 +304,49 @@ const TierEditor = ({
                 />
               </DetailsToggle>
               <DetailsContent>
-              <Dropdown>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "var(--spacer-3)",
-                    gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
-                  }}
-                >
-                  {Object.entries(tier.recurrence_price_values).flatMap(([recurrence, value]) =>
-                    value.enabled ? (
-                      <React.Fragment key={recurrence}>
-                        <Fieldset>
-                          <Label htmlFor={`${uid}-${recurrence}-minimum-price`}>
-                            Minimum amount {perRecurrenceLabels[recurrence]}
-                          </Label>
-                          <PriceInput
-                            id={`${uid}-${recurrence}-minimum-price`}
-                            currencyCode={currencyType}
-                            cents={value.price_cents}
-                            disabled
-                          />
-                        </Fieldset>
-                        <Fieldset>
-                          <Label htmlFor={`${uid}-${recurrence}-suggested-price`}>
-                            Suggested amount {perRecurrenceLabels[recurrence]}
-                          </Label>
-                          <PriceInput
-                            id={`${uid}-${recurrence}-suggested-price`}
-                            currencyCode={currencyType}
-                            cents={value.suggested_price_cents}
-                            onChange={(suggested_price_cents) =>
-                              updateRecurrencePriceValue(recurrence, { suggested_price_cents })
-                            }
-                            placeholder={PLACEHOLDER_VALUES[recurrence]}
-                          />
-                        </Fieldset>
-                      </React.Fragment>
-                    ) : (
-                      []
-                    ),
-                  )}
-                </div>
-              </Dropdown>
+                <Dropdown>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "var(--spacer-3)",
+                      gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
+                    }}
+                  >
+                    {Object.entries(tier.recurrence_price_values).flatMap(([recurrence, value]) =>
+                      value.enabled ? (
+                        <React.Fragment key={recurrence}>
+                          <Fieldset>
+                            <Label htmlFor={`${uid}-${recurrence}-minimum-price`}>
+                              Minimum amount {perRecurrenceLabels[recurrence]}
+                            </Label>
+                            <PriceInput
+                              id={`${uid}-${recurrence}-minimum-price`}
+                              currencyCode={currencyType}
+                              cents={value.price_cents}
+                              disabled
+                            />
+                          </Fieldset>
+                          <Fieldset>
+                            <Label htmlFor={`${uid}-${recurrence}-suggested-price`}>
+                              Suggested amount {perRecurrenceLabels[recurrence]}
+                            </Label>
+                            <PriceInput
+                              id={`${uid}-${recurrence}-suggested-price`}
+                              currencyCode={currencyType}
+                              cents={value.suggested_price_cents}
+                              onChange={(suggested_price_cents) =>
+                                updateRecurrencePriceValue(recurrence, { suggested_price_cents })
+                              }
+                              placeholder={PLACEHOLDER_VALUES[recurrence]}
+                            />
+                          </Fieldset>
+                        </React.Fragment>
+                      ) : (
+                        []
+                      ),
+                    )}
+                  </div>
+                </Dropdown>
               </DetailsContent>
             </Details>
             <PriceChangeSettings tier={tier} updateTier={updateTier} />
@@ -434,9 +432,7 @@ You can modify or cancel your membership at any time.`;
   }, 500);
 
   return (
-    <Details
-      open={tier.apply_price_changes_to_existing_memberships}
-    >
+    <Details open={tier.apply_price_changes_to_existing_memberships}>
       <DetailsToggle>
         <Switch
           checked={tier.apply_price_changes_to_existing_memberships}
@@ -450,77 +446,78 @@ You can modify or cancel your membership at any time.`;
         />
       </DetailsToggle>
       <DetailsContent>
-      <Dropdown>
-        <div className="grid gap-6">
-          {initialEffectiveDate ? (
-            <Alert variant="warning">
-              You have scheduled a pricing update for existing customers on {format(initialEffectiveDate, "MMMM d, y")}
-            </Alert>
-          ) : null}
-          <div>
-            <strong>
-              We'll send an email reminder to your active members stating the new price 7 days prior to their next
-              scheduled payment.
-            </strong>{" "}
-            <button
-              type="button"
-              className="cursor-pointer underline all-unset"
-              onClick={() =>
-                void sendSamplePriceChangeEmail({
-                  productPermalink: uniquePermalink,
-                  tierId: tier.id,
-                  newPrice,
-                  customMessage: tier.subscription_price_change_message,
-                  effectiveDate: formattedEffectiveDate,
-                }).then(
-                  () => {
-                    showAlert("Email sample sent! Check your email", "success");
-                  },
-                  (e: unknown) => {
-                    assertResponseError(e);
-                    showAlert("Error sending email", "error");
-                  },
-                )
-              }
-            >
-              Get a sample
-            </button>
-          </div>
-          <Fieldset state={effectiveDate.error ? "danger" : undefined}>
-            <FieldsetTitle>
-              <Label htmlFor={`${uid}-date`}>Effective date for existing customers</Label>
-            </FieldsetTitle>
-            <DateInput
-              id={`${uid}-date`}
-              value={effectiveDate.value}
-              onChange={(value) => {
-                if (!value) return;
-                setEffectiveDate({ value, error: value < earliestMembershipPriceChangeDate });
-              }}
-            />
-
-            {effectiveDate.error ? (
-              <FieldsetDescription>The effective date must be at least 7 days from today</FieldsetDescription>
+        <Dropdown>
+          <div className="grid gap-6">
+            {initialEffectiveDate ? (
+              <Alert variant="warning">
+                You have scheduled a pricing update for existing customers on{" "}
+                {format(initialEffectiveDate, "MMMM d, y")}
+              </Alert>
             ) : null}
-          </Fieldset>
-          <Fieldset>
-            <FieldsetTitle>
-              <Label htmlFor={`${uid}-custom-message`}>Custom message</Label>
-            </FieldsetTitle>
-            {isMounted ? (
-              <RichTextEditor
-                id={`${uid}-custom-message`}
-                className="textarea rounded border border-border px-4 py-3"
-                placeholder={placeholder}
-                ariaLabel="Custom message"
-                initialValue={editorContent}
-                onChange={onMessageChange}
-                onCreate={setEditor}
+            <div>
+              <strong>
+                We'll send an email reminder to your active members stating the new price 7 days prior to their next
+                scheduled payment.
+              </strong>{" "}
+              <button
+                type="button"
+                className="cursor-pointer underline all-unset"
+                onClick={() =>
+                  void sendSamplePriceChangeEmail({
+                    productPermalink: uniquePermalink,
+                    tierId: tier.id,
+                    newPrice,
+                    customMessage: tier.subscription_price_change_message,
+                    effectiveDate: formattedEffectiveDate,
+                  }).then(
+                    () => {
+                      showAlert("Email sample sent! Check your email", "success");
+                    },
+                    (e: unknown) => {
+                      assertResponseError(e);
+                      showAlert("Error sending email", "error");
+                    },
+                  )
+                }
+              >
+                Get a sample
+              </button>
+            </div>
+            <Fieldset state={effectiveDate.error ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-date`}>Effective date for existing customers</Label>
+              </FieldsetTitle>
+              <DateInput
+                id={`${uid}-date`}
+                value={effectiveDate.value}
+                onChange={(value) => {
+                  if (!value) return;
+                  setEffectiveDate({ value, error: value < earliestMembershipPriceChangeDate });
+                }}
               />
-            ) : null}
-          </Fieldset>
-        </div>
-      </Dropdown>
+
+              {effectiveDate.error ? (
+                <FieldsetDescription>The effective date must be at least 7 days from today</FieldsetDescription>
+              ) : null}
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-custom-message`}>Custom message</Label>
+              </FieldsetTitle>
+              {isMounted ? (
+                <RichTextEditor
+                  id={`${uid}-custom-message`}
+                  className="textarea rounded border border-border px-4 py-3"
+                  placeholder={placeholder}
+                  ariaLabel="Custom message"
+                  initialValue={editorContent}
+                  onChange={onMessageChange}
+                  onCreate={setEditor}
+                />
+              ) : null}
+            </Fieldset>
+          </div>
+        </Dropdown>
       </DetailsContent>
     </Details>
   );

@@ -43,7 +43,6 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 import { generatePageIcon } from "$app/utils/rich_content_page";
 
 import { Button } from "$app/components/Button";
-import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { ComboBox } from "$app/components/ComboBox";
 import { PageList, PageListItem, PageListLayout } from "$app/components/Download/PageListLayout";
@@ -82,6 +81,7 @@ import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
@@ -925,18 +925,24 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       {product.native_type === "membership" ? (
                         <CardContent asChild details>
                           <Details>
-                            <DetailsToggle chevronPosition="right" className="grow" inert>Membership</DetailsToggle>
+                            <DetailsToggle chevronPosition="right" className="grow" inert>
+                              Membership
+                            </DetailsToggle>
                           </Details>
                         </CardContent>
                       ) : null}
                       <CardContent asChild details>
                         <Details>
-                          <DetailsToggle chevronPosition="right" className="grow" inert>Receipt</DetailsToggle>
+                          <DetailsToggle chevronPosition="right" className="grow" inert>
+                            Receipt
+                          </DetailsToggle>
                         </Details>
                       </CardContent>
                       <CardContent asChild details>
                         <Details>
-                          <DetailsToggle chevronPosition="right" className="grow" inert>Library</DetailsToggle>
+                          <DetailsToggle chevronPosition="right" className="grow" inert>
+                            Library
+                          </DetailsToggle>
                         </Details>
                       </CardContent>
                     </Card>

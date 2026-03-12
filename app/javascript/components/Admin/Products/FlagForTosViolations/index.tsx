@@ -3,12 +3,12 @@ import { cast } from "ts-safe-cast";
 
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import AdminFlagForTosViolationsContent, {
   type TosViolationFlags,
 } from "$app/components/Admin/Products/FlagForTosViolations/Content";
 import AdminFlagForTosViolationsForm from "$app/components/Admin/Products/FlagForTosViolations/Form";
 import type { Product } from "$app/components/Admin/Products/Product";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 
 export type Compliance = {
   reasons: Record<string, string>;
@@ -65,7 +65,9 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
     <>
       <hr />
       <Details open={open} onToggle={onToggle}>
-        <DetailsToggle><h3>Flag for TOS violation</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>Flag for TOS violation</h3>
+        </DetailsToggle>
         <DetailsContent>
           {shouldShowForm ? (
             <AdminFlagForTosViolationsForm

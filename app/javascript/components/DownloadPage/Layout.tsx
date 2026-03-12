@@ -9,7 +9,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { PageListLayout } from "$app/components/Download/PageListLayout";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -17,6 +16,7 @@ import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -147,7 +147,9 @@ export const Layout = ({
                 purchase.membership.is_installment_plan ? (
                   <CardContent asChild details>
                     <Details>
-                      <DetailsToggle chevronPosition="right" className="grow">Installment plan</DetailsToggle>
+                      <DetailsToggle chevronPosition="right" className="grow">
+                        Installment plan
+                      </DetailsToggle>
                       <DetailsContent>
                         {purchase.membership.is_installment_plan_completed ? (
                           "This installment plan has been paid in full."
@@ -162,17 +164,23 @@ export const Layout = ({
                 ) : (
                   <CardContent asChild details>
                     <Details>
-                      <DetailsToggle chevronPosition="right" className="grow">Membership</DetailsToggle>
+                      <DetailsToggle chevronPosition="right" className="grow">
+                        Membership
+                      </DetailsToggle>
                       <DetailsContent>
                         <div style={{ display: "grid" }}>
                           {purchase.membership.has_active_subscription ? (
-                            <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                            <NavigationButton
+                              href={Routes.manage_subscription_url(purchase.membership.subscription_id)}
+                            >
                               Manage
                             </NavigationButton>
                           ) : purchase.membership.is_subscription_ended ? (
                             "This subscription has ended."
                           ) : purchase.membership.is_subscription_cancelled_or_failed ? (
-                            <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                            <NavigationButton
+                              href={Routes.manage_subscription_url(purchase.membership.subscription_id)}
+                            >
                               Restart
                             </NavigationButton>
                           ) : null}
@@ -185,7 +193,9 @@ export const Layout = ({
               {receiptPurchaseId ? (
                 <CardContent asChild details>
                   <Details>
-                    <DetailsToggle chevronPosition="right" className="grow">Receipt</DetailsToggle>
+                    <DetailsToggle chevronPosition="right" className="grow">
+                      Receipt
+                    </DetailsToggle>
                     <DetailsContent>
                       <div className="flex flex-col gap-4">
                         <NavigationButton
@@ -208,7 +218,9 @@ export const Layout = ({
               {loggedInUser !== null ? (
                 <CardContent asChild details>
                   <Details>
-                    <DetailsToggle chevronPosition="right" className="grow">Library</DetailsToggle>
+                    <DetailsToggle chevronPosition="right" className="grow">
+                      Library
+                    </DetailsToggle>
                     <DetailsContent>
                       <div className="flex flex-col gap-4">
                         <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />

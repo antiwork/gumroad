@@ -4,10 +4,10 @@ import { cast } from "ts-safe-cast";
 
 import { request } from "$app/utils/request";
 
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 
 type UserGuids = { guid: string; user_external_ids: string[] }[];
 
@@ -72,7 +72,9 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
     <>
       <hr />
       <Details open={open} onToggle={onToggle}>
-        <DetailsToggle><h3>GUIDs</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>GUIDs</h3>
+        </DetailsToggle>
         <DetailsContent>
           <UserGuidsContent userGuids={userGuids} isLoading={isLoading} />
         </DetailsContent>

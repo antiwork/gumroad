@@ -12,7 +12,6 @@ import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
 import { HomeFooter } from "$app/components/Home/Shared/Footer";
@@ -20,6 +19,7 @@ import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
 import { CardContent } from "$app/components/ui/Card";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Radio } from "$app/components/ui/Radio";
@@ -484,7 +484,9 @@ function DiscoverIndex() {
                 <>
                   <CardContent asChild details>
                     <Details>
-                      <DetailsToggle chevronPosition="right" className="grow">Rating</DetailsToggle>
+                      <DetailsToggle chevronPosition="right" className="grow">
+                        Rating
+                      </DetailsToggle>
                       <DetailsContent>
                         <Fieldset role="group">
                           {range(4, 0).map((number) => (
@@ -514,7 +516,9 @@ function DiscoverIndex() {
                   {hasOfferCode ? (
                     <CardContent asChild details>
                       <Details open>
-                        <DetailsToggle chevronPosition="right" className="grow">Offer code</DetailsToggle>
+                        <DetailsToggle chevronPosition="right" className="grow">
+                          Offer code
+                        </DetailsToggle>
                         <DetailsContent>
                           <div className="flex items-center justify-between gap-2 py-1">
                             <span>{props.black_friday_offer_code}</span>

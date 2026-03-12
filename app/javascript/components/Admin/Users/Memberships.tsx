@@ -3,8 +3,8 @@ import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import type { User, UserMembership } from "$app/components/Admin/Users/User";
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 
 type MembershipsProps = {
   user: User;
@@ -48,7 +48,9 @@ const Memberships = ({ user: { admin_manageable_user_memberships } }: Membership
     <>
       <hr />
       <Details>
-        <DetailsToggle><h3>User memberships</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>User memberships</h3>
+        </DetailsToggle>
         <DetailsContent>
           <Card>
             {admin_manageable_user_memberships.map((membership) => (

@@ -3,8 +3,8 @@ import * as React from "react";
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
@@ -20,7 +20,9 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
     <>
       <hr />
       <Details>
-        <DetailsToggle><h3>Custom fee</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>Custom fee</h3>
+        </DetailsToggle>
         <DetailsContent>
           <Form
             url={Routes.set_custom_fee_admin_user_path(user.external_id)}

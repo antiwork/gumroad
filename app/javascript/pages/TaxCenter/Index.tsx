@@ -6,11 +6,11 @@ import { cast } from "ts-safe-cast";
 
 import { classNames } from "$app/utils/classNames";
 
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { NavigationButton } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Select } from "$app/components/ui/Select";
@@ -228,7 +228,9 @@ const TaxCenterIndex = () => {
           {FAQ_ITEMS.map((item) => (
             <CardContent asChild details key={item.id}>
               <Details>
-                <DetailsToggle chevronPosition="right" className="grow">{item.question}</DetailsToggle>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  {item.question}
+                </DetailsToggle>
                 <DetailsContent>
                   <p className="text-sm">{item.answer}</p>
                 </DetailsContent>

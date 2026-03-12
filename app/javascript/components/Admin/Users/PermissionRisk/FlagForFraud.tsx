@@ -1,10 +1,10 @@
 import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Textarea } from "$app/components/ui/Textarea";
 
@@ -20,7 +20,9 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
       <>
         <hr />
         <Details>
-          <DetailsToggle><h3>Flag for fraud</h3></DetailsToggle>
+          <DetailsToggle>
+            <h3>Flag for fraud</h3>
+          </DetailsToggle>
           <DetailsContent>
             <Form
               url={Routes.flag_for_fraud_admin_user_path(user.external_id)}

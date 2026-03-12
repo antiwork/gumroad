@@ -9,11 +9,11 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card as UICard, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -259,7 +259,9 @@ export const CardGrid = ({
           {hideSort ? null : (
             <CardContent asChild details>
               <Details>
-                <DetailsToggle chevronPosition="right" className="grow">Sort by</DetailsToggle>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  Sort by
+                </DetailsToggle>
                 <DetailsContent>
                   <Fieldset role="group">
                     {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
@@ -282,7 +284,9 @@ export const CardGrid = ({
           {results?.tags_data.length || searchParams.tags?.length || tagsOpen ? (
             <CardContent asChild details>
               <Details open={tagsOpen} onToggle={setTagsOpen}>
-                <DetailsToggle chevronPosition="right" className="grow">Tags</DetailsToggle>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  Tags
+                </DetailsToggle>
                 <DetailsContent>
                   <Fieldset role="group">
                     <Label className="w-full">
@@ -310,7 +314,9 @@ export const CardGrid = ({
           {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
             <CardContent asChild details>
               <Details open={filetypesOpen} onToggle={setFiletypesOpen}>
-                <DetailsToggle chevronPosition="right" className="grow">Contains</DetailsToggle>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  Contains
+                </DetailsToggle>
                 <DetailsContent>
                   <Fieldset role="group">
                     {results ? (
@@ -328,51 +334,53 @@ export const CardGrid = ({
           ) : null}
           <CardContent asChild details>
             <Details>
-              <DetailsToggle chevronPosition="right" className="grow">Price</DetailsToggle>
+              <DetailsToggle chevronPosition="right" className="grow">
+                Price
+              </DetailsToggle>
               <DetailsContent>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                  gridAutoFlow: "row",
-                  gap: "var(--spacer-3)",
-                }}
-              >
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={minPriceUid}>Minimum price</Label>
-                  </FieldsetTitle>
-                  <InputGroup>
-                    <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
-                    <NumberInput
-                      onChange={(value) => {
-                        setEnteredMinPrice(value);
-                        debouncedTrySetPrice(value, enteredMaxPrice);
-                      }}
-                      value={enteredMinPrice ?? null}
-                    >
-                      {(props) => <Input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
-                    </NumberInput>
-                  </InputGroup>
-                </Fieldset>
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={maxPriceUid}>Maximum price</Label>
-                  </FieldsetTitle>
-                  <InputGroup>
-                    <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
-                    <NumberInput
-                      onChange={(value) => {
-                        setEnteredMaxPrice(value);
-                        debouncedTrySetPrice(enteredMinPrice, value);
-                      }}
-                      value={enteredMaxPrice ?? null}
-                    >
-                      {(props) => <Input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
-                    </NumberInput>
-                  </InputGroup>
-                </Fieldset>
-              </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                    gridAutoFlow: "row",
+                    gap: "var(--spacer-3)",
+                  }}
+                >
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={minPriceUid}>Minimum price</Label>
+                    </FieldsetTitle>
+                    <InputGroup>
+                      <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
+                      <NumberInput
+                        onChange={(value) => {
+                          setEnteredMinPrice(value);
+                          debouncedTrySetPrice(value, enteredMaxPrice);
+                        }}
+                        value={enteredMinPrice ?? null}
+                      >
+                        {(props) => <Input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
+                      </NumberInput>
+                    </InputGroup>
+                  </Fieldset>
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={maxPriceUid}>Maximum price</Label>
+                    </FieldsetTitle>
+                    <InputGroup>
+                      <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
+                      <NumberInput
+                        onChange={(value) => {
+                          setEnteredMaxPrice(value);
+                          debouncedTrySetPrice(enteredMinPrice, value);
+                        }}
+                        value={enteredMaxPrice ?? null}
+                      >
+                        {(props) => <Input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
+                      </NumberInput>
+                    </InputGroup>
+                  </Fieldset>
+                </div>
               </DetailsContent>
             </Details>
           </CardContent>

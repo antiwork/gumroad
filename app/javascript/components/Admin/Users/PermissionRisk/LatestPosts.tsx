@@ -4,10 +4,10 @@ import { cast } from "ts-safe-cast";
 import { request } from "$app/utils/request";
 
 import type { User } from "$app/components/Admin/Users/User";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 
 type LatestPostsProps = {
   user: User;
@@ -73,7 +73,9 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
     <>
       <hr />
       <Details open={open} onToggle={onToggle}>
-        <DetailsToggle><h3>Last posts</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>Last posts</h3>
+        </DetailsToggle>
         <DetailsContent>
           <LatestPostsContent posts={posts} isLoading={isLoading} />
         </DetailsContent>

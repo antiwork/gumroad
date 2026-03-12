@@ -23,7 +23,6 @@ import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
@@ -38,6 +37,7 @@ import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
@@ -1033,9 +1033,7 @@ const Form = ({
           </Fieldset>
           <Fieldset className="gap-4">
             <FieldsetTitle>Settings</FieldsetTitle>
-            <Details
-              open={limitQuantity}
-            >
+            <Details open={limitQuantity}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={limitQuantity}
@@ -1063,9 +1061,7 @@ const Form = ({
                 </Dropdown>
               </DetailsContent>
             </Details>
-            <Details
-              open={limitValidity}
-            >
+            <Details open={limitValidity}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={limitValidity}
@@ -1110,9 +1106,7 @@ const Form = ({
                 </Dropdown>
               </DetailsContent>
             </Details>
-            <Details
-              open={hasMinimumAmount}
-            >
+            <Details open={hasMinimumAmount}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={hasMinimumAmount}
@@ -1138,9 +1132,7 @@ const Form = ({
                 </Dropdown>
               </DetailsContent>
             </Details>
-            <Details
-              open={hasMinimumQuantity}
-            >
+            <Details open={hasMinimumQuantity}>
               <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={hasMinimumQuantity}

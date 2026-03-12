@@ -11,9 +11,9 @@ import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
 import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceiptForm";
 import { Button } from "$app/components/Button";
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
 import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
@@ -478,7 +478,9 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
   gift.is_sender_purchase ? (
     <>
       <Details>
-        <DetailsToggle><h3>Gift Sender Info</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>Gift Sender Info</h3>
+        </DetailsToggle>
         <DetailsContent>
           <dl>
             <dt>For</dt>
@@ -499,7 +501,9 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
 
       <hr />
       <Details>
-        <DetailsToggle><h3>Edit giftee email</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>Edit giftee email</h3>
+        </DetailsToggle>
         <DetailsContent>
           <Form
             url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
@@ -508,7 +512,13 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
           >
             {(isLoading) => (
               <div className="flex gap-2">
-                <Input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
+                <Input
+                  type="text"
+                  className="flex-1"
+                  name="giftee_email"
+                  placeholder="Enter new giftee email"
+                  required
+                />
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Updating..." : "Update"}
                 </Button>
@@ -520,7 +530,9 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
     </>
   ) : (
     <Details>
-      <DetailsToggle><h3>Gift Receiver Info</h3></DetailsToggle>
+      <DetailsToggle>
+        <h3>Gift Receiver Info</h3>
+      </DetailsToggle>
       <DetailsContent>
         <dl>
           <dt>From</dt>
@@ -681,7 +693,9 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
       <>
         <hr />
         <Details>
-          <DetailsToggle><h3>Resend receipt</h3></DetailsToggle>
+          <DetailsToggle>
+            <h3>Resend receipt</h3>
+          </DetailsToggle>
           <DetailsContent>
             <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
           </DetailsContent>

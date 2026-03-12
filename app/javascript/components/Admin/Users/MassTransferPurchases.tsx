@@ -3,8 +3,8 @@ import * as React from "react";
 import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
@@ -16,7 +16,9 @@ const AdminUserMassTransferPurchases = ({ user }: AdminUserMassTransferPurchases
   <>
     <hr />
     <Details>
-      <DetailsToggle><h3>Mass-transfer purchases</h3></DetailsToggle>
+      <DetailsToggle>
+        <h3>Mass-transfer purchases</h3>
+      </DetailsToggle>
       <DetailsContent>
         <Form
           url={Routes.mass_transfer_purchases_admin_user_path(user.external_id)}

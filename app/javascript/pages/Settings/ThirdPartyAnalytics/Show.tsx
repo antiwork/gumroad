@@ -7,12 +7,12 @@ import { Snippet, SNIPPET_LOCATIONS, ThirdPartyAnalytics } from "$app/data/third
 import { SettingPage } from "$app/parsers/settings";
 
 import { Button } from "$app/components/Button";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
@@ -100,9 +100,7 @@ export default function ThirdPartyAnalyticsPage() {
             </>
           }
         >
-          <Details
-            open={!thirdPartyAnalytics.disable_third_party_analytics}
-          >
+          <Details open={!thirdPartyAnalytics.disable_third_party_analytics}>
             <DetailsToggle chevronPosition="none" className="mb-0">
               <Switch
                 checked={!thirdPartyAnalytics.disable_third_party_analytics}
@@ -111,52 +109,50 @@ export default function ThirdPartyAnalyticsPage() {
               />
             </DetailsToggle>
             <DetailsContent>
-            <Dropdown className="flex flex-col gap-4">
-              <Fieldset>
-                <FieldsetTitle>
-                  <Label htmlFor={`${uid}googleAnalyticsId`}>Google Analytics Property ID</Label>
-                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
-                    Learn more
-                  </a>
-                </FieldsetTitle>
-                <Input
-                  id={`${uid}googleAnalyticsId`}
-                  type="text"
-                  placeholder="G-ABCD232DSE"
-                  value={thirdPartyAnalytics.google_analytics_id}
-                  onChange={(evt) => updateThirdPartyAnalytics({ google_analytics_id: evt.target.value })}
-                />
-              </Fieldset>
-              <Fieldset>
-                <FieldsetTitle>
-                  <Label htmlFor={`${uid}facebookPixel`}>Facebook Pixel</Label>
-                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
-                    Learn more
-                  </a>
-                </FieldsetTitle>
-                <Input
-                  id={`${uid}facebookPixel`}
-                  type="text"
-                  placeholder="9127380912836192"
-                  value={thirdPartyAnalytics.facebook_pixel_id}
-                  onChange={(evt) => updateThirdPartyAnalytics({ facebook_pixel_id: evt.target.value })}
-                />
-              </Fieldset>
-              <Label>
-                <Checkbox
-                  checked={!thirdPartyAnalytics.skip_free_sale_analytics}
-                  onChange={(evt) => updateThirdPartyAnalytics({ skip_free_sale_analytics: !evt.target.checked })}
-                />
-                Send 'Purchase' events for free ($0) sales
-              </Label>
-            </Dropdown>
+              <Dropdown className="flex flex-col gap-4">
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}googleAnalyticsId`}>Google Analytics Property ID</Label>
+                    <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                      Learn more
+                    </a>
+                  </FieldsetTitle>
+                  <Input
+                    id={`${uid}googleAnalyticsId`}
+                    type="text"
+                    placeholder="G-ABCD232DSE"
+                    value={thirdPartyAnalytics.google_analytics_id}
+                    onChange={(evt) => updateThirdPartyAnalytics({ google_analytics_id: evt.target.value })}
+                  />
+                </Fieldset>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}facebookPixel`}>Facebook Pixel</Label>
+                    <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                      Learn more
+                    </a>
+                  </FieldsetTitle>
+                  <Input
+                    id={`${uid}facebookPixel`}
+                    type="text"
+                    placeholder="9127380912836192"
+                    value={thirdPartyAnalytics.facebook_pixel_id}
+                    onChange={(evt) => updateThirdPartyAnalytics({ facebook_pixel_id: evt.target.value })}
+                  />
+                </Fieldset>
+                <Label>
+                  <Checkbox
+                    checked={!thirdPartyAnalytics.skip_free_sale_analytics}
+                    onChange={(evt) => updateThirdPartyAnalytics({ skip_free_sale_analytics: !evt.target.checked })}
+                  />
+                  Send 'Purchase' events for free ($0) sales
+                </Label>
+              </Dropdown>
             </DetailsContent>
           </Details>
         </FormSection>
         <FormSection header={<h2>Domain verification</h2>}>
-          <Details
-            open={thirdPartyAnalytics.enable_verify_domain_third_party_services}
-          >
+          <Details open={thirdPartyAnalytics.enable_verify_domain_third_party_services}>
             <DetailsToggle>
               <Switch
                 checked={thirdPartyAnalytics.enable_verify_domain_third_party_services}
@@ -167,25 +163,25 @@ export default function ThirdPartyAnalyticsPage() {
               />
             </DetailsToggle>
             <DetailsContent>
-            <Dropdown className="flex flex-col gap-4">
-              <Fieldset>
-                <FieldsetTitle>
-                  <Label htmlFor={`${uid}facebookMetaTag`}>Facebook Business</Label>
-                  <a href="/help/article/290-facebook-domain-verification" target="_blank" rel="noreferrer">
-                    Learn more
-                  </a>
-                </FieldsetTitle>
-                <Textarea
-                  id={`${uid}facebookMetaTag`}
-                  placeholder='<meta name="facebook-domain-verification" content="me2vv6lgwoh" />'
-                  value={thirdPartyAnalytics.facebook_meta_tag}
-                  onChange={(evt) => updateThirdPartyAnalytics({ facebook_meta_tag: evt.target.value })}
-                />
-                <FieldsetDescription>
-                  Enter meta tag containing the Facebook domain verification code.
-                </FieldsetDescription>
-              </Fieldset>
-            </Dropdown>
+              <Dropdown className="flex flex-col gap-4">
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}facebookMetaTag`}>Facebook Business</Label>
+                    <a href="/help/article/290-facebook-domain-verification" target="_blank" rel="noreferrer">
+                      Learn more
+                    </a>
+                  </FieldsetTitle>
+                  <Textarea
+                    id={`${uid}facebookMetaTag`}
+                    placeholder='<meta name="facebook-domain-verification" content="me2vv6lgwoh" />'
+                    value={thirdPartyAnalytics.facebook_meta_tag}
+                    onChange={(evt) => updateThirdPartyAnalytics({ facebook_meta_tag: evt.target.value })}
+                  />
+                  <FieldsetDescription>
+                    Enter meta tag containing the Facebook domain verification code.
+                  </FieldsetDescription>
+                </Fieldset>
+              </Dropdown>
             </DetailsContent>
           </Details>
         </FormSection>

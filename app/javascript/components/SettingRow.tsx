@@ -1,7 +1,7 @@
 import * as React from "react";
 
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Switch } from "$app/components/ui/Switch";
 
 type ToggleProps = {
@@ -41,7 +41,9 @@ export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disab
   );
   return dropdown ? (
     <Details open={value}>
-      <DetailsToggle chevronPosition="none" className="mb-0">{toggle}</DetailsToggle>
+      <DetailsToggle chevronPosition="none" className="mb-0">
+        {toggle}
+      </DetailsToggle>
       <DetailsContent>
         <Dropdown>{dropdown}</Dropdown>
       </DetailsContent>

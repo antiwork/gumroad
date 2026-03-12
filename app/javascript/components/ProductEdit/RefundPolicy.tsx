@@ -4,11 +4,11 @@ import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
+import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Select as FormSelect } from "$app/components/ui/Select";
@@ -44,9 +44,7 @@ export const RefundPolicySelector = ({
   const uid = React.useId();
 
   return (
-    <Details
-      open={isEnabled}
-    >
+    <Details open={isEnabled}>
       <DetailsToggle chevronPosition="none" className="mb-0">
         <Switch
           checked={isEnabled}
@@ -62,82 +60,82 @@ export const RefundPolicySelector = ({
         />
       </DetailsToggle>
       <DetailsContent>
-      <Dropdown className="flex flex-col gap-4">
-        <Fieldset>
-          <FieldsetTitle className="flex justify-between">
-            <Label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</Label>
-            {refundPolicies.length > 0 ? (
-              <Popover>
-                <PopoverTrigger className="underline">Copy from other products</PopoverTrigger>
-                <PopoverContent>
-                  <div className="flex w-80 max-w-full flex-col gap-4 font-normal">
-                    <Select
-                      options={refundPolicies.map(({ id, product_name: label }) => ({ id, label }))}
-                      isMulti={false}
-                      placeholder="Select a product"
-                      onChange={(option) => setSelectedRefundPolicyId(option?.id ?? null)}
-                    />
-                    <PopoverClose asChild>
-                      <Button
-                        color="primary"
-                        disabled={selectedRefundPolicyId === null}
-                        onClick={() => {
-                          const otherRefundPolicy = refundPolicies.find(({ id }) => id === selectedRefundPolicyId);
-                          if (otherRefundPolicy) {
-                            setRefundPolicy({
-                              ...refundPolicy,
-                              title: otherRefundPolicy.title,
-                              fine_print: otherRefundPolicy.fine_print,
-                              max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days,
-                            });
-                          }
-                        }}
-                      >
-                        Copy
-                      </Button>
-                    </PopoverClose>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            ) : null}
-          </FieldsetTitle>
-          <FormSelect
-            id={`${uid}-max-refund-period-in-days`}
-            value={refundPolicy.max_refund_period_in_days}
-            onChange={(evt) => {
-              const maxRefundPeriodInDays = Number(evt.target.value);
-              const title = refundPolicy.allowed_refund_periods_in_days.find(
-                ({ key }) => key === maxRefundPeriodInDays,
-              )?.value;
-              setRefundPolicy({
-                ...refundPolicy,
-                max_refund_period_in_days: maxRefundPeriodInDays,
-                title: assertDefined(title),
-              });
-            }}
-          >
-            {refundPolicy.allowed_refund_periods_in_days.map(({ key, value }) => (
-              <option key={key} value={key}>
-                {value}
-              </option>
-            ))}
-          </FormSelect>
-        </Fieldset>
-        <Fieldset>
-          <FieldsetTitle>
-            <Label htmlFor={`${uid}-refund-policy-fine-print`}>Fine print (optional)</Label>
-          </FieldsetTitle>
-          <Textarea
-            id={`${uid}-refund-policy-fine-print`}
-            maxLength={3000}
-            rows={10}
-            value={refundPolicy.fine_print || ""}
-            onChange={(evt) => setRefundPolicy({ ...refundPolicy, fine_print: evt.target.value })}
-            onMouseEnter={() => setShowPreview(true)}
-            onMouseLeave={() => setShowPreview(false)}
-          />
-        </Fieldset>
-      </Dropdown>
+        <Dropdown className="flex flex-col gap-4">
+          <Fieldset>
+            <FieldsetTitle className="flex justify-between">
+              <Label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</Label>
+              {refundPolicies.length > 0 ? (
+                <Popover>
+                  <PopoverTrigger className="underline">Copy from other products</PopoverTrigger>
+                  <PopoverContent>
+                    <div className="flex w-80 max-w-full flex-col gap-4 font-normal">
+                      <Select
+                        options={refundPolicies.map(({ id, product_name: label }) => ({ id, label }))}
+                        isMulti={false}
+                        placeholder="Select a product"
+                        onChange={(option) => setSelectedRefundPolicyId(option?.id ?? null)}
+                      />
+                      <PopoverClose asChild>
+                        <Button
+                          color="primary"
+                          disabled={selectedRefundPolicyId === null}
+                          onClick={() => {
+                            const otherRefundPolicy = refundPolicies.find(({ id }) => id === selectedRefundPolicyId);
+                            if (otherRefundPolicy) {
+                              setRefundPolicy({
+                                ...refundPolicy,
+                                title: otherRefundPolicy.title,
+                                fine_print: otherRefundPolicy.fine_print,
+                                max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days,
+                              });
+                            }
+                          }}
+                        >
+                          Copy
+                        </Button>
+                      </PopoverClose>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              ) : null}
+            </FieldsetTitle>
+            <FormSelect
+              id={`${uid}-max-refund-period-in-days`}
+              value={refundPolicy.max_refund_period_in_days}
+              onChange={(evt) => {
+                const maxRefundPeriodInDays = Number(evt.target.value);
+                const title = refundPolicy.allowed_refund_periods_in_days.find(
+                  ({ key }) => key === maxRefundPeriodInDays,
+                )?.value;
+                setRefundPolicy({
+                  ...refundPolicy,
+                  max_refund_period_in_days: maxRefundPeriodInDays,
+                  title: assertDefined(title),
+                });
+              }}
+            >
+              {refundPolicy.allowed_refund_periods_in_days.map(({ key, value }) => (
+                <option key={key} value={key}>
+                  {value}
+                </option>
+              ))}
+            </FormSelect>
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-refund-policy-fine-print`}>Fine print (optional)</Label>
+            </FieldsetTitle>
+            <Textarea
+              id={`${uid}-refund-policy-fine-print`}
+              maxLength={3000}
+              rows={10}
+              value={refundPolicy.fine_print || ""}
+              onChange={(evt) => setRefundPolicy({ ...refundPolicy, fine_print: evt.target.value })}
+              onMouseEnter={() => setShowPreview(true)}
+              onMouseLeave={() => setShowPreview(false)}
+            />
+          </Fieldset>
+        </Dropdown>
       </DetailsContent>
     </Details>
   );

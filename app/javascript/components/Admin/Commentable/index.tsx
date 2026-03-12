@@ -45,7 +45,9 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
     <>
       <hr />
       <Details open={open} onToggle={setOpen} className="space-y-2">
-        <DetailsToggle><h3>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</h3></DetailsToggle>
+        <DetailsToggle>
+          <h3>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</h3>
+        </DetailsToggle>
         <DetailsContent>
           <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
           <AdminCommentableContent
