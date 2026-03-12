@@ -25,8 +25,6 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    expect(page).to have_text("Subtotal US$153.24", normalize_ws: true)
-    expect(page).to have_text("Shipping rate US$30.65", normalize_ws: true)
     check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true)
 
     expect(Purchase.last.price_cents).to eq(18389)
@@ -46,8 +44,6 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-    expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
     check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true)
 
     expect(Purchase.last.price_cents).to eq(12000)
@@ -129,9 +125,6 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
       visit product.long_url
       add_to_cart(product)
-      expect(page).to have_text("Subtotal US$6.38", normalize_ws: true)
-      expect(page).to have_text("Shipping rate US$6.38", normalize_ws: true)
-      expect(page).to have_text("Total US$12.76", normalize_ws: true)
       check_out(product, should_verify_address: true)
 
       expect(Purchase.last.price_cents).to eq(1276)

@@ -49,11 +49,6 @@
     }
   }
 
-  main {
-    display: flex;
-    flex-direction: column;
-  }
-
   @for $i from 1 through 5 {
     h#{$i} {
       @include font-size(6 - $i);

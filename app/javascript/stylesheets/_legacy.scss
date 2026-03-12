@@ -36,11 +36,3 @@ button[draggable="true"] {
     }
   }
 }
-
-body > header,
-header.sticky-top,
-main > header {
-  [role="tablist"] a[role="tab"] {
-    text-decoration: none;
-  }
-}

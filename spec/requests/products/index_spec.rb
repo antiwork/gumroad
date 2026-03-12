@@ -61,8 +61,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Cancel"
       end
+      click_on "Cancel"
 
       expect(page).not_to have_alert(text: "Product deleted!")
 
@@ -70,8 +70,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
 
       expect(page).to have_alert(text: "Product deleted!")
     end
@@ -85,8 +85,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Cancel"
       end
+      click_on "Cancel"
 
       expect(page).not_to have_alert(text: "Product deleted!")
 
@@ -94,8 +94,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
 
       expect(page).to have_alert(text: "Product deleted!")
     end
@@ -554,8 +554,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
       expect(page).to have_alert(text: "Product deleted!")
     end
 
@@ -573,8 +573,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
       expect(page).to have_alert(text: "Product deleted!")
     end
   end
