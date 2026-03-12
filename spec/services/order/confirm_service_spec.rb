@@ -65,10 +65,10 @@ describe Order::ConfirmService, :vcr do
       charge_responses = Order::ChargeService.new(order:, params:).perform
       expect(order.purchases.in_progress.count).to eq(2)
       expect(charge_responses.size).to eq(2)
-      expect(charge_responses[charge_responses.keys[0]]).to include(success: true, requires_card_action: true, client_secret: anything,
-                                                                    order: { id: order.external_id, stripe_connect_account_id: nil })
-      expect(charge_responses[charge_responses.keys[1]]).to include(success: true, requires_card_action: true, client_secret: anything,
-                                                                    order: { id: order.external_id, stripe_connect_account_id: nil })
+      expect(charge_responses[charge_responses.keys[0]]).to include(success: true, requires_card_action: true, client_secret: anything)
+      expect(Order.find_by_secure_external_id(charge_responses[charge_responses.keys[0]][:order][:id], scope: "confirm")).to eq(order)
+      expect(charge_responses[charge_responses.keys[1]]).to include(success: true, requires_card_action: true, client_secret: anything)
+      expect(Order.find_by_secure_external_id(charge_responses[charge_responses.keys[1]][:order][:id], scope: "confirm")).to eq(order)
 
       client_secret = charge_responses[charge_responses.keys[0]][:client_secret]
       confirmation_params = { client_secret:, stripe_error: nil }
@@ -89,10 +89,10 @@ describe Order::ConfirmService, :vcr do
       charge_responses = Order::ChargeService.new(order:, params:).perform
       expect(order.purchases.in_progress.count).to eq(2)
       expect(charge_responses.size).to eq(2)
-      expect(charge_responses[charge_responses.keys[0]]).to include(success: true, requires_card_action: true, client_secret: anything,
-                                                                    order: { id: order.external_id, stripe_connect_account_id: nil })
-      expect(charge_responses[charge_responses.keys[1]]).to include(success: true, requires_card_action: true, client_secret: anything,
-                                                                    order: { id: order.external_id, stripe_connect_account_id: nil })
+      expect(charge_responses[charge_responses.keys[0]]).to include(success: true, requires_card_action: true, client_secret: anything)
+      expect(Order.find_by_secure_external_id(charge_responses[charge_responses.keys[0]][:order][:id], scope: "confirm")).to eq(order)
+      expect(charge_responses[charge_responses.keys[1]]).to include(success: true, requires_card_action: true, client_secret: anything)
+      expect(Order.find_by_secure_external_id(charge_responses[charge_responses.keys[1]][:order][:id], scope: "confirm")).to eq(order)
 
       client_secret = charge_responses[charge_responses.keys[0]][:client_secret]
       confirmation_params = { client_secret:, stripe_error: {
@@ -121,10 +121,10 @@ describe Order::ConfirmService, :vcr do
       charge_responses = Order::ChargeService.new(order:, params:).perform
       expect(order.purchases.in_progress.count).to eq(2)
       expect(charge_responses.size).to eq(2)
-      expect(charge_responses[charge_responses.keys[0]]).to include(success: true, requires_card_action: true, client_secret: anything,
-                                                                    order: { id: order.external_id, stripe_connect_account_id: nil })
-      expect(charge_responses[charge_responses.keys[1]]).to include(success: true, requires_card_action: true, client_secret: anything,
-                                                                    order: { id: order.external_id, stripe_connect_account_id: nil })
+      expect(charge_responses[charge_responses.keys[0]]).to include(success: true, requires_card_action: true, client_secret: anything)
+      expect(Order.find_by_secure_external_id(charge_responses[charge_responses.keys[0]][:order][:id], scope: "confirm")).to eq(order)
+      expect(charge_responses[charge_responses.keys[1]]).to include(success: true, requires_card_action: true, client_secret: anything)
+      expect(Order.find_by_secure_external_id(charge_responses[charge_responses.keys[1]][:order][:id], scope: "confirm")).to eq(order)
 
       client_secret = charge_responses[charge_responses.keys[0]][:client_secret]
       confirmation_params = { client_secret:, stripe_error: {

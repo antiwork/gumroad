@@ -338,7 +338,7 @@ describe Order::CreateService, :vcr do
           requires_card_action: true,
           client_secret: "pi_123_secret_456"
         )
-        expect(sca_response[:order][:id]).to eq(order.external_id)
+        expect(Order.find_by_secure_external_id(sca_response[:order][:id], scope: "confirm")).to eq(order)
         expect(sca_response[:order][:stripe_connect_account_id]).to eq(merchant_account.charge_processor_merchant_id)
         # The SCA upgrade purchase is added to the order for the confirm endpoint
         expect(order.purchases.in_progress.count).to eq(2)
