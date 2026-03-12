@@ -161,7 +161,8 @@ describe("Checkout upsells page", type: :system, js: true) do
   end
 
   def within_preview_modal(title:, &block)
-    within_modal title do
+    within "[role=dialog]" do
+      expect(page).to have_selector("h2", text: title)
       block.call
     end
   end
