@@ -149,6 +149,7 @@ export const RefundPolicyModalPreview = ({ refundPolicy, open }: { refundPolicy:
       open={!!refundPolicy.fine_print && open}
       title={refundPolicy.title}
       modal={false}
+      usePortal={false}
       footer={`Last updated ${new Date().toLocaleString(userAgentInfo.locale, { dateStyle: "medium" })}`}
     >
       <div style={{ whiteSpace: "pre-wrap" }}>{refundPolicy.fine_print}</div>

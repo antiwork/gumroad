@@ -3,6 +3,8 @@ import React from "react";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Pill } from "$app/components/ui/Pill";
 
+import { CardContent } from "../ui/Card";
+
 export const ApiEndpoint = ({
   method,
   path,
@@ -20,7 +22,7 @@ export const ApiEndpoint = ({
   const url = isOAuth ? `https://gumroad.com${path}` : `https://api.gumroad.com/v2${path}`;
 
   return (
-    <div id={methodId}>
+    <CardContent details id={methodId}>
       <div className="flex flex-col gap-4">
         <div role="heading" aria-level={3} className="flex items-center gap-2">
           <Pill color="primary">{method.toUpperCase()}</Pill>
@@ -30,6 +32,6 @@ export const ApiEndpoint = ({
         <CodeSnippet>{url}</CodeSnippet>
         {children}
       </div>
-    </div>
+    </CardContent>
   );
 };
