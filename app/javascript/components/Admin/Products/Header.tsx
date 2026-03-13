@@ -6,6 +6,7 @@ import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelat
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
 import { buttonVariants } from "$app/components/Button";
+import { InlineList } from "$app/components/ui/InlineList";
 
 import coverPlaceholder from "$assets/images/cover_placeholder.png";
 
@@ -40,7 +41,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
         </h2>
 
         <div>
-          <ul className="inline">
+          <InlineList>
             <li>
               <DateTimeWithRelativeTooltip date={product.created_at} utc />
             </li>
@@ -48,7 +49,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
               <Link href={Routes.admin_user_path(product.user.external_id)}>{product.user.name}</Link>
             </li>
             <AdminProductStats product_external_id={product.external_id} />
-          </ul>
+          </InlineList>
         </div>
       </div>
     </div>
