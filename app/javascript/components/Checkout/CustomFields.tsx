@@ -5,6 +5,7 @@ import { CustomFieldDescriptor } from "$app/parsers/product";
 
 import { Creator } from "$app/components/Checkout/cartState";
 import { Product, getCustomFieldKey, getErrors, isProcessing, useState } from "$app/components/Checkout/payment";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -141,7 +142,7 @@ const SellerCustomFields = ({ seller, className }: { seller: Creator; className?
     <div className={className}>
       <section className="flex grow flex-col gap-4">
         <h4 className="text-base sm:text-lg">
-          <img className="user-avatar h-8 !w-8" src={seller.avatar_url} />
+          <Avatar className="h-8 !w-8" src={seller.avatar_url} />
           &ensp;
           {seller.name}
         </h4>

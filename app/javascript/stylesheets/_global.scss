@@ -162,20 +162,6 @@ details {
   }
 }
 
-.user-avatar {
-  border-radius: border-radius(3);
-  width: $big-icon-size;
-  aspect-ratio: 1;
-  flex-shrink: 0;
-  border: $border;
-}
-
-.application-icon {
-  border: $border;
-  border-radius: border-radius(1);
-  flex-shrink: 0;
-}
-
 [role^="menuitem"] {
   cursor: pointer;
 }

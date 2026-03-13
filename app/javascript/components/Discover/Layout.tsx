@@ -11,6 +11,7 @@ import { Nav } from "$app/components/Discover/Nav";
 import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
 import { Logo } from "$app/components/Logo";
+import { Avatar } from "$app/components/ui/Avatar";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 const UserActionButtons: React.FC = () => {
@@ -149,7 +150,7 @@ export const Layout: React.FC<{
   const cartButton = <CartNavigationButton className="link-button shrink-0" />;
   const avatarElement = currentSeller ? (
     <a href={Routes.dashboard_url({ host: appDomain })} aria-label="Dashboard" className="shrink-0">
-      <img className="user-avatar" src={currentSeller.avatarUrl} />
+      <Avatar src={currentSeller.avatarUrl} />
     </a>
   ) : null;
 

@@ -10,6 +10,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { TopCreatorBadge } from "$app/components/Product/AuthorByline";
 import { FollowForm } from "$app/components/Profile/FollowForm";
+import { Avatar } from "$app/components/ui/Avatar";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -53,7 +54,7 @@ export const Layout = ({ creatorProfile, hideFollowForm, children }: LayoutProps
                 Impersonate
               </NavigationButton>
             ) : null}
-            <img className="user-avatar" src={creatorProfile.avatar_url} alt="Profile Picture" />
+            <Avatar src={creatorProfile.avatar_url} alt="Profile Picture" />
             <a href={Routes.root_path()} className="flex items-center gap-2 no-underline">
               {creatorProfile.name}
               {creatorProfile.is_verified ? (
