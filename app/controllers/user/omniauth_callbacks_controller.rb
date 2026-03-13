@@ -6,6 +6,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   before_action :set_default_page_title
   before_action :set_csrf_meta_tags
   before_action :set_default_meta_tags
+  before_action :hide_layouts
   helper_method :erb_meta_tags
 
   REQ_PARAM_STATE = "state"
@@ -190,6 +191,10 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   end
 
   private
+    def hide_layouts
+      @hide_layouts = true
+    end
+
     def post_auth_redirect(user)
       if params[:referer].present? && params[:referer] != "/"
         params[:referer]
