@@ -49,11 +49,6 @@
     }
   }
 
-  main {
-    display: flex;
-    flex-direction: column;
-  }
-
   @for $i from 1 through 5 {
     h#{$i} {
       @include font-size(6 - $i);
@@ -165,20 +160,6 @@ details {
       margin-bottom: 0;
     }
   }
-}
-
-.user-avatar {
-  border-radius: border-radius(3);
-  width: $big-icon-size;
-  aspect-ratio: 1;
-  flex-shrink: 0;
-  border: $border;
-}
-
-.application-icon {
-  border: $border;
-  border-radius: border-radius(1);
-  flex-shrink: 0;
 }
 
 [role^="menuitem"] {

@@ -2362,7 +2362,6 @@ const RefundForm = ({
       </Fieldset>
       <div style={{ display: "contents" }}>
         <Modal
-          usePortal
           open={isModalShowing}
           onClose={() => setIsModalShowing(false)}
           title={modalTitle}

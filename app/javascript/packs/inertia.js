@@ -5,11 +5,13 @@ import { createRoot } from "react-dom/client";
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
 
-router.on("start", () => {
+router.on("start", (event) => {
+  if (event.detail.visit.prefetch) return;
   window.__activeRequests = (window.__activeRequests || 0) + 1;
 });
 
-router.on("finish", () => {
+router.on("finish", (event) => {
+  if (event.detail.visit.prefetch) return;
   window.__activeRequests = Math.max((window.__activeRequests || 1) - 1, 0);
 });
 
@@ -25,7 +27,7 @@ router.on("before", (event) => {
 
   // Track previous route for navigation (only for GET requests)
   const method = event.detail.visit.method?.toLowerCase() || "get";
-  if (method === "get") {
+  if (method === "get" && !event.detail.visit.prefetch) {
     const currentUrl = new URL(window.location.href);
     const newUrl =
       typeof event.detail.visit.url === "string"
@@ -88,11 +90,6 @@ async function resolvePageComponent(name) {
 }
 
 createInertiaApp({
-  defaults: {
-    prefetch: {
-      cacheFor: ["30s", "5m"],
-    },
-  },
   progress: false,
   resolve: resolvePageComponent,
   title: (title) => title || "Gumroad",
