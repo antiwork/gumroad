@@ -2,10 +2,6 @@
 // It should be removed once everything uses the new stuff.
 @use "sass:math";
 
-.legacy-only {
-  display: none !important;
-}
-
 // Work around a strange Chromium issue where dragging doesn't work due to `all: unset`
 button[draggable="true"] {
   -webkit-user-drag: element;
