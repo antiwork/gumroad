@@ -190,15 +190,15 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 5
           command: |
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               docker/ci/wait_on_connection.sh db_test 3306
 
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               docker/ci/wait_on_connection.sh elasticsearch 9200
 
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               docker/ci/wait_on_connection.sh minio 9000
         env:
@@ -210,7 +210,7 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 10
           command: |
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
               -e RAILS_ENV=test \
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               bundle exec rake db:setup
@@ -222,7 +222,7 @@ jobs:
           WEB_REPO: quay.io/gumroad/web
           KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
         run: |
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+          docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -e RUBY_YJIT_ENABLE=1 \
             -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC=${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }} \
             -e KNAPSACK_PRO_CI_NODE_TOTAL=${{ matrix.ci_node_total }} \
@@ -340,15 +340,15 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 5
           command: |
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               docker/ci/wait_on_connection.sh db_test 3306
 
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               docker/ci/wait_on_connection.sh elasticsearch 9200
 
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               docker/ci/wait_on_connection.sh minio 9000
         env:
@@ -360,7 +360,7 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 10
           command: |
-            docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
               -e RAILS_ENV=test \
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               bundle exec rake db:setup
@@ -393,7 +393,7 @@ jobs:
           chmod 777 ./test-logs
 
           # Run tests with volume mount to capture capybara artifacts and test logs
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+          docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
             -v "$(pwd)/test-logs:/app/log" \
             -e RUBY_YJIT_ENABLE \
