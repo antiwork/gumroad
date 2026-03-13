@@ -9,6 +9,7 @@ import { assertResponseError } from "$app/utils/request";
 import { Layout } from "$app/components/Library/Layout";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
@@ -77,7 +78,7 @@ export default function WishlistsFollowingPage() {
                       href={wishlist.creator.profile_url}
                       style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}
                     >
-                      <img className="user-avatar" src={wishlist.creator.avatar_url} />
+                      <Avatar src={wishlist.creator.avatar_url} />
                       <span>{wishlist.creator.name}</span>
                     </a>
                   </TableCell>

@@ -282,8 +282,8 @@ export const useRichTextEditor = ({
     editorProps: {
       attributes: {
         class: classNames(
-          "min-h-full focus-within:outline-none",
-          editable && "whitespace-break-spaces rounded-t-none",
+          "focus-within:outline-none",
+          editable && "min-h-full whitespace-break-spaces rounded-t-none",
           className,
         ),
         ...(ariaLabel ? { "aria-label": ariaLabel } : {}),

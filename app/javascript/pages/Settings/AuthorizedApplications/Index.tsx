@@ -104,10 +104,10 @@ export default function AuthorizedApplicationsPage() {
                 <TableRow key={application.id}>
                   <TableCell hideLabel>
                     <div className="flex gap-3">
-                      <div>
+                      <div className="shrink-0">
                         <img
                           src={application.icon_url || placeholderAppIcon}
-                          className="application-icon"
+                          className="rounded border"
                           width={72}
                           height={72}
                           alt={application.name}

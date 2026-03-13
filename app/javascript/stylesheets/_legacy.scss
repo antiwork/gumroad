@@ -50,11 +50,3 @@ body#overlay-page {
     }
   }
 }
-
-body > header,
-header.sticky-top,
-main > header {
-  [role="tablist"] a[role="tab"] {
-    text-decoration: none;
-  }
-}

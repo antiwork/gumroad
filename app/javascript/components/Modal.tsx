@@ -12,7 +12,7 @@ export const Modal = ({
   allowClose = true,
   onClose,
   modal = true,
-  usePortal,
+  usePortal = true,
   ...props
 }: {
   className?: string;
