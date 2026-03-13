@@ -932,7 +932,7 @@ const Form = ({
           </section>
         </form>
         <CheckoutPreview cartItem={previewCartItem}>
-          <Modal open modal={false} title={offerText.value}>
+          <Modal open modal={false} usePortal={false} title={offerText.value}>
             {isCrossSell ? (
               <CrossSellModal
                 crossSell={{

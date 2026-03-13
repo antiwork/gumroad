@@ -15,6 +15,7 @@ import { Modal } from "$app/components/Modal";
 import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -331,7 +332,7 @@ export const EntityInfo = ({ entityName, creator }: { entityName: string | null;
       {creator ? (
         <CardContent>
           <span style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} className="grow">
-            {creator.avatar_url ? <img className="user-avatar" src={creator.avatar_url} /> : null}
+            {creator.avatar_url ? <Avatar src={creator.avatar_url} /> : null}
 
             <span>
               By{" "}

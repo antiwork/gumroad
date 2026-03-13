@@ -3,6 +3,7 @@ import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import type { User, UserMembership } from "$app/components/Admin/Users/User";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Card, CardContent } from "$app/components/ui/Card";
 
 type MembershipsProps = {
@@ -17,7 +18,7 @@ type MembershipProps = {
 const Membership = ({ membership, className }: MembershipProps) => (
   <div className={className}>
     <div className="flex grow items-center gap-4">
-      <img src={membership.seller.avatar_url} className="user-avatar" alt={membership.seller.display_name_or_email} />
+      <Avatar src={membership.seller.avatar_url} alt={membership.seller.display_name_or_email} />
       <div className="grid">
         <h5>
           <Link href={Routes.admin_user_url(membership.seller.external_id)}>

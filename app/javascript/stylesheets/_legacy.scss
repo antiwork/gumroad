@@ -23,20 +23,6 @@ button[draggable="true"] {
   opacity: $disabled-opacity;
 }
 
-body#overlay-page {
-  display: flex;
-  flex-direction: column;
-  background: transparent;
-
-  &:not(.gumroad-minimized) {
-    background: rgba(0, 0, 0, 0.5);
-  }
-
-  .product-display {
-    overflow: auto;
-  }
-}
-
 .rich-text {
   .embed {
     > .preview {
@@ -48,13 +34,5 @@ body#overlay-page {
         }
       }
     }
-  }
-}
-
-body > header,
-header.sticky-top,
-main > header {
-  [role="tablist"] a[role="tab"] {
-    text-decoration: none;
   }
 }
