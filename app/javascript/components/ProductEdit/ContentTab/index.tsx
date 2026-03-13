@@ -84,6 +84,7 @@ import { Checkbox } from "$app/components/ui/Checkbox";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
@@ -132,35 +133,37 @@ const FileUploadMenu = ({
   onSelectExistingFiles: () => void;
   onUploadFromDropbox: () => void;
 }) => (
-  <div role="menu" aria-label="Image and file uploader">
+  <Menu aria-label="Image and file uploader">
     <PopoverClose asChild>
-      <div role="menuitem" onClick={onEmbedMedia}>
+      <MenuListItem onClick={onEmbedMedia}>
         <Images className="size-5" />
         <span>Embed media</span>
-      </div>
+      </MenuListItem>
     </PopoverClose>
     <PopoverClose asChild>
-      <label role="menuitem">
-        <input type="file" name="file" className="sr-only" multiple onChange={(e) => onUploadFile(e.target)} />
-        <Paperclip className="size-5" />
-        <span>Computer files</span>
-      </label>
+      <MenuListItem asChild>
+        <label>
+          <input type="file" name="file" className="sr-only" multiple onChange={(e) => onUploadFile(e.target)} />
+          <Paperclip className="size-5" />
+          <span>Computer files</span>
+        </label>
+      </MenuListItem>
     </PopoverClose>
     {existingFiles.length > 0 ? (
       <PopoverClose asChild>
-        <div role="menuitem" onClick={onSelectExistingFiles}>
+        <MenuListItem onClick={onSelectExistingFiles}>
           <File className="size-5" />
           <span>Existing product files</span>
-        </div>
+        </MenuListItem>
       </PopoverClose>
     ) : null}
     <PopoverClose asChild>
-      <div role="menuitem" onClick={onUploadFromDropbox}>
+      <MenuListItem onClick={onUploadFromDropbox}>
         <DropboxIcon pack="brands" className="size-5" />
         <span>Dropbox files</span>
-      </div>
+      </MenuListItem>
     </PopoverClose>
-  </div>
+  </Menu>
 );
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
@@ -710,11 +713,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-                    <div role="menu" onClick={() => setInsertMenuState(null)}>
+                    <Menu onClick={() => setInsertMenuState(null)}>
                       {insertMenuState === "inputs" ? (
                         <>
-                          <div
-                            role="menuitem"
+                          <MenuListItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setInsertMenuState("open");
@@ -722,32 +724,31 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <ChevronLeft className="size-5" />
                             <span>Back</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
+                          </MenuListItem>
+                          <MenuListItem onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
                             <FileDetail className="size-5" />
                             <span>Short answer</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
+                          </MenuListItem>
+                          <MenuListItem onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
                             <FileDetail className="size-5" />
                             <span>Long answer</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
+                          </MenuListItem>
+                          <MenuListItem onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
                             <FolderPlus className="size-5" />
                             <span>Upload file</span>
-                          </div>
+                          </MenuListItem>
                         </>
                       ) : (
                         <>
-                          <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
+                          <MenuListItem onClick={() => setAddingButton({ label: "", url: "" })}>
                             <CursorClick className="size-5" />
                             <span>Button</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+                          </MenuListItem>
+                          <MenuListItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                             <Minus className="size-5" />
                             <span>Divider</span>
-                          </div>
-                          <div
-                            role="menuitem"
+                          </MenuListItem>
+                          <MenuListItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setInsertMenuState("inputs");
@@ -757,25 +758,24 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             <Rename />
                             <span>Input</span>
                             <ChevronRight className="ml-auto size-5" />
-                          </div>
-                          <div role="menuitem" onClick={onInsertMoreLikeThis}>
+                          </MenuListItem>
+                          <MenuListItem onClick={onInsertMoreLikeThis}>
                             <Grid className="size-5" />
                             <span>More like this</span>
-                          </div>
-                          <div role="menuitem" onClick={onInsertPosts}>
+                          </MenuListItem>
+                          <MenuListItem onClick={onInsertPosts}>
                             <FileDetail className="size-5" />
                             <span>List of posts</span>
-                          </div>
-                          <div role="menuitem" onClick={onInsertLicense}>
+                          </MenuListItem>
+                          <MenuListItem onClick={onInsertLicense}>
                             <Key className="size-5" />
                             <span>License key</span>
-                          </div>
-                          <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
+                          </MenuListItem>
+                          <MenuListItem onClick={() => setShowInsertPostModal(true)}>
                             <TwitterX pack="brands" className="size-5" />
                             <span>X post</span>
-                          </div>
-                          <div
-                            role="menuitem"
+                          </MenuListItem>
+                          <MenuListItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowUpsellModal(true);
@@ -783,9 +783,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <CartPlus className="size-5" />
                             <span>Upsell</span>
-                          </div>
-                          <div
-                            role="menuitem"
+                          </MenuListItem>
+                          <MenuListItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowReviewModal(true);
@@ -793,10 +792,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <Star pack="filled" className="size-5" />
                             <span>Review</span>
-                          </div>
+                          </MenuListItem>
                         </>
                       )}
-                    </div>
+                    </Menu>
                   </PopoverContent>
                 </Popover>
                 <div

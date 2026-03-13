@@ -10,6 +10,7 @@ import { CardProduct } from "$app/parsers/product";
 import { Card } from "$app/components/Product/Card";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Label } from "$app/components/ui/Label";
+import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { Radio } from "$app/components/ui/Radio";
@@ -86,11 +87,11 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
                 ),
                 menu: (close) => (
                   <>
-                    <div role="menuitem" style={{ pointerEvents: "none", backgroundColor: "transparent" }}>
+                    <MenuListItem style={{ pointerEvents: "none", backgroundColor: "transparent" }}>
                       <b>More like this recommendations:</b>
-                    </div>
+                    </MenuListItem>
                     <div onChange={close}>
-                      <div role="menuitem">
+                      <MenuListItem>
                         <Label>
                           <Radio
                             checked={node.attrs.recommendationType === "own_products"}
@@ -98,8 +99,8 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
                           />
                           Only my products
                         </Label>
-                      </div>
-                      <div role="menuitem">
+                      </MenuListItem>
+                      <MenuListItem>
                         <Label>
                           <Radio
                             checked={node.attrs.recommendationType === "directly_affiliated_products"}
@@ -107,8 +108,8 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
                           />
                           My products and affiliated
                         </Label>
-                      </div>
-                      <div role="menuitem">
+                      </MenuListItem>
+                      <MenuListItem>
                         <Label>
                           <Radio
                             checked={node.attrs.recommendationType === "gumroad_affiliates_products"}
@@ -119,7 +120,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
                             Gumroad Affiliates
                           </a>
                         </Label>
-                      </div>
+                      </MenuListItem>
                     </div>
                   </>
                 ),

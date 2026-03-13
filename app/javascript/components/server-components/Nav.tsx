@@ -37,6 +37,7 @@ import {
 } from "$app/components/Nav";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
+import { Menu as MenuContainer } from "$app/components/ui/Menu";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -112,7 +113,7 @@ export const Nav = (props: Props) => {
             }
           />
           <DashboardNavProfilePopover user={currentSeller}>
-            <div role="menu" className="border-0! shadow-none! dark:border!">
+            <MenuContainer className="border-0! shadow-none! dark:border!">
               {teamMemberships != null && teamMemberships.length > 0 ? (
                 <>
                   {teamMemberships.map((teamMembership) => (
@@ -137,7 +138,7 @@ export const Nav = (props: Props) => {
                 href={Routes.logout_url(routeParams)}
               />
               {loggedInUser?.isImpersonating ? <UnbecomeDropdownItem /> : null}
-            </div>
+            </MenuContainer>
           </DashboardNavProfilePopover>
         </>
       }

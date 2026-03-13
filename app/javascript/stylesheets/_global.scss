@@ -107,10 +107,6 @@ ul.inline {
   }
 }
 
-menu > li {
-  list-style: none;
-}
-
 details {
   & > summary {
     all: inherit;
@@ -158,47 +154,6 @@ details {
     }
     &[open] > summary {
       margin-bottom: 0;
-    }
-  }
-}
-
-[role^="menuitem"] {
-  cursor: pointer;
-}
-
-[role="menu"] {
-  @include bg-color(filled);
-  padding: spacer(2) 0;
-  border: $border;
-  border-radius: border-radius(1);
-  box-shadow: box-shadow(1);
-
-  [role^="menuitem"] {
-    display: block;
-    padding: spacer(2) spacer(4);
-    border: none;
-    @include text-singleline;
-
-    // Not using flex with gap here as text-overflow does not work correctly for it
-    > :not(:last-child) {
-      margin-right: spacer(2);
-    }
-
-    &:hover {
-      background-color: var(--active-bg);
-    }
-
-    @each $name in $states {
-      &.#{$name} {
-        color: full-color($name);
-      }
-    }
-  }
-
-  [role="menuitemradio"],
-  [role="menuitemcheckbox"] {
-    &[aria-checked="true"] {
-      font-weight: bold;
     }
   }
 }
