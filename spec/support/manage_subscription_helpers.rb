@@ -113,7 +113,6 @@ module ManageSubscriptionHelpers
       quantity:,
       gift:
     )
-    @subscription.update!(flat_fee_applicable: false)
     @original_purchase = @subscription.original_purchase
     @original_purchase.update!(gift_given: gift, is_gift_sender_purchase: true) if gift
 

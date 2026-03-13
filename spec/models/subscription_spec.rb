@@ -1461,7 +1461,7 @@ describe Subscription, :vcr do
 
           recurring_purchase = @subscription.purchases.last
           expect(recurring_purchase.discover_fee_per_thousand).to eq(300)
-          expect(recurring_purchase.fee_cents).to eq(264) # 599*0.09 + 599*0.3 + 30c
+          expect(recurring_purchase.fee_cents).to eq(227) # 599*0.329 + 30c
         end
       end
 
@@ -1475,7 +1475,7 @@ describe Subscription, :vcr do
 
           recurring_purchase = @subscription.purchases.last
           expect(recurring_purchase.discover_fee_per_thousand).to eq(300)
-          expect(recurring_purchase.fee_cents).to eq(264) # 599*0.09 + 599*0.3 + 30c
+          expect(recurring_purchase.fee_cents).to eq(227) # 599*0.329 + 30c
         end
       end
     end
@@ -1985,8 +1985,8 @@ describe Subscription, :vcr do
       expect(new_purchase.quantity).to eq 2
       expect(new_purchase.price_cents).to eq 3400 # $40 - $6 offer code
       expect(new_purchase.displayed_price_cents).to eq 3400 # $40 - $6 offer code
-      expect(new_purchase.fee_cents).to eq 1326 # 30% discover fee + 9% Gumroad fee
-      expect(new_purchase.affiliate_credit_cents).to eq 41 # $34 * 200/10,000 - 2% of the $13.26 fee
+      expect(new_purchase.fee_cents).to eq 1119 # 3400*0.329, rounded
+      expect(new_purchase.affiliate_credit_cents).to eq 45 # ($34 - $11.19 fee) * 200/10,000, floored
       expect(new_purchase.total_transaction_cents).to eq 3400 # $40 - $6 offer code
 
       # copied associations
@@ -2138,11 +2138,11 @@ describe Subscription, :vcr do
         new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
         @subscription.reload
 
-        expect(new_purchase.fee_cents).to eq(780) # 180 (gumroad 9% fee) + 600 (discover 30% fee)
+        expect(new_purchase.fee_cents).to eq(658) # 2000*0.329, rounded
 
         recurring_purchase = @subscription.charge!
         expect(recurring_purchase.purchase_state).to eq "successful"
-        expect(recurring_purchase.fee_cents).to eq(810)
+        expect(recurring_purchase.fee_cents).to eq(688)
         expect(recurring_purchase.discover_fee_per_thousand).to eq(300)
       end
     end
@@ -3563,13 +3563,6 @@ describe Subscription, :vcr do
         expect(subscription.alive_at?(purchase_date + 9.months)).to eq true
         expect(subscription.alive_at?(purchase_date + 15.months)).to eq false
       end
-    end
-  end
-
-  describe "#enable_flat_fee" do
-    it "sets flat_fee_applicable to true by default" do
-      expect_any_instance_of(Subscription).to receive(:enable_flat_fee).and_call_original
-      expect(create(:subscription).flat_fee_applicable).to eq true
     end
   end
 
