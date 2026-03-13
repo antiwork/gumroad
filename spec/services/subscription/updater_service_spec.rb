@@ -293,7 +293,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(result[:success]).to eq true
             expect(@subscription.reload).to be_alive
           end
-
         end
 
         context "using a new card" do

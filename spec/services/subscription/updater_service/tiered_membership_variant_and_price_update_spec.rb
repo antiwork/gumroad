@@ -103,7 +103,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               ).perform
             end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
           end
-
         end
 
         context "but recurrence period has changed" do

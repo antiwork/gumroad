@@ -96,5 +96,4 @@ describe User::Tier do
       expect(creator.tier(creator.sales_cents_total)).to eq(User::TIER_4)
     end
   end
-
 end
