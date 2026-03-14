@@ -26,6 +26,7 @@ type TaxDocument = {
   taxes: string;
   affiliate_credit?: string;
   net: string;
+  filed_at: string | null;
 };
 
 const FAQ_ITEMS: {
@@ -177,6 +178,7 @@ const TaxCenterIndex = () => {
                   <TableHead>Taxes</TableHead>
                   <TableHead>Affiliate commission</TableHead>
                   <TableHead>Net</TableHead>
+                  <TableHead>Filing Status</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -194,6 +196,9 @@ const TaxCenterIndex = () => {
                     <TableCell data-label="Taxes">-{doc.taxes}</TableCell>
                     <TableCell data-label="Affiliate commission">-{doc.affiliate_credit}</TableCell>
                     <TableCell data-label="Net">{doc.net}</TableCell>
+                    <TableCell data-label="Filing Status">
+                      {doc.filed_at ? `Filed with IRS on ${doc.filed_at}` : "Informational only (Not Filed with IRS)"}
+                    </TableCell>
                     <TableCell data-label="" className="text-right">
                       <div className="flex justify-end">
                         <NavigationButton

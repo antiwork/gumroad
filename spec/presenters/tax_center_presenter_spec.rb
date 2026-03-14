@@ -79,6 +79,27 @@ describe TaxCenterPresenter do
         expect(document[:taxes]).to eq("$1.80")
         expect(document[:affiliate_credit]).to eq("$1.50")
         expect(document[:net]).to eq("$24.25")
+        expect(document[:filed_at]).to be nil
+      end
+
+      it "returns document with necessary data including filing date when present" do
+        tax_form.update!(filed_at: 1.week.ago.to_i)
+
+        result = presenter.props
+
+        expect(result[:selected_year]).to eq(2023)
+
+        document = result[:documents].sole
+        expect(document[:document]).to eq("1099-K")
+        expect(document[:type]).to eq("IRS form")
+        expect(document[:year]).to eq(2023)
+        expect(document[:form_type]).to eq("us_1099_k")
+        expect(document[:gross]).to eq("$30.55")
+        expect(document[:fees]).to eq("$3.00")
+        expect(document[:taxes]).to eq("$1.80")
+        expect(document[:affiliate_credit]).to eq("$1.50")
+        expect(document[:net]).to eq("$24.25")
+        expect(document[:filed_at]).to eq(Time.at(tax_form.filed_at).strftime("%B %-d, %Y"))
       end
 
       it "caches the document data" do
