@@ -190,6 +190,15 @@ describe TaxCenterController, type: :controller, inertia: true do
         allow_any_instance_of(StripeTaxFormsApi).to receive(:download_tax_form).and_return(nil)
       end
 
+      it "redirects to the S3 download url if it is present" do
+        allow_any_instance_of(User).to receive(:tax_form_1099_download_url).and_return("https://example.com/tax1099k.pdf")
+
+        get :download, params: { year:, form_type: }
+
+        expect(response).to redirect_to("https://example.com/tax1099k.pdf")
+        expect(flash[:alert]).to be nil
+      end
+
       it "redirects with error message" do
         get :download, params: { year:, form_type: }
 
