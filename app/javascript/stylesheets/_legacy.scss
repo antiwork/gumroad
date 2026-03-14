@@ -11,11 +11,6 @@ button[draggable="true"] {
   -webkit-user-drag: element;
 }
 
-[role="tab"][aria-selected="true"][draggable="true"]::after {
-  transform: translate(-50%);
-  visibility: hidden;
-}
-
 [role="tree"] [role="treeitem"].sortable-ghost {
   background-color: gray(1);
   border: dashed $border-width $border-color;
