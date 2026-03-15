@@ -156,12 +156,6 @@ menu > li {
   @include dummy;
 }
 
-// Since we use alpha values to control the intensity of colours, when overlaying elements the background can shine through.
-// This helper class applies a solid background to mix the colour with to prevent that.
-.bg-filled {
-  background: linear-gradient(full-color(filled), full-color(filled));
-  background-blend-mode: overlay;
-}
 
 dl {
   display: grid;
