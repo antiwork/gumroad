@@ -68,21 +68,19 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
         <DetailsToggle>
           <h3>Flag for TOS violation</h3>
         </DetailsToggle>
-        <>
-          {shouldShowForm ? (
-            <AdminFlagForTosViolationsForm
-              user_external_id={product.user.external_id}
-              product_external_id={product.external_id}
-              success_message={suspendTosSuccessMessage}
-              confirm_message={suspendTosConfirmMessage}
-              reasons={compliance.reasons}
-              default_reason={compliance.default_reason}
-              onSuccess={() => setFlaggedForTosViolation(true)}
-            />
-          ) : null}
+        {shouldShowForm ? (
+          <AdminFlagForTosViolationsForm
+            user_external_id={product.user.external_id}
+            product_external_id={product.external_id}
+            success_message={suspendTosSuccessMessage}
+            confirm_message={suspendTosConfirmMessage}
+            reasons={compliance.reasons}
+            default_reason={compliance.default_reason}
+            onSuccess={() => setFlaggedForTosViolation(true)}
+          />
+        ) : null}
 
-          <AdminFlagForTosViolationsContent isLoading={isLoading} tosViolationFlags={tos_violation_flags} />
-        </>
+        <AdminFlagForTosViolationsContent isLoading={isLoading} tosViolationFlags={tos_violation_flags} />
       </Details>
     </>
   );

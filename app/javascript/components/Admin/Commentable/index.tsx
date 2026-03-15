@@ -48,17 +48,15 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
         <DetailsToggle>
           <h3>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</h3>
         </DetailsToggle>
-        <>
-          <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
-          <AdminCommentableContent
-            count={commentsCount}
-            comments={comments}
-            hasLoaded={hasLoaded}
-            isLoading={isLoading}
-            hasMore={hasMore}
-            onLoadMore={() => void fetchNextPage()}
-          />
-        </>
+        <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
+        <AdminCommentableContent
+          count={commentsCount}
+          comments={comments}
+          hasLoaded={hasLoaded}
+          isLoading={isLoading}
+          hasMore={hasMore}
+          onLoadMore={() => void fetchNextPage()}
+        />
       </Details>
     </>
   );
