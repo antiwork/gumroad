@@ -23,30 +23,28 @@ const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
           <DetailsToggle>
             <h3>Suspend for fraud</h3>
           </DetailsToggle>
-          <>
-            <Form
-              url={Routes.suspend_for_fraud_admin_user_path(user.external_id)}
-              method="POST"
-              confirmMessage={`Are you sure you want to suspend user ${user.external_id} for fraud?`}
-              onSuccess={() => showAlert("Suspended.", "success")}
-            >
-              {(isLoading) => (
-                <Fieldset>
-                  <div className="flex items-start gap-2">
-                    <Textarea
-                      name="suspend_for_fraud[suspension_note]"
-                      rows={3}
-                      className="flex-1"
-                      placeholder="Add suspension note (optional)"
-                    />
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Submitting..." : "Submit"}
-                    </Button>
-                  </div>
-                </Fieldset>
-              )}
-            </Form>
-          </>
+          <Form
+            url={Routes.suspend_for_fraud_admin_user_path(user.external_id)}
+            method="POST"
+            confirmMessage={`Are you sure you want to suspend user ${user.external_id} for fraud?`}
+            onSuccess={() => showAlert("Suspended.", "success")}
+          >
+            {(isLoading) => (
+              <Fieldset>
+                <div className="flex items-start gap-2">
+                  <Textarea
+                    name="suspend_for_fraud[suspension_note]"
+                    rows={3}
+                    className="flex-1"
+                    placeholder="Add suspension note (optional)"
+                  />
+                  <Button type="submit" disabled={isLoading}>
+                    {isLoading ? "Submitting..." : "Submit"}
+                  </Button>
+                </div>
+              </Fieldset>
+            )}
+          </Form>
         </Details>
       </>
     )

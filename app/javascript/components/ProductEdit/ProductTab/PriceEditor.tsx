@@ -26,7 +26,8 @@ export const PriceEditor = ({
   numberOfInstallments,
   onAllowInstallmentPlanChange,
   onNumberOfInstallmentsChange,
-  currencyCodeSelector }: {
+  currencyCodeSelector,
+}: {
   priceCents: number;
   suggestedPriceCents: number | null;
   isPWYW: boolean;
@@ -69,24 +70,22 @@ export const PriceEditor = ({
             }
           />
         </DetailsToggle>
-        <>
-          <Dropdown className="gap-4 lg:grid-cols-2">
-            <Fieldset>
-              <Label htmlFor={`${uid}-minimum-amount`}>Minimum amount</Label>
-              <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
-            </Fieldset>
-            <Fieldset>
-              <Label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</Label>
-              <PriceInput
-                id={`${uid}-suggested-price-cents`}
-                placeholder={formatPriceCentsWithoutCurrencySymbol(currencyType, priceCents)}
-                currencyCode={currencyType}
-                cents={suggestedPriceCents}
-                onChange={setSuggestedPriceCents}
-              />
-            </Fieldset>
-          </Dropdown>
-        </>
+        <Dropdown className="gap-4 lg:grid-cols-2">
+          <Fieldset>
+            <Label htmlFor={`${uid}-minimum-amount`}>Minimum amount</Label>
+            <PriceInput id={`${uid}-minimum-amount`} currencyCode={currencyType} cents={priceCents} disabled />
+          </Fieldset>
+          <Fieldset>
+            <Label htmlFor={`${uid}-suggested-price-cents`}>Suggested amount</Label>
+            <PriceInput
+              id={`${uid}-suggested-price-cents`}
+              placeholder={formatPriceCentsWithoutCurrencySymbol(currencyType, priceCents)}
+              currencyCode={currencyType}
+              cents={suggestedPriceCents}
+              onChange={setSuggestedPriceCents}
+            />
+          </Fieldset>
+        </Dropdown>
       </Details>
       {eligibleForInstallmentPlans ? (
         <InstallmentPlanEditor

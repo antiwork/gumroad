@@ -19,13 +19,15 @@ const AdminProductDetails = ({ product }: Props) => {
   const {
     data: details,
     isLoading,
-    fetchData: fetchDetails } = useLazyFetch<DetailsProps | null>(null, {
+    fetchData: fetchDetails,
+  } = useLazyFetch<DetailsProps | null>(null, {
     fetchUnlessLoaded: open,
     url: Routes.admin_product_details_path(product.external_id, { format: "json" }),
     responseParser: (data) => {
       const parsed = cast<{ details: DetailsProps }>(data);
       return parsed.details;
-    } });
+    },
+  });
 
   const onToggle = (isOpen: boolean) => {
     setOpen(isOpen);
@@ -41,9 +43,7 @@ const AdminProductDetails = ({ product }: Props) => {
         <DetailsToggle>
           <h3>Details</h3>
         </DetailsToggle>
-        <>
-          {isLoading || !details ? <LoadingSpinner /> : <AdminProductAttributesAndInfo productData={details} />}
-        </>
+        {isLoading || !details ? <LoadingSpinner /> : <AdminProductAttributesAndInfo productData={details} />}
       </Details>
     </>
   );

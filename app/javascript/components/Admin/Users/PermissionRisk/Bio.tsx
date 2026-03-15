@@ -15,15 +15,13 @@ const Bio = ({ user }: BioProps) => (
       <DetailsToggle>
         <h3>Bio</h3>
       </DetailsToggle>
-      <>
-        {user.bio ? (
-          <div>{user.bio}</div>
-        ) : (
-          <Alert role="status" variant="info">
-            No bio provided.
-          </Alert>
-        )}
-      </>
+      {user.bio ? (
+        <div>{user.bio}</div>
+      ) : (
+        <Alert role="status" variant="info">
+          No bio provided.
+        </Alert>
+      )}
     </Details>
   </>
 );

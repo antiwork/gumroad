@@ -56,7 +56,8 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
     const response = await request({
       method: "GET",
       url: Routes.admin_user_latest_posts_path(user.external_id),
-      accept: "json" });
+      accept: "json",
+    });
     setPosts(cast<PostProps[]>(await response.json()));
     setIsLoading(false);
   };
@@ -75,9 +76,7 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
         <DetailsToggle>
           <h3>Last posts</h3>
         </DetailsToggle>
-        <>
-          <LatestPostsContent posts={posts} isLoading={isLoading} />
-        </>
+        <LatestPostsContent posts={posts} isLoading={isLoading} />
       </Details>
     </>
   );

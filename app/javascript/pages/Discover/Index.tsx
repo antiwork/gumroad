@@ -51,7 +51,8 @@ const sortTitles = {
   curated: "Curated for you",
   trending: "On the market",
   hot_and_new: "Hot and new products",
-  best_sellers: "Best selling products" };
+  best_sellers: "Best selling products",
+};
 
 const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title: string }) => {
   const [active, setActive] = React.useState(0);
@@ -120,7 +121,8 @@ const ProductsCarouselSkeleton = () => (
 
 const BlackFridayBanner = ({
   stats,
-  currencyCode }: {
+  currencyCode,
+}: {
   stats: { active_deals_count: number; revenue_cents: number; average_discount_percentage: number };
   currencyCode: CurrencyCode;
 }) => (
@@ -173,7 +175,8 @@ const BlackFridayButton = ({
   variant = "pink",
   size = "default",
   offerCode,
-  taxonomy = undefined }: {
+  taxonomy = undefined,
+}: {
   variant?: "light" | "dark" | "pink";
   size?: "small" | "default";
   offerCode: string;
@@ -182,11 +185,13 @@ const BlackFridayButton = ({
   const variantClasses = {
     light: "bg-black text-white",
     dark: "bg-white text-black",
-    pink: "bg-pink text-black" };
+    pink: "bg-pink text-black",
+  };
 
   const sizeClasses = {
     small: "h-12 px-3 text-base lg:h-12 lg:px-6 lg:text-base",
-    default: "h-14 px-8 text-xl lg:h-16 lg:px-10 lg:text-xl" };
+    default: "h-14 px-8 text-xl lg:h-16 lg:px-10 lg:text-xl",
+  };
 
   const buttonClasses = classNames(
     "relative inline-flex rounded-sm no-underline items-center justify-center border border-black transition-all duration-150 group-hover:-translate-x-2 group-hover:-translate-y-2 z-3 w-full lg:w-auto",
@@ -215,7 +220,8 @@ const parseUrlParams = (href: string, curatedProductIds: string[], defaultSortOr
     taxonomy: url.pathname === Routes.discover_path() ? undefined : url.pathname.replace("/", ""),
     curated_product_ids: curatedProductIds.slice(
       url.pathname === Routes.discover_path() ? recommendedProductsCount : 0,
-    ) };
+    ),
+  };
 
   function parseParams<T extends keyof SearchRequest>(keys: T[], transform: (value: string) => SearchRequest[T]) {
     for (const key of keys) {
@@ -237,7 +243,8 @@ function DiscoverIndex() {
 
   const [state, dispatch] = useSearchReducer({
     params: addInitialOffset(parseUrlParams(window.location.href, props.curated_product_ids, defaultSortOrder)),
-    results: props.search_results });
+    results: props.search_results,
+  });
 
   const isBlackFridayPage = state.params.offer_code === props.black_friday_offer_code;
   const showBlackFridayHero = props.show_black_friday_hero ?? false;
@@ -280,7 +287,8 @@ function DiscoverIndex() {
           {},
           {
             preserveState: true,
-            preserveScroll: true },
+            preserveScroll: true,
+          },
         );
       } else {
         router.get(
@@ -289,7 +297,8 @@ function DiscoverIndex() {
           {
             preserveState: true,
             preserveScroll: true,
-            only: ["search_results"] },
+            only: ["search_results"],
+          },
         );
       }
     }
@@ -302,7 +311,8 @@ function DiscoverIndex() {
       const newParams = parseUrlParams(window.location.href, props.curated_product_ids, defaultSortOrder);
       dispatch({
         type: "set-params",
-        params: addInitialOffset(newParams) });
+        params: addInitialOffset(newParams),
+      });
     };
     window.addEventListener("popstate", handlePopstate);
     return () => window.removeEventListener("popstate", handlePopstate);
@@ -338,7 +348,9 @@ function DiscoverIndex() {
       params: addInitialOffset({
         taxonomy: newTaxonomyPath,
         curated_product_ids: newTaxonomyPath ? [] : props.curated_product_ids.slice(recommendedProductsCount),
-        offer_code: newTaxonomyPath && currentOfferCode ? currentOfferCode : undefined }) });
+        offer_code: newTaxonomyPath && currentOfferCode ? currentOfferCode : undefined,
+      }),
+    });
   };
 
   return (
@@ -428,7 +440,8 @@ function DiscoverIndex() {
                       onClick={() =>
                         updateParams({
                           sort: "curated",
-                          curated_product_ids: props.curated_product_ids.slice(recommendedProductsCount) })
+                          curated_product_ids: props.curated_product_ids.slice(recommendedProductsCount),
+                        })
                       }
                     >
                       Curated
@@ -465,7 +478,8 @@ function DiscoverIndex() {
               defaults={{
                 taxonomy: state.params.taxonomy,
                 query: state.params.query,
-                sort: state.params.query || hasOfferCode ? "default" : state.params.sort }}
+                sort: state.params.query || hasOfferCode ? "default" : state.params.sort,
+              }}
               appendFilters={
                 <>
                   <CardContent asChild details>
@@ -473,30 +487,28 @@ function DiscoverIndex() {
                       <DetailsToggle chevronPosition="right" className="grow">
                         Rating
                       </DetailsToggle>
-                      <>
-                        <Fieldset role="group">
-                          {range(4, 0).map((number) => (
-                            <Label key={number} className="w-full">
-                              <span className="flex shrink-0 items-center gap-1">
-                                <RatingStars rating={number} />
-                                and up
-                              </span>
-                              <Radio
-                                wrapperClassName="ml-auto"
-                                value={number}
-                                aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
-                                checked={number === state.params.rating}
-                                readOnly
-                                onClick={() =>
-                                  updateParams(
-                                    state.params.rating === number ? { rating: undefined } : { rating: number },
-                                  )
-                                }
-                              />
-                            </Label>
-                          ))}
-                        </Fieldset>
-                      </>
+                      <Fieldset role="group">
+                        {range(4, 0).map((number) => (
+                          <Label key={number} className="w-full">
+                            <span className="flex shrink-0 items-center gap-1">
+                              <RatingStars rating={number} />
+                              and up
+                            </span>
+                            <Radio
+                              wrapperClassName="ml-auto"
+                              value={number}
+                              aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
+                              checked={number === state.params.rating}
+                              readOnly
+                              onClick={() =>
+                                updateParams(
+                                  state.params.rating === number ? { rating: undefined } : { rating: number },
+                                )
+                              }
+                            />
+                          </Label>
+                        ))}
+                      </Fieldset>
                     </Details>
                   </CardContent>
                   {hasOfferCode ? (
@@ -505,18 +517,16 @@ function DiscoverIndex() {
                         <DetailsToggle chevronPosition="right" className="grow">
                           Offer code
                         </DetailsToggle>
-                        <>
-                          <div className="flex items-center justify-between gap-2 py-1">
-                            <span>{props.black_friday_offer_code}</span>
-                            <button
-                              onClick={() => updateParams({ offer_code: undefined })}
-                              className="flex cursor-pointer items-center justify-center all-unset"
-                              aria-label="Remove offer code filter"
-                            >
-                              <X className="size-4" />
-                            </button>
-                          </div>
-                        </>
+                        <div className="flex items-center justify-between gap-2 py-1">
+                          <span>{props.black_friday_offer_code}</span>
+                          <button
+                            onClick={() => updateParams({ offer_code: undefined })}
+                            className="flex cursor-pointer items-center justify-center all-unset"
+                            aria-label="Remove offer code filter"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        </div>
                       </Details>
                     </CardContent>
                   ) : null}

@@ -23,30 +23,28 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
           <DetailsToggle>
             <h3>Flag for fraud</h3>
           </DetailsToggle>
-          <>
-            <Form
-              url={Routes.flag_for_fraud_admin_user_path(user.external_id)}
-              method="POST"
-              confirmMessage={`Are you sure you want to flag user ${user.external_id} for fraud?`}
-              onSuccess={() => showAlert("Flagged.", "success")}
-            >
-              {(isLoading) => (
-                <Fieldset>
-                  <div className="flex items-start gap-2">
-                    <Textarea
-                      name="flag_for_fraud[flag_note]"
-                      className="flex-1"
-                      rows={3}
-                      placeholder="Add flag note (optional)"
-                    />
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Submitting..." : "Submit"}
-                    </Button>
-                  </div>
-                </Fieldset>
-              )}
-            </Form>
-          </>
+          <Form
+            url={Routes.flag_for_fraud_admin_user_path(user.external_id)}
+            method="POST"
+            confirmMessage={`Are you sure you want to flag user ${user.external_id} for fraud?`}
+            onSuccess={() => showAlert("Flagged.", "success")}
+          >
+            {(isLoading) => (
+              <Fieldset>
+                <div className="flex items-start gap-2">
+                  <Textarea
+                    name="flag_for_fraud[flag_note]"
+                    className="flex-1"
+                    rows={3}
+                    placeholder="Add flag note (optional)"
+                  />
+                  <Button type="submit" disabled={isLoading}>
+                    {isLoading ? "Submitting..." : "Submit"}
+                  </Button>
+                </div>
+              </Fieldset>
+            )}
+          </Form>
         </Details>
       </>
     )

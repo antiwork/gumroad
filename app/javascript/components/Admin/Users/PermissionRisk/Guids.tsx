@@ -55,7 +55,8 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
     const response = await request({
       method: "GET",
       url: Routes.admin_user_guids_path(user_external_id, { format: "json" }),
-      accept: "json" });
+      accept: "json",
+    });
     setUserGuids(cast<UserGuids>(await response.json()));
     setIsLoading(false);
   };
@@ -74,9 +75,7 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
         <DetailsToggle>
           <h3>GUIDs</h3>
         </DetailsToggle>
-        <>
-          <UserGuidsContent userGuids={userGuids} isLoading={isLoading} />
-        </>
+        <UserGuidsContent userGuids={userGuids} isLoading={isLoading} />
       </Details>
     </>
   );

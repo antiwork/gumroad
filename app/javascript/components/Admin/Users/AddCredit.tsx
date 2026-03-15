@@ -21,31 +21,29 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
       <DetailsToggle>
         <h3>Add credits</h3>
       </DetailsToggle>
-      <>
-        <Form
-          url={Routes.add_credit_admin_user_path(user.external_id)}
-          method="POST"
-          confirmMessage="Are you sure you want to add credits?"
-          onSuccess={() => showAlert("Successfully added credits.", "success")}
-        >
-          {(isLoading) => (
-            <Fieldset>
-              <div className="flex gap-2">
-                <InputGroup className="flex-1">
-                  <Pill className="-ml-2 shrink-0">$</Pill>
-                  <Input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
-                </InputGroup>
+      <Form
+        url={Routes.add_credit_admin_user_path(user.external_id)}
+        method="POST"
+        confirmMessage="Are you sure you want to add credits?"
+        onSuccess={() => showAlert("Successfully added credits.", "success")}
+      >
+        {(isLoading) => (
+          <Fieldset>
+            <div className="flex gap-2">
+              <InputGroup className="flex-1">
+                <Pill className="-ml-2 shrink-0">$</Pill>
+                <Input type="text" name="credit[credit_amount]" placeholder="10.25" inputMode="decimal" required />
+              </InputGroup>
 
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? "Saving..." : "Add credits"}
-                </Button>
-              </div>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? "Saving..." : "Add credits"}
+              </Button>
+            </div>
 
-              <FieldsetDescription>Subtract credits by providing a negative value</FieldsetDescription>
-            </Fieldset>
-          )}
-        </Form>
-      </>
+            <FieldsetDescription>Subtract credits by providing a negative value</FieldsetDescription>
+          </Fieldset>
+        )}
+      </Form>
     </Details>
   </>
 );

@@ -19,26 +19,24 @@ const AdminUserChangeEmail = ({ user }: AdminUserChangeEmailProps) => (
       <DetailsToggle>
         <h3>Change email</h3>
       </DetailsToggle>
-      <>
-        <Form
-          url={Routes.update_email_admin_user_path(user.external_id)}
-          method="POST"
-          confirmMessage="Are you sure you want to update this user's email address?"
-          onSuccess={() => showAlert("Successfully updated email address.", "success")}
-        >
-          {(isLoading) => (
-            <Fieldset>
-              <div className="grid grid-cols-[1fr_auto] gap-3">
-                <Input type="email" name="update_email[email_address]" placeholder={user.email} required />
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? "Updating..." : "Update email"}
-                </Button>
-              </div>
-              <FieldsetDescription>This will update the user's email to this new one!</FieldsetDescription>
-            </Fieldset>
-          )}
-        </Form>
-      </>
+      <Form
+        url={Routes.update_email_admin_user_path(user.external_id)}
+        method="POST"
+        confirmMessage="Are you sure you want to update this user's email address?"
+        onSuccess={() => showAlert("Successfully updated email address.", "success")}
+      >
+        {(isLoading) => (
+          <Fieldset>
+            <div className="grid grid-cols-[1fr_auto] gap-3">
+              <Input type="email" name="update_email[email_address]" placeholder={user.email} required />
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? "Updating..." : "Update email"}
+              </Button>
+            </div>
+            <FieldsetDescription>This will update the user's email to this new one!</FieldsetDescription>
+          </Fieldset>
+        )}
+      </Form>
     </Details>
   </>
 );

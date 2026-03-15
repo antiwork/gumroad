@@ -17,7 +17,8 @@ type AdminProductPurchasesProps = {
 const AdminProductPurchases = ({
   productExternalId,
   isAffiliateUser = false,
-  userExternalId }: AdminProductPurchasesProps) => {
+  userExternalId,
+}: AdminProductPurchasesProps) => {
   const [open, setOpen] = React.useState(false);
 
   const url =
@@ -29,14 +30,16 @@ const AdminProductPurchases = ({
     data: purchases,
     isLoading,
     fetchNextPage,
-    hasMore } = useLazyPaginatedFetch<ProductPurchase[]>([], {
+    hasMore,
+  } = useLazyPaginatedFetch<ProductPurchase[]>([], {
     fetchUnlessLoaded: open,
     url,
     responseParser: (data) => {
       const parsed = cast<{ purchases: ProductPurchase[] }>(data);
       return parsed.purchases;
     },
-    mode: "append" });
+    mode: "append",
+  });
 
   return (
     <>
@@ -45,15 +48,13 @@ const AdminProductPurchases = ({
         <DetailsToggle>
           <h3>{isAffiliateUser ? "Affiliate purchases" : "Purchases"}</h3>
         </DetailsToggle>
-        <>
-          <AdminProductPurchasesContent
-            purchases={purchases}
-            isLoading={isLoading}
-            hasMore={hasMore}
-            onLoadMore={() => void fetchNextPage()}
-            productExternalId={productExternalId}
-          />
-        </>
+        <AdminProductPurchasesContent
+          purchases={purchases}
+          isLoading={isLoading}
+          hasMore={hasMore}
+          onLoadMore={() => void fetchNextPage()}
+          productExternalId={productExternalId}
+        />
       </Details>
     </>
   );

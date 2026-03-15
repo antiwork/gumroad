@@ -35,13 +35,15 @@ export default function ThirdPartyAnalyticsPage() {
   const loggedInUser = useLoggedInUser();
 
   const form = useForm({
-    user: props.third_party_analytics });
+    user: props.third_party_analytics,
+  });
 
   const thirdPartyAnalytics = form.data.user;
   const updateThirdPartyAnalytics = (update: Partial<ThirdPartyAnalytics>) =>
     form.setData("user", {
       ...form.data.user,
-      ...update });
+      ...update,
+    });
 
   const uid = React.useId();
 
@@ -53,7 +55,8 @@ export default function ThirdPartyAnalyticsPage() {
           snippets: [
             ...thirdPartyAnalytics.snippets,
             { id: `${NEW_SNIPPET_ID_PREFIX}${Math.random()}`, name: "", location: "receipt", code: "", product: null },
-          ] })
+          ],
+        })
       }
     >
       <Plus className="size-5" />
@@ -66,10 +69,14 @@ export default function ThirdPartyAnalyticsPage() {
         ...data.user,
         snippets: data.user.snippets.map((snippet: Snippet) => ({
           ...snippet,
-          id: snippet.id && !snippet.id.startsWith(NEW_SNIPPET_ID_PREFIX) ? snippet.id : null })) } }));
+          id: snippet.id && !snippet.id.startsWith(NEW_SNIPPET_ID_PREFIX) ? snippet.id : null,
+        })),
+      },
+    }));
 
     form.put(Routes.settings_third_party_analytics_path(), {
-      preserveScroll: true });
+      preserveScroll: true,
+    });
   };
 
   return (
@@ -101,47 +108,45 @@ export default function ThirdPartyAnalyticsPage() {
                 label="Enable third-party analytics services"
               />
             </DetailsToggle>
-            <>
-              <Dropdown className="flex flex-col gap-4">
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}googleAnalyticsId`}>Google Analytics Property ID</Label>
-                    <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
-                      Learn more
-                    </a>
-                  </FieldsetTitle>
-                  <Input
-                    id={`${uid}googleAnalyticsId`}
-                    type="text"
-                    placeholder="G-ABCD232DSE"
-                    value={thirdPartyAnalytics.google_analytics_id}
-                    onChange={(evt) => updateThirdPartyAnalytics({ google_analytics_id: evt.target.value })}
-                  />
-                </Fieldset>
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}facebookPixel`}>Facebook Pixel</Label>
-                    <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
-                      Learn more
-                    </a>
-                  </FieldsetTitle>
-                  <Input
-                    id={`${uid}facebookPixel`}
-                    type="text"
-                    placeholder="9127380912836192"
-                    value={thirdPartyAnalytics.facebook_pixel_id}
-                    onChange={(evt) => updateThirdPartyAnalytics({ facebook_pixel_id: evt.target.value })}
-                  />
-                </Fieldset>
-                <Label>
-                  <Checkbox
-                    checked={!thirdPartyAnalytics.skip_free_sale_analytics}
-                    onChange={(evt) => updateThirdPartyAnalytics({ skip_free_sale_analytics: !evt.target.checked })}
-                  />
-                  Send 'Purchase' events for free ($0) sales
-                </Label>
-              </Dropdown>
-            </>
+            <Dropdown className="flex flex-col gap-4">
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}googleAnalyticsId`}>Google Analytics Property ID</Label>
+                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                    Learn more
+                  </a>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}googleAnalyticsId`}
+                  type="text"
+                  placeholder="G-ABCD232DSE"
+                  value={thirdPartyAnalytics.google_analytics_id}
+                  onChange={(evt) => updateThirdPartyAnalytics({ google_analytics_id: evt.target.value })}
+                />
+              </Fieldset>
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}facebookPixel`}>Facebook Pixel</Label>
+                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                    Learn more
+                  </a>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}facebookPixel`}
+                  type="text"
+                  placeholder="9127380912836192"
+                  value={thirdPartyAnalytics.facebook_pixel_id}
+                  onChange={(evt) => updateThirdPartyAnalytics({ facebook_pixel_id: evt.target.value })}
+                />
+              </Fieldset>
+              <Label>
+                <Checkbox
+                  checked={!thirdPartyAnalytics.skip_free_sale_analytics}
+                  onChange={(evt) => updateThirdPartyAnalytics({ skip_free_sale_analytics: !evt.target.checked })}
+                />
+                Send 'Purchase' events for free ($0) sales
+              </Label>
+            </Dropdown>
           </Details>
         </FormSection>
         <FormSection header={<h2>Domain verification</h2>}>
@@ -155,27 +160,25 @@ export default function ThirdPartyAnalyticsPage() {
                 label="Verify domain in third-party services"
               />
             </DetailsToggle>
-            <>
-              <Dropdown className="flex flex-col gap-4">
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}facebookMetaTag`}>Facebook Business</Label>
-                    <a href="/help/article/290-facebook-domain-verification" target="_blank" rel="noreferrer">
-                      Learn more
-                    </a>
-                  </FieldsetTitle>
-                  <Textarea
-                    id={`${uid}facebookMetaTag`}
-                    placeholder='<meta name="facebook-domain-verification" content="me2vv6lgwoh" />'
-                    value={thirdPartyAnalytics.facebook_meta_tag}
-                    onChange={(evt) => updateThirdPartyAnalytics({ facebook_meta_tag: evt.target.value })}
-                  />
-                  <FieldsetDescription>
-                    Enter meta tag containing the Facebook domain verification code.
-                  </FieldsetDescription>
-                </Fieldset>
-              </Dropdown>
-            </>
+            <Dropdown className="flex flex-col gap-4">
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}facebookMetaTag`}>Facebook Business</Label>
+                  <a href="/help/article/290-facebook-domain-verification" target="_blank" rel="noreferrer">
+                    Learn more
+                  </a>
+                </FieldsetTitle>
+                <Textarea
+                  id={`${uid}facebookMetaTag`}
+                  placeholder='<meta name="facebook-domain-verification" content="me2vv6lgwoh" />'
+                  value={thirdPartyAnalytics.facebook_meta_tag}
+                  onChange={(evt) => updateThirdPartyAnalytics({ facebook_meta_tag: evt.target.value })}
+                />
+                <FieldsetDescription>
+                  Enter meta tag containing the Facebook domain verification code.
+                </FieldsetDescription>
+              </Fieldset>
+            </Dropdown>
           </Details>
         </FormSection>
         <FormSection
@@ -218,13 +221,15 @@ const NEW_SNIPPET_ID_PREFIX = "__GUMROAD";
 const LOCATION_TITLES: Record<string, string> = {
   receipt: "Receipt",
   product: "Product page",
-  all: "All pages" };
+  all: "All pages",
+};
 
 const SnippetRow = ({
   snippet,
   thirdPartyAnalytics,
   updateThirdPartyAnalytics,
-  products }: {
+  products,
+}: {
   snippet: Snippet;
   thirdPartyAnalytics: ThirdPartyAnalytics;
   updateThirdPartyAnalytics: (update: Partial<ThirdPartyAnalytics>) => void;
@@ -239,7 +244,8 @@ const SnippetRow = ({
         ...thirdPartyAnalytics.snippets.slice(0, snippetIndex),
         { ...snippet, ...update },
         ...thirdPartyAnalytics.snippets.slice(snippetIndex + 1),
-      ] });
+      ],
+    });
   };
 
   const uid = React.useId();
@@ -264,7 +270,8 @@ const SnippetRow = ({
           size="icon"
           onClick={() =>
             updateThirdPartyAnalytics({
-              snippets: thirdPartyAnalytics.snippets.filter(({ id }) => id !== snippet.id) })
+              snippets: thirdPartyAnalytics.snippets.filter(({ id }) => id !== snippet.id),
+            })
           }
           aria-label="Delete snippet"
         >
@@ -290,7 +297,8 @@ const SnippetRow = ({
               onChange={(key) => updateSnippet({ location: key })}
               options={SNIPPET_LOCATIONS.map((location) => ({
                 id: location,
-                label: LOCATION_TITLES[location] ?? "Receipt" }))}
+                label: LOCATION_TITLES[location] ?? "Receipt",
+              }))}
             />
           </Fieldset>
           <Fieldset>
@@ -303,7 +311,8 @@ const SnippetRow = ({
                 { id: "", label: "All products" },
                 ...products.map(({ permalink, name }) => ({
                   id: permalink,
-                  label: name })),
+                  label: name,
+                })),
               ]}
             />
           </Fieldset>

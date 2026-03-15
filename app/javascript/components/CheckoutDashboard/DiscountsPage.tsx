@@ -10,7 +10,8 @@ import {
   deleteDiscount,
   getPagedDiscounts,
   getStatistics,
-  updateDiscount } from "$app/data/offer_code";
+  updateDiscount,
+} from "$app/data/offer_code";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -104,7 +105,8 @@ const formatProducts = (offerCode: OfferCode) => {
 const formatAmount = (offerCode: OfferCode) =>
   offerCode.discount.type === "cents"
     ? formatPriceCentsWithCurrencySymbol(offerCode.currency_type, offerCode.discount.value, {
-        symbolFormat: "short" })
+        symbolFormat: "short",
+      })
     : `${offerCode.discount.value}%`;
 const formatRevenue = (revenue: number) => formatPriceCentsWithCurrencySymbol("usd", revenue, { symbolFormat: "long" });
 const formatUses = (uses: number, limit: number | null) => `${uses}/${limit ?? "∞"}`;
@@ -119,7 +121,8 @@ const extractParams = (rawParams: URLSearchParams): QueryParams => {
     case "term":
       sort = {
         direction: rawParams.get("sort") === "desc" ? "desc" : "asc",
-        key: column };
+        key: column,
+      };
       break;
     default:
       break;
@@ -130,7 +133,8 @@ const extractParams = (rawParams: URLSearchParams): QueryParams => {
   return {
     query: query ? decodeURIComponent(query) : "",
     sort,
-    page };
+    page,
+  };
 };
 
 const year = new Date().getFullYear();
@@ -152,14 +156,16 @@ const DiscountsPage = ({
   pagination: initialPagination,
   show_black_friday_banner,
   black_friday_code,
-  black_friday_code_name }: DiscountsPageProps) => {
+  black_friday_code_name,
+}: DiscountsPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [{ offerCodes, pagination }, setState] = React.useState<{
     offerCodes: OfferCode[];
     pagination: PaginationProps;
   }>({
     offerCodes: offer_codes.map((offerCode) => ({ ...offerCode, revenue_cents: null, uses: null })),
-    pagination: initialPagination });
+    pagination: initialPagination,
+  });
 
   const [offerCodeStatistics, setOfferCodeStatistics] = React.useState<Record<string, OfferCodeStatistics>>({});
   const offerCodeStatisticsRequests = React.useRef<Set<string>>(new Set());
@@ -204,7 +210,8 @@ const DiscountsPage = ({
       page: params.page?.toString() || null,
       query: params.query || null,
       sort: params.sort?.direction || null,
-      column: params.sort?.key || null });
+      column: params.sort?.key || null,
+    });
     if (newUrl.toString() !== window.location.href) window.history.pushState(params, document.title, newUrl.toString());
   };
 
@@ -214,7 +221,8 @@ const DiscountsPage = ({
     setUrlQueryParams({
       query: null,
       sort: null,
-      page: null });
+      page: null,
+    });
   };
 
   const [popoverOfferCodeId, setPopoverOfferCodeId] = React.useState<string | null>(null);
@@ -244,7 +252,8 @@ const DiscountsPage = ({
         setUrlQueryParams({
           query,
           sort,
-          page: pagination.pages > 1 ? page : null });
+          page: pagination.pages > 1 ? page : null,
+        });
 
       const request = getPagedDiscounts(page || 1, query, sort);
       activeRequest.current = request;
@@ -281,13 +290,15 @@ const DiscountsPage = ({
       day: "numeric",
       year: date.getFullYear() !== year ? "numeric" : undefined,
       hour: "numeric",
-      timeZone: currentSeller.timeZone.name });
+      timeZone: currentSeller.timeZone.name,
+    });
   const formatDate = (date: Date) =>
     date.toLocaleDateString(userAgentInfo.locale, {
       day: "numeric",
       month: "short",
       year: date.getFullYear() !== year ? "numeric" : undefined,
-      timeZone: currentSeller.timeZone.name });
+      timeZone: currentSeller.timeZone.name,
+    });
 
   return view === "list" ? (
     <Layout
@@ -558,7 +569,8 @@ const DiscountsPage = ({
                       selectedOfferCode.currency_type,
                       selectedOfferCode.minimum_amount_cents,
                       {
-                        symbolFormat: "short" },
+                        symbolFormat: "short",
+                      },
                     )}
                   </CardContent>
                 ) : null}
@@ -651,7 +663,8 @@ const DiscountsPage = ({
             expiresAt: offerCode.expires_at,
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
-            minimumAmount: offerCode.minimum_amount_cents });
+            minimumAmount: offerCode.minimum_amount_cents,
+          });
           resetQueryState();
           setState({ offerCodes, pagination });
           showAlert("Successfully updated discount!", "success");
@@ -693,7 +706,8 @@ const DiscountsPage = ({
             expiresAt: offerCode.expires_at,
             minimumQuantity: offerCode.minimum_quantity,
             durationInBillingCycles: offerCode.duration_in_billing_cycles,
-            minimumAmount: offerCode.minimum_amount_cents });
+            minimumAmount: offerCode.minimum_amount_cents,
+          });
           resetQueryState();
           setState({ offerCodes, pagination });
           setSelectedOfferCodeId(offerCodes[0]?.id ?? null);
@@ -724,7 +738,8 @@ const Form = ({
   isLoading,
   black_friday_code,
   black_friday_code_name,
-  isBlackFridayMode = false }: {
+  isBlackFridayMode = false,
+}: {
   title: string;
   offerCode?: OfferCode | undefined;
   readOnlyCode?: boolean;
@@ -738,14 +753,17 @@ const Form = ({
   isBlackFridayMode?: boolean;
 }) => {
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({
-    value: isBlackFridayMode ? black_friday_code_name : (offerCode?.name ?? "") });
+    value: isBlackFridayMode ? black_friday_code_name : (offerCode?.name ?? ""),
+  });
   const [code, setCode] = React.useState<{ value: string; error?: boolean }>({
-    value: isBlackFridayMode ? black_friday_code : offerCode?.code || generateCode() });
+    value: isBlackFridayMode ? black_friday_code : offerCode?.code || generateCode(),
+  });
 
   const [discount, setDiscount] = React.useState<InputtedDiscount>(
     offerCode?.discount ?? {
       type: "percent",
-      value: 0 },
+      value: 0,
+    },
   );
 
   const nameFieldRef = React.useRef<HTMLInputElement>(null);
@@ -754,28 +772,33 @@ const Form = ({
 
   const [universal, setUniversal] = React.useState(offerCode ? offerCode.products === null : false);
   const [selectedProductIds, setSelectedProductIds] = React.useState<{ value: string[]; error?: boolean }>({
-    value: offerCode?.products?.map(({ id }) => id) ?? [] });
+    value: offerCode?.products?.map(({ id }) => id) ?? [],
+  });
   const selectedProducts = products.filter(({ id }) => selectedProductIds.value.includes(id));
 
   const [limitQuantity, setLimitQuantity] = React.useState(!!offerCode?.limit);
   const [maxQuantity, setMaxQuantity] = React.useState<{ value: number | null; error?: boolean }>({
-    value: offerCode?.limit ?? null });
+    value: offerCode?.limit ?? null,
+  });
 
   const [limitValidity, setLimitValidity] = React.useState(!!offerCode?.valid_at);
   const [validAt, setValidAt] = React.useState(offerCode?.valid_at ? new Date(offerCode.valid_at) : new Date());
   const [expiresAt, setExpiresAt] = React.useState<{ error?: boolean; value: Date }>({
     value: offerCode?.expires_at
       ? new Date(offerCode.expires_at)
-      : new Date(new Date().setHours(new Date().getHours() + 1)) });
+      : new Date(new Date().setHours(new Date().getHours() + 1)),
+  });
   const [hasNoEndDate, setHasNoEndDate] = React.useState(!offerCode?.expires_at);
 
   const [hasMinimumQuantity, setHasMinimumQuantity] = React.useState(!!offerCode?.minimum_quantity);
   const [minimumQuantity, setMinimumQuantity] = React.useState<{ value: number | null; error?: boolean }>({
-    value: offerCode?.minimum_quantity ?? null });
+    value: offerCode?.minimum_quantity ?? null,
+  });
 
   const [hasMinimumAmount, setHasMinimumAmount] = React.useState(!!offerCode?.minimum_amount_cents);
   const [minimumAmount, setMinimumAmount] = React.useState<{ value: number | null; error?: boolean }>({
-    value: offerCode?.minimum_amount_cents ?? null });
+    value: offerCode?.minimum_amount_cents ?? null,
+  });
 
   const [currencyCode, setCurrencyCode] = React.useState(
     offerCode?.currency_type ?? selectedProducts[0]?.currency_type ?? products[0]?.currency_type ?? "usd",
@@ -842,7 +865,8 @@ const Form = ({
       expires_at: limitValidity && !hasNoEndDate ? expiresAt.value.toISOString() : null,
       minimum_quantity: hasMinimumQuantity ? minimumQuantity.value : null,
       duration_in_billing_cycles: canSetDuration ? durationInBillingCycles : null,
-      minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null });
+      minimum_amount_cents: hasMinimumAmount ? minimumAmount.value : null,
+    });
   };
 
   return (
@@ -943,7 +967,8 @@ const Form = ({
                 .map((product) => ({ id: product.id, label: product.name }))}
               value={selectedProducts.map(({ id, name: label }) => ({
                 id,
-                label }))}
+                label,
+              }))}
               isMulti
               isClearable
               placeholder="Products to which this discount will apply"
@@ -995,7 +1020,8 @@ const Form = ({
                 universal
                   ? {
                       options: [...new Set(products.map(({ currency_type }) => currency_type))],
-                      onChange: setCurrencyCode }
+                      onChange: setCurrencyCode,
+                    }
                   : undefined
               }
               disableFixedAmount={
@@ -1015,25 +1041,23 @@ const Form = ({
                   label="Limit quantity"
                 />
               </DetailsToggle>
-              <>
-                <Dropdown>
-                  <Fieldset state={maxQuantity.error ? "danger" : undefined}>
-                    <FieldsetTitle>
-                      <Label htmlFor={`${uid}quantity`}>Quantity</Label>
-                    </FieldsetTitle>
-                    <NumberInput
-                      value={maxQuantity.value}
-                      onChange={(value) => {
-                        if (value === null || value >= 0) setMaxQuantity({ value });
-                      }}
-                    >
-                      {(props) => (
-                        <Input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
-                      )}
-                    </NumberInput>
-                  </Fieldset>
-                </Dropdown>
-              </>
+              <Dropdown>
+                <Fieldset state={maxQuantity.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}quantity`}>Quantity</Label>
+                  </FieldsetTitle>
+                  <NumberInput
+                    value={maxQuantity.value}
+                    onChange={(value) => {
+                      if (value === null || value >= 0) setMaxQuantity({ value });
+                    }}
+                  >
+                    {(props) => (
+                      <Input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
+                    )}
+                  </NumberInput>
+                </Fieldset>
+              </Dropdown>
             </Details>
             <Details open={limitValidity}>
               <DetailsToggle chevronPosition="none" className="mb-0">
@@ -1043,42 +1067,40 @@ const Form = ({
                   label="Limit validity period"
                 />
               </DetailsToggle>
-              <>
-                <Dropdown className="gap-4 lg:grid-cols-2">
-                  <Fieldset>
-                    <FieldsetTitle>
-                      <Label htmlFor={`${uid}validAt`}>Valid from</Label>
-                    </FieldsetTitle>
-                    <DateInput
-                      withTime
-                      id={`${uid}validAt`}
-                      value={validAt}
-                      onChange={(date) => {
-                        if (date) setValidAt(date);
-                      }}
-                    />
-                    <Label>
-                      <Checkbox checked={hasNoEndDate} onChange={(evt) => setHasNoEndDate(evt.target.checked)} />
-                      No end date
-                    </Label>
-                  </Fieldset>
-                  <Fieldset state={expiresAt.error ? "danger" : undefined}>
-                    <FieldsetTitle>
-                      <Label htmlFor={`${uid}expiresAt`}>Valid until</Label>
-                    </FieldsetTitle>
-                    <DateInput
-                      withTime
-                      id={`${uid}expiresAt`}
-                      value={expiresAt.value}
-                      onChange={(value) => {
-                        if (value) setExpiresAt({ value });
-                      }}
-                      disabled={hasNoEndDate}
-                      aria-invalid={expiresAt.error ?? false}
-                    />
-                  </Fieldset>
-                </Dropdown>
-              </>
+              <Dropdown className="gap-4 lg:grid-cols-2">
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}validAt`}>Valid from</Label>
+                  </FieldsetTitle>
+                  <DateInput
+                    withTime
+                    id={`${uid}validAt`}
+                    value={validAt}
+                    onChange={(date) => {
+                      if (date) setValidAt(date);
+                    }}
+                  />
+                  <Label>
+                    <Checkbox checked={hasNoEndDate} onChange={(evt) => setHasNoEndDate(evt.target.checked)} />
+                    No end date
+                  </Label>
+                </Fieldset>
+                <Fieldset state={expiresAt.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}expiresAt`}>Valid until</Label>
+                  </FieldsetTitle>
+                  <DateInput
+                    withTime
+                    id={`${uid}expiresAt`}
+                    value={expiresAt.value}
+                    onChange={(value) => {
+                      if (value) setExpiresAt({ value });
+                    }}
+                    disabled={hasNoEndDate}
+                    aria-invalid={expiresAt.error ?? false}
+                  />
+                </Fieldset>
+              </Dropdown>
             </Details>
             <Details open={hasMinimumAmount}>
               <DetailsToggle chevronPosition="none" className="mb-0">
@@ -1088,23 +1110,21 @@ const Form = ({
                   label="Set a minimum qualifying amount"
                 />
               </DetailsToggle>
-              <>
-                <Dropdown>
-                  <Fieldset state={minimumAmount.error ? "danger" : undefined}>
-                    <FieldsetTitle>
-                      <Label htmlFor={`${uid}minimumAmount`}>Minimum amount</Label>
-                    </FieldsetTitle>
-                    <PriceInput
-                      id={`${uid}minimumAmount`}
-                      currencyCode={currencyCode}
-                      cents={minimumAmount.value}
-                      onChange={(value) => setMinimumAmount({ value })}
-                      placeholder="0"
-                      hasError={minimumAmount.error ?? false}
-                    />
-                  </Fieldset>
-                </Dropdown>
-              </>
+              <Dropdown>
+                <Fieldset state={minimumAmount.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}minimumAmount`}>Minimum amount</Label>
+                  </FieldsetTitle>
+                  <PriceInput
+                    id={`${uid}minimumAmount`}
+                    currencyCode={currencyCode}
+                    cents={minimumAmount.value}
+                    onChange={(value) => setMinimumAmount({ value })}
+                    placeholder="0"
+                    hasError={minimumAmount.error ?? false}
+                  />
+                </Fieldset>
+              </Dropdown>
             </Details>
             <Details open={hasMinimumQuantity}>
               <DetailsToggle chevronPosition="none" className="mb-0">
@@ -1114,30 +1134,28 @@ const Form = ({
                   label="Set a minimum quantity"
                 />
               </DetailsToggle>
-              <>
-                <Dropdown>
-                  <Fieldset state={minimumQuantity.error ? "danger" : undefined}>
-                    <FieldsetTitle>
-                      <Label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</Label>
-                    </FieldsetTitle>
-                    <NumberInput
-                      value={minimumQuantity.value}
-                      onChange={(value) => {
-                        if (value === null || value >= 0) setMinimumQuantity({ value });
-                      }}
-                    >
-                      {(props) => (
-                        <Input
-                          id={`${uid}minimumQuantity`}
-                          placeholder="0"
-                          aria-invalid={minimumQuantity.error}
-                          {...props}
-                        />
-                      )}
-                    </NumberInput>
-                  </Fieldset>
-                </Dropdown>
-              </>
+              <Dropdown>
+                <Fieldset state={minimumQuantity.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</Label>
+                  </FieldsetTitle>
+                  <NumberInput
+                    value={minimumQuantity.value}
+                    onChange={(value) => {
+                      if (value === null || value >= 0) setMinimumQuantity({ value });
+                    }}
+                  >
+                    {(props) => (
+                      <Input
+                        id={`${uid}minimumQuantity`}
+                        placeholder="0"
+                        aria-invalid={minimumQuantity.error}
+                        {...props}
+                      />
+                    )}
+                  </NumberInput>
+                </Fieldset>
+              </Dropdown>
             </Details>
           </Fieldset>
         </FormSection>

@@ -23,40 +23,38 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
         <DetailsToggle>
           <h3>Custom fee</h3>
         </DetailsToggle>
-        <>
-          <Form
-            url={Routes.set_custom_fee_admin_user_path(user.external_id)}
-            method="POST"
-            confirmMessage={`Are you sure you want to update this user's custom fee?`}
-            onSuccess={() => showAlert("Custom fee updated.", "success")}
-          >
-            {(isLoading) => (
-              <Fieldset>
-                <div className="flex items-start gap-2">
-                  <Input
-                    name="custom_fee_percent"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={customFee}
-                    className="flex-1"
-                    onChange={(e) => setCustomFee(e.target.value)}
-                    placeholder="Enter a custom fee percentage between 0 and 100. Submit blank to clear existing custom fee."
-                  />
-                  <Button type="submit" disabled={isLoading} id="update-custom-fee">
-                    {isLoading ? "Submitting..." : "Submit"}
-                  </Button>
-                </div>
-                <FieldsetDescription>
-                  Note: Updated custom fee will apply to new direct (non-discover) sales of the user, but not to future
-                  charges of their existing memberships.
-                </FieldsetDescription>
-              </Fieldset>
-            )}
-          </Form>
-        </>
+        <Form
+          url={Routes.set_custom_fee_admin_user_path(user.external_id)}
+          method="POST"
+          confirmMessage={`Are you sure you want to update this user's custom fee?`}
+          onSuccess={() => showAlert("Custom fee updated.", "success")}
+        >
+          {(isLoading) => (
+            <Fieldset>
+              <div className="flex items-start gap-2">
+                <Input
+                  name="custom_fee_percent"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={customFee}
+                  className="flex-1"
+                  onChange={(e) => setCustomFee(e.target.value)}
+                  placeholder="Enter a custom fee percentage between 0 and 100. Submit blank to clear existing custom fee."
+                />
+                <Button type="submit" disabled={isLoading} id="update-custom-fee">
+                  {isLoading ? "Submitting..." : "Submit"}
+                </Button>
+              </div>
+              <FieldsetDescription>
+                Note: Updated custom fee will apply to new direct (non-discover) sales of the user, but not to future
+                charges of their existing memberships.
+              </FieldsetDescription>
+            </Fieldset>
+          )}
+        </Form>
       </Details>
     </>
   );

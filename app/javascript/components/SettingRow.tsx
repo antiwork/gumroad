@@ -44,9 +44,7 @@ export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disab
       <DetailsToggle chevronPosition="none" className="mb-0">
         {toggle}
       </DetailsToggle>
-      <>
-        <Dropdown>{dropdown}</Dropdown>
-      </>
+      <Dropdown>{dropdown}</Dropdown>
     </Details>
   ) : (
     toggle

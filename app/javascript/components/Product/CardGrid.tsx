@@ -35,7 +35,8 @@ export const SORT_BY_LABELS = {
   newest: "Newest",
   page_layout: "Custom",
   price_asc: "Price (Low to High)",
-  price_desc: "Price (High to Low)" };
+  price_desc: "Price (High to Low)",
+};
 
 export type State = {
   params: SearchRequest;
@@ -57,7 +58,8 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
         case "set-params": {
           const params = {
             ...action.params,
-            taxonomy: action.params.taxonomy === "discover" ? undefined : action.params.taxonomy };
+            taxonomy: action.params.taxonomy === "discover" ? undefined : action.params.taxonomy,
+          };
           return { params, results: null, offset: action.params.from };
         }
         case "set-results":
@@ -71,7 +73,8 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             return state;
           return {
             ...state,
-            params: { ...state.params, from: (state.offset ?? 1) + state.results.products.length } };
+            params: { ...state.params, from: (state.offset ?? 1) + state.results.products.length },
+          };
       }
     },
     { ...initial, offset: initial.params.from },
@@ -88,7 +91,8 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
           results:
             state.results == null
               ? results
-              : { ...results, products: [...state.results.products, ...results.products] } });
+              : { ...results, products: [...state.results.products, ...results.products] },
+        });
         activeRequest.current = null;
       } catch (e) {
         if (!(e instanceof AbortError)) {
@@ -120,7 +124,8 @@ const FilterCheckboxes = ({
   selection,
   setSelection,
   filters,
-  disabled }: {
+  disabled,
+}: {
   filters: ProductFilter[];
   selection: string[];
   setSelection: (value: string[]) => void;
@@ -166,7 +171,8 @@ export const CardGrid = ({
   prependFilters,
   appendFilters,
   hideSort,
-  pagination = "scroll" }: Props) => {
+  pagination = "scroll",
+}: Props) => {
   const currencySymbol = getShortCurrencySymbol(currencyCode);
   const gridRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -256,22 +262,20 @@ export const CardGrid = ({
                 <DetailsToggle chevronPosition="right" className="grow">
                   Sort by
                 </DetailsToggle>
-                <>
-                  <Fieldset role="group">
-                    {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
-                      <Label key={key} className="w-full">
-                        {SORT_BY_LABELS[key]}
-                        <Radio
-                          wrapperClassName="ml-auto"
-                          disabled={disableFilters}
-                          name={`${uid}-sortBy`}
-                          checked={(searchParams.sort ?? defaults.sort) === key}
-                          onChange={() => updateParams({ sort: key })}
-                        />
-                      </Label>
-                    ))}
-                  </Fieldset>
-                </>
+                <Fieldset role="group">
+                  {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
+                    <Label key={key} className="w-full">
+                      {SORT_BY_LABELS[key]}
+                      <Radio
+                        wrapperClassName="ml-auto"
+                        disabled={disableFilters}
+                        name={`${uid}-sortBy`}
+                        checked={(searchParams.sort ?? defaults.sort) === key}
+                        onChange={() => updateParams({ sort: key })}
+                      />
+                    </Label>
+                  ))}
+                </Fieldset>
               </Details>
             </CardContent>
           )}
@@ -281,27 +285,25 @@ export const CardGrid = ({
                 <DetailsToggle chevronPosition="right" className="grow">
                   Tags
                 </DetailsToggle>
-                <>
-                  <Fieldset role="group">
-                    <Label className="w-full">
-                      All Products
-                      <Checkbox
-                        wrapperClassName="ml-auto"
-                        checked={!searchParams.tags?.length}
-                        disabled={disableFilters || !searchParams.tags?.length}
-                        onChange={() => updateParams({ tags: undefined })}
-                      />
-                    </Label>
-                    {results ? (
-                      <FilterCheckboxes
-                        filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
-                        selection={searchParams.tags ?? []}
-                        setSelection={(tags) => updateParams({ tags })}
-                        disabled={disableFilters ?? false}
-                      />
-                    ) : null}
-                  </Fieldset>
-                </>
+                <Fieldset role="group">
+                  <Label className="w-full">
+                    All Products
+                    <Checkbox
+                      wrapperClassName="ml-auto"
+                      checked={!searchParams.tags?.length}
+                      disabled={disableFilters || !searchParams.tags?.length}
+                      onChange={() => updateParams({ tags: undefined })}
+                    />
+                  </Label>
+                  {results ? (
+                    <FilterCheckboxes
+                      filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
+                      selection={searchParams.tags ?? []}
+                      setSelection={(tags) => updateParams({ tags })}
+                      disabled={disableFilters ?? false}
+                    />
+                  ) : null}
+                </Fieldset>
               </Details>
             </CardContent>
           ) : null}
@@ -311,18 +313,16 @@ export const CardGrid = ({
                 <DetailsToggle chevronPosition="right" className="grow">
                   Contains
                 </DetailsToggle>
-                <>
-                  <Fieldset role="group">
-                    {results ? (
-                      <FilterCheckboxes
-                        filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
-                        selection={searchParams.filetypes ?? []}
-                        setSelection={(filetypes) => updateParams({ filetypes })}
-                        disabled={disableFilters ?? false}
-                      />
-                    ) : null}
-                  </Fieldset>
-                </>
+                <Fieldset role="group">
+                  {results ? (
+                    <FilterCheckboxes
+                      filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
+                      selection={searchParams.filetypes ?? []}
+                      setSelection={(filetypes) => updateParams({ filetypes })}
+                      disabled={disableFilters ?? false}
+                    />
+                  ) : null}
+                </Fieldset>
               </Details>
             </CardContent>
           ) : null}
@@ -331,50 +331,49 @@ export const CardGrid = ({
               <DetailsToggle chevronPosition="right" className="grow">
                 Price
               </DetailsToggle>
-              <>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                    gridAutoFlow: "row",
-                    gap: "var(--spacer-3)" }}
-                >
-                  <Fieldset>
-                    <FieldsetTitle>
-                      <Label htmlFor={minPriceUid}>Minimum price</Label>
-                    </FieldsetTitle>
-                    <InputGroup>
-                      <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
-                      <NumberInput
-                        onChange={(value) => {
-                          setEnteredMinPrice(value);
-                          debouncedTrySetPrice(value, enteredMaxPrice);
-                        }}
-                        value={enteredMinPrice ?? null}
-                      >
-                        {(props) => <Input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
-                      </NumberInput>
-                    </InputGroup>
-                  </Fieldset>
-                  <Fieldset>
-                    <FieldsetTitle>
-                      <Label htmlFor={maxPriceUid}>Maximum price</Label>
-                    </FieldsetTitle>
-                    <InputGroup>
-                      <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
-                      <NumberInput
-                        onChange={(value) => {
-                          setEnteredMaxPrice(value);
-                          debouncedTrySetPrice(enteredMinPrice, value);
-                        }}
-                        value={enteredMaxPrice ?? null}
-                      >
-                        {(props) => <Input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
-                      </NumberInput>
-                    </InputGroup>
-                  </Fieldset>
-                </div>
-              </>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
+                  gridAutoFlow: "row",
+                  gap: "var(--spacer-3)",
+                }}
+              >
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={minPriceUid}>Minimum price</Label>
+                  </FieldsetTitle>
+                  <InputGroup>
+                    <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
+                    <NumberInput
+                      onChange={(value) => {
+                        setEnteredMinPrice(value);
+                        debouncedTrySetPrice(value, enteredMaxPrice);
+                      }}
+                      value={enteredMinPrice ?? null}
+                    >
+                      {(props) => <Input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
+                    </NumberInput>
+                  </InputGroup>
+                </Fieldset>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={maxPriceUid}>Maximum price</Label>
+                  </FieldsetTitle>
+                  <InputGroup>
+                    <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
+                    <NumberInput
+                      onChange={(value) => {
+                        setEnteredMaxPrice(value);
+                        debouncedTrySetPrice(enteredMinPrice, value);
+                      }}
+                      value={enteredMaxPrice ?? null}
+                    >
+                      {(props) => <Input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
+                    </NumberInput>
+                  </InputGroup>
+                </Fieldset>
+              </div>
             </Details>
           </CardContent>
           {appendFilters}

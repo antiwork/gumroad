@@ -52,15 +52,13 @@ const Memberships = ({ user: { admin_manageable_user_memberships } }: Membership
         <DetailsToggle>
           <h3>User memberships</h3>
         </DetailsToggle>
-        <>
-          <Card>
-            {admin_manageable_user_memberships.map((membership) => (
-              <CardContent key={membership.id} asChild>
-                <Membership membership={membership} />
-              </CardContent>
-            ))}
-          </Card>
-        </>
+        <Card>
+          {admin_manageable_user_memberships.map((membership) => (
+            <CardContent key={membership.id} asChild>
+              <Membership membership={membership} />
+            </CardContent>
+          ))}
+        </Card>
       </Details>
     </>
   );

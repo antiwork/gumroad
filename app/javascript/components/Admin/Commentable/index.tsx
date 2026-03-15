@@ -23,14 +23,16 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
     setData: setComments,
     hasMore,
     hasLoaded,
-    fetchNextPage } = useLazyPaginatedFetch<CommentProps[]>([], {
+    fetchNextPage,
+  } = useLazyPaginatedFetch<CommentProps[]>([], {
     url: endpoint,
     responseParser: (data: unknown) => {
       const result = cast<{ comments: CommentProps[] }>(data);
       return result.comments;
     },
     mode: "append",
-    fetchUnlessLoaded: open });
+    fetchUnlessLoaded: open,
+  });
 
   const [commentsCount, setCommentsCount] = React.useState(count ?? 0);
 

@@ -43,7 +43,8 @@ export type Product = {
 export const UpsellSelectModal = ({
   isOpen,
   onClose,
-  onInsert }: {
+  onInsert,
+}: {
   isOpen: boolean;
   onClose: () => void;
   onInsert: (product: Product, variant: ProductOption | null, discount: InputtedDiscount | null) => void;
@@ -59,7 +60,8 @@ export const UpsellSelectModal = ({
         const response = await request({
           method: "GET",
           accept: "json",
-          url: Routes.checkout_upsells_products_path() });
+          url: Routes.checkout_upsells_products_path(),
+        });
         const responseData = cast<Product[]>(await response.json());
         setProducts(responseData);
       } catch (error) {
@@ -112,7 +114,8 @@ export const UpsellSelectModal = ({
   const selectedProductOption = selectedProduct
     ? {
         id: selectedProduct.id,
-        label: selectedVariant ? `${selectedProduct.name} (${selectedVariant.name})` : selectedProduct.name }
+        label: selectedVariant ? `${selectedProduct.name} (${selectedVariant.name})` : selectedProduct.name,
+      }
     : null;
 
   return (
@@ -162,17 +165,15 @@ export const UpsellSelectModal = ({
               label="Add a discount to the offered product"
             />
           </DetailsToggle>
-          <>
-            {discount && selectedProduct ? (
-              <Dropdown className="max-w-sm">
-                <DiscountInput
-                  discount={discount}
-                  setDiscount={(newDiscount: InputtedDiscount) => setDiscount(newDiscount)}
-                  currencyCode={selectedProduct.currency_code}
-                />
-              </Dropdown>
-            ) : null}
-          </>
+          {discount && selectedProduct ? (
+            <Dropdown className="max-w-sm">
+              <DiscountInput
+                discount={discount}
+                setDiscount={(newDiscount: InputtedDiscount) => setDiscount(newDiscount)}
+                currencyCode={selectedProduct.currency_code}
+              />
+            </Dropdown>
+          ) : null}
         </Details>
       </Fieldset>
     </Modal>

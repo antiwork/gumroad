@@ -11,7 +11,8 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 export const MaxPurchaseCountToggle = ({
   maxPurchaseCount,
-  setMaxPurchaseCount }: {
+  setMaxPurchaseCount,
+}: {
   maxPurchaseCount: number | null;
   setMaxPurchaseCount: (maxPurchaseCount: number | null) => void;
 }) => {
@@ -27,18 +28,16 @@ export const MaxPurchaseCountToggle = ({
       <DetailsToggle chevronPosition="none" className="mb-0">
         <Switch checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} label="Limit product sales" />
       </DetailsToggle>
-      <>
-        <Dropdown>
-          <Fieldset>
-            <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>
-            <WithTooltip tip="Total sales">
-              <NumberInput value={count} onChange={setCount}>
-                {(props) => <Input id={`${uid}-max-purchase-count`} placeholder="∞" {...props} />}
-              </NumberInput>
-            </WithTooltip>
-          </Fieldset>
-        </Dropdown>
-      </>
+      <Dropdown>
+        <Fieldset>
+          <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>
+          <WithTooltip tip="Total sales">
+            <NumberInput value={count} onChange={setCount}>
+              {(props) => <Input id={`${uid}-max-purchase-count`} placeholder="∞" {...props} />}
+            </NumberInput>
+          </WithTooltip>
+        </Fieldset>
+      </Dropdown>
     </Details>
   );
 };

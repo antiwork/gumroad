@@ -10,7 +10,8 @@ import {
   numberOfMonthsInRecurrence,
   perRecurrenceLabels,
   RecurrenceId,
-  recurrenceNames } from "$app/utils/recurringPricing";
+  recurrenceNames,
+} from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -73,10 +74,12 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
               quarterly: { enabled: false },
               biannually: { enabled: false },
               yearly: { enabled: false },
-              every_two_years: { enabled: false } },
+              every_two_years: { enabled: false },
+            },
             integrations: { discord: false, circle: false, google_calendar: false },
             newlyAdded: true,
-            rich_content: [] },
+            rich_content: [],
+          },
         ]);
       }}
     >
@@ -136,7 +139,8 @@ const PLACEHOLDER_VALUES = { monthly: "5", quarterly: "15", biannually: "30", ye
 const TierEditor = ({
   tier,
   updateTier,
-  onDelete }: {
+  onDelete,
+}: {
   tier: Tier;
   updateTier: (update: Partial<Tier>) => void;
   onDelete: () => void;
@@ -151,11 +155,13 @@ const TierEditor = ({
   const updateRecurrencePriceValue = (recurrence: RecurrenceId, update: Partial<RecurrencePriceValue>) => {
     const updatedRecurrencePriceValues = {
       ...tier.recurrence_price_values,
-      [recurrence]: { ...tier.recurrence_price_values[recurrence], ...update } };
+      [recurrence]: { ...tier.recurrence_price_values[recurrence], ...update },
+    };
 
     updateTier({
       recurrence_price_values: updatedRecurrencePriceValues,
-      ...(areAllEnabledPricesZero(updatedRecurrencePriceValues) && { customizable_price: true }) });
+      ...(areAllEnabledPricesZero(updatedRecurrencePriceValues) && { customizable_price: true }),
+    });
   };
 
   const defaultRecurrencePriceValue = product.subscription_duration
@@ -172,9 +178,11 @@ const TierEditor = ({
               r,
               {
                 ...v,
-                price_cents: v.enabled ? v.price_cents : defaultPriceProratedPerMonth * numberOfMonthsInRecurrence(r) },
+                price_cents: v.enabled ? v.price_cents : defaultPriceProratedPerMonth * numberOfMonthsInRecurrence(r),
+              },
             ]),
-          ) });
+          ),
+        });
       }
     }
   }, [defaultRecurrencePriceValue?.price_cents]);
@@ -251,7 +259,8 @@ const TierEditor = ({
               style={{
                 display: "grid",
                 gap: "var(--spacer-3)",
-                gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))" }}
+                gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
+              }}
             >
               <FieldsetTitle>Pricing</FieldsetTitle>
               {Object.entries(tier.recurrence_price_values).map(([recurrence, value]) => (
@@ -260,7 +269,8 @@ const TierEditor = ({
                     display: "grid",
                     gridTemplateColumns: "max-content 1fr",
                     alignItems: "center",
-                    gap: "var(--spacer-2)" }}
+                    gap: "var(--spacer-2)",
+                  }}
                   key={recurrence}
                 >
                   <Switch
@@ -293,50 +303,49 @@ const TierEditor = ({
                   label="Allow customers to pay what they want"
                 />
               </DetailsToggle>
-              <>
-                <Dropdown>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "var(--spacer-3)",
-                      gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))" }}
-                  >
-                    {Object.entries(tier.recurrence_price_values).flatMap(([recurrence, value]) =>
-                      value.enabled ? (
-                        <React.Fragment key={recurrence}>
-                          <Fieldset>
-                            <Label htmlFor={`${uid}-${recurrence}-minimum-price`}>
-                              Minimum amount {perRecurrenceLabels[recurrence]}
-                            </Label>
-                            <PriceInput
-                              id={`${uid}-${recurrence}-minimum-price`}
-                              currencyCode={currencyType}
-                              cents={value.price_cents}
-                              disabled
-                            />
-                          </Fieldset>
-                          <Fieldset>
-                            <Label htmlFor={`${uid}-${recurrence}-suggested-price`}>
-                              Suggested amount {perRecurrenceLabels[recurrence]}
-                            </Label>
-                            <PriceInput
-                              id={`${uid}-${recurrence}-suggested-price`}
-                              currencyCode={currencyType}
-                              cents={value.suggested_price_cents}
-                              onChange={(suggested_price_cents) =>
-                                updateRecurrencePriceValue(recurrence, { suggested_price_cents })
-                              }
-                              placeholder={PLACEHOLDER_VALUES[recurrence]}
-                            />
-                          </Fieldset>
-                        </React.Fragment>
-                      ) : (
-                        []
-                      ),
-                    )}
-                  </div>
-                </Dropdown>
-              </>
+              <Dropdown>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "var(--spacer-3)",
+                    gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
+                  }}
+                >
+                  {Object.entries(tier.recurrence_price_values).flatMap(([recurrence, value]) =>
+                    value.enabled ? (
+                      <React.Fragment key={recurrence}>
+                        <Fieldset>
+                          <Label htmlFor={`${uid}-${recurrence}-minimum-price`}>
+                            Minimum amount {perRecurrenceLabels[recurrence]}
+                          </Label>
+                          <PriceInput
+                            id={`${uid}-${recurrence}-minimum-price`}
+                            currencyCode={currencyType}
+                            cents={value.price_cents}
+                            disabled
+                          />
+                        </Fieldset>
+                        <Fieldset>
+                          <Label htmlFor={`${uid}-${recurrence}-suggested-price`}>
+                            Suggested amount {perRecurrenceLabels[recurrence]}
+                          </Label>
+                          <PriceInput
+                            id={`${uid}-${recurrence}-suggested-price`}
+                            currencyCode={currencyType}
+                            cents={value.suggested_price_cents}
+                            onChange={(suggested_price_cents) =>
+                              updateRecurrencePriceValue(recurrence, { suggested_price_cents })
+                            }
+                            placeholder={PLACEHOLDER_VALUES[recurrence]}
+                          />
+                        </Fieldset>
+                      </React.Fragment>
+                    ) : (
+                      []
+                    ),
+                  )}
+                </div>
+              </Dropdown>
             </Details>
             <PriceChangeSettings tier={tier} updateTier={updateTier} />
             {integrations.length > 0 ? (
@@ -375,7 +384,8 @@ const PriceChangeSettings = ({ tier, updateTier }: { tier: Tier; updateTier: (up
   const [effectiveDate, setEffectiveDate] = React.useState<{ value: Date; error?: boolean }>({
     value: tier.subscription_price_change_effective_date
       ? new Date(tier.subscription_price_change_effective_date)
-      : earliestMembershipPriceChangeDate });
+      : earliestMembershipPriceChangeDate,
+  });
   effectiveDate.value = getDateWithUTCOffset(effectiveDate.value);
   React.useEffect(
     () => updateTier({ subscription_price_change_effective_date: effectiveDate.value.toISOString() }),
@@ -391,7 +401,8 @@ const PriceChangeSettings = ({ tier, updateTier }: { tier: Tier; updateTier: (up
   const newPrice = enabledPrice?.[1]?.enabled
     ? {
         recurrence: enabledPrice[0],
-        amount: priceCentsToUnit(enabledPrice[1].price_cents ?? 0, getIsSingleUnitCurrency(currencyType)).toString() }
+        amount: priceCentsToUnit(enabledPrice[1].price_cents ?? 0, getIsSingleUnitCurrency(currencyType)).toString(),
+      }
     : { recurrence: "monthly" as const, amount: "10" };
 
   const [editorContent] = React.useState(tier.subscription_price_change_message);
@@ -426,84 +437,83 @@ You can modify or cancel your membership at any time.`;
           onChange={(e) =>
             updateTier({
               apply_price_changes_to_existing_memberships: e.target.checked,
-              subscription_price_change_effective_date: effectiveDate.value.toISOString() })
+              subscription_price_change_effective_date: effectiveDate.value.toISOString(),
+            })
           }
           label="Apply price changes to existing customers"
         />
       </DetailsToggle>
-      <>
-        <Dropdown>
-          <div className="grid gap-6">
-            {initialEffectiveDate ? (
-              <Alert variant="warning">
-                You have scheduled a pricing update for existing customers on{" "}
-                {format(initialEffectiveDate, "MMMM d, y")}
-              </Alert>
-            ) : null}
-            <div>
-              <strong>
-                We'll send an email reminder to your active members stating the new price 7 days prior to their next
-                scheduled payment.
-              </strong>{" "}
-              <button
-                type="button"
-                className="cursor-pointer underline all-unset"
-                onClick={() =>
-                  void sendSamplePriceChangeEmail({
-                    productPermalink: uniquePermalink,
-                    tierId: tier.id,
-                    newPrice,
-                    customMessage: tier.subscription_price_change_message,
-                    effectiveDate: formattedEffectiveDate }).then(
-                    () => {
-                      showAlert("Email sample sent! Check your email", "success");
-                    },
-                    (e: unknown) => {
-                      assertResponseError(e);
-                      showAlert("Error sending email", "error");
-                    },
-                  )
-                }
-              >
-                Get a sample
-              </button>
-            </div>
-            <Fieldset state={effectiveDate.error ? "danger" : undefined}>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-date`}>Effective date for existing customers</Label>
-              </FieldsetTitle>
-              <DateInput
-                id={`${uid}-date`}
-                value={effectiveDate.value}
-                onChange={(value) => {
-                  if (!value) return;
-                  setEffectiveDate({ value, error: value < earliestMembershipPriceChangeDate });
-                }}
-              />
-
-              {effectiveDate.error ? (
-                <FieldsetDescription>The effective date must be at least 7 days from today</FieldsetDescription>
-              ) : null}
-            </Fieldset>
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-custom-message`}>Custom message</Label>
-              </FieldsetTitle>
-              {isMounted ? (
-                <RichTextEditor
-                  id={`${uid}-custom-message`}
-                  className="textarea rounded border border-border px-4 py-3"
-                  placeholder={placeholder}
-                  ariaLabel="Custom message"
-                  initialValue={editorContent}
-                  onChange={onMessageChange}
-                  onCreate={setEditor}
-                />
-              ) : null}
-            </Fieldset>
+      <Dropdown>
+        <div className="grid gap-6">
+          {initialEffectiveDate ? (
+            <Alert variant="warning">
+              You have scheduled a pricing update for existing customers on {format(initialEffectiveDate, "MMMM d, y")}
+            </Alert>
+          ) : null}
+          <div>
+            <strong>
+              We'll send an email reminder to your active members stating the new price 7 days prior to their next
+              scheduled payment.
+            </strong>{" "}
+            <button
+              type="button"
+              className="cursor-pointer underline all-unset"
+              onClick={() =>
+                void sendSamplePriceChangeEmail({
+                  productPermalink: uniquePermalink,
+                  tierId: tier.id,
+                  newPrice,
+                  customMessage: tier.subscription_price_change_message,
+                  effectiveDate: formattedEffectiveDate,
+                }).then(
+                  () => {
+                    showAlert("Email sample sent! Check your email", "success");
+                  },
+                  (e: unknown) => {
+                    assertResponseError(e);
+                    showAlert("Error sending email", "error");
+                  },
+                )
+              }
+            >
+              Get a sample
+            </button>
           </div>
-        </Dropdown>
-      </>
+          <Fieldset state={effectiveDate.error ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-date`}>Effective date for existing customers</Label>
+            </FieldsetTitle>
+            <DateInput
+              id={`${uid}-date`}
+              value={effectiveDate.value}
+              onChange={(value) => {
+                if (!value) return;
+                setEffectiveDate({ value, error: value < earliestMembershipPriceChangeDate });
+              }}
+            />
+
+            {effectiveDate.error ? (
+              <FieldsetDescription>The effective date must be at least 7 days from today</FieldsetDescription>
+            ) : null}
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-custom-message`}>Custom message</Label>
+            </FieldsetTitle>
+            {isMounted ? (
+              <RichTextEditor
+                id={`${uid}-custom-message`}
+                className="textarea rounded border border-border px-4 py-3"
+                placeholder={placeholder}
+                ariaLabel="Custom message"
+                initialValue={editorContent}
+                onChange={onMessageChange}
+                onCreate={setEditor}
+              />
+            ) : null}
+          </Fieldset>
+        </div>
+      </Dropdown>
     </Details>
   );
 };

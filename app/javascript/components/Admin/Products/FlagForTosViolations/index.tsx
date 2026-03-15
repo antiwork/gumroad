@@ -4,7 +4,8 @@ import { cast } from "ts-safe-cast";
 import { useLazyFetch } from "$app/hooks/useLazyFetch";
 
 import AdminFlagForTosViolationsContent, {
-  type TosViolationFlags } from "$app/components/Admin/Products/FlagForTosViolations/Content";
+  type TosViolationFlags,
+} from "$app/components/Admin/Products/FlagForTosViolations/Content";
 import AdminFlagForTosViolationsForm from "$app/components/Admin/Products/FlagForTosViolations/Form";
 import type { Product } from "$app/components/Admin/Products/Product";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
@@ -26,14 +27,17 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
   const {
     data: tos_violation_flags,
     isLoading,
-    fetchData: fetchTosViolationFlags } = useLazyFetch<TosViolationFlags[]>([], {
+    fetchData: fetchTosViolationFlags,
+  } = useLazyFetch<TosViolationFlags[]>([], {
     fetchUnlessLoaded: open,
     url: Routes.admin_user_product_tos_violation_flags_path(product.user.external_id, product.external_id, {
-      format: "json" }),
+      format: "json",
+    }),
     responseParser: (data) => {
       const parsed = cast<{ tos_violation_flags: TosViolationFlags[] }>(data);
       return parsed.tos_violation_flags;
-    } });
+    },
+  });
 
   const fetchIfFlagged = () => {
     if (flaggedForTosViolation) {

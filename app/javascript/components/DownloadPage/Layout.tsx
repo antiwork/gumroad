@@ -87,7 +87,8 @@ export const Layout = ({
   creator,
   headerActions,
   pageList,
-  children }: LayoutProps & { headerActions?: React.ReactNode; pageList?: React.ReactNode; children: React.ReactNode }) => {
+  children,
+}: LayoutProps & { headerActions?: React.ReactNode; pageList?: React.ReactNode; children: React.ReactNode }) => {
   const loggedInUser = useLoggedInUser();
   const [isResendingReceipt, setIsResendingReceipt] = React.useState(false);
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -98,7 +99,8 @@ export const Layout = ({
       await request({
         method: "POST",
         url: Routes.resend_receipt_purchase_path(purchaseId),
-        accept: "json" });
+        accept: "json",
+      });
       showAlert("Receipt resent", "success");
     } catch (e) {
       assertResponseError(e);
@@ -149,15 +151,13 @@ export const Layout = ({
                       <DetailsToggle chevronPosition="right" className="grow">
                         Installment plan
                       </DetailsToggle>
-                      <>
-                        {purchase.membership.is_installment_plan_completed ? (
-                          "This installment plan has been paid in full."
-                        ) : (
-                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
-                            Manage
-                          </NavigationButton>
-                        )}
-                      </>
+                      {purchase.membership.is_installment_plan_completed ? (
+                        "This installment plan has been paid in full."
+                      ) : (
+                        <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                          Manage
+                        </NavigationButton>
+                      )}
                     </Details>
                   </CardContent>
                 ) : (
@@ -166,25 +166,19 @@ export const Layout = ({
                       <DetailsToggle chevronPosition="right" className="grow">
                         Membership
                       </DetailsToggle>
-                      <>
-                        <div style={{ display: "grid" }}>
-                          {purchase.membership.has_active_subscription ? (
-                            <NavigationButton
-                              href={Routes.manage_subscription_url(purchase.membership.subscription_id)}
-                            >
-                              Manage
-                            </NavigationButton>
-                          ) : purchase.membership.is_subscription_ended ? (
-                            "This subscription has ended."
-                          ) : purchase.membership.is_subscription_cancelled_or_failed ? (
-                            <NavigationButton
-                              href={Routes.manage_subscription_url(purchase.membership.subscription_id)}
-                            >
-                              Restart
-                            </NavigationButton>
-                          ) : null}
-                        </div>
-                      </>
+                      <div style={{ display: "grid" }}>
+                        {purchase.membership.has_active_subscription ? (
+                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                            Manage
+                          </NavigationButton>
+                        ) : purchase.membership.is_subscription_ended ? (
+                          "This subscription has ended."
+                        ) : purchase.membership.is_subscription_cancelled_or_failed ? (
+                          <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
+                            Restart
+                          </NavigationButton>
+                        ) : null}
+                      </div>
                     </Details>
                   </CardContent>
                 )
@@ -195,22 +189,20 @@ export const Layout = ({
                     <DetailsToggle chevronPosition="right" className="grow">
                       Receipt
                     </DetailsToggle>
-                    <>
-                      <div className="flex flex-col gap-4">
-                        <NavigationButton
-                          href={
-                            purchase.email
-                              ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
-                              : Routes.receipt_purchase_url(receiptPurchaseId)
-                          }
-                        >
-                          View receipt
-                        </NavigationButton>
-                        <Button onClick={() => handleResendReceipt(receiptPurchaseId)} disabled={isResendingReceipt}>
-                          {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
-                        </Button>
-                      </div>
-                    </>
+                    <div className="flex flex-col gap-4">
+                      <NavigationButton
+                        href={
+                          purchase.email
+                            ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
+                            : Routes.receipt_purchase_url(receiptPurchaseId)
+                        }
+                      >
+                        View receipt
+                      </NavigationButton>
+                      <Button onClick={() => handleResendReceipt(receiptPurchaseId)} disabled={isResendingReceipt}>
+                        {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
+                      </Button>
+                    </div>
                   </Details>
                 </CardContent>
               ) : null}
@@ -220,12 +212,10 @@ export const Layout = ({
                     <DetailsToggle chevronPosition="right" className="grow">
                       Library
                     </DetailsToggle>
-                    <>
-                      <div className="flex flex-col gap-4">
-                        <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
-                        <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
-                      </div>
-                    </>
+                    <div className="flex flex-col gap-4">
+                      <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
+                      <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
+                    </div>
                   </Details>
                 </CardContent>
               ) : null}
@@ -302,14 +292,16 @@ const CallDetails = ({ call }: { call: Call }) => {
     date.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false });
+      hour12: false,
+    });
 
   const formatDate = (date: Date) =>
     date.toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",
       month: "long",
-      day: "numeric" });
+      day: "numeric",
+    });
 
   const formattedStartDate = formatDate(startTime);
   const formattedEndDate = formatDate(endTime);
@@ -361,7 +353,8 @@ export const EntityInfo = ({ entityName, creator }: { entityName: string | null;
 
 const PurchaseDeleteButton = ({
   purchase_id,
-  product_name }: {
+  product_name,
+}: {
   purchase_id: string;
   product_name: string | null;
   small?: boolean;
@@ -441,7 +434,8 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
         buyerSignup: true,
         termsAccepted: true,
         email: purchase_email,
-        password });
+        password,
+      });
       window.location.href = Routes.library_path();
     } catch (error) {
       assertResponseError(error);

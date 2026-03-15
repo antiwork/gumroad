@@ -189,7 +189,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {formatPriceCentsWithCurrencySymbol("usd", purchase.fee_cents, {
           symbolFormat: "long",
-          noCentsIfWhole: true })}
+          noCentsIfWhole: true,
+        })}
       </dd>
 
       {purchase.tip ? (
@@ -198,7 +199,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dd>
             {formatPriceCentsWithCurrencySymbol("usd", purchase.tip, {
               symbolFormat: "long",
-              noCentsIfWhole: true })}
+              noCentsIfWhole: true,
+            })}
           </dd>
         </>
       ) : null}
@@ -479,22 +481,20 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
         <DetailsToggle>
           <h3>Gift Sender Info</h3>
         </DetailsToggle>
-        <>
-          <dl>
-            <dt>For</dt>
-            <dd>{gift.other_email}</dd>
+        <dl>
+          <dt>For</dt>
+          <dd>{gift.other_email}</dd>
 
-            <dt>Note</dt>
-            <dd>{gift.note}</dd>
+          <dt>Note</dt>
+          <dd>{gift.note}</dd>
 
-            <dt>Receiver purchase external id</dt>
-            <dd>
-              <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
-                {gift.other_purchase_external_id}
-              </Link>
-            </dd>
-          </dl>
-        </>
+          <dt>Receiver purchase external id</dt>
+          <dd>
+            <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
+              {gift.other_purchase_external_id}
+            </Link>
+          </dd>
+        </dl>
       </Details>
 
       <hr />
@@ -502,28 +502,20 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
         <DetailsToggle>
           <h3>Edit giftee email</h3>
         </DetailsToggle>
-        <>
-          <Form
-            url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
-            method="POST"
-            onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
-          >
-            {(isLoading) => (
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  className="flex-1"
-                  name="giftee_email"
-                  placeholder="Enter new giftee email"
-                  required
-                />
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? "Updating..." : "Update"}
-                </Button>
-              </div>
-            )}
-          </Form>
-        </>
+        <Form
+          url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
+          method="POST"
+          onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
+        >
+          {(isLoading) => (
+            <div className="flex gap-2">
+              <Input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? "Updating..." : "Update"}
+              </Button>
+            </div>
+          )}
+        </Form>
       </Details>
     </>
   ) : (
@@ -531,22 +523,20 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
       <DetailsToggle>
         <h3>Gift Receiver Info</h3>
       </DetailsToggle>
-      <>
-        <dl>
-          <dt>From</dt>
-          <dd>{gift.other_email}</dd>
+      <dl>
+        <dt>From</dt>
+        <dd>{gift.other_email}</dd>
 
-          <dt>Note</dt>
-          <dd>{gift.note}</dd>
+        <dt>Note</dt>
+        <dd>{gift.note}</dd>
 
-          <dt>Sender purchase external id</dt>
-          <dd>
-            <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
-              {gift.other_purchase_external_id}
-            </Link>
-          </dd>
-        </dl>
-      </>
+        <dt>Sender purchase external id</dt>
+        <dd>
+          <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
+            {gift.other_purchase_external_id}
+          </Link>
+        </dd>
+      </dl>
     </Details>
   );
 
@@ -658,7 +648,8 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
 
 const PurchaseUrlRedirect = ({
   url_redirect,
-  label = "URL redirect" }: {
+  label = "URL redirect",
+}: {
   url_redirect: UrlRedirect;
   label?: string;
 }) => (
@@ -693,9 +684,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
           <DetailsToggle>
             <h3>Resend receipt</h3>
           </DetailsToggle>
-          <>
-            <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
-          </>
+          <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
         </Details>
       </>
     ) : null}
