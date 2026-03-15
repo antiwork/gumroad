@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { Dropdown } from "$app/components/Dropdown";
 import { NumberInput } from "$app/components/NumberInput";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -11,8 +11,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 export const MaxPurchaseCountToggle = ({
   maxPurchaseCount,
-  setMaxPurchaseCount,
-}: {
+  setMaxPurchaseCount }: {
   maxPurchaseCount: number | null;
   setMaxPurchaseCount: (maxPurchaseCount: number | null) => void;
 }) => {
@@ -28,7 +27,7 @@ export const MaxPurchaseCountToggle = ({
       <DetailsToggle chevronPosition="none" className="mb-0">
         <Switch checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} label="Limit product sales" />
       </DetailsToggle>
-      <DetailsContent>
+      <>
         <Dropdown>
           <Fieldset>
             <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>
@@ -39,7 +38,7 @@ export const MaxPurchaseCountToggle = ({
             </WithTooltip>
           </Fieldset>
         </Dropdown>
-      </DetailsContent>
+      </>
     </Details>
   );
 };

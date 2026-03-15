@@ -7,7 +7,7 @@ import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type LatestPostsProps = {
   user: User;
@@ -56,8 +56,7 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
     const response = await request({
       method: "GET",
       url: Routes.admin_user_latest_posts_path(user.external_id),
-      accept: "json",
-    });
+      accept: "json" });
     setPosts(cast<PostProps[]>(await response.json()));
     setIsLoading(false);
   };
@@ -76,9 +75,9 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
         <DetailsToggle>
           <h3>Last posts</h3>
         </DetailsToggle>
-        <DetailsContent>
+        <>
           <LatestPostsContent posts={posts} isLoading={isLoading} />
-        </DetailsContent>
+        </>
       </Details>
     </>
   );

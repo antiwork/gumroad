@@ -16,7 +16,7 @@ import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -86,8 +86,7 @@ export const Layout = ({
   creator,
   headerActions,
   pageList,
-  children,
-}: LayoutProps & { headerActions?: React.ReactNode; pageList?: React.ReactNode; children: React.ReactNode }) => {
+  children }: LayoutProps & { headerActions?: React.ReactNode; pageList?: React.ReactNode; children: React.ReactNode }) => {
   const loggedInUser = useLoggedInUser();
   const [isResendingReceipt, setIsResendingReceipt] = React.useState(false);
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -98,8 +97,7 @@ export const Layout = ({
       await request({
         method: "POST",
         url: Routes.resend_receipt_purchase_path(purchaseId),
-        accept: "json",
-      });
+        accept: "json" });
       showAlert("Receipt resent", "success");
     } catch (e) {
       assertResponseError(e);
@@ -150,7 +148,7 @@ export const Layout = ({
                       <DetailsToggle chevronPosition="right" className="grow">
                         Installment plan
                       </DetailsToggle>
-                      <DetailsContent>
+                      <>
                         {purchase.membership.is_installment_plan_completed ? (
                           "This installment plan has been paid in full."
                         ) : (
@@ -158,7 +156,7 @@ export const Layout = ({
                             Manage
                           </NavigationButton>
                         )}
-                      </DetailsContent>
+                      </>
                     </Details>
                   </CardContent>
                 ) : (
@@ -167,7 +165,7 @@ export const Layout = ({
                       <DetailsToggle chevronPosition="right" className="grow">
                         Membership
                       </DetailsToggle>
-                      <DetailsContent>
+                      <>
                         <div style={{ display: "grid" }}>
                           {purchase.membership.has_active_subscription ? (
                             <NavigationButton
@@ -185,7 +183,7 @@ export const Layout = ({
                             </NavigationButton>
                           ) : null}
                         </div>
-                      </DetailsContent>
+                      </>
                     </Details>
                   </CardContent>
                 )
@@ -196,7 +194,7 @@ export const Layout = ({
                     <DetailsToggle chevronPosition="right" className="grow">
                       Receipt
                     </DetailsToggle>
-                    <DetailsContent>
+                    <>
                       <div className="flex flex-col gap-4">
                         <NavigationButton
                           href={
@@ -211,7 +209,7 @@ export const Layout = ({
                           {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                         </Button>
                       </div>
-                    </DetailsContent>
+                    </>
                   </Details>
                 </CardContent>
               ) : null}
@@ -221,12 +219,12 @@ export const Layout = ({
                     <DetailsToggle chevronPosition="right" className="grow">
                       Library
                     </DetailsToggle>
-                    <DetailsContent>
+                    <>
                       <div className="flex flex-col gap-4">
                         <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
                         <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
                       </div>
-                    </DetailsContent>
+                    </>
                   </Details>
                 </CardContent>
               ) : null}
@@ -303,16 +301,14 @@ const CallDetails = ({ call }: { call: Call }) => {
     date.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false,
-    });
+      hour12: false });
 
   const formatDate = (date: Date) =>
     date.toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",
       month: "long",
-      day: "numeric",
-    });
+      day: "numeric" });
 
   const formattedStartDate = formatDate(startTime);
   const formattedEndDate = formatDate(endTime);
@@ -364,8 +360,7 @@ export const EntityInfo = ({ entityName, creator }: { entityName: string | null;
 
 const PurchaseDeleteButton = ({
   purchase_id,
-  product_name,
-}: {
+  product_name }: {
   purchase_id: string;
   product_name: string | null;
   small?: boolean;
@@ -445,8 +440,7 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
         buyerSignup: true,
         termsAccepted: true,
         email: purchase_email,
-        password,
-      });
+        password });
       window.location.href = Routes.library_path();
     } catch (error) {
       assertResponseError(error);

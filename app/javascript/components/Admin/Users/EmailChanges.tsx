@@ -6,7 +6,7 @@ import { request } from "$app/utils/request";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type AdminUserEmailChangesProps = {
@@ -76,16 +76,14 @@ const AdminUserEmailChanges = ({ user }: AdminUserEmailChangesProps) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [data, setData] = React.useState<{ email_changes: EmailChangesProps; fields: FieldsProps }>({
     email_changes: [],
-    fields: ["email", "payment_address"],
-  });
+    fields: ["email", "payment_address"] });
 
   const fetchEmailChanges = async () => {
     setIsLoading(true);
     const response = await request({
       method: "GET",
       url: Routes.admin_user_email_changes_path(user.external_id),
-      accept: "json",
-    });
+      accept: "json" });
     const data = cast<{ email_changes: EmailChangesProps; fields: FieldsProps }>(await response.json());
     setData(data);
     setIsLoading(false);
@@ -105,9 +103,9 @@ const AdminUserEmailChanges = ({ user }: AdminUserEmailChangesProps) => {
         <DetailsToggle>
           <h3>Email changes</h3>
         </DetailsToggle>
-        <DetailsContent>
+        <>
           <EmailChanges fields={data.fields} emailChanges={data.email_changes} isLoading={isLoading} />
-        </DetailsContent>
+        </>
       </Details>
     </>
   );

@@ -6,7 +6,7 @@ import { useLazyPaginatedFetch } from "$app/hooks/useLazyFetch";
 import type { CommentProps } from "$app/components/Admin/Commentable/Comment";
 import AdminCommentableContent from "$app/components/Admin/Commentable/Content";
 import AdminCommentableForm from "$app/components/Admin/Commentable/Form";
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type AdminCommentableProps = {
   count?: number;
@@ -23,16 +23,14 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
     setData: setComments,
     hasMore,
     hasLoaded,
-    fetchNextPage,
-  } = useLazyPaginatedFetch<CommentProps[]>([], {
+    fetchNextPage } = useLazyPaginatedFetch<CommentProps[]>([], {
     url: endpoint,
     responseParser: (data: unknown) => {
       const result = cast<{ comments: CommentProps[] }>(data);
       return result.comments;
     },
     mode: "append",
-    fetchUnlessLoaded: open,
-  });
+    fetchUnlessLoaded: open });
 
   const [commentsCount, setCommentsCount] = React.useState(count ?? 0);
 
@@ -48,7 +46,7 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
         <DetailsToggle>
           <h3>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</h3>
         </DetailsToggle>
-        <DetailsContent>
+        <>
           <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
           <AdminCommentableContent
             count={commentsCount}
@@ -58,7 +56,7 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
             hasMore={hasMore}
             onLoadMore={() => void fetchNextPage()}
           />
-        </DetailsContent>
+        </>
       </Details>
     </>
   );

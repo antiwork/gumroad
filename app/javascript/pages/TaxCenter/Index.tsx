@@ -10,7 +10,7 @@ import { NavigationButton } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Select } from "$app/components/ui/Select";
@@ -47,8 +47,7 @@ const FAQ_ITEMS: {
         </a>
         .
       </>
-    ),
-  },
+    ) },
   {
     id: "how-gross-sales-calculated",
     question: "How is the 'Gross Sales' amount on my 1099-K calculated?",
@@ -61,8 +60,7 @@ const FAQ_ITEMS: {
         </a>
         .
       </>
-    ),
-  },
+    ) },
   {
     id: "find-gumroad-fees",
     question: "Where can I find my Gumroad fees to deduct on my tax return?",
@@ -77,14 +75,12 @@ const FAQ_ITEMS: {
         </a>
         .
       </>
-    ),
-  },
+    ) },
   {
     id: "report-income-no-1099",
     question: "Do I need to report income if I didn't receive a 1099-K?",
     answer:
-      "Yes. Even if you didn't meet the IRS thresholds for a 1099-K, you are still required to report all income from Gumroad on your tax return.",
-  },
+      "Yes. Even if you didn't meet the IRS thresholds for a 1099-K, you are still required to report all income from Gumroad on your tax return." },
 ];
 
 const TaxCenterIndex = () => {
@@ -102,8 +98,7 @@ const TaxCenterIndex = () => {
       data: { year },
       onStart: () => setIsLoading(true),
       onFinish: () => setIsLoading(false),
-      onError: () => showAlert("Something went wrong. Please try again.", "error"),
-    });
+      onError: () => showAlert("Something went wrong. Please try again.", "error") });
   };
 
   const handleDownload = (_e: React.MouseEvent<HTMLAnchorElement>, formType: string) => {
@@ -231,9 +226,9 @@ const TaxCenterIndex = () => {
                 <DetailsToggle chevronPosition="right" className="grow">
                   {item.question}
                 </DetailsToggle>
-                <DetailsContent>
+                <>
                   <p className="text-sm">{item.answer}</p>
-                </DetailsContent>
+                </>
               </Details>
             </CardContent>
           ))}

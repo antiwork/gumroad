@@ -7,7 +7,7 @@ import { request } from "$app/utils/request";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type UserGuids = { guid: string; user_external_ids: string[] }[];
 
@@ -55,8 +55,7 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
     const response = await request({
       method: "GET",
       url: Routes.admin_user_guids_path(user_external_id, { format: "json" }),
-      accept: "json",
-    });
+      accept: "json" });
     setUserGuids(cast<UserGuids>(await response.json()));
     setIsLoading(false);
   };
@@ -75,9 +74,9 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
         <DetailsToggle>
           <h3>GUIDs</h3>
         </DetailsToggle>
-        <DetailsContent>
+        <>
           <UserGuidsContent userGuids={userGuids} isLoading={isLoading} />
-        </DetailsContent>
+        </>
       </Details>
     </>
   );

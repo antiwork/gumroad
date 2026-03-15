@@ -12,7 +12,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
@@ -35,15 +35,13 @@ export default function ThirdPartyAnalyticsPage() {
   const loggedInUser = useLoggedInUser();
 
   const form = useForm({
-    user: props.third_party_analytics,
-  });
+    user: props.third_party_analytics });
 
   const thirdPartyAnalytics = form.data.user;
   const updateThirdPartyAnalytics = (update: Partial<ThirdPartyAnalytics>) =>
     form.setData("user", {
       ...form.data.user,
-      ...update,
-    });
+      ...update });
 
   const uid = React.useId();
 
@@ -55,8 +53,7 @@ export default function ThirdPartyAnalyticsPage() {
           snippets: [
             ...thirdPartyAnalytics.snippets,
             { id: `${NEW_SNIPPET_ID_PREFIX}${Math.random()}`, name: "", location: "receipt", code: "", product: null },
-          ],
-        })
+          ] })
       }
     >
       <Plus className="size-5" />
@@ -69,14 +66,10 @@ export default function ThirdPartyAnalyticsPage() {
         ...data.user,
         snippets: data.user.snippets.map((snippet: Snippet) => ({
           ...snippet,
-          id: snippet.id && !snippet.id.startsWith(NEW_SNIPPET_ID_PREFIX) ? snippet.id : null,
-        })),
-      },
-    }));
+          id: snippet.id && !snippet.id.startsWith(NEW_SNIPPET_ID_PREFIX) ? snippet.id : null })) } }));
 
     form.put(Routes.settings_third_party_analytics_path(), {
-      preserveScroll: true,
-    });
+      preserveScroll: true });
   };
 
   return (
@@ -108,7 +101,7 @@ export default function ThirdPartyAnalyticsPage() {
                 label="Enable third-party analytics services"
               />
             </DetailsToggle>
-            <DetailsContent>
+            <>
               <Dropdown className="flex flex-col gap-4">
                 <Fieldset>
                   <FieldsetTitle>
@@ -148,7 +141,7 @@ export default function ThirdPartyAnalyticsPage() {
                   Send 'Purchase' events for free ($0) sales
                 </Label>
               </Dropdown>
-            </DetailsContent>
+            </>
           </Details>
         </FormSection>
         <FormSection header={<h2>Domain verification</h2>}>
@@ -162,7 +155,7 @@ export default function ThirdPartyAnalyticsPage() {
                 label="Verify domain in third-party services"
               />
             </DetailsToggle>
-            <DetailsContent>
+            <>
               <Dropdown className="flex flex-col gap-4">
                 <Fieldset>
                   <FieldsetTitle>
@@ -182,7 +175,7 @@ export default function ThirdPartyAnalyticsPage() {
                   </FieldsetDescription>
                 </Fieldset>
               </Dropdown>
-            </DetailsContent>
+            </>
           </Details>
         </FormSection>
         <FormSection
@@ -225,15 +218,13 @@ const NEW_SNIPPET_ID_PREFIX = "__GUMROAD";
 const LOCATION_TITLES: Record<string, string> = {
   receipt: "Receipt",
   product: "Product page",
-  all: "All pages",
-};
+  all: "All pages" };
 
 const SnippetRow = ({
   snippet,
   thirdPartyAnalytics,
   updateThirdPartyAnalytics,
-  products,
-}: {
+  products }: {
   snippet: Snippet;
   thirdPartyAnalytics: ThirdPartyAnalytics;
   updateThirdPartyAnalytics: (update: Partial<ThirdPartyAnalytics>) => void;
@@ -248,8 +239,7 @@ const SnippetRow = ({
         ...thirdPartyAnalytics.snippets.slice(0, snippetIndex),
         { ...snippet, ...update },
         ...thirdPartyAnalytics.snippets.slice(snippetIndex + 1),
-      ],
-    });
+      ] });
   };
 
   const uid = React.useId();
@@ -274,8 +264,7 @@ const SnippetRow = ({
           size="icon"
           onClick={() =>
             updateThirdPartyAnalytics({
-              snippets: thirdPartyAnalytics.snippets.filter(({ id }) => id !== snippet.id),
-            })
+              snippets: thirdPartyAnalytics.snippets.filter(({ id }) => id !== snippet.id) })
           }
           aria-label="Delete snippet"
         >
@@ -301,8 +290,7 @@ const SnippetRow = ({
               onChange={(key) => updateSnippet({ location: key })}
               options={SNIPPET_LOCATIONS.map((location) => ({
                 id: location,
-                label: LOCATION_TITLES[location] ?? "Receipt",
-              }))}
+                label: LOCATION_TITLES[location] ?? "Receipt" }))}
             />
           </Fieldset>
           <Fieldset>
@@ -315,8 +303,7 @@ const SnippetRow = ({
                 { id: "", label: "All products" },
                 ...products.map(({ permalink, name }) => ({
                   id: permalink,
-                  label: name,
-                })),
+                  label: name })),
               ]}
             />
           </Fieldset>

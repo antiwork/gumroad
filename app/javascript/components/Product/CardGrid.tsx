@@ -13,7 +13,7 @@ import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card as UICard, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -35,8 +35,7 @@ export const SORT_BY_LABELS = {
   newest: "Newest",
   page_layout: "Custom",
   price_asc: "Price (Low to High)",
-  price_desc: "Price (High to Low)",
-};
+  price_desc: "Price (High to Low)" };
 
 export type State = {
   params: SearchRequest;
@@ -58,8 +57,7 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
         case "set-params": {
           const params = {
             ...action.params,
-            taxonomy: action.params.taxonomy === "discover" ? undefined : action.params.taxonomy,
-          };
+            taxonomy: action.params.taxonomy === "discover" ? undefined : action.params.taxonomy };
           return { params, results: null, offset: action.params.from };
         }
         case "set-results":
@@ -73,8 +71,7 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             return state;
           return {
             ...state,
-            params: { ...state.params, from: (state.offset ?? 1) + state.results.products.length },
-          };
+            params: { ...state.params, from: (state.offset ?? 1) + state.results.products.length } };
       }
     },
     { ...initial, offset: initial.params.from },
@@ -91,8 +88,7 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
           results:
             state.results == null
               ? results
-              : { ...results, products: [...state.results.products, ...results.products] },
-        });
+              : { ...results, products: [...state.results.products, ...results.products] } });
         activeRequest.current = null;
       } catch (e) {
         if (!(e instanceof AbortError)) {
@@ -124,8 +120,7 @@ const FilterCheckboxes = ({
   selection,
   setSelection,
   filters,
-  disabled,
-}: {
+  disabled }: {
   filters: ProductFilter[];
   selection: string[];
   setSelection: (value: string[]) => void;
@@ -171,8 +166,7 @@ export const CardGrid = ({
   prependFilters,
   appendFilters,
   hideSort,
-  pagination = "scroll",
-}: Props) => {
+  pagination = "scroll" }: Props) => {
   const currencySymbol = getShortCurrencySymbol(currencyCode);
   const gridRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -262,7 +256,7 @@ export const CardGrid = ({
                 <DetailsToggle chevronPosition="right" className="grow">
                   Sort by
                 </DetailsToggle>
-                <DetailsContent>
+                <>
                   <Fieldset role="group">
                     {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
                       <Label key={key} className="w-full">
@@ -277,7 +271,7 @@ export const CardGrid = ({
                       </Label>
                     ))}
                   </Fieldset>
-                </DetailsContent>
+                </>
               </Details>
             </CardContent>
           )}
@@ -287,7 +281,7 @@ export const CardGrid = ({
                 <DetailsToggle chevronPosition="right" className="grow">
                   Tags
                 </DetailsToggle>
-                <DetailsContent>
+                <>
                   <Fieldset role="group">
                     <Label className="w-full">
                       All Products
@@ -307,7 +301,7 @@ export const CardGrid = ({
                       />
                     ) : null}
                   </Fieldset>
-                </DetailsContent>
+                </>
               </Details>
             </CardContent>
           ) : null}
@@ -317,7 +311,7 @@ export const CardGrid = ({
                 <DetailsToggle chevronPosition="right" className="grow">
                   Contains
                 </DetailsToggle>
-                <DetailsContent>
+                <>
                   <Fieldset role="group">
                     {results ? (
                       <FilterCheckboxes
@@ -328,7 +322,7 @@ export const CardGrid = ({
                       />
                     ) : null}
                   </Fieldset>
-                </DetailsContent>
+                </>
               </Details>
             </CardContent>
           ) : null}
@@ -337,14 +331,13 @@ export const CardGrid = ({
               <DetailsToggle chevronPosition="right" className="grow">
                 Price
               </DetailsToggle>
-              <DetailsContent>
+              <>
                 <div
                   style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
                     gridAutoFlow: "row",
-                    gap: "var(--spacer-3)",
-                  }}
+                    gap: "var(--spacer-3)" }}
                 >
                   <Fieldset>
                     <FieldsetTitle>
@@ -381,7 +374,7 @@ export const CardGrid = ({
                     </InputGroup>
                   </Fieldset>
                 </div>
-              </DetailsContent>
+              </>
             </Details>
           </CardContent>
           {appendFilters}

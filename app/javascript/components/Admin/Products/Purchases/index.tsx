@@ -3,7 +3,7 @@ import { cast } from "ts-safe-cast";
 
 import { useLazyPaginatedFetch } from "$app/hooks/useLazyFetch";
 
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 import AdminProductPurchasesContent from "./Content";
 import { type ProductPurchase } from "./Purchase";
@@ -17,8 +17,7 @@ type AdminProductPurchasesProps = {
 const AdminProductPurchases = ({
   productExternalId,
   isAffiliateUser = false,
-  userExternalId,
-}: AdminProductPurchasesProps) => {
+  userExternalId }: AdminProductPurchasesProps) => {
   const [open, setOpen] = React.useState(false);
 
   const url =
@@ -30,16 +29,14 @@ const AdminProductPurchases = ({
     data: purchases,
     isLoading,
     fetchNextPage,
-    hasMore,
-  } = useLazyPaginatedFetch<ProductPurchase[]>([], {
+    hasMore } = useLazyPaginatedFetch<ProductPurchase[]>([], {
     fetchUnlessLoaded: open,
     url,
     responseParser: (data) => {
       const parsed = cast<{ purchases: ProductPurchase[] }>(data);
       return parsed.purchases;
     },
-    mode: "append",
-  });
+    mode: "append" });
 
   return (
     <>
@@ -48,7 +45,7 @@ const AdminProductPurchases = ({
         <DetailsToggle>
           <h3>{isAffiliateUser ? "Affiliate purchases" : "Purchases"}</h3>
         </DetailsToggle>
-        <DetailsContent>
+        <>
           <AdminProductPurchasesContent
             purchases={purchases}
             isLoading={isLoading}
@@ -56,7 +53,7 @@ const AdminProductPurchases = ({
             onLoadMore={() => void fetchNextPage()}
             productExternalId={productExternalId}
           />
-        </DetailsContent>
+        </>
       </Details>
     </>
   );

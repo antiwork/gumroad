@@ -12,7 +12,7 @@ import { Modal } from "$app/components/Modal";
 import { RecurrencePriceValue } from "$app/components/ProductEdit/state";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
@@ -43,8 +43,7 @@ export type Product = {
 export const UpsellSelectModal = ({
   isOpen,
   onClose,
-  onInsert,
-}: {
+  onInsert }: {
   isOpen: boolean;
   onClose: () => void;
   onInsert: (product: Product, variant: ProductOption | null, discount: InputtedDiscount | null) => void;
@@ -60,8 +59,7 @@ export const UpsellSelectModal = ({
         const response = await request({
           method: "GET",
           accept: "json",
-          url: Routes.checkout_upsells_products_path(),
-        });
+          url: Routes.checkout_upsells_products_path() });
         const responseData = cast<Product[]>(await response.json());
         setProducts(responseData);
       } catch (error) {
@@ -114,8 +112,7 @@ export const UpsellSelectModal = ({
   const selectedProductOption = selectedProduct
     ? {
         id: selectedProduct.id,
-        label: selectedVariant ? `${selectedProduct.name} (${selectedVariant.name})` : selectedProduct.name,
-      }
+        label: selectedVariant ? `${selectedProduct.name} (${selectedVariant.name})` : selectedProduct.name }
     : null;
 
   return (
@@ -165,7 +162,7 @@ export const UpsellSelectModal = ({
               label="Add a discount to the offered product"
             />
           </DetailsToggle>
-          <DetailsContent>
+          <>
             {discount && selectedProduct ? (
               <Dropdown className="max-w-sm">
                 <DiscountInput
@@ -175,7 +172,7 @@ export const UpsellSelectModal = ({
                 />
               </Dropdown>
             ) : null}
-          </DetailsContent>
+          </>
         </Details>
       </Fieldset>
     </Modal>

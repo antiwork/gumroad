@@ -75,12 +75,3 @@ export const DetailsToggle = React.forwardRef<
   );
 });
 DetailsToggle.displayName = "DetailsToggle";
-
-export const DetailsContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ children, ...props }, ref) => (
-    <div ref={ref} {...props}>
-      {children}
-    </div>
-  ),
-);
-DetailsContent.displayName = "DetailsContent";

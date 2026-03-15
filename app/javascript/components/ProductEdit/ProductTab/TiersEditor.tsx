@@ -10,8 +10,7 @@ import {
   numberOfMonthsInRecurrence,
   perRecurrenceLabels,
   RecurrenceId,
-  recurrenceNames,
-} from "$app/utils/recurringPricing";
+  recurrenceNames } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -26,7 +25,7 @@ import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Alert } from "$app/components/ui/Alert";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -74,12 +73,10 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
               quarterly: { enabled: false },
               biannually: { enabled: false },
               yearly: { enabled: false },
-              every_two_years: { enabled: false },
-            },
+              every_two_years: { enabled: false } },
             integrations: { discord: false, circle: false, google_calendar: false },
             newlyAdded: true,
-            rich_content: [],
-          },
+            rich_content: [] },
         ]);
       }}
     >
@@ -139,8 +136,7 @@ const PLACEHOLDER_VALUES = { monthly: "5", quarterly: "15", biannually: "30", ye
 const TierEditor = ({
   tier,
   updateTier,
-  onDelete,
-}: {
+  onDelete }: {
   tier: Tier;
   updateTier: (update: Partial<Tier>) => void;
   onDelete: () => void;
@@ -155,13 +151,11 @@ const TierEditor = ({
   const updateRecurrencePriceValue = (recurrence: RecurrenceId, update: Partial<RecurrencePriceValue>) => {
     const updatedRecurrencePriceValues = {
       ...tier.recurrence_price_values,
-      [recurrence]: { ...tier.recurrence_price_values[recurrence], ...update },
-    };
+      [recurrence]: { ...tier.recurrence_price_values[recurrence], ...update } };
 
     updateTier({
       recurrence_price_values: updatedRecurrencePriceValues,
-      ...(areAllEnabledPricesZero(updatedRecurrencePriceValues) && { customizable_price: true }),
-    });
+      ...(areAllEnabledPricesZero(updatedRecurrencePriceValues) && { customizable_price: true }) });
   };
 
   const defaultRecurrencePriceValue = product.subscription_duration
@@ -178,11 +172,9 @@ const TierEditor = ({
               r,
               {
                 ...v,
-                price_cents: v.enabled ? v.price_cents : defaultPriceProratedPerMonth * numberOfMonthsInRecurrence(r),
-              },
+                price_cents: v.enabled ? v.price_cents : defaultPriceProratedPerMonth * numberOfMonthsInRecurrence(r) },
             ]),
-          ),
-        });
+          ) });
       }
     }
   }, [defaultRecurrencePriceValue?.price_cents]);
@@ -259,8 +251,7 @@ const TierEditor = ({
               style={{
                 display: "grid",
                 gap: "var(--spacer-3)",
-                gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
-              }}
+                gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))" }}
             >
               <FieldsetTitle>Pricing</FieldsetTitle>
               {Object.entries(tier.recurrence_price_values).map(([recurrence, value]) => (
@@ -269,8 +260,7 @@ const TierEditor = ({
                     display: "grid",
                     gridTemplateColumns: "max-content 1fr",
                     alignItems: "center",
-                    gap: "var(--spacer-2)",
-                  }}
+                    gap: "var(--spacer-2)" }}
                   key={recurrence}
                 >
                   <Switch
@@ -303,14 +293,13 @@ const TierEditor = ({
                   label="Allow customers to pay what they want"
                 />
               </DetailsToggle>
-              <DetailsContent>
+              <>
                 <Dropdown>
                   <div
                     style={{
                       display: "grid",
                       gap: "var(--spacer-3)",
-                      gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
-                    }}
+                      gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))" }}
                   >
                     {Object.entries(tier.recurrence_price_values).flatMap(([recurrence, value]) =>
                       value.enabled ? (
@@ -347,7 +336,7 @@ const TierEditor = ({
                     )}
                   </div>
                 </Dropdown>
-              </DetailsContent>
+              </>
             </Details>
             <PriceChangeSettings tier={tier} updateTier={updateTier} />
             {integrations.length > 0 ? (
@@ -386,8 +375,7 @@ const PriceChangeSettings = ({ tier, updateTier }: { tier: Tier; updateTier: (up
   const [effectiveDate, setEffectiveDate] = React.useState<{ value: Date; error?: boolean }>({
     value: tier.subscription_price_change_effective_date
       ? new Date(tier.subscription_price_change_effective_date)
-      : earliestMembershipPriceChangeDate,
-  });
+      : earliestMembershipPriceChangeDate });
   effectiveDate.value = getDateWithUTCOffset(effectiveDate.value);
   React.useEffect(
     () => updateTier({ subscription_price_change_effective_date: effectiveDate.value.toISOString() }),
@@ -403,8 +391,7 @@ const PriceChangeSettings = ({ tier, updateTier }: { tier: Tier; updateTier: (up
   const newPrice = enabledPrice?.[1]?.enabled
     ? {
         recurrence: enabledPrice[0],
-        amount: priceCentsToUnit(enabledPrice[1].price_cents ?? 0, getIsSingleUnitCurrency(currencyType)).toString(),
-      }
+        amount: priceCentsToUnit(enabledPrice[1].price_cents ?? 0, getIsSingleUnitCurrency(currencyType)).toString() }
     : { recurrence: "monthly" as const, amount: "10" };
 
   const [editorContent] = React.useState(tier.subscription_price_change_message);
@@ -439,13 +426,12 @@ You can modify or cancel your membership at any time.`;
           onChange={(e) =>
             updateTier({
               apply_price_changes_to_existing_memberships: e.target.checked,
-              subscription_price_change_effective_date: effectiveDate.value.toISOString(),
-            })
+              subscription_price_change_effective_date: effectiveDate.value.toISOString() })
           }
           label="Apply price changes to existing customers"
         />
       </DetailsToggle>
-      <DetailsContent>
+      <>
         <Dropdown>
           <div className="grid gap-6">
             {initialEffectiveDate ? (
@@ -468,8 +454,7 @@ You can modify or cancel your membership at any time.`;
                     tierId: tier.id,
                     newPrice,
                     customMessage: tier.subscription_price_change_message,
-                    effectiveDate: formattedEffectiveDate,
-                  }).then(
+                    effectiveDate: formattedEffectiveDate }).then(
                     () => {
                       showAlert("Email sample sent! Check your email", "success");
                     },
@@ -518,7 +503,7 @@ You can modify or cancel your membership at any time.`;
             </Fieldset>
           </div>
         </Dropdown>
-      </DetailsContent>
+      </>
     </Details>
   );
 };

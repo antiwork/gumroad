@@ -12,8 +12,7 @@ import {
   resumeUpsell,
   updateUpsell,
   UpsellPayload,
-  UpsellStatistics,
-} from "$app/data/upsells";
+  UpsellStatistics } from "$app/data/upsells";
 import { Discount } from "$app/parsers/checkout";
 import { ProductNativeType } from "$app/parsers/product";
 import { PLACEHOLDER_CART_ITEM } from "$app/utils/cart";
@@ -40,7 +39,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -290,8 +289,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
                       <TableCell aria-busy={!statistics}>
                         {statistics ? (
                           formatPriceCentsWithCurrencySymbol(upsell.product.currency_type, statistics.revenue_cents, {
-                            symbolFormat: "short",
-                          })
+                            symbolFormat: "short" })
                         ) : (
                           <Skeleton className="w-16" />
                         )}
@@ -369,8 +367,7 @@ const UpsellDrawer = ({
   onDelete,
   onTogglePause,
   onClose,
-  isLoading,
-}: {
+  isLoading }: {
   selectedUpsell: Upsell;
   statistics: UpsellStatistics | null;
   onCreate: () => void;
@@ -403,8 +400,7 @@ const UpsellDrawer = ({
                     selectedUpsell.product.currency_type,
                     selectedUpsell.discount.cents,
                     {
-                      symbolFormat: "long",
-                    },
+                      symbolFormat: "long" },
                   )}
             </CardContent>
           ) : null}
@@ -417,8 +413,7 @@ const UpsellDrawer = ({
               <CardContent>
                 <h5 className="grow font-bold">Revenue</h5>
                 {formatPriceCentsWithCurrencySymbol(selectedUpsell.product.currency_type, statistics.revenue_cents, {
-                  symbolFormat: "short",
-                })}
+                  symbolFormat: "short" })}
               </CardContent>
             </>
           ) : null}
@@ -522,8 +517,7 @@ const Form = ({
   onSave,
   products,
   onCancel,
-  isLoading,
-}: {
+  isLoading }: {
   title: string;
   upsell?: Upsell | undefined;
   onSave: (upsell: UpsellPayload) => void;
@@ -559,8 +553,7 @@ const Form = ({
   );
 
   const [selectedProductId, setSelectedProductId] = React.useState<{ value: null | string; error?: boolean }>({
-    value: upsell && !upsell.cross_sell ? upsell.product.id : null,
-  });
+    value: upsell && !upsell.cross_sell ? upsell.product.id : null });
   const selectedOption = products.find(({ id }) => id === selectedProductId.value);
   const selectedCartItem = selectedProductId.value ? cartItems[selectedProductId.value] : null;
   const selectedProduct = selectedCartItem?.product;
@@ -573,8 +566,7 @@ const Form = ({
   const [variants, setVariants] = React.useState<{ selectedVariantId: string; offeredVariantId: string }[]>(
     upsell?.upsell_variants.map(({ selected_variant, offered_variant }) => ({
       selectedVariantId: selected_variant.id,
-      offeredVariantId: offered_variant.id,
-    })) ?? [],
+      offeredVariantId: offered_variant.id })) ?? [],
   );
   const setVariant = (selectedVariantId: string, offeredVariantId: string | null) =>
     setVariants((prevVariants) => {
@@ -583,14 +575,12 @@ const Form = ({
     });
 
   const [selectedProductIds, setSelectedProductIds] = React.useState<{ value: string[]; error?: boolean }>({
-    value: upsell?.cross_sell ? upsell.selected_products.map(({ id }) => id) : [],
-  });
+    value: upsell?.cross_sell ? upsell.selected_products.map(({ id }) => id) : [] });
   const selectedOptions = products.filter(({ id }) => selectedProductIds.value.includes(id));
   const selectedProducts = selectedProductIds.value.flatMap((id) => cartItems[id] ?? []);
 
   const [offeredProductId, setOfferedProductId] = React.useState<{ value: null | string; error?: boolean }>({
-    value: upsell?.cross_sell ? upsell.product.id : null,
-  });
+    value: upsell?.cross_sell ? upsell.product.id : null });
   const offeredOption = products.find(({ id }) => id === offeredProductId.value);
   const offeredCartItem = offeredProductId.value ? cartItems[offeredProductId.value] : null;
   const offeredProduct = offeredCartItem?.product;
@@ -599,8 +589,7 @@ const Form = ({
   );
 
   const [offeredVariantId, setOfferedVariantId] = React.useState<{ value: null | string; error?: boolean }>({
-    value: upsell?.cross_sell ? (upsell.product.variant?.id ?? null) : null,
-  });
+    value: upsell?.cross_sell ? (upsell.product.variant?.id ?? null) : null });
   const offeredVariant = offeredProduct?.options.find(({ id }) => id === offeredVariantId.value);
 
   const handleSubmit = () => {
@@ -621,16 +610,14 @@ const Form = ({
         if (!universal)
           setSelectedProductIds((selectedProductIds) => ({
             ...selectedProductIds,
-            error: selectedProductIds.value.length === 0,
-          }));
+            error: selectedProductIds.value.length === 0 }));
         setOfferedProductId((offeredProductId) => ({ ...offeredProductId, error: offeredProductId.value === null }));
         if (offeredProduct && offeredProduct.options.length > 0)
           setOfferedVariantId((offeredVariantId) => ({ ...offeredVariantId, error: offeredVariantId.value === null }));
       } else {
         setSelectedProductId((selectedProductId) => ({
           ...selectedProductId,
-          error: selectedProductId.value === null,
-        }));
+          error: selectedProductId.value === null }));
       }
 
       if (discount) setDiscount({ ...discount, error: discount.value === null });
@@ -655,8 +642,7 @@ const Form = ({
           : null,
       productIds: isCrossSell ? selectedProductIds.value : [],
       upsellVariants: !isCrossSell ? variants : [],
-      paused,
-    });
+      paused });
   };
 
   const previewCartItem: CartItem = {
@@ -665,8 +651,7 @@ const Form = ({
     url_parameters: {},
     referrer: "",
     recommender_model_name: null,
-    pay_in_installments: false,
-  };
+    pay_in_installments: false };
 
   const useLoadCartItem = (productId: string | null) => {
     React.useEffect(() => {
@@ -864,13 +849,13 @@ const Form = ({
                         label="Add discount to the offered product"
                       />
                     </DetailsToggle>
-                    <DetailsContent>
+                    <>
                       {discount ? (
                         <Dropdown>
                           <DiscountInput discount={discount} setDiscount={setDiscount} currencyCode="usd" />
                         </Dropdown>
                       ) : null}
-                    </DetailsContent>
+                    </>
                   </Details>
                 </Fieldset>
               </>
@@ -950,11 +935,9 @@ const Form = ({
                           quantity: 1,
                           recurrence: offeredCartItem.recurrence,
                           callStartTime: null,
-                          payInInstallments: false,
-                        }).priceCents
+                          payInInstallments: false }).priceCents
                       : 0,
-                    accepted_offer: null,
-                  },
+                    accepted_offer: null },
                   discount: discount?.value
                     ? {
                         ...(discount.type === "percent"
@@ -964,17 +947,14 @@ const Form = ({
                         minimum_quantity: null,
                         expires_at: null,
                         duration_in_billing_cycles: null,
-                        minimum_amount_cents: null,
-                      }
+                        minimum_amount_cents: null }
                     : null,
-                  ratings: null,
-                }}
+                  ratings: null }}
                 accept={() => {}}
                 decline={() => {}}
                 cart={{
                   items: [previewCartItem],
-                  discountCodes: [],
-                }}
+                  discountCodes: [] }}
               />
             ) : (
               <UpsellModal
@@ -992,14 +972,11 @@ const Form = ({
                     price_difference_cents: 0,
                     recurrence_price_values: null,
                     is_pwyw: false,
-                    duration_in_minutes: null,
-                  },
-                  item: previewCartItem,
-                }}
+                    duration_in_minutes: null },
+                  item: previewCartItem }}
                 cart={{
                   items: [previewCartItem],
-                  discountCodes: [],
-                }}
+                  discountCodes: [] }}
                 accept={() => {}}
                 decline={() => {}}
               />

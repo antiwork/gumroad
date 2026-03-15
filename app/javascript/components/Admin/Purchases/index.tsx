@@ -13,7 +13,7 @@ import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceip
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
@@ -189,8 +189,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {formatPriceCentsWithCurrencySymbol("usd", purchase.fee_cents, {
           symbolFormat: "long",
-          noCentsIfWhole: true,
-        })}
+          noCentsIfWhole: true })}
       </dd>
 
       {purchase.tip ? (
@@ -199,8 +198,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
           <dd>
             {formatPriceCentsWithCurrencySymbol("usd", purchase.tip, {
               symbolFormat: "long",
-              noCentsIfWhole: true,
-            })}
+              noCentsIfWhole: true })}
           </dd>
         </>
       ) : null}
@@ -481,7 +479,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
         <DetailsToggle>
           <h3>Gift Sender Info</h3>
         </DetailsToggle>
-        <DetailsContent>
+        <>
           <dl>
             <dt>For</dt>
             <dd>{gift.other_email}</dd>
@@ -496,7 +494,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
               </Link>
             </dd>
           </dl>
-        </DetailsContent>
+        </>
       </Details>
 
       <hr />
@@ -504,7 +502,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
         <DetailsToggle>
           <h3>Edit giftee email</h3>
         </DetailsToggle>
-        <DetailsContent>
+        <>
           <Form
             url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
             method="POST"
@@ -525,7 +523,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
               </div>
             )}
           </Form>
-        </DetailsContent>
+        </>
       </Details>
     </>
   ) : (
@@ -533,7 +531,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
       <DetailsToggle>
         <h3>Gift Receiver Info</h3>
       </DetailsToggle>
-      <DetailsContent>
+      <>
         <dl>
           <dt>From</dt>
           <dd>{gift.other_email}</dd>
@@ -548,7 +546,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
             </Link>
           </dd>
         </dl>
-      </DetailsContent>
+      </>
     </Details>
   );
 
@@ -660,8 +658,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
 
 const PurchaseUrlRedirect = ({
   url_redirect,
-  label = "URL redirect",
-}: {
+  label = "URL redirect" }: {
   url_redirect: UrlRedirect;
   label?: string;
 }) => (
@@ -696,9 +693,9 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
           <DetailsToggle>
             <h3>Resend receipt</h3>
           </DetailsToggle>
-          <DetailsContent>
+          <>
             <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
-          </DetailsContent>
+          </>
         </Details>
       </>
     ) : null}

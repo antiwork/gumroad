@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 
 import { type Product } from "$app/components/Admin/Products/Product";
 import { Alert } from "$app/components/ui/Alert";
-import { Details, DetailsToggle, DetailsContent } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type Props = {
   product: Product;
@@ -23,7 +23,7 @@ const AdminUsersProductsDescription = ({ product }: Props) => {
         <DetailsToggle>
           <h3>Description</h3>
         </DetailsToggle>
-        <DetailsContent>
+        <>
           {product.html_safe_description && strippedHtmlSafeDescription ? (
             <div dangerouslySetInnerHTML={{ __html: product.html_safe_description }} />
           ) : (
@@ -31,7 +31,7 @@ const AdminUsersProductsDescription = ({ product }: Props) => {
               No description provided.
             </Alert>
           )}
-        </DetailsContent>
+        </>
       </Details>
     </>
   );

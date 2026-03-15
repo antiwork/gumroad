@@ -4,7 +4,7 @@ import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Textarea } from "$app/components/ui/Textarea";
 
@@ -23,7 +23,7 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
           <DetailsToggle>
             <h3>Flag for fraud</h3>
           </DetailsToggle>
-          <DetailsContent>
+          <>
             <Form
               url={Routes.flag_for_fraud_admin_user_path(user.external_id)}
               method="POST"
@@ -46,7 +46,7 @@ const FlagForFraud = ({ user }: FlagForFraudProps) => {
                 </Fieldset>
               )}
             </Form>
-          </DetailsContent>
+          </>
         </Details>
       </>
     )

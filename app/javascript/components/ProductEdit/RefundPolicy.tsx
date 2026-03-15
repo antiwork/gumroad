@@ -8,7 +8,7 @@ import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Select as FormSelect } from "$app/components/ui/Select";
@@ -30,8 +30,7 @@ export const RefundPolicySelector = ({
   refundPolicies,
   isEnabled,
   setIsEnabled,
-  setShowPreview,
-}: {
+  setShowPreview }: {
   refundPolicy: RefundPolicy;
   setRefundPolicy: (refundPolicy: RefundPolicy) => void;
   refundPolicies: OtherRefundPolicy[];
@@ -59,7 +58,7 @@ export const RefundPolicySelector = ({
           }
         />
       </DetailsToggle>
-      <DetailsContent>
+      <>
         <Dropdown className="flex flex-col gap-4">
           <Fieldset>
             <FieldsetTitle className="flex justify-between">
@@ -86,8 +85,7 @@ export const RefundPolicySelector = ({
                                 ...refundPolicy,
                                 title: otherRefundPolicy.title,
                                 fine_print: otherRefundPolicy.fine_print,
-                                max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days,
-                              });
+                                max_refund_period_in_days: otherRefundPolicy.max_refund_period_in_days });
                             }
                           }}
                         >
@@ -110,8 +108,7 @@ export const RefundPolicySelector = ({
                 setRefundPolicy({
                   ...refundPolicy,
                   max_refund_period_in_days: maxRefundPeriodInDays,
-                  title: assertDefined(title),
-                });
+                  title: assertDefined(title) });
               }}
             >
               {refundPolicy.allowed_refund_periods_in_days.map(({ key, value }) => (
@@ -136,7 +133,7 @@ export const RefundPolicySelector = ({
             />
           </Fieldset>
         </Dropdown>
-      </DetailsContent>
+      </>
     </Details>
   );
 };

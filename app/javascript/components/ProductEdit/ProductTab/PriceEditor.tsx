@@ -8,7 +8,7 @@ import { DefaultDiscountCodeSelector } from "$app/components/ProductEdit/Product
 import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/InstallmentPlanEditor";
 import { ProductEditContext } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
-import { Details, DetailsContent, DetailsToggle } from "$app/components/ui/Details";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
@@ -26,8 +26,7 @@ export const PriceEditor = ({
   numberOfInstallments,
   onAllowInstallmentPlanChange,
   onNumberOfInstallmentsChange,
-  currencyCodeSelector,
-}: {
+  currencyCodeSelector }: {
   priceCents: number;
   suggestedPriceCents: number | null;
   isPWYW: boolean;
@@ -70,7 +69,7 @@ export const PriceEditor = ({
             }
           />
         </DetailsToggle>
-        <DetailsContent>
+        <>
           <Dropdown className="gap-4 lg:grid-cols-2">
             <Fieldset>
               <Label htmlFor={`${uid}-minimum-amount`}>Minimum amount</Label>
@@ -87,7 +86,7 @@ export const PriceEditor = ({
               />
             </Fieldset>
           </Dropdown>
-        </DetailsContent>
+        </>
       </Details>
       {eligibleForInstallmentPlans ? (
         <InstallmentPlanEditor
