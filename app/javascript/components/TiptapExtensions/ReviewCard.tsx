@@ -9,9 +9,8 @@ import { assertResponseError } from "$app/utils/request";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Review } from "$app/components/Review";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
-
-import { Skeleton } from "../Skeleton";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {

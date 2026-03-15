@@ -11,6 +11,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { CardContent, Card as UICard } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
@@ -24,8 +25,6 @@ import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { Radio } from "$app/components/ui/Radio";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
-
-import { Skeleton } from "../Skeleton";
 
 import { Card } from "./Card";
 

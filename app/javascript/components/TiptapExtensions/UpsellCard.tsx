@@ -12,12 +12,11 @@ import { assertResponseError, request } from "$app/utils/request";
 
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+import { Skeleton } from "$app/components/Skeleton";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useRunOnce } from "$app/components/useRunOnce";
-
-import { Skeleton } from "../Skeleton";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {

@@ -9,11 +9,10 @@ import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { getCssVariable } from "$app/utils/styles";
 
 import { AuthorByline } from "$app/components/Product/AuthorByline";
+import { Skeleton } from "$app/components/Skeleton";
 import { ProductCard, ProductCardFigure, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useFollowWishlist } from "$app/components/Wishlist/FollowButton";
-
-import { Skeleton } from "../Skeleton";
 
 const nativeTypeThumbnails = require.context("$assets/images/native_types/thumbnails/");
 

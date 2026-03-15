@@ -8,13 +8,12 @@ import { getRecommendedProducts, RecommendationType } from "$app/data/recommende
 import { CardProduct } from "$app/parsers/product";
 
 import { Card } from "$app/components/Product/Card";
+import { Skeleton } from "$app/components/Skeleton";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { Radio } from "$app/components/ui/Radio";
-
-import { Skeleton } from "../Skeleton";
 
 export const MoreLikeThis = TiptapNode.create<{ productId: string }>({
   name: "moreLikeThis",

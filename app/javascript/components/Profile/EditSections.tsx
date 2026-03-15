@@ -44,6 +44,7 @@ import { WishlistsSectionView } from "$app/components/Profile/EditSections/Wishl
 import { RichTextEditorToolbar, useImageUploadSettings, useRichTextEditor } from "$app/components/RichTextEditor";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
@@ -54,8 +55,6 @@ import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/component
 import { Switch } from "$app/components/ui/Switch";
 import { useOnChange } from "$app/components/useOnChange";
 import { useRefToLatest } from "$app/components/useRefToLatest";
-
-import { Skeleton } from "../Skeleton";
 
 import { PageProps as BasePageProps, FeaturedProductView, Post, PostsView, SubscribeView } from "./Sections";
 
