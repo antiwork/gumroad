@@ -4,6 +4,10 @@ import { Card, CardContent } from "$app/components/ui/Card";
 
 const SCOPES = [
   {
+    name: "account",
+    description: "full access to all API endpoints.",
+  },
+  {
     name: "view_profile",
     description: "read-only access to the user's public information and products.",
   },
@@ -37,7 +41,7 @@ export const Scopes = () => (
     </CardContent>
     <CardContent>
       <div className="flex grow flex-col gap-4">
-        <p>We've provided six scopes that you may request when the user authorizes your application.</p>
+        <p>We've provided the following scopes that you may request when the user authorizes your application.</p>
         <div className="api-list">
           {SCOPES.map((scope) => (
             <React.Fragment key={scope.name}>
