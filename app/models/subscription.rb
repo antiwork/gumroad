@@ -15,6 +15,7 @@ class Subscription < ApplicationRecord
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
+  extend Restartable
 
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
   ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE = 5.days
@@ -248,7 +249,21 @@ class Subscription < ApplicationRecord
     purchase = Purchase.new(purchase_params)
     purchase.variant_attributes = original_purchase.variant_attributes
 
-    purchase.offer_code = original_purchase.offer_code if discount_applies_to_next_charge?
+    if discount_applies_to_next_charge?
+      if original_purchase.purchase_offer_code_discount.present?
+        original_discount = original_purchase.purchase_offer_code_discount
+        purchase.offer_code = original_purchase.offer_code
+        purchase.build_purchase_offer_code_discount(
+          offer_code: original_discount.offer_code,
+          offer_code_amount: original_discount.offer_code_amount,
+          offer_code_is_percent: original_discount.offer_code_is_percent,
+          pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
+          duration_in_months: original_discount.duration_in_months
+        )
+      elsif original_purchase.offer_code.present?
+        purchase.offer_code = original_purchase.offer_code
+      end
+    end
 
     purchase.purchaser = user
     purchase.link = link
@@ -263,7 +278,7 @@ class Subscription < ApplicationRecord
     end
     purchase.affiliate = original_purchase.affiliate if original_purchase.affiliate.try(:eligible_for_credit?)
     purchase.is_upgrade_purchase = is_upgrade_purchase if is_upgrade_purchase
-    get_vat_id_from_original_purchase(purchase)
+    set_vat_id_for_purchase(purchase)
     purchase
   end
 
@@ -462,7 +477,7 @@ class Subscription < ApplicationRecord
       new_purchase.is_original_subscription_purchase = true
       new_purchase.perceived_price_cents = perceived_price_cents
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
-      new_purchase.business_vat_id = original_purchase.purchase_sales_tax_info&.business_vat_id
+      new_purchase.business_vat_id = business_vat_id.presence || original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
 
@@ -696,6 +711,10 @@ class Subscription < ApplicationRecord
     end
   end
 
+  def update_business_vat_id!(vat_id)
+    update!(business_vat_id: vat_id) if vat_id.present? && business_vat_id.blank?
+  end
+
   def last_resubscribed_at
     if defined?(@_last_resubscribed_at)
       @_last_resubscribed_at
@@ -735,11 +754,11 @@ class Subscription < ApplicationRecord
   end
 
   def charges_completed?
-    has_fixed_length? && purchases.successful.count == charge_occurrence_count
+    has_fixed_length? && successful_purchases.count == charge_occurrence_count
   end
 
   def remaining_charges_count
-    has_fixed_length? ? charge_occurrence_count - purchases.successful.count : 0
+    has_fixed_length? ? charge_occurrence_count - successful_purchases.count : 0
   end
 
   # Certain events should transition the subscription from pending cancellation to cancelled thus not allowing the customer access to updates.
@@ -935,12 +954,8 @@ class Subscription < ApplicationRecord
       payment_options.alive.last
     end
 
-    def get_vat_id_from_original_purchase(purchase)
-      if original_purchase.purchase_sales_tax_info&.business_vat_id
-        purchase.business_vat_id = original_purchase.purchase_sales_tax_info.business_vat_id
-      elsif original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").exists?
-        purchase.business_vat_id = original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").first.business_vat_id
-      end
+    def set_vat_id_for_purchase(purchase)
+      purchase.business_vat_id = business_vat_id if business_vat_id.present?
     end
 
     def schedule_member_cancellation_workflow_jobs

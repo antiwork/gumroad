@@ -1,3 +1,4 @@
+import { CartPlus, Link as LinkIcon } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { Link, useMatches, useNavigate } from "react-router-dom";
@@ -5,13 +6,13 @@ import { Link, useMatches, useNavigate } from "react-router-dom";
 import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
+import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
@@ -19,7 +20,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -138,7 +139,8 @@ export const Layout = ({
   showNavigationButton?: boolean;
 }) => {
   const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
-  const rootPath = `/products/${uniquePermalink}/edit`;
+  const currentSeller = useCurrentSeller();
+  const rootPath = Routes.edit_link_path(uniquePermalink);
 
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
@@ -147,6 +149,21 @@ export const Layout = ({
   const tab = match?.handle ?? "product";
 
   const navigate = useRefToLatest(useNavigate());
+
+  const profileColors =
+    currentSeller && showBorder
+      ? {
+          "--accent": hexToRgb(currentSeller.profileHighlightColor),
+          "--contrast-accent": hexToRgb(getContrastColor(currentSeller.profileHighlightColor)),
+          "--filled": hexToRgb(currentSeller.profileBackgroundColor),
+          "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
+        }
+      : {};
+
+  const fontUrl =
+    currentSeller?.profileFont && currentSeller.profileFont !== "ABC Favorit"
+      ? `https://fonts.googleapis.com/css2?family=${currentSeller.profileFont}:wght@400;600&display=swap`
+      : null;
 
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
@@ -237,13 +254,13 @@ export const Layout = ({
               </Button>
               {saveButton}
               <CopyToClipboard text={url} copyTooltip="Copy product URL">
-                <Button>
-                  <Icon name="link" />
+                <Button size="icon">
+                  <LinkIcon className="size-5" />
                 </Button>
               </CopyToClipboard>
               <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="left">
-                <Button>
-                  <Icon name="cart-plus" />
+                <Button size="icon">
+                  <CartPlus className="size-5" />
                 </Button>
               </CopyToClipboard>
             </>
@@ -321,6 +338,7 @@ export const Layout = ({
               previewLink: (props) => (
                 <NavigationButton
                   {...props}
+                  size="icon"
                   disabled={isBusy}
                   href={url}
                   onClick={(evt) => {
@@ -337,12 +355,36 @@ export const Layout = ({
                 showBorder
                   ? {
                       border: "var(--border)",
-                      backgroundColor: "rgb(var(--filled))",
                       borderRadius: "var(--border-radius-2)",
+                      fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+                      ...profileColors,
+                      "--primary": "var(--color)",
+                      "--body-bg": "rgb(var(--filled))",
+                      "--contrast-primary": "var(--filled)",
+                      "--contrast-filled": "var(--color)",
+                      "--color-body": "var(--body-bg)",
+                      "--color-background": "rgb(var(--filled))",
+                      "--color-foreground": "rgb(var(--color))",
+                      "--color-border": "rgb(var(--color) / var(--border-alpha))",
+                      "--color-accent": "rgb(var(--accent))",
+                      "--color-accent-foreground": "rgb(var(--contrast-accent))",
+                      "--color-primary": "rgb(var(--primary))",
+                      "--color-primary-foreground": "rgb(var(--contrast-primary))",
+                      "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
+                      "--color-muted": "rgb(var(--color) / var(--gray-3))",
+                      backgroundColor: "rgb(var(--filled))",
+                      color: "rgb(var(--color))",
                     }
                   : {}
               }
             >
+              {fontUrl ? (
+                <>
+                  <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+                  <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                  <link rel="stylesheet" href={fontUrl} />
+                </>
+              ) : null}
               {preview}
             </Preview>
           </PreviewSidebar>

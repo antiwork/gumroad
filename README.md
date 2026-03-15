@@ -2,7 +2,7 @@
   <picture>
     <source srcset="https://public-files.gumroad.com/logo/gumroad-dark.svg" media="(prefers-color-scheme: dark)">
     <source srcset="https://public-files.gumroad.com/logo/gumroad.svg" media="(prefers-color-scheme: light)">
-    <img src="https://public-files.gumroad.com/logo/gumroad.svg" height="100" alt="Gumroad logo">
+    <img src="https://public-files.gumroad.com/logo/gumroad.svg" width="714" alt="Gumroad logo">
   </picture>
 </p>
 
@@ -162,22 +162,6 @@ npm install
 #### Set up Custom credentials
 
 App can be booted without any custom credentials. But if you would like to use services that require custom credentials (e.g. S3, Stripe, Resend, etc.), you can copy the `.env.example` file to `.env` and fill in the values.
-
-#### Local SSL Certificates
-
-1. Install mkcert on macOS:
-
-```shell
-brew install mkcert
-```
-
-For other operating systems, see [mkcert installation instructions](https://github.com/FiloSottile/mkcert?tab=readme-ov-file#installation).
-
-2. Generate certificates by running:
-
-```shell
-bin/generate_ssl_certificates
-```
 
 ### Running Locally
 

@@ -375,6 +375,10 @@ create_india_sales_report:
   cron: "0 3 1 * *" # UTC 03:00 on 1st of every month
   class: CreateIndiaSalesReportJob
   description: Generates India GST sales report for the previous month
+collect_unclaimed_balances_of_inactive_stripe_account:
+  cron: "0 10 1 * *" # UTC 10:00 on 1st of every month
+  class: CollectUnclaimedBalancesOfInactiveStripeAccountsJob
+  description: Collect unclaimed balances from inactive Stripe US custom connect accounts
 
 # Quarterly
 generate_financial_reports:

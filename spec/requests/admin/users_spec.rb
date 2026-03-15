@@ -224,15 +224,15 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     it "shows blocked user indicator with appropriate tooltips for email and domain blocks" do
       # Initially no block should exist
       visit admin_user_path(user.external_id)
-      expect(page).not_to have_css(".icon-solid-shield-exclamation")
+      expect(page).not_to have_css("[aria-label='Blocked User']")
 
       # Block by email
       BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email], user.form_email, admin.id)
       page.refresh
 
       # Verify icon appears and tooltip shows email block
-      expect(page).to have_css(".icon-solid-shield-exclamation")
-      icon = find(".icon-solid-shield-exclamation")
+      expect(page).to have_css("[aria-label='Blocked User']")
+      icon = find("[aria-label='Blocked User']")
       icon.hover
       expect(page).to have_text("Email blocked")
       expect(page).to have_text("block created")
@@ -242,8 +242,8 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       page.refresh
 
       # Verify icon still appears and tooltip shows both blocks
-      expect(page).to have_css(".icon-solid-shield-exclamation")
-      icon = find(".icon-solid-shield-exclamation")
+      expect(page).to have_css("[aria-label='Blocked User']")
+      icon = find("[aria-label='Blocked User']")
       icon.hover
       expect(page).to have_text("Email blocked")
       expect(page).to have_text("#{user.form_email_domain} blocked")

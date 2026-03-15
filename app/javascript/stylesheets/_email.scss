@@ -180,9 +180,24 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       &.table-stack {
         // [3]
+        width: 100%;
+
         &,
         & > * {
           display: revert;
+        }
+
+        & > tbody > tr {
+          width: 100%;
+        }
+
+        & > tbody > tr > td {
+          width: 100%;
+          padding: spacer(4);
+
+          .attribute-label {
+            font-weight: bold;
+          }
         }
 
         & > thead,
@@ -602,6 +617,7 @@ $accent-color: map-get($colors, "pink"); // [1]
   @include bg-color(filled);
   border: $border;
   border-radius: border-radius(1);
+  display: grid;
 
   > figure {
     background: url("~images/placeholders/product-cover.png");

@@ -2,6 +2,7 @@ import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { useDomains } from "$app/components/DomainSettings";
+import { Logo } from "$app/components/Logo";
 import { Card, CardContent } from "$app/components/ui/Card";
 
 export const Layout = ({ heading, children }: { heading: string; children: React.ReactNode }) => {
@@ -22,7 +23,9 @@ export const Layout = ({ heading, children }: { heading: string; children: React
         </Card>
         <footer className="p-4 text-center">
           Powered by&ensp;
-          <Link href={Routes.root_url({ host: rootDomain })} className="logo-full" aria-label="Gumroad" />
+          <Link href={Routes.root_url({ host: rootDomain })}>
+            <Logo />
+          </Link>
         </footer>
       </main>
     </div>

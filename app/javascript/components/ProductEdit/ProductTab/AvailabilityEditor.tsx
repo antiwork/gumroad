@@ -1,11 +1,12 @@
+import { Plus, Trash } from "@boxicons/react";
 import { fromZonedTime, toZonedTime, format } from "date-fns-tz";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
-import { Icon } from "$app/components/Icons";
 import { Availability } from "$app/components/ProductEdit/state";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 
 const DEFAULT_INTERVAL_START_HOURS = 9;
@@ -125,7 +126,7 @@ export const AvailabilityEditor = ({
                   ) : (
                     <span />
                   )}
-                  <input
+                  <Input
                     type="time"
                     value={formatTime(availability.start_time)}
                     onChange={(evt) =>
@@ -135,7 +136,7 @@ export const AvailabilityEditor = ({
                     }
                     aria-label="From"
                   />
-                  <input
+                  <Input
                     type="time"
                     value={formatTime(availability.end_time)}
                     onChange={(evt) =>
@@ -149,11 +150,11 @@ export const AvailabilityEditor = ({
                     onClick={() => onChange(serializedAvailabilities.filter(({ id }) => availability.id !== id))}
                     aria-label="Delete hours"
                   >
-                    <Icon name="trash2" />
+                    <Trash className="size-5" />
                   </Button>
                   {idx === 0 ? (
                     <Button onClick={() => addAvailability(lastGroupEndTime ?? new Date())} aria-label="Add hours">
-                      <Icon name="plus" />
+                      <Plus className="size-5" />
                     </Button>
                   ) : (
                     <span />
@@ -193,7 +194,7 @@ export const AvailabilityEditor = ({
 
 const AddButton = ({ onClick }: { onClick: () => void }) => (
   <Button color="primary" onClick={onClick}>
-    <Icon name="plus" />
+    <Plus className="size-5" />
     Add day of availability
   </Button>
 );

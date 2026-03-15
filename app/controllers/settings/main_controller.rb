@@ -3,6 +3,7 @@
 class Settings::MainController < Settings::BaseController
   include ActiveSupport::NumberHelper
 
+  skip_before_action :check_suspended
   before_action :authorize
 
   def show

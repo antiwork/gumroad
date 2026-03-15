@@ -1260,11 +1260,12 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     describe "all info provided of a Japanese individual" do
-      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "Tokyo", phone: "+81987654321",
+      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "渋谷区", phone: "+81987654321",
                                                                   first_name_kanji: "日本語", last_name_kanji: "創造者",
                                                                   first_name_kana: "ニホンゴ", last_name_kana: "ソウゾウシャ",
-                                                                  building_number: "1-1", street_address_kanji: "日本語", street_address_kana: "ニホンゴ",
-                                                                  street_address: "address_full_match", state: nil, zip_code: "100-0000",
+                                                                  building_number: "1-1", building_number_kana: "1-1",
+                                                                  street_address_kanji: "神宮前", street_address_kana: "ジングウマエ",
+                                                                  street_address: "address_full_match", state: "東京都", zip_code: "100-0000",
                                                                   country: "Japan") end
       let(:bank_account) { create(:japan_bank_account, user:) }
       let(:tos_agreement) { create(:tos_agreement, user:) }
@@ -1298,12 +1299,16 @@ describe StripeMerchantAccountManager, :vcr do
           individual: {
             address_kanji: {
               line1: "1-1",
-              line2: "日本語",
+              town: "神宮前",
+              state: "東京都",
+              country: "JP",
               postal_code: "100-0000",
             },
             address_kana: {
               line1: "1-1",
-              line2: "ニホンゴ",
+              town: "ジングウマエ",
+              state: "トウキョウト",
+              country: "JP",
               postal_code: "100-0000",
             },
             id_number: "000000000",
@@ -8497,6 +8502,42 @@ describe StripeMerchantAccountManager, :vcr do
           subject.create_account(user, passphrase: "1234")
         end.to raise_error(Stripe::InvalidRequestError)
         expect(user.merchant_accounts.alive.count).to eq(0)
+      end
+    end
+
+    describe "Stripe account cleanup when create_person fails" do
+      let(:user_compliance_info) { create(:user_compliance_info_business, user:) }
+      let(:bank_account) { create(:ach_account_stripe_succeed, user:) }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+      let(:fake_stripe_account) { Stripe::Account.construct_from(id: "acct_fake_123", object: "account") }
+
+      before do
+        user_compliance_info
+        bank_account
+        tos_agreement
+
+        allow(Stripe::Account).to receive(:create).and_return(fake_stripe_account)
+        allow(Stripe::Account).to receive(:create_person).and_raise(Stripe::InvalidRequestError.new("person creation failed", "person"))
+        allow(Bugsnag).to receive(:notify)
+      end
+
+      it "deletes the Stripe account and marks the merchant account as deleted" do
+        expect(Stripe::Account).to receive(:delete).with("acct_fake_123")
+
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(Stripe::InvalidRequestError)
+        expect(user.merchant_accounts.alive.count).to eq(0)
+      end
+
+      it "still marks the merchant account as deleted when Stripe account deletion fails" do
+        allow(Stripe::Account).to receive(:delete).and_raise(Stripe::APIError.new("cleanup failed"))
+
+        expect do
+          subject.create_account(user, passphrase: "1234")
+        end.to raise_error(Stripe::InvalidRequestError)
+        expect(user.merchant_accounts.alive.count).to eq(0)
+        expect(Bugsnag).to have_received(:notify).at_least(:twice)
       end
     end
 

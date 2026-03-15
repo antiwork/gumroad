@@ -1,17 +1,15 @@
+import { Github, Search } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { NewTicketModal } from "$app/components/support/NewTicketModal";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-
-import githubIcon from "$assets/images/help-center/github-icon.svg";
 
 type HelperSession = {
   email?: string | null;
@@ -40,7 +38,7 @@ function ReportBugButton() {
       rel="noopener noreferrer"
       className="flex items-center gap-2"
     >
-      <img src={githubIcon} alt="" className="h-4 w-4" />
+      <Github pack="brands" className="size-5" />
       Report a bug
     </NavigationButton>
   );
@@ -94,9 +92,11 @@ function HelpCenterHeader({
   const renderActions = () => {
     if (showSearchButton) {
       return (
-        <Link href={Routes.help_center_root_path()} className="button" aria-label="Search" title="Search">
-          <Icon name="solid-search" />
-        </Link>
+        <Button asChild>
+          <Link href={Routes.help_center_root_path()} aria-label="Search" title="Search">
+            <Search className="size-5" />
+          </Link>
+        </Button>
       );
     }
 

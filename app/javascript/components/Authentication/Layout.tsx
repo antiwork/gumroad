@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { useDomains } from "$app/components/DomainSettings";
+import { Logo } from "$app/components/Logo";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 import background from "$assets/images/auth/background.png";
@@ -20,7 +21,11 @@ export const Layout = ({
     <div className="flex flex-1">
       <div className="squished flex-1">
         <PageHeader
-          title={<a href={`${scheme}://${rootDomain}`} className="logo-full" aria-label="Gumroad" />}
+          title={
+            <a href={`${scheme}://${rootDomain}`}>
+              <Logo />
+            </a>
+          }
           actions={headerActions}
           className="p-8 sm:p-16"
         >

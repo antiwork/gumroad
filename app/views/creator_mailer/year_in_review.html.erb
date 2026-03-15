@@ -161,7 +161,7 @@
               <td>
                 <% if @seller.eligible_for_1099?(@year) %>
                   Your 1099 form is available for download on your
-                  <%= link_to "Gumroad Tax Center page", tax_center_url %> page.
+                  <%= link_to "Gumroad Tax Center", tax_center_url %> page.
                 <% else %>
                   You do not qualify for a 1099 this year.
                 <% end %>

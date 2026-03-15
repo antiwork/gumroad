@@ -119,6 +119,7 @@ describe ProductPresenter do
               id: product.user.external_id,
               name: product.user.username,
               profile_url: product.user.profile_url(recommended_by: "discover"),
+              is_verified: false,
             },
             collaborating_user: nil,
             is_compliance_blocked: false,
@@ -194,6 +195,43 @@ describe ProductPresenter do
     end
   end
 
+  describe "layout-specific props methods" do
+    let(:request) { ActionDispatch::TestRequest.create }
+    let(:pundit_user) { SellerContext.new(user: @user, seller: @user) }
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:presenter) { described_class.new(product:, request:, pundit_user:) }
+    let(:base_kwargs) { { seller_custom_domain_url: nil } }
+
+    it "returns product_page_props with sections for default layout" do
+      props = presenter.product_page_props(**base_kwargs)
+      expect(props[:product]).to be_present
+      expect(props[:product][:name]).to eq(product.name)
+      expect(props).to have_key(:sections)
+    end
+
+    it "returns product_props without sections for iframe layout" do
+      props = presenter.iframe_product_props(**base_kwargs)
+      expect(props[:product]).to be_present
+      expect(props).not_to have_key(:sections)
+    end
+
+    it "merges creator_profile for profile layout" do
+      props = presenter.profile_product_props(**base_kwargs)
+      expect(props[:creator_profile]).to be_present
+      expect(props[:creator_profile][:name]).to eq(seller.name || seller.username)
+      expect(props[:product]).to be_present
+    end
+
+    it "merges discover_props for discover layout" do
+      discover_props = { taxonomy_path: "art/illustration", taxonomies_for_nav: [{ name: "Art" }] }
+      props = presenter.discover_product_props(discover_props:, **base_kwargs)
+      expect(props[:taxonomy_path]).to eq("art/illustration")
+      expect(props[:taxonomies_for_nav]).to eq([{ name: "Art" }])
+      expect(props[:product]).to be_present
+    end
+  end
+
   describe "#edit_props" do
     let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http") }
     let(:circle_integration) { create(:circle_integration) }
@@ -257,6 +295,7 @@ describe ProductPresenter do
             **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
             customizable_price: true,
             suggested_price_cents: 200,
+            default_offer_code_id: nil,
             default_offer_code: nil,
             custom_button_text_option: "pay_prompt",
             custom_summary: "To summarize, I am a product.",
@@ -378,6 +417,7 @@ describe ProductPresenter do
             native_type: "ebook",
             require_shipping: false,
             cancellation_discount: nil,
+            default_offer_code_id: nil,
             default_offer_code: nil,
             public_files: [],
             audio_previews_enabled: false,
@@ -417,7 +457,7 @@ describe ProductPresenter do
           successful_sales_count: 0,
           ratings: {
             count: 0,
-            average: 0,
+            average: 0.0,
             percentages: [0, 0, 0, 0, 0],
           },
           seller: UserPresenter.new(user: product.user).author_byline_props,
@@ -434,6 +474,7 @@ describe ProductPresenter do
           },
           cancellation_discounts_enabled: false,
           ai_generated: false,
+          dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
       )
     end
@@ -445,15 +486,15 @@ describe ProductPresenter do
         product.update!(default_offer_code: offer_code)
       end
 
-      it "includes default_offer_code with id in edit_props" do
-        expect(presenter.edit_props[:product][:default_offer_code][:id]).to eq(offer_code.external_id)
-      end
-
-      it "includes default_offer_code in product data" do
-        default_offer_code = presenter.edit_props[:product][:default_offer_code]
-        expect(default_offer_code).to be_a(Hash)
-        expect(default_offer_code[:id]).to eq(offer_code.external_id)
-        expect(default_offer_code[:code]).to eq(offer_code.code)
+      it "includes default offer code data in edit_props" do
+        product_data = presenter.edit_props[:product]
+        expect(product_data[:default_offer_code_id]).to eq(offer_code.external_id)
+        expect(product_data[:default_offer_code]).to eq(
+          id: offer_code.external_id,
+          code: offer_code.code,
+          name: "",
+          discount: offer_code.discount,
+        )
       end
     end
 
@@ -505,6 +546,7 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
+              default_offer_code_id: nil,
               default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
@@ -613,6 +655,7 @@ describe ProductPresenter do
                 name: collaborator.affiliate_user.username,
                 profile_url: collaborator.affiliate_user.subdomain_with_protocol,
                 avatar_url: collaborator.affiliate_user.avatar_url,
+                is_verified: false,
               },
               rich_content: [],
               files: [],
@@ -628,6 +671,7 @@ describe ProductPresenter do
                 },
                 duration_in_billing_cycles: 3
               },
+              default_offer_code_id: nil,
               default_offer_code: nil,
               public_files: [],
               audio_previews_enabled: false,
@@ -649,7 +693,7 @@ describe ProductPresenter do
             successful_sales_count: 0,
             ratings: {
               count: 1,
-              average: 5,
+              average: 5.0,
               percentages: [0, 0, 0, 0, 100],
             },
             seller: UserPresenter.new(user: membership.user).author_byline_props,
@@ -666,6 +710,7 @@ describe ProductPresenter do
             },
             cancellation_discounts_enabled: true,
             ai_generated: false,
+            dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
         )
       end
@@ -760,6 +805,7 @@ describe ProductPresenter do
               **ProductPresenter::InstallmentPlanProps.new(product: presenter.product).props,
               customizable_price: false,
               suggested_price_cents: nil,
+              default_offer_code_id: nil,
               default_offer_code: nil,
               custom_button_text_option: nil,
               custom_summary: nil,
@@ -839,6 +885,7 @@ describe ProductPresenter do
               native_type: "digital",
               require_shipping: false,
               cancellation_discount: nil,
+              default_offer_code_id: nil,
               default_offer_code: nil,
               public_files: [],
               audio_previews_enabled: false,
@@ -860,7 +907,7 @@ describe ProductPresenter do
             successful_sales_count: 0,
             ratings: {
               count: 0,
-              average: 0,
+              average: 0.0,
               percentages: [0, 0, 0, 0, 0],
             },
             seller: UserPresenter.new(user: new_product.user).author_byline_props,
@@ -877,6 +924,7 @@ describe ProductPresenter do
             },
             cancellation_discounts_enabled: false,
             ai_generated: false,
+            dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
         )
       end

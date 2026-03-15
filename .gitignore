@@ -29,8 +29,6 @@
 /public/packs-test
 /vendor/bundle
 app/javascript/json_schemas
-app/javascript/stylesheets/_icon_names.scss
-app/javascript/types/icons.d.ts
 app/javascript/utils/routes.*
 docker/base/Gemfile*
 dump.rdb
@@ -57,6 +55,8 @@ bin/dist
 # Local SSL certificates
 docker/local-nginx/certs/*.crt
 docker/local-nginx/certs/*.key
+!docker/local-nginx/certs/gumroad_dev.crt
+!docker/local-nginx/certs/gumroad_dev.key
 lib/GeoIP2-City.mmdb
 nomad/
 docs/ssh.md

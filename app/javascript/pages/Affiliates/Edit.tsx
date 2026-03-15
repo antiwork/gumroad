@@ -1,3 +1,4 @@
+import { XSquare } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -5,10 +6,12 @@ import { cast } from "ts-safe-cast";
 import { isUrlValid } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 import { AffiliateForm, AffiliateProduct } from "./Form";
@@ -136,7 +139,7 @@ export default function AffiliatesEdit() {
         actions={
           <>
             <NavigationButtonInertia href={Routes.affiliates_path()} disabled={processing}>
-              <Icon name="x-square" />
+              <XSquare className="size-5" />
               Cancel
             </NavigationButtonInertia>
             <Button
@@ -158,12 +161,12 @@ export default function AffiliatesEdit() {
           uid={uid}
           headerText="The process of editing is almost identical to adding them. You can change their affiliate fee, the products they are assigned. Their affiliate link will not change."
           emailField={
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}email`}>Email</label>
-              </legend>
-              <input type="email" id={`${uid}email`} value={props.affiliate.email} disabled />
-            </fieldset>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}email`}>Email</Label>
+              </FieldsetTitle>
+              <Input type="email" id={`${uid}email`} value={props.affiliate.email} disabled />
+            </Fieldset>
           }
           onToggleAllProducts={toggleAllProducts}
           onUpdateFeePercent={(value) => {

@@ -1,5 +1,5 @@
+import { Shield } from "@boxicons/react";
 import { usePage, router } from "@inertiajs/react";
-import { cx } from "class-variance-authority";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
 import { cast } from "ts-safe-cast";
@@ -22,13 +22,17 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Option, Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { Alert } from "$app/components/ui/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -129,14 +133,17 @@ const AddTeamMembersSection = ({
   });
 
   return (
-    <section className="p-4! md:p-8!">
-      <header>
-        <h2>Add team members</h2>
-        <div>Invite as many team members as you need to help run this account.</div>
-        <a href="/help/article/326-teams-and-roles" target="_blank" rel="noreferrer">
-          Learn more
-        </a>
-      </header>
+    <FormSection
+      header={
+        <>
+          <h2>Add team members</h2>
+          <div>Invite as many team members as you need to help run this account.</div>
+          <a href="/help/article/326-teams-and-roles" target="_blank" rel="noreferrer">
+            Learn more
+          </a>
+        </>
+      }
+    >
       <div
         style={{
           display: "grid",
@@ -144,11 +151,11 @@ const AddTeamMembersSection = ({
           gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
         }}
       >
-        <fieldset className={cx({ danger: errors.has("email") })}>
-          <legend>
-            <label htmlFor={emailUID}>Email</label>
-          </legend>
-          <input
+        <Fieldset state={errors.has("email") ? "danger" : undefined}>
+          <FieldsetTitle>
+            <Label htmlFor={emailUID}>Email</Label>
+          </FieldsetTitle>
+          <Input
             id={emailUID}
             type="text"
             ref={emailFieldRef}
@@ -160,11 +167,11 @@ const AddTeamMembersSection = ({
               clearError("email");
             }}
           />
-        </fieldset>
-        <fieldset className={cx({ danger: errors.has("role") })}>
-          <legend>
-            <label htmlFor={roleUID}>Role</label>
-          </legend>
+        </Fieldset>
+        <Fieldset state={errors.has("role") ? "danger" : undefined}>
+          <FieldsetTitle>
+            <Label htmlFor={roleUID}>Role</Label>
+          </FieldsetTitle>
           <Select
             ref={roleFieldRef}
             inputId={roleUID}
@@ -181,7 +188,7 @@ const AddTeamMembersSection = ({
               }
             }}
           />
-        </fieldset>
+        </Fieldset>
       </div>
       <Button color="primary" className="w-fit" disabled={loading} onClick={onSubmit}>
         {loading ? (
@@ -192,7 +199,7 @@ const AddTeamMembersSection = ({
           "Send invitation"
         )}
       </Button>
-    </section>
+    </FormSection>
   );
 };
 
@@ -259,10 +266,7 @@ const TeamMembersSection = ({
   };
 
   return (
-    <section className="p-4! md:p-8!">
-      <header>
-        <h2 ref={ref}>Team members</h2>
-      </header>
+    <FormSection header={<h2 ref={ref}>Team members</h2>}>
       {deletedMember ? (
         <Alert variant="success">
           <div className="flex flex-col justify-between sm:flex-row">
@@ -302,8 +306,7 @@ const TeamMembersSection = ({
             <TableRow key={`${memberInfo.type}-${memberInfo.id}`}>
               <TableCell>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-4)" }}>
-                  <img
-                    className="user-avatar"
+                  <Avatar
                     style={{ width: "var(--spacer-6)" }}
                     src={memberInfo.avatar_url}
                     alt={`Avatar of ${memberInfo.name}`}
@@ -318,10 +321,11 @@ const TeamMembersSection = ({
                         tip="Invitation has expired. You can resend the invitation from the member's menu options."
                         position="top"
                       >
-                        <Icon
-                          name="solid-shield-exclamation"
+                        <Shield
+                          pack="filled"
                           style={{ color: "rgb(var(--warning))" }}
                           aria-label="Invitation has expired. You can resend the invitation from the member's menu options."
+                          className="size-5"
                         />
                       </WithTooltip>
                     ) : null}
@@ -389,6 +393,6 @@ const TeamMembersSection = ({
           have access.
         </Modal>
       ) : null}
-    </section>
+    </FormSection>
   );
 };

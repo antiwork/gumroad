@@ -409,10 +409,10 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             put :update, params: { user: params }
           end
 
-          it "returns an error" do
+          it "returns an error with the actual Stripe error message" do
             expect(response).to redirect_to(settings_payments_path)
             expect(response).to have_http_status :found
-            expect(session[:inertia_errors][:base]).to be_present
+            expect(session[:inertia_errors][:base]).to eq(["Invalid request: You cannot change legal_entity[first_name] via API if an account is verified."])
           end
 
           it "the users current compliance info should be changed" do
@@ -528,7 +528,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(compliance_info.business_state).to eq "CA"
           expect(compliance_info.business_zip_code).to eq "94107"
           expect(compliance_info.business_type).to eq "llc"
-          expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123-123-123"
+          expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123123123"
         end
       end
 
@@ -606,7 +606,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(compliance_info.business_state).to eq "CA"
         expect(compliance_info.business_zip_code).to eq "94107"
         expect(compliance_info.business_type).to eq "llc"
-        expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123-123-123"
+        expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123123123"
 
         expect(response).to redirect_to(settings_payments_path)
         expect(response).to have_http_status :see_other
@@ -653,7 +653,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(compliance_info.business_state).to eq "CA"
         expect(compliance_info.business_zip_code).to eq "94107"
         expect(compliance_info.business_type).to eq "llc"
-        expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123-123-123"
+        expect(compliance_info.business_tax_id.decrypt("1234")).to eq "123123123"
       end
     end
 

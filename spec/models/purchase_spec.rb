@@ -3765,6 +3765,19 @@ describe Purchase, :vcr do
       expect(purchase.purchase_sales_tax_info).to eq(purchase_sales_tax_info)
     end
 
+    it "stores VAT ID on subscription when present in sales tax info" do
+      product = create(:subscription_product)
+      subscription = create(:subscription, link: product, business_vat_id: nil)
+      purchase = build(:free_purchase, link: product, subscription:, is_original_subscription_purchase: true,
+                                       country: "Ireland", business_vat_id: "IE6388047V")
+
+      allow(VatValidationService).to receive_message_chain(:new, :process).and_return(true)
+
+      purchase.send(:create_sales_tax_info!)
+
+      expect(subscription.reload.business_vat_id).to eq "IE6388047V"
+    end
+
     it "handles invalid countries from GEOIP lookup for IP address" do
       purchase = create(:purchase, price_cents: 100_00, chargeable: create(:chargeable))
       purchase.sales_tax_country_code_election = Compliance::Countries::DEU.alpha2
@@ -4869,6 +4882,27 @@ describe Purchase, :vcr do
 
       it "refunds the full amount when argument is a float" do
         expect(purchase.refunding_amount_cents(4_000.05)).to eq(price_cents)
+      end
+    end
+
+    context "for JPY (single-unit currency)" do
+      let(:price_cents) { 3759 }
+      let(:product) { create(:product, user:, price_cents:, price_currency_type: "jpy") }
+      let(:purchase) do
+        create(:purchase,
+               link: product,
+               seller: product.user,
+               displayed_price_currency_type: "jpy",
+               rate_converted_to_usd: "153.3446")
+      end
+
+      it "converts JPY partial refund amount to correct USD cents" do
+        expect(purchase.refunding_amount_cents("5764")).to eq((5764 / 153.3446 * 100).round)
+      end
+
+      it "converts JPY full refund amount to match price_cents" do
+        jpy_full_price = (price_cents * 153.3446 / 100).round
+        expect(purchase.refunding_amount_cents(jpy_full_price.to_s)).to eq(price_cents)
       end
     end
   end

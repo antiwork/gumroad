@@ -202,17 +202,16 @@ describe("Product Edit Scenario", type: :system, js: true) do
       click_on "Upsell"
     end
 
-    # The product itself should be listed but disabled, variants listed with icon
     within_modal do
       find(:combo_box, "Product").click
       product_option = find("[role='option']", text: "Sample product", exact_text: true)
-      expect(product_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(product_option["aria-disabled"]).to eq("true")
 
       variant1_option = find("[role='option']", text: "Sample product (#{variant1.name})")
-      expect(variant1_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(variant1_option["aria-disabled"]).to eq("false")
 
       variant2_option = find("[role='option']", text: "Sample product (#{variant2.name})")
-      expect(variant2_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(variant2_option["aria-disabled"]).to eq("false")
     end
 
     discount_amount_cents = 100
@@ -390,6 +389,21 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(page).to have_alert(text: "Changes saved!")
 
     expect(product.reload.suggested_price_cents).to be_nil
+  end
+
+  it "persists default discount code on save without changes" do
+    offer_code = create(:offer_code, user: seller, products: [product], code: "PERSIST10")
+    product.update!(default_offer_code: offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
+
+    save_change
+
+    expect(product.reload.default_offer_code).to eq(offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
   end
 
   it "allows user to update name and price", :sidekiq_inline, :elasticsearch_wait_for_refresh do
@@ -1094,7 +1108,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button(product.name)
           end
@@ -1129,7 +1143,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button("#{product.name} - #{product.alive_variants.first.name}")
             expect(page).not_to have_selector(:button, exact_text: product.name)
@@ -1161,5 +1175,29 @@ describe("Product Edit Scenario", type: :system, js: true) do
     product.reload
     expect(product.community_chat_enabled?).to be(false)
     expect(product.active_community).to be_nil
+  end
+
+  it "navigates between edit tabs" do
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_text(product.name)
+
+    click_on "Content"
+    expect(page).to have_current_path(%r{/edit/content})
+
+    click_on "Receipt"
+    expect(page).to have_current_path(%r{/edit/receipt})
+
+    click_on "Product"
+    expect(page).to have_current_path(%r{/edit\z})
+  end
+
+  it "loads edit sub-routes directly" do
+    visit "/products/#{product.unique_permalink}/edit/content"
+    expect(page).to have_current_path(%r{/edit/content})
+    expect(page).to have_text(product.name)
+
+    visit "/products/#{product.unique_permalink}/edit/receipt"
+    expect(page).to have_current_path(%r{/edit/receipt})
+    expect(page).to have_text(product.name)
   end
 end

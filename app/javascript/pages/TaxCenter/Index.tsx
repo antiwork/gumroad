@@ -1,3 +1,4 @@
+import { Cog } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import taxesPlaceholder from "images/placeholders/taxes.png";
 import * as React from "react";
@@ -6,12 +7,13 @@ import { cast } from "ts-safe-cast";
 import { classNames } from "$app/utils/classNames";
 
 import { NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
@@ -25,6 +27,7 @@ type TaxDocument = {
   taxes: string;
   affiliate_credit?: string;
   net: string;
+  filed_at: string | null;
 };
 
 const FAQ_ITEMS: {
@@ -119,7 +122,7 @@ const TaxCenterIndex = () => {
 
   const settingsAction = loggedInUser?.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Icon name="gear-fill" />
+      <Cog pack="filled" className="size-5" />
       Settings
     </NavigationButton>
   ) : null;
@@ -144,7 +147,7 @@ const TaxCenterIndex = () => {
           <h2>Tax documents</h2>
           {selected_year ? (
             <div className="flex items-center gap-3">
-              <select
+              <Select
                 aria-label="Tax year"
                 disabled={isLoading}
                 value={selected_year}
@@ -155,7 +158,7 @@ const TaxCenterIndex = () => {
                     {year}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           ) : null}
         </div>
@@ -176,6 +179,7 @@ const TaxCenterIndex = () => {
                   <TableHead>Taxes</TableHead>
                   <TableHead>Affiliate commission</TableHead>
                   <TableHead>Net</TableHead>
+                  <TableHead>Filing Status</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -193,10 +197,13 @@ const TaxCenterIndex = () => {
                     <TableCell data-label="Taxes">-{doc.taxes}</TableCell>
                     <TableCell data-label="Affiliate commission">-{doc.affiliate_credit}</TableCell>
                     <TableCell data-label="Net">{doc.net}</TableCell>
+                    <TableCell data-label="Filing Status">
+                      {doc.filed_at ? `Filed with IRS on ${doc.filed_at}` : "Informational only (Not Filed with IRS)"}
+                    </TableCell>
                     <TableCell data-label="" className="text-right">
                       <div className="flex justify-end">
                         <NavigationButton
-                          small
+                          size="sm"
                           className="w-full sm:w-auto"
                           href={Routes.download_tax_form_path(doc.year, doc.form_type)}
                           disabled={downloadingFormType === doc.form_type}
@@ -225,12 +232,12 @@ const TaxCenterIndex = () => {
         <Card>
           {FAQ_ITEMS.map((item) => (
             <CardContent asChild details key={item.id}>
-              <details>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+              <Details>
+                <DetailsToggle chevronPosition="right" className="grow">
                   {item.question}
-                </summary>
+                </DetailsToggle>
                 <p className="text-sm">{item.answer}</p>
-              </details>
+              </Details>
             </CardContent>
           ))}
         </Card>

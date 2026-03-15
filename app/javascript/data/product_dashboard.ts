@@ -60,11 +60,14 @@ async function pollForProductDuplication(permalink: string, productName: string)
     accept: "json",
   });
 
-  const { status } = cast<{ status: string }>(await response.json());
-  if (status === "product_duplication_failed") {
-    throw new ResponseError(`Sorry, failed to duplicate '${productName}'. Please try again.`);
-  } else if (status === "product_duplicated") {
-    return { status };
+  const json = cast<{ status: string; error_message?: string }>(await response.json());
+  if (json.status === "product_duplication_failed") {
+    const reason = json.error_message
+      ? `Sorry, failed to duplicate '${productName}': ${json.error_message}`
+      : `Sorry, failed to duplicate '${productName}'. Please try again.`;
+    throw new ResponseError(reason);
+  } else if (json.status === "product_duplicated") {
+    return { status: json.status };
   }
   await new Promise((resolve) => setTimeout(resolve, 2000));
   return pollForProductDuplication(permalink, productName);

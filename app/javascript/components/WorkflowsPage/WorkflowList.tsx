@@ -1,3 +1,4 @@
+import { Pencil, Trash } from "@boxicons/react";
 import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
@@ -5,7 +6,6 @@ import { Workflow } from "$app/types/workflow";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -127,17 +127,24 @@ const WorkflowRow = ({
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
         {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
         <div className="flex flex-wrap gap-2">
-          <Button asChild>
+          <Button asChild size="icon">
             <Link
               href={Routes.edit_workflow_path(workflow.external_id)}
               aria-label="Edit workflow"
               inert={!canManageWorkflow || undefined}
             >
-              <Icon name="pencil" />
+              <Pencil className="size-5" />
             </Link>
           </Button>
-          <Button color="danger" outline aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
-            <Icon name="trash2" />
+          <Button
+            size="icon"
+            color="danger"
+            outline
+            aria-label="Delete workflow"
+            disabled={!canManageWorkflow}
+            onClick={onDelete}
+          >
+            <Trash className="size-5" />
           </Button>
         </div>
       </div>

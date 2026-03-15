@@ -478,7 +478,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("First name", with: "barny")
         click_on("Update settings")
 
-        within(:alert, text: "Your account could not be updated.")
+        within(:alert, text: "You cannot change legal_entity[first_name] via API if an account is verified.")
 
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.first_name).to eq("barnabas")
@@ -540,7 +540,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.active_bank_account.account_holder_full_name).to eq("Gumhead Moneybags")
       end
 
-      it "displays the Stripe Connect embedded verification banner" do
+      it "shows the verification section when identity verification is needed" do
         user = create(:user, username: nil, payment_address: nil)
         create(:user_compliance_info, user:, birthday: Date.new(1901, 1, 2))
         create(:ach_account_stripe_succeed, user:)
@@ -554,7 +554,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+        expect(page).to have_section("Verification")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
       end
 
       it "always shows the verification section with success message when verification is not needed" do
@@ -589,7 +590,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+        expect(page).to have_section("Verification")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
 
         merchant_account.mark_deleted!
         visit settings_payments_path
@@ -857,7 +859,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::Business::COMPANY_REGISTRATION_VERIFICATION)
 
         visit settings_payments_path
-        expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+        expect(page).to have_section("Verification")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
       end
     end
 
@@ -1241,6 +1244,74 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(page).to have_alert(text: "Thanks! You're all set.")
         end.to change { @user.alive_user_compliance_info.reload.street_address }.to("P.O. Box 123, Tokyo central hall")
       end
+
+      describe "BR business" do
+        before do
+          old_user_compliance_info = @user.alive_user_compliance_info
+          new_user_compliance_info = old_user_compliance_info.dup
+          new_user_compliance_info.country = "Brazil"
+          ActiveRecord::Base.transaction do
+            old_user_compliance_info.mark_deleted!
+            new_user_compliance_info.save!
+          end
+          expect(@user.active_bank_account).to be nil
+          expect(@user.stripe_account).to be nil
+        end
+
+        it "allows to enter PayPal address" do
+          visit settings_payments_path
+
+          choose "Business"
+
+          fill_in("Legal business name", with: "BR LLC")
+          select("Sole Proprietorship", from: "Type")
+          find_field("Address", match: :first).set("address_full_match")
+          find_field("City", match: :first).set("Curitiba")
+          all('select[id$="business-state"]').last.select("Paraná")
+          find_field("Postal code", match: :first).set("81010-250")
+          fill_in("Business phone number", with: "5022541982")
+
+          fill_in("First name", with: "Brazilian")
+          fill_in("Last name", with: "Creator")
+          all('select[id$="creator-country"]').last.select("Brazil")
+          all('input[id$="creator-street-address"]').last.set("address_full_match")
+          all('input[id$="creator-city"]').last.set("Curitiba")
+          all('select[id$="creator-state"]').last.select("Paraná")
+          all('input[id$="creator-zip-code"]').last.set("81010-250")
+          fill_in("Phone number", with: "5022541982")
+
+          select("1", from: "Day")
+          select("January", from: "Month")
+          select("1980", from: "Year")
+
+          fill_in("PayPal Email", with: "br@example.com")
+
+          click_on("Update settings")
+
+          expect(page).to have_alert(text: "Thanks! You're all set.")
+
+          compliance_info = @user.alive_user_compliance_info
+          expect(compliance_info.is_business).to be true
+          expect(compliance_info.business_name).to eq("BR LLC")
+          expect(compliance_info.business_street_address).to eq("address_full_match")
+          expect(compliance_info.business_city).to eq("Curitiba")
+          expect(compliance_info.business_state).to eq("PR")
+          expect(compliance_info.business_country).to eq("Brazil")
+          expect(compliance_info.business_zip_code).to eq("81010-250")
+          expect(compliance_info.business_phone).to eq("+555022541982")
+          expect(compliance_info.business_type).to eq("sole_proprietorship")
+          expect(compliance_info.first_name).to eq("Brazilian")
+          expect(compliance_info.last_name).to eq("Creator")
+          expect(compliance_info.street_address).to eq("address_full_match")
+          expect(compliance_info.city).to eq("Curitiba")
+          expect(compliance_info.state).to eq("PR")
+          expect(compliance_info.country).to eq("Brazil")
+          expect(compliance_info.zip_code).to eq("81010-250")
+          expect(compliance_info.phone).to eq("+555022541982")
+          expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
+          expect(@user.reload.payment_address).to eq("br@example.com")
+        end
+      end
     end
 
     describe "EU creator" do
@@ -1276,7 +1347,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).to have_content("Payouts will be made in EUR.")
 
         click_on("Update settings")
-        expect(page).to have_content("Invalid DE postal code")
+        expect(page).to have_content("The postal code you entered is not valid for Germany.")
 
         fill_in("Postal code", with: "01067")
         click_on("Update settings")
@@ -1798,7 +1869,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_selector("iframe[src*='connect-js.stripe.com']")
+        expect(page).to have_section("Verification")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
       end
 
       it "allows the creator to use paypal payouts as an individual" do
@@ -3688,6 +3760,35 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         end
       end
 
+      it "rejects invalid kana characters" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "japanese")
+        fill_in("Last name", with: "creator")
+        fill_in("First name (Kanji)", with: "日本語")
+        fill_in("Last name (Kanji)", with: "創造者")
+        fill_in("First name (Kana)", with: "ニホンゴ")
+        fill_in("Last name (Kana)", with: "ソウゾウシャ）")
+        fill_in("Block / Building number", with: "1-1")
+        fill_in("Block / Building number (Kana)", with: "イチノイチ")
+        fill_in("Town/Cho-me (Kanji)", with: "日本語")
+        fill_in("Town/Cho-me (Kana)", with: "ニホンゴ")
+        select("東京都", from: "Prefecture")
+        fill_in("Phone number", with: "987654321")
+        fill_in("Postal code", with: "100-0000")
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+        fill_in("Pay to the order of", with: "japanese creator")
+        fill_in("Bank code", with: "1100")
+        fill_in("Branch code", with: "000")
+        fill_in("Account #", with: "0001234")
+        fill_in("Confirm account #", with: "0001234")
+
+        click_on("Update settings")
+        expect(page).to have_status(text: "Last name (Kana) may only contain katakana characters, spaces, dashes, and dots.")
+      end
+
       it "allows to enter bank account details" do
         visit settings_payments_path
 
@@ -3697,10 +3798,11 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Last name (Kanji)", with: "創造者")
         fill_in("First name (Kana)", with: "ニホンゴ")
         fill_in("Last name (Kana)", with: "ソウゾウシャ")
-        fill_in("Block / Building Number", with: "1-1")
-        fill_in("Street Address (Kanji)", with: "日本語")
-        fill_in("Street Address (Kana)", with: "ニホンゴ")
-        fill_in("City", with: "tokyo")
+        fill_in("Block / Building number", with: "1-1")
+        fill_in("Block / Building number (Kana)", with: "イチノイチ")
+        fill_in("Town/Cho-me (Kanji)", with: "日本語")
+        fill_in("Town/Cho-me (Kana)", with: "ニホンゴ")
+        select("東京都", from: "Prefecture")
         fill_in("Phone number", with: "987654321")
         fill_in("Postal code", with: "100-0000")
 
@@ -3731,11 +3833,113 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.building_number).to eq("1-1")
         expect(compliance_info.street_address_kanji).to eq("日本語")
         expect(compliance_info.street_address_kana).to eq("ニホンゴ")
-        expect(compliance_info.city).to eq("tokyo")
+        expect(compliance_info.state).to eq("東京都")
         expect(compliance_info.zip_code).to eq("100-0000")
         expect(compliance_info.phone).to eq("+81987654321")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("0001234")
+      end
+    end
+
+    describe "Japanese business creator" do
+      before do
+        old_user_compliance_info = @user.alive_user_compliance_info
+        new_user_compliance_info = old_user_compliance_info.dup
+        new_user_compliance_info.country = "Japan"
+        ActiveRecord::Base.transaction do
+          old_user_compliance_info.mark_deleted!
+          new_user_compliance_info.save!
+        end
+      end
+
+      it "rejects Japanese characters in legal business name" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "japanese")
+        fill_in("Last name", with: "creator")
+        fill_in("First name (Kanji)", with: "日本語")
+        fill_in("Last name (Kanji)", with: "創造者")
+        fill_in("First name (Kana)", with: "ニホンゴ")
+        fill_in("Last name (Kana)", with: "ソウゾウシャ")
+        fill_in("Block / Building number", with: "1-1")
+        fill_in("Block / Building number (Kana)", with: "イチノイチ")
+        fill_in("Town/Cho-me (Kanji)", with: "日本語")
+        fill_in("Town/Cho-me (Kana)", with: "ニホンゴ")
+        select("東京都", from: "Prefecture")
+        fill_in("Phone number", with: "987654321")
+        fill_in("Postal code", with: "100-0000")
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        choose "Business"
+
+        fill_in("Legal business name", with: "サクラショウテン", match: :first)
+        select("LLC", from: "Type")
+        fill_in("Business Name (Kanji)", with: "桜商店株式会社")
+        fill_in("Legal Business Name (Kana)", with: "サクラショウテン")
+        find(:fillable_field, id: /business-building-number$/).set("1-1")
+        find(:fillable_field, id: /business-building-number-kana$/).set("イチノイチ")
+        fill_in("Business town/Cho-me (Kanji)", with: "日本語")
+        fill_in("Business town/Cho-me (Kana)", with: "ニホンゴ")
+        find(:select, id: /business-prefecture/).select("東京都")
+        fill_in("Business phone number", with: "987654321")
+
+        fill_in("Pay to the order of", with: "japanese creator")
+        fill_in("Bank code", with: "1100")
+        fill_in("Branch code", with: "000")
+        fill_in("Account #", with: "0001234")
+        fill_in("Confirm account #", with: "0001234")
+
+        click_on("Update settings")
+        expect(page).to have_status(text: "Legal business name must be in romaji (latin characters) for Japanese accounts")
+      end
+
+      it "clears stale error message after fixing the field and resubmitting" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "japanese")
+        fill_in("Last name", with: "creator")
+        fill_in("First name (Kanji)", with: "日本語")
+        fill_in("Last name (Kanji)", with: "創造者")
+        fill_in("First name (Kana)", with: "ニホンゴ")
+        fill_in("Last name (Kana)", with: "ソウゾウシャ")
+        fill_in("Block / Building number", with: "1-1")
+        fill_in("Block / Building number (Kana)", with: "イチノイチ")
+        fill_in("Town/Cho-me (Kanji)", with: "日本語")
+        fill_in("Town/Cho-me (Kana)", with: "ニホンゴ")
+        select("東京都", from: "Prefecture")
+        fill_in("Phone number", with: "987654321")
+        fill_in("Postal code", with: "100-0000")
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        choose "Business"
+
+        fill_in("Legal business name", with: "サクラショウテン", match: :first)
+        select("LLC", from: "Type")
+        fill_in("Business Name (Kanji)", with: "桜商店株式会社")
+        fill_in("Legal Business Name (Kana)", with: "サクラショウテン")
+        find(:fillable_field, id: /business-building-number$/).set("1-1")
+        find(:fillable_field, id: /business-building-number-kana$/).set("イチノイチ")
+        fill_in("Business town/Cho-me (Kanji)", with: "日本語")
+        fill_in("Business town/Cho-me (Kana)", with: "ニホンゴ")
+        find(:select, id: /business-prefecture/).select("東京都")
+        fill_in("Business phone number", with: "987654321")
+
+        fill_in("Pay to the order of", with: "japanese creator")
+        fill_in("Bank code", with: "1100")
+        fill_in("Branch code", with: "000")
+        fill_in("Account #", with: "0001234")
+        fill_in("Confirm account #", with: "0001234")
+
+        click_on("Update settings")
+        expect(page).to have_status(text: "Legal business name must be in romaji (latin characters) for Japanese accounts")
+
+        fill_in("Legal business name", with: "Sakura Shoten", match: :first)
+        click_on("Update settings")
+        expect(page).not_to have_status(text: "Legal business name must be in romaji (latin characters) for Japanese accounts")
       end
     end
 
@@ -6250,12 +6454,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         field.fill_in(with: "5")
 
         expect(field["aria-invalid"]).to eq("true")
-        expect(page).to have_text("Your payout threshold must be at least $10.")
+        expect(page).to have_text("The minimum payout threshold for United States is $10.")
         expect(page).to have_button("Update settings", disabled: true)
 
         field.fill_in(with: "15")
         expect(field["aria-invalid"]).to eq("false")
-        expect(page).to_not have_text("Your payout threshold must be at least $10.")
+        expect(page).to have_text("The minimum payout threshold for United States is $10.")
 
         click_on "Update settings"
 
@@ -6278,17 +6482,33 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           field.fill_in(with: "30")
 
           expect(field["aria-invalid"]).to eq("true")
-          expect(page).to have_text("Your payout threshold must be at least $34.74.")
+          expect(page).to have_text("The minimum payout threshold for South Korea is $34.74.")
           expect(page).to have_button("Update settings", disabled: true)
 
           field.fill_in(with: "40")
           expect(field["aria-invalid"]).to eq("false")
-          expect(page).to_not have_text("Your payout threshold must be at least $34.74.")
+          expect(page).to have_text("The minimum payout threshold for South Korea is $34.74.")
 
           click_on "Update settings"
 
           expect(page).to have_alert(text: "Thanks! You're all set.")
           expect(user.reload.minimum_payout_amount_cents).to eq(4000)
+        end
+
+        it "loads the raw stored payout threshold in the form field, not the effective minimum" do
+          user.update!(payout_threshold_cents: 1000)
+
+          visit settings_payments_path
+
+          field = find_field("Minimum payout threshold")
+          expect(field.value).to eq("10")
+
+          fill_in "Minimum payout threshold", with: "35", fill_options: { clear: :backspace }
+
+          click_on "Update settings"
+
+          expect(page).to have_alert(text: "Thanks! You're all set.")
+          expect(user.reload.payout_threshold_cents).to eq(3500)
         end
       end
     end

@@ -1,3 +1,4 @@
+import { XSquare } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
@@ -6,7 +7,6 @@ import { cast } from "ts-safe-cast";
 import { SettingPage } from "$app/parsers/settings";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout } from "$app/components/Settings/Layout";
@@ -104,10 +104,10 @@ export default function AuthorizedApplicationsPage() {
                 <TableRow key={application.id}>
                   <TableCell hideLabel>
                     <div className="flex gap-3">
-                      <div>
+                      <div className="shrink-0">
                         <img
                           src={application.icon_url || placeholderAppIcon}
-                          className="application-icon"
+                          className="rounded border"
                           width={72}
                           height={72}
                           alt={application.name}
@@ -140,7 +140,7 @@ export default function AuthorizedApplicationsPage() {
                   </TableCell>
                   <TableCell hideLabel>
                     <Button color="danger" outline onClick={() => setRevokingAccessForApp({ id: application.id })}>
-                      <Icon name="x-square"></Icon>
+                      <XSquare className="size-5" />
                       Revoke access
                     </Button>
                   </TableCell>

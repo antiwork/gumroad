@@ -21,10 +21,7 @@ class Purchase < ApplicationRecord
   SKU_ID_PREFIX_FOR_PRODUCT_WITH_NO_SKUS = "pid_"
 
   # Gumroad's fees per transaction
-  GUMROAD_FEE_PER_THOUSAND = 85
   GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND = 100
-
-  GUMROAD_NON_PRO_FEE_PERCENTAGE = 60
 
   GUMROAD_FLAT_FEE_PER_THOUSAND = 100
   GUMROAD_DISCOVER_FEE_PER_THOUSAND = 300
@@ -474,8 +471,9 @@ class Purchase < ApplicationRecord
   scope :not_additional_contribution, -> { where("purchases.flags IS NULL OR purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:is_additional_contribution]) }
   scope :for_products, ->(products) { where(link_id: products) if products.present? }
   scope :not_subscription_or_original_purchase, -> {
-    where("purchases.subscription_id IS NULL OR purchases.flags & ? = ?",
-          Purchase.flag_mapping["flags"][:is_original_subscription_purchase], Purchase.flag_mapping["flags"][:is_original_subscription_purchase])
+    where("purchases.subscription_id IS NULL OR purchases.flags & ? = ? OR purchases.flags & ? = ?",
+          Purchase.flag_mapping["flags"][:is_original_subscription_purchase], Purchase.flag_mapping["flags"][:is_original_subscription_purchase],
+          Purchase.flag_mapping["flags"][:is_gift_receiver_purchase], Purchase.flag_mapping["flags"][:is_gift_receiver_purchase])
   }
   # TODO: since Memberships, `not_recurring_charge` & `recurring_charge` are not an accurate names for what the scopes filter, and they should be renamed.
   scope :not_recurring_charge, lambda { not_subscription_or_original_purchase }
@@ -1999,7 +1997,7 @@ class Purchase < ApplicationRecord
   end
 
   def does_not_count_towards_max_purchases
-    is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? || is_gift_receiver_purchase || is_updated_original_subscription_purchase || is_commission_completion_purchase
+    is_recurring_subscription_charge || is_additional_contribution || is_preorder_charge? || is_gift_receiver_purchase || is_updated_original_subscription_purchase || is_commission_completion_purchase || (is_installment_payment && !is_original_subscription_purchase)
   end
 
   # Public: Determine if this purchase is a test purchase by the links owner.
@@ -2115,7 +2113,14 @@ class Purchase < ApplicationRecord
     check_filters_for_past_posts = lambda do |posts|
       posts.select do |post|
         purchases.reduce(false) do |select_post, purchase|
-          select_post || (purchase.link.should_show_all_posts? && post.purchase_passes_filters(purchase) && post.targeted_at_purchased_item?(purchase) && post.passes_member_cancellation_checks?(purchase))
+          next true if select_post
+
+          next false unless purchase.link.should_show_all_posts?
+          next false unless post.purchase_passes_filters(purchase)
+          next false unless post.targeted_at_purchased_item?(purchase)
+          next false unless post.passes_member_cancellation_checks?(purchase)
+
+          post.delivery_due?(purchase)
         end
       end
     end
@@ -2722,9 +2727,6 @@ class Purchase < ApplicationRecord
 
       calculate_fees
 
-      validate_seller_revenue
-      return if errors.present?
-
       purchase_sales_tax_info.save
       save
 
@@ -2792,15 +2794,6 @@ class Purchase < ApplicationRecord
     # Private: truncate the referrer so that they fit in our mysql string column.
     def truncate_referrer
       self.referrer = referrer.first(191) if referrer
-    end
-
-    def validate_seller_revenue
-      return unless price_cents
-      return if price_cents == 0
-      return if price_cents > fee_cents + affiliate_credit_cents
-
-      self.error_code = PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE
-      errors.add(:base, "Your purchase failed because the product is not correctly set up. Please contact the creator for more information.")
     end
 
     # Private: Prepare for charging the chargeable and retrieve any information about the chargeable that's needed
@@ -3120,37 +3113,12 @@ class Purchase < ApplicationRecord
       purchase_sales_tax_info.country_code = Compliance::Countries.find_by_name(country)&.alpha2
       purchase_sales_tax_info.ip_country_code = Compliance::Countries.find_by_name(ip_country)&.alpha2
       purchase_sales_tax_info.elected_country_code = sales_tax_country_code_election
-
-      if business_vat_id
-        if Compliance::Countries::AUS.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if AbnValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::SGP.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if GstValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::CAN.alpha2 == purchase_sales_tax_info.country_code &&
-              QUEBEC == purchase_sales_tax_info.state_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if QstValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::NOR.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if MvaValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::BHR.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if TrnValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::KEN.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if KraPinValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::OMN.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if OmanVatNumberValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::NGA.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if FirsTinValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::TZA.alpha2 == purchase_sales_tax_info.country_code
-          purchase_sales_tax_info.business_vat_id = business_vat_id if TraTinValidationService.new(business_vat_id).process
-        elsif Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(purchase_sales_tax_info.country_code) ||
-              Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS_WITH_TAX_ID_PRO_VALIDATION.include?(purchase_sales_tax_info.country_code)
-          purchase_sales_tax_info.business_vat_id = business_vat_id if TaxIdValidationService.new(business_vat_id, purchase_sales_tax_info.country_code).process
-        else
-          purchase_sales_tax_info.business_vat_id = business_vat_id if VatValidationService.new(business_vat_id).process
-        end
-      end
+      purchase_sales_tax_info.business_vat_id = business_vat_id if RegionalVatIdValidationService.new(business_vat_id, country_code: purchase_sales_tax_info.country_code, state_code: purchase_sales_tax_info.state_code).process
 
       self.purchase_sales_tax_info = purchase_sales_tax_info
       self.purchase_sales_tax_info.save!
+
+      subscription&.update_business_vat_id!(purchase_sales_tax_info.business_vat_id) if purchase_sales_tax_info.business_vat_id.present?
     end
 
     def charge_discover_fee?
@@ -3211,14 +3179,8 @@ class Purchase < ApplicationRecord
       if flat_fee_applicable?
         calculate_custom_fee_per_thousand
         (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
-      elsif seller.tier_pricing_enabled?
-        (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round
       else
-        if charged_using_gumroad_merchant_account?
-          gumroad_fee_percentage_for_non_migrated_account
-        else
-          gumroad_fee_percentage_for_migrated_account
-        end
+        (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round
       end
     end
 
@@ -3243,14 +3205,6 @@ class Purchase < ApplicationRecord
       # 10% flat fee is applicable to this purchase if it is not a recurring charge
       # on a subscription that started before the flat fee was introduced.
       subscription.blank? || subscription.flat_fee_applicable?
-    end
-
-    def gumroad_fee_percentage_for_non_migrated_account
-      GUMROAD_FEE_PER_THOUSAND
-    end
-
-    def gumroad_fee_percentage_for_migrated_account
-      GUMROAD_NON_PRO_FEE_PERCENTAGE
     end
 
     def calculate_taxes
@@ -3359,7 +3313,7 @@ class Purchase < ApplicationRecord
     def validate_offer_code
       return if errors.present?
       # accept the offer code that was used when the buyer preordered/subscribed
-      return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase
+      return if is_preorder_charge? || is_recurring_subscription_charge || is_gift_receiver_purchase || (is_installment_payment && !is_original_subscription_purchase)
       return if discount_code.blank?
 
       if offer_code.nil?
@@ -3773,9 +3727,7 @@ class Purchase < ApplicationRecord
       after_commit do
         next if destroyed?
 
-        if error_code == PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE
-          ContactingCreatorMailer.negative_revenue_sale_failure(id).deliver_later(queue: "critical")
-        elsif paid? && charge_processor_id.in?([PaypalChargeProcessor.charge_processor_id, BraintreeChargeProcessor.charge_processor_id])
+        if paid? && charge_processor_id.in?([PaypalChargeProcessor.charge_processor_id, BraintreeChargeProcessor.charge_processor_id])
           CustomerMailer.paypal_purchase_failed(id).deliver_later(queue: "critical")
         end
       end

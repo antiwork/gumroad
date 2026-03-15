@@ -1,0 +1,17 @@
+<% cards = local_assigns[:cards] || [] %>
+
+<div class="mx-auto max-w-7xl px-8 md:px-none">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 gap-y-16 md:gap-y-20">
+    <% cards.each do |card| %>
+      <div class="relative">
+        <div class="absolute -top-8 sm:-top-10 left-6 w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center border-2 border-black bg-<%= card[:icon_bg] %> shadow-[4px_4px_0_0_#000]">
+          <%= image_tag card[:icon], alt: card[:title], class: "w-12 h-12" %>
+        </div>
+        <div class="bg-white text-black rounded-2xl p-8 pt-12 sm:pt-14 h-full">
+          <h3 class="text-xl sm:text-2xl font-bold mb-2 sm:mb-4"><%= card[:title] %></h3>
+          <p class="text-base sm:text-lg"><%= card[:description] %></p>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</div>

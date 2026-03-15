@@ -1,3 +1,4 @@
+import { Star } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -9,11 +10,11 @@ import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { OfferCode, applyOfferCodeToCents } from "$app/utils/offer-code";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 import { Skeleton } from "../Skeleton";
@@ -38,6 +39,7 @@ type Product = {
   review_count: number;
   average_rating: number;
   native_type: ProductNativeType;
+  thumbnail_url: string | null;
   permalink: string;
   options: ProductOption[];
 };
@@ -113,7 +115,7 @@ export const UpsellCard = TiptapNode.create({
 });
 
 const getUpsellUrl = (id: string, permalink: string) => {
-  const url = new URL(Routes.checkout_index_url());
+  const url = new URL(Routes.checkout_url());
   const searchParams = new URLSearchParams();
   searchParams.append("product", permalink);
   searchParams.append("accepted_offer_id", id);
@@ -177,20 +179,20 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         ) : product ? (
           <ProductCard className="lg:h-32 lg:flex-row">
             <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0">
-              <Thumbnail url={null} nativeType={product.native_type} />
+              <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
             </ProductCardFigure>
             <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">
               {isEditable ? (
                 <UpsellCardHeader product={product} variant={variant} />
               ) : (
-                <a href={getUpsellUrl(id ?? "", product.permalink)} className="stretched-link">
+                <StretchedLink href={getUpsellUrl(id ?? "", product.permalink)}>
                   <UpsellCardHeader product={product} variant={variant} />
-                </a>
+                </StretchedLink>
               )}
               <ProductCardFooter className="lg:divide-x-0">
                 {product.review_count > 0 ? (
                   <div className="flex flex-[1_0_max-content] items-center gap-1 p-4 lg:p-0">
-                    <Icon name="solid-star" />
+                    <Star pack="filled" className="size-5" />
                     <span className="rating-average">{product.average_rating.toFixed(1)}</span>
                     <span>{`(${formatOrderOfMagnitude(product.review_count, 1)})`}</span>
                   </div>

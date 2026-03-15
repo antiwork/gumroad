@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf, Link } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -5,61 +6,20 @@ import { cast } from "ts-safe-cast";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
+import { EmailsLayout } from "$app/components/EmailsPage/Layout";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
-import { Icon } from "$app/components/Icons";
-import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
-import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/followers.png";
-
-const Layout = ({
-  title,
-  actions,
-  children,
-}: {
-  title: string;
-  actions?: React.ReactNode;
-  children: React.ReactNode;
-}) => {
-  const loggedInUser = useLoggedInUser();
-
-  return (
-    <div>
-      <PageHeader title={title} actions={actions}>
-        <Tabs>
-          <Tab href={Routes.published_emails_path()} isSelected={false}>
-            Published
-          </Tab>
-          {loggedInUser?.policies.installment.create ? (
-            <>
-              <Tab href={Routes.scheduled_emails_path()} isSelected={false}>
-                Scheduled
-              </Tab>
-              <Tab href={Routes.drafts_emails_path()} isSelected={false}>
-                Drafts
-              </Tab>
-            </>
-          ) : null}
-          <Tab href={Routes.followers_path()} isSelected>
-            Subscribers
-          </Tab>
-        </Tabs>
-      </PageHeader>
-      {children}
-    </div>
-  );
-};
 
 type Follower = {
   id: string;
@@ -85,6 +45,9 @@ export default function FollowersPage() {
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [selectedFollowerId, setSelectedFollowerId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState(email);
+  const hasSearchableContent = followers.length > 0 || searchQuery.length > 0;
+  const isSearchVisible = React.useRef(hasSearchableContent);
+  isSearchVisible.current ||= hasSearchableContent;
   const selectedFollower = followers.find((follower) => follower.id === selectedFollowerId);
 
   const updateSearch = useDebouncedCallback((email: string) => {
@@ -124,19 +87,19 @@ export default function FollowersPage() {
   const currentSeller = useCurrentSeller();
 
   return (
-    <Layout
-      title="Subscribers"
+    <EmailsLayout
+      selectedTab="subscribers"
       actions={
         <>
-          {(followers.length > 0 || searchQuery.length > 0) && (
+          {isSearchVisible.current ? (
             <Search onSearch={setSearchQuery} value={searchQuery} placeholder="Search followers" />
-          )}
+          ) : null}
           <Popover>
             <PopoverAnchor>
               <WithTooltip tip="Export" position="bottom">
                 <PopoverTrigger aria-label="Export" asChild>
-                  <Button>
-                    <Icon aria-label="Download" name="download" />
+                  <Button size="icon">
+                    <ArrowInDownSquareHalf aria-label="Download" className="size-5" />
                   </Button>
                 </PopoverTrigger>
               </WithTooltip>
@@ -152,7 +115,7 @@ export default function FollowersPage() {
               text={Routes.custom_domain_subscribe_url({ host: currentSeller.subdomain })}
             >
               <Button>
-                <Icon name="link" />
+                <Link className="size-5" />
                 Share subscribe page
               </Button>
             </CopyToClipboard>
@@ -243,6 +206,6 @@ export default function FollowersPage() {
           </Placeholder>
         )}
       </div>
-    </Layout>
+    </EmailsLayout>
   );
 }

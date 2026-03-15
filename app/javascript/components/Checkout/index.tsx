@@ -1,7 +1,7 @@
+import { X } from "@boxicons/react";
 import * as React from "react";
 
 import { computeOfferDiscount } from "$app/data/offer_code";
-import { getRecommendedProducts } from "$app/data/recommended_products";
 import { CardProduct, COMMISSION_DEPOSIT_PROPORTION } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { classNames } from "$app/utils/classNames";
@@ -9,9 +9,7 @@ import { formatUSDCentsWithExpandedCurrencySymbol } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
 import { variantLabel } from "$app/utils/labels";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
-import { asyncVoid } from "$app/utils/promise";
 import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels } from "$app/utils/recurringPricing";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import {
@@ -27,7 +25,6 @@ import {
 } from "$app/components/CartItemList";
 import { GiftForm } from "$app/components/Checkout/GiftForm";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
 import { Card } from "$app/components/Product/Card";
@@ -40,21 +37,24 @@ import {
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import {
-  CartState,
+  type CartState,
   convertToUSD,
   hasFreeTrial,
   getDiscountedPrice,
-  CartItem as CartItemProps,
+  type CartItem as CartItemProps,
   findCartItem,
 } from "./cartState";
 import {
@@ -97,21 +97,18 @@ const nameOfSalesTaxForCountry = (countryCode: string) => {
 export const Checkout = ({
   discoverUrl,
   cart,
-  setCart,
+  updateCart,
   recommendedProducts,
-  setRecommendedProducts,
 }: {
   discoverUrl: string;
   cart: CartState;
-  setCart?: (prev: React.SetStateAction<CartState>) => void;
+  updateCart: (updated: Partial<CartState>) => void;
   recommendedProducts?: CardProduct[] | null;
-  setRecommendedProducts?: (prev: React.SetStateAction<CardProduct[] | null>) => void;
 }) => {
   const [state] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
 
-  const updateCart = (updated: Partial<CartState>) => setCart?.((prevCart) => ({ ...prevCart, ...updated }));
   const isGift = state.gift != null;
 
   async function applyDiscount(code: string, fromUrl = false) {
@@ -202,21 +199,6 @@ export const Checkout = ({
       ),
   );
 
-  const isMobile = !useIsAboveBreakpoint("sm");
-  const productIds = cart.items.map(({ product }) => product.id);
-  React.useEffect(() => {
-    if (state.status.type !== "input") return;
-    if (!productIds.length) return;
-    asyncVoid(async () => {
-      try {
-        setRecommendedProducts?.(await getRecommendedProducts(productIds, isMobile ? 2 : 6));
-      } catch (e) {
-        assertResponseError(e);
-        showAlert(e.message, "error");
-      }
-    })();
-  }, [isMobile, productIds.join(",")]);
-
   const commissionTotal = cart.items
     .filter((item) => item.product.native_type === "commission")
     .reduce((sum, item) => sum + getDiscountedPrice(cart, item).price, 0);
@@ -270,11 +252,11 @@ export const Checkout = ({
               </CartItemList>
               <CartItemList>
                 {displayTipSelector ? (
-                  <div className="p-3 sm:p-5">
+                  <div className="p-4 sm:p-5">
                     <TipSelector />
                   </div>
                 ) : null}
-                <div className={classNames("grid gap-4 p-4", displayTipSelector && "border-t border-border")}>
+                <div className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}>
                   {state.surcharges.type === "loaded" ? (
                     <>
                       <CartPriceItem title="Subtotal" price={formatPrice(subtotal)} />
@@ -314,7 +296,7 @@ export const Checkout = ({
                                 aria-label="Purchasing power parity discount"
                               >
                                 Purchasing power parity discount
-                                <Icon name="x" className="ml-2" />
+                                <X className="ml-2 size-5" />
                               </button>
                             </Pill>
                           </WithTooltip>
@@ -330,7 +312,7 @@ export const Checkout = ({
                             aria-label="Discount code"
                           >
                             {code.code}
-                            <Icon name="x" className="ml-2" />
+                            <X className="ml-2 size-5" />
                           </Pill>
                         ))}
                       </h4>
@@ -345,7 +327,7 @@ export const Checkout = ({
                         void applyDiscount(newDiscountCode);
                       }}
                     >
-                      <input
+                      <Input
                         placeholder="Discount code"
                         value={newDiscountCode}
                         className="flex-1"
@@ -360,7 +342,7 @@ export const Checkout = ({
                 </div>
                 {total != null ? (
                   <>
-                    <footer className="grid gap-4 border-t border-border p-4">
+                    <footer className="grid gap-4 border-t border-border p-4 sm:px-5">
                       <CartPriceItem title="Total" price={formatPrice(total)} variant="large" />
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
@@ -435,33 +417,39 @@ const TipSelector = () => {
       <CartPriceItem title="Add a tip?" price={formatPrice(computeTip(state))} variant="tip" />
       <div className="grid grid-cols-1 gap-4 @[52rem]:grid-cols-5">
         {showPercentageOptions ? (
-          <div
+          <Tabs
+            variant="buttons"
             role="radiogroup"
-            className="radio-buttons col-span-full grid-cols-1! @3xs:grid-cols-2! @sm:grid-cols-4! @[52rem]:col-span-4!"
+            className="col-span-full grid-cols-1! @3xs:grid-cols-2! @sm:grid-cols-4! @[52rem]:col-span-4!"
           >
             {tipPercentages.map((percentage) => (
-              <Button
-                className="justify-center! whitespace-nowrap"
+              <Tab
                 key={percentage}
-                role="radio"
-                aria-checked={state.tip.type === "percentage" && percentage === state.tip.percentage}
-                onClick={() => {
-                  dispatch({
-                    type: "set-value",
-                    tip: {
-                      type: "percentage",
-                      percentage,
-                    },
-                  });
-                }}
-                disabled={isProcessing(state)}
+                isSelected={state.tip.type === "percentage" && percentage === state.tip.percentage}
+                asChild
               >
-                {percentage === 0 ? "No Tip" : `${percentage}%`}
-              </Button>
+                <Button
+                  className="justify-center! whitespace-nowrap"
+                  role="radio"
+                  aria-checked={state.tip.type === "percentage" && percentage === state.tip.percentage}
+                  onClick={() => {
+                    dispatch({
+                      type: "set-value",
+                      tip: {
+                        type: "percentage",
+                        percentage,
+                      },
+                    });
+                  }}
+                  disabled={isProcessing(state)}
+                >
+                  {percentage === 0 ? "No Tip" : `${percentage}%`}
+                </Button>
+              </Tab>
             ))}
-          </div>
+          </Tabs>
         ) : null}
-        <fieldset className={classNames("col-span-full @[52rem]:col-span-1!", { danger: errors.has("tip") })}>
+        <Fieldset state={errors.has("tip") ? "danger" : undefined} className="col-span-full @[52rem]:col-span-1!">
           <PriceInput
             hasError={errors.has("tip")}
             ariaLabel="Tip"
@@ -479,7 +467,7 @@ const TipSelector = () => {
             placeholder="Custom tip"
             disabled={isProcessing(state)}
           />
-        </fieldset>
+        </Fieldset>
       </div>
     </div>
   );

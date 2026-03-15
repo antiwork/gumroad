@@ -1,3 +1,4 @@
+import { ArrowUpRightSquare } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -5,7 +6,6 @@ import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelat
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
 import { buttonVariants } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 
 import coverPlaceholder from "$assets/images/cover_placeholder.png";
 
@@ -34,9 +34,9 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
           ) : (
             <Link href={Routes.admin_product_path(product.external_id)}>{product.name}</Link>
           )}
-          <Link href={product.long_url} target="_blank" rel="noreferrer noopener">
-            <Icon name="arrow-up-right-square" />
-          </Link>
+          <a href={product.long_url} target="_blank" rel="noreferrer noopener">
+            <ArrowUpRightSquare className="size-5" />
+          </a>
         </h2>
 
         <div>

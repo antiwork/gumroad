@@ -19,7 +19,7 @@ describe ReceiptPresenter::PaymentInfo do
   end
   let(:payment_info) { described_class.new(purchase) }
   let(:invoice_url) do
-    Rails.application.routes.url_helpers.generate_invoice_by_buyer_url(
+    Rails.application.routes.url_helpers.new_purchase_invoice_url(
       purchase.external_id,
       email: purchase.email,
       host: UrlService.domain_with_protocol
@@ -336,6 +336,34 @@ describe ReceiptPresenter::PaymentInfo do
               expect(upcoming_payment_attributes).to eq([])
             end
           end
+
+          context "when the purchase is a test purchase with no more remaining charges" do
+            let(:product) { create(:membership_product, name: "Membership product") }
+            let(:purchase) do
+              create(
+                :test_purchase,
+                link: product,
+                is_original_subscription_purchase: true,
+                price_cents: 1_00,
+                created_at: DateTime.parse("January 1, 2023")
+              )
+            end
+
+            before do
+              purchase.subscription ||= create(:subscription, link: product, user: purchase.purchaser, is_test_subscription: true, charge_occurrence_count: 1)
+              purchase.save!
+            end
+
+            it "does not show upcoming payment for test purchase" do
+              expect(upcoming_payment_attributes).to eq([])
+            end
+
+            it "shows correct charge progress for test purchase" do
+              expect(today_payment_attributes).to include(
+                hash_including(label: "Membership product: 1 of 1")
+              )
+            end
+          end
         end
       end
 
@@ -552,7 +580,7 @@ describe ReceiptPresenter::PaymentInfo do
       let(:charge) { create(:charge) }
       let(:invoice_url) do
         purchase = charge.send(:purchase_as_chargeable)
-        Rails.application.routes.url_helpers.generate_invoice_by_buyer_url(
+        Rails.application.routes.url_helpers.new_purchase_invoice_url(
           purchase.external_id,
           email: purchase.email,
           host: UrlService.domain_with_protocol

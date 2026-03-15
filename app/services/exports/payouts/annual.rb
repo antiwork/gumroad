@@ -24,7 +24,7 @@ class Exports::Payouts::Annual < Exports::Payouts::Csv
     CsvSafe.open(tempfile, "wb") do |csv|
       csv << HEADERS
       payments_scope.find_each do |payment|
-        @payment_id = payment.id
+        @payment = payment
         data = payout_data
         totals = calculate_totals(data, from_totals: totals)
 

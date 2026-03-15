@@ -11,12 +11,12 @@ describe Iffy::User::BanService do
       it "suspends the user and adds a comment" do
         expect_any_instance_of(User).to receive(:flag_for_tos_violation!).with(
           author_name: "Iffy",
-          content: "Banned for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} (Adult (18+) content)",
+          content: "Banned for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} (General non-compliance)",
           bulk: true
         ).and_call_original
         expect_any_instance_of(User).to receive(:suspend_for_tos_violation!).with(
           author_name: "Iffy",
-          content: "Banned for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} (Adult (18+) content)",
+          content: "Banned for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} (General non-compliance)",
           bulk: true
         ).and_call_original
 
@@ -24,7 +24,7 @@ describe Iffy::User::BanService do
           service.perform
         end.to change { user.reload.user_risk_state }.from("not_reviewed").to("suspended_for_tos_violation")
 
-        expect(user.tos_violation_reason).to eq("Adult (18+) content")
+        expect(user.tos_violation_reason).to eq("General non-compliance")
       end
     end
   end

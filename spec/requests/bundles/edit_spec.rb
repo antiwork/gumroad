@@ -136,11 +136,9 @@ describe("Bundle edit page", type: :system, js: true) do
       end
       select "7-day money back guarantee", from: "Refund period"
       find_field("Fine print (optional)", with: "This is a product-level refund policy").fill_in with: "I hate being small"
-      in_preview do
-        within "[role=dialog]" do
-          expect(page).to have_selector("h2", text: "7-day money back guarantee")
-          expect(page).to have_text("I hate being small")
-        end
+      within "[role=dialog]" do
+        expect(page).to have_selector("h2", text: "7-day money back guarantee")
+        expect(page).to have_text("I hate being small")
       end
 
       product_page = window_opened_by { click_on "Preview" }
@@ -274,6 +272,24 @@ describe("Bundle edit page", type: :system, js: true) do
       expect(page).to_not have_field("Product 8")
       scroll_to find_field("Product 7")
       expect(page).to have_field("Product 8")
+    end
+
+    it "shows creation date and URL for all products" do
+      test_product = create(:product, name: "Test Product", user: seller, created_at: 2.days.ago)
+
+      index_model_records(Link)
+
+      visit edit_bundle_content_path(bundle.external_id)
+
+      fill_in "Search products", with: "Test Product"
+      wait_for_ajax
+
+      within "[aria-label='Product selector']" do
+        within_cart_item "Test Product" do
+          expect(page).to have_text(2.days.ago.strftime("%b %-d, %Y"))
+          expect(page).to have_link(href: test_product.long_url)
+        end
+      end
     end
 
     it "allows selecting and unselecting all products" do

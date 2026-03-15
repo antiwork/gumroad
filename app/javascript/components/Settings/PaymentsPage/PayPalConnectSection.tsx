@@ -1,3 +1,4 @@
+import { CheckCircle, Paypal } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -5,9 +6,12 @@ import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 
 export type PayPalConnect = {
   email: string | null;
@@ -46,13 +50,16 @@ const PayPalConnectSection = ({
   });
 
   return (
-    <section className="p-4! md:p-8!">
-      <header>
-        <h2>PayPal</h2>
-        <a href="/help/article/275-paypal-connect" target="_blank" rel="noreferrer">
-          Learn more
-        </a>
-      </header>
+    <FormSection
+      header={
+        <>
+          <h2>PayPal</h2>
+          <a href="/help/article/275-paypal-connect" target="_blank" rel="noreferrer">
+            Learn more
+          </a>
+        </>
+      }
+    >
       <div className="flex flex-col gap-4">
         {!paypalConnect.charge_processor_merchant_id ? (
           <>
@@ -72,7 +79,7 @@ const PayPalConnectSection = ({
                       })}
                       inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
                     >
-                      <span className="brand-icon brand-icon-paypal" />
+                      <Paypal pack="brands" className="size-5" />
                       Connect with Paypal
                     </a>
                   </Button>
@@ -94,15 +101,15 @@ const PayPalConnectSection = ({
           <>
             <p>{connectAccountFeeInfoText}</p>
             <div className="grid gap-8">
-              <fieldset>
-                <legend>
-                  <label>PayPal account</label>
-                </legend>
-                <div className="input input-wrapper">
-                  <div className="fake-input">{paypalConnect.charge_processor_merchant_id}</div>
-                  <Icon name="solid-check-circle" className="text-success" />
-                </div>
-              </fieldset>
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label>PayPal account</Label>
+                </FieldsetTitle>
+                <InputGroup readOnly>
+                  <span className="flex-1">{paypalConnect.charge_processor_merchant_id}</span>
+                  <CheckCircle pack="filled" className="size-5 text-success" />
+                </InputGroup>
+              </Fieldset>
               {paypalConnect.show_paypal_connect ? (
                 <>
                   <p>
@@ -138,7 +145,7 @@ const PayPalConnectSection = ({
                       })}
                       inert={isFormDisabled || !paypalConnect.allow_paypal_connect}
                     >
-                      <span className="brand-icon brand-icon-paypal" />
+                      <Paypal pack="brands" className="size-5" />
                       Connect with Paypal
                     </a>
                   </Button>
@@ -162,7 +169,7 @@ const PayPalConnectSection = ({
           </>
         )}
       </div>
-    </section>
+    </FormSection>
   );
 };
 export default PayPalConnectSection;

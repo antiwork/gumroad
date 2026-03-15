@@ -1,14 +1,17 @@
+import { CheckCircle, Stripe } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { asyncVoid } from "$app/utils/promise";
-import { request, assertResponseError } from "$app/utils/request";
+import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 
 export type StripeConnect = {
   has_connected_stripe: boolean;
@@ -65,22 +68,22 @@ const StripeConnectSection = ({
         </div>
         {stripeConnect.has_connected_stripe ? (
           <div className="grid gap-8">
-            <fieldset>
-              <legend>
-                <label>Stripe account</label>
-              </legend>
-              <div className="input input-wrapper">
-                <div className="fake-input">{stripeConnect.stripe_connect_account_id}</div>
-                <Icon name="solid-check-circle" className="text-success" />
-              </div>
-            </fieldset>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label>Stripe account</Label>
+              </FieldsetTitle>
+              <InputGroup readOnly>
+                <span className="flex-1">{stripeConnect.stripe_connect_account_id}</span>
+                <CheckCircle pack="filled" className="size-5 text-success" />
+              </InputGroup>
+            </Fieldset>
             <p>
               <Button
                 color="stripe"
                 disabled={isFormDisabled || isDisconnecting || !stripeConnect.stripe_disconnect_allowed}
                 onClick={disconnectStripe}
               >
-                <span className="brand-icon brand-icon-stripe" />
+                <Stripe pack="brands" className="size-5" />
                 Disconnect Stripe account
               </Button>
             </p>
@@ -100,6 +103,7 @@ const StripeConnectSection = ({
               })}
               disabled={isFormDisabled}
             >
+              <Stripe pack="brands" className="size-5" />
               Connect with Stripe
             </SocialAuthButton>
           </div>

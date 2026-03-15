@@ -1,8 +1,11 @@
+import { ChevronDown, ChevronUp, Envelope, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { TagInput } from "$app/components/TagInput";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 
@@ -18,7 +21,7 @@ type Product = {
 
 const AddProductLevelSupportEmailButton = React.memo(({ onClick }: { onClick: () => void }) => (
   <Button color="primary" onClick={onClick}>
-    <Icon name="plus" />
+    <Plus className="size-5" />
     Add a product specific email
   </Button>
 ));
@@ -58,7 +61,7 @@ const ProductLevelSupportEmailRow = React.memo(
     return (
       <Row role="listitem">
         <RowContent>
-          <Icon name="envelope-fill" className="type-icon" />
+          <Envelope pack="filled" className="type-icon size-5" />
           <div className="ml-1">
             <h4>{supportEmail.email || "No email set"}</h4>
             <span>
@@ -67,18 +70,18 @@ const ProductLevelSupportEmailRow = React.memo(
           </div>
         </RowContent>
         <RowActions>
-          <Button onClick={handleToggleExpandedState} aria-label="Edit email">
-            {expanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
+          <Button size="icon" onClick={handleToggleExpandedState} aria-label="Edit email">
+            {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
-          <Button onClick={handleRemove} aria-label="Delete email">
-            <Icon name="trash2" />
+          <Button size="icon" onClick={handleRemove} aria-label="Delete email">
+            <Trash className="size-5" />
           </Button>
         </RowActions>
         {expanded ? (
           <RowDetails className="flex flex-col gap-4">
-            <fieldset>
-              <label htmlFor={`${uid}email`}>Email</label>
-              <input
+            <Fieldset>
+              <Label htmlFor={`${uid}email`}>Email</Label>
+              <Input
                 id={`${uid}email`}
                 type="email"
                 value={supportEmail.email}
@@ -86,12 +89,14 @@ const ProductLevelSupportEmailRow = React.memo(
                 required={supportEmail.product_ids.length > 0}
                 onChange={handleEmailChange}
               />
-              <small>This reply-to email will appear on receipts for selected products.</small>
-            </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}-products`}>Products</label>
-              </legend>
+              <FieldsetDescription>
+                This reply-to email will appear on receipts for selected products.
+              </FieldsetDescription>
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-products`}>Products</Label>
+              </FieldsetTitle>
               <TagInput
                 inputId={`${uid}-products`}
                 tagIds={supportEmail.product_ids}
@@ -99,7 +104,7 @@ const ProductLevelSupportEmailRow = React.memo(
                 isDisabled={isDisabled}
                 onChangeTagIds={handleProductIdsChange}
               />
-            </fieldset>
+            </Fieldset>
           </RowDetails>
         ) : null}
       </Row>

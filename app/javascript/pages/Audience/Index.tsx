@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf } from "@boxicons/react";
 import { Deferred, router, usePage } from "@inertiajs/react";
 import { lightFormat } from "date-fns";
 import * as React from "react";
@@ -12,9 +13,9 @@ import { AudienceQuickStats } from "$app/components/Audience/AudienceQuickStats"
 import { Button } from "$app/components/Button";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { InputGroup } from "$app/components/ui/InputGroup";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useOnChange } from "$app/components/useOnChange";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -44,13 +45,13 @@ function Audience() {
       selectedTab="following"
       actions={
         hasContent ? (
-          <>
+          <div className="flex w-full gap-2">
             <Popover>
               <PopoverAnchor>
                 <WithTooltip tip="Export" position="bottom">
                   <PopoverTrigger aria-label="Export" asChild>
-                    <Button>
-                      <Icon aria-label="Download" name="download" />
+                    <Button size="icon">
+                      <ArrowInDownSquareHalf aria-label="Download" className="size-5" />
                     </Button>
                   </PopoverTrigger>
                 </WithTooltip>
@@ -59,8 +60,10 @@ function Audience() {
                 <ExportSubscribersPopover />
               </PopoverContent>
             </Popover>
-            <DateRangePicker {...dateRange} />
-          </>
+            <div className="flex-1">
+              <DateRangePicker {...dateRange} />
+            </div>
+          </div>
         ) : null
       }
     >
@@ -73,10 +76,10 @@ function Audience() {
           <Deferred
             data={["audience_data"]}
             fallback={
-              <div className="input">
+              <InputGroup>
                 <LoadingSpinner />
                 Loading charts...
-              </div>
+              </InputGroup>
             }
           >
             {audience_data ? <AudienceChart data={audience_data} /> : null}

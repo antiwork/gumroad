@@ -1,3 +1,4 @@
+import { TwitterX } from "@boxicons/react";
 import * as React from "react";
 
 import { NavigationButton } from "$app/components/Button";
@@ -18,7 +19,7 @@ export const TwitterShareButton = ({ url, text = "Join me on @Gumroad!" }: { url
 
   return (
     <NavigationButton color="twitter" onClick={handleClick} href={shareUrl} target="_blank" rel="noopener noreferrer">
-      <span className="brand-icon brand-icon-twitter" />
+      <TwitterX pack="brands" className="size-5" />
       Share on X
     </NavigationButton>
   );

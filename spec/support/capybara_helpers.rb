@@ -32,10 +32,10 @@ module CapybaraHelpers
     wait_for_ajax
   end
 
-  def wait_until_true
+  def wait_until_true(sleep_interval: 1)
     Timeout.timeout(Capybara.default_max_wait_time) do
       until yield
-        sleep 1
+        sleep sleep_interval
       end
     end
   end
@@ -77,5 +77,13 @@ module CapybaraHelpers
       false
     end
     page.driver.browser.switch_to.alert.accept
+  end
+
+  def with_throttled_network(fixture_file, factor: 4)
+    throughput = (File.size(fixture_file) * factor)
+    page.driver.browser.execute_cdp("Network.enable")
+    page.driver.browser.execute_cdp("Network.emulateNetworkConditions", offline: false, latency: 0, downloadThroughput: throughput, uploadThroughput: throughput)
+    yield
+    page.driver.browser.execute_cdp("Network.emulateNetworkConditions", offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1)
   end
 end

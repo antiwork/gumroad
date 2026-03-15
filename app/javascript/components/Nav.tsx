@@ -1,3 +1,4 @@
+import { ArrowRight, CheckCircle, Menu, X } from "@boxicons/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
@@ -6,10 +7,13 @@ import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { TeamMembership } from "$app/components/LoggedInUser";
+import { Logo } from "$app/components/Logo";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
+
+import logo from "$assets/images/logo-g.svg";
 
 type NavContextValue = {
   open: boolean;
@@ -22,7 +26,7 @@ export const useNav = () => React.useContext(NavContext);
 
 interface BaseNavLinkProps {
   text: string;
-  icon?: IconName;
+  icon?: React.ReactNode;
   badge?: React.ReactNode;
   href: string;
   exactHrefMatch?: boolean;
@@ -62,8 +66,8 @@ const BaseNavLink = ({
       )}
       {...props}
     >
-      {icon ? <Icon name={icon} className="mr-4" /> : null}
-      {text}
+      {icon}
+      <span className="ml-4">{text}</span>
       {badge ? (
         <>
           <span className="flex-1" />
@@ -97,12 +101,12 @@ export const NavLinkDropdownItem = ({
   onClick,
 }: {
   text: string;
-  icon: IconName;
+  icon: React.ReactNode;
   href: string;
   onClick?: (ev: React.MouseEvent<HTMLAnchorElement>) => void;
 }) => (
   <a role="menuitem" href={href} onClick={onClick} className="block truncate border-0 px-4 py-2 no-underline">
-    <Icon name={icon} className="mr-3 ml-1" />
+    {icon}
     {text}
   </a>
 );
@@ -130,17 +134,16 @@ export const Nav = ({ title, children, footer }: Props) => {
       >
         <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">
           <a href={Routes.root_url()} className="no-underline">
-            <span className="logo-g" />
+            <img src={logo} className="size-6" alt="Home" />
           </a>
           <h1 className="w-full truncate text-center text-base">{title}</h1>
           <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
-            <Icon name={open ? "x" : "outline-menu"} />
+            {open ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
         <header className="hidden p-6 lg:grid">
           <a href={Routes.root_url()} aria-label="Dashboard" className="no-underline">
-            {/* This custom text and line height size is required so the header's bottom border aligns with the main page header’s bottom border */}
-            <span className="logo-full w-full text-[2.5rem] leading-[1.2]" />
+            <Logo className="w-full text-[2.5rem] leading-[1.2]" />
           </a>
         </header>
         {children}
@@ -172,7 +175,14 @@ export const UnbecomeDropdownItem = () => {
     }
   });
 
-  return <NavLinkDropdownItem text="Unbecome" icon="box-arrow-in-right-fill" href="#" onClick={makeRequest} />;
+  return (
+    <NavLinkDropdownItem
+      text="Unbecome"
+      icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-5" />}
+      href="#"
+      onClick={makeRequest}
+    />
+  );
 };
 
 export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembership: TeamMembership }) => {
@@ -207,11 +217,11 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
       aria-checked={teamMembership.is_selected}
       className="flex! min-w-0 items-center gap-2"
     >
-      <img className="user-avatar shrink-0" src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
+      <Avatar src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
       <span className="min-w-0 flex-1 truncate" title={teamMembership.seller_name}>
         {teamMembership.seller_name}
       </span>
-      {teamMembership.is_selected ? <Icon name="solid-check-circle" className="h-5 shrink-0 text-accent" /> : null}
+      {teamMembership.is_selected ? <CheckCircle pack="filled" className="size-5 h-5 shrink-0 text-accent" /> : null}
     </a>
   );
 };

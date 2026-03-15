@@ -1,3 +1,4 @@
+import { Copy } from "@boxicons/react";
 import CodeBlockLowlight, { CodeBlockLowlightOptions } from "@tiptap/extension-code-block-lowlight";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import { common, createLowlight } from "lowlight";
@@ -5,7 +6,7 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
+import { Select } from "$app/components/ui/Select";
 
 const lowlight = createLowlight(common);
 
@@ -64,7 +65,7 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
     <NodeViewWrapper as="pre" className="codeblock-lowlight">
       <div style={{ width: "fit-content", float: "right" }}>
         {isEditable ? (
-          <select
+          <Select
             onChange={(e) => updateAttributes({ language: e.target.value })}
             defaultValue={language || "plaintext"}
             style={{
@@ -79,7 +80,7 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
                 {lang.label}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           <CopyToClipboard text={node.textContent}>
             <button
@@ -87,7 +88,7 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
               style={{ padding: "0 var(--spacer-1)" }}
               aria-label="Copy"
             >
-              <Icon name="outline-duplicate" />
+              <Copy className="size-5" />
             </button>
           </CopyToClipboard>
         )}

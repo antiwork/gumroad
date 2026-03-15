@@ -106,7 +106,7 @@ module StripeMerchantAccountManager
 
     merchant_account
   rescue Stripe::StripeError => e
-    merchant_account.mark_deleted! if merchant_account.present? && merchant_account.charge_processor_merchant_id.blank?
+    cleanup_failed_merchant_account(merchant_account) if merchant_account.present?
     Bugsnag.notify(e)
     raise
   end
@@ -311,6 +311,18 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
+  def self.cleanup_failed_merchant_account(merchant_account)
+    if merchant_account.charge_processor_merchant_id.present?
+      begin
+        Stripe::Account.delete(merchant_account.charge_processor_merchant_id)
+      rescue Stripe::StripeError => cleanup_error
+        Bugsnag.notify(cleanup_error)
+      end
+    end
+    merchant_account.mark_deleted!
+  end
+
+  private_class_method
   def self.user_has_stripe_connect_merchant_account?(user)
     # It's really important we don't have two merchant accounts per user, so we do this check on the master database
     # to ensure we're looking at the latest data.
@@ -458,12 +470,16 @@ module StripeMerchantAccountManager
                            last_name_kana: user_compliance_info.last_name_kana,
                            address_kanji: {
                              line1: user_compliance_info.building_number,
-                             line2: user_compliance_info.street_address_kanji,
+                             town: user_compliance_info.street_address_kanji,
+                             state: user_compliance_info.state,
+                             country: "JP",
                              postal_code: user_compliance_info.zip_code
                            },
                            address_kana: {
-                             line1: user_compliance_info.building_number,
-                             line2: user_compliance_info.street_address_kana,
+                             line1: user_compliance_info.building_number_kana,
+                             town: user_compliance_info.street_address_kana,
+                             state: prefecture_kana(user_compliance_info.state),
+                             country: "JP",
                              postal_code: user_compliance_info.zip_code
                            }
                          })
@@ -532,12 +548,16 @@ module StripeMerchantAccountManager
                            name_kana: user_compliance_info.business_name_kana,
                            address_kanji: {
                              line1: user_compliance_info.business_building_number,
-                             line2: user_compliance_info.business_street_address_kanji,
+                             town: user_compliance_info.business_street_address_kanji,
+                             state: user_compliance_info.business_state,
+                             country: "JP",
                              postal_code: user_compliance_info.legal_entity_zip_code
                            },
                            address_kana: {
-                             line1: user_compliance_info.business_building_number,
-                             line2: user_compliance_info.business_street_address_kana,
+                             line1: user_compliance_info.business_building_number_kana,
+                             town: user_compliance_info.business_street_address_kana,
+                             state: prefecture_kana(user_compliance_info.business_state),
+                             country: "JP",
                              postal_code: user_compliance_info.legal_entity_zip_code
                            }
                          }
@@ -810,6 +830,10 @@ module StripeMerchantAccountManager
       email_sent_at = Time.current
       new_requests.each { |request| request.record_email_sent!(email_sent_at) }
     end
+  end
+
+  def self.prefecture_kana(kanji)
+    Compliance::Countries.japan_prefecture_kana(kanji)
   end
 
   def self.handle_new_user_compliance_info(user_compliance_info)

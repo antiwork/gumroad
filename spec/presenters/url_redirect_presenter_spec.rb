@@ -714,4 +714,165 @@ describe UrlRedirectPresenter do
       end
     end
   end
+
+  describe "#stream_page_props" do
+    let(:product) { create(:product) }
+    let(:video_file) { create(:streamable_video, link: product) }
+    let(:purchase) { create(:purchase, link: product) }
+    let(:url_redirect) { create(:url_redirect, purchase:, link: product) }
+
+    before do
+      allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)
+      stub_const("UrlRedirect::GUID_GETTER_FROM_S3_URL_REGEX", /(specs)/)
+    end
+
+    it "returns props for the stream page" do
+      presenter = described_class.new(url_redirect:, logged_in_user: nil)
+      props = presenter.stream_page_props(product_file: video_file)
+
+      expect(props[:playlist]).to be_an(Array)
+      expect(props[:playlist].first[:sources]).to be_present
+      expect(props[:index_to_play]).to eq(0)
+      expect(props[:url_redirect_id]).to eq(url_redirect.external_id)
+      expect(props[:purchase_id]).to eq(purchase.external_id)
+      expect(props[:should_show_transcoding_notice]).to eq(false)
+      expect(props[:transcode_on_first_sale]).to eq(false)
+    end
+
+    it "returns nil for purchase_id when purchase is not present" do
+      url_redirect_without_purchase = create(:url_redirect, purchase: nil, link: product)
+      presenter = described_class.new(url_redirect: url_redirect_without_purchase, logged_in_user: nil)
+      props = presenter.stream_page_props(product_file: video_file)
+
+      expect(props[:purchase_id]).to be_nil
+    end
+
+    context "when logged in user is the seller" do
+      let(:seller) { product.user }
+
+      it "shows transcoding notice when videos are not transcoded" do
+        presenter = described_class.new(url_redirect:, logged_in_user: seller)
+        props = presenter.stream_page_props(product_file: video_file)
+
+        expect(props[:should_show_transcoding_notice]).to eq(true)
+      end
+
+      it "does not show transcoding notice when videos are transcoded" do
+        create(:transcoded_video, streamable: video_file, is_hls: true)
+        presenter = described_class.new(url_redirect:, logged_in_user: seller)
+        props = presenter.stream_page_props(product_file: video_file)
+
+        expect(props[:should_show_transcoding_notice]).to eq(false)
+      end
+    end
+
+    context "when logged in user is not the seller" do
+      let(:other_user) { create(:user) }
+
+      it "does not show transcoding notice" do
+        presenter = described_class.new(url_redirect:, logged_in_user: other_user)
+        props = presenter.stream_page_props(product_file: video_file)
+
+        expect(props[:should_show_transcoding_notice]).to eq(false)
+      end
+    end
+
+    context "transcode_on_first_sale" do
+      it "returns true when product has transcode_videos_on_purchase enabled" do
+        product.update!(transcode_videos_on_purchase: true)
+        presenter = described_class.new(url_redirect:, logged_in_user: nil)
+        props = presenter.stream_page_props(product_file: video_file)
+
+        expect(props[:transcode_on_first_sale]).to eq(true)
+      end
+
+      it "returns false when product does not have transcode_videos_on_purchase enabled" do
+        presenter = described_class.new(url_redirect:, logged_in_user: nil)
+        props = presenter.stream_page_props(product_file: video_file)
+
+        expect(props[:transcode_on_first_sale]).to eq(false)
+      end
+    end
+
+    context "with multiple video files" do
+      let(:video_file_2) { create(:streamable_video, link: product, display_name: "Second Video") }
+
+      before do
+        product.product_files << video_file_2
+      end
+
+      it "returns index_to_play for the requested product file" do
+        presenter = described_class.new(url_redirect:, logged_in_user: nil)
+        props = presenter.stream_page_props(product_file: video_file)
+
+        expect(props[:playlist][props[:index_to_play]][:external_id]).to eq(video_file.external_id)
+      end
+
+      it "includes all video files in the playlist" do
+        presenter = described_class.new(url_redirect:, logged_in_user: nil)
+        props = presenter.stream_page_props(product_file: video_file)
+
+        expect(props[:playlist].size).to eq(2)
+      end
+    end
+  end
+
+  describe "#read_page_props" do
+    it "returns all necessary props for the PDF reader page" do
+      product = create(:product_with_pdf_file)
+      purchase = create(:purchase, link: product, purchaser: create(:user))
+      url_redirect = create(:url_redirect, purchase:)
+      product_file = product.product_files.first
+      read_url = "https://example.com/read/test.pdf"
+      title = "Test PDF Title"
+
+      props = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).read_page_props(
+        product_file:,
+        read_url:,
+        title:,
+      )
+
+      expect(props).to eq(
+        read_id: product_file.external_id,
+        url: read_url,
+        url_redirect_id: url_redirect.external_id,
+        purchase_id: purchase.external_id,
+        product_file_id: product_file.external_id,
+        latest_media_location: nil,
+        title:,
+      )
+    end
+
+    it "includes latest_media_location when available" do
+      product = create(:product_with_pdf_file)
+      purchase = create(:purchase, link: product, purchaser: create(:user))
+      url_redirect = create(:url_redirect, purchase:)
+      product_file = product.product_files.first
+      media_location = create(:media_location, url_redirect_id: url_redirect.id, purchase_id: purchase.id,
+                                               product_file_id: product_file.id, product_id: product.id, location: 5)
+
+      props = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).read_page_props(
+        product_file:,
+        read_url: "https://example.com/read/test.pdf",
+        title: "Test PDF",
+      )
+
+      expect(props[:latest_media_location]).to eq(media_location.as_json)
+    end
+
+    it "returns nil for purchase_id when there is no purchase" do
+      creator = create(:user)
+      post = create(:follower_installment, seller: creator)
+      url_redirect = create(:installment_url_redirect, installment: post)
+      product_file = post.product_files.first
+
+      props = described_class.new(url_redirect:, logged_in_user: nil).read_page_props(
+        product_file:,
+        read_url: "https://example.com/read/test.pdf",
+        title: "Test PDF",
+      )
+
+      expect(props[:purchase_id]).to be_nil
+    end
+  end
 end

@@ -1,3 +1,4 @@
+import { BookmarkPlus, BookmarkStar } from "@boxicons/react";
 import * as React from "react";
 
 import { followWishlist, unfollowWishlist } from "$app/data/wishlists";
@@ -5,7 +6,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -74,13 +74,13 @@ export const FollowButton = ({
   return isFollowing ? (
     <WithTooltip tip="Unfollow">
       <Button onClick={() => void toggleFollowing()} color="primary" disabled={isLoading}>
-        <Icon name="bookmark-check-fill" />
+        <BookmarkStar pack="filled" className="size-5" />
         Following
       </Button>
     </WithTooltip>
   ) : (
     <Button onClick={() => void toggleFollowing()} disabled={isLoading}>
-      <Icon name="bookmark-plus" />
+      <BookmarkPlus className="size-5" />
       Follow wishlist
     </Button>
   );

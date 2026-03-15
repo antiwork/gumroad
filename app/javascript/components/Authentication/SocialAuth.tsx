@@ -1,3 +1,4 @@
+import { Facebook, Google, Stripe, TwitterX } from "@boxicons/react";
 import * as React from "react";
 
 import { useFeatureFlags } from "$app/components/FeatureFlags";
@@ -12,27 +13,30 @@ export const SocialAuth = () => {
   const isSignupPage = new URL(originalLocation).pathname === "/signup";
   const showStripe = isSignupPage ? !featureFlags.disable_stripe_signup : true;
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-4 pb-12">
       <SocialAuthButton provider="facebook" href={Routes.user_facebook_omniauth_authorize_path({ referer: next })}>
+        <Facebook pack="brands" className="size-5" />
         Facebook
       </SocialAuthButton>
       <SocialAuthButton
         provider="google"
         href={Routes.user_google_oauth2_omniauth_authorize_path({ referer: next, x_auth_access_type: "read" })}
       >
+        <Google pack="brands" className="size-5" />
         Google
       </SocialAuthButton>
       <SocialAuthButton
         provider="twitter"
         href={Routes.user_twitter_omniauth_authorize_path({ referer: next, x_auth_access_type: "read" })}
       >
-        X
+        <TwitterX pack="brands" className="size-5" /> X
       </SocialAuthButton>
       {showStripe ? (
         <SocialAuthButton
           provider="stripe"
           href={Routes.user_stripe_connect_omniauth_authorize_path({ referer: next })}
         >
+          <Stripe pack="brands" className="size-5" />
           Stripe
         </SocialAuthButton>
       ) : null}

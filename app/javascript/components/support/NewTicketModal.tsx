@@ -1,3 +1,4 @@
+import { Paperclip, Trash } from "@boxicons/react";
 import { useCreateConversation, useCreateMessage } from "@helperai/react";
 import React from "react";
 
@@ -6,11 +7,13 @@ import FileUtils from "$app/utils/file";
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ALLOWED_ATTACHMENT_MIMETYPES } from "$app/components/support/ConversationDetail";
+import { SupportSlaMessage } from "$app/components/support/SupportSlaMessage";
+import { Input } from "$app/components/ui/Input";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export function NewTicketModal({
   open,
@@ -32,6 +35,29 @@ export function NewTicketModal({
   const formRef = React.useRef<HTMLFormElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
+  const isFormValid = subject.trim() && message.trim();
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!isFormValid) return;
+
+    setIsSubmitting(true);
+    try {
+      const { conversationSlug } = await createConversation({ subject: subject.trim() });
+      await createMessage({
+        conversationSlug,
+        content: message.trim(),
+        attachments,
+        customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
+      });
+      onCreated(conversationSlug);
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : "Something went wrong.", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <Modal
       open={open}
@@ -40,47 +66,32 @@ export function NewTicketModal({
       footer={
         <>
           <Button onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-            <Icon name="paperclip" /> Attach files
+            <Paperclip className="size-5" /> Attach files
           </Button>
           <Button
             color="accent"
             onClick={() => formRef.current?.requestSubmit()}
-            disabled={isSubmitting || !subject.trim() || !message.trim()}
+            disabled={isSubmitting || !isFormValid}
           >
             {isSubmitting ? "Sending..." : "Send message"}
           </Button>
         </>
       }
     >
+      <p>
+        <SupportSlaMessage />
+      </p>
       <form
         ref={formRef}
         className="space-y-4 md:w-[700px]"
         onSubmit={(e) => {
-          e.preventDefault();
-          void (async () => {
-            if (!subject.trim() || !message.trim()) return;
-            setIsSubmitting(true);
-            try {
-              const { conversationSlug } = await createConversation({ subject: subject.trim() });
-              await createMessage({
-                conversationSlug,
-                content: message.trim(),
-                attachments,
-                customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
-              });
-              onCreated(conversationSlug);
-            } catch (error) {
-              showAlert(error instanceof Error ? error.message : "Something went wrong.", "error");
-            } finally {
-              setIsSubmitting(false);
-            }
-          })();
+          void handleSubmit(e);
         }}
       >
         <label className="sr-only">Subject</label>
-        <input value={subject} placeholder="Subject" onChange={(e) => setSubject(e.target.value)} />
+        <Input value={subject} placeholder="Subject" onChange={(e) => setSubject(e.target.value)} />
         <label className="sr-only">Message</label>
-        <textarea
+        <Textarea
           rows={6}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -91,6 +102,7 @@ export function NewTicketModal({
           type="file"
           multiple
           accept={ALLOWED_ATTACHMENT_MIMETYPES}
+          className="sr-only"
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
             if (files.length === 0) return;
@@ -118,7 +130,7 @@ export function NewTicketModal({
                     aria-label="Remove"
                     onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
                   >
-                    <Icon name="trash2" />
+                    <Trash className="size-5" />
                   </Button>
                 </RowActions>
               </Row>

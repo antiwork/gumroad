@@ -1,7 +1,7 @@
+import { ArrowUpRight } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 
-import { Icon } from "$app/components/Icons";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const WithPreviewSidebar = ({ children, className, ...props }: React.ComponentProps<"div">) => (
@@ -23,7 +23,7 @@ export const PreviewSidebar = ({
   return (
     <aside
       className={cx(
-        "bg-filled sticky top-0 hidden h-screen flex-col gap-4 self-start overflow-auto p-6 lg:flex lg:border-l lg:border-border",
+        "bg-filled sticky top-0 hidden min-h-screen flex-col gap-4 self-start p-6 lg:flex lg:border-l lg:border-border",
         className,
       )}
       aria-labelledby={`${uid}-title`}
@@ -33,7 +33,7 @@ export const PreviewSidebar = ({
         <h2 id={`${uid}-title`}>Preview</h2>
         {previewLink ? (
           <WithTooltip tip="Preview">
-            {previewLink({ "aria-label": "Preview", children: <Icon name="arrow-diagonal-up-right" /> })}
+            {previewLink({ "aria-label": "Preview", children: <ArrowUpRight className="size-5" /> })}
           </WithTooltip>
         ) : null}
       </div>

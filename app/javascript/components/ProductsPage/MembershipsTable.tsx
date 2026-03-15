@@ -19,7 +19,6 @@ import {
   TableHeader,
   TableRow,
 } from "$app/components/ui/Table";
-import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -45,7 +44,7 @@ export const ProductsPageMembershipsTable = (props: {
         memberships_sort_direction: newSort?.direction,
         memberships_page: undefined,
       },
-      only: ["memberships_data"],
+      only: ["memberships_data", "has_products"],
       onBefore: () => setSort(newSort),
       onStart: () => setIsLoading(true),
       onFinish: () => setIsLoading(false),
@@ -62,7 +61,7 @@ export const ProductsPageMembershipsTable = (props: {
         memberships_sort_direction: sort?.direction,
         query: props.query || undefined,
       },
-      only: ["memberships_data"],
+      only: ["memberships_data", "has_products"],
       onStart: () => setIsLoading(true),
       onFinish: () => {
         setIsLoading(false);
@@ -70,12 +69,6 @@ export const ProductsPageMembershipsTable = (props: {
       },
     });
   };
-
-  const debouncedLoadMemberships = useDebouncedCallback(() => loadMemberships(1), 300);
-
-  React.useEffect(() => {
-    if (props.query !== null) debouncedLoadMemberships();
-  }, [props.query]);
 
   const reloadMemberships = () => loadMemberships(pagination.page);
 

@@ -366,6 +366,45 @@ describe "Sales page", type: :system, js: true do
         end
       end
     end
+
+    describe "timezone display" do
+      it "displays purchase dates in the seller's timezone" do
+        seller.update!(timezone: "Tokyo")
+        create(:purchase, link: product1, full_name: "TZ Customer", email: "tz@example.com",
+                          created_at: Time.utc(2025, 1, 15, 20, 0, 0), seller:)
+        index_model_records(Purchase)
+
+        login_as seller
+        visit customers_path(query: "tz@example.com")
+
+        row = find(:table_row, { "Email" => "tz@example.com" })
+        within row do
+          expect(page).to have_text("Jan 16, 2025, 5:00 AM")
+        end
+      end
+
+      it "displays charge dates in the seller's timezone" do
+        seller.update!(timezone: "Tokyo")
+        purchase2.update!(
+          purchase_state: "in_progress",
+          created_at: Time.utc(2024, 3, 31, 20, 0, 0),
+          chargeable: create(:chargeable)
+        )
+        purchase2.process!
+        purchase2.mark_successful!
+        purchase2.subscription.update!(charge_occurrence_count: 2, deactivated_at: Time.current)
+
+        login_as seller
+        visit customers_path
+        find(:table_row, { "Name" => "Customer 2" }).click
+
+        within_modal "Membership" do
+          within_section "Charges", section_element: :section do
+            expect(page).to have_text("on 4/1/2024")
+          end
+        end
+      end
+    end
   end
 
   describe "drawer" do
@@ -483,7 +522,7 @@ describe "Sales page", type: :system, js: true do
             expect(page).to_not have_button("Show more")
             within_section "Post 10" do
               expect(page).to have_link("Post 10", href: post.full_url)
-              expect(page).to have_text("Originally sent on #{post.published_at.strftime("%b %-d")}")
+              expect(page).to have_text("Originally sent on #{post.published_at.in_time_zone(seller.timezone).strftime("%b %-d")}")
               click_on "Send"
               expect(page).to have_button("Sending...", disabled: true)
             end
@@ -502,7 +541,7 @@ describe "Sales page", type: :system, js: true do
           end
           within_section "Emails received", section_element: :section do
             within_section "Post 10" do
-              expect(page).to have_text("Sent #{post.published_at.strftime("%b %-d")}")
+              expect(page).to have_text("Sent #{post.published_at.in_time_zone(seller.timezone).strftime("%b %-d")}")
               click_on "Resend email"
               expect(page).to have_button("Sending...", disabled: true)
             end
@@ -538,8 +577,8 @@ describe "Sales page", type: :system, js: true do
         find(:table_row, { "Name" => "Customer 2" }).click
         within_modal "Membership" do
           within_section "Emails received", section_element: :section do
-            expect(page).to have_section("Receipt", text: "Delivered #{purchase2.created_at.strftime("%b %-d")}")
-            within_section "Receipt", text: "Delivered #{membership_purchase.created_at.strftime("%b %-d")}" do
+            expect(page).to have_section("Receipt", text: "Delivered #{purchase2.created_at.in_time_zone(seller.timezone).strftime("%b %-d")}")
+            within_section "Receipt", text: "Delivered #{membership_purchase.created_at.in_time_zone(seller.timezone).strftime("%b %-d")}" do
               click_on "Resend receipt"
               expect(page).to have_button("Resending receipt...", disabled: true)
             end
@@ -548,7 +587,7 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_alert(text: "Receipt resent")
 
         expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(membership_purchase.id).on("critical")
-        within_section "Receipt", text: "Delivered #{membership_purchase.created_at.strftime("%b %-d")}" do
+        within_section "Receipt", text: "Delivered #{membership_purchase.created_at.in_time_zone(seller.timezone).strftime("%b %-d")}" do
           expect(page).to have_button("Receipt resent", disabled: true)
         end
       end
@@ -1123,11 +1162,9 @@ describe "Sales page", type: :system, js: true do
             fill_in "4", with: "2"
             click_on "Issue partial refund"
 
-            within page.document do
-              within_modal "Charge refund" do
-                expect(page).to have_text("Would you like to confirm this charge refund?")
-                click_on "Cancel"
-              end
+            within_modal "Charge refund" do
+              expect(page).to have_text("Would you like to confirm this charge refund?")
+              click_on "Cancel"
             end
 
             click_on "Issue partial refund"
@@ -1150,14 +1187,16 @@ describe "Sales page", type: :system, js: true do
             find_field("2", with: "2").fill_in with: "3"
             click_on "Refund fully"
 
-            within page.document do
-              within_modal "Charge refund" do
-                click_on "Confirm refund"
-              end
-              wait_for_ajax
-              expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+            within_modal "Charge refund" do
+              click_on "Confirm refund"
             end
+            wait_for_ajax
+          end
+        end
+        expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
 
+        within_modal "Membership" do
+          within_section "Charges", section_element: :section do
             find_field("2", with: "3").fill_in with: "2"
             click_on "Refund fully"
           end
@@ -1448,12 +1487,10 @@ describe "Sales page", type: :system, js: true do
             fill_in "3", with: "1"
             click_on "Issue partial refund"
 
-            within page.document do
-              within_modal "Purchase refund" do
-                click_on "Cancel"
-              end
-              expect(page).to_not have_modal("Purchase refund")
+            within_modal "Purchase refund" do
+              click_on "Cancel"
             end
+            expect(page).to_not have_modal("Purchase refund")
 
             click_on "Issue partial refund"
           end
@@ -1476,13 +1513,15 @@ describe "Sales page", type: :system, js: true do
             find_field("2", with: "2").fill_in with: "3"
             click_on "Refund fully"
 
-            within page.document do
-              within_modal "Purchase refund" do
-                click_on "Confirm refund"
-              end
-              expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
+            within_modal "Purchase refund" do
+              click_on "Confirm refund"
             end
+          end
+        end
+        expect(page).to have_alert(text: "Refund amount cannot be greater than the purchase price.")
 
+        within_modal "Product 2" do
+          within_section "Refund", section_element: :section do
             fill_in "2", with: "2"
             click_on "Refund fully"
           end

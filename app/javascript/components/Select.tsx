@@ -1,22 +1,22 @@
+import { ChevronDown, TurnRight, X } from "@boxicons/react";
 import * as React from "react";
 import ReactSelect, {
+  ClearIndicatorProps,
   components,
+  ControlProps,
+  DropdownIndicatorProps,
+  GroupBase,
   InputProps,
   MenuListProps,
   MultiValueProps,
   OptionProps,
   Props as ReactSelectProps,
-  DropdownIndicatorProps,
-  ControlProps,
-  ClearIndicatorProps,
-  GroupBase,
   SelectInstance,
 } from "react-select";
 
 import { escapeRegExp } from "$app/utils";
 import { classNames } from "$app/utils/classNames";
 
-import { Icon } from "$app/components/Icons";
 import { Pill } from "$app/components/ui/Pill";
 
 export type Option = { id: string; label: string; isSubOption?: boolean; disabled?: boolean };
@@ -166,7 +166,7 @@ const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel
   }
   return (
     <span>
-      {isSubOption ? <Icon name="arrow-right-reply" className="mr-2" /> : null}
+      {isSubOption ? <TurnRight className="mr-2 size-5" /> : null}
       {label}
     </span>
   );
@@ -178,7 +178,7 @@ const IndicatorSeparator = () => null;
 const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Option, IsMulti>) => (
   <components.ClearIndicator {...props}>
     <button className="cursor-pointer all-unset" aria-label="Clear value">
-      <Icon name="x" />
+      <X className="size-5" />
     </button>
   </components.ClearIndicator>
 );
@@ -186,7 +186,7 @@ const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Opti
 const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProps<Option, IsMulti>) =>
   props.isMulti ? null : (
     <components.DropdownIndicator {...props}>
-      <Icon name="outline-cheveron-down" />
+      <ChevronDown className="size-5 text-muted" />
     </components.DropdownIndicator>
   );
 
@@ -229,7 +229,7 @@ const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMu
     <Pill asChild color="primary" className="cursor-pointer font-[inherit] text-[length:inherit]">
       <button>
         {props.data.label}
-        <Icon name="x" className="ml-2" />
+        <X className="ml-2 size-5" />
       </button>
     </Pill>
   </div>
@@ -276,6 +276,7 @@ const Option = <IsMulti extends boolean>(props: OptionProps<Option, IsMulti>) =>
       onMouseOver={innerProps.onMouseOver}
       tabIndex={innerProps.tabIndex}
       role="option"
+      aria-disabled={props.isDisabled}
     >
       {customProps.customOption?.({ id: props.label, label: props.label }) ?? props.children}
     </div>

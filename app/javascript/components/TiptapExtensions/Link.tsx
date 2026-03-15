@@ -1,20 +1,21 @@
+import { Button as ButtonIcon, CursorClick, Link as LinkIcon } from "@boxicons/react";
 import { Editor, Node } from "@tiptap/core";
 import { Link as BaseLink } from "@tiptap/extension-link";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { cast } from "ts-safe-cast";
 
 import { classNames } from "$app/utils/classNames";
 
 import { Button, buttonVariants } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 
 export const WithDialog = ({
   editor,
@@ -91,39 +92,35 @@ export const WithDialog = ({
 
   return (
     <>
-      {addingLink !== null
-        ? // TODO (maya) remove this once popovers no longer use details
-          createPortal(
-            <Modal open onClose={() => setAddingLink(null)} title={`Insert ${type === "link" ? "link" : "button"}`}>
-              {!editor.isActive("image") ? (
-                <input
-                  ref={labelInputRef}
-                  type="text"
-                  placeholder="Enter text"
-                  value={addingLink.label}
-                  onChange={(el) => setAddingLink({ label: el.target.value, url: addingLink.url || "" })}
-                  onKeyDown={(el) => {
-                    if (el.key === "Enter") onAddLink();
-                  }}
-                />
-              ) : null}
-              <input
-                ref={linkInputRef}
-                type="text"
-                placeholder="Enter URL"
-                value={addingLink.url}
-                onChange={(el) => setAddingLink({ label: addingLink.label || "", url: el.target.value })}
-                onKeyDown={(el) => {
-                  if (el.key === "Enter") onAddLink();
-                }}
-              />
-              <Button color="primary" onClick={onAddLink}>
-                {type === "link" ? "Add link" : "Add button"}
-              </Button>
-            </Modal>,
-            document.body,
-          )
-        : null}
+      {addingLink !== null ? (
+        <Modal open onClose={() => setAddingLink(null)} title={`Insert ${type === "link" ? "link" : "button"}`}>
+          {!editor.isActive("image") ? (
+            <Input
+              ref={labelInputRef}
+              type="text"
+              placeholder="Enter text"
+              value={addingLink.label}
+              onChange={(el) => setAddingLink({ label: el.target.value, url: addingLink.url || "" })}
+              onKeyDown={(el) => {
+                if (el.key === "Enter") onAddLink();
+              }}
+            />
+          ) : null}
+          <Input
+            ref={linkInputRef}
+            type="text"
+            placeholder="Enter URL"
+            value={addingLink.url}
+            onChange={(el) => setAddingLink({ label: addingLink.label || "", url: el.target.value })}
+            onKeyDown={(el) => {
+              if (el.key === "Enter") onAddLink();
+            }}
+          />
+          <Button color="primary" onClick={onAddLink}>
+            {type === "link" ? "Add link" : "Add button"}
+          </Button>
+        </Modal>
+      ) : null}
       <div onClick={onLinkMenuItemClick}>{children}</div>
     </>
   );
@@ -238,14 +235,14 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
             />
           </PopoverTrigger>
           <PopoverContent usePortal>
-            <fieldset>
-              <input
+            <Fieldset>
+              <Input
                 placeholder="Enter text"
                 value={link.label}
                 onChange={(evt) => setLink({ ...link, label: evt.target.value })}
                 onKeyDown={handleKeyPress}
               />
-              <input
+              <Input
                 placeholder="Enter URL"
                 value={link.url}
                 ref={linkInputRef}
@@ -269,7 +266,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
                   Save
                 </Button>
               </div>
-            </fieldset>
+            </Fieldset>
           </PopoverContent>
         </Popover>
       ) : (
@@ -319,7 +316,7 @@ const TiptapButton = Node.create({
   },
   menuItem: (editor) => (
     <WithDialog editor={editor} type="button">
-      <MenuItem name="Insert button" icon="button" />
+      <MenuItem name="Insert button" icon={<ButtonIcon className="size-5" />} />
     </WithDialog>
   ),
   submenu: {
@@ -327,7 +324,7 @@ const TiptapButton = Node.create({
     item: (editor) => (
       <WithDialog editor={editor} type="button">
         <div role="menuitem">
-          <Icon name="button" />
+          <CursorClick className="size-5" />
           <span>Button</span>
         </div>
       </WithDialog>
@@ -338,7 +335,11 @@ export { TiptapButton as Button };
 
 export const LinkMenuItem = ({ editor }: { editor: Editor }) => (
   <WithDialog editor={editor} type="link">
-    <MenuItem name="Insert link" icon="link" active={editor.isActive("link") || !!editor.getAttributes("image").link} />
+    <MenuItem
+      name="Insert link"
+      icon={<LinkIcon className="size-5" />}
+      active={editor.isActive("link") || !!editor.getAttributes("image").link}
+    />
   </WithDialog>
 );
 

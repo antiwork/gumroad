@@ -1,3 +1,4 @@
+import { CodeAlt, NoteBook } from "@boxicons/react";
 import * as React from "react";
 
 import { Tab, TabIcon, Tabs as TabsComponent } from "$app/components/ui/Tabs";
@@ -17,14 +18,18 @@ export const Tabs = ({
 }) => (
   <TabsComponent variant="buttons">
     <Tab onClick={() => setTab("overlay")} isSelected={tab === "overlay"} aria-controls={overlayTabpanelUID}>
-      <TabIcon name="stickies" />
+      <TabIcon>
+        <NoteBook className="size-5" />
+      </TabIcon>
       <div>
         <h4 className="font-bold">Modal Overlay</h4>
         <small className="text-sm">Pop up product information with a familiar and trusted buying experience.</small>
       </div>
     </Tab>
     <Tab onClick={() => setTab("embed")} isSelected={tab === "embed"} aria-controls={embedTabpanelUID}>
-      <TabIcon name="code-square" />
+      <TabIcon>
+        <CodeAlt className="size-5" />
+      </TabIcon>
       <div>
         <h4 className="font-bold">Embed</h4>
         <small className="text-sm">Embed on your website, blog posts & more.</small>

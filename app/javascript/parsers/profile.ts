@@ -4,6 +4,7 @@ export type CreatorProfile = {
   name: string;
   twitter_handle: string | null;
   subdomain: string | null;
+  is_verified: boolean;
 };
 
 export type Tab = { name: string; sections: string[] };

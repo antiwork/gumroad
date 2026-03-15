@@ -31,5 +31,14 @@ describe DuplicateProductWorker do
 
       expect(@product.reload.is_duplicating).to be(false)
     end
+
+    it "logs and notifies Bugsnag on failure" do
+      error = StandardError.new("Something broke")
+      expect_any_instance_of(ProductDuplicatorService).to receive(:duplicate).and_raise(error)
+
+      expect(Bugsnag).to receive(:notify).with(error)
+
+      described_class.new.perform(@product.id)
+    end
   end
 end

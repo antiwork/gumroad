@@ -3,8 +3,11 @@ import * as React from "react";
 import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
+import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
 import { showAlert } from "$app/components/server-components/Alert";
-import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/server-components/DownloadPage/WithContent";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export const TextInput = ({
   customFieldId,
@@ -57,8 +60,8 @@ export const TextInput = ({
 
   return (
     <>
-      <label htmlFor={uid}>{label}</label>
-      {type === "shortAnswer" ? <input {...sharedInputProps} /> : <textarea {...sharedInputProps} />}
+      <Label htmlFor={uid}>{label}</Label>
+      {type === "shortAnswer" ? <Input {...sharedInputProps} /> : <Textarea {...sharedInputProps} />}
     </>
   );
 };

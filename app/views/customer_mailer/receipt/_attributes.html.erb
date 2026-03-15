@@ -5,7 +5,7 @@
         <tr>
           <td>
             <% if attribute[:label].present? %>
-              <span style="font-weight: bold"><%= attribute[:label] %></span>
+              <span class="attribute-label"><%= attribute[:label] %></span>
               <br>
             <% end %>
             <% if attribute[:value].is_a?(Array) %>

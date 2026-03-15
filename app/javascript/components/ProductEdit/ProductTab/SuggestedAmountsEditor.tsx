@@ -1,9 +1,10 @@
+import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 
 let newVersionId = 0;
 
@@ -42,14 +43,14 @@ export const SuggestedAmountsEditor = ({
       }}
       disabled={versions.length === 3}
     >
-      <Icon name="plus" />
+      <Plus className="size-5" />
       Add amount
     </Button>
   );
 
   return (
-    <fieldset>
-      <legend>{versions.length > 1 ? "Suggested amounts" : "Suggested amount"}</legend>
+    <Fieldset>
+      <FieldsetTitle>{versions.length > 1 ? "Suggested amounts" : "Suggested amount"}</FieldsetTitle>
       {versions.map((version, index) => (
         <SuggestedAmountEditor
           key={version.id}
@@ -63,7 +64,7 @@ export const SuggestedAmountsEditor = ({
         />
       ))}
       {addButton}
-    </fieldset>
+    </Fieldset>
   );
 };
 
@@ -93,7 +94,7 @@ const SuggestedAmountEditor = ({
         onBlur={onBlur}
       />
       <Button aria-label="Delete" onClick={onDelete ?? undefined} disabled={!onDelete}>
-        <Icon name="trash2" />
+        <Trash className="size-5" />
       </Button>
     </section>
   );

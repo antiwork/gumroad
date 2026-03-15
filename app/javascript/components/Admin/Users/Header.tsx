@@ -1,3 +1,4 @@
+import { Copy } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -8,7 +9,7 @@ import BlockedUserTooltip from "$app/components/Admin/Users/BlockedUserTooltip";
 import AdminUserStats from "$app/components/Admin/Users/Stats";
 import type { User } from "$app/components/Admin/Users/User";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
+import { Avatar } from "$app/components/ui/Avatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type HeaderProps = {
@@ -26,7 +27,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
-        <img src={user.avatar_url} className="user-avatar" style={{ width: "var(--form-element-height)" }} alt="" />
+        <Avatar src={user.avatar_url} style={{ width: "var(--form-element-height)" }} alt="" />
         <div className="grid gap-2">
           <h2>
             <Link href={adminUserUrl} className={classNames({ active: url === adminUserUrl })}>
@@ -39,16 +40,16 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
             </li>
             {user.username ? (
               <li>
-                <Link href={user.subdomain_with_protocol} target="_blank" rel="noopener noreferrer nofollow">
+                <a href={user.subdomain_with_protocol} target="_blank" rel="noopener noreferrer nofollow">
                   {user.username}
-                </Link>
+                </a>
               </li>
             ) : null}
             {user.form_email ? (
               <li className="space-x-1">
                 <span>Email: {user.form_email}</span>
                 <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy email" text={user.form_email}>
-                  <Icon name="outline-duplicate" />
+                  <Copy className="size-5" />
                 </CopyToClipboard>
                 <BlockedUserTooltip user={user} position="bottom" />
               </li>
@@ -57,7 +58,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
               <li className="space-x-1">
                 <span>Support email: {user.support_email}</span>
                 <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy support email" text={user.support_email}>
-                  <Icon name="outline-duplicate" />
+                  <Copy className="size-5" />
                 </CopyToClipboard>
               </li>
             ) : null}

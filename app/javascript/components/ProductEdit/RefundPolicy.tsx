@@ -4,12 +4,16 @@ import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
-import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Select as FormSelect } from "$app/components/ui/Select";
 import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 export type RefundPolicy = {
@@ -40,10 +44,8 @@ export const RefundPolicySelector = ({
   const uid = React.useId();
 
   return (
-    <Details
-      className="toggle"
-      open={isEnabled}
-      summary={
+    <Details open={isEnabled}>
+      <DetailsToggle chevronPosition="none" className="mb-0">
         <Switch
           checked={isEnabled}
           onChange={(e) => setIsEnabled(e.target.checked)}
@@ -56,12 +58,11 @@ export const RefundPolicySelector = ({
             </>
           }
         />
-      }
-    >
+      </DetailsToggle>
       <Dropdown className="flex flex-col gap-4">
-        <fieldset>
-          <legend className="flex justify-between">
-            <label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</label>
+        <Fieldset>
+          <FieldsetTitle className="flex justify-between">
+            <Label htmlFor={`${uid}-max-refund-period-in-days`}>Refund period</Label>
             {refundPolicies.length > 0 ? (
               <Popover>
                 <PopoverTrigger className="underline">Copy from other products</PopoverTrigger>
@@ -96,8 +97,8 @@ export const RefundPolicySelector = ({
                 </PopoverContent>
               </Popover>
             ) : null}
-          </legend>
-          <select
+          </FieldsetTitle>
+          <FormSelect
             id={`${uid}-max-refund-period-in-days`}
             value={refundPolicy.max_refund_period_in_days}
             onChange={(evt) => {
@@ -117,13 +118,13 @@ export const RefundPolicySelector = ({
                 {value}
               </option>
             ))}
-          </select>
-        </fieldset>
-        <fieldset>
-          <legend>
-            <label htmlFor={`${uid}-refund-policy-fine-print`}>Fine print (optional)</label>
-          </legend>
-          <textarea
+          </FormSelect>
+        </Fieldset>
+        <Fieldset>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}-refund-policy-fine-print`}>Fine print (optional)</Label>
+          </FieldsetTitle>
+          <Textarea
             id={`${uid}-refund-policy-fine-print`}
             maxLength={3000}
             rows={10}
@@ -132,7 +133,7 @@ export const RefundPolicySelector = ({
             onMouseEnter={() => setShowPreview(true)}
             onMouseLeave={() => setShowPreview(false)}
           />
-        </fieldset>
+        </Fieldset>
       </Dropdown>
     </Details>
   );
@@ -145,6 +146,7 @@ export const RefundPolicyModalPreview = ({ refundPolicy, open }: { refundPolicy:
       open={!!refundPolicy.fine_print && open}
       title={refundPolicy.title}
       modal={false}
+      usePortal={false}
       footer={`Last updated ${new Date().toLocaleString(userAgentInfo.locale, { dateStyle: "medium" })}`}
     >
       <div style={{ whiteSpace: "pre-wrap" }}>{refundPolicy.fine_print}</div>

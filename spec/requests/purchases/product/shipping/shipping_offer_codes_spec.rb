@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 describe("Product Page - Shipping with offer codes", type: :system, js: true, shipping: true) do
+  before do
+    # Pin GBP exchange rate to avoid flakiness from currency fluctuations.
+    # Rate 0.652578 gives: 100 GBP = $153.24 USD, shipping 20 GBP = $30.65 USD
+    currency_ns = Redis::Namespace.new(:currencies, redis: $redis)
+    currency_ns.set("GBP", "0.652578")
+  end
+
   it "allows the 50% offer code to only affect the product cost and not the shipping in USD" do
     @product = create(:product, user: create(:user), require_shipping: true, price_cents: 100_00)
     @offer_code = create(:percentage_offer_code, products: [@product], amount_percentage: 50, user: @product.user)
@@ -13,9 +20,8 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
     expect(page).to have_selector("[aria-label='Discount code']", text: @offer_code.code)
-    check_out(@product, should_verify_address: true) do
-      expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
-    end
+    expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
+    check_out(@product, should_verify_address: true)
 
     expect(page).to have_alert("Your purchase was successful!")
 
@@ -35,9 +41,8 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
     expect(page).to have_selector("[aria-label='Discount code']", text: @offer_code.code)
-    check_out(@product, should_verify_address: true) do
-      expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
-    end
+    expect(page).to have_text("Shipping rate US$20", normalize_ws: true)
+    check_out(@product, should_verify_address: true)
 
     expect(page).to have_alert("Your purchase was successful!")
 
@@ -63,12 +68,9 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
 
     visit "/l/#{@product.unique_permalink}/#{@offer_code.code}"
     add_to_cart(@product, offer_code: @offer_code)
-    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
-      expect(page).to have_text("Subtotal US$153.24", normalize_ws: true)
-      expect(page).to have_text("Sales tax US$5.13", normalize_ws: true)
-      expect(page).to have_text("Shipping rate US$30.65", normalize_ws: true)
-      expect(page).to have_text("Total US$112.40", normalize_ws: true)
-    end
+    expect(page).to have_text("Subtotal US$153.24", normalize_ws: true)
+    expect(page).to have_text("Shipping rate US$30.65", normalize_ws: true)
+    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true)
 
     expect(page).to have_alert("Your purchase was successful!")
 

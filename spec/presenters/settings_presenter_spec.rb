@@ -518,6 +518,7 @@ describe SettingsPresenter do
           business_type: nil,
           business_street_address: nil,
           business_building_number: nil,
+          business_building_number_kana: nil,
           business_street_address_kanji: nil,
           business_street_address_kana: nil,
           business_city: nil,
@@ -534,6 +535,7 @@ describe SettingsPresenter do
           last_name_kana: nil,
           street_address: nil,
           building_number: nil,
+          building_number_kana: nil,
           street_address_kanji: nil,
           street_address_kana: nil,
           city: nil,
@@ -558,6 +560,7 @@ describe SettingsPresenter do
           ae: Compliance::Countries.subdivisions_for_select(Compliance::Countries::ARE.alpha2).map { |code, name| { code:, name: } },
           ir: Compliance::Countries.subdivisions_for_select(Compliance::Countries::IRL.alpha2).map { |code, name| { code:, name: } },
           br: Compliance::Countries.subdivisions_for_select(Compliance::Countries::BRA.alpha2).map { |code, name| { code:, name: } },
+          jp: Compliance::Countries.japan_prefectures_for_select,
         },
         saved_card: nil,
         formatted_balance_to_forfeit_on_country_change: nil,
@@ -568,6 +571,7 @@ describe SettingsPresenter do
         payouts_paused_by_user: false,
         payout_threshold_cents: 1000,
         minimum_payout_threshold_cents: 1000,
+        payout_country_name: nil,
         payout_frequency: User::PayoutSchedule::WEEKLY,
         payout_frequency_daily_supported: false,
       }
@@ -665,6 +669,7 @@ describe SettingsPresenter do
                                              aus_backtax_details: @base_props[:aus_backtax_details].merge({
                                                                                                             legal_entity_name: @user_compliance_info.first_and_last_name,
                                                                                                           }),
+                                             payout_country_name: "United States",
                                            })
       end
 
@@ -755,6 +760,14 @@ describe SettingsPresenter do
       end
     end
 
+    context "when the seller is a business with a different personal and business country" do
+      it "returns payout_currency based on the business country, not the personal country" do
+        create(:user_compliance_info_business, user: seller, country: "United States", business_country: "Canada")
+
+        expect(presenter.payments_props[:user][:payout_currency]).to eq("cad")
+      end
+    end
+
     context "when the seller is from Brazil" do
       before do
         @user_compliance_info = create(:user_compliance_info, user: seller, country: "Brazil")
@@ -804,6 +817,19 @@ describe SettingsPresenter do
 
       it "returns the payout threshold" do
         expect(presenter.payments_props[:payout_threshold_cents]).to eq(5000)
+      end
+    end
+
+    context "when seller is in a cross-border payout country with a stored threshold below the country minimum" do
+      let!(:compliance_info) { create(:user_compliance_info_korea, user: seller) }
+
+      before do
+        seller.update!(payout_threshold_cents: 1000)
+      end
+
+      it "returns the stored payout threshold, not the effective minimum" do
+        expect(seller.minimum_payout_amount_cents).to be > 1000
+        expect(presenter.payments_props[:payout_threshold_cents]).to eq(1000)
       end
     end
 

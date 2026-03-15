@@ -158,7 +158,8 @@ describe("Posts on seller profile", type: :system, js: true) do
 
         expect do
           submit_follow_form(with: @follower_email)
-          expect(page).to have_button("Subscribed", disabled: true)
+          wait_for_ajax
+          expect(page).to have_alert(text: "Check your inbox to confirm your follow request.")
           Follower.find_by(email: @follower_email).confirm!
         end.to change { Follower.active.count }.by(1)
         expect(Follower.last.email).to eq @follower_email
@@ -251,14 +252,14 @@ describe("Posts on seller profile", type: :system, js: true) do
                 click_on("Delete")
               end
             end
-
-            expect(page).to have_text("Are you sure?")
-
-            expect do
-              click_on("Confirm")
-              wait_for_ajax
-            end.to change { own_comment.reload.alive? }.from(true).to(false)
           end
+
+          expect(page).to have_text("Are you sure?")
+
+          expect do
+            click_on("Confirm")
+            wait_for_ajax
+          end.to change { own_comment.reload.alive? }.from(true).to(false)
           expect(page).to have_alert(text: "Successfully deleted the comment")
 
           visit "#{seller.subdomain_with_protocol}/p/#{post.slug}"
@@ -435,11 +436,12 @@ describe("Posts on seller profile", type: :system, js: true) do
                 click_on("Delete")
               end
             end
-            expect(page).to have_text("Are you sure?")
-            click_on("Confirm")
-            wait_for_ajax
-            expect(page).to_not have_text("Nice article!")
           end
+
+          expect(page).to have_text("Are you sure?")
+          click_on("Confirm")
+          wait_for_ajax
+          expect(page).to_not have_text("Nice article!")
           expect(page).to have_alert(text: "Successfully deleted the comment")
           expect(page).to have_text("1 comment")
         end
@@ -681,10 +683,11 @@ describe("Posts on seller profile", type: :system, js: true) do
               click_on("Delete")
             end
           end
-          expect(page).to have_text("Are you sure?")
-          click_on("Confirm")
-          wait_for_ajax
         end
+
+        expect(page).to have_text("Are you sure?")
+        click_on("Confirm")
+        wait_for_ajax
         expect(page).to have_alert(text: "Successfully deleted the comment")
         expect(page).to_not have_text("Reply at depth 3")
         expect(page).to_not have_text("Reply at depth 4")

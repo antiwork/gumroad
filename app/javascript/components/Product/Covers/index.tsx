@@ -1,9 +1,9 @@
+import { ArrowLeft, ArrowRight } from "@boxicons/react";
 import * as React from "react";
 
 import { AssetPreview } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 
-import { Icon } from "$app/components/Icons";
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useOnChange } from "$app/components/useOnChange";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
@@ -100,7 +100,6 @@ export const Covers = ({
 };
 
 const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; onClick: () => void }) => {
-  const iconName = direction === "previous" ? "arrow-left" : "arrow-right";
   const positionClass = direction === "previous" ? "left-0" : "right-0";
 
   return (
@@ -117,7 +116,7 @@ const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; 
       }}
       aria-label={direction === "previous" ? "Show previous cover" : "Show next cover"}
     >
-      <Icon name={iconName} />
+      {direction === "previous" ? <ArrowLeft className="size-5" /> : <ArrowRight className="size-5" />}
     </button>
   );
 };

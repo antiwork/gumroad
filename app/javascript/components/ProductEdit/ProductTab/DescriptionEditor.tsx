@@ -1,4 +1,4 @@
-import { DirectUpload, DirectUploadDelegate, Blob } from "@rails/activestorage";
+import { Blob, DirectUpload, DirectUploadDelegate } from "@rails/activestorage";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorView } from "@tiptap/pm/view";
 import { Editor, EditorContent } from "@tiptap/react";
@@ -19,9 +19,12 @@ import {
 import { showAlert } from "$app/components/server-components/Alert";
 import { MoveNode } from "$app/components/TiptapExtensions/MoveNode";
 import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const MAX_ALLOWED_PUBLIC_FILE_SIZE_IN_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_ALLOWED_IMAGE_SIZE_IN_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_ALLOWED_PUBLIC_FILES_COUNT = 5;
 
 export const useImageUpload = () => {
@@ -146,7 +149,8 @@ export const DescriptionEditor = ({
   useRunOnce(() => setIsMounted(true));
   const editor = useRichTextEditor({
     id: uid,
-    className: "textarea",
+    className:
+      "textarea px-4 py-3 border border-border rounded-b block w-full bg-background placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
     ariaLabel: "Description",
     placeholder: "Describe your product...",
     initialValue: isMounted ? initialDescription : null,
@@ -332,6 +336,7 @@ export const DescriptionEditor = ({
         });
       },
       allowedExtensions: ALLOWED_EXTENSIONS,
+      maxFileSize: MAX_ALLOWED_IMAGE_SIZE_IN_BYTES,
     }),
     [],
   );
@@ -339,16 +344,22 @@ export const DescriptionEditor = ({
   if (!isMounted) return null;
 
   return (
-    <fieldset>
-      <label htmlFor={uid}>Description</label>
+    <Fieldset>
+      <Label htmlFor={uid}>Description</Label>
       <PublicFilesSettingsContext.Provider value={publicFilesSettings}>
         <ImageUploadSettingsContext.Provider value={imageSettings}>
-          <div className="rich-text-editor" data-gumroad-ignore>
-            {editor ? <RichTextEditorToolbar editor={editor} productId={id} /> : null}
+          <div className="grid min-h-56 grid-rows-[max-content_1fr] rounded" data-gumroad-ignore>
+            {editor ? (
+              <RichTextEditorToolbar
+                editor={editor}
+                productId={id}
+                className="rounded-t rounded-b-none border border-b-0 border-border"
+              />
+            ) : null}
             <EditorContent className="rich-text" editor={editor} />
           </div>
         </ImageUploadSettingsContext.Provider>
       </PublicFilesSettingsContext.Provider>
-    </fieldset>
+    </Fieldset>
   );
 };

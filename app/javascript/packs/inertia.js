@@ -3,13 +3,15 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 
 import AppWrapper from "../inertia/app_wrapper.tsx";
-import Layout, { AuthenticationLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
+import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
 
-router.on("start", () => {
+router.on("start", (event) => {
+  if (event.detail.visit.prefetch) return;
   window.__activeRequests = (window.__activeRequests || 0) + 1;
 });
 
-router.on("finish", () => {
+router.on("finish", (event) => {
+  if (event.detail.visit.prefetch) return;
   window.__activeRequests = Math.max((window.__activeRequests || 1) - 1, 0);
 });
 
@@ -25,7 +27,7 @@ router.on("before", (event) => {
 
   // Track previous route for navigation (only for GET requests)
   const method = event.detail.visit.method?.toLowerCase() || "get";
-  if (method === "get") {
+  if (method === "get" && !event.detail.visit.prefetch) {
     const currentUrl = new URL(window.location.href);
     const newUrl =
       typeof event.detail.visit.url === "string"
@@ -51,32 +53,36 @@ router.on("invalid", (event) => {
   }
 });
 
+router.on("exception", (event) => {
+  // When logging in for a mobile OAuth flow, the redirect chain ends at a custom scheme
+  // (gumroadmobile://) that XHR can't follow. Fall back to navigating the browser
+  // to the OAuth authorize URL so it can handle the custom scheme redirect natively.
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (next?.includes("redirect_uri=gumroadmobile")) {
+    event.preventDefault();
+    window.location.href = next;
+  }
+});
+
+function assignLayout(page) {
+  if (page.publicLayout) {
+    page.layout ||= (page) => createElement(PublicLayout, { children: page });
+  } else if (page.loggedInUserLayout) {
+    page.layout ||= (page) => createElement(LoggedInUserLayout, { children: page });
+  } else {
+    page.layout ||= (page) => createElement(Layout, { children: page });
+  }
+  return page;
+}
+
 async function resolvePageComponent(name) {
   try {
     const module = await import(`../pages/${name}.tsx`);
-    const page = module.default;
-    if (page.authenticationLayout) {
-      page.layout ||= (page) => createElement(AuthenticationLayout, { children: page });
-      return page;
-    } else if (page.loggedInUserLayout) {
-      page.layout ||= (page) => createElement(LoggedInUserLayout, { children: page });
-      return page;
-    }
-    page.layout ||= (page) => createElement(Layout, { children: page });
-    return page;
+    return assignLayout(module.default);
   } catch {
     try {
       const module = await import(`../pages/${name}.jsx`);
-      const page = module.default;
-      if (page.authenticationLayout) {
-        page.layout ||= (page) => createElement(AuthenticationLayout, { children: page });
-        return page;
-      } else if (page.loggedInUserLayout) {
-        page.layout ||= (page) => createElement(LoggedInUserLayout, { children: page });
-        return page;
-      }
-      page.layout ||= (page) => createElement(Layout, { children: page });
-      return page;
+      return assignLayout(module.default);
     } catch {
       throw new Error(`Page component not found: ${name}`);
     }
@@ -85,8 +91,8 @@ async function resolvePageComponent(name) {
 
 createInertiaApp({
   progress: false,
-  resolve: (name) => resolvePageComponent(name),
-  title: (title) => (title ? `${title}` : "Gumroad"),
+  resolve: resolvePageComponent,
+  title: (title) => title || "Gumroad",
   setup({ el, App, props }) {
     if (!el) return;
 
