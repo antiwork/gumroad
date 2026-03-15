@@ -153,7 +153,7 @@ export default function ThirdPartyAnalyticsPage() {
         </FormSection>
         <FormSection header={<h2>Domain verification</h2>}>
           <Details open={thirdPartyAnalytics.enable_verify_domain_third_party_services}>
-            <DetailsToggle>
+            <DetailsToggle chevronPosition="none" className="mb-0">
               <Switch
                 checked={thirdPartyAnalytics.enable_verify_domain_third_party_services}
                 onChange={(evt) =>

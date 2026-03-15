@@ -433,7 +433,7 @@ You can modify or cancel your membership at any time.`;
 
   return (
     <Details open={tier.apply_price_changes_to_existing_memberships}>
-      <DetailsToggle>
+      <DetailsToggle chevronPosition="none" className="mb-0">
         <Switch
           checked={tier.apply_price_changes_to_existing_memberships}
           onChange={(e) =>
