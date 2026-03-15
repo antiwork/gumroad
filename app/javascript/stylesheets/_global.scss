@@ -165,10 +165,6 @@ dl {
   opacity: $disabled-opacity;
 }
 
-[hidden] {
-  display: none !important;
-}
-
 [draggable="true"],
 [aria-grabbed] {
   cursor: move;
