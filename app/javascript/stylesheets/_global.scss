@@ -181,20 +181,6 @@ dl {
   }
 }
 
-[inert] {
-  cursor: not-allowed;
-  opacity: $disabled-opacity;
-}
-
-[hidden] {
-  display: none !important;
-}
-
-[draggable="true"],
-[aria-grabbed] {
-  cursor: move;
-}
-
 meter {
   height: 1lh;
   width: 100%;
