@@ -568,7 +568,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
           <div style={{ display: "grid", gridColumn: "4 span", gap: "var(--spacer-1)" }}>
             <meter
               value={latestMediaLocation / file.duration}
-              className="border-0"
+              className="h-[1lh] w-full appearance-none rounded border-0 bg-none [--optimum-value-background:rgb(var(--accent))] [&::-moz-meter-bar]:rounded [&::-moz-meter-bar]:[background:var(--optimum-value-background)] [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded [&::-webkit-meter-optimum-value]:[background:var(--optimum-value-background)]"
               style={{
                 ...{
                   background: "var(--active-bg)",

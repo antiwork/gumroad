@@ -195,35 +195,6 @@ dl {
   cursor: move;
 }
 
-meter {
-  height: 1lh;
-  width: 100%;
-  appearance: none;
-  background: none;
-  border: $border;
-  border-radius: border-radius(1);
-  --optimum-value-background: #{full-color(accent)};
-
-  &::-webkit-meter-inner-element,
-  &::-webkit-meter-bar {
-    display: contents;
-  }
-
-  @mixin value {
-    background: var(--optimum-value-background);
-    border-radius: border-radius(1);
-  }
-
-  &::-webkit-meter-optimum-value {
-    @include value;
-  }
-
-  // specify this separately as otherwise Chrome disregards the entire selector
-  &::-moz-meter-bar {
-    @include value;
-  }
-}
-
 // Unset max-width for Rack::MiniProfiler results to (expectedly) expand beyond
 // the narrow parent container.
 .profiler-results * {
