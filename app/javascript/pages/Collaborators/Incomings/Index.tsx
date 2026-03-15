@@ -14,6 +14,7 @@ import { Layout } from "$app/components/Collaborators/Layout";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -38,8 +39,8 @@ const IncomingCollaboratorsTableRow = ({
   <TableRow key={incomingCollaborator.id} selected={isSelected} onClick={onSelect}>
     <TableCell>
       <div className="flex items-center gap-4">
-        <img
-          className="user-avatar w-8!"
+        <Avatar
+          className="w-8!"
           src={incomingCollaborator.seller_avatar_url}
           alt={`Avatar of ${incomingCollaborator.seller_name || "Collaborator"}`}
         />

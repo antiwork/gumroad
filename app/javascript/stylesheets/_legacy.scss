@@ -2,18 +2,9 @@
 // It should be removed once everything uses the new stuff.
 @use "sass:math";
 
-.legacy-only {
-  display: none !important;
-}
-
 // Work around a strange Chromium issue where dragging doesn't work due to `all: unset`
 button[draggable="true"] {
   -webkit-user-drag: element;
-}
-
-[role="tab"][aria-selected="true"][draggable="true"]::after {
-  transform: translate(-50%);
-  visibility: hidden;
 }
 
 [role="tree"] [role="treeitem"].sortable-ghost {
@@ -21,20 +12,6 @@ button[draggable="true"] {
   border: dashed $border-width $border-color;
   display: grid !important;
   opacity: $disabled-opacity;
-}
-
-body#overlay-page {
-  display: flex;
-  flex-direction: column;
-  background: transparent;
-
-  &:not(.gumroad-minimized) {
-    background: rgba(0, 0, 0, 0.5);
-  }
-
-  .product-display {
-    overflow: auto;
-  }
 }
 
 .rich-text {
@@ -48,13 +25,5 @@ body#overlay-page {
         }
       }
     }
-  }
-}
-
-body > header,
-header.sticky-top,
-main > header {
-  [role="tablist"] a[role="tab"] {
-    text-decoration: none;
   }
 }
