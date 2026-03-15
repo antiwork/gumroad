@@ -160,11 +160,6 @@ dl {
   }
 }
 
-[inert] {
-  cursor: not-allowed;
-  opacity: $disabled-opacity;
-}
-
 [hidden] {
   display: none !important;
 }

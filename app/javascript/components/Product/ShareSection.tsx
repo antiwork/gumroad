@@ -122,6 +122,7 @@ export const ShareSection = ({
               <div
                 {...props}
                 inert={isSelectionInWishlist(wishlist)}
+                className={isSelectionInWishlist(wishlist) ? "cursor-not-allowed opacity-30" : undefined}
                 onClick={(e) => {
                   props.onClick?.(e);
                   void addProduct(Promise.resolve({ newlyCreated: false, wishlist }));

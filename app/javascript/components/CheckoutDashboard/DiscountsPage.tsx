@@ -448,6 +448,7 @@ const DiscountsPage = ({
                                 <div
                                   role="menuitem"
                                   inert={!offerCode.can_update || isLoading}
+                                  className={!offerCode.can_update || isLoading ? "cursor-not-allowed opacity-30" : undefined}
                                   onClick={() => {
                                     setPopoverOfferCodeId(null);
                                     setSelectedOfferCodeId(offerCode.id);
@@ -459,7 +460,7 @@ const DiscountsPage = ({
                                 </div>
                                 <div
                                   role="menuitem"
-                                  className="danger"
+                                  className={cx("danger", (!offerCode.can_update || isLoading) && "cursor-not-allowed opacity-30")}
                                   inert={!offerCode.can_update || isLoading}
                                   onClick={asyncVoid(async (e) => {
                                     e.stopPropagation();

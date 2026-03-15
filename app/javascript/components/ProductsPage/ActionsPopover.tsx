@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { archiveProduct, deleteProduct, duplicateProduct, unarchiveProduct } from "$app/data/product_dashboard";
 import { Membership, Product } from "$app/data/products";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -96,24 +97,24 @@ const ActionsPopover = ({
         </PopoverTrigger>
         <PopoverContent className="border-0 p-0 shadow-none">
           <div role="menu">
-            <div role="menuitem" inert={!product.can_duplicate || isDuplicating} onClick={() => void handleDuplicate()}>
+            <div role="menuitem" inert={!product.can_duplicate || isDuplicating} className={!product.can_duplicate || isDuplicating ? "cursor-not-allowed opacity-30" : undefined} onClick={() => void handleDuplicate()}>
               <Copy className="size-5" />
               &ensp;{isDuplicating ? "Duplicating..." : "Duplicate"}
             </div>
             {product.can_unarchive ? (
-              <div role="menuitem" inert={isUnarchiving} onClick={() => void handleUnarchive()}>
+              <div role="menuitem" inert={isUnarchiving} className={isUnarchiving ? "cursor-not-allowed opacity-30" : undefined} onClick={() => void handleUnarchive()}>
                 <Archive className="size-5" />
                 &ensp;{isUnarchiving ? "Unarchiving..." : "Unarchive"}
               </div>
             ) : null}
             {product.can_archive ? (
-              <div role="menuitem" inert={isArchiving} onClick={() => void handleArchive()}>
+              <div role="menuitem" inert={isArchiving} className={isArchiving ? "cursor-not-allowed opacity-30" : undefined} onClick={() => void handleArchive()}>
                 <Archive className="size-5" />
                 &ensp;{isArchiving ? "Archiving..." : "Archive"}
               </div>
             ) : null}
             <div
-              className="danger"
+              className={classNames("danger", (!product.can_destroy || isDeleting) && "cursor-not-allowed opacity-30")}
               inert={!product.can_destroy || isDeleting}
               role="menuitem"
               onClick={() => setConfirmingDelete(true)}
