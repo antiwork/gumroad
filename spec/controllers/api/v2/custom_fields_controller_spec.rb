@@ -189,5 +189,4 @@ describe Api::V2::CustomFieldsController do
       end
     end
   end
-
 end

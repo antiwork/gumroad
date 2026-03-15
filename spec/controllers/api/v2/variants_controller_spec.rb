@@ -296,5 +296,4 @@ describe Api::V2::VariantsController do
       end
     end
   end
-
 end

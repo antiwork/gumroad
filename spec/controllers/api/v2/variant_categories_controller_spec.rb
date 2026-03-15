@@ -215,5 +215,4 @@ describe Api::V2::VariantCategoriesController do
       end
     end
   end
-
 end

@@ -297,5 +297,4 @@ describe Api::V2::OfferCodesController do
       end
     end
   end
-
 end
