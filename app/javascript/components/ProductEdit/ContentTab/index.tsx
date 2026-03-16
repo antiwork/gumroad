@@ -85,7 +85,7 @@ import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
-import { Menu, MenuItem as MenuListItem } from "$app/components/ui/Menu";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
@@ -136,33 +136,33 @@ const FileUploadMenu = ({
 }) => (
   <Menu aria-label="Image and file uploader">
     <PopoverClose asChild>
-      <MenuListItem onClick={onEmbedMedia}>
+      <MenuItem onClick={onEmbedMedia}>
         <Images className="size-5" />
         <span>Embed media</span>
-      </MenuListItem>
+      </MenuItem>
     </PopoverClose>
     <PopoverClose asChild>
-      <MenuListItem asChild>
+      <MenuItem asChild>
         <label>
           <input type="file" name="file" className="sr-only" multiple onChange={(e) => onUploadFile(e.target)} />
           <Paperclip className="size-5" />
           <span>Computer files</span>
         </label>
-      </MenuListItem>
+      </MenuItem>
     </PopoverClose>
     {existingFiles.length > 0 ? (
       <PopoverClose asChild>
-        <MenuListItem onClick={onSelectExistingFiles}>
+        <MenuItem onClick={onSelectExistingFiles}>
           <File className="size-5" />
           <span>Existing product files</span>
-        </MenuListItem>
+        </MenuItem>
       </PopoverClose>
     ) : null}
     <PopoverClose asChild>
-      <MenuListItem onClick={onUploadFromDropbox}>
+      <MenuItem onClick={onUploadFromDropbox}>
         <DropboxIcon pack="brands" className="size-5" />
         <span>Dropbox files</span>
-      </MenuListItem>
+      </MenuItem>
     </PopoverClose>
   </Menu>
 );
@@ -717,7 +717,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <Menu onClick={() => setInsertMenuState(null)}>
                       {insertMenuState === "inputs" ? (
                         <>
-                          <MenuListItem
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setInsertMenuState("open");
@@ -725,31 +725,31 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <ChevronLeft className="size-5" />
                             <span>Back</span>
-                          </MenuListItem>
-                          <MenuListItem onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
                             <FileDetail className="size-5" />
                             <span>Short answer</span>
-                          </MenuListItem>
-                          <MenuListItem onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
                             <FileDetail className="size-5" />
                             <span>Long answer</span>
-                          </MenuListItem>
-                          <MenuListItem onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
                             <FolderPlus className="size-5" />
                             <span>Upload file</span>
-                          </MenuListItem>
+                          </MenuItem>
                         </>
                       ) : (
                         <>
-                          <MenuListItem onClick={() => setAddingButton({ label: "", url: "" })}>
+                          <MenuItem onClick={() => setAddingButton({ label: "", url: "" })}>
                             <CursorClick className="size-5" />
                             <span>Button</span>
-                          </MenuListItem>
-                          <MenuListItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                             <Minus className="size-5" />
                             <span>Divider</span>
-                          </MenuListItem>
-                          <MenuListItem
+                          </MenuItem>
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setInsertMenuState("inputs");
@@ -759,24 +759,24 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             <Rename />
                             <span>Input</span>
                             <ChevronRight className="ml-auto size-5" />
-                          </MenuListItem>
-                          <MenuListItem onClick={onInsertMoreLikeThis}>
+                          </MenuItem>
+                          <MenuItem onClick={onInsertMoreLikeThis}>
                             <Grid className="size-5" />
                             <span>More like this</span>
-                          </MenuListItem>
-                          <MenuListItem onClick={onInsertPosts}>
+                          </MenuItem>
+                          <MenuItem onClick={onInsertPosts}>
                             <FileDetail className="size-5" />
                             <span>List of posts</span>
-                          </MenuListItem>
-                          <MenuListItem onClick={onInsertLicense}>
+                          </MenuItem>
+                          <MenuItem onClick={onInsertLicense}>
                             <Key className="size-5" />
                             <span>License key</span>
-                          </MenuListItem>
-                          <MenuListItem onClick={() => setShowInsertPostModal(true)}>
+                          </MenuItem>
+                          <MenuItem onClick={() => setShowInsertPostModal(true)}>
                             <TwitterX pack="brands" className="size-5" />
                             <span>X post</span>
-                          </MenuListItem>
-                          <MenuListItem
+                          </MenuItem>
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowUpsellModal(true);
@@ -784,8 +784,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <CartPlus className="size-5" />
                             <span>Upsell</span>
-                          </MenuListItem>
-                          <MenuListItem
+                          </MenuItem>
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowReviewModal(true);
@@ -793,7 +793,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <Star pack="filled" className="size-5" />
                             <span>Review</span>
-                          </MenuListItem>
+                          </MenuItem>
                         </>
                       )}
                     </Menu>
