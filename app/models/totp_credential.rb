@@ -36,7 +36,7 @@ class TotpCredential < ApplicationRecord
   def redeem_recovery_code(code)
     return false if recovery_codes.blank?
 
-    normalized = code.to_s.upcase.gsub("-", "").strip
+    normalized = code.to_s.upcase.delete("-").strip
     hashes = JSON.parse(recovery_codes)
     matching_index = hashes.index { |h| BCrypt::Password.new(h) == normalized }
     return false unless matching_index
