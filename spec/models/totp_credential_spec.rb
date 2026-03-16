@@ -93,9 +93,9 @@ describe TotpCredential do
       credential.generate_recovery_codes
       credential.reload
 
-      hashes = JSON.parse(credential.recovery_codes)
-      expect(hashes.length).to eq 10
-      hashes.each do |h|
+      expect(credential.recovery_codes).to be_an(Array)
+      expect(credential.recovery_codes.length).to eq 10
+      credential.recovery_codes.each do |h|
         expect { BCrypt::Password.new(h) }.not_to raise_error
       end
     end

@@ -7,6 +7,9 @@ class TotpCredential < ApplicationRecord
 
   validates :user_id, uniqueness: true
 
+  serialize :recovery_codes, coder: JSON
+
+  DRIFT = 30
   RECOVERY_CODE_COUNT = 10
   RECOVERY_CODE_LENGTH = 8
   ISSUER_NAME = "Gumroad"
@@ -16,7 +19,7 @@ class TotpCredential < ApplicationRecord
   end
 
   def verify_code(code)
-    authenticate_otp(code, drift: 30).present?
+    authenticate_otp(code, drift: DRIFT).present?
   end
 
   def totp_provisioning_uri
@@ -27,7 +30,7 @@ class TotpCredential < ApplicationRecord
     codes = Array.new(RECOVERY_CODE_COUNT) { SecureRandom.alphanumeric(RECOVERY_CODE_LENGTH).upcase }
     hashed = codes.map { |code| BCrypt::Password.create(code) }
     update!(
-      recovery_codes: hashed.to_json,
+      recovery_codes: hashed,
       recovery_codes_generated_at: Time.current
     )
     codes
@@ -37,18 +40,17 @@ class TotpCredential < ApplicationRecord
     return false if recovery_codes.blank?
 
     normalized = code.to_s.upcase.delete("-").strip
-    hashes = JSON.parse(recovery_codes)
-    matching_index = hashes.index { |h| BCrypt::Password.new(h) == normalized }
+    matching_index = recovery_codes.index { |h| BCrypt::Password.new(h) == normalized }
     return false unless matching_index
 
-    hashes.delete_at(matching_index)
-    update!(recovery_codes: hashes.to_json)
+    recovery_codes.delete_at(matching_index)
+    update!(recovery_codes:)
     true
   end
 
   def recovery_codes_remaining
     return 0 if recovery_codes.blank?
 
-    JSON.parse(recovery_codes).size
+    recovery_codes.size
   end
 end
