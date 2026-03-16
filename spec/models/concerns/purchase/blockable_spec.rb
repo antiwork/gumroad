@@ -597,6 +597,31 @@ describe Purchase::Blockable do
         end
       end
 
+      context "when seller is verified" do
+        let(:verified_seller) { create(:user, verified: true) }
+        let(:verified_product) { create(:product, user: verified_seller) }
+        let!(:verified_purchase) { create(:purchase, link: verified_product, purchase_state: "in_progress") }
+
+        it "does not pause payouts for the seller" do
+          create_list(:failed_purchase, 5, link: verified_product, price_cents: 250)
+          verified_purchase.mark_failed!
+
+          expect(verified_seller.reload.payouts_paused_internally).to be(false)
+          expect(verified_seller.payouts_paused_by_source).to be_nil
+        end
+      end
+
+      context "when seller is not verified" do
+        it "pauses payouts when threshold is exceeded" do
+          expect(seller.verified?).to be(false)
+          create_list(:failed_purchase, 5, link: product, price_cents: 250)
+          purchase.mark_failed!
+
+          expect(seller.reload.payouts_paused_internally).to be(true)
+          expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        end
+      end
+
       context "when error code is ignored" do
         it "does not pause payouts for the seller" do
           create_list(:failed_purchase, 5, link: product, price_cents: 250)
