@@ -34,7 +34,7 @@ class Settings::TotpController < Settings::BaseController
       credential.update!(confirmed_at: Time.current)
       codes = credential.generate_recovery_codes
 
-      render json: { success: true, recovery_codes: codes }
+      render json: { success: true, recovery_codes: format_recovery_codes(codes) }
     else
       render json: { success: false, error_message: "Invalid code. Please try again." }, status: :unprocessable_entity
     end
@@ -59,7 +59,7 @@ class Settings::TotpController < Settings::BaseController
 
     codes = credential.generate_recovery_codes
 
-    render json: { success: true, recovery_codes: codes }
+    render json: { success: true, recovery_codes: format_recovery_codes(codes) }
   end
 
   private
@@ -69,5 +69,10 @@ class Settings::TotpController < Settings::BaseController
 
     def authorize
       super([:settings, :totp, @user])
+    end
+
+    def format_recovery_codes(codes)
+      midpoint = TotpCredential::RECOVERY_CODE_LENGTH / 2
+      codes.map { |code| "#{code[0...midpoint]}-#{code[midpoint..]}" }
     end
 end

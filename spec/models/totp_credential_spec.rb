@@ -85,7 +85,7 @@ describe TotpCredential do
       expect(codes.length).to eq 10
       codes.each do |code|
         expect(code.length).to eq 8
-        expect(code).to match(/\A[a-z0-9]+\z/)
+        expect(code).to match(/\A[A-Z0-9]+\z/)
       end
     end
 
@@ -118,7 +118,12 @@ describe TotpCredential do
     end
 
     it "is case-insensitive" do
-      expect(credential.redeem_recovery_code(codes.first.upcase)).to be true
+      expect(credential.redeem_recovery_code(codes.first.downcase)).to be true
+    end
+
+    it "accepts codes with a dash" do
+      code = codes.second
+      expect(credential.redeem_recovery_code(code.insert(4, "-"))).to be true
     end
 
     it "returns false for an invalid code" do

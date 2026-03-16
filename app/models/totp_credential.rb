@@ -24,7 +24,7 @@ class TotpCredential < ApplicationRecord
   end
 
   def generate_recovery_codes
-    codes = Array.new(RECOVERY_CODE_COUNT) { SecureRandom.alphanumeric(RECOVERY_CODE_LENGTH).downcase }
+    codes = Array.new(RECOVERY_CODE_COUNT) { SecureRandom.alphanumeric(RECOVERY_CODE_LENGTH).upcase }
     hashed = codes.map { |code| BCrypt::Password.create(code) }
     update!(
       recovery_codes: hashed.to_json,
@@ -36,8 +36,9 @@ class TotpCredential < ApplicationRecord
   def redeem_recovery_code(code)
     return false if recovery_codes.blank?
 
+    normalized = code.to_s.upcase.gsub("-", "").strip
     hashes = JSON.parse(recovery_codes)
-    matching_index = hashes.index { |h| BCrypt::Password.new(h) == code.to_s.downcase.strip }
+    matching_index = hashes.index { |h| BCrypt::Password.new(h) == normalized }
     return false unless matching_index
 
     hashes.delete_at(matching_index)

@@ -67,7 +67,7 @@ describe Settings::TotpController, type: :controller do
     context "when user has an unconfirmed totp credential" do
       let!(:credential) { create(:totp_credential, user:) }
 
-      it "confirms the credential with a valid code and returns recovery codes" do
+      it "confirms the credential with a valid code and returns formatted recovery codes" do
         code = credential.otp_code
 
         post :confirm, params: { code: }
@@ -77,6 +77,7 @@ describe Settings::TotpController, type: :controller do
         expect(json["success"]).to be true
         expect(json["recovery_codes"]).to be_an(Array)
         expect(json["recovery_codes"].length).to eq(10)
+        json["recovery_codes"].each { |c| expect(c).to match(/\A[A-Z0-9]{4}-[A-Z0-9]{4}\z/) }
         expect(credential.reload).to be_confirmed
       end
 
@@ -147,7 +148,7 @@ describe Settings::TotpController, type: :controller do
     context "when user has a confirmed totp credential" do
       let!(:credential) { create(:totp_credential, :with_recovery_codes, user:) }
 
-      it "regenerates recovery codes" do
+      it "regenerates formatted recovery codes" do
         old_codes = credential.recovery_codes
 
         post :regenerate_recovery_codes
@@ -157,6 +158,7 @@ describe Settings::TotpController, type: :controller do
         expect(json["success"]).to be true
         expect(json["recovery_codes"]).to be_an(Array)
         expect(json["recovery_codes"].length).to eq(10)
+        json["recovery_codes"].each { |c| expect(c).to match(/\A[A-Z0-9]{4}-[A-Z0-9]{4}\z/) }
         expect(credential.reload.recovery_codes).not_to eq(old_codes)
       end
     end
