@@ -9,7 +9,7 @@ class Settings::TotpController < Settings::BaseController
       return render json: { success: false, error_message: "Authenticator app is already enabled." }, status: :unprocessable_entity
     end
 
-    @user.totp_credential&.destroy unless @user.totp_credential&.confirmed?
+    @user.totp_credential&.destroy
 
     credential = @user.create_totp_credential!
     uri = credential.totp_provisioning_uri
@@ -51,13 +51,11 @@ class Settings::TotpController < Settings::BaseController
   end
 
   def regenerate_recovery_codes
-    credential = @user.totp_credential
-
-    unless credential&.confirmed?
+    unless @user.totp_enabled?
       return render json: { success: false, error_message: "Authenticator app is not enabled." }, status: :unprocessable_entity
     end
 
-    codes = credential.generate_recovery_codes
+    codes = @user.totp_credential.generate_recovery_codes
 
     render json: { success: true, recovery_codes: format_recovery_codes(codes) }
   end
