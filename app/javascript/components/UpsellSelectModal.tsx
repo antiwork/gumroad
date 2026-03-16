@@ -7,12 +7,12 @@ import { assertResponseError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
-import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { RecurrencePriceValue } from "$app/components/ProductEdit/state";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
@@ -157,17 +157,14 @@ export const UpsellSelectModal = ({
         <FieldsetTitle>
           <Label htmlFor="discount">Discount</Label>
         </FieldsetTitle>
-        <Details
-          className="toggle"
-          open={!!discount}
-          summary={
+        <Details open={!!discount}>
+          <DetailsToggle chevronPosition="none" className="mb-0">
             <Switch
               checked={!!discount}
               onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
               label="Add a discount to the offered product"
             />
-          }
-        >
+          </DetailsToggle>
           {discount && selectedProduct ? (
             <Dropdown className="max-w-sm">
               <DiscountInput

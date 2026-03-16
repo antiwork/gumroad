@@ -13,6 +13,7 @@ import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceip
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
@@ -476,10 +477,10 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
 const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gift: Gift }) =>
   gift.is_sender_purchase ? (
     <>
-      <details>
-        <summary>
+      <Details>
+        <DetailsToggle>
           <h3>Gift Sender Info</h3>
-        </summary>
+        </DetailsToggle>
         <dl>
           <dt>For</dt>
           <dd>{gift.other_email}</dd>
@@ -494,13 +495,13 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
             </Link>
           </dd>
         </dl>
-      </details>
+      </Details>
 
       <hr />
-      <details>
-        <summary>
+      <Details>
+        <DetailsToggle>
           <h3>Edit giftee email</h3>
-        </summary>
+        </DetailsToggle>
         <Form
           url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
           method="POST"
@@ -515,13 +516,13 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
             </div>
           )}
         </Form>
-      </details>
+      </Details>
     </>
   ) : (
-    <details>
-      <summary>
+    <Details>
+      <DetailsToggle>
         <h3>Gift Receiver Info</h3>
-      </summary>
+      </DetailsToggle>
       <dl>
         <dt>From</dt>
         <dd>{gift.other_email}</dd>
@@ -536,7 +537,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
           </Link>
         </dd>
       </dl>
-    </details>
+    </Details>
   );
 
 const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
@@ -679,12 +680,12 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     purchase.is_free_trial_purchase ? (
       <>
         <hr />
-        <details>
-          <summary>
+        <Details>
+          <DetailsToggle>
             <h3>Resend receipt</h3>
-          </summary>
+          </DetailsToggle>
           <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
-        </details>
+        </Details>
       </>
     ) : null}
     <hr />
