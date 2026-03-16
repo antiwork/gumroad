@@ -571,8 +571,8 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
               className={classNames(
                 "h-1 w-full appearance-none rounded border-0 bg-active-bg [&::-moz-meter-bar]:rounded [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded",
                 isPlaying
-                  ? "[&::-moz-meter-bar]:bg-accent [&::-webkit-meter-optimum-value]:bg-accent"
-                  : "[&::-moz-meter-bar]:bg-current [&::-webkit-meter-optimum-value]:bg-current",
+                  ? "[&::-moz-meter-bar]:[background:var(--color-accent)] [&::-webkit-meter-optimum-value]:[background:var(--color-accent)]"
+                  : "[&::-moz-meter-bar]:[background:currentColor] [&::-webkit-meter-optimum-value]:[background:currentColor]",
               )}
             />
             <small>{humanizedDuration(file.duration - latestMediaLocation)} left</small>
