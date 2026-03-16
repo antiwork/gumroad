@@ -3,6 +3,9 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
+const menuItemStyles =
+  "block cursor-pointer overflow-hidden border-0 px-4 py-2 text-ellipsis whitespace-nowrap hover:bg-active-bg [&>:not(:last-child)]:mr-2";
+
 export const Menu = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...rest }, ref) => (
     <div
@@ -27,11 +30,7 @@ export const MenuItem = React.forwardRef<HTMLDivElement, MenuItemProps>(
       <Component
         ref={ref}
         role="menuitem"
-        className={classNames(
-          "block cursor-pointer overflow-hidden border-0 px-4 py-2 text-ellipsis whitespace-nowrap hover:bg-active-bg [&>:not(:last-child)]:mr-2",
-          variant === "danger" && "text-danger",
-          className,
-        )}
+        className={classNames(menuItemStyles, variant === "danger" && "text-danger", className)}
         {...rest}
       />
     );
@@ -52,11 +51,7 @@ export const MenuItemRadio = React.forwardRef<HTMLDivElement, MenuItemRadioProps
         ref={ref}
         role="menuitemradio"
         aria-checked={checked}
-        className={classNames(
-          "block cursor-pointer overflow-hidden border-0 px-4 py-2 text-ellipsis whitespace-nowrap hover:bg-active-bg [&>:not(:last-child)]:mr-2",
-          checked && "font-bold",
-          className,
-        )}
+        className={classNames(menuItemStyles, checked && "font-bold", className)}
         {...rest}
       />
     );
