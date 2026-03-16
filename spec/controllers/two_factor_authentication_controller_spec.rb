@@ -317,7 +317,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
 
         expect(flash[:notice]).to eq "Successfully logged in!"
         expect(response).to redirect_to(controller.send(:login_path_for, @user))
-        expect(totp_credential.reload.recovery_codes_remaining).to eq(9)
+        expect(totp_credential.reload.recovery_codes.size).to eq(9)
       end
 
       it "rejects an already-used recovery code" do

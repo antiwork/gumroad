@@ -114,7 +114,7 @@ describe TotpCredential do
 
     it "returns true and removes a valid recovery code" do
       expect(credential.redeem_recovery_code(codes.first)).to be true
-      expect(credential.recovery_codes_remaining).to eq 9
+      expect(credential.reload.recovery_codes.size).to eq 9
     end
 
     it "is case-insensitive" do
@@ -141,19 +141,4 @@ describe TotpCredential do
     end
   end
 
-  describe "#recovery_codes_remaining" do
-    let(:credential) { create(:totp_credential, :confirmed, user:) }
-
-    it "returns 0 when no recovery codes exist" do
-      expect(credential.recovery_codes_remaining).to eq 0
-    end
-
-    it "returns the count of remaining codes" do
-      codes = credential.generate_recovery_codes
-      expect(credential.recovery_codes_remaining).to eq 10
-
-      credential.redeem_recovery_code(codes.first)
-      expect(credential.recovery_codes_remaining).to eq 9
-    end
-  end
 end

@@ -47,10 +47,4 @@ class TotpCredential < ApplicationRecord
     update!(recovery_codes:)
     true
   end
-
-  def recovery_codes_remaining
-    return 0 if recovery_codes.blank?
-
-    recovery_codes.size
-  end
 end
