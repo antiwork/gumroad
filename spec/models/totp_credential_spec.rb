@@ -140,5 +140,4 @@ describe TotpCredential do
       expect(credential.redeem_recovery_code("anything")).to be false
     end
   end
-
 end
