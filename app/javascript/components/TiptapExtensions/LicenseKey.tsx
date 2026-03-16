@@ -55,7 +55,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
           <RowContent className="content" contentEditable={false}>
             <Key pack="filled" className="type-icon size-5" />
             <div>
-              <h4 className="text-singleline">{licenseKey}</h4>
+              <h4 className="truncate">{licenseKey}</h4>
               <ul className="inline">
                 <li>{editor.isEditable ? "License key (sample)" : "License key"}</li>
                 {isMultiSeatLicense && seats !== null ? <li>{`${seats} ${seats === 1 ? "Seat" : "Seats"}`}</li> : null}

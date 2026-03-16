@@ -56,18 +56,10 @@
     }
   }
 
-  .text-singleline {
-    @include text-singleline;
-  }
-
   a {
     color: var(--color);
     text-decoration: underline;
     cursor: pointer;
-  }
-
-  .link {
-    @extend a;
   }
 
   sub {
