@@ -181,6 +181,15 @@ dl {
   }
 }
 
+[inert] {
+  cursor: not-allowed;
+  opacity: $disabled-opacity;
+}
+
+[hidden] {
+  display: none !important;
+}
+
 meter {
   height: 1lh;
   width: 100%;

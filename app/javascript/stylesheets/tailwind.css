@@ -81,14 +81,6 @@
   }
 }
 
-[inert] {
-  @apply cursor-not-allowed opacity-30;
-}
-
-[hidden] {
-  @apply hidden!;
-}
-
 /* Coins parallax animation */
 .parallax-up {
   transform: translateY(0);
