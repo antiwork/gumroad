@@ -106,58 +106,6 @@ ul.inline {
     }
   }
 }
-
-details {
-  & > summary {
-    all: inherit;
-    outline: revert;
-    display: grid;
-    grid-template-columns: auto 1fr;
-    cursor: pointer;
-    list-style: none;
-
-    &::marker,
-    &::-webkit-details-marker {
-      display: none;
-    }
-
-    &::before {
-      content: "\00a0";
-      display: inline-block;
-      background: currentColor;
-      min-height: max(1lh, 1em);
-      width: 1em;
-      mask-image: url("data:image/svg+xml,%3Csvg width='24' height='24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m9 5.007 7 7-7 7' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-      mask-position: 50% 50%;
-      mask-size: 120%;
-      mask-repeat: no-repeat;
-      flex-shrink: 0;
-      margin-right: spacer(1);
-    }
-  }
-  &[open] > summary {
-    // details elements do not support display: grid in all browsers
-    margin-bottom: spacer(2);
-
-    &::before {
-      mask-image: url("data:image/svg+xml,%3Csvg width='24' height='24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m19 9.007-7 7-7-7' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    }
-  }
-
-  &.toggle {
-    & > summary {
-      grid-template-columns: 1fr;
-
-      &::before {
-        content: none;
-      }
-    }
-    &[open] > summary {
-      margin-bottom: 0;
-    }
-  }
-}
-
 .dummy {
   @include dummy;
 }
