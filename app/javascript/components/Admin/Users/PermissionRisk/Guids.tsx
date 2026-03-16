@@ -7,6 +7,7 @@ import { request } from "$app/utils/request";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type UserGuids = { guid: string; user_external_ids: string[] }[];
 
@@ -60,9 +61,9 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
     setIsLoading(false);
   };
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
+  const onToggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
       void fetchUserGuids();
     }
   };
@@ -70,12 +71,12 @@ const AdminUserGuids = ({ user_external_id }: { user_external_id: string }) => {
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
+      <Details open={open} onToggle={onToggle}>
+        <DetailsToggle>
           <h3>GUIDs</h3>
-        </summary>
+        </DetailsToggle>
         <UserGuidsContent userGuids={userGuids} isLoading={isLoading} />
-      </details>
+      </Details>
     </>
   );
 };

@@ -105,7 +105,7 @@ export const ShareSection = ({
               )}
               aria-label="Add to wishlist"
             >
-              <span className="text-singleline flex-1">
+              <span className="flex-1 truncate">
                 {saveState.type === "success"
                   ? saveState.wishlist.name
                   : saveState.type === "saving"

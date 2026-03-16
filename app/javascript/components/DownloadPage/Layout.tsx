@@ -17,6 +17,7 @@ import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Avatar } from "$app/components/ui/Avatar";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -146,10 +147,10 @@ export const Layout = ({
               {content_unavailability_reason_code === null && purchase.membership ? (
                 purchase.membership.is_installment_plan ? (
                   <CardContent asChild details>
-                    <details>
-                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                    <Details>
+                      <DetailsToggle chevronPosition="right" className="grow">
                         Installment plan
-                      </summary>
+                      </DetailsToggle>
                       {purchase.membership.is_installment_plan_completed ? (
                         "This installment plan has been paid in full."
                       ) : (
@@ -157,14 +158,14 @@ export const Layout = ({
                           Manage
                         </NavigationButton>
                       )}
-                    </details>
+                    </Details>
                   </CardContent>
                 ) : (
                   <CardContent asChild details>
-                    <details>
-                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                    <Details>
+                      <DetailsToggle chevronPosition="right" className="grow">
                         Membership
-                      </summary>
+                      </DetailsToggle>
                       <div style={{ display: "grid" }}>
                         {purchase.membership.has_active_subscription ? (
                           <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
@@ -178,14 +179,16 @@ export const Layout = ({
                           </NavigationButton>
                         ) : null}
                       </div>
-                    </details>
+                    </Details>
                   </CardContent>
                 )
               ) : null}
               {receiptPurchaseId ? (
                 <CardContent asChild details>
-                  <details>
-                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Receipt</summary>
+                  <Details>
+                    <DetailsToggle chevronPosition="right" className="grow">
+                      Receipt
+                    </DetailsToggle>
                     <div className="flex flex-col gap-4">
                       <NavigationButton
                         href={
@@ -200,18 +203,20 @@ export const Layout = ({
                         {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                       </Button>
                     </div>
-                  </details>
+                  </Details>
                 </CardContent>
               ) : null}
               {loggedInUser !== null ? (
                 <CardContent asChild details>
-                  <details>
-                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Library</summary>
+                  <Details>
+                    <DetailsToggle chevronPosition="right" className="grow">
+                      Library
+                    </DetailsToggle>
                     <div className="flex flex-col gap-4">
                       <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
                       <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
                     </div>
-                  </details>
+                  </Details>
                 </CardContent>
               ) : null}
             </Card>
