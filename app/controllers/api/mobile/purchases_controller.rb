@@ -107,6 +107,10 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
 
       options[:seller] = User.where(external_id: Array.wrap(params[:seller])) if params[:seller]
       options[:archived] = ActiveModel::Type::Boolean.new.cast(params[:archived]) if params[:archived]
+      if params[:products].present?
+        products = Link.where(unique_permalink: Array.wrap(params[:products]))
+        options[:any_products_or_variants] = { products: }
+      end
       options
     end
 
