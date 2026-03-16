@@ -737,7 +737,11 @@ export const RatingsHistogramRow = ({ rating, percentage }: { rating: number; pe
   return (
     <>
       <div>{label}</div>
-      <meter aria-label={label} value={percentage / 100} />
+      <meter
+        aria-label={label}
+        value={percentage / 100}
+        className="h-[1lh] w-full appearance-none rounded border border-border bg-none [&::-moz-meter-bar]:rounded [&::-moz-meter-bar]:[background:var(--color-accent)] [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded [&::-webkit-meter-optimum-value]:[background:var(--color-accent)]"
+      />
       <div>{formattedPercentage}</div>
     </>
   );
