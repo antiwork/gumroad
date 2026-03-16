@@ -138,7 +138,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
       expect(page).to have_content "Enter the code from your authenticator app."
       expect(page).not_to have_button "Resend Authentication Token"
 
-      fill_in "Authenticator Code", with: "000000", fill_options: { clear: :backspace }
+      fill_in "Authenticator Code", with: "123456", fill_options: { clear: :backspace }
       click_on "Login"
       expect(page).to have_content "Invalid token, please try again."
 

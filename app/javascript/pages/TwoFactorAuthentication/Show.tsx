@@ -26,8 +26,7 @@ type FormData = {
 };
 
 function TwoFactorAuthentication() {
-  const { user_id, email, token: initialToken, authenticity_token, two_factor_method } =
-    usePage<PageProps>().props;
+  const { user_id, email, token: initialToken, authenticity_token, two_factor_method } = usePage<PageProps>().props;
   const next = new URL(useOriginalLocation()).searchParams.get("next");
   const uid = React.useId();
 
