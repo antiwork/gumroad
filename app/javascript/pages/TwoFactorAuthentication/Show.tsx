@@ -101,31 +101,42 @@ function TwoFactorAuthentication() {
           <Button color="primary" type="submit" disabled={form.processing}>
             {form.processing ? "Logging in..." : "Login"}
           </Button>
-          {two_factor_method === "email" ? (
-            <Button disabled={switchForm.processing} onClick={() => resendToken()}>
-              Resend Authentication Token
-            </Button>
-          ) : null}
-          {two_factor_method === "totp" ? (
-            <>
-              <Button disabled={switchForm.processing} onClick={switchToEmail}>
-                Use email instead
-              </Button>
-              <Button disabled={switchForm.processing} onClick={switchToRecovery}>
-                Use a recovery code
-              </Button>
-            </>
-          ) : null}
-          {two_factor_method === "recovery" ? (
-            <>
-              <Button disabled={switchForm.processing} onClick={switchToAuthenticator}>
-                Use authenticator app
-              </Button>
-              <Button disabled={switchForm.processing} onClick={switchToEmail}>
-                Use email instead
-              </Button>
-            </>
-          ) : null}
+          {(() => {
+            switch (two_factor_method) {
+              case "email":
+                return (
+                  <Button disabled={switchForm.processing} onClick={() => resendToken()}>
+                    Resend Authentication Token
+                  </Button>
+                );
+              case "totp":
+                return (
+                  <>
+                    <Button disabled={switchForm.processing} onClick={switchToEmail}>
+                      Use email instead
+                    </Button>
+                    <Button disabled={switchForm.processing} onClick={switchToRecovery}>
+                      Use a recovery code
+                    </Button>
+                  </>
+                );
+              case "recovery":
+                return (
+                  <>
+                    <Button disabled={switchForm.processing} onClick={switchToAuthenticator}>
+                      Use authenticator app
+                    </Button>
+                    <Button disabled={switchForm.processing} onClick={switchToEmail}>
+                      Use email instead
+                    </Button>
+                  </>
+                );
+              default: {
+                const _exhaustive: never = two_factor_method;
+                return _exhaustive;
+              }
+            }
+          })()}
         </section>
       </form>
     </Layout>
