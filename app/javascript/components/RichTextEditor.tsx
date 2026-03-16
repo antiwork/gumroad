@@ -449,7 +449,6 @@ export const RichTextEditorToolbar = ({
                 <PopoverClose key={option.name} asChild>
                   <MenuItemRadio
                     checked={option === activeFormatOption}
-                    role="menuitemradio"
                     aria-checked={option === activeFormatOption}
                     className="aria-checked:bg-active-bg"
                     onClick={() => {
