@@ -451,6 +451,10 @@ Rails.application.routes.draw do
         post :resend_confirmation_email
       end
       resource :password, only: %i[show update], controller: "password"
+      resource :totp, only: %i[create destroy], controller: "totp" do
+        post :confirm
+        post :regenerate_recovery_codes
+      end
       resource :profile, only: %i[show update], controller: "profile"
       resource :third_party_analytics, only: %i[show update], controller: "third_party_analytics"
       resource :advanced, only: %i[show update], controller: "advanced"
