@@ -142,24 +142,6 @@ menu > li {
   background-blend-mode: overlay;
 }
 
-dl {
-  display: grid;
-  grid-template-columns: fit-content(40%);
-  column-gap: spacer(3);
-
-  dt {
-    grid-column: 1;
-
-    &::after {
-      content: ":";
-    }
-  }
-
-  dd {
-    grid-column: 2;
-  }
-}
-
 [hidden] {
   display: none !important;
 }
