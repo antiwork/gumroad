@@ -42,6 +42,7 @@ import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -444,9 +445,8 @@ const DiscountsPage = ({
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-                              <div role="menu">
-                                <div
-                                  role="menuitem"
+                              <Menu>
+                                <MenuItem
                                   inert={!offerCode.can_update || isLoading}
                                   onClick={() => {
                                     setPopoverOfferCodeId(null);
@@ -455,11 +455,10 @@ const DiscountsPage = ({
                                   }}
                                 >
                                   <Copy className="size-5" />
-                                  &ensp;Duplicate
-                                </div>
-                                <div
-                                  role="menuitem"
-                                  className="danger"
+                                  Duplicate
+                                </MenuItem>
+                                <MenuItem
+                                  variant="danger"
                                   inert={!offerCode.can_update || isLoading}
                                   onClick={asyncVoid(async (e) => {
                                     e.stopPropagation();
@@ -475,9 +474,9 @@ const DiscountsPage = ({
                                   })}
                                 >
                                   <Trash className="size-5" />
-                                  &ensp;Delete
-                                </div>
-                              </div>
+                                  Delete
+                                </MenuItem>
+                              </Menu>
                             </PopoverContent>
                           </Popover>
                         </div>

@@ -1,7 +1,7 @@
 import React from "react";
 
 export const ApiParameters = ({ children }: { children: React.ReactNode }) => (
-  <div className="parameters">
+  <div>
     <h4>Parameters:</h4>
     {children}
   </div>
