@@ -48,7 +48,7 @@ export const NavigationButtonInertia = React.forwardRef<HTMLAnchorElement, Navig
           buttonVariants({ variant, size, color: color && !outline ? color : undefined }),
           className,
           "no-underline",
-          disabled && "pointer-events-none cursor-not-allowed opacity-30",
+          disabled && "pointer-events-none opacity-30",
         )}
         ref={ref}
         inert={disabled}

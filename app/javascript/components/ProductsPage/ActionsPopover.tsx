@@ -100,7 +100,7 @@ const ActionsPopover = ({
             <div
               role="menuitem"
               inert={!product.can_duplicate || isDuplicating}
-              className={!product.can_duplicate || isDuplicating ? "cursor-not-allowed opacity-30" : undefined}
+              className={!product.can_duplicate || isDuplicating ? "opacity-30" : undefined}
               onClick={() => void handleDuplicate()}
             >
               <Copy className="size-5" />
@@ -110,7 +110,7 @@ const ActionsPopover = ({
               <div
                 role="menuitem"
                 inert={isUnarchiving}
-                className={isUnarchiving ? "cursor-not-allowed opacity-30" : undefined}
+                className={isUnarchiving ? "opacity-30" : undefined}
                 onClick={() => void handleUnarchive()}
               >
                 <Archive className="size-5" />
@@ -121,7 +121,7 @@ const ActionsPopover = ({
               <div
                 role="menuitem"
                 inert={isArchiving}
-                className={isArchiving ? "cursor-not-allowed opacity-30" : undefined}
+                className={isArchiving ? "opacity-30" : undefined}
                 onClick={() => void handleArchive()}
               >
                 <Archive className="size-5" />
@@ -129,7 +129,7 @@ const ActionsPopover = ({
               </div>
             ) : null}
             <div
-              className={classNames("danger", (!product.can_destroy || isDeleting) && "cursor-not-allowed opacity-30")}
+              className={classNames("danger", (!product.can_destroy || isDeleting) && "opacity-30")}
               inert={!product.can_destroy || isDeleting}
               role="menuitem"
               onClick={() => setConfirmingDelete(true)}

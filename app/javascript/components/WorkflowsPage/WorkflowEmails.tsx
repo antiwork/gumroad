@@ -273,7 +273,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                 <Link
                   href={Routes.workflows_path()}
                   inert={isBusy || undefined}
-                  className={isBusy ? "cursor-not-allowed opacity-30" : undefined}
+                  className={isBusy ? "opacity-30" : undefined}
                 >
                   {workflow.published ? (
                     <>

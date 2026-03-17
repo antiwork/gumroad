@@ -27,7 +27,7 @@ const WorkflowList = ({ workflows }: WorkflowListProps) => {
       <Link
         href={Routes.new_workflow_path()}
         inert={!canManageWorkflow || undefined}
-        className={!canManageWorkflow ? "cursor-not-allowed opacity-30" : undefined}
+        className={!canManageWorkflow ? "opacity-30" : undefined}
       >
         New workflow
       </Link>
@@ -136,7 +136,7 @@ const WorkflowRow = ({
               href={Routes.edit_workflow_path(workflow.external_id)}
               aria-label="Edit workflow"
               inert={!canManageWorkflow || undefined}
-              className={!canManageWorkflow ? "cursor-not-allowed opacity-30" : undefined}
+              className={!canManageWorkflow ? "opacity-30" : undefined}
             >
               <Pencil className="size-5" />
             </Link>
@@ -205,7 +205,7 @@ const WorkflowRow = ({
           <Link
             href={Routes.workflow_emails_path(workflow.external_id)}
             inert={!canManageWorkflow || undefined}
-            className={!canManageWorkflow ? "cursor-not-allowed opacity-30" : undefined}
+            className={!canManageWorkflow ? "opacity-30" : undefined}
           >
             add one
           </Link>

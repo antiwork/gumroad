@@ -296,7 +296,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
             <Link
               href={Routes.workflows_path()}
               inert={form.processing || undefined}
-              className={form.processing ? "cursor-not-allowed opacity-30" : undefined}
+              className={form.processing ? "opacity-30" : undefined}
             >
               Cancel
             </Link>
