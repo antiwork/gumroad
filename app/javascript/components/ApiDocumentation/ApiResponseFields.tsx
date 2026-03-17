@@ -1,7 +1,7 @@
 import React from "react";
 
-import { Details } from "$app/components/Details";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 export type FieldDefinition = {
   name: string;
@@ -14,7 +14,12 @@ export type FieldDefinition = {
 export const ApiResponseFields = ({ children }: { children: React.ReactNode }) => (
   <Card>
     <CardContent>
-      <Details summary={<h4>Response fields</h4>}>{children}</Details>
+      <Details>
+        <DetailsToggle>
+          <h4>Response fields</h4>
+        </DetailsToggle>
+        {children}
+      </Details>
     </CardContent>
   </Card>
 );

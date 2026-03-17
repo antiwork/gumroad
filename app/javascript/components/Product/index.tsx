@@ -788,7 +788,7 @@ const Reviews = ({
           {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "rating" : "ratings"}`})
         </div>
       </header>
-      <div itemProp="aggregateRating" itemType="https://schema.org/AggregateRating" itemScope hidden>
+      <div itemProp="aggregateRating" itemType="https://schema.org/AggregateRating" itemScope className="hidden">
         <div itemProp="reviewCount">{ratings.count}</div>
         <div itemProp="ratingValue">{ratings.average}</div>
       </div>
