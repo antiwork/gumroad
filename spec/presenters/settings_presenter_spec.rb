@@ -325,13 +325,13 @@ describe SettingsPresenter do
       end
 
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:)
+        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false)
       end
     end
 
     context "when seller is registered using email" do
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:)
+        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false)
       end
     end
   end

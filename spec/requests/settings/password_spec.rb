@@ -134,4 +134,31 @@ describe("Password Settings Scenario", type: :system, js: true) do
       end
     end
   end
+
+  describe "two-factor authentication section" do
+    let(:user) { create(:user) }
+
+    context "when feature flag is active" do
+      before do
+        Feature.activate(:authenticator_2fa)
+      end
+
+      it "displays authenticator app status" do
+        visit settings_password_path
+
+        expect(page).to have_text("Two-factor authentication")
+        expect(page).to have_text("Authenticator app")
+        expect(page).to have_button("Set up")
+      end
+    end
+
+    context "when feature flag is not active" do
+      it "does not display the two-factor authentication section" do
+        visit settings_password_path
+
+        expect(page).not_to have_text("Two-factor authentication")
+        expect(page).not_to have_text("Authenticator app")
+      end
+    end
+  end
 end
