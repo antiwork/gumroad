@@ -14,6 +14,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -124,7 +125,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
                       )}
                       <div>
                         {post.date.type === "date" ? (
-                          <ul className="inline">
+                          <InlineList>
                             <li>
                               {parseISO(post.date.value).toLocaleDateString(userAgentInfo.locale, {
                                 month: "long",
@@ -133,7 +134,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
                               })}
                             </li>
                             <li>{formatDistanceToNow(parseISO(post.date.value))} ago</li>
-                          </ul>
+                          </InlineList>
                         ) : post.date.time_duration === 0 ? (
                           "Available immediately after purchase"
                         ) : (

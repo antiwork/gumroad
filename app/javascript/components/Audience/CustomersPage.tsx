@@ -91,6 +91,7 @@ import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -2609,10 +2610,10 @@ const FileRow = ({ file, disabled, onDelete }: { file: File; disabled?: boolean;
       <FileKindIcon extension={file.extension} />
       <div>
         <h4>{file.name}</h4>
-        <ul className="inline">
+        <InlineList>
           <li>{file.extension}</li>
           <li>{FileUtils.getFullFileSizeString(file.size)}</li>
-        </ul>
+        </InlineList>
       </div>
     </RowContent>
     <RowActions>
