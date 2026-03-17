@@ -2,10 +2,10 @@
 
 class Onetime::NotifySellersAboutLegacyFeeMigration < Onetime::Base
   LAST_PROCESSED_USER_ID_KEY = "notify_sellers_legacy_fee_migration_last_user_id"
-  SUBJECT = "Heads up: your Gumroad fees are changing"
+  SUBJECT = "Heads up: Your Gumroad fees are changing"
   BODY = <<~HTML
-    <p>In 2023, Gumroad moved to a flat 10% + $0.50 per transaction for all creators. Your account has been on an older rate that carried over during that transition.</p>
-    <p>Starting today, your account will move to the same pricing as everyone else on Gumroad.</p>
+    <p>In 2023, Gumroad moved to a flat 10% + $0.50 per transaction for all creators. Your membership products created before the transition have remained on an older rate.</p>
+    <p>Starting today, those memberships will move to the same pricing as everything else on Gumroad.</p>
     <p>You can see the full details at <a href="https://gumroad.com/pricing">gumroad.com/pricing</a>.</p>
     <p>If you have any questions, just reply to this email.</p>
     <p>The Gumroad Team</p>
