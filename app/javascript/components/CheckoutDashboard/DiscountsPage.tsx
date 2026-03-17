@@ -12,6 +12,7 @@ import {
   getStatistics,
   updateDiscount,
 } from "$app/data/offer_code";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -448,7 +449,9 @@ const DiscountsPage = ({
                                 <div
                                   role="menuitem"
                                   inert={!offerCode.can_update || isLoading}
-                                  className={!offerCode.can_update || isLoading ? "cursor-not-allowed opacity-30" : undefined}
+                                  className={classNames(
+                                    (!offerCode.can_update || isLoading) && "cursor-not-allowed opacity-30",
+                                  )}
                                   onClick={() => {
                                     setPopoverOfferCodeId(null);
                                     setSelectedOfferCodeId(offerCode.id);
@@ -460,7 +463,10 @@ const DiscountsPage = ({
                                 </div>
                                 <div
                                   role="menuitem"
-                                  className={cx("danger", (!offerCode.can_update || isLoading) && "cursor-not-allowed opacity-30")}
+                                  className={classNames(
+                                    "danger",
+                                    (!offerCode.can_update || isLoading) && "cursor-not-allowed opacity-30",
+                                  )}
                                   inert={!offerCode.can_update || isLoading}
                                   onClick={asyncVoid(async (e) => {
                                     e.stopPropagation();

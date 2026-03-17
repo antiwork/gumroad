@@ -22,7 +22,7 @@ export const brandNames = [
 export type BrandName = (typeof brandNames)[number];
 
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:hover:translate-0 disabled:hover:shadow-none",
+  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none",
   {
     variants: {
       variant: {
@@ -124,7 +124,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const classes = classNames(
       buttonVariants({ variant, size, color: color || undefined }),
-      disabled && "cursor-not-allowed opacity-30",
+      disabled && "cursor-not-allowed opacity-30 hover:translate-0 hover:shadow-none",
       className,
     );
     const Comp = asChild ? Slot : "button";
