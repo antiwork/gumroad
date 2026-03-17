@@ -110,30 +110,46 @@ function TwoFactorAuthentication() {
                 );
               case "totp":
                 return (
-                  <>
-                    <Button disabled={switchForm.processing} onClick={switchToEmail}>
+                  <div className="flex gap-6">
+                    <button
+                      type="button"
+                      className="cursor-pointer underline all-unset"
+                      disabled={switchForm.processing}
+                      onClick={switchToEmail}
+                    >
                       Use email instead
-                    </Button>
-                    <Button disabled={switchForm.processing} onClick={switchToRecovery}>
+                    </button>
+                    <button
+                      type="button"
+                      className="cursor-pointer underline all-unset"
+                      disabled={switchForm.processing}
+                      onClick={switchToRecovery}
+                    >
                       Use a recovery code
-                    </Button>
-                  </>
+                    </button>
+                  </div>
                 );
               case "recovery":
                 return (
-                  <>
-                    <Button disabled={switchForm.processing} onClick={switchToAuthenticator}>
+                  <div className="flex gap-6">
+                    <button
+                      type="button"
+                      className="cursor-pointer underline all-unset"
+                      disabled={switchForm.processing}
+                      onClick={switchToAuthenticator}
+                    >
                       Use authenticator app
-                    </Button>
-                    <Button disabled={switchForm.processing} onClick={switchToEmail}>
+                    </button>
+                    <button
+                      type="button"
+                      className="cursor-pointer underline all-unset"
+                      disabled={switchForm.processing}
+                      onClick={switchToEmail}
+                    >
                       Use email instead
-                    </Button>
-                  </>
+                    </button>
+                  </div>
                 );
-              default: {
-                const _exhaustive: never = two_factor_method;
-                return _exhaustive;
-              }
             }
           })()}
         </section>
