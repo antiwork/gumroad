@@ -43,6 +43,7 @@ import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -537,7 +538,7 @@ const EmailRow = ({
             </Fieldset>
             <RichTextEditor
               id={email.id}
-              className="textarea bg-filled block w-full rounded border border-border px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
+              className="textarea block w-full rounded border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
               ariaLabel="Email message"
               placeholder="Write a personalized message..."
               extensions={[...(isAbandonedCartWorkflow ? [AbandonedCartProductList] : [])]}
@@ -661,7 +662,7 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
       </WithTooltip>
       {abandonedCartProducts.length > shownProductCount ? (
         <button
-          className="link cursor-pointer all-unset"
+          className="cursor-pointer text-foreground underline all-unset"
           onClick={() =>
             setShownProductCount(
               shownProductCount + ABANDONED_CART_PRODUCTS_TO_LOAD_PER_PAGE > abandonedCartProducts.length
@@ -705,7 +706,7 @@ const SellerByLine = ({ isPreview }: { isPreview: boolean }) => {
       rel="noopener noreferrer nofollow"
       tabIndex={isPreview ? undefined : -1}
     >
-      <img className="user-avatar" src={currentSeller.avatarUrl} />
+      <Avatar src={currentSeller.avatarUrl} />
       {currentSeller.name || currentSeller.email || ""}
     </a>
   );

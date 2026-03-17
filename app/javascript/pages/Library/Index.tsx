@@ -28,6 +28,7 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -116,20 +117,20 @@ export const Card = ({
         </div>
         <div className="p-4">
           <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-            <PopoverTrigger aria-label="Open product action menu">
+            <PopoverTrigger aria-label="Open product action menu" className="relative">
               <DotsHorizontalRounded className="size-5" />
             </PopoverTrigger>
             <PopoverContent className="border-0 p-0 shadow-none" usePortal>
-              <div role="menu">
-                <div role="menuitem" onClick={toggleArchived}>
+              <Menu>
+                <MenuItem onClick={toggleArchived}>
                   <Archive className="size-5" />
-                  &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
-                </div>
-                <div className="danger" role="menuitem" onClick={() => onDelete()}>
+                  {purchase.is_archived ? "Unarchive" : "Archive"}
+                </MenuItem>
+                <MenuItem variant="danger" onClick={() => onDelete()}>
                   <Trash className="size-5" />
-                  &ensp;Delete permanently
-                </div>
-              </div>
+                  Delete permanently
+                </MenuItem>
+              </Menu>
             </PopoverContent>
           </Popover>
         </div>

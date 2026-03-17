@@ -6,6 +6,7 @@ import { Review as ReviewType } from "$app/data/product_reviews";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewResponseForm } from "$app/components/ReviewResponseForm";
 import { ReviewVideoPlayer } from "$app/components/ReviewVideoPlayer";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Pill } from "$app/components/ui/Pill";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -26,7 +27,7 @@ const ReviewUserAttribution = ({
   isBuyer?: boolean;
 }) => (
   <section className="flex items-center gap-2">
-    <img className="user-avatar" src={avatarUrl} />
+    <Avatar src={avatarUrl} />
     <h5>{name}</h5>
     {isBuyer ? (
       <WithTooltip tip="Verified Buyer">

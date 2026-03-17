@@ -1176,4 +1176,28 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(product.community_chat_enabled?).to be(false)
     expect(product.active_community).to be_nil
   end
+
+  it "navigates between edit tabs" do
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_text(product.name)
+
+    click_on "Content"
+    expect(page).to have_current_path(%r{/edit/content})
+
+    click_on "Receipt"
+    expect(page).to have_current_path(%r{/edit/receipt})
+
+    click_on "Product"
+    expect(page).to have_current_path(%r{/edit\z})
+  end
+
+  it "loads edit sub-routes directly" do
+    visit "/products/#{product.unique_permalink}/edit/content"
+    expect(page).to have_current_path(%r{/edit/content})
+    expect(page).to have_text(product.name)
+
+    visit "/products/#{product.unique_permalink}/edit/receipt"
+    expect(page).to have_current_path(%r{/edit/receipt})
+    expect(page).to have_text(product.name)
+  end
 end

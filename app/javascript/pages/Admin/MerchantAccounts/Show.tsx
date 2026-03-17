@@ -6,6 +6,7 @@ import { cast } from "ts-safe-cast";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { BooleanIcon, NoIcon } from "$app/components/Admin/Icons";
 import { Alert } from "$app/components/ui/Alert";
+import { DefinitionList } from "$app/components/ui/DefinitionList";
 
 export type AdminMerchantAccountProps = {
   charge_processor_id: string;
@@ -38,7 +39,7 @@ const AdminMerchantAccountsShow = () => {
 
       <hr />
       <div>
-        <dl>
+        <DefinitionList>
           <dt>External ID</dt>
           <dd>{merchant_account.external_id}</dd>
 
@@ -96,14 +97,14 @@ const AdminMerchantAccountsShow = () => {
             <BooleanIcon value={!!merchant_account.charge_processor_deleted_at} />{" "}
             <DateTimeWithRelativeTooltip date={merchant_account.charge_processor_deleted_at} utc />
           </dd>
-        </dl>
+        </DefinitionList>
       </div>
 
       <hr />
       <div className="flex flex-col gap-4">
         <h3>Charge Processor live attributes</h3>
         {merchant_account.live_attributes.length > 0 ? (
-          <dl>
+          <DefinitionList>
             {merchant_account.live_attributes.map(({ label, value }) => (
               <React.Fragment key={label}>
                 <dt>{label}</dt>
@@ -112,7 +113,7 @@ const AdminMerchantAccountsShow = () => {
                 </dd>
               </React.Fragment>
             ))}
-          </dl>
+          </DefinitionList>
         ) : (
           <Alert variant="info">Charge Processor Merchant information is missing.</Alert>
         )}
@@ -120,19 +121,19 @@ const AdminMerchantAccountsShow = () => {
 
       <hr />
       <div>
-        <dl>
+        <DefinitionList>
           <dt>Updated</dt>
           <dd>
             <DateTimeWithRelativeTooltip date={merchant_account.updated_at} utc />
           </dd>
-        </dl>
+        </DefinitionList>
 
-        <dl>
+        <DefinitionList>
           <dt>Deleted</dt>
           <dd>
             <DateTimeWithRelativeTooltip date={merchant_account.deleted_at} utc placeholder={<NoIcon />} />
           </dd>
-        </dl>
+        </DefinitionList>
       </div>
     </div>
   );

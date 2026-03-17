@@ -419,6 +419,7 @@ class ContactingCreatorMailer < ApplicationMailer
   def tax_form_1099k(user_id, year)
     @seller = User.find(user_id)
     @year = year
+    @is_filed = @seller.user_tax_forms.for_year(year).where(tax_form_type: "us_1099_k").first&.filed?
     @subject = "Get your 1099-K form for #{@year}"
   end
 

@@ -1628,20 +1628,41 @@ describe ContactingCreatorMailer do
   end
 
   describe "tax_form_1099k" do
-    it "has the correct subject and body with form download url included" do
-      creator = create(:user)
-      year = Date.current.year.pred
+    describe "filed form" do
+      it "has the correct subject and body with form download url included" do
+        creator = create(:user)
+        year = Date.current.year.pred
+        create(:user_tax_form, user: creator, tax_year: year, tax_form_type: "us_1099_k", filed_at: 1.week.ago.to_i)
 
-      mail = ContactingCreatorMailer.tax_form_1099k(creator.id, year)
+        mail = ContactingCreatorMailer.tax_form_1099k(creator.id, year)
 
-      expect(mail.subject).to eq "Get your 1099-K form for #{year}"
-      expect(mail.to).to eq [creator.email]
-      expect(mail.body.encoded).to include "Your 1099-K form for #{year} is ready to download"
-      expect(mail.body.encoded).to include "The 1099-K is a purely informational form that summarizes the payments that were made to your account during #{year} and is designed to help you report your taxes."
-      expect(mail.body.encoded).to include "Our payment processor, Stripe, files a copy electronically with the IRS."
-      expect(mail.body.encoded).to include "The sales deposited directly to your connected PayPal and Stripe accounts are not included in your 1099-K. You will receive separate 1099-K forms for those sales from PayPal and Stripe."
-      expect(mail.body).to have_link("Download form", href: download_tax_form_url(form_type: "us_1099_k", year:))
-      expect(mail.body.encoded).to include "You can also download it from your <a href=\"#{tax_center_url}\">Gumroad tax center</a> at any time."
+        expect(mail.subject).to eq "Get your 1099-K form for #{year}"
+        expect(mail.to).to eq [creator.email]
+        expect(mail.body.encoded).to include "Your 1099-K form for #{year} is ready to download"
+        expect(mail.body.encoded).to include "The 1099-K is a purely informational form that summarizes the payments that were made to your account during #{year} and is designed to help you report your taxes."
+        expect(mail.body.encoded).to include "Our payment processor, Stripe, files a copy electronically with the IRS."
+        expect(mail.body.encoded).to include "The sales deposited directly to your connected PayPal and Stripe accounts are not included in your 1099-K. You will receive separate 1099-K forms for those sales from PayPal and Stripe."
+        expect(mail.body).to have_link("Download form", href: download_tax_form_url(form_type: "us_1099_k", year:))
+        expect(mail.body.encoded).to include "You can also download it from your <a href=\"#{tax_center_url}\">Gumroad tax center</a> at any time."
+      end
+    end
+
+    describe "informational not-filed form" do
+      it "has the correct subject and body with form download url included" do
+        creator = create(:user)
+        year = Date.current.year.pred
+        create(:user_tax_form, user: creator, tax_year: year, tax_form_type: "us_1099_k")
+
+        mail = ContactingCreatorMailer.tax_form_1099k(creator.id, year)
+
+        expect(mail.subject).to eq "Get your 1099-K form for #{year}"
+        expect(mail.to).to eq [creator.email]
+        expect(mail.body.encoded).to include "Your 1099-K form for #{year} is ready to download"
+        expect(mail.body.encoded).to include "The 1099-K is a purely informational form that summarizes the payments that were made to your account during #{year} and is designed to help you report your taxes."
+        expect(mail.body.encoded).to include "This form is for your records only and has not been filed with the IRS."
+        expect(mail.body).to have_link("Download form", href: download_tax_form_url(form_type: "us_1099_k", year:))
+        expect(mail.body.encoded).to include "You can also download it from your <a href=\"#{tax_center_url}\">Gumroad tax center</a> at any time."
+      end
     end
   end
 

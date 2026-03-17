@@ -65,6 +65,7 @@ function TwoFactorAuthentication() {
             <Input
               id={uid}
               type="text"
+              inputMode="numeric"
               value={form.data.token}
               onChange={(e) => form.setData("token", e.target.value)}
               required

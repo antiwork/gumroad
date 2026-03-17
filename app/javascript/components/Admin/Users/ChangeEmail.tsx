@@ -4,6 +4,7 @@ import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
@@ -14,10 +15,10 @@ type AdminUserChangeEmailProps = {
 const AdminUserChangeEmail = ({ user }: AdminUserChangeEmailProps) => (
   <>
     <hr />
-    <details>
-      <summary>
+    <Details>
+      <DetailsToggle>
         <h3>Change email</h3>
-      </summary>
+      </DetailsToggle>
       <Form
         url={Routes.update_email_admin_user_path(user.external_id)}
         method="POST"
@@ -36,7 +37,7 @@ const AdminUserChangeEmail = ({ user }: AdminUserChangeEmailProps) => (
           </Fieldset>
         )}
       </Form>
-    </details>
+    </Details>
   </>
 );
 

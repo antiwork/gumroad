@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { Avatar } from "$app/components/ui/Avatar";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const TopCreatorBadge = () => (
@@ -36,7 +37,7 @@ export const AuthorByline = ({
   isTopCreator?: boolean | undefined;
 }) => (
   <a href={profileUrl} target="_blank" className="relative flex items-center gap-2" rel="noreferrer">
-    {avatarUrl ? <img className="user-avatar" src={avatarUrl} /> : null}
+    {avatarUrl ? <Avatar src={avatarUrl} /> : null}
     {name}
     {isTopCreator ? (
       <WithTooltip tip="Top creator" position="top">

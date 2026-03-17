@@ -9,6 +9,7 @@ import { type RefundPolicy, RefundPolicyTitle } from "$app/components/Admin/Purc
 import { PurchaseStates } from "$app/components/Admin/Purchases/States";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 import { Select } from "$app/components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -105,7 +106,7 @@ export default function Purchases() {
                     </a>{" "}
                     <PurchaseStates purchase={purchase} />
                     <div className="text-sm">
-                      <ul className="inline">
+                      <InlineList>
                         {purchase.refund_policy ? (
                           <li>
                             <RefundPolicyTitle refundPolicy={purchase.refund_policy} />
@@ -120,7 +121,7 @@ export default function Purchases() {
                         {purchase.seller.support_email ? (
                           <li>Seller support email: {purchase.seller.support_email}</li>
                         ) : null}
-                      </ul>
+                      </InlineList>
                     </div>
                   </TableCell>
                   <TableCell>

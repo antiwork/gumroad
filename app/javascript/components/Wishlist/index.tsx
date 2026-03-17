@@ -1,14 +1,12 @@
 import { Cart, Gift, Link, Pencil, Trash } from "@boxicons/react";
 import { uniqBy } from "lodash-es";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { fetchPaginatedWishlistItems, deleteWishlistItem } from "$app/data/wishlists";
 import { CardProduct } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { RecurrenceId, recurrenceNames } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -16,6 +14,7 @@ import { Card } from "$app/components/Product/Card";
 import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -267,7 +266,7 @@ export const Wishlist = ({
         <PageHeader title={name} actions={headerActions}>
           {user ? (
             <a className="flex items-center gap-2" href={user.profile_url}>
-              <img className="user-avatar w-6" src={user.avatar_url} />
+              <Avatar className="w-6" src={user.avatar_url} />
               <h4>{user.name}</h4>
             </a>
           ) : null}
@@ -318,4 +317,4 @@ export const Wishlist = ({
   );
 };
 
-export default register({ component: Wishlist, propParser: createCast() });
+export default Wishlist;

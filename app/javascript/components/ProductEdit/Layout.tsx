@@ -1,7 +1,7 @@
 import { CartPlus, Link as LinkIcon } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
-import { Link, useLocation, useMatches, useNavigate } from "react-router-dom";
+import { Link, useMatches, useNavigate } from "react-router-dom";
 
 import { saveProduct } from "$app/data/product_edit";
 import { setProductPublished } from "$app/data/publish_product";
@@ -24,7 +24,7 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { FileEntry, parseEditSegment, useProductEditContext } from "./state";
+import { FileEntry, useProductEditContext } from "./state";
 
 export const useProductUrl = (params = {}) => {
   const { product, uniquePermalink } = useProductEditContext();
@@ -140,8 +140,7 @@ export const Layout = ({
 }) => {
   const { id, product, updateProduct, uniquePermalink, saving, save, currencyType } = useProductEditContext();
   const currentSeller = useCurrentSeller();
-  const { pathname } = useLocation();
-  const rootPath = `/products/${uniquePermalink}/${parseEditSegment(pathname)}`;
+  const rootPath = Routes.edit_link_path(uniquePermalink);
 
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });

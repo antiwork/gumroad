@@ -72,6 +72,14 @@
       border-color: var(--color-border);
     }
   }
+
+  body:not(.mac) *::-webkit-scrollbar {
+    @apply w-3 bg-active-bg;
+  }
+
+  body:not(.mac) *::-webkit-scrollbar-thumb {
+    @apply rounded-lg bg-muted;
+  }
 }
 
 @utility all-unset {
@@ -91,6 +99,17 @@
   animation-timeline: view();
   animation-range: entry exit;
   animation-fill-mode: forwards;
+}
+
+.jwplayer {
+  position: absolute !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* So that the `jwplayer` time tooltip isn't squished */
+.jwplayer .jw-time-tip {
+  min-width: max-content;
 }
 
 @keyframes parallax-scroll {
