@@ -24,7 +24,11 @@ const WorkflowList = ({ workflows }: WorkflowListProps) => {
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
   const newWorkflowButton = (
     <Button asChild color="accent">
-      <Link href={Routes.new_workflow_path()} inert={!canManageWorkflow || undefined} className={!canManageWorkflow ? "cursor-not-allowed opacity-30" : undefined}>
+      <Link
+        href={Routes.new_workflow_path()}
+        inert={!canManageWorkflow || undefined}
+        className={!canManageWorkflow ? "cursor-not-allowed opacity-30" : undefined}
+      >
         New workflow
       </Link>
     </Button>
@@ -198,7 +202,11 @@ const WorkflowRow = ({
       <Placeholder>
         <h4>
           No emails yet,{" "}
-          <Link href={Routes.workflow_emails_path(workflow.external_id)} inert={!canManageWorkflow || undefined} className={!canManageWorkflow ? "cursor-not-allowed opacity-30" : undefined}>
+          <Link
+            href={Routes.workflow_emails_path(workflow.external_id)}
+            inert={!canManageWorkflow || undefined}
+            className={!canManageWorkflow ? "cursor-not-allowed opacity-30" : undefined}
+          >
             add one
           </Link>
         </h4>

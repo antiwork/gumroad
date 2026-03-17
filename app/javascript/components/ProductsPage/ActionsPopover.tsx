@@ -97,18 +97,33 @@ const ActionsPopover = ({
         </PopoverTrigger>
         <PopoverContent className="border-0 p-0 shadow-none">
           <div role="menu">
-            <div role="menuitem" inert={!product.can_duplicate || isDuplicating} className={!product.can_duplicate || isDuplicating ? "cursor-not-allowed opacity-30" : undefined} onClick={() => void handleDuplicate()}>
+            <div
+              role="menuitem"
+              inert={!product.can_duplicate || isDuplicating}
+              className={!product.can_duplicate || isDuplicating ? "cursor-not-allowed opacity-30" : undefined}
+              onClick={() => void handleDuplicate()}
+            >
               <Copy className="size-5" />
               &ensp;{isDuplicating ? "Duplicating..." : "Duplicate"}
             </div>
             {product.can_unarchive ? (
-              <div role="menuitem" inert={isUnarchiving} className={isUnarchiving ? "cursor-not-allowed opacity-30" : undefined} onClick={() => void handleUnarchive()}>
+              <div
+                role="menuitem"
+                inert={isUnarchiving}
+                className={isUnarchiving ? "cursor-not-allowed opacity-30" : undefined}
+                onClick={() => void handleUnarchive()}
+              >
                 <Archive className="size-5" />
                 &ensp;{isUnarchiving ? "Unarchiving..." : "Unarchive"}
               </div>
             ) : null}
             {product.can_archive ? (
-              <div role="menuitem" inert={isArchiving} className={isArchiving ? "cursor-not-allowed opacity-30" : undefined} onClick={() => void handleArchive()}>
+              <div
+                role="menuitem"
+                inert={isArchiving}
+                className={isArchiving ? "cursor-not-allowed opacity-30" : undefined}
+                onClick={() => void handleArchive()}
+              >
                 <Archive className="size-5" />
                 &ensp;{isArchiving ? "Archiving..." : "Archive"}
               </div>

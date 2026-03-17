@@ -1188,7 +1188,11 @@ export const ContentTab = () => {
                             }}
                             aria-selected={item.id === selectedVariantId}
                             inert={product.has_same_rich_content_for_all_variants}
-                            className={product.has_same_rich_content_for_all_variants ? "cursor-not-allowed opacity-30" : undefined}
+                            className={
+                              product.has_same_rich_content_for_all_variants
+                                ? "cursor-not-allowed opacity-30"
+                                : undefined
+                            }
                           >
                             <div className="flex-1">
                               <h4>{item.name || "Untitled"}</h4>

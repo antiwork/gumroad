@@ -293,7 +293,11 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
       actions={
         <>
           <Button asChild>
-            <Link href={Routes.workflows_path()} inert={form.processing || undefined} className={form.processing ? "cursor-not-allowed opacity-30" : undefined}>
+            <Link
+              href={Routes.workflows_path()}
+              inert={form.processing || undefined}
+              className={form.processing ? "cursor-not-allowed opacity-30" : undefined}
+            >
               Cancel
             </Link>
           </Button>

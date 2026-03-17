@@ -722,7 +722,11 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
               </Button>
             )}
             <Button asChild>
-              <Link href={getCancelPath()} inert={isBusy ? true : undefined} className={isBusy ? "cursor-not-allowed opacity-30" : undefined}>
+              <Link
+                href={getCancelPath()}
+                inert={isBusy ? true : undefined}
+                className={isBusy ? "cursor-not-allowed opacity-30" : undefined}
+              >
                 Cancel
               </Link>
             </Button>
