@@ -74,9 +74,3 @@
     padding-left: spacer(6);
   }
 }
-
-// Unset max-width for Rack::MiniProfiler results to (expectedly) expand beyond
-// the narrow parent container.
-.profiler-results * {
-  max-width: unset;
-}
