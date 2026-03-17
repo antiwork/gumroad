@@ -38,17 +38,6 @@
     color: full-color(color);
   }
 
-  body:not(.mac) * {
-    &::-webkit-scrollbar {
-      width: size(0.75);
-      background-color: gray(1);
-    }
-    &::-webkit-scrollbar-thumb {
-      background-color: gray(3);
-      border-radius: border-radius(2);
-    }
-  }
-
   @for $i from 1 through 5 {
     h#{$i} {
       @include font-size(6 - $i);
@@ -133,24 +122,6 @@ menu > li {
 
 .dummy {
   @include dummy;
-}
-
-dl {
-  display: grid;
-  grid-template-columns: fit-content(40%);
-  column-gap: spacer(3);
-
-  dt {
-    grid-column: 1;
-
-    &::after {
-      content: ":";
-    }
-  }
-
-  dd {
-    grid-column: 2;
-  }
 }
 
 [inert] {
