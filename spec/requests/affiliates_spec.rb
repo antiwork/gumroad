@@ -912,7 +912,7 @@ describe "Affiliates", type: :system, js: true do
       visit settings_password_path
 
       menu_items = all("a[role='tab']")
-      expected_items = %w[Settings Payments Password Advanced]
+      expected_items = ["Settings", "Payments", "Password and authentication", "Advanced"]
       expect(menu_items.collect(&:text)).to include(*expected_items)
     end
   end
