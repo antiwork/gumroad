@@ -7,6 +7,7 @@ import { type DetailsProps } from "$app/components/Admin/Products/AttributesAndI
 import AdminProductAttributesAndInfo from "$app/components/Admin/Products/AttributesAndInfo";
 import { type Product } from "$app/components/Admin/Products/Product";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type Props = {
   product: Product;
@@ -28,9 +29,9 @@ const AdminProductDetails = ({ product }: Props) => {
     },
   });
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
+  const onToggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
       void fetchDetails();
     }
   };
@@ -38,12 +39,12 @@ const AdminProductDetails = ({ product }: Props) => {
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
+      <Details open={open} onToggle={onToggle}>
+        <DetailsToggle>
           <h3>Details</h3>
-        </summary>
+        </DetailsToggle>
         {isLoading || !details ? <LoadingSpinner /> : <AdminProductAttributesAndInfo productData={details} />}
-      </details>
+      </Details>
     </>
   );
 };

@@ -3,7 +3,10 @@
 class BeninBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "BJ"
 
-  validate :validate_account_number, if: -> { Rails.env.production? }
+  ACCOUNT_NUMBER_FORMAT_REGEX = /^BJ[a-zA-Z0-9]{26}$/
+  private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
+
+  validate :validate_account_number
 
   def bank_account_type
     BANK_ACCOUNT_TYPE
@@ -30,7 +33,7 @@ class BeninBankAccount < BankAccount
 
   private
     def validate_account_number
-      return if Ibandit::IBAN.new(account_number_decrypted).valid?
+      return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
       errors.add :base, "The account number is invalid."
     end
 end

@@ -19,6 +19,7 @@ import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
 import { CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Radio } from "$app/components/ui/Radio";
@@ -482,8 +483,10 @@ function DiscoverIndex() {
               appendFilters={
                 <>
                   <CardContent asChild details>
-                    <details>
-                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Rating</summary>
+                    <Details>
+                      <DetailsToggle chevronPosition="right" className="grow">
+                        Rating
+                      </DetailsToggle>
                       <Fieldset role="group">
                         {range(4, 0).map((number) => (
                           <Label key={number} className="w-full">
@@ -506,14 +509,14 @@ function DiscoverIndex() {
                           </Label>
                         ))}
                       </Fieldset>
-                    </details>
+                    </Details>
                   </CardContent>
                   {hasOfferCode ? (
                     <CardContent asChild details>
-                      <details open>
-                        <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                      <Details open>
+                        <DetailsToggle chevronPosition="right" className="grow">
                           Offer code
-                        </summary>
+                        </DetailsToggle>
                         <div className="flex items-center justify-between gap-2 py-1">
                           <span>{props.black_friday_offer_code}</span>
                           <button
@@ -524,7 +527,7 @@ function DiscoverIndex() {
                             <X className="size-4" />
                           </button>
                         </div>
-                      </details>
+                      </Details>
                     </CardContent>
                   ) : null}
                 </>

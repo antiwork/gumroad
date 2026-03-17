@@ -23,7 +23,6 @@ import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
-import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
@@ -38,6 +37,7 @@ import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
@@ -1033,17 +1033,14 @@ const Form = ({
           </Fieldset>
           <Fieldset className="gap-4">
             <FieldsetTitle>Settings</FieldsetTitle>
-            <Details
-              className="toggle"
-              open={limitQuantity}
-              summary={
+            <Details open={limitQuantity}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={limitQuantity}
                   onChange={(evt) => setLimitQuantity(evt.target.checked)}
                   label="Limit quantity"
                 />
-              }
-            >
+              </DetailsToggle>
               <Dropdown>
                 <Fieldset state={maxQuantity.error ? "danger" : undefined}>
                   <FieldsetTitle>
@@ -1062,17 +1059,14 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
-            <Details
-              className="toggle"
-              open={limitValidity}
-              summary={
+            <Details open={limitValidity}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={limitValidity}
                   onChange={(evt) => setLimitValidity(evt.target.checked)}
                   label="Limit validity period"
                 />
-              }
-            >
+              </DetailsToggle>
               <Dropdown className="gap-4 lg:grid-cols-2">
                 <Fieldset>
                   <FieldsetTitle>
@@ -1108,17 +1102,14 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
-            <Details
-              className="toggle"
-              open={hasMinimumAmount}
-              summary={
+            <Details open={hasMinimumAmount}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={hasMinimumAmount}
                   onChange={(evt) => setHasMinimumAmount(evt.target.checked)}
                   label="Set a minimum qualifying amount"
                 />
-              }
-            >
+              </DetailsToggle>
               <Dropdown>
                 <Fieldset state={minimumAmount.error ? "danger" : undefined}>
                   <FieldsetTitle>
@@ -1135,17 +1126,14 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
-            <Details
-              className="toggle"
-              open={hasMinimumQuantity}
-              summary={
+            <Details open={hasMinimumQuantity}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={hasMinimumQuantity}
                   onChange={(evt) => setHasMinimumQuantity(evt.target.checked)}
                   label="Set a minimum quantity"
                 />
-              }
-            >
+              </DetailsToggle>
               <Dropdown>
                 <Fieldset state={minimumQuantity.error ? "danger" : undefined}>
                   <FieldsetTitle>

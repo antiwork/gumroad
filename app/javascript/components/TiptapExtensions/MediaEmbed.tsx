@@ -249,9 +249,9 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
           <RowContent className="content">
             <PlayCircle pack="filled" className="type-icon size-5" />
             <div>
-              <h4 className="text-singleline">{node.attrs.title}</h4>
+              <h4 className="truncate">{node.attrs.title}</h4>
               {node.attrs.url ? (
-                <div className="text-singleline">
+                <div className="truncate">
                   <a href={cast(node.attrs.url)} target="_blank" rel="noreferrer">
                     {node.attrs.url}
                   </a>

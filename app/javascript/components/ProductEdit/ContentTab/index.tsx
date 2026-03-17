@@ -81,6 +81,7 @@ import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
@@ -923,26 +924,26 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <Card>
                       {product.native_type === "membership" ? (
                         <CardContent asChild details>
-                          <details>
-                            <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2" inert>
+                          <Details>
+                            <DetailsToggle chevronPosition="right" className="grow" inert>
                               Membership
-                            </summary>
-                          </details>
+                            </DetailsToggle>
+                          </Details>
                         </CardContent>
                       ) : null}
                       <CardContent asChild details>
-                        <details>
-                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                        <Details>
+                          <DetailsToggle chevronPosition="right" className="grow" inert>
                             Receipt
-                          </summary>
-                        </details>
+                          </DetailsToggle>
+                        </Details>
                       </CardContent>
                       <CardContent asChild details>
-                        <details>
-                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                        <Details>
+                          <DetailsToggle chevronPosition="right" className="grow" inert>
                             Library
-                          </summary>
-                        </details>
+                          </DetailsToggle>
+                        </Details>
                       </CardContent>
                     </Card>
                     <EntityInfo
@@ -1168,7 +1169,7 @@ export const ContentTab = () => {
                     <ComboBox<Variant>
                       input={(props) => (
                         <InputGroup {...props} className="cursor-pointer py-3" aria-label="Select a version">
-                          <span className="text-singleline flex-1">
+                          <span className="flex-1 truncate">
                             {selectedVariant && !product.has_same_rich_content_for_all_variants
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}

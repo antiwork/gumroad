@@ -6,6 +6,7 @@ import { useLazyPaginatedFetch } from "$app/hooks/useLazyFetch";
 import type { CommentProps } from "$app/components/Admin/Commentable/Comment";
 import AdminCommentableContent from "$app/components/Admin/Commentable/Content";
 import AdminCommentableForm from "$app/components/Admin/Commentable/Form";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type AdminCommentableProps = {
   count?: number;
@@ -35,10 +36,6 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
 
   const [commentsCount, setCommentsCount] = React.useState(count ?? 0);
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-  };
-
   const appendComment = (comment: CommentProps) => {
     setComments([comment, ...comments]);
     setCommentsCount(commentsCount + 1);
@@ -47,10 +44,10 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle} className="space-y-2">
-        <summary>
+      <Details open={open} onToggle={setOpen} className="space-y-2">
+        <DetailsToggle>
           <h3>{commentsCount === 1 ? `${commentsCount} comment` : `${commentsCount} comments`}</h3>
-        </summary>
+        </DetailsToggle>
         <AdminCommentableForm endpoint={endpoint} onCommentAdded={appendComment} commentableType={commentableType} />
         <AdminCommentableContent
           count={commentsCount}
@@ -60,7 +57,7 @@ const AdminCommentableComments = ({ count, endpoint, commentableType }: AdminCom
           hasMore={hasMore}
           onLoadMore={() => void fetchNextPage()}
         />
-      </details>
+      </Details>
     </>
   );
 };

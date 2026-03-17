@@ -4,6 +4,7 @@ import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
@@ -18,10 +19,10 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
   return (
     <>
       <hr />
-      <details>
-        <summary>
+      <Details>
+        <DetailsToggle>
           <h3>Custom fee</h3>
-        </summary>
+        </DetailsToggle>
         <Form
           url={Routes.set_custom_fee_admin_user_path(user.external_id)}
           method="POST"
@@ -54,7 +55,7 @@ const AdminUserCustomFee = ({ user }: AdminUserCustomFeeProps) => {
             </Fieldset>
           )}
         </Form>
-      </details>
+      </Details>
     </>
   );
 };
