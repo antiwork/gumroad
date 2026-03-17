@@ -45,6 +45,10 @@ class Settings::TotpController < Settings::BaseController
       return render json: { success: false, error_message: "Authenticator app is not enabled." }, status: :unprocessable_entity
     end
 
+    unless @user.totp_credential.verify_code(params[:code])
+      return render json: { success: false, error_message: "Invalid code. Please try again." }, status: :unprocessable_entity
+    end
+
     @user.totp_credential.destroy!
 
     render json: { success: true }

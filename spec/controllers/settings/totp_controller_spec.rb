@@ -119,17 +119,27 @@ describe Settings::TotpController, type: :controller do
 
   describe "DELETE destroy" do
     context "when user has a confirmed totp credential" do
-      before do
-        create(:totp_credential, :confirmed, user:)
-      end
+      let!(:credential) { create(:totp_credential, :confirmed, user:) }
 
-      it "destroys the totp credential" do
-        delete :destroy
+      it "destroys the totp credential with a valid code" do
+        code = credential.otp_code
+
+        delete :destroy, params: { code: }
 
         expect(response).to be_successful
         json = response.parsed_body
         expect(json["success"]).to be true
         expect(user.reload.totp_credential).to be_nil
+      end
+
+      it "returns an error with an invalid code" do
+        delete :destroy, params: { code: "000000" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        json = response.parsed_body
+        expect(json["success"]).to be false
+        expect(json["error_message"]).to eq("Invalid code. Please try again.")
+        expect(user.reload.totp_credential).to be_present
       end
     end
 

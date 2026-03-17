@@ -248,6 +248,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
 
     context "when user has TOTP enabled" do
       before do
+        Feature.activate(:authenticator_2fa)
         create(:totp_credential, :confirmed, user: @user)
         controller.prepare_for_two_factor_authentication(@user)
       end
@@ -267,6 +268,7 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
     let!(:totp_credential) { create(:totp_credential, :with_recovery_codes, user: @user) }
 
     before do
+      Feature.activate(:authenticator_2fa)
       controller.prepare_for_two_factor_authentication(@user)
     end
 
@@ -301,9 +303,8 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
 
         post :create, params: { token: email_code, user_id: @user.encrypted_external_id }
 
-        # The email OTP code will only work if it happens to match the TOTP code
-        # (different secrets, so normally won't match). We verify the flow uses TOTP validation.
-        expect(controller.send(:two_factor_auth_method)).to eq("totp")
+        expect(response).to redirect_to(two_factor_authentication_path)
+        expect(flash[:warning]).to eq("Invalid token, please try again.")
       end
     end
 

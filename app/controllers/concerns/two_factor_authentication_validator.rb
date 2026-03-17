@@ -27,7 +27,7 @@ module TwoFactorAuthenticationValidator
   def prepare_for_two_factor_authentication(user)
     session[TWO_FACTOR_AUTH_USER_ID_SESSION_NAME] = user.id
 
-    if user.totp_enabled?
+    if user.totp_enabled? && Feature.active?(:authenticator_2fa)
       session[TWO_FACTOR_AUTH_METHOD_SESSION_NAME] = "totp"
     else
       session[TWO_FACTOR_AUTH_METHOD_SESSION_NAME] = "email"
