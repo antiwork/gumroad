@@ -1169,7 +1169,7 @@ export const ContentTab = () => {
                     <ComboBox<Variant>
                       input={(props) => (
                         <InputGroup {...props} className="cursor-pointer py-3" aria-label="Select a version">
-                          <span className="text-singleline flex-1">
+                          <span className="flex-1 truncate">
                             {selectedVariant && !product.has_same_rich_content_for_all_variants
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}

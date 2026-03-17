@@ -14,6 +14,7 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
@@ -137,14 +138,14 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
         <ArrowUpRightSquare className="size-5" />
       </Link>
     </h2>
-    <ul className="inline">
+    <InlineList>
       <li>
         <DateTimeWithRelativeTooltip date={purchase.created_at} />
       </li>
       <li>
         <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>
       </li>
-    </ul>
+    </InlineList>
   </div>
 );
 

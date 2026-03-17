@@ -116,7 +116,7 @@ export const Card = ({
         </div>
         <div className="p-4">
           <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-            <PopoverTrigger aria-label="Open product action menu">
+            <PopoverTrigger aria-label="Open product action menu" className="relative">
               <DotsHorizontalRounded className="size-5" />
             </PopoverTrigger>
             <PopoverContent className="border-0 p-0 shadow-none" usePortal>

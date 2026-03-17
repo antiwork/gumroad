@@ -514,11 +514,6 @@ GEM
       json (>= 1.8)
       rexml
     language_server-protocol (3.17.0.5)
-    libv8-node (18.19.0.0)
-    libv8-node (18.19.0.0-arm64-darwin)
-    libv8-node (18.19.0.0-x86_64-darwin)
-    libv8-node (18.19.0.0-x86_64-linux)
-    libv8-node (18.19.0.0-x86_64-linux-musl)
     lint_roller (1.1.0)
     llhttp-ffi (0.5.0)
       ffi-compiler (~> 1.0)
@@ -558,8 +553,6 @@ GEM
     mini_magick (4.13.2)
     mini_mime (1.1.5)
     mini_portile2 (2.8.9)
-    mini_racer (0.16.0)
-      libv8-node (~> 18.19.0.0)
     minitest (5.27.0)
     model_attribute (3.2.0)
     modis (4.3.1)
@@ -812,12 +805,6 @@ GEM
       erb
       psych (>= 4.0.0)
       tsort
-    react_on_rails (14.0.4)
-      addressable
-      connection_pool
-      execjs (~> 2.5)
-      rails (>= 5.2)
-      rainbow (~> 3.0)
     redcarpet (3.6.0)
     redis (5.2.0)
       redis-client (>= 0.22.0)
@@ -1200,7 +1187,6 @@ DEPENDENCIES
   maxmind-geoip2 (~> 1.1)
   mime-types (~> 3.4)
   mini_magick (~> 4.12)
-  mini_racer (= 0.16.0)
   money (~> 6.16)
   mongoid (~> 9.0)
   mysql2 (>= 0.5.6)
@@ -1238,7 +1224,6 @@ DEPENDENCIES
   rails-controller-testing (~> 1.0)
   rake (= 13.2.1)
   ratelimit (~> 1.0)
-  react_on_rails (~> 14.0)
   redcarpet (~> 3.5)
   redis (~> 5.0)
   redis-namespace (~> 1.10)

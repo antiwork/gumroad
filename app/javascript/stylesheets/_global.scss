@@ -56,18 +56,10 @@
     }
   }
 
-  .text-singleline {
-    @include text-singleline;
-  }
-
   a {
     color: var(--color);
     text-decoration: underline;
     cursor: pointer;
-  }
-
-  .link {
-    @extend a;
   }
 
   sub {
@@ -91,19 +83,6 @@
   ol,
   ul {
     padding-left: spacer(6);
-  }
-}
-
-ul.inline {
-  padding: 0;
-  list-style: none;
-
-  & > li {
-    display: inline;
-
-    &:not(:last-child)::after {
-      content: " · ";
-    }
   }
 }
 
@@ -186,35 +165,6 @@ dl {
 [draggable="true"],
 [aria-grabbed] {
   cursor: move;
-}
-
-meter {
-  height: 1lh;
-  width: 100%;
-  appearance: none;
-  background: none;
-  border: $border;
-  border-radius: border-radius(1);
-  --optimum-value-background: #{full-color(accent)};
-
-  &::-webkit-meter-inner-element,
-  &::-webkit-meter-bar {
-    display: contents;
-  }
-
-  @mixin value {
-    background: var(--optimum-value-background);
-    border-radius: border-radius(1);
-  }
-
-  &::-webkit-meter-optimum-value {
-    @include value;
-  }
-
-  // specify this separately as otherwise Chrome disregards the entire selector
-  &::-moz-meter-bar {
-    @include value;
-  }
 }
 
 // Unset max-width for Rack::MiniProfiler results to (expectedly) expand beyond

@@ -409,7 +409,7 @@ const ProductsSettings = ({ section }: { section: ProductsSection }) => {
                     {section.default_product_sort === "page_layout" ? (
                       <RowDragHandle aria-grabbed={product.chosen} />
                     ) : null}
-                    <span className="text-singleline">{product.name}</span>
+                    <span className="truncate">{product.name}</span>
                   </RowContent>
                   <RowActions>
                     <Checkbox
