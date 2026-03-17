@@ -79,9 +79,3 @@
   cursor: not-allowed;
   opacity: $disabled-opacity;
 }
-
-// Unset max-width for Rack::MiniProfiler results to (expectedly) expand beyond
-// the narrow parent container.
-.profiler-results * {
-  max-width: unset;
-}
