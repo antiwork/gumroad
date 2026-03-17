@@ -9,7 +9,7 @@ import { PasswordInput } from "$app/components/PasswordInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Label } from "$app/components/ui/Label";
 
@@ -103,21 +103,21 @@ export default function PasswordPage() {
               Use an authenticator app to get verification codes without waiting for an email.
             </Alert>
           )}
-          <Fieldset>
-            <FieldsetTitle>
-              Authenticator app
-              {props.authenticator_app_enabled ? (
-                <Button color="danger" outline>
-                  Remove
-                </Button>
-              ) : (
-                <Button color="primary">
-                  Set up
-                </Button>
-              )}
-            </FieldsetTitle>
-            <FieldsetDescription>Get verification codes from an app on your device.</FieldsetDescription>
-          </Fieldset>
+          <div className="flex items-center justify-between gap-4">
+            <div className="grid gap-2">
+              <div className="font-bold">Authenticator app</div>
+              <small className="text-muted">Get verification codes from an app on your device.</small>
+            </div>
+            {props.authenticator_app_enabled ? (
+              <Button color="danger" outline>
+                Remove
+              </Button>
+            ) : (
+              <Button color="primary">
+                Set up
+              </Button>
+            )}
+          </div>
         </FormSection>
       ) : null}
     </SettingsLayout>
