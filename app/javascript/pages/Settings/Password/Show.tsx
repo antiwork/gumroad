@@ -113,9 +113,7 @@ export default function PasswordPage() {
                 Remove
               </Button>
             ) : (
-              <Button color="primary">
-                Set up
-              </Button>
+              <Button color="primary">Set up</Button>
             )}
           </div>
         </FormSection>
