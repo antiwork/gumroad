@@ -8,6 +8,7 @@ import { getRecommendedProducts, RecommendationType } from "$app/data/recommende
 import { CardProduct } from "$app/parsers/product";
 
 import { Card } from "$app/components/Product/Card";
+import { Skeleton } from "$app/components/Skeleton";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Label } from "$app/components/ui/Label";
 import { MenuItem } from "$app/components/ui/Menu";
@@ -133,7 +134,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
         {isLoading ? (
           <ProductCardGrid narrow>
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="dummy h-128" />
+              <Skeleton key={index} className="h-128" />
             ))}
           </ProductCardGrid>
         ) : recommendedProducts && recommendedProducts.length > 0 ? (

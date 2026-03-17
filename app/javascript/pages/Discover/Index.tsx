@@ -18,6 +18,7 @@ import { HomeFooter } from "$app/components/Home/Shared/Footer";
 import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
+import { Skeleton } from "$app/components/Skeleton";
 import { CardContent } from "$app/components/ui/Card";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
@@ -113,7 +114,7 @@ const ProductsCarouselSkeleton = () => (
     </header>
     <div className="override grid min-h-96 auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 overflow-x-auto pb-1 [scrollbar-width:none] lg:auto-cols-[40rem] [&::-webkit-scrollbar]:hidden">
       {Array.from({ length: 3 }, (_, index) => (
-        <div key={index} className="dummy" style={{ minHeight: "24rem" }} />
+        <Skeleton key={index} className="h-96" />
       ))}
     </div>
   </section>

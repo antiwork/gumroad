@@ -44,6 +44,7 @@ import { WishlistsSectionView } from "$app/components/Profile/EditSections/Wishl
 import { RichTextEditorToolbar, useImageUploadSettings, useRichTextEditor } from "$app/components/RichTextEditor";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
@@ -622,7 +623,7 @@ const FeaturedProductSectionView = ({ section }: { section: FeaturedProductSecti
       {props ? (
         <FeaturedProductView props={props} />
       ) : section.featured_product_id ? (
-        <section className="dummy h-128" />
+        <Skeleton className="h-128" />
       ) : null}
     </SectionLayout>
   );

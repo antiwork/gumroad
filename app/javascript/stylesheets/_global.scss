@@ -75,10 +75,6 @@
   }
 }
 
-.dummy {
-  @include dummy;
-}
-
 [inert] {
   cursor: not-allowed;
   opacity: $disabled-opacity;
