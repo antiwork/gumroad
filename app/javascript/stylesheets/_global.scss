@@ -38,17 +38,6 @@
     color: full-color(color);
   }
 
-  body:not(.mac) * {
-    &::-webkit-scrollbar {
-      width: size(0.75);
-      background-color: gray(1);
-    }
-    &::-webkit-scrollbar-thumb {
-      background-color: gray(3);
-      border-radius: border-radius(2);
-    }
-  }
-
   @for $i from 1 through 5 {
     h#{$i} {
       @include font-size(6 - $i);
