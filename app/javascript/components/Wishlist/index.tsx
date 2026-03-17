@@ -1,14 +1,12 @@
 import { Cart, Gift, Link, Pencil, Trash } from "@boxicons/react";
 import { uniqBy } from "lodash-es";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { fetchPaginatedWishlistItems, deleteWishlistItem } from "$app/data/wishlists";
 import { CardProduct } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { RecurrenceId, recurrenceNames } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -319,4 +317,4 @@ export const Wishlist = ({
   );
 };
 
-export default register({ component: Wishlist, propParser: createCast() });
+export default Wishlist;

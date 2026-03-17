@@ -11,6 +11,7 @@ class AffiliateRequestsController < ApplicationController
   before_action :check_if_needs_redirect, only: :new
   before_action :ensure_creator_has_enabled_affiliate_requests, only: %i[new create]
   before_action :set_affiliate_request, only: %i[approve ignore]
+  before_action :hide_layouts, only: %i[approve ignore]
 
   def new
     set_meta_tag(title: "Become an affiliate for #{@user.display_name}")

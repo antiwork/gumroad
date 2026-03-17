@@ -23,6 +23,7 @@ import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -543,36 +544,28 @@ function CommunitiesIndex() {
                     </span>
 
                     <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
-                      <PopoverTrigger aria-label="Switch creator" className="flex h-8 w-8 justify-center">
+                      <PopoverTrigger aria-label="Switch creator" className="flex h-8 w-8 items-center justify-center">
                         <ChevronDown className="size-5" />
                       </PopoverTrigger>
                       <PopoverContent className="shrink-0 border-0 p-0 shadow-none">
-                        <div role="menu">
+                        <Menu>
                           {sellersExceptSelected.map((seller) => (
-                            <div
+                            <MenuItem
                               key={seller.id}
-                              role="menuitem"
-                              className="max-w-xs"
+                              className="max-w-xs gap-1"
                               onClick={() => switchSeller(seller.id)}
                             >
-                              <div className="flex items-center gap-1">
-                                <UserAvatar
-                                  src={seller.avatar_url}
-                                  alt={seller.name}
-                                  className="shrink-0"
-                                  size="small"
-                                />
-                                <span className="truncate">
-                                  {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
-                                </span>
-                              </div>
-                            </div>
+                              <UserAvatar src={seller.avatar_url} alt={seller.name} className="shrink-0" size="small" />
+                              <span className="truncate">
+                                {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
+                              </span>
+                            </MenuItem>
                           ))}
                           {sellersExceptSelected.length > 0 ? <hr className="my-1" /> : null}
-                          <div role="menuitem" onClick={() => setShowNotificationsSettings(true)}>
+                          <MenuItem onClick={() => setShowNotificationsSettings(true)}>
                             <Bell className="size-5" /> Notifications
-                          </div>
-                        </div>
+                          </MenuItem>
+                        </Menu>
                       </PopoverContent>
                     </Popover>
                   </div>

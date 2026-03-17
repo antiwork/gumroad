@@ -72,6 +72,14 @@
       border-color: var(--color-border);
     }
   }
+
+  body:not(.mac) *::-webkit-scrollbar {
+    @apply w-3 bg-active-bg;
+  }
+
+  body:not(.mac) *::-webkit-scrollbar-thumb {
+    @apply rounded-lg bg-muted;
+  }
 }
 
 @utility all-unset {
@@ -149,4 +157,9 @@
 .ProseMirror .node-image.is-empty .figcaption::before {
   content: attr(data-placeholder);
   @apply pointer-events-none float-left h-0 text-muted;
+}
+
+/* Unset max-width for Rack::MiniProfiler results to (expectedly) expand beyond the narrow parent container */
+.profiler-results * {
+  max-width: unset;
 }

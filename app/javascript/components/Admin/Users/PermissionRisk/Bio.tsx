@@ -2,6 +2,7 @@ import React from "react";
 
 import type { User } from "$app/components/Admin/Users/User";
 import { Alert } from "$app/components/ui/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type BioProps = {
   user: User;
@@ -10,10 +11,10 @@ type BioProps = {
 const Bio = ({ user }: BioProps) => (
   <>
     <hr />
-    <details>
-      <summary>
+    <Details>
+      <DetailsToggle>
         <h3>Bio</h3>
-      </summary>
+      </DetailsToggle>
       {user.bio ? (
         <div>{user.bio}</div>
       ) : (
@@ -21,7 +22,7 @@ const Bio = ({ user }: BioProps) => (
           No bio provided.
         </Alert>
       )}
-    </details>
+    </Details>
   </>
 );
 

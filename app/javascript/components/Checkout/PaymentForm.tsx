@@ -914,7 +914,7 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
     <>
       <div
         ref={ref}
-        hidden={isProcessing(state)}
+        className={classNames(isProcessing(state) && "hidden")}
         style={isDarkTheme ? { filter: "invert(1) grayscale(1)" } : undefined}
       />
       {isProcessing(state) ? <LoadingSpinner /> : null}

@@ -10,6 +10,7 @@ import { NavigationButton } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Select } from "$app/components/ui/Select";
@@ -231,12 +232,12 @@ const TaxCenterIndex = () => {
         <Card>
           {FAQ_ITEMS.map((item) => (
             <CardContent asChild details key={item.id}>
-              <details>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+              <Details>
+                <DetailsToggle chevronPosition="right" className="grow">
                   {item.question}
-                </summary>
+                </DetailsToggle>
                 <p className="text-sm">{item.answer}</p>
-              </details>
+              </Details>
             </CardContent>
           ))}
         </Card>

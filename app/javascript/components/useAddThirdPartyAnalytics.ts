@@ -17,7 +17,7 @@ export function addThirdPartyAnalytics({
   domain: string;
 }) {
   const iframe = document.createElement("iframe");
-  iframe.setAttribute("hidden", "true");
+  iframe.classList.add("hidden");
   iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
   iframe.ariaLabel = "Third-party analytics";
   iframe.dataset.permalink = permalink;

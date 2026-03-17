@@ -28,7 +28,6 @@ import { UpsellModal } from "$app/components/Checkout/UpsellModal";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -41,6 +40,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -856,17 +856,14 @@ const Form = ({
                 ) : null}
                 <Fieldset>
                   <FieldsetTitle>Settings</FieldsetTitle>
-                  <Details
-                    className="toggle"
-                    open={!!discount}
-                    summary={
+                  <Details open={!!discount}>
+                    <DetailsToggle chevronPosition="none" className="mb-0">
                       <Switch
                         checked={!!discount}
                         onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
                         label="Add discount to the offered product"
                       />
-                    }
-                  >
+                    </DetailsToggle>
                     {discount ? (
                       <Dropdown>
                         <DiscountInput discount={discount} setDiscount={setDiscount} currencyCode="usd" />
@@ -898,7 +895,7 @@ const Form = ({
                   />
                 </Fieldset>
                 {selectedProduct ? (
-                  <div className="grid grid-cols-[1fr_auto_1fr] gap-2" aria-label="Upsell versions">
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" aria-label="Upsell versions">
                     <b>Version selected</b>
                     <div />
                     <b>Version to offer</b>
@@ -910,7 +907,7 @@ const Form = ({
                       );
                       return (
                         <React.Fragment key={option.id}>
-                          <InputGroup readOnly>{option.name}</InputGroup>
+                          <InputGroup>{option.name}</InputGroup>
                           <ArrowRightCircle className="size-5" />
                           <Select
                             options={selectedProduct.options.flatMap(({ id, name: label }) =>

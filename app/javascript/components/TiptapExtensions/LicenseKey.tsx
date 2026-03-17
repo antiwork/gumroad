@@ -11,6 +11,7 @@ import { Drawer } from "$app/components/SortableList";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
@@ -55,11 +56,11 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
           <RowContent className="content" contentEditable={false}>
             <Key pack="filled" className="type-icon size-5" />
             <div>
-              <h4 className="text-singleline">{licenseKey}</h4>
-              <ul className="inline">
+              <h4 className="truncate">{licenseKey}</h4>
+              <InlineList>
                 <li>{editor.isEditable ? "License key (sample)" : "License key"}</li>
                 {isMultiSeatLicense && seats !== null ? <li>{`${seats} ${seats === 1 ? "Seat" : "Seats"}`}</li> : null}
-              </ul>
+              </InlineList>
             </div>
           </RowContent>
 

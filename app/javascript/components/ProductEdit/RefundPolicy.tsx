@@ -4,11 +4,11 @@ import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { assertDefined } from "$app/utils/assert";
 
 import { Button } from "$app/components/Button";
-import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Select } from "$app/components/Select";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Select as FormSelect } from "$app/components/ui/Select";
@@ -44,10 +44,8 @@ export const RefundPolicySelector = ({
   const uid = React.useId();
 
   return (
-    <Details
-      className="toggle"
-      open={isEnabled}
-      summary={
+    <Details open={isEnabled}>
+      <DetailsToggle chevronPosition="none" className="mb-0">
         <Switch
           checked={isEnabled}
           onChange={(e) => setIsEnabled(e.target.checked)}
@@ -60,8 +58,7 @@ export const RefundPolicySelector = ({
             </>
           }
         />
-      }
-    >
+      </DetailsToggle>
       <Dropdown className="flex flex-col gap-4">
         <Fieldset>
           <FieldsetTitle className="flex justify-between">

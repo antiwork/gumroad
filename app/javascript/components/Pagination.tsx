@@ -55,7 +55,7 @@ export const Pagination = ({ pagination, pageDisplayCount = 10, onChangePage }: 
         <ChevronLeft className="size-5" />
         Previous
       </Button>
-      <menu className="hidden! flex-1 justify-center gap-2 lg:flex!">
+      <menu className="hidden! flex-1 list-none justify-center gap-2 lg:flex!">
         {firstBoundaryPageShown ? (
           <>
             <PageNumber page={1} isCurrent={pagination.page === 1} onClick={() => onChangePage(1)} />

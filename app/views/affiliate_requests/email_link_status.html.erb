@@ -1,10 +1,10 @@
-<main class="grid divide-y divide-border bg-filled border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+<main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
   <header class="flex flex-col gap-4 p-4 text-center">
     <h1>Affiliates</h1>
   </header>
   <div class="flex flex-col gap-4 p-4">
     <%# TODO: When migrating to React/Inertia, use the Placeholder component instead of these Tailwind classes %>
-    <div class="grid gap-3 rounded border border-dashed border-border p-6 text-center justify-items-center bg-filled">
+    <div class="grid gap-3 rounded border border-dashed border-border p-6 text-center justify-items-center bg-background">
       <h2><%= @message %></h2>
       <div>You can always check all your affiliate requests <%= link_to "here", affiliates_path %>.</div>
     </div>
