@@ -331,7 +331,6 @@ export const WithContent = ({
                         }}
                       >
                         <PageIcon iconKey={pageIcons[index] ?? "text-only"} />
-                        &ensp;
                         {page.title ?? "Untitled"}
                       </MenuItemRadio>
                     </PopoverClose>

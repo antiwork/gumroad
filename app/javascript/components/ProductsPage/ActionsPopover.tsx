@@ -99,18 +99,18 @@ const ActionsPopover = ({
           <Menu>
             <MenuItem inert={!product.can_duplicate || isDuplicating} onClick={() => void handleDuplicate()}>
               <Copy className="size-5" />
-              &ensp;{isDuplicating ? "Duplicating..." : "Duplicate"}
+              {isDuplicating ? "Duplicating..." : "Duplicate"}
             </MenuItem>
             {product.can_unarchive ? (
               <MenuItem inert={isUnarchiving} onClick={() => void handleUnarchive()}>
                 <Archive className="size-5" />
-                &ensp;{isUnarchiving ? "Unarchiving..." : "Unarchive"}
+                {isUnarchiving ? "Unarchiving..." : "Unarchive"}
               </MenuItem>
             ) : null}
             {product.can_archive ? (
               <MenuItem inert={isArchiving} onClick={() => void handleArchive()}>
                 <Archive className="size-5" />
-                &ensp;{isArchiving ? "Archiving..." : "Archive"}
+                {isArchiving ? "Archiving..." : "Archive"}
               </MenuItem>
             ) : null}
             <MenuItem
@@ -119,7 +119,7 @@ const ActionsPopover = ({
               onClick={() => setConfirmingDelete(true)}
             >
               <Trash className="size-5" />
-              &ensp;{isDeleting ? "Deleting..." : "Delete permanently"}
+              {isDeleting ? "Deleting..." : "Delete permanently"}
             </MenuItem>
           </Menu>
         </PopoverContent>

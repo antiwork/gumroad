@@ -66,14 +66,14 @@ const AdminNavFooter = () => {
         ) : null}
         <MenuItem asChild>
           <Link href={Routes.logout_url()} method="delete" className="all-unset">
-            <ArrowRight pack="filled" className="mr-3 ml-1 size-5" />
+            <ArrowRight pack="filled" className="mx-1 size-5" />
             Logout
           </Link>
         </MenuItem>
         {loggedInUser?.isImpersonating ? (
           <MenuItem asChild>
             <a href="#" onClick={handleUnbecome} className="w-full">
-              <ArrowRight pack="filled" className="mr-3 ml-1 size-5" />
+              <ArrowRight pack="filled" className="mx-1 size-5" />
               Unbecome
             </a>
           </MenuItem>

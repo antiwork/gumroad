@@ -706,27 +706,27 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
         <Menu onClick={() => setOpen(false)}>
           <MenuItem onClick={() => addSection("SellerProfileProductsSection")}>
             <Grid className="size-5" />
-            &ensp; Products
+            Products
           </MenuItem>
           <MenuItem onClick={() => addSection("SellerProfilePostsSection")}>
             <Envelope pack="filled" className="size-5" />
-            &ensp; Posts
+            Posts
           </MenuItem>
           <MenuItem onClick={() => addSection("SellerProfileFeaturedProductSection")}>
             <Box className="size-5" />
-            &ensp; Featured Product
+            Featured Product
           </MenuItem>
           <MenuItem onClick={() => addSection("SellerProfileRichTextSection")}>
             <FileDetail className="size-5" />
-            &ensp; Rich text
+            Rich text
           </MenuItem>
           <MenuItem onClick={() => addSection("SellerProfileSubscribeSection")}>
             <Bell pack="filled" className="size-5" />
-            &ensp; Subscribe
+            Subscribe
           </MenuItem>
           <MenuItem onClick={() => addSection("SellerProfileWishlistsSection")}>
             <FileDetail pack="filled" className="size-5" />
-            &ensp; Wishlists
+            Wishlists
           </MenuItem>
         </Menu>
       </PopoverContent>

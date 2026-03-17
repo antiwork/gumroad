@@ -47,17 +47,17 @@ function NavbarFooter() {
           ) : null}
           <NavLinkDropdownItem
             text="Profile"
-            icon={<Store pack="filled" className="mr-3 ml-1 size-5" />}
+            icon={<Store pack="filled" className="mx-1 size-5" />}
             href={Routes.root_url({ ...routeParams, host: currentSeller?.subdomain ?? routeParams.host })}
           />
           <NavLinkDropdownItem
             text="Affiliates"
-            icon={<Gift pack="filled" className="mr-3 ml-1 size-5" />}
+            icon={<Gift pack="filled" className="mx-1 size-5" />}
             href={Routes.affiliates_url(routeParams)}
           />
           <MenuItem asChild>
             <Link href={Routes.logout_url(routeParams)} method="delete" className="all-unset">
-              <ArrowOutRightSquareHalf pack="filled" className="mr-3 ml-1 size-5" />
+              <ArrowOutRightSquareHalf pack="filled" className="mx-1 size-5" />
               Logout
             </Link>
           </MenuItem>

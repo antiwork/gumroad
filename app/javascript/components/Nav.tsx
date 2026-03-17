@@ -181,7 +181,7 @@ export const UnbecomeDropdownItem = () => {
   return (
     <NavLinkDropdownItem
       text="Unbecome"
-      icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-5" />}
+      icon={<ArrowRight pack="filled" className="mx-1 size-5" />}
       href="#"
       onClick={makeRequest}
     />
@@ -214,7 +214,7 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
 
   return (
     <MenuItemRadio checked={teamMembership.is_selected} asChild>
-      <a href={Routes.sellers_switch_path()} onClick={onClick} className="flex! min-w-0 items-center gap-2">
+      <a href={Routes.sellers_switch_path()} onClick={onClick} className="min-w-0">
         <Avatar src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
         <span className="min-w-0 flex-1 truncate" title={teamMembership.seller_name}>
           {teamMembership.seller_name}

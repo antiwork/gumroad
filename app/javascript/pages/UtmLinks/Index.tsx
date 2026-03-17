@@ -340,18 +340,18 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
             <MenuItem asChild>
               <Link href={Routes.edit_dashboard_utm_link_path(link.id)} className="no-underline">
                 <Pencil className="size-5" />
-                &ensp;Edit
+                Edit
               </Link>
             </MenuItem>
             <MenuItem asChild>
               <Link href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })} className="no-underline">
                 <Copy className="size-5" />
-                &ensp;Duplicate
+                Duplicate
               </Link>
             </MenuItem>
             <MenuItem variant="danger" onClick={onDelete}>
               <Trash className="size-5" />
-              &ensp;Delete
+              Delete
             </MenuItem>
           </Menu>
         </PopoverContent>

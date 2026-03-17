@@ -550,18 +550,15 @@ function CommunitiesIndex() {
                       <PopoverContent className="shrink-0 border-0 p-0 shadow-none">
                         <Menu>
                           {sellersExceptSelected.map((seller) => (
-                            <MenuItem key={seller.id} className="max-w-xs" onClick={() => switchSeller(seller.id)}>
-                              <div className="flex items-center gap-1">
-                                <UserAvatar
-                                  src={seller.avatar_url}
-                                  alt={seller.name}
-                                  className="shrink-0"
-                                  size="small"
-                                />
-                                <span className="truncate">
-                                  {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
-                                </span>
-                              </div>
+                            <MenuItem
+                              key={seller.id}
+                              className="max-w-xs gap-1"
+                              onClick={() => switchSeller(seller.id)}
+                            >
+                              <UserAvatar src={seller.avatar_url} alt={seller.name} className="shrink-0" size="small" />
+                              <span className="truncate">
+                                {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
+                              </span>
                             </MenuItem>
                           ))}
                           {sellersExceptSelected.length > 0 ? <hr className="my-1" /> : null}

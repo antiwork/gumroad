@@ -455,7 +455,7 @@ const DiscountsPage = ({
                                   }}
                                 >
                                   <Copy className="size-5" />
-                                  &ensp;Duplicate
+                                  Duplicate
                                 </MenuItem>
                                 <MenuItem
                                   variant="danger"
@@ -474,7 +474,7 @@ const DiscountsPage = ({
                                   })}
                                 >
                                   <Trash className="size-5" />
-                                  &ensp;Delete
+                                  Delete
                                 </MenuItem>
                               </Menu>
                             </PopoverContent>

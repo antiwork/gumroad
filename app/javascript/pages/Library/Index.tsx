@@ -124,11 +124,11 @@ export const Card = ({
               <Menu>
                 <MenuItem onClick={toggleArchived}>
                   <Archive className="size-5" />
-                  &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
+                  {purchase.is_archived ? "Unarchive" : "Archive"}
                 </MenuItem>
                 <MenuItem variant="danger" onClick={() => onDelete()}>
                   <Trash className="size-5" />
-                  &ensp;Delete permanently
+                  Delete permanently
                 </MenuItem>
               </Menu>
             </PopoverContent>
