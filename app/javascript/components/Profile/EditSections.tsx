@@ -542,10 +542,9 @@ const RichTextSectionView = ({ section }: { section: RichTextSection }) => {
       {editor ? (
         <div
           ref={toolbarRef}
-          style={{ display: "contents" }}
           onMouseDown={() => setFocused(true)}
           // Conditionally rendering this breaks on Safari, so we use hidden instead
-          className={classNames(!editor.isFocused && !focused && "hidden")}
+          className={classNames(!editor.isFocused && !focused ? "hidden" : "contents")}
         >
           <RichTextEditorToolbar
             editor={editor}
