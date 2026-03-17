@@ -37,14 +37,18 @@ class TotpCredential < ApplicationRecord
   end
 
   def redeem_recovery_code(code)
-    return false if recovery_codes.blank?
-
     normalized = code.to_s.upcase.delete("-").strip
-    matching_index = recovery_codes.index { |h| BCrypt::Password.new(h) == normalized }
-    return false unless matching_index
 
-    recovery_codes.delete_at(matching_index)
-    update!(recovery_codes:)
+    with_lock do
+      return false if recovery_codes.blank?
+
+      matching_index = recovery_codes.index { |h| BCrypt::Password.new(h) == normalized }
+      return false unless matching_index
+
+      recovery_codes.delete_at(matching_index)
+      update!(recovery_codes:)
+    end
+
     true
   end
 end
