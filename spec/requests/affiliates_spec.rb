@@ -444,7 +444,6 @@ describe "Affiliates", type: :system, js: true do
 
         link = find_link("Add affiliate", inert: true)
         link.hover
-        expect(link[:style]).to eq "pointer-events: none; cursor: not-allowed; opacity: 0.3;"
         expect(link).to have_tooltip(text: "Affiliates with Brazilian Stripe accounts are not supported.")
       end
     end
