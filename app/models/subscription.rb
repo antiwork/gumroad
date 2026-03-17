@@ -34,6 +34,7 @@ class Subscription < ApplicationRecord
   has_flags 1 => :is_test_subscription,
             2 => :cancelled_by_buyer,
             3 => :cancelled_by_admin,
+            4 => :DEPRECATED_flat_fee_applicable,
             5 => :is_resubscription_pending_confirmation,
             6 => :mor_fee_applicable,
             7 => :is_installment_plan,
