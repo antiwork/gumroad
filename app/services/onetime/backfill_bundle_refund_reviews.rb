@@ -17,6 +17,7 @@ class Onetime::BackfillBundleRefundReviews < Onetime::Base
 
   def initialize(dry_run: true)
     @dry_run = dry_run
+    @affected_count = 0
     @fixed_count = 0
     @skipped_count = 0
   end
@@ -38,6 +39,7 @@ class Onetime::BackfillBundleRefundReviews < Onetime::Base
             "(bundle: #{bundle_purchase.id}, product: #{product_purchase.link.name}, " \
             "review: #{review&.id || 'none'}, review_alive: #{review&.alive?})"
           )
+          @affected_count += 1
         else
           if is_partially_refunded
             product_purchase.update!(stripe_partially_refunded: true)
@@ -49,8 +51,8 @@ class Onetime::BackfillBundleRefundReviews < Onetime::Base
             "(bundle: #{bundle_purchase.id}, product: #{product_purchase.link.name}, " \
             "review: #{review&.id || 'none'}, review_deleted: #{review&.reload&.deleted?})"
           )
+          @fixed_count += 1
         end
-        @fixed_count += 1
       rescue StandardError => e
         Rails.logger.error("Failed to fix purchase #{product_purchase.id}: #{e.message}")
         @skipped_count += 1
@@ -59,7 +61,11 @@ class Onetime::BackfillBundleRefundReviews < Onetime::Base
       ReplicaLagWatcher.watch
     end
 
-    Rails.logger.info("#{@dry_run ? '[DRY RUN] ' : ''}Done. Fixed: #{@fixed_count}, Skipped: #{@skipped_count}")
+    if @dry_run
+      Rails.logger.info("[DRY RUN] Done. Would fix: #{@affected_count}, Skipped: #{@skipped_count}")
+    else
+      Rails.logger.info("Done. Fixed: #{@fixed_count}, Skipped: #{@skipped_count}")
+    end
   end
 
   private
