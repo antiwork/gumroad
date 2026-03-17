@@ -4,6 +4,8 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { SUBSCRIBER_FIELDS } from "../responseFieldDefinitions";
 
 export const GetSubscribers = () => (
   <ApiEndpoint
@@ -37,6 +39,29 @@ export const GetSubscribers = () => (
         description="(optional) - A key representing a page of results. It is given in the paginated response of the previous page as `next_page_key`."
       />
     </ApiParameters>
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        {
+          name: "next_page_url",
+          type: "string",
+          description: "URL for the next page of results",
+          condition: "present when paginated",
+        },
+        {
+          name: "next_page_key",
+          type: "string",
+          description: "Key to pass as page_key for the next page",
+          condition: "present when paginated",
+        },
+        {
+          name: "subscribers",
+          type: "array",
+          description: "Array of subscriber objects",
+          children: SUBSCRIBER_FIELDS,
+        },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/0ssD7adjRklGBjS5cwlWPq==/subscribers \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -78,6 +103,17 @@ export const GetSubscriber = () => (
     path="/subscribers/:id"
     description="Retrieves the details of a subscriber to this user's product. Available with the 'view_sales' scope."
   >
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        {
+          name: "subscribers",
+          type: "object",
+          description: "The subscriber object",
+          children: SUBSCRIBER_FIELDS,
+        },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/subscribers/P5ppE6H8XIjy2JSCgUhbAw== \\
   -d "access_token=ACCESS_TOKEN" \\

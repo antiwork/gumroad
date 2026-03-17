@@ -3,6 +3,7 @@ import { formatDistanceToNow, parseISO } from "date-fns";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
@@ -23,7 +24,7 @@ export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
               <div>
                 <div>
                   <h4>{post.name}</h4>
-                  <ul className="inline">
+                  <InlineList>
                     <li>
                       {actionAt.toLocaleDateString(userAgentInfo.locale, {
                         month: "long",
@@ -32,7 +33,7 @@ export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
                       })}
                     </li>
                     <li>{formatDistanceToNow(actionAt)} ago</li>
-                  </ul>
+                  </InlineList>
                 </div>
               </div>
             </RowContent>

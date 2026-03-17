@@ -72,6 +72,14 @@
       border-color: var(--color-border);
     }
   }
+
+  body:not(.mac) *::-webkit-scrollbar {
+    @apply w-3 bg-active-bg;
+  }
+
+  body:not(.mac) *::-webkit-scrollbar-thumb {
+    @apply rounded-lg bg-muted;
+  }
 }
 
 @utility all-unset {

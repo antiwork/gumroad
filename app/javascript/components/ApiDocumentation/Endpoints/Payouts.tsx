@@ -4,6 +4,36 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { PAYOUT_DETAIL_FIELDS, PAYOUT_FIELDS } from "../responseFieldDefinitions";
+
+const PayoutDetailResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      {
+        name: "payout",
+        type: "object",
+        description: "The payout object",
+        children: PAYOUT_DETAIL_FIELDS,
+      },
+    ])}
+  </ApiResponseFields>
+);
+
+const PayoutsDetailResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      {
+        name: "payouts",
+        type: "array",
+        description: "Array of payout objects",
+        children: PAYOUT_DETAIL_FIELDS,
+      },
+    ])}
+  </ApiResponseFields>
+);
 
 export const GetPayouts = () => (
   <ApiEndpoint
@@ -29,6 +59,19 @@ export const GetPayouts = () => (
         description='(optional, default: "true") - Set to "false" to exclude the upcoming payout from the response.'
       />
     </ApiParameters>
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        { name: "next_page_url", type: "string", description: "URL for the next page of results" },
+        { name: "next_page_key", type: "string", description: "Key to pass as page_key for the next page" },
+        {
+          name: "payouts",
+          type: "array",
+          description: "Array of payout objects",
+          children: PAYOUT_FIELDS,
+        },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/payouts \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -108,6 +151,7 @@ export const GetPayout = () => (
         description='(optional, default: "false") - Set to "true" to include the same transaction details in the response as exported payout CSV. All balance-affecting transactions included in the payout will be listed in a "transactions" array. Each transaction will have these keys: { type:, date:, purchase_id:, item_name:, buyer_name:, buyer_email:, taxes:, shipping:, sale_price:, gumroad_fees:, net_total: }. The "type" of transactions can be "Sale", "Chargeback", "Full Refund", "Partial Refund", "PayPal Refund", "Stripe Connect Refund", "Affiliate Credit", "PayPal Connect Affiliate Fees", "Stripe Connect Affiliate Fees", "PayPal Payouts", "Stripe Connect Payouts", "Credit", "Payout Fee", and "Technical Adjustment".'
       />
     </ApiParameters>
+    <PayoutDetailResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/payouts/fEGTaEpuKDsnDvf_MfecTA== \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -218,6 +262,7 @@ export const GetUpcomingPayouts = () => (
         description='(optional, default: "false") - Set to "true" to include the same transaction details in the response as exported payout CSV. All balance-affecting transactions included in the payout will be listed in a "transactions" array. Each transaction will have these keys: { type:, date:, purchase_id:, item_name:, buyer_name:, buyer_email:, taxes:, shipping:, sale_price:, gumroad_fees:, net_total: }. The "type" of transactions can be "Sale", "Chargeback", "Full Refund", "Partial Refund", "PayPal Refund", "Stripe Connect Refund", "Affiliate Credit", "PayPal Connect Affiliate Fees", "Stripe Connect Affiliate Fees", "PayPal Payouts", "Stripe Connect Payouts", "Credit", "Payout Fee", and "Technical Adjustment".'
       />
     </ApiParameters>
+    <PayoutsDetailResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/payouts/upcoming \\
   -d "access_token=ACCESS_TOKEN" \\

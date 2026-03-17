@@ -15,6 +15,7 @@ import { Checkbox } from "$app/components/ui/Checkbox";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -256,10 +257,10 @@ const SnippetRow = ({
         <CodeAlt className="type-icon size-5" />
         <div>
           <h4>{snippet.name || "Untitled"}</h4>
-          <ul className="inline">
+          <InlineList>
             <li>{products.find(({ permalink }) => permalink === snippet.product)?.name ?? "All products"}</li>
             <li>{LOCATION_TITLES[snippet.location]}</li>
-          </ul>
+          </InlineList>
         </div>
       </RowContent>
       <RowActions>

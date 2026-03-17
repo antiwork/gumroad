@@ -4,6 +4,23 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { LICENSE_PURCHASE_FIELDS } from "../responseFieldDefinitions";
+
+const LicenseResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "uses", type: "number", description: "Current number of times this license has been used" },
+      {
+        name: "purchase",
+        type: "object",
+        description: "The purchase associated with this license",
+        children: LICENSE_PURCHASE_FIELDS,
+      },
+    ])}
+  </ApiResponseFields>
+);
 
 export const VerifyLicense = () => (
   <ApiEndpoint method="post" path="/licenses/verify" description="Verify a license">
@@ -12,6 +29,7 @@ export const VerifyLicense = () => (
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
       <ApiParameter name="increment_uses_count" description='("true"/"false", optional, default: "true")' />
     </ApiParameters>
+    <LicenseResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/licenses/verify \\
   -d "product_id=32-nPAicqbLj8B_WswVlMw==" \\
@@ -73,6 +91,7 @@ export const EnableLicense = () => (
       <ApiParameter name="product_id" description="(the unique ID of the product, available on product's edit page)" />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
+    <LicenseResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/licenses/enable \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -135,6 +154,7 @@ export const DisableLicense = () => (
       <ApiParameter name="product_id" description="(the unique ID of the product, available on product's edit page)" />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
+    <LicenseResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/licenses/disable \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -197,6 +217,7 @@ export const DecrementUsesCount = () => (
       <ApiParameter name="product_id" description="(the unique ID of the product, available on product's edit page)" />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
+    <LicenseResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/licenses/decrement_uses_count \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -263,6 +284,7 @@ export const RotateLicense = () => (
       <ApiParameter name="product_id" description="(the unique ID of the product, available on product's edit page)" />
       <ApiParameter name="license_key" description="(the license key provided by your customer)" />
     </ApiParameters>
+    <LicenseResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/licenses/rotate \\
   -d "access_token=ACCESS_TOKEN" \\

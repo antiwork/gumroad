@@ -50,6 +50,7 @@ import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";
 import { useOnChange } from "$app/components/useOnChange";
@@ -702,32 +703,32 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
         className="border-0 p-0 shadow-none"
         arrowClassName="dark:fill-[rgb(var(--parent-color)/var(--border-alpha))]"
       >
-        <div role="menu" onClick={() => setOpen(false)}>
-          <div role="menuitem" onClick={() => addSection("SellerProfileProductsSection")}>
+        <Menu onClick={() => setOpen(false)}>
+          <MenuItem onClick={() => addSection("SellerProfileProductsSection")}>
             <Grid className="size-5" />
-            &ensp; Products
-          </div>
-          <div role="menuitem" onClick={() => addSection("SellerProfilePostsSection")}>
+            Products
+          </MenuItem>
+          <MenuItem onClick={() => addSection("SellerProfilePostsSection")}>
             <Envelope pack="filled" className="size-5" />
-            &ensp; Posts
-          </div>
-          <div role="menuitem" onClick={() => addSection("SellerProfileFeaturedProductSection")}>
+            Posts
+          </MenuItem>
+          <MenuItem onClick={() => addSection("SellerProfileFeaturedProductSection")}>
             <Box className="size-5" />
-            &ensp; Featured Product
-          </div>
-          <div role="menuitem" onClick={() => addSection("SellerProfileRichTextSection")}>
+            Featured Product
+          </MenuItem>
+          <MenuItem onClick={() => addSection("SellerProfileRichTextSection")}>
             <FileDetail className="size-5" />
-            &ensp; Rich text
-          </div>
-          <div role="menuitem" onClick={() => addSection("SellerProfileSubscribeSection")}>
+            Rich text
+          </MenuItem>
+          <MenuItem onClick={() => addSection("SellerProfileSubscribeSection")}>
             <Bell pack="filled" className="size-5" />
-            &ensp; Subscribe
-          </div>
-          <div role="menuitem" onClick={() => addSection("SellerProfileWishlistsSection")}>
+            Subscribe
+          </MenuItem>
+          <MenuItem onClick={() => addSection("SellerProfileWishlistsSection")}>
             <FileDetail pack="filled" className="size-5" />
-            &ensp; Wishlists
-          </div>
-        </div>
+            Wishlists
+          </MenuItem>
+        </Menu>
       </PopoverContent>
     </Popover>
   );

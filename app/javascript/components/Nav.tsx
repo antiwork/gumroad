@@ -11,6 +11,7 @@ import { TeamMembership } from "$app/components/LoggedInUser";
 import { Logo } from "$app/components/Logo";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Avatar } from "$app/components/ui/Avatar";
+import { MenuItem, MenuItemRadio } from "$app/components/ui/Menu";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 import logo from "$assets/images/logo-g.svg";
@@ -105,10 +106,12 @@ export const NavLinkDropdownItem = ({
   href: string;
   onClick?: (ev: React.MouseEvent<HTMLAnchorElement>) => void;
 }) => (
-  <a role="menuitem" href={href} onClick={onClick} className="block truncate border-0 px-4 py-2 no-underline">
-    {icon}
-    {text}
-  </a>
+  <MenuItem asChild>
+    <a href={href} onClick={onClick} className="no-underline">
+      {icon}
+      {text}
+    </a>
+  </MenuItem>
 );
 
 type Props = {
@@ -178,7 +181,7 @@ export const UnbecomeDropdownItem = () => {
   return (
     <NavLinkDropdownItem
       text="Unbecome"
-      icon={<ArrowRight pack="filled" className="mr-3 ml-1 size-5" />}
+      icon={<ArrowRight pack="filled" className="mx-1 size-5" />}
       href="#"
       onClick={makeRequest}
     />
@@ -210,18 +213,14 @@ export const NavLinkDropdownMembershipItem = ({ teamMembership }: { teamMembersh
   };
 
   return (
-    <a
-      role="menuitemradio"
-      href={Routes.sellers_switch_path()}
-      onClick={onClick}
-      aria-checked={teamMembership.is_selected}
-      className="flex! min-w-0 items-center gap-2"
-    >
-      <Avatar src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
-      <span className="min-w-0 flex-1 truncate" title={teamMembership.seller_name}>
-        {teamMembership.seller_name}
-      </span>
-      {teamMembership.is_selected ? <CheckCircle pack="filled" className="size-5 h-5 shrink-0 text-accent" /> : null}
-    </a>
+    <MenuItemRadio checked={teamMembership.is_selected} asChild>
+      <a href={Routes.sellers_switch_path()} onClick={onClick} className="min-w-0">
+        <Avatar src={teamMembership.seller_avatar_url} alt={teamMembership.seller_name} />
+        <span className="min-w-0 flex-1 truncate" title={teamMembership.seller_name}>
+          {teamMembership.seller_name}
+        </span>
+        {teamMembership.is_selected ? <CheckCircle pack="filled" className="size-5 h-5 shrink-0 text-accent" /> : null}
+      </a>
+    </MenuItemRadio>
   );
 };
