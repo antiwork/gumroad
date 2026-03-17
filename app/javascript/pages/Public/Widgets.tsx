@@ -4,8 +4,8 @@ import React from "react";
 import ReactDOMServer from "react-dom/server";
 import { cast } from "ts-safe-cast";
 
-import { classNames } from "$app/utils/classNames";
 import { usePersistentExternalScript } from "$app/hooks/usePersistentExternalScript";
+import { classNames } from "$app/utils/classNames";
 import { buildOverlayCodeToCopy, buildEmbedCodeToCopy } from "$app/utils/widgetCodeToCopyBuilders";
 
 import { Button } from "$app/components/Button";
