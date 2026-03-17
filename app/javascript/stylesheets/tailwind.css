@@ -158,3 +158,8 @@
   content: attr(data-placeholder);
   @apply pointer-events-none float-left h-0 text-muted;
 }
+
+/* Unset max-width for Rack::MiniProfiler results to (expectedly) expand beyond the narrow parent container */
+.profiler-results * {
+  max-width: unset;
+}
