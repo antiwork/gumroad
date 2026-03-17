@@ -13,7 +13,9 @@ import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceip
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
+import { DefinitionList } from "$app/components/ui/DefinitionList";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
@@ -137,21 +139,21 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
         <ArrowUpRightSquare className="size-5" />
       </Link>
     </h2>
-    <ul className="inline">
+    <InlineList>
       <li>
         <DateTimeWithRelativeTooltip date={purchase.created_at} />
       </li>
       <li>
         <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>
       </li>
-    </ul>
+    </InlineList>
   </div>
 );
 
 const Info = ({ purchase }: { purchase: Purchase }) => (
   <div className="flex flex-col gap-4">
     <h3>Info</h3>
-    <dl>
+    <DefinitionList>
       {purchase.seller.support_email ? (
         <>
           <dt>Seller support email</dt>
@@ -470,7 +472,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd aria-label="Can email">
         <BooleanIcon value={purchase.can_contact} />
       </dd>
-    </dl>
+    </DefinitionList>
   </div>
 );
 
@@ -481,7 +483,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
         <DetailsToggle>
           <h3>Gift Sender Info</h3>
         </DetailsToggle>
-        <dl>
+        <DefinitionList>
           <dt>For</dt>
           <dd>{gift.other_email}</dd>
 
@@ -494,9 +496,8 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
               {gift.other_purchase_external_id}
             </Link>
           </dd>
-        </dl>
+        </DefinitionList>
       </Details>
-
       <hr />
       <Details>
         <DetailsToggle>
@@ -523,7 +524,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
       <DetailsToggle>
         <h3>Gift Receiver Info</h3>
       </DetailsToggle>
-      <dl>
+      <DefinitionList>
         <dt>From</dt>
         <dd>{gift.other_email}</dd>
 
@@ -536,7 +537,7 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
             {gift.other_purchase_external_id}
           </Link>
         </dd>
-      </dl>
+      </DefinitionList>
     </Details>
   );
 
@@ -696,7 +697,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
       commentableType="purchase"
     />
     <hr />
-    <dl>
+    <DefinitionList>
       <dt>Updated</dt>
       <dd>
         <DateTimeWithRelativeTooltip date={purchase.updated_at} />
@@ -705,7 +706,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         <DateTimeWithRelativeTooltip date={purchase.deleted_at} placeholder={<NoIcon />} />
       </dd>
-    </dl>
+    </DefinitionList>
   </div>
 );
 

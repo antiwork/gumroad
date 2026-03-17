@@ -5,6 +5,7 @@ import ReactDOMServer from "react-dom/server";
 import { cast } from "ts-safe-cast";
 
 import { usePersistentExternalScript } from "$app/hooks/usePersistentExternalScript";
+import { classNames } from "$app/utils/classNames";
 import { buildOverlayCodeToCopy, buildEmbedCodeToCopy } from "$app/utils/widgetCodeToCopyBuilders";
 
 import { Button } from "$app/components/Button";
@@ -162,8 +163,7 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
       <div
         role="tabpanel"
         id={overlayTabpanelUID}
-        className="grid gap-6 rounded-sm border bg-background p-4"
-        hidden={selectedTab !== "overlay"}
+        className={classNames("grid gap-6 rounded-sm border bg-background p-4", selectedTab !== "overlay" && "hidden")}
       >
         {display_product_select ? productSelect : null}
         <OverlayPanel selectedProduct={selectedProduct} />
@@ -171,8 +171,7 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
       <div
         role="tabpanel"
         id={embedTabpanelUID}
-        className="grid gap-6 rounded-sm border bg-background p-4"
-        hidden={selectedTab !== "embed"}
+        className={classNames("grid gap-6 rounded-sm border bg-background p-4", selectedTab !== "embed" && "hidden")}
       >
         {display_product_select ? productSelect : null}
         <EmbedPanel selectedProduct={selectedProduct} />

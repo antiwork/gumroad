@@ -17,6 +17,7 @@ import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 declare module "@tiptap/core" {
@@ -89,10 +90,10 @@ export const Raw = TiptapNode.create({
     menu: "insert",
     item: (editor) => (
       <WithDialog editor={editor} type="twitter">
-        <div role="menuitem">
+        <MenuListItem>
           <TwitterX pack="brands" className="size-5" />
           <span>X post</span>
-        </div>
+        </MenuListItem>
       </WithDialog>
     ),
   },
@@ -249,9 +250,9 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
           <RowContent className="content">
             <PlayCircle pack="filled" className="type-icon size-5" />
             <div>
-              <h4 className="text-singleline">{node.attrs.title}</h4>
+              <h4 className="truncate">{node.attrs.title}</h4>
               {node.attrs.url ? (
-                <div className="text-singleline">
+                <div className="truncate">
                   <a href={cast(node.attrs.url)} target="_blank" rel="noreferrer">
                     {node.attrs.url}
                   </a>

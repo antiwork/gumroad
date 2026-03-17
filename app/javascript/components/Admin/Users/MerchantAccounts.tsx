@@ -9,6 +9,7 @@ import { BooleanIcon } from "$app/components/Admin/Icons";
 import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
+import { InlineList } from "$app/components/ui/InlineList";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type AdminUserMerchantAccountsProps = {
@@ -64,11 +65,11 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
       {isLoading ? <LoadingSpinner /> : null}
 
       {data?.merchant_accounts && data.merchant_accounts.length > 0 ? (
-        <ul className="inline">
+        <InlineList>
           {data.merchant_accounts.map((merchant_account: MerchantAccountProps) => (
             <MerchantAccount key={merchant_account.external_id} {...merchant_account} />
           ))}
-        </ul>
+        </InlineList>
       ) : (
         <Alert role="status" variant="info">
           No merchant accounts.
