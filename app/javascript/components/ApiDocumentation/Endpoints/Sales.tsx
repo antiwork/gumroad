@@ -4,6 +4,17 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { SALE_FIELDS } from "../responseFieldDefinitions";
+
+const SaleResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "sale", type: "object", description: "The sale object", children: SALE_FIELDS },
+    ])}
+  </ApiResponseFields>
+);
 
 export const GetSales = () => (
   <ApiEndpoint
@@ -28,6 +39,14 @@ export const GetSales = () => (
         description="(optional) - A key representing a page of results. It is given in the response as `next_page_key`."
       />
     </ApiParameters>
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        { name: "next_page_url", type: "string", description: "URL for the next page of results" },
+        { name: "next_page_key", type: "string", description: "Key to pass as page_key for the next page" },
+        { name: "sales", type: "array", description: "Array of sale objects", children: SALE_FIELDS },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/sales \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -118,6 +137,7 @@ export const GetSale = () => (
     path="/sales/:id"
     description="Retrieves the details of a sale by this user. Available with the 'view_sales' scope."
   >
+    <SaleResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/sales/FO8TXN-dvxYabdavG97Y-Q== \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -207,6 +227,7 @@ export const MarkSaleAsShipped = () => (
     <ApiParameters>
       <ApiParameter name="tracking_url" description="(optional)" />
     </ApiParameters>
+    <SaleResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/sales/A-m3CDDC5dlrSdKZp0RFhA==/mark_as_shipped \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -302,6 +323,7 @@ export const RefundSale = () => (
         description="(optional) - Amount in cents (in currency of the sale) to be refunded. If set, issue partial refund by this amount. If not set, issue full refund. You can issue multiple partial refunds per sale until it is fully refunded."
       />
     </ApiParameters>
+    <SaleResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/sales/A-m3CDDC5dlrSdKZp0RFhA==/refund \\
   -d "access_token=ACCESS_TOKEN" \\
