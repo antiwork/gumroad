@@ -174,6 +174,28 @@ describe Purchase::Reviews do
         expect(product_purchase.link.average_rating).to eq(0)
       end
     end
+
+    it "removes reviews from all products in a bundle when bundle is partially refunded" do
+      bundle_purchase = create(:purchase, link: create(:product, :bundle))
+      bundle_purchase.create_artifacts_and_send_receipt!
+
+      bundle_purchase.product_purchases.each do |product_purchase|
+        product_purchase.post_review(rating: 2, message: "test review")
+        expect(product_purchase.link.average_rating).to eq(2)
+        expect(product_purchase.product_review).to be_alive
+        expect(product_purchase.link.reviews_count).to eq(1)
+      end
+
+      partial_amount = bundle_purchase.total_transaction_cents / 2
+      bundle_purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, partial_amount), bundle_purchase.seller.id)
+
+      bundle_purchase.product_purchases.each do |product_purchase|
+        expect(product_purchase.reload.stripe_partially_refunded).to eq(true)
+        expect(product_purchase.product_review.reload).to be_deleted
+        expect(product_purchase.link.reviews_count).to eq(0)
+        expect(product_purchase.link.average_rating).to eq(0)
+      end
+    end
   end
 
   describe "revoking/unrevoking access" do
@@ -209,7 +231,8 @@ describe Purchase::Reviews do
         create(:purchase, is_gift_sender_purchase: true),
         create(:purchase, should_exclude_product_review: true),
         create(:purchase, is_bundle_purchase: true),
-        create(:purchase, is_commission_completion_purchase: true)
+        create(:purchase, is_commission_completion_purchase: true),
+        create(:purchase, stripe_partially_refunded: true)
       ]
       @matching_purchases = [
         create(:purchase),
