@@ -1,7 +1,7 @@
 import React from "react";
 
-import { Details } from "$app/components/Details";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details } from "$app/components/ui/Details";
 
 export type FieldDefinition = {
   name: string;
