@@ -8,9 +8,11 @@ import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Label } from "$app/components/ui/Label";
+import { Pill } from "$app/components/ui/Pill";
 
 const MIN_PASSWORD_LENGTH = 4;
 const MAX_PASSWORD_LENGTH = 128;
@@ -18,6 +20,8 @@ const MAX_PASSWORD_LENGTH = 128;
 type PasswordPageProps = {
   settings_pages: SettingPage[];
   require_old_password: boolean;
+  show_authenticator_app_settings: boolean;
+  authenticator_app_enabled: boolean;
 };
 
 export default function PasswordPage() {
@@ -93,6 +97,22 @@ export default function PasswordPage() {
           </Fieldset>
         </FormSection>
       </form>
+      {props.show_authenticator_app_settings ? (
+        <FormSection header={<h2>Two-factor authentication</h2>}>
+          {props.authenticator_app_enabled ? null : (
+            <Alert variant="info">
+              Use an authenticator app to get verification codes without waiting for an email.
+            </Alert>
+          )}
+          <Fieldset>
+            <FieldsetTitle>
+              Authenticator app
+              {props.authenticator_app_enabled ? <Pill color="success">Enabled</Pill> : <Pill>Not set up</Pill>}
+            </FieldsetTitle>
+            <FieldsetDescription>Get verification codes from an app on your device.</FieldsetDescription>
+          </Fieldset>
+        </FormSection>
+      ) : null}
     </SettingsLayout>
   );
 }
