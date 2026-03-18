@@ -138,7 +138,7 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
           </button>{" "}
           instead.
         </p>
-        <Modal open={showSecret ? setupData !== null : null} title="Setup key" onClose={() => setShowSecret(false)}>
+        <Modal open={showSecret ? setupData !== null : false} title="Setup key" onClose={() => setShowSecret(false)}>
           <div className="grid gap-4">
             <code className="rounded border border-border bg-background p-3 font-mono text-sm break-all">
               {setupData?.secret}
