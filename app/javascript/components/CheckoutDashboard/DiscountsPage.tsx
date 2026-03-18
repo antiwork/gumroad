@@ -12,6 +12,7 @@ import {
   getStatistics,
   updateDiscount,
 } from "$app/data/offer_code";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -448,6 +449,7 @@ const DiscountsPage = ({
                               <Menu>
                                 <MenuItem
                                   inert={!offerCode.can_update || isLoading}
+                                  className={classNames((!offerCode.can_update || isLoading) && "opacity-30")}
                                   onClick={() => {
                                     setPopoverOfferCodeId(null);
                                     setSelectedOfferCodeId(offerCode.id);
@@ -460,6 +462,7 @@ const DiscountsPage = ({
                                 <MenuItem
                                   variant="danger"
                                   inert={!offerCode.can_update || isLoading}
+                                  className={!offerCode.can_update || isLoading ? "opacity-30" : undefined}
                                   onClick={asyncVoid(async (e) => {
                                     e.stopPropagation();
                                     try {

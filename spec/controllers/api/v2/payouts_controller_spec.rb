@@ -395,6 +395,12 @@ describe Api::V2::PayoutsController do
         expect(response.code).to eq "403"
       end
     end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+      get :index, params: { access_token: token.token }
+      expect(response).to be_successful
+    end
   end
 
   describe "GET 'show'" do

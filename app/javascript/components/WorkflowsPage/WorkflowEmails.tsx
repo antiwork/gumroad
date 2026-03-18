@@ -270,7 +270,11 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
           actions={
             <>
               <Button asChild>
-                <Link href={Routes.workflows_path()} inert={isBusy || undefined}>
+                <Link
+                  href={Routes.workflows_path()}
+                  inert={isBusy || undefined}
+                  className={isBusy ? "opacity-30" : undefined}
+                >
                   {workflow.published ? (
                     <>
                       <XSquare className="size-5" />
