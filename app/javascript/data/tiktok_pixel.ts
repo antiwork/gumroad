@@ -41,7 +41,7 @@ export function trackProductEvent(config: AnalyticsConfig, data: TikTokProductAn
 export function startTrackingForSeller(data: TikTokPixelConfig) {
   if (!shouldTrack() || !data.tiktokPixelId || initializedPixels.has(data.tiktokPixelId)) return;
 
-  loadTikTokPixelScript();
+  if (typeof ttq === "undefined") loadTikTokPixelScript();
   ttq.load(data.tiktokPixelId);
   ttq.page();
   initializedPixels.add(data.tiktokPixelId);
