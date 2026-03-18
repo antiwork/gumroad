@@ -587,6 +587,84 @@ describe Subscription::RestartAtCheckoutService do
       end
     end
 
+    describe ".sync_offer_code_discount_from_confirmed_purchase!" do
+      let(:expensive_product) { create(:membership_product, user: seller, price_cents: 10_00) }
+      let(:offer_code) { create(:offer_code, amount_cents: nil, amount_percentage: 25, duration_in_months: 1, products: [expensive_product], user: seller) }
+
+      let!(:subscription) do
+        sub = create_subscription_for_product(
+          product: expensive_product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+        original_purchase = sub.original_purchase
+        original_purchase.offer_code = offer_code
+        pre_discount_price = original_purchase.minimum_paid_price_cents_per_unit_before_discount
+        discounted_price = (pre_discount_price * 0.75).round
+        original_purchase.update!(displayed_price_cents: discounted_price)
+        original_purchase.create_purchase_offer_code_discount!(
+          offer_code: offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: pre_discount_price,
+          duration_in_months: 1
+        )
+        sub
+      end
+
+      it "syncs from the confirmed purchase's discount, not the live offer code" do
+        original_purchase = subscription.original_purchase
+
+        confirmed_purchase = create(:purchase,
+                                    link: expensive_product,
+                                    purchaser: buyer,
+                                    email: email,
+                                    subscription: subscription,
+                                    offer_code: offer_code)
+        confirmed_purchase.create_purchase_offer_code_discount!(
+          offer_code: offer_code,
+          offer_code_amount: 50,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 3
+        )
+
+        # Seller changes the live offer code after checkout
+        offer_code.update!(amount_percentage: 75, duration_in_months: 6)
+
+        described_class.sync_offer_code_discount_from_confirmed_purchase!(subscription, confirmed_purchase)
+
+        discount = original_purchase.purchase_offer_code_discount.reload
+        # Should use confirmed purchase values (50%, 3 months), not live values (75%, 6 months)
+        expect(discount.offer_code_amount).to eq(50)
+        expect(discount.offer_code_is_percent).to be true
+        expect(discount.duration_in_billing_cycles).to eq(3)
+      end
+
+      it "is a no-op when the confirmed purchase IS the original purchase" do
+        original_purchase = subscription.original_purchase
+
+        expect do
+          described_class.sync_offer_code_discount_from_confirmed_purchase!(subscription, original_purchase)
+        end.not_to change { original_purchase.purchase_offer_code_discount.reload.updated_at }
+      end
+
+      it "is a no-op when the confirmed purchase has no discount" do
+        confirmed_purchase = create(:purchase,
+                                    link: expensive_product,
+                                    purchaser: buyer,
+                                    email: email,
+                                    subscription: subscription)
+
+        expect do
+          described_class.sync_offer_code_discount_from_confirmed_purchase!(subscription, confirmed_purchase)
+        end.not_to change { subscription.original_purchase.purchase_offer_code_discount.reload.attributes }
+      end
+    end
+
     # Integration tests - verify error handling works correctly
     # Success cases are covered by UpdaterService specs; we just verify delegation
     describe "integration behavior" do

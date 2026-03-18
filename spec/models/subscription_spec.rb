@@ -2207,6 +2207,39 @@ describe Subscription, :vcr do
       end
     end
 
+    context "when the original purchase has an offer code discount with duration_in_months" do
+      it "copies duration_in_months to the new original purchase's discount" do
+        offer_code = create(:offer_code, amount_percentage: 25, duration_in_months: 3, products: [@product])
+        setup_subscription(offer_code: offer_code)
+
+        original_discount = @original_purchase.purchase_offer_code_discount
+        expect(original_discount).to be_present
+        expect(original_discount.duration_in_months).to eq(3)
+
+        new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code_amount).to eq(original_discount.offer_code_amount)
+        expect(new_discount.offer_code_is_percent).to eq(original_discount.offer_code_is_percent)
+        expect(new_discount.duration_in_months).to eq(3)
+      end
+
+      it "preserves nil duration_in_months for unlimited discounts" do
+        offer_code = create(:offer_code, amount_percentage: 25, duration_in_months: nil, products: [@product])
+        setup_subscription(offer_code: offer_code)
+
+        original_discount = @original_purchase.purchase_offer_code_discount
+        expect(original_discount.duration_in_months).to be_nil
+
+        new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.duration_in_months).to be_nil
+      end
+    end
+
     context "for a subscription with fixed length" do
       it "raises an error" do
         setup_subscription

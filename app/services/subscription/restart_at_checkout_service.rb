@@ -35,6 +35,41 @@ class Subscription::RestartAtCheckoutService
     adapt_result(result)
   end
 
+  # Re-applies discount values from a confirmed purchase (after 3DS) to the
+  # subscription's original_purchase. Unlike sync_offer_code_discount!, this
+  # reads from the purchase that was created at checkout time, not from the
+  # live offer code, so it is safe against seller edits between checkout and
+  # 3DS confirmation.
+  def self.sync_offer_code_discount_from_confirmed_purchase!(subscription, confirmed_purchase)
+    source_discount = confirmed_purchase.purchase_offer_code_discount
+    return if source_discount.blank?
+
+    target_purchase = subscription.original_purchase
+    target_discount = target_purchase.purchase_offer_code_discount
+    return if target_discount.blank?
+
+    # If the confirmed purchase IS the current original purchase (plan-changed
+    # case), the discount is already correct.
+    return if target_discount.id == source_discount.id
+
+    return if target_discount.offer_code_amount == source_discount.offer_code_amount &&
+              target_discount.offer_code_is_percent == source_discount.offer_code_is_percent &&
+              target_discount.duration_in_billing_cycles == source_discount.duration_in_billing_cycles
+
+    ActiveRecord::Base.transaction do
+      target_discount.update!(
+        offer_code_amount: source_discount.offer_code_amount,
+        offer_code_is_percent: source_discount.offer_code_is_percent,
+        duration_in_billing_cycles: source_discount.duration_in_billing_cycles
+      )
+
+      new_displayed_price = compute_displayed_price(
+        target_purchase, source_discount.offer_code_amount, source_discount.offer_code_is_percent
+      )
+      target_purchase.update!(displayed_price_cents: new_displayed_price)
+    end
+  end
+
   def self.sync_offer_code_discount!(subscription)
     original_purchase = subscription.original_purchase
     discount = original_purchase.purchase_offer_code_discount
@@ -58,13 +93,21 @@ class Subscription::RestartAtCheckoutService
         duration_in_billing_cycles: current_duration
       )
 
-      pre_discount_price = original_purchase.minimum_paid_price_cents_per_unit_before_discount
-      new_discount_off = offer_code.amount_off(pre_discount_price)
-      new_displayed_price = [(pre_discount_price - new_discount_off) * original_purchase.quantity, 0].max
-
+      new_displayed_price = compute_displayed_price(original_purchase, current_amount, current_is_percent)
       original_purchase.update!(displayed_price_cents: new_displayed_price)
     end
   end
+
+  def self.compute_displayed_price(purchase, discount_amount, is_percent)
+    pre_discount_price = purchase.minimum_paid_price_cents_per_unit_before_discount
+    if is_percent
+      discount_off = (pre_discount_price * discount_amount / 100.0).round
+    else
+      discount_off = discount_amount
+    end
+    [(pre_discount_price - discount_off) * purchase.quantity, 0].max
+  end
+  private_class_method :compute_displayed_price
 
   private
     def updater_service_params

@@ -39,7 +39,11 @@ class Purchase::ConfirmService < Purchase::BaseService
 
     if purchase.is_upgrade_purchase? || purchase.subscription&.is_resubscription_pending_confirmation?
       if purchase.subscription.is_resubscription_pending_confirmation?
-        Subscription::RestartAtCheckoutService.sync_offer_code_discount!(purchase.subscription)
+        begin
+          Subscription::RestartAtCheckoutService.sync_offer_code_discount_from_confirmed_purchase!(purchase.subscription, purchase)
+        rescue => e
+          Bugsnag.notify(e)
+        end
       end
       purchase.subscription.handle_purchase_success(purchase)
       if purchase.subscription.is_resubscription_pending_confirmation?
