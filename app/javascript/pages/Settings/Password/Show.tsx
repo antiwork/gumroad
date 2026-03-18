@@ -106,7 +106,10 @@ export default function PasswordPage() {
         throw new ResponseError(result.error_message ?? "Sorry, something went wrong. Please try again.");
       }
 
-      setRegeneratedCodes(result.recovery_codes ?? []);
+      if (!result.recovery_codes?.length) {
+        throw new ResponseError("No recovery codes were generated. Please try again.");
+      }
+      setRegeneratedCodes(result.recovery_codes);
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
