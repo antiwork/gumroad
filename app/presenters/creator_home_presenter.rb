@@ -66,7 +66,7 @@ class CreatorHomePresenter
       end
     end
 
-    tax_center_enabled = Feature.active?(:tax_center, seller)
+    tax_center_enabled = seller.tax_center_enabled?
     if tax_center_enabled
       tax_forms = []
       show_1099_download_notice = seller.user_tax_forms.for_year(Time.current.prev_year.year).exists?
@@ -94,7 +94,7 @@ class CreatorHomePresenter
       stripe_verification_message:,
       tax_forms:,
       show_1099_download_notice:,
-      tax_center_enabled: Feature.active?(:tax_center, seller)
+      tax_center_enabled:
     }
   end
 
