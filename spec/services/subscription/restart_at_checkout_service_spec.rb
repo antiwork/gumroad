@@ -663,6 +663,40 @@ describe Subscription::RestartAtCheckoutService do
           described_class.sync_offer_code_discount_from_confirmed_purchase!(subscription, confirmed_purchase)
         end.not_to change { subscription.original_purchase.purchase_offer_code_discount.reload.attributes }
       end
+
+      it "uses the checkout-time price when the seller edits the membership price between checkout and 3DS completion" do
+        original_purchase = subscription.original_purchase
+        checkout_pre_discount_price = original_purchase.minimum_paid_price_cents_per_unit_before_discount
+
+        confirmed_purchase = create(:purchase,
+                                    link: expensive_product,
+                                    purchaser: buyer,
+                                    email: email,
+                                    subscription: subscription,
+                                    offer_code: offer_code)
+        confirmed_purchase.create_purchase_offer_code_discount!(
+          offer_code: offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: checkout_pre_discount_price,
+          duration_in_months: 1
+        )
+
+        # Seller edits the membership price between checkout and 3DS completion
+        expensive_product.prices.alive.first.update!(price_cents: 20_00)
+
+        described_class.sync_offer_code_discount_from_confirmed_purchase!(subscription, confirmed_purchase)
+
+        original_purchase.reload
+        target_discount = original_purchase.purchase_offer_code_discount.reload
+
+        # displayed_price_cents should use the checkout-time price (10_00), not the new price (20_00)
+        expected_displayed_price = (checkout_pre_discount_price * 0.75).round
+        expect(original_purchase.displayed_price_cents).to eq(expected_displayed_price)
+
+        # pre_discount_minimum_price_cents should also reflect the checkout-time price
+        expect(target_discount.pre_discount_minimum_price_cents).to eq(checkout_pre_discount_price)
+      end
     end
 
     # Integration tests - verify error handling works correctly

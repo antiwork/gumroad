@@ -54,19 +54,24 @@ class Subscription::RestartAtCheckoutService
 
     return if target_discount.offer_code_amount == source_discount.offer_code_amount &&
               target_discount.offer_code_is_percent == source_discount.offer_code_is_percent &&
-              target_discount.duration_in_billing_cycles == source_discount.duration_in_billing_cycles
+              target_discount.duration_in_billing_cycles == source_discount.duration_in_billing_cycles &&
+              target_discount.pre_discount_minimum_price_cents == source_discount.pre_discount_minimum_price_cents
 
     ActiveRecord::Base.transaction do
       target_discount.update!(
         offer_code_amount: source_discount.offer_code_amount,
         offer_code_is_percent: source_discount.offer_code_is_percent,
-        duration_in_billing_cycles: source_discount.duration_in_billing_cycles
+        duration_in_billing_cycles: source_discount.duration_in_billing_cycles,
+        pre_discount_minimum_price_cents: source_discount.pre_discount_minimum_price_cents
       )
 
-      new_displayed_price = compute_displayed_price(
-        target_purchase, source_discount.offer_code_amount, source_discount.offer_code_is_percent
-      )
-      target_purchase.update!(displayed_price_cents: new_displayed_price)
+      pre_discount_price = source_discount.pre_discount_minimum_price_cents
+      if source_discount.offer_code_is_percent
+        discount_off = (pre_discount_price * source_discount.offer_code_amount / 100.0).round
+      else
+        discount_off = source_discount.offer_code_amount
+      end
+      target_purchase.update!(displayed_price_cents: [(pre_discount_price - discount_off) * target_purchase.quantity, 0].max)
     end
   end
 
