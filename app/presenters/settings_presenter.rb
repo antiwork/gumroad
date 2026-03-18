@@ -156,7 +156,7 @@ class SettingsPresenter
       require_old_password: seller.provider.blank?,
       settings_pages: pages,
       show_authenticator_app_settings: Feature.active?(:authenticator_2fa, seller),
-      authenticator_app_enabled: false,
+      authenticator_app_enabled: seller.totp_enabled?,
     }
   end
 
