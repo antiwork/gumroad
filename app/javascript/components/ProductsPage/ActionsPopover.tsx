@@ -3,7 +3,6 @@ import * as React from "react";
 
 import { archiveProduct, deleteProduct, duplicateProduct, unarchiveProduct } from "$app/data/product_dashboard";
 import { Membership, Product } from "$app/data/products";
-import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
