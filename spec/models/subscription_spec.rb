@@ -2208,29 +2208,39 @@ describe Subscription, :vcr do
     end
 
     context "when the original purchase has an offer code discount with duration_in_months" do
-      it "copies duration_in_months to the new original purchase's discount" do
-        offer_code = create(:offer_code, amount_percentage: 25, duration_in_months: 3, products: [@product])
-        setup_subscription(offer_code: offer_code)
+      before do
+        setup_subscription
+        @offer_code = create(:offer_code, amount_percentage: 25, products: [@product])
+        @original_purchase.update!(offer_code: @offer_code)
+      end
 
-        original_discount = @original_purchase.purchase_offer_code_discount
-        expect(original_discount).to be_present
-        expect(original_discount.duration_in_months).to eq(3)
+      it "copies duration_in_months to the new original purchase's discount" do
+        @offer_code.update!(duration_in_months: 3)
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 3
+        )
 
         new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
 
         new_discount = new_purchase.purchase_offer_code_discount
         expect(new_discount).to be_present
-        expect(new_discount.offer_code_amount).to eq(original_discount.offer_code_amount)
-        expect(new_discount.offer_code_is_percent).to eq(original_discount.offer_code_is_percent)
+        expect(new_discount.offer_code_amount).to eq(25)
+        expect(new_discount.offer_code_is_percent).to eq(true)
         expect(new_discount.duration_in_months).to eq(3)
       end
 
       it "preserves nil duration_in_months for unlimited discounts" do
-        offer_code = create(:offer_code, amount_percentage: 25, duration_in_months: nil, products: [@product])
-        setup_subscription(offer_code: offer_code)
-
-        original_discount = @original_purchase.purchase_offer_code_discount
-        expect(original_discount.duration_in_months).to be_nil
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: nil
+        )
 
         new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
 
