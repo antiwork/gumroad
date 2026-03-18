@@ -121,7 +121,9 @@ export const ProductsPageMembershipsTable = (props: {
                 {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
 
                 {membership.remaining_for_sale_count ? (
-                  <small className="block">{membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
+                  <small className="block">
+                    {membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining
+                  </small>
                 ) : null}
               </TableCell>
 

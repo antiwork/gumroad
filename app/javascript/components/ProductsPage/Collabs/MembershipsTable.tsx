@@ -90,7 +90,9 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
                 {membership.successful_sales_count.toLocaleString(locale)}
 
                 {membership.remaining_for_sale_count ? (
-                  <small className="block">{membership.remaining_for_sale_count.toLocaleString(locale)} remaining</small>
+                  <small className="block">
+                    {membership.remaining_for_sale_count.toLocaleString(locale)} remaining
+                  </small>
                 ) : null}
               </TableCell>
 

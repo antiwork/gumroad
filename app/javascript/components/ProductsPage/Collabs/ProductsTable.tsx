@@ -86,7 +86,9 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 </a>
 
                 {product.remaining_for_sale_count ? (
-                  <small className="block">{product.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
+                  <small className="block">
+                    {product.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining
+                  </small>
                 ) : null}
               </TableCell>
 
