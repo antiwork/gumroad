@@ -138,7 +138,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
             ))}
           </ProductCardGrid>
         ) : recommendedProducts && recommendedProducts.length > 0 ? (
-          <ProductCardGrid narrow inert={editor.isEditable}>
+          <ProductCardGrid narrow inert={editor.isEditable} className={editor.isEditable ? "opacity-30" : undefined}>
             {recommendedProducts.map((product) => (
               <div key={product.id}>
                 <Card product={product} />

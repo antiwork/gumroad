@@ -4,7 +4,8 @@ module TwoFactorAuthenticationValidator
   extend ActiveSupport::Concern
 
   TWO_FACTOR_AUTH_USER_ID_SESSION_NAME = :verify_two_factor_auth_for
-  private_constant :TWO_FACTOR_AUTH_USER_ID_SESSION_NAME
+  TWO_FACTOR_AUTH_METHOD_SESSION_NAME = :two_factor_auth_method
+  private_constant :TWO_FACTOR_AUTH_USER_ID_SESSION_NAME, :TWO_FACTOR_AUTH_METHOD_SESSION_NAME
 
   def skip_two_factor_authentication?(user)
     # Skip 2FA if it's not enabled for the user
@@ -26,10 +27,20 @@ module TwoFactorAuthenticationValidator
   def prepare_for_two_factor_authentication(user)
     session[TWO_FACTOR_AUTH_USER_ID_SESSION_NAME] = user.id
 
-    # Do not send token if it's already present in the next URL (navigated from email login login to an unauthenticated session)
-    return if params[:next] && params[:next].include?(verify_two_factor_authentication_path(format: :html))
+    if user.totp_enabled? && Feature.active?(:authenticator_2fa)
+      session[TWO_FACTOR_AUTH_METHOD_SESSION_NAME] = "totp"
+    else
+      session[TWO_FACTOR_AUTH_METHOD_SESSION_NAME] = "email"
 
-    user.send_authentication_token!
+      # Do not send token if it's already present in the next URL (navigated from email login login to an unauthenticated session)
+      return if params[:next] && params[:next].include?(verify_two_factor_authentication_path(format: :html))
+
+      user.send_authentication_token!
+    end
+  end
+
+  def two_factor_auth_method
+    session[TWO_FACTOR_AUTH_METHOD_SESSION_NAME] || "email"
   end
 
   def user_for_two_factor_authentication
@@ -40,6 +51,7 @@ module TwoFactorAuthenticationValidator
 
   def reset_two_factor_auth_login_session
     session.delete(TWO_FACTOR_AUTH_USER_ID_SESSION_NAME)
+    session.delete(TWO_FACTOR_AUTH_METHOD_SESSION_NAME)
   end
 
   def set_two_factor_auth_cookie(user)

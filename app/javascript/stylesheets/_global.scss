@@ -73,8 +73,3 @@
     padding-left: spacer(6);
   }
 }
-
-[inert] {
-  cursor: not-allowed;
-  opacity: $disabled-opacity;
-}

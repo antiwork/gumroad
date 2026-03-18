@@ -924,7 +924,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       {product.native_type === "membership" ? (
                         <CardContent asChild details>
                           <Details>
-                            <DetailsToggle chevronPosition="right" className="grow" inert>
+                            <DetailsToggle chevronPosition="right" className="grow opacity-30" inert>
                               Membership
                             </DetailsToggle>
                           </Details>
@@ -932,14 +932,14 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                       ) : null}
                       <CardContent asChild details>
                         <Details>
-                          <DetailsToggle chevronPosition="right" className="grow" inert>
+                          <DetailsToggle chevronPosition="right" className="grow opacity-30" inert>
                             Receipt
                           </DetailsToggle>
                         </Details>
                       </CardContent>
                       <CardContent asChild details>
                         <Details>
-                          <DetailsToggle chevronPosition="right" className="grow" inert>
+                          <DetailsToggle chevronPosition="right" className="grow opacity-30" inert>
                             Library
                           </DetailsToggle>
                         </Details>
@@ -1187,6 +1187,7 @@ export const ContentTab = () => {
                             }}
                             aria-selected={item.id === selectedVariantId}
                             inert={product.has_same_rich_content_for_all_variants}
+                            className={product.has_same_rich_content_for_all_variants ? "opacity-30" : undefined}
                           >
                             <div className="flex-1">
                               <h4>{item.name || "Untitled"}</h4>

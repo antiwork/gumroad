@@ -48,6 +48,13 @@ describe Api::V2::LinksController do
         expect(response.parsed_body).to eq({ success: true, products: [@product2, @product1] }.as_json(api_scopes: ["view_sales"]))
       end
     end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+      get @action, params: { access_token: token.token }
+      expect(response).to be_successful
+      expect(response.parsed_body["products"]).to be_present
+    end
   end
 
   describe "POST 'create'" do
@@ -176,6 +183,13 @@ describe Api::V2::LinksController do
         get :show, params: @params.merge(id: create(:product, user: @user).external_id)
         expect(response.parsed_body["product"]).to include("custom_delivery_url" => nil)
       end
+    end
+
+    it "grants access with the account scope and includes sales data" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+      get :show, params: { id: @product.external_id, access_token: token.token }
+      expect(response).to be_successful
+      expect(response.parsed_body["product"]).to have_key("sales_count")
     end
   end
 
