@@ -310,10 +310,8 @@ class Payment < ApplicationRecord
     def sync_with_stripe
       return unless processor == PayoutProcessorType::STRIPE
 
-      # Payments stuck in "creating" for over 48 hours never reached Stripe.
-      # Fail them directly and unlock balances.
       if state == CREATING
-        if created_at < 48.hours.ago
+        if created_at < 24.hours.ago
           with_lock do
             mark_failed!("Payment stuck in creating state")
           end
@@ -324,13 +322,10 @@ class Payment < ApplicationRecord
 
       return if stripe_transfer_id.blank? || stripe_connect_account_id.blank?
 
-      # Fetch payout status outside the lock to avoid holding row lock during API calls
       stripe_payout = Stripe::Payout.retrieve(stripe_transfer_id, { stripe_account: stripe_connect_account_id })
 
       needs_reverse_transfer = false
 
-      # Hold the lock only for state transitions, matching the pattern in
-      # handle_stripe_event_payout_failed
       with_lock do
         case stripe_payout["status"]
         when "paid"

@@ -107,7 +107,7 @@ describe SyncStuckPayoutsJob do
         expect(payment.reload.state).to eq("completed")
       end
 
-      it "fails Stripe payouts stuck in creating for over 48 hours" do
+      it "fails Stripe payouts stuck in creating for over 24 hours" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
                                    stripe_transfer_id: nil, stripe_connect_account_id: nil,
                                    created_at: 3.days.ago)
@@ -121,7 +121,7 @@ describe SyncStuckPayoutsJob do
         expect(StripePayoutProcessor).to have_received(:reverse_internal_transfer!).with(payment)
       end
 
-      it "does not sync Stripe payouts still in creating under 48 hours" do
+      it "does not sync Stripe payouts still in creating under 24 hours" do
         create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
                          stripe_transfer_id: nil, stripe_connect_account_id: nil,
                          created_at: 1.hour.ago)

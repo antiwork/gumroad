@@ -285,7 +285,7 @@ describe Payment do
   end
 
   describe "#sync_with_stripe" do
-    context "when payment is stuck in creating for over 48 hours" do
+    context "when payment is stuck in creating for over 24 hours" do
       it "fails the payment and reverses internal transfer" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
                                    created_at: 3.days.ago)
@@ -300,7 +300,7 @@ describe Payment do
       end
     end
 
-    context "when payment is in creating for less than 48 hours" do
+    context "when payment is in creating for less than 24 hours" do
       it "does not fail the payment" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
                                    created_at: 1.hour.ago)
