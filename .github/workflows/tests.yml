@@ -25,7 +25,7 @@ jobs:
 
   build_base:
     name: Build base image${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
-    runs-on: hetzner
+    runs-on: ubicloud-standard-4
     needs: ci_gate
     if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
@@ -81,7 +81,7 @@ jobs:
           fi
 
   build_test:
-    runs-on: hetzner
+    runs-on: ubicloud-standard-4
     name: Build test image${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     needs: build_base
     steps:
@@ -152,7 +152,7 @@ jobs:
     name: Test Fast ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
-    runs-on: hetzner
+    runs-on: ubicloud-standard-4
     needs: build_test
     strategy:
       fail-fast: false
@@ -440,7 +440,7 @@ jobs:
 
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
-    runs-on: ubicloud-standard-4
+    runs-on: ubicloud-standard-2
     needs: [test_fast, test_slow]
     if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:

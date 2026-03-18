@@ -13,7 +13,13 @@ class Settings::TotpController < Settings::BaseController
 
     credential = @user.create_totp_credential!
     uri = credential.totp_provisioning_uri
-    qr_svg = RQRCode::QRCode.new(uri).as_svg(module_size: 4, use_path: true)
+    qr_svg = RQRCode::QRCode.new(uri).as_svg(
+      module_size: 4,
+      offset: 16,
+      fill: "ffffff",
+      use_path: true,
+      viewbox: true
+    )
 
     render json: {
       success: true,
@@ -31,8 +37,10 @@ class Settings::TotpController < Settings::BaseController
     end
 
     if credential.verify_code(params[:code])
-      credential.update!(confirmed_at: Time.current)
-      codes = credential.generate_recovery_codes
+      codes = TotpCredential.transaction do
+        credential.update!(confirmed_at: Time.current)
+        credential.generate_recovery_codes
+      end
 
       render json: { success: true, recovery_codes: format_recovery_codes(codes) }
     else
