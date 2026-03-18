@@ -50,6 +50,10 @@ module TwoFactorAuthentication
     !Rails.env.production? && authentication_token == DEFAULT_AUTH_TOKEN
   end
 
+  def totp_enabled?
+    totp_credential&.confirmed? == true
+  end
+
   def has_logged_in_from_ip_before?(remote_ip)
     two_factor_auth_redis_namespace.get(two_factor_auth_ip_redis_key(remote_ip)).present?
   end

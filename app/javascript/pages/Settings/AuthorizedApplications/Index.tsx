@@ -26,6 +26,7 @@ type AuthorizedApplication = {
 };
 
 type Scope =
+  | "account"
   | "edit_products"
   | "ifttt"
   | "mark_sales_as_shipped"
@@ -41,6 +42,7 @@ type Scope =
   | "creator_api";
 
 const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
+  account: "Full access to your account.",
   edit_products: "Create new products and edit your existing products.",
   ifttt: "See your sales data.",
   mark_sales_as_shipped: "Mark your sales as shipped.",
@@ -104,10 +106,10 @@ export default function AuthorizedApplicationsPage() {
                 <TableRow key={application.id}>
                   <TableCell hideLabel>
                     <div className="flex gap-3">
-                      <div>
+                      <div className="shrink-0">
                         <img
                           src={application.icon_url || placeholderAppIcon}
-                          className="application-icon"
+                          className="rounded border"
                           width={72}
                           height={72}
                           alt={application.name}

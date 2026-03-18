@@ -3,6 +3,26 @@ import React from "react";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { PRODUCT_FIELDS } from "../responseFieldDefinitions";
+
+const ProductResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "products", type: "array", description: "Array of product objects", children: PRODUCT_FIELDS },
+    ])}
+  </ApiResponseFields>
+);
+
+const SingleProductResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "product", type: "object", description: "The product object", children: PRODUCT_FIELDS },
+    ])}
+  </ApiResponseFields>
+);
 
 export const GetProducts = () => (
   <ApiEndpoint
@@ -10,6 +30,7 @@ export const GetProducts = () => (
     path="/products"
     description="Retrieve all of the existing products for the authenticated user."
   >
+    <ProductResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -86,6 +107,7 @@ export const GetProducts = () => (
 
 export const GetProduct = () => (
   <ApiEndpoint method="get" path="/products/:id" description="Retrieve the details of a product.">
+    <SingleProductResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA== \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -178,6 +200,7 @@ export const DeleteProduct = () => (
 
 export const EnableProduct = () => (
   <ApiEndpoint method="put" path="/products/:id/enable" description="Enable an existing product.">
+    <SingleProductResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/enable \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -254,6 +277,7 @@ export const EnableProduct = () => (
 
 export const DisableProduct = () => (
   <ApiEndpoint method="put" path="/products/:id/disable" description="Disable an existing product.">
+    <SingleProductResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/disable \\
   -d "access_token=ACCESS_TOKEN" \\

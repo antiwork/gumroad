@@ -4,6 +4,22 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { CUSTOM_FIELD_FIELDS } from "../responseFieldDefinitions";
+
+const CustomFieldResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      {
+        name: "custom_field",
+        type: "object",
+        description: "The custom field object",
+        children: CUSTOM_FIELD_FIELDS,
+      },
+    ])}
+  </ApiResponseFields>
+);
 
 export const GetCustomFields = () => (
   <ApiEndpoint
@@ -11,6 +27,17 @@ export const GetCustomFields = () => (
     path="/products/:product_id/custom_fields"
     description="Retrieve all of the existing custom fields for a product."
   >
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        {
+          name: "custom_fields",
+          type: "array",
+          description: "Array of custom field objects",
+          children: CUSTOM_FIELD_FIELDS,
+        },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/custom_fields \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -39,6 +66,7 @@ export const CreateCustomField = () => (
       <ApiParameter name="name" />
       <ApiParameter name="required" description="(true or false)" />
     </ApiParameters>
+    <CustomFieldResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/custom_fields \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -68,6 +96,7 @@ export const UpdateCustomField = () => (
       <ApiParameter name="variant" />
       <ApiParameter name="required" description="(true or false)" />
     </ApiParameters>
+    <CustomFieldResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/custom_fields/phone%20number \\
   -d "access_token=ACCESS_TOKEN" \\

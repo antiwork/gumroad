@@ -51,7 +51,7 @@ class Api::V2::PayoutsController < Api::V2::BaseController
   def show
     payout = current_resource_owner.payments.find_by_external_id(params[:id])
     if payout
-      include_sales = doorkeeper_token.scopes.include?("view_sales") && params[:include_sales] != "false"
+      include_sales = (doorkeeper_token.scopes.include?("view_sales") || doorkeeper_token.scopes.include?("account")) && params[:include_sales] != "false"
       include_transactions = params[:include_transactions] == "true"
       success_with_payout(payout.as_json(include_sales:, include_transactions:))
     else
@@ -62,7 +62,7 @@ class Api::V2::PayoutsController < Api::V2::BaseController
   def upcoming
     payouts_json = []
     current_resource_owner.upcoming_payouts.each do |payout|
-      include_sales = doorkeeper_token.scopes.include?("view_sales") && params[:include_sales] != "false"
+      include_sales = (doorkeeper_token.scopes.include?("view_sales") || doorkeeper_token.scopes.include?("account")) && params[:include_sales] != "false"
       include_transactions = params[:include_transactions] == "true"
       payouts_json << payout.as_json(include_sales:, include_transactions:).merge(id: nil)
     end

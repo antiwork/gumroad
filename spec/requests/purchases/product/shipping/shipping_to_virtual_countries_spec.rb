@@ -12,10 +12,9 @@ describe("Product Page - Shipping to Virtual Countries", type: :system, js: true
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    check_out(@product) do
-      expect(page).to have_text("Shipping rate US$5", normalize_ws: true)
-      expect(page).to have_text("Total US$105", normalize_ws: true)
-    end
+    expect(page).to have_text("Shipping rate US$5", normalize_ws: true)
+    expect(page).to have_text("Total US$105", normalize_ws: true)
+    check_out(@product)
 
     expect(Purchase.last.price_cents).to eq(10500)
     expect(Purchase.last.shipping_cents).to eq(500)
@@ -30,10 +29,9 @@ describe("Product Page - Shipping to Virtual Countries", type: :system, js: true
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product, quantity: 2)
-    check_out(@product) do
-      expect(page).to have_text("Shipping rate US$6", normalize_ws: true)
-      expect(page).to have_text("Total US$206", normalize_ws: true)
-    end
+    expect(page).to have_text("Shipping rate US$6", normalize_ws: true)
+    expect(page).to have_text("Total US$206", normalize_ws: true)
+    check_out(@product)
 
     expect(Purchase.last.price_cents).to eq(20600)
     expect(Purchase.last.shipping_cents).to eq(600)

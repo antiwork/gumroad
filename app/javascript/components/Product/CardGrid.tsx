@@ -2,7 +2,7 @@ import { Archive } from "@boxicons/react";
 import * as React from "react";
 
 import { getSearchResults, ProductFilter, SearchRequest, SearchResults } from "$app/data/search";
-import { SORT_KEYS, PROFILE_SORT_KEYS } from "$app/parsers/product";
+import { PROFILE_SORT_KEYS, SORT_KEYS } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, getShortCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
@@ -11,8 +11,10 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Card as UICard, CardContent } from "$app/components/ui/Card";
+import { Skeleton } from "$app/components/Skeleton";
+import { CardContent, Card as UICard } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -257,8 +259,10 @@ export const CardGrid = ({
           {prependFilters}
           {hideSort ? null : (
             <CardContent asChild details>
-              <details>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Sort by</summary>
+              <Details>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  Sort by
+                </DetailsToggle>
                 <Fieldset role="group">
                   {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
                     <Label key={key} className="w-full">
@@ -273,13 +277,15 @@ export const CardGrid = ({
                     </Label>
                   ))}
                 </Fieldset>
-              </details>
+              </Details>
             </CardContent>
           )}
           {results?.tags_data.length || searchParams.tags?.length || tagsOpen ? (
             <CardContent asChild details>
-              <details onToggle={() => setTagsOpen(!tagsOpen)}>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Tags</summary>
+              <Details open={tagsOpen} onToggle={setTagsOpen}>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  Tags
+                </DetailsToggle>
                 <Fieldset role="group">
                   <Label className="w-full">
                     All Products
@@ -299,13 +305,15 @@ export const CardGrid = ({
                     />
                   ) : null}
                 </Fieldset>
-              </details>
+              </Details>
             </CardContent>
           ) : null}
           {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
             <CardContent asChild details>
-              <details onToggle={() => setFiletypesOpen(!filetypesOpen)}>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Contains</summary>
+              <Details open={filetypesOpen} onToggle={setFiletypesOpen}>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  Contains
+                </DetailsToggle>
                 <Fieldset role="group">
                   {results ? (
                     <FilterCheckboxes
@@ -316,12 +324,14 @@ export const CardGrid = ({
                     />
                   ) : null}
                 </Fieldset>
-              </details>
+              </Details>
             </CardContent>
           ) : null}
           <CardContent asChild details>
-            <details>
-              <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Price</summary>
+            <Details>
+              <DetailsToggle chevronPosition="right" className="grow">
+                Price
+              </DetailsToggle>
               <div
                 style={{
                   display: "grid",
@@ -365,7 +375,7 @@ export const CardGrid = ({
                   </InputGroup>
                 </Fieldset>
               </div>
-            </details>
+            </Details>
           </CardContent>
           {appendFilters}
         </UICard>
@@ -382,7 +392,7 @@ export const CardGrid = ({
             {results?.products.map((result, idx) => <Card key={result.permalink} product={result} eager={idx < 4} />) ??
               Array(6)
                 .fill(0)
-                .map((_, i) => <div key={i} className="dummy" />)}
+                .map((_, i) => <Skeleton key={i} className="h-75 sm:h-95" />)}
           </ProductCardGrid>
           {pagination === "button" &&
           !((state.results?.total ?? 0) < (state.offset ?? 1) + (state.results?.products.length ?? 0)) ? (

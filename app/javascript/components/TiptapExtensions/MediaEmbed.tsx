@@ -3,7 +3,6 @@ import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { cast, is } from "ts-safe-cast";
 
 import { asyncVoid } from "$app/utils/promise";
@@ -18,6 +17,7 @@ import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 declare module "@tiptap/core" {
@@ -90,10 +90,10 @@ export const Raw = TiptapNode.create({
     menu: "insert",
     item: (editor) => (
       <WithDialog editor={editor} type="twitter">
-        <div role="menuitem">
+        <MenuListItem>
           <TwitterX pack="brands" className="size-5" />
           <span>X post</span>
-        </div>
+        </MenuListItem>
       </WithDialog>
     ),
   },
@@ -216,22 +216,18 @@ const WithDialog = ({
   const [open, setOpen] = React.useState(false);
   return (
     <>
-      {open
-        ? // TODO (maya) remove this once popovers no longer use details
-          createPortal(
-            <Modal open onClose={() => setOpen(false)} title={`Insert ${type === "embed" ? "video" : "post"}`}>
-              <EmbedMediaForm
-                type={type}
-                onEmbedReceived={(data) => {
-                  insertMediaEmbed(editor, data);
-                  setOpen(false);
-                }}
-                onClose={() => setOpen(false)}
-              />
-            </Modal>,
-            document.body,
-          )
-        : null}
+      {open ? (
+        <Modal open onClose={() => setOpen(false)} title={`Insert ${type === "embed" ? "video" : "post"}`}>
+          <EmbedMediaForm
+            type={type}
+            onEmbedReceived={(data) => {
+              insertMediaEmbed(editor, data);
+              setOpen(false);
+            }}
+            onClose={() => setOpen(false)}
+          />
+        </Modal>
+      ) : null}
       <div onClick={() => setOpen(true)}>{children}</div>
     </>
   );
@@ -254,9 +250,9 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
           <RowContent className="content">
             <PlayCircle pack="filled" className="type-icon size-5" />
             <div>
-              <h4 className="text-singleline">{node.attrs.title}</h4>
+              <h4 className="truncate">{node.attrs.title}</h4>
               {node.attrs.url ? (
-                <div className="text-singleline">
+                <div className="truncate">
                   <a href={cast(node.attrs.url)} target="_blank" rel="noreferrer">
                     {node.attrs.url}
                   </a>

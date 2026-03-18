@@ -1,8 +1,8 @@
 import * as React from "react";
 
-import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { NumberInput } from "$app/components/NumberInput";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -24,13 +24,10 @@ export const MaxPurchaseCountToggle = ({
   const uid = React.useId();
 
   return (
-    <Details
-      className="toggle"
-      open={isEnabled}
-      summary={
+    <Details open={isEnabled}>
+      <DetailsToggle chevronPosition="none" className="mb-0">
         <Switch checked={isEnabled} onChange={(e) => setIsEnabled(e.target.checked)} label="Limit product sales" />
-      }
-    >
+      </DetailsToggle>
       <Dropdown>
         <Fieldset>
           <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>

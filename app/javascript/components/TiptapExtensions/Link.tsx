@@ -5,7 +5,6 @@ import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { cast } from "ts-safe-cast";
 
 import { classNames } from "$app/utils/classNames";
@@ -17,6 +16,7 @@ import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 
 export const WithDialog = ({
   editor,
@@ -93,39 +93,35 @@ export const WithDialog = ({
 
   return (
     <>
-      {addingLink !== null
-        ? // TODO (maya) remove this once popovers no longer use details
-          createPortal(
-            <Modal open onClose={() => setAddingLink(null)} title={`Insert ${type === "link" ? "link" : "button"}`}>
-              {!editor.isActive("image") ? (
-                <Input
-                  ref={labelInputRef}
-                  type="text"
-                  placeholder="Enter text"
-                  value={addingLink.label}
-                  onChange={(el) => setAddingLink({ label: el.target.value, url: addingLink.url || "" })}
-                  onKeyDown={(el) => {
-                    if (el.key === "Enter") onAddLink();
-                  }}
-                />
-              ) : null}
-              <Input
-                ref={linkInputRef}
-                type="text"
-                placeholder="Enter URL"
-                value={addingLink.url}
-                onChange={(el) => setAddingLink({ label: addingLink.label || "", url: el.target.value })}
-                onKeyDown={(el) => {
-                  if (el.key === "Enter") onAddLink();
-                }}
-              />
-              <Button color="primary" onClick={onAddLink}>
-                {type === "link" ? "Add link" : "Add button"}
-              </Button>
-            </Modal>,
-            document.body,
-          )
-        : null}
+      {addingLink !== null ? (
+        <Modal open onClose={() => setAddingLink(null)} title={`Insert ${type === "link" ? "link" : "button"}`}>
+          {!editor.isActive("image") ? (
+            <Input
+              ref={labelInputRef}
+              type="text"
+              placeholder="Enter text"
+              value={addingLink.label}
+              onChange={(el) => setAddingLink({ label: el.target.value, url: addingLink.url || "" })}
+              onKeyDown={(el) => {
+                if (el.key === "Enter") onAddLink();
+              }}
+            />
+          ) : null}
+          <Input
+            ref={linkInputRef}
+            type="text"
+            placeholder="Enter URL"
+            value={addingLink.url}
+            onChange={(el) => setAddingLink({ label: addingLink.label || "", url: el.target.value })}
+            onKeyDown={(el) => {
+              if (el.key === "Enter") onAddLink();
+            }}
+          />
+          <Button color="primary" onClick={onAddLink}>
+            {type === "link" ? "Add link" : "Add button"}
+          </Button>
+        </Modal>
+      ) : null}
       <div onClick={onLinkMenuItemClick}>{children}</div>
     </>
   );
@@ -328,10 +324,10 @@ const TiptapButton = Node.create({
     menu: "insert",
     item: (editor) => (
       <WithDialog editor={editor} type="button">
-        <div role="menuitem">
+        <MenuListItem>
           <CursorClick className="size-5" />
           <span>Button</span>
-        </div>
+        </MenuListItem>
       </WithDialog>
     ),
   },

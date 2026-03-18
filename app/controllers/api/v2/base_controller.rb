@@ -4,6 +4,10 @@ class Api::V2::BaseController < ApplicationController
   after_action :log_method_use
 
   private
+    def doorkeeper_authorize!(*scopes)
+      super(*scopes, :account)
+    end
+
     def fetch_product
       products = current_resource_owner.links
       @product = products.find_by_external_id(params[:link_id]) || products.find_by(unique_permalink: params[:link_id]) || error_with_object(:product, nil)

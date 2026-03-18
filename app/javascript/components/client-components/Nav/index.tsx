@@ -20,6 +20,7 @@ import {
   Search,
   Workflow,
 } from "@boxicons/react";
+import { type LinkPrefetchOption } from "@inertiajs/core";
 import { Link } from "@inertiajs/react";
 import * as React from "react";
 
@@ -48,6 +49,7 @@ export const ClientNavLink = ({
   exactHrefMatch,
   additionalPatterns = [],
   onClick,
+  prefetch = "hover",
 }: {
   text: string;
   icon?: React.ReactNode;
@@ -56,6 +58,7 @@ export const ClientNavLink = ({
   exactHrefMatch?: boolean;
   additionalPatterns?: string[];
   onClick?: (event: React.MouseEvent) => void;
+  prefetch?: boolean | LinkPrefetchOption | LinkPrefetchOption[];
 }) => {
   const currentPath = window.location.pathname + window.location.search;
 
@@ -71,6 +74,7 @@ export const ClientNavLink = ({
     <Link
       aria-current={ariaCurrent}
       href={href}
+      prefetch={prefetch}
       title={text}
       {...(onClick && { onClick })}
       className={classNames(

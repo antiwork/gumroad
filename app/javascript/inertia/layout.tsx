@@ -39,7 +39,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <Alert initial={null} />
         <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
           {logged_in_user ? <Nav title="Dashboard" /> : null}
-          <main scroll-region="" className="flex-1 overflow-y-auto">
+          <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto">
             {children}
           </main>
         </div>
@@ -89,7 +89,7 @@ export function StandaloneLayout({ children }: { children: React.ReactNode }) {
         <MetaTags />
         <Alert initial={null} />
         <div className="flex min-h-screen flex-col lg:flex-row">
-          <main className="flex-1">{children}</main>
+          <main className="flex flex-1 flex-col">{children}</main>
         </div>
       </CurrentSellerProvider>
     </LoggedInUserProvider>
