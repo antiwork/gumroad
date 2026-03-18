@@ -136,6 +136,7 @@ class SettingsPresenter
       disable_third_party_analytics: seller.disable_third_party_analytics,
       google_analytics_id: seller.google_analytics_id || "",
       facebook_pixel_id: seller.facebook_pixel_id || "",
+      tiktok_pixel_id: seller.tiktok_pixel_id || "",
       skip_free_sale_analytics: seller.skip_free_sale_analytics,
       facebook_meta_tag: seller.facebook_meta_tag || "",
       enable_verify_domain_third_party_services: seller.enable_verify_domain_third_party_services,
