@@ -43,8 +43,10 @@ function TwoFactorAuthentication() {
     form.post(Routes.two_factor_authentication_path({ user_id }));
   };
 
+  const hasInteracted = React.useRef(false);
   React.useEffect(() => {
-    if (two_factor_method === "totp" && /^\d{6}$/.test(form.data.token)) {
+    if (!hasInteracted.current) return;
+    if (two_factor_method === "totp" && form.data.token.length === 6) {
       form.post(Routes.two_factor_authentication_path({ user_id }));
     }
   }, [form.data.token]);
@@ -98,10 +100,13 @@ function TwoFactorAuthentication() {
               type="text"
               inputMode={two_factor_method === "recovery" ? "text" : "numeric"}
               autoComplete={two_factor_method === "totp" ? "one-time-code" : undefined}
-              maxLength={two_factor_method === "totp" || two_factor_method === "email" ? 6 : undefined}
-              pattern={two_factor_method === "totp" || two_factor_method === "email" ? "[0-9]*" : undefined}
+              maxLength={two_factor_method === "totp" ? 6 : undefined}
+              pattern={two_factor_method === "totp" ? "[0-9]*" : undefined}
               value={form.data.token}
-              onChange={(e) => form.setData("token", e.target.value)}
+              onChange={(e) => {
+                hasInteracted.current = true;
+                form.setData("token", e.target.value);
+              }}
               required
               autoFocus
               style={two_factor_method === "totp" ? { letterSpacing: "0.5em" } : undefined}
