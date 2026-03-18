@@ -43,6 +43,12 @@ function TwoFactorAuthentication() {
     form.post(Routes.two_factor_authentication_path({ user_id }));
   };
 
+  React.useEffect(() => {
+    if (two_factor_method === "totp" && /^\d{6}$/.test(form.data.token)) {
+      form.post(Routes.two_factor_authentication_path({ user_id }));
+    }
+  }, [form.data.token]);
+
   const resendToken = () => {
     switchForm.post(Routes.resend_authentication_token_path({ user_id }));
   };
@@ -91,10 +97,14 @@ function TwoFactorAuthentication() {
               id={uid}
               type="text"
               inputMode={two_factor_method === "recovery" ? "text" : "numeric"}
+              autoComplete={two_factor_method === "totp" ? "one-time-code" : undefined}
+              maxLength={two_factor_method === "totp" || two_factor_method === "email" ? 6 : undefined}
+              pattern={two_factor_method === "totp" || two_factor_method === "email" ? "[0-9]*" : undefined}
               value={form.data.token}
               onChange={(e) => form.setData("token", e.target.value)}
               required
               autoFocus
+              style={two_factor_method === "totp" ? { letterSpacing: "0.5em" } : undefined}
             />
           </Fieldset>
           <Button color="primary" type="submit" disabled={form.processing}>

@@ -139,11 +139,9 @@ describe "Two-Factor Authentication", js: true, type: :system do
       expect(page).not_to have_button "Resend Authentication Token"
 
       fill_in "Authenticator Code", with: "123456", fill_options: { clear: :backspace }
-      click_on "Login"
       expect(page).to have_content "Invalid token, please try again."
 
       fill_in "Authenticator Code", with: user.totp_credential.otp_code, fill_options: { clear: :backspace }
-      click_on "Login"
       expect(page).to have_current_path(dashboard_path)
     end
 
