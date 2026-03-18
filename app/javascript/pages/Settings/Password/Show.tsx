@@ -171,7 +171,12 @@ export default function PasswordPage() {
                 <Button onClick={handleRegenerateRecoveryCodes} disabled={regenerating || removingAuthenticatorApp}>
                   {regenerating ? "Regenerating..." : "Regenerate recovery codes"}
                 </Button>
-                <Button color="danger" outline onClick={handleRemoveAuthenticatorApp} disabled={removingAuthenticatorApp || regenerating}>
+                <Button
+                  color="danger"
+                  outline
+                  onClick={handleRemoveAuthenticatorApp}
+                  disabled={removingAuthenticatorApp || regenerating}
+                >
                   {removingAuthenticatorApp ? "Removing..." : "Remove"}
                 </Button>
               </div>
