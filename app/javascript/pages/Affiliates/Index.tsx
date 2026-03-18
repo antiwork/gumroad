@@ -170,7 +170,7 @@ const AffiliateRequestsTable = ({
               <TableRow key={affiliateRequest.id}>
                 <TableCell>
                   {affiliateRequest.name}
-                  <small className="text-muted">{affiliateRequest.email}</small>
+                  <small className="block text-muted">{affiliateRequest.email}</small>
                 </TableCell>
 
                 <TableCell>{affiliateRequest.promotion}</TableCell>

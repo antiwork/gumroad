@@ -62,7 +62,7 @@ const AdminProductPurchase = ({
             <a href={Routes.admin_purchase_path(external_id)}>{displayed_price}</a>
             {gumroad_responsible_for_tax ? ` + ${formatted_gumroad_tax_amount} VAT` : null}
           </h5>
-          <small>
+          <small className="block">
             <InlineList>
               <li>{purchase_state}</li>
               {error_code ? <li>{error_code}</li> : null}
@@ -87,7 +87,7 @@ const AdminProductPurchase = ({
       </div>
       <div className="text-right">
         <a href={Routes.admin_search_purchases_path({ query: email })}>{email}</a>
-        <small>{created}</small>
+        <small className="block">{created}</small>
       </div>
     </div>
   );

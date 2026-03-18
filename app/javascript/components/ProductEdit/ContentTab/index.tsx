@@ -1191,9 +1191,9 @@ export const ContentTab = () => {
                             <div className="flex-1">
                               <h4>{item.name || "Untitled"}</h4>
                               {item.id === selectedVariant?.id ? (
-                                <small>Editing</small>
+                                <small className="block">Editing</small>
                               ) : product.has_same_rich_content_for_all_variants || item.rich_content.length ? (
-                                <small>
+                                <small className="block">
                                   Last edited on{" "}
                                   {formatDate(
                                     (product.has_same_rich_content_for_all_variants
@@ -1206,7 +1206,7 @@ export const ContentTab = () => {
                                   )}
                                 </small>
                               ) : (
-                                <small className="text-muted">No content yet</small>
+                                <small className="block text-muted">No content yet</small>
                               )}
                             </div>
                             {item.id === selectedVariant?.id && (
@@ -1224,7 +1224,7 @@ export const ContentTab = () => {
                                     setHasSameRichContent(!product.has_same_rich_content_for_all_variants);
                                   }}
                                 />
-                                <small>Use the same content for all versions</small>
+                                <small className="block">Use the same content for all versions</small>
                               </Label>
                             </div>
                           ) : null}
