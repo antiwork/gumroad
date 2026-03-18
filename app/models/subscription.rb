@@ -452,7 +452,7 @@ class Subscription < ApplicationRecord
 
   # creates a new original subscription purchase & archives the existing one.
   # Any changes to the subscription made here must be reverted in `Subscription::UpdaterService#restore_original_purchase`
-  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false)
+  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code_attrs: nil)
     raise Subscription::UpdateFailed, "Installment plans cannot be updated." if is_installment_plan?
     raise Subscription::UpdateFailed, "Changing plans for fixed-length subscriptions is not currently supported." if has_fixed_length?
 
@@ -494,10 +494,16 @@ class Subscription < ApplicationRecord
       original_purchase.save!
 
       if new_purchase.offer_code.present? && original_discount = original_purchase.purchase_offer_code_discount
-        new_purchase.build_purchase_offer_code_discount(offer_code: new_purchase.offer_code, offer_code_amount: original_discount.offer_code_amount,
-                                                        offer_code_is_percent: original_discount.offer_code_is_percent,
-                                                        pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
-                                                        duration_in_months: original_discount.duration_in_months)
+        discount_attrs = offer_code_attrs || {
+          offer_code_amount: original_discount.offer_code_amount,
+          offer_code_is_percent: original_discount.offer_code_is_percent,
+          duration_in_months: original_discount.duration_in_months
+        }
+        new_purchase.build_purchase_offer_code_discount(
+          offer_code: new_purchase.offer_code,
+          pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          **discount_attrs
+        )
       end
 
       if original_purchase.recommended_purchase_info.present?

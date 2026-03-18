@@ -2248,6 +2248,33 @@ describe Subscription, :vcr do
         expect(new_discount).to be_present
         expect(new_discount.duration_in_months).to be_nil
       end
+
+      it "uses offer_code_attrs when provided instead of copying from the original discount" do
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 1
+        )
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          offer_code_attrs: {
+            offer_code_amount: 50,
+            offer_code_is_percent: true,
+            duration_in_months: 6
+          }
+        )
+
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code_amount).to eq(50)
+        expect(new_discount.offer_code_is_percent).to eq(true)
+        expect(new_discount.duration_in_months).to eq(6)
+        expect(new_discount.pre_discount_minimum_price_cents).to eq(new_purchase.minimum_paid_price_cents_per_unit_before_discount)
+      end
     end
 
     context "for a subscription with fixed length" do

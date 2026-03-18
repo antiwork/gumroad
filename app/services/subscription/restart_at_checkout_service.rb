@@ -12,10 +12,9 @@ class Subscription::RestartAtCheckoutService
 
   def perform
     result = nil
-    old_discount_attrs = snapshot_discount_attrs
 
     ActiveRecord::Base.transaction do
-      sync_offer_code_discount_to_current!
+      update_original_purchase_for_offer_code_change!
 
       result = Subscription::UpdaterService.new(
         subscription: subscription,
@@ -28,91 +27,8 @@ class Subscription::RestartAtCheckoutService
       raise ActiveRecord::Rollback unless result[:success]
     end
 
-    if result[:requires_card_action] && old_discount_attrs.present?
-      revert_offer_code_discount_sync!(old_discount_attrs)
-    end
-
     adapt_result(result)
   end
-
-  # Re-applies discount values from a confirmed purchase (after 3DS) to the
-  # subscription's original_purchase. Unlike sync_offer_code_discount!, this
-  # reads from the purchase that was created at checkout time, not from the
-  # live offer code, so it is safe against seller edits between checkout and
-  # 3DS confirmation.
-  def self.sync_offer_code_discount_from_confirmed_purchase!(subscription, confirmed_purchase)
-    source_discount = confirmed_purchase.purchase_offer_code_discount
-    return if source_discount.blank?
-
-    target_purchase = subscription.original_purchase
-    target_discount = target_purchase.purchase_offer_code_discount
-    return if target_discount.blank?
-
-    # If the confirmed purchase IS the current original purchase (plan-changed
-    # case), the discount is already correct.
-    return if target_discount.id == source_discount.id
-
-    return if target_discount.offer_code_amount == source_discount.offer_code_amount &&
-              target_discount.offer_code_is_percent == source_discount.offer_code_is_percent &&
-              target_discount.duration_in_billing_cycles == source_discount.duration_in_billing_cycles &&
-              target_discount.pre_discount_minimum_price_cents == source_discount.pre_discount_minimum_price_cents
-
-    ActiveRecord::Base.transaction do
-      target_discount.update!(
-        offer_code_amount: source_discount.offer_code_amount,
-        offer_code_is_percent: source_discount.offer_code_is_percent,
-        duration_in_billing_cycles: source_discount.duration_in_billing_cycles,
-        pre_discount_minimum_price_cents: source_discount.pre_discount_minimum_price_cents
-      )
-
-      pre_discount_price = source_discount.pre_discount_minimum_price_cents
-      if source_discount.offer_code_is_percent
-        discount_off = (pre_discount_price * source_discount.offer_code_amount / 100.0).round
-      else
-        discount_off = source_discount.offer_code_amount
-      end
-      target_purchase.update!(displayed_price_cents: [(pre_discount_price - discount_off) * target_purchase.quantity, 0].max)
-    end
-  end
-
-  def self.sync_offer_code_discount!(subscription)
-    original_purchase = subscription.original_purchase
-    discount = original_purchase.purchase_offer_code_discount
-    return if discount.blank?
-
-    offer_code = discount.offer_code
-    return if offer_code.blank?
-
-    current_amount = offer_code.amount
-    current_is_percent = offer_code.is_percent?
-    current_duration = offer_code.duration_in_billing_cycles
-
-    return if discount.offer_code_amount == current_amount &&
-              discount.offer_code_is_percent == current_is_percent &&
-              discount.duration_in_billing_cycles == current_duration
-
-    ActiveRecord::Base.transaction do
-      discount.update!(
-        offer_code_amount: current_amount,
-        offer_code_is_percent: current_is_percent,
-        duration_in_billing_cycles: current_duration
-      )
-
-      new_displayed_price = compute_displayed_price(original_purchase, current_amount, current_is_percent)
-      original_purchase.update!(displayed_price_cents: new_displayed_price)
-    end
-  end
-
-  def self.compute_displayed_price(purchase, discount_amount, is_percent)
-    pre_discount_price = purchase.minimum_paid_price_cents_per_unit_before_discount
-    if is_percent
-      discount_off = (pre_discount_price * discount_amount / 100.0).round
-    else
-      discount_off = discount_amount
-    end
-    [(pre_discount_price - discount_off) * purchase.quantity, 0].max
-  end
-  private_class_method :compute_displayed_price
 
   private
     def updater_service_params
@@ -134,39 +50,33 @@ class Subscription::RestartAtCheckoutService
       }.compact
     end
 
-    def sync_offer_code_discount_to_current!
-      self.class.sync_offer_code_discount!(subscription)
-    end
-
-    def snapshot_discount_attrs
+    # When the offer code terms have changed since the original purchase,
+    # create a new original_purchase with the current offer code values
+    # (similar to how plan/recurrence changes are handled via update_current_plan!).
+    # This preserves historical data on the old purchase instead of overwriting it.
+    def update_original_purchase_for_offer_code_change!
       original_purchase = subscription.original_purchase
       discount = original_purchase.purchase_offer_code_discount
-      return nil if discount.blank?
-
-      {
-        purchase_id: original_purchase.id,
-        offer_code_amount: discount.offer_code_amount,
-        offer_code_is_percent: discount.offer_code_is_percent,
-        duration_in_billing_cycles: discount.duration_in_billing_cycles,
-        displayed_price_cents: original_purchase.displayed_price_cents
-      }
-    end
-
-    def revert_offer_code_discount_sync!(old_attrs)
-      purchase = Purchase.find_by(id: old_attrs[:purchase_id])
-      return if purchase.blank?
-
-      discount = purchase.purchase_offer_code_discount
       return if discount.blank?
 
-      ActiveRecord::Base.transaction do
-        discount.update!(
-          offer_code_amount: old_attrs[:offer_code_amount],
-          offer_code_is_percent: old_attrs[:offer_code_is_percent],
-          duration_in_billing_cycles: old_attrs[:duration_in_billing_cycles]
-        )
-        purchase.update!(displayed_price_cents: old_attrs[:displayed_price_cents])
-      end
+      offer_code = discount.offer_code
+      return if offer_code.blank?
+
+      return if discount.offer_code_amount == offer_code.amount &&
+                discount.offer_code_is_percent == offer_code.is_percent? &&
+                discount.duration_in_billing_cycles == offer_code.duration_in_billing_cycles
+
+      subscription.update_current_plan!(
+        new_variants: original_purchase.variant_attributes.to_a,
+        new_price: subscription.price,
+        new_quantity: original_purchase.quantity,
+        offer_code_attrs: {
+          offer_code_amount: offer_code.amount,
+          offer_code_is_percent: offer_code.is_percent?,
+          duration_in_months: offer_code.duration_in_billing_cycles
+        }
+      )
+      subscription.reload
     end
 
     def default_variant_ids
