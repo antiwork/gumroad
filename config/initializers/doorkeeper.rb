@@ -7,7 +7,7 @@ module VisibleScopes
   # These are the scopes that the public should be aware of. Update this list when adding scopes to Doorkeeper.
   # Mobile Api scope is not included because we don't want the public to have knowledge of that scope.
   def public_scopes
-    %i[edit_products view_sales mark_sales_as_shipped edit_sales revenue_share ifttt view_profile view_payouts]
+    %i[edit_products view_sales mark_sales_as_shipped edit_sales revenue_share ifttt view_profile view_payouts account]
   end
 end
 
@@ -55,7 +55,7 @@ Doorkeeper.configure do
   # access token scopes for providers
   default_scopes :view_public
   optional_scopes :edit_products, :view_sales, :view_payouts, :mark_sales_as_shipped, :refund_sales, :edit_sales, :revenue_share, :ifttt, :mobile_api,
-                  :creator_api, :view_profile, :unfurl, :helper_api
+                  :creator_api, :view_profile, :unfurl, :helper_api, :account
 
   use_refresh_token
 

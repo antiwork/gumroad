@@ -81,9 +81,11 @@ import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
@@ -132,35 +134,37 @@ const FileUploadMenu = ({
   onSelectExistingFiles: () => void;
   onUploadFromDropbox: () => void;
 }) => (
-  <div role="menu" aria-label="Image and file uploader">
+  <Menu aria-label="Image and file uploader">
     <PopoverClose asChild>
-      <div role="menuitem" onClick={onEmbedMedia}>
+      <MenuItem onClick={onEmbedMedia}>
         <Images className="size-5" />
         <span>Embed media</span>
-      </div>
+      </MenuItem>
     </PopoverClose>
     <PopoverClose asChild>
-      <label role="menuitem">
-        <input type="file" name="file" className="sr-only" multiple onChange={(e) => onUploadFile(e.target)} />
-        <Paperclip className="size-5" />
-        <span>Computer files</span>
-      </label>
+      <MenuItem asChild>
+        <label>
+          <input type="file" name="file" className="sr-only" multiple onChange={(e) => onUploadFile(e.target)} />
+          <Paperclip className="size-5" />
+          <span>Computer files</span>
+        </label>
+      </MenuItem>
     </PopoverClose>
     {existingFiles.length > 0 ? (
       <PopoverClose asChild>
-        <div role="menuitem" onClick={onSelectExistingFiles}>
+        <MenuItem onClick={onSelectExistingFiles}>
           <File className="size-5" />
           <span>Existing product files</span>
-        </div>
+        </MenuItem>
       </PopoverClose>
     ) : null}
     <PopoverClose asChild>
-      <div role="menuitem" onClick={onUploadFromDropbox}>
+      <MenuItem onClick={onUploadFromDropbox}>
         <DropboxIcon pack="brands" className="size-5" />
         <span>Dropbox files</span>
-      </div>
+      </MenuItem>
     </PopoverClose>
-  </div>
+  </Menu>
 );
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
@@ -710,11 +714,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-                    <div role="menu" onClick={() => setInsertMenuState(null)}>
+                    <Menu onClick={() => setInsertMenuState(null)}>
                       {insertMenuState === "inputs" ? (
                         <>
-                          <div
-                            role="menuitem"
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setInsertMenuState("open");
@@ -722,32 +725,31 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <ChevronLeft className="size-5" />
                             <span>Back</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
                             <FileDetail className="size-5" />
                             <span>Short answer</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
                             <FileDetail className="size-5" />
                             <span>Long answer</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
                             <FolderPlus className="size-5" />
                             <span>Upload file</span>
-                          </div>
+                          </MenuItem>
                         </>
                       ) : (
                         <>
-                          <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
+                          <MenuItem onClick={() => setAddingButton({ label: "", url: "" })}>
                             <CursorClick className="size-5" />
                             <span>Button</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                             <Minus className="size-5" />
                             <span>Divider</span>
-                          </div>
-                          <div
-                            role="menuitem"
+                          </MenuItem>
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setInsertMenuState("inputs");
@@ -757,25 +759,24 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             <Rename />
                             <span>Input</span>
                             <ChevronRight className="ml-auto size-5" />
-                          </div>
-                          <div role="menuitem" onClick={onInsertMoreLikeThis}>
+                          </MenuItem>
+                          <MenuItem onClick={onInsertMoreLikeThis}>
                             <Grid className="size-5" />
                             <span>More like this</span>
-                          </div>
-                          <div role="menuitem" onClick={onInsertPosts}>
+                          </MenuItem>
+                          <MenuItem onClick={onInsertPosts}>
                             <FileDetail className="size-5" />
                             <span>List of posts</span>
-                          </div>
-                          <div role="menuitem" onClick={onInsertLicense}>
+                          </MenuItem>
+                          <MenuItem onClick={onInsertLicense}>
                             <Key className="size-5" />
                             <span>License key</span>
-                          </div>
-                          <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
+                          </MenuItem>
+                          <MenuItem onClick={() => setShowInsertPostModal(true)}>
                             <TwitterX pack="brands" className="size-5" />
                             <span>X post</span>
-                          </div>
-                          <div
-                            role="menuitem"
+                          </MenuItem>
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowUpsellModal(true);
@@ -783,9 +784,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <CartPlus className="size-5" />
                             <span>Upsell</span>
-                          </div>
-                          <div
-                            role="menuitem"
+                          </MenuItem>
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowReviewModal(true);
@@ -793,10 +793,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                           >
                             <Star pack="filled" className="size-5" />
                             <span>Review</span>
-                          </div>
+                          </MenuItem>
                         </>
                       )}
-                    </div>
+                    </Menu>
                   </PopoverContent>
                 </Popover>
                 <div
@@ -923,26 +923,26 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <Card>
                       {product.native_type === "membership" ? (
                         <CardContent asChild details>
-                          <details>
-                            <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2" inert>
+                          <Details>
+                            <DetailsToggle chevronPosition="right" className="grow opacity-30" inert>
                               Membership
-                            </summary>
-                          </details>
+                            </DetailsToggle>
+                          </Details>
                         </CardContent>
                       ) : null}
                       <CardContent asChild details>
-                        <details>
-                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                        <Details>
+                          <DetailsToggle chevronPosition="right" className="grow opacity-30" inert>
                             Receipt
-                          </summary>
-                        </details>
+                          </DetailsToggle>
+                        </Details>
                       </CardContent>
                       <CardContent asChild details>
-                        <details>
-                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                        <Details>
+                          <DetailsToggle chevronPosition="right" className="grow opacity-30" inert>
                             Library
-                          </summary>
-                        </details>
+                          </DetailsToggle>
+                        </Details>
                       </CardContent>
                     </Card>
                     <EntityInfo
@@ -1168,7 +1168,7 @@ export const ContentTab = () => {
                     <ComboBox<Variant>
                       input={(props) => (
                         <InputGroup {...props} className="cursor-pointer py-3" aria-label="Select a version">
-                          <span className="text-singleline flex-1">
+                          <span className="flex-1 truncate">
                             {selectedVariant && !product.has_same_rich_content_for_all_variants
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}
@@ -1187,6 +1187,7 @@ export const ContentTab = () => {
                             }}
                             aria-selected={item.id === selectedVariantId}
                             inert={product.has_same_rich_content_for_all_variants}
+                            className={product.has_same_rich_content_for_all_variants ? "opacity-30" : undefined}
                           >
                             <div className="flex-1">
                               <h4>{item.name || "Untitled"}</h4>

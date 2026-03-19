@@ -133,7 +133,7 @@ module Product::AsJson
         json["purchasing_power_parity_prices"] = compute_ppp_prices(cached_default_price_cents, ppp_factors, currency)
       end
 
-      if options[:api_scopes].include?("view_sales")
+      if (options[:api_scopes] & %w[view_sales account]).present?
         json["custom_delivery_url"] = nil # Deprecated
         json["sales_count"] = successful_sales_count
         json["sales_usd_cents"] = total_usd_cents

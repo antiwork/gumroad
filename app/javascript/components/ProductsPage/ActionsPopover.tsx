@@ -9,6 +9,7 @@ import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 
 const ActionsPopover = ({
   product,
@@ -95,33 +96,45 @@ const ActionsPopover = ({
           <DotsHorizontalRounded className="size-5" />
         </PopoverTrigger>
         <PopoverContent className="border-0 p-0 shadow-none">
-          <div role="menu">
-            <div role="menuitem" inert={!product.can_duplicate || isDuplicating} onClick={() => void handleDuplicate()}>
+          <Menu>
+            <MenuItem
+              inert={!product.can_duplicate || isDuplicating}
+              className={!product.can_duplicate || isDuplicating ? "opacity-30" : undefined}
+              onClick={() => void handleDuplicate()}
+            >
               <Copy className="size-5" />
-              &ensp;{isDuplicating ? "Duplicating..." : "Duplicate"}
-            </div>
+              {isDuplicating ? "Duplicating..." : "Duplicate"}
+            </MenuItem>
             {product.can_unarchive ? (
-              <div role="menuitem" inert={isUnarchiving} onClick={() => void handleUnarchive()}>
+              <MenuItem
+                inert={isUnarchiving}
+                className={isUnarchiving ? "opacity-30" : undefined}
+                onClick={() => void handleUnarchive()}
+              >
                 <Archive className="size-5" />
-                &ensp;{isUnarchiving ? "Unarchiving..." : "Unarchive"}
-              </div>
+                {isUnarchiving ? "Unarchiving..." : "Unarchive"}
+              </MenuItem>
             ) : null}
             {product.can_archive ? (
-              <div role="menuitem" inert={isArchiving} onClick={() => void handleArchive()}>
+              <MenuItem
+                inert={isArchiving}
+                className={isArchiving ? "opacity-30" : undefined}
+                onClick={() => void handleArchive()}
+              >
                 <Archive className="size-5" />
-                &ensp;{isArchiving ? "Archiving..." : "Archive"}
-              </div>
+                {isArchiving ? "Archiving..." : "Archive"}
+              </MenuItem>
             ) : null}
-            <div
-              className="danger"
+            <MenuItem
+              variant="danger"
               inert={!product.can_destroy || isDeleting}
-              role="menuitem"
+              className={!product.can_destroy || isDeleting ? "opacity-30" : undefined}
               onClick={() => setConfirmingDelete(true)}
             >
               <Trash className="size-5" />
-              &ensp;{isDeleting ? "Deleting..." : "Delete permanently"}
-            </div>
-          </div>
+              {isDeleting ? "Deleting..." : "Delete permanently"}
+            </MenuItem>
+          </Menu>
         </PopoverContent>
       </Popover>
       {confirmingDelete ? (

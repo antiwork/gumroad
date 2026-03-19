@@ -3,6 +3,7 @@ import React from "react";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { NoIcon } from "$app/components/Admin/Icons";
 import type { User } from "$app/components/Admin/Users/User";
+import { DefinitionList } from "$app/components/ui/DefinitionList";
 
 type FooterProps = {
   user: User;
@@ -10,7 +11,7 @@ type FooterProps = {
 
 const Footer = ({ user }: FooterProps) => (
   <div>
-    <dl>
+    <DefinitionList>
       <dt>Created</dt>
       <dd>
         <DateTimeWithRelativeTooltip date={user.created_at} />
@@ -23,7 +24,7 @@ const Footer = ({ user }: FooterProps) => (
       <dd>
         <DateTimeWithRelativeTooltip date={user.deleted_at} placeholder={<NoIcon />} />
       </dd>
-    </dl>
+    </DefinitionList>
   </div>
 );
 

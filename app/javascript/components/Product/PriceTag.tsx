@@ -75,15 +75,15 @@ export const PriceTag = ({
         </div>
       </WithTooltip>
       <link itemProp="url" href={url} />
-      <div itemProp="availability" hidden>
+      <div itemProp="availability" className="hidden">
         {`https://schema.org/${isSalesLimited ? "LimitedAvailability" : "InStock"}`}
       </div>
-      <div itemProp="priceCurrency" hidden>
+      <div itemProp="priceCurrency" className="hidden">
         {currencyCode}
       </div>
       {creatorName ? (
-        <div itemProp="seller" itemType="https://schema.org/Person" hidden>
-          <div itemProp="name" hidden>
+        <div itemProp="seller" itemType="https://schema.org/Person" className="hidden">
+          <div itemProp="name" className="hidden">
             {creatorName}
           </div>
         </div>

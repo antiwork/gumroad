@@ -121,7 +121,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to_not have_table_row({ "Link" => utm_link1.title })
         expect(page).to have_button("1", aria: { current: "page" })
         expect(page).to have_button("2")
-        expect(page).to_not have_button("3")
+        expect(page).to_not have_button("3", exact: true)
         expect(page).to have_button("Previous", disabled: true)
         expect(page).to have_button("Next")
         click_on "Next"
@@ -129,7 +129,7 @@ describe "UTM links", :js, type: :system do
         expect(page).to have_button("Previous")
         expect(page).to have_button("2", aria: { current: "page" })
         expect(page).to have_button("1")
-        expect(page).to_not have_button("3")
+        expect(page).to_not have_button("3", exact: true)
         expect(page).to have_table_row({ "Link" => utm_link1.title })
         expect(page).to_not have_table_row({ "Link" => utm_link2.title })
         expect(page).to have_current_path(dashboard_utm_links_path({ page: 2 }))

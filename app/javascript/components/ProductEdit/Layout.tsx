@@ -242,7 +242,7 @@ export const Layout = ({
     <>
       <NotifyAboutProductUpdatesAlert />
       {/* TODO: remove this legacy uploader stuff */}
-      <form hidden data-id={uniquePermalink} id="edit-link-basic-form" />
+      <form className="hidden" data-id={uniquePermalink} id="edit-link-basic-form" />
       <PageHeader
         className="sticky-top"
         title={product.name || "Untitled"}

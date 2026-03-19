@@ -737,7 +737,11 @@ export const RatingsHistogramRow = ({ rating, percentage }: { rating: number; pe
   return (
     <>
       <div>{label}</div>
-      <meter aria-label={label} value={percentage / 100} />
+      <meter
+        aria-label={label}
+        value={percentage / 100}
+        className="h-[1lh] w-full appearance-none rounded border border-border bg-none [&::-moz-meter-bar]:rounded [&::-moz-meter-bar]:[background:var(--color-accent)] [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded [&::-webkit-meter-optimum-value]:[background:var(--color-accent)]"
+      />
       <div>{formattedPercentage}</div>
     </>
   );
@@ -784,7 +788,7 @@ const Reviews = ({
           {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "rating" : "ratings"}`})
         </div>
       </header>
-      <div itemProp="aggregateRating" itemType="https://schema.org/AggregateRating" itemScope hidden>
+      <div itemProp="aggregateRating" itemType="https://schema.org/AggregateRating" itemScope className="hidden">
         <div itemProp="reviewCount">{ratings.count}</div>
         <div itemProp="ratingValue">{ratings.average}</div>
       </div>

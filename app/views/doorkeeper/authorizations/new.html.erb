@@ -1,4 +1,4 @@
-<main class="grid divide-y divide-border bg-filled border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+<main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
   <header class="flex flex-col gap-4 p-4 text-center">
     <div>
       <%= image_tag OauthApplication.find(@pre_auth.client.id).icon_url || asset_path("gumroad_app.png"), size: "72" %>
@@ -30,6 +30,7 @@
               when "view_public" then "See your public information (name, Facebook profile, bio, Twitter handle)."
               when "view_sales" then "See your sales data."
               when "view_payouts" then "See your payouts data."
+              when "account" then "Full access to your account."
             end
             %>
           </li>

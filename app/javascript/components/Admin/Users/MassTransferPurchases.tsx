@@ -4,6 +4,7 @@ import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
@@ -14,10 +15,10 @@ type AdminUserMassTransferPurchasesProps = {
 const AdminUserMassTransferPurchases = ({ user }: AdminUserMassTransferPurchasesProps) => (
   <>
     <hr />
-    <details>
-      <summary>
+    <Details>
+      <DetailsToggle>
         <h3>Mass-transfer purchases</h3>
-      </summary>
+      </DetailsToggle>
       <Form
         url={Routes.mass_transfer_purchases_admin_user_path(user.external_id)}
         method="POST"
@@ -36,7 +37,7 @@ const AdminUserMassTransferPurchases = ({ user }: AdminUserMassTransferPurchases
           </Fieldset>
         )}
       </Form>
-    </details>
+    </Details>
   </>
 );
 

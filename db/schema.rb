@@ -2306,6 +2306,17 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.index ["user_id"], name: "index_tos_agreements_on_user_id"
   end
 
+  create_table "totp_credentials", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "otp_secret", null: false
+    t.datetime "confirmed_at"
+    t.text "recovery_codes"
+    t.datetime "recovery_codes_generated_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_totp_credentials_on_user_id", unique: true
+  end
+
   create_table "transcoded_videos", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "link_id"
     t.string "original_video_key", limit: 1024
