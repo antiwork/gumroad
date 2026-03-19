@@ -160,7 +160,7 @@ describe PayoutsHelper do
     end
 
     describe "displayable_payout_period_range" do
-      let(:seller) { create(:compliant_user, unpaid_balance_cents: 10_01) }
+      let(:seller) { create(:compliant_user, unpaid_balance_cents: 100_01) }
       let!(:merchant_account) { create(:merchant_account_stripe_connect, user: seller) }
       let(:stripe_connect_account_id) { merchant_account.charge_processor_merchant_id }
 
@@ -238,19 +238,19 @@ describe PayoutsHelper do
     it "shows minimum payout volume for user without enough balance" do
       user = create(:user)
       expect(self.payout_period_data(user)[:is_user_payable]).to eq(false)
-      expect(self.payout_period_data(user)[:minimum_payout_amount_cents]).to eq(1000)
+      expect(self.payout_period_data(user)[:minimum_payout_amount_cents]).to eq(10000)
     end
 
     it "shows payout data without payout given and no previous payouts" do
       travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
         user = create(:user)
         create(:ach_account, user:)
-        create(:balance, user:, amount_cents: 10_00, date: Date.current)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
         create(:bank, routing_number: "110000000", name: "Bank of America")
         expect(self.payout_period_data(user)[:is_user_payable]).to eq(true)
         expect(self.payout_period_data(user)[:displayable_payout_period_range]).to eq("Activity up to now")
         expect(self.payout_period_data(user)[:payout_date_formatted]).to eq("March 13th, 2015")
-        expect(self.payout_period_data(user)[:payout_cents]).to eq(1000)
+        expect(self.payout_period_data(user)[:payout_cents]).to eq(10000)
         expect(self.payout_period_data(user)[:bank_number]).to eq("110000000")
         expect(self.payout_period_data(user)[:account_number]).to eq("******1234")
         expect(self.payout_period_data(user)[:bank_account_type]).to eq("ACH")
@@ -265,12 +265,12 @@ describe PayoutsHelper do
         payment = create(:payment, user:, amount_cents: 10_00)
         balance = create(:balance, user:, amount_cents: 10_00, date: Date.current - 30.days, state: "paid")
         payment.balances << balance
-        create(:balance, user:, amount_cents: 10_00, date: Date.current)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
         create(:bank, routing_number: "110000000", name: "Bank of America")
         expect(self.payout_period_data(user)[:is_user_payable]).to eq(true)
         expect(self.payout_period_data(user)[:displayable_payout_period_range]).to eq("Activity since March 1st, 2015")
         expect(self.payout_period_data(user)[:payout_date_formatted]).to eq("March 13th, 2015")
-        expect(self.payout_period_data(user)[:payout_cents]).to eq(1000)
+        expect(self.payout_period_data(user)[:payout_cents]).to eq(10000)
         expect(self.payout_period_data(user)[:bank_number]).to eq("110000000")
         expect(self.payout_period_data(user)[:account_number]).to eq("******1234")
         expect(self.payout_period_data(user)[:bank_name]).to eq("Bank of America")
