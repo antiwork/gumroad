@@ -18,7 +18,9 @@ import { HomeFooter } from "$app/components/Home/Shared/Footer";
 import { HorizontalCard } from "$app/components/Product/Card";
 import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
 import { RatingStars } from "$app/components/RatingStars";
+import { Skeleton } from "$app/components/Skeleton";
 import { CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Radio } from "$app/components/ui/Radio";
@@ -112,7 +114,7 @@ const ProductsCarouselSkeleton = () => (
     </header>
     <div className="override grid min-h-96 auto-cols-[min(20rem,60vw)] grid-flow-col gap-6 overflow-x-auto pb-1 [scrollbar-width:none] lg:auto-cols-[40rem] [&::-webkit-scrollbar]:hidden">
       {Array.from({ length: 3 }, (_, index) => (
-        <div key={index} className="dummy" style={{ minHeight: "24rem" }} />
+        <Skeleton key={index} className="h-96" />
       ))}
     </div>
   </section>
@@ -482,8 +484,10 @@ function DiscoverIndex() {
               appendFilters={
                 <>
                   <CardContent asChild details>
-                    <details>
-                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Rating</summary>
+                    <Details>
+                      <DetailsToggle chevronPosition="right" className="grow">
+                        Rating
+                      </DetailsToggle>
                       <Fieldset role="group">
                         {range(4, 0).map((number) => (
                           <Label key={number} className="w-full">
@@ -506,14 +510,14 @@ function DiscoverIndex() {
                           </Label>
                         ))}
                       </Fieldset>
-                    </details>
+                    </Details>
                   </CardContent>
                   {hasOfferCode ? (
                     <CardContent asChild details>
-                      <details open>
-                        <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                      <Details open>
+                        <DetailsToggle chevronPosition="right" className="grow">
                           Offer code
-                        </summary>
+                        </DetailsToggle>
                         <div className="flex items-center justify-between gap-2 py-1">
                           <span>{props.black_friday_offer_code}</span>
                           <button
@@ -524,7 +528,7 @@ function DiscoverIndex() {
                             <X className="size-4" />
                           </button>
                         </div>
-                      </details>
+                      </Details>
                     </CardContent>
                   ) : null}
                 </>

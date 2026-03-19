@@ -150,7 +150,7 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
         </FieldsetTitle>
         <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "flex-start" }}>
           <div className="relative">
-            <img className="application-icon" src={icon?.url || placeholderAppIcon} width={80} height={80} />
+            <img className="shrink-0 rounded border" src={icon?.url || placeholderAppIcon} width={80} height={80} />
             {icon ? (
               <Button
                 color="primary"

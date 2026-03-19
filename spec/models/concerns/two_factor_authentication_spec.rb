@@ -147,6 +147,30 @@ describe TwoFactorAuthentication do
     end
   end
 
+  describe "#totp_enabled?" do
+    context "when user has no totp credential" do
+      it "returns false" do
+        expect(@user.totp_enabled?).to be false
+      end
+    end
+
+    context "when user has an unconfirmed totp credential" do
+      before { create(:totp_credential, user: @user) }
+
+      it "returns false" do
+        expect(@user.totp_enabled?).to be false
+      end
+    end
+
+    context "when user has a confirmed totp credential" do
+      before { create(:totp_credential, :confirmed, user: @user) }
+
+      it "returns true" do
+        expect(@user.totp_enabled?).to be true
+      end
+    end
+  end
+
   describe "#two_factor_auth_redis_namespace" do
     it "returns the redis namespace for two factor authentication" do
       redis_namespace = @user.two_factor_auth_redis_namespace

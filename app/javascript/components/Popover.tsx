@@ -21,7 +21,7 @@ export const PopoverTrigger = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <PopoverPrimitive.Trigger
     ref={ref}
-    className={classNames("relative cursor-pointer outline-none all-unset focus-visible:outline-none", className)}
+    className={classNames("cursor-pointer outline-none all-unset focus-visible:outline-none", className)}
     {...props}
   />
 ));

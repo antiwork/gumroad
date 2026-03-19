@@ -4,6 +4,7 @@ import { formatDate } from "$app/utils/date";
 
 import { BooleanIcon } from "$app/components/Admin/Icons";
 import type { User } from "$app/components/Admin/Users/User";
+import { DefinitionList } from "$app/components/ui/DefinitionList";
 
 export type ComplianceInfoProps = {
   is_business: boolean | null;
@@ -66,7 +67,7 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
     <div className="grid gap-4 md:grid-cols-2">
       <div className="flex flex-col gap-4">
         <h3>Personal Info</h3>
-        <dl>
+        <DefinitionList>
           <dt>Is Business</dt>
           <dd>
             <BooleanIcon value={!!is_business} />
@@ -106,13 +107,13 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
           <dd>
             <BooleanIcon value={has_individual_tax_id} />
           </dd>
-        </dl>
+        </DefinitionList>
       </div>
 
       {is_business ? (
         <div className="flex flex-col gap-4">
           <h4 className="font-bold">Business Info</h4>
-          <dl>
+          <DefinitionList>
             <dt>Name</dt>
             <dd>{business_name}</dd>
 
@@ -138,7 +139,7 @@ const ComplianceInfo = ({ complianceInfo }: ComplianceInfoComponentProps) => {
             <dd>
               <BooleanIcon value={has_business_tax_id} />
             </dd>
-          </dl>
+          </DefinitionList>
         </div>
       ) : null}
     </div>

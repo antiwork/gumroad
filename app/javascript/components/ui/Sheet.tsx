@@ -15,7 +15,7 @@ export const Sheet = ({
       {modal ? <Dialog.Overlay className="fixed inset-0 z-40 bg-black/80" /> : null}
       <Dialog.Content
         className={classNames(
-          "bg-filled fixed inset-0 z-40 flex flex-col gap-4 overflow-auto border-border p-6 md:left-[unset] md:w-[40vw] md:border-l",
+          "fixed inset-0 z-40 flex flex-col gap-4 overflow-auto border-border bg-background p-6 md:left-[unset] md:w-[40vw] md:border-l",
           className,
         )}
         aria-modal

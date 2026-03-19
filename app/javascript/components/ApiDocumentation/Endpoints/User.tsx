@@ -3,9 +3,17 @@ import React from "react";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { USER_FIELDS } from "../responseFieldDefinitions";
 
 export const GetUser = () => (
   <ApiEndpoint method="get" path="/user" description="Retrieve the user's data.">
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        { name: "user", type: "object", description: "The user object", children: USER_FIELDS },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/user \\
   -d "access_token=ACCESS_TOKEN" \\

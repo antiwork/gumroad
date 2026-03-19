@@ -4,6 +4,7 @@ import { Form } from "$app/components/Admin/Form";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -16,10 +17,10 @@ type AdminUserAddCreditProps = {
 const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
   <>
     <hr />
-    <details>
-      <summary>
+    <Details>
+      <DetailsToggle>
         <h3>Add credits</h3>
-      </summary>
+      </DetailsToggle>
       <Form
         url={Routes.add_credit_admin_user_path(user.external_id)}
         method="POST"
@@ -43,7 +44,7 @@ const AdminUserAddCredit = ({ user }: AdminUserAddCreditProps) => (
           </Fieldset>
         )}
       </Form>
-    </details>
+    </Details>
   </>
 );
 

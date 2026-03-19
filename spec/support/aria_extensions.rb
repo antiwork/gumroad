@@ -87,6 +87,21 @@ Capybara.add_selector(:status, locator_type: [nil]) do
   end
 end
 
+# Use XPath.anywhere for modals since content may be rendered in a portal
+Capybara.modify_selector(:modal) do
+  xpath do |*|
+    XPath.anywhere[
+      [
+        XPath.self(:dialog)[XPath.attr(:open)],
+        [
+          XPath.attr(:"aria-modal") == "true",
+          (XPath.attr(:role) == "dialog") | (XPath.attr(:role) == "alertdialog")
+        ].reduce(:&)
+      ].reduce(&:|)
+    ]
+  end
+end
+
 Capybara.add_selector(:command) do
   xpath do |locator, **options|
     %i[link button menuitem tab_button].map do |selector|

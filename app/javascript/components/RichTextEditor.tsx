@@ -42,6 +42,7 @@ import { Image, uploadImages } from "$app/components/TiptapExtensions/Image";
 import { Link, LinkDialog, Button as TiptapButton } from "$app/components/TiptapExtensions/Link";
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
+import { Menu as MenuContainer, MenuItem as MenuListItem, MenuItemRadio } from "$app/components/ui/Menu";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
 import { Position, WithTooltip } from "$app/components/WithTooltip";
 
@@ -283,8 +284,8 @@ export const useRichTextEditor = ({
     editorProps: {
       attributes: {
         class: classNames(
-          "min-h-full focus-within:outline-none",
-          editable && "whitespace-break-spaces rounded-t-none",
+          "focus-within:outline-none",
+          editable && "min-h-full whitespace-break-spaces rounded-t-none",
           className,
         ),
         ...(ariaLabel ? { "aria-label": ariaLabel } : {}),
@@ -459,11 +460,11 @@ export const RichTextEditorToolbar = ({
             {activeFormatOption?.name ?? "Text"} <ChevronDown className="size-5" />
           </PopoverTrigger>
           <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-            <div role="menu">
+            <MenuContainer>
               {textFormatOptions.map((option) => (
                 <PopoverClose key={option.name} asChild>
-                  <div
-                    role="menuitemradio"
+                  <MenuItemRadio
+                    checked={option === activeFormatOption}
                     aria-checked={option === activeFormatOption}
                     className="aria-checked:bg-active-bg"
                     onClick={() => {
@@ -476,10 +477,10 @@ export const RichTextEditorToolbar = ({
                   >
                     {option.icon}
                     <span>{option.name}</span>
-                  </div>
+                  </MenuItemRadio>
                 </PopoverClose>
               ))}
-            </div>
+            </MenuContainer>
           </PopoverContent>
         </Popover>
         <div
@@ -550,15 +551,15 @@ export const RichTextEditorToolbar = ({
                     Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-                    <div role="menu">
+                    <MenuContainer>
                       {insertMenuItems.map((item, i) => (
                         <React.Fragment key={i}>
                           {item.name === "horizontalRule" ? (
                             <PopoverClose asChild>
-                              <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+                              <MenuListItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                                 <Minus className="size-5" />
                                 <span>Divider</span>
-                              </div>
+                              </MenuListItem>
                             </PopoverClose>
                           ) : (
                             <PopoverClose asChild>
@@ -568,20 +569,20 @@ export const RichTextEditorToolbar = ({
                         </React.Fragment>
                       ))}
                       <PopoverClose asChild>
-                        <div role="menuitem" onClick={() => setIsUpsellModalOpen(true)}>
+                        <MenuListItem onClick={() => setIsUpsellModalOpen(true)}>
                           <CartPlus className="size-5" />
                           <span>Upsell</span>
-                        </div>
+                        </MenuListItem>
                       </PopoverClose>
                       {productId ? (
                         <PopoverClose asChild>
-                          <div role="menuitem" onClick={() => setIsReviewModalOpen(true)}>
+                          <MenuListItem onClick={() => setIsReviewModalOpen(true)}>
                             <Star pack="filled" className="size-5" />
                             <span>Reviews</span>
-                          </div>
+                          </MenuListItem>
                         </PopoverClose>
                       ) : null}
-                    </div>
+                    </MenuContainer>
                   </PopoverContent>
                 </Popover>
               </>

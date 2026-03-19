@@ -7,6 +7,7 @@ import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type LatestPostsProps = {
   user: User;
@@ -61,9 +62,9 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
     setIsLoading(false);
   };
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
+  const onToggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
       void fetchPosts();
     }
   };
@@ -71,12 +72,12 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
+      <Details open={open} onToggle={onToggle}>
+        <DetailsToggle>
           <h3>Last posts</h3>
-        </summary>
+        </DetailsToggle>
         <LatestPostsContent posts={posts} isLoading={isLoading} />
-      </details>
+      </Details>
     </>
   );
 };

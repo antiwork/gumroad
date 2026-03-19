@@ -151,6 +151,33 @@ describe TwoFactorAuthenticationValidator, type: :controller do
         end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
       end
     end
+
+    context "when user has TOTP enabled" do
+      before do
+        Feature.activate(:authenticator_2fa)
+        create(:totp_credential, :confirmed, user: @user)
+      end
+
+      it "sets the auth method to totp in session" do
+        controller.prepare_for_two_factor_authentication(@user)
+
+        expect(controller.two_factor_auth_method).to eq("totp")
+      end
+
+      it "does not send authentication token email" do
+        expect do
+          controller.prepare_for_two_factor_authentication(@user)
+        end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token)
+      end
+    end
+
+    context "when user does not have TOTP enabled" do
+      it "sets the auth method to email in session" do
+        controller.prepare_for_two_factor_authentication(@user)
+
+        expect(controller.two_factor_auth_method).to eq("email")
+      end
+    end
   end
 
   describe "#user_for_two_factor_authentication" do
@@ -168,10 +195,11 @@ describe TwoFactorAuthenticationValidator, type: :controller do
       controller.prepare_for_two_factor_authentication(@user)
     end
 
-    it "removes the user_id from session" do
+    it "removes the user_id and method from session" do
       controller.reset_two_factor_auth_login_session
 
       expect(session[:verify_two_factor_auth_for]).to be_nil
+      expect(session[:two_factor_auth_method]).to be_nil
     end
   end
 end

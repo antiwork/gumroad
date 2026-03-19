@@ -335,6 +335,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     if user.present?
       user.two_factor_authentication_enabled = params[:enabled]
       if user.save
+        user.totp_credential&.destroy unless user.two_factor_authentication_enabled?
         render json: { success: true, message: "Two-factor authentication #{user.two_factor_authentication_enabled? ? "enabled" : "disabled"}." }
       else
         render json: { success: false, error_message: user.errors.full_messages.join(", ") }, status: :unprocessable_entity

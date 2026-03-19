@@ -1,4 +1,23 @@
 <% unless inertia_rendering? %>
   <% alert_text = flash[:alert] || flash[:warning] || flash[:notice] %>
-  <%= react_component "Alert", props: { initial: alert_text ? { message: alert_text, status: flash[:alert] ? "danger" : flash[:warning] ? "warning" : "success" } : nil }, prerender: true %>
+  <% if alert_text %>
+    <% status = flash[:alert] ? "danger" : flash[:warning] ? "warning" : "success" %>
+    <div id="flash-toast"
+         class="fixed top-4 left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded bg-background md:max-w-sm"
+         style="transition: all 0.3s ease-out 0.5s;">
+      <div role="status" class="flex items-center gap-2 rounded border p-4 text-sm
+        <%= status == 'danger' ? 'border-danger bg-danger/20 text-danger' : status == 'warning' ? 'border-warning bg-warning/20 text-warning' : 'border-success bg-success/20 text-success' %>">
+        <%= alert_text %>
+      </div>
+    </div>
+    <script nonce="<%= SecureHeaders.content_security_policy_script_nonce(request) %>">
+      setTimeout(function() {
+        var el = document.getElementById("flash-toast");
+        if (el) {
+          el.style.transform = "translateX(-50%) translateY(calc(-100% - var(--spacer-4)))";
+          el.addEventListener("transitionend", function() { el.remove(); });
+        }
+      }, 5000);
+    </script>
+  <% end %>
 <% end %>
