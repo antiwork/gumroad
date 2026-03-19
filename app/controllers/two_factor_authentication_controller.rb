@@ -68,7 +68,7 @@ class TwoFactorAuthenticationController < ApplicationController
 
         redirect_to login_path_for(@user), notice: "Successfully logged in!", status: :see_other
       else
-        redirect_to two_factor_authentication_path, warning: "Invalid token, please try again."
+        redirect_to two_factor_authentication_path, warning: "Invalid token, please try again.", status: :see_other
       end
     end
 

@@ -51,7 +51,7 @@ function TwoFactorAuthentication() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     form.setData({ token: e.target.value });
-    if (isNumericCode && e.target.value.length === 6) submitCode(e.target.value);
+    if (isNumericCode && /^\d{6}$/u.test(e.target.value)) submitCode(e.target.value);
   };
 
   return (

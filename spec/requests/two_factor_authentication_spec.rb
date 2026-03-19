@@ -103,7 +103,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
         login_to_app
         expect(page).to have_content "Two-Factor Authentication"
 
-        fill_in "Token", with: "abcd", fill_options: { clear: :backspace }
+        fill_in "Token", with: "123456", fill_options: { clear: :backspace }
         click_on "Login"
 
         expect(page).to have_content("Invalid token, please try again.")
@@ -191,7 +191,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
       expect(page).to have_content "Two-Factor Authentication"
 
       # Fill the data before opening a new window to make sure the page is fully loaded before switching to the new page.
-      fill_in "Token", with: "invalid", fill_options: { clear: :backspace }
+      fill_in "Token", with: "123", fill_options: { clear: :backspace }
 
       new_window = open_new_window
       within_window new_window do
