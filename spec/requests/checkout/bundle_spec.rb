@@ -14,6 +14,8 @@ describe "Checkout bundles", :js, type: :system do
 
   before do
     product.product_files << create(:readable_document, pdf_stamp_enabled: true)
+    product.thumbnail.url
+    versioned_product.thumbnail.url
   end
 
   it "allows purchasing the bundle" do
