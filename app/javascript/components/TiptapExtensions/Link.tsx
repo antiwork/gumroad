@@ -17,7 +17,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
-
 export const LinkDialog = ({
   editor,
   type,

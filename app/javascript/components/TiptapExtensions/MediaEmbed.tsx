@@ -16,7 +16,6 @@ import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
-
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 declare module "@tiptap/core" {
