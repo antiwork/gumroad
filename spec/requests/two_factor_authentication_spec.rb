@@ -70,7 +70,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
         expect(page).to have_link "Gumroad", href: UrlService.root_domain_with_protocol
 
         fill_in "Token", with: user.otp_code, fill_options: { clear: :backspace }
-        click_on "Login"
 
         # Wait for dashboard content to appear
         expect(page).to have_current_path(dashboard_path)
@@ -82,7 +81,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
         expect(page).to have_content "Two-Factor Authentication"
 
         fill_in "Token", with: user.otp_code, fill_options: { clear: :backspace }
-        click_on "Login"
 
         expect(page).to have_current_path(dashboard_path)
 
@@ -104,7 +102,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
         expect(page).to have_content "Two-Factor Authentication"
 
         fill_in "Token", with: "123456", fill_options: { clear: :backspace }
-        click_on "Login"
 
         expect(page).to have_content("Invalid token, please try again.")
       end
@@ -159,7 +156,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
       end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).once.with(user.id, email_provider: nil)
 
       fill_in "Authentication Token", with: user.otp_code, fill_options: { clear: :backspace }
-      click_on "Login"
       expect(page).to have_current_path(dashboard_path)
     end
 
@@ -228,7 +224,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
       expect(page).to have_content "Two-Factor Authentication"
 
       fill_in "Token", with: user.otp_code, fill_options: { clear: :backspace }
-      click_on "Login"
 
       expect(page).to have_current_path(dashboard_path)
     end

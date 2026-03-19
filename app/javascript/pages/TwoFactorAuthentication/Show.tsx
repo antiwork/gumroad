@@ -19,38 +19,37 @@ type PageProps = {
   two_factor_method: TwoFactorMethod;
 };
 
-type FormData = {
-  token: string;
-  next: string | null;
-  authenticity_token: string;
-};
-
 function TwoFactorAuthentication() {
   const { user_id, email, token: initialToken, authenticity_token, two_factor_method } = usePage<PageProps>().props;
   const next = new URL(useOriginalLocation()).searchParams.get("next");
   const uid = React.useId();
 
-  const form = useForm<FormData>({
-    token: initialToken ?? "",
-    next,
-    authenticity_token,
-  });
-
   const switchForm = useForm({ authenticity_token });
 
   const isNumericCode = two_factor_method === "totp" || two_factor_method === "email";
 
+  const [token, setToken] = React.useState(initialToken ?? "");
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
   const submitCode = (token: string) => {
-    router.post(Routes.two_factor_authentication_path({ user_id }), { token, next, authenticity_token });
+    if (isSubmitting) return;
+    router.post(
+      Routes.two_factor_authentication_path({ user_id }),
+      { token, next, authenticity_token },
+      {
+        onBefore: () => setIsSubmitting(true),
+        onFinish: () => setIsSubmitting(false),
+      },
+    );
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    submitCode(form.data.token);
+    submitCode(token);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    form.setData({ token: e.target.value });
+    setToken(e.target.value);
     if (isNumericCode && /^\d{6}$/u.test(e.target.value)) submitCode(e.target.value);
   };
 
@@ -89,15 +88,15 @@ function TwoFactorAuthentication() {
               autoComplete={isNumericCode ? "one-time-code" : undefined}
               maxLength={isNumericCode ? 6 : undefined}
               pattern={isNumericCode ? "[0-9]*" : undefined}
-              value={form.data.token}
+              value={token}
               onChange={handleChange}
               required
               autoFocus
               className={isNumericCode ? "tracking-[0.5em]" : undefined}
             />
           </Fieldset>
-          <Button color="primary" type="submit" disabled={form.processing}>
-            {form.processing ? "Logging in..." : "Login"}
+          <Button color="primary" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Logging in..." : "Login"}
           </Button>
           {(() => {
             switch (two_factor_method) {
