@@ -11,9 +11,25 @@
 - #2 discard 97 092b91e — Baseline - metric counts too many (all payments_spec tests, not just flaky ones). Need better measurement.
 - #3 crash 999 6591179 — Permission denied on script
 - #4 keep 98 6591179 — Baseline: 98 flaky test patterns (90 payments unstubbed, 7 taxes no-block, 1 preorder)
+- #5 crash 999 294f5e3 — Wrong branch, fixing
 
 ## Plugin Checkpoint
-- Last updated: 2026-03-19T19:04:11.459Z
+- Last updated: 2026-03-19T19:08:43.175Z
+- Runs tracked: 5 current / 5 total
+- Baseline: 999
+- Best kept: 98
+- Confidence: n/a
+- Last logged run: #5 crash 294f5e3 — Wrong branch, fixing
+- Pending run awaiting log_experiment: cd /Users/gumclaw/.openclaw/workspace/repos/gumroad && bash autoresearch.sh (8)
+
+Z
+- Runs tracked: 5 current / 5 total
+- Baseline: 999
+- Best kept: 98
+- Confidence: n/a
+- Last logged run: #5 crash 294f5e3 — Wrong branch, fixing
+
+Z
 - Runs tracked: 4 current / 4 total
 - Baseline: 999
 - Best kept: 98

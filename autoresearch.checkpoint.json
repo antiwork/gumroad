@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": 1773947051459,
+  "updatedAt": 1773947323175,
   "sessionStartCommit": "092b91e",
   "session": {
     "name": "Fix remaining flaky tests in Gumroad CI",
@@ -8,22 +8,22 @@
     "metricUnit": "",
     "bestDirection": "lower",
     "currentSegment": 0,
-    "currentRunCount": 4,
-    "totalRunCount": 4,
+    "currentRunCount": 5,
+    "totalRunCount": 5,
     "currentBaselineMetric": 999,
     "currentBestMetric": 98,
-    "confidence": 2
+    "confidence": null
   },
   "lastLoggedRun": {
-    "run": 4,
-    "commit": "6591179",
-    "metric": 98,
+    "run": 5,
+    "commit": "294f5e3",
+    "metric": 999,
     "metrics": {},
-    "status": "keep",
-    "description": "Baseline: 98 flaky test patterns (90 payments unstubbed, 7 taxes no-block, 1 preorder)",
-    "timestamp": 1773947051309,
+    "status": "crash",
+    "description": "Wrong branch, fixing",
+    "timestamp": 1773947318547,
     "segment": 0,
-    "confidence": 2
+    "confidence": null
   },
   "recentLoggedRuns": [
     {
@@ -69,7 +69,29 @@
       "timestamp": 1773947051309,
       "segment": 0,
       "confidence": 2
+    },
+    {
+      "run": 5,
+      "commit": "294f5e3",
+      "metric": 999,
+      "metrics": {},
+      "status": "crash",
+      "description": "Wrong branch, fixing",
+      "timestamp": 1773947318547,
+      "segment": 0,
+      "confidence": null
     }
   ],
-  "pendingRun": null
+  "pendingRun": {
+    "command": "cd /Users/gumclaw/.openclaw/workspace/repos/gumroad && bash autoresearch.sh",
+    "commit": "c55d6e2",
+    "primaryMetric": 8,
+    "metrics": {},
+    "durationSeconds": 0.201,
+    "exitCode": 0,
+    "passed": true,
+    "timedOut": false,
+    "tailOutput": "payments_unstubbed=90 taxes_no_block=7 preorder=1\nMETRIC flaky_test_count=8",
+    "capturedAt": 1773947323175
+  }
 }
