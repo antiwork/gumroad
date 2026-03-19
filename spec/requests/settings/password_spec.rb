@@ -156,6 +156,7 @@ describe("Password Settings Scenario", type: :system, js: true) do
 
         click_on("Set up")
         expect(page).to have_text("Scan this QR code")
+        wait_for_ajax
 
         credential = user.reload.totp_credential
         expect(credential).to be_present
@@ -173,6 +174,25 @@ describe("Password Settings Scenario", type: :system, js: true) do
         click_on("Remove")
         expect(page).to have_button("Set up")
         expect(user.reload.totp_credential).to be_nil
+      end
+
+      context "when authenticator app is enabled" do
+        before do
+          create(:totp_credential, :with_recovery_codes, user:)
+        end
+
+        it "allows regenerating recovery codes" do
+          visit settings_password_path
+
+          click_on("Regenerate recovery codes")
+
+          expect(page).to have_text("Save these codes")
+          expect(page).to have_button("Copy all")
+          expect(page).to have_button("Download")
+
+          click_on("Done")
+          expect(page).not_to have_text("Save these codes")
+        end
       end
     end
 

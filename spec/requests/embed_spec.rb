@@ -116,9 +116,11 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true do
 
       within_frame { click_on "Add to cart" }
 
-      check_out(product)
+      expect do
+        check_out(product)
+      end.to change { AffiliateCredit.count }.by(1)
 
-      purchase = product.sales.successful.last
+      purchase = product.sales.successful.last.reload
       expect(purchase.affiliate_credit.affiliate).to eq(direct_affiliate)
       expect(purchase.affiliate_credit.amount_cents).to eq(645)
     end
@@ -131,7 +133,7 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true do
 
         check_out(product)
 
-        purchase = product.sales.successful.last
+        purchase = product.sales.successful.last.reload
         expect(purchase.affiliate_credit.affiliate).to eq(direct_affiliate)
         expect(purchase.affiliate_credit.amount_cents).to eq(645)
       end
