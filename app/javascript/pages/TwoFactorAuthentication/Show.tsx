@@ -1,4 +1,4 @@
-import { useForm, usePage } from "@inertiajs/react";
+import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { AuthAlert } from "$app/components/AuthAlert";
@@ -38,33 +38,20 @@ function TwoFactorAuthentication() {
 
   const switchForm = useForm({ authenticity_token });
 
+  const isNumericCode = two_factor_method === "totp" || two_factor_method === "email";
+
+  const submitCode = (token: string) => {
+    router.post(Routes.two_factor_authentication_path({ user_id }), { token, next, authenticity_token });
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    form.post(Routes.two_factor_authentication_path({ user_id }));
+    submitCode(form.data.token);
   };
 
-  const hasInteracted = React.useRef(false);
-  React.useEffect(() => {
-    if (!hasInteracted.current) return;
-    if (two_factor_method === "totp" && form.data.token.length === 6) {
-      form.post(Routes.two_factor_authentication_path({ user_id }));
-    }
-  }, [form.data.token]);
-
-  const resendToken = () => {
-    switchForm.post(Routes.resend_authentication_token_path({ user_id }));
-  };
-
-  const switchToEmail = () => {
-    switchForm.post(Routes.switch_to_email_two_factor_path({ user_id }));
-  };
-
-  const switchToRecovery = () => {
-    switchForm.post(Routes.switch_to_recovery_two_factor_path({ user_id }));
-  };
-
-  const switchToAuthenticator = () => {
-    switchForm.post(Routes.switch_to_authenticator_two_factor_path({ user_id }));
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    form.setData({ token: e.target.value });
+    if (isNumericCode && e.target.value.length === 6) submitCode(e.target.value);
   };
 
   return (
@@ -98,18 +85,15 @@ function TwoFactorAuthentication() {
             <Input
               id={uid}
               type="text"
-              inputMode={two_factor_method === "recovery" ? "text" : "numeric"}
-              autoComplete={two_factor_method === "totp" ? "one-time-code" : undefined}
-              maxLength={two_factor_method === "totp" ? 6 : undefined}
-              pattern={two_factor_method === "totp" ? "[0-9]*" : undefined}
+              inputMode={isNumericCode ? "numeric" : "text"}
+              autoComplete={isNumericCode ? "one-time-code" : undefined}
+              maxLength={isNumericCode ? 6 : undefined}
+              pattern={isNumericCode ? "[0-9]*" : undefined}
               value={form.data.token}
-              onChange={(e) => {
-                hasInteracted.current = true;
-                form.setData("token", e.target.value);
-              }}
+              onChange={handleChange}
               required
               autoFocus
-              style={two_factor_method === "totp" ? { letterSpacing: "0.5em" } : undefined}
+              className={isNumericCode ? "tracking-[0.5em]" : undefined}
             />
           </Fieldset>
           <Button color="primary" type="submit" disabled={form.processing}>
@@ -119,7 +103,10 @@ function TwoFactorAuthentication() {
             switch (two_factor_method) {
               case "email":
                 return (
-                  <Button disabled={switchForm.processing} onClick={() => resendToken()}>
+                  <Button
+                    disabled={switchForm.processing}
+                    onClick={() => switchForm.post(Routes.resend_authentication_token_path({ user_id }))}
+                  >
                     Resend Authentication Token
                   </Button>
                 );
@@ -130,7 +117,7 @@ function TwoFactorAuthentication() {
                       type="button"
                       className="cursor-pointer underline all-unset"
                       disabled={switchForm.processing}
-                      onClick={switchToEmail}
+                      onClick={() => switchForm.post(Routes.switch_to_email_two_factor_path({ user_id }))}
                     >
                       Use email instead
                     </button>
@@ -138,7 +125,7 @@ function TwoFactorAuthentication() {
                       type="button"
                       className="cursor-pointer underline all-unset"
                       disabled={switchForm.processing}
-                      onClick={switchToRecovery}
+                      onClick={() => switchForm.post(Routes.switch_to_recovery_two_factor_path({ user_id }))}
                     >
                       Use a recovery code
                     </button>
@@ -151,7 +138,7 @@ function TwoFactorAuthentication() {
                       type="button"
                       className="cursor-pointer underline all-unset"
                       disabled={switchForm.processing}
-                      onClick={switchToAuthenticator}
+                      onClick={() => switchForm.post(Routes.switch_to_authenticator_two_factor_path({ user_id }))}
                     >
                       Use authenticator app
                     </button>
@@ -159,7 +146,7 @@ function TwoFactorAuthentication() {
                       type="button"
                       className="cursor-pointer underline all-unset"
                       disabled={switchForm.processing}
-                      onClick={switchToEmail}
+                      onClick={() => switchForm.post(Routes.switch_to_email_two_factor_path({ user_id }))}
                     >
                       Use email instead
                     </button>
