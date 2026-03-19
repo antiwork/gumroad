@@ -414,6 +414,7 @@ describe("Discover", js: true, type: :system) do
 
     create(:thumbnail, product:)
     product.reload
+    product.thumbnail.url
 
     allow(product).to receive(:recommendable?).and_return(true)
     allow(product).to receive(:reviews_count).and_return(1)
