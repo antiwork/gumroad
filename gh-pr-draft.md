@@ -13,6 +13,7 @@ Fixes race conditions, timing issues, and element matching problems that caused 
 **Pagination button matching** — `have_button("3")` matched "30" or "3 of 5" on pages with more content. Added `exact: true` in `utm_links_spec` and `customers_spec`.
 
 **Other fixes:**
+
 - `sections_spec`: Fixed header intercepting clicks on disclosure button. Used JS `scrollIntoView` + `click()`.
 - `show_spec`: `within "[role='listitem']"` matched multiple items. Added `match: :first`.
 - `secure_redirect_spec`: Missing `wait_for_ajax` before asserting redirect path.
@@ -30,11 +31,11 @@ CI was failing on nearly every run, blocking merges. The failures were non-deter
 
 Ran 26 experiments over ~10 hours using an autonomous loop (push → wait for CI → analyze → fix → repeat). Results:
 
-| Phase | Failed jobs / 60 | Notes |
-|-------|-------------------|-------|
-| Before fixes | 3-5+ | Consistent multi-failures every run |
-| After Stripe + timing fixes | 1-2 | Occasional tax/Circle races |
-| After all fixes | **0** | 7 fully green runs achieved |
+| Phase                       | Failed jobs / 60 | Notes                               |
+| --------------------------- | ---------------- | ----------------------------------- |
+| Before fixes                | 3-5+             | Consistent multi-failures every run |
+| After Stripe + timing fixes | 1-2              | Occasional tax/Circle races         |
+| After all fixes             | **0**            | 7 fully green runs achieved         |
 
 The last 3 consecutive runs before the final edge case fixes were all 0/60. After fixing the remaining `embed_spec` and preorder races, achieved another streak of clean runs. The remaining occasional 1/60 failures in the experiment branch were infrastructure issues (Stripe rate limit cascades across all 42 nodes, Chrome crashes) rather than test code problems.
 
