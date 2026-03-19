@@ -11,21 +11,13 @@ class Subscription::RestartAtCheckoutService
   end
 
   def perform
-    result = nil
-
-    ActiveRecord::Base.transaction do
-      update_original_purchase_for_offer_code_change!
-
-      result = Subscription::UpdaterService.new(
-        subscription: subscription,
-        params: updater_service_params,
-        logged_in_user: buyer,
-        gumroad_guid: params.dig(:purchase, :browser_guid),
-        remote_ip: params[:remote_ip]
-      ).perform
-
-      raise ActiveRecord::Rollback unless result[:success]
-    end
+    result = Subscription::UpdaterService.new(
+      subscription: subscription,
+      params: updater_service_params,
+      logged_in_user: buyer,
+      gumroad_guid: params.dig(:purchase, :browser_guid),
+      remote_ip: params[:remote_ip]
+    ).perform
 
     adapt_result(result)
   end
@@ -34,6 +26,9 @@ class Subscription::RestartAtCheckoutService
     def updater_service_params
       perceived_price_cents = params.dig(:purchase, :perceived_price_cents)&.to_i ||
                               subscription.current_subscription_price_cents
+      original_discount = subscription.original_purchase.purchase_offer_code_discount
+      new_discount_code = params.dig(:purchase, :discount_code)
+      new_offer_code = new_discount_code.present? ? product.find_offer_code(code: new_discount_code.downcase.strip) : nil
 
       {
         variants: params[:variants] || default_variant_ids,
@@ -47,36 +42,9 @@ class Subscription::RestartAtCheckoutService
         paypal_order_id: params[:paypal_order_id],
         stripe_customer_id: params[:stripe_customer_id],
         stripe_setup_intent_id: params[:stripe_setup_intent_id],
+        offer_code: new_offer_code,
+        clear_discount: original_discount.present? && new_offer_code.blank?,
       }.compact
-    end
-
-    # When the offer code terms have changed since the original purchase,
-    # create a new original_purchase with the current offer code values
-    # (similar to how plan/recurrence changes are handled via update_current_plan!).
-    # This preserves historical data on the old purchase instead of overwriting it.
-    def update_original_purchase_for_offer_code_change!
-      original_purchase = subscription.original_purchase
-      discount = original_purchase.purchase_offer_code_discount
-      return if discount.blank?
-
-      offer_code = discount.offer_code
-      return if offer_code.blank?
-
-      return if discount.offer_code_amount == offer_code.amount &&
-                discount.offer_code_is_percent == offer_code.is_percent? &&
-                discount.duration_in_billing_cycles == offer_code.duration_in_billing_cycles
-
-      subscription.update_current_plan!(
-        new_variants: original_purchase.variant_attributes.to_a,
-        new_price: subscription.price,
-        new_quantity: original_purchase.quantity,
-        offer_code_attrs: {
-          offer_code_amount: offer_code.amount,
-          offer_code_is_percent: offer_code.is_percent?,
-          duration_in_months: offer_code.duration_in_billing_cycles
-        }
-      )
-      subscription.reload
     end
 
     def default_variant_ids

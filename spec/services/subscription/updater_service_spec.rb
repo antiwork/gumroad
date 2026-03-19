@@ -2874,6 +2874,154 @@ describe Subscription::UpdaterService, :vcr do
       end
     end
 
+    context "when restarting with offer code changes" do
+      let(:free_trial) { false }
+
+      before :each do
+        setup_subscription
+
+        @offer_code = create(:offer_code, amount_cents: nil, amount_percentage: 25, products: [@product], user: @product.user)
+        @original_purchase.update!(offer_code: @offer_code)
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount
+        )
+
+        @remote_ip = "11.22.33.44"
+        @gumroad_guid = "abc123"
+
+        allow_any_instance_of(Purchase).to receive(:mandate_options_for_stripe).and_return({
+                                                                                             payment_method_options: {
+                                                                                               card: {
+                                                                                                 mandate_options: {
+                                                                                                   reference: StripeChargeProcessor::MANDATE_PREFIX + SecureRandom.hex,
+                                                                                                   amount_type: "maximum",
+                                                                                                   amount: 100_00,
+                                                                                                   start_date: Time.current.to_i,
+                                                                                                   interval: "sporadic",
+                                                                                                   supported_types: ["india"]
+                                                                                                 }
+                                                                                               }
+                                                                                             }
+                                                                                           })
+
+        travel_to(@originally_subscribed_at + 4.months)
+        @subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true)
+      end
+
+      let(:restart_params) do
+        {
+          price_id: @quarterly_product_price.external_id,
+          variants: [@original_tier.external_id],
+          quantity: 1,
+          use_existing_card: true,
+          perceived_price_cents: @original_tier_quarterly_price.price_cents,
+          perceived_upgrade_price_cents: @original_tier_quarterly_price.price_cents,
+        }
+      end
+
+      it "clears the discount when restarting without an offer code" do
+        original_purchase = @subscription.original_purchase
+        expect(original_purchase.purchase_offer_code_discount).to be_present
+
+        full_price = @original_tier_quarterly_price.price_cents
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            clear_discount: true,
+            perceived_price_cents: full_price,
+            perceived_upgrade_price_cents: full_price,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        new_purchase = @subscription.reload.original_purchase
+        expect(new_purchase.id).not_to eq(original_purchase.id)
+        expect(new_purchase.offer_code).to be_nil
+        expect(new_purchase.purchase_offer_code_discount).to be_nil
+      end
+
+      it "updates the discount when the seller changed the offer code percentage" do
+        original_discount = @subscription.original_purchase.purchase_offer_code_discount
+        expect(original_discount.offer_code_amount).to eq(25)
+
+        @offer_code.update!(amount_percentage: 50)
+        new_perceived = @original_tier_quarterly_price.price_cents - @offer_code.amount_off(@original_tier_quarterly_price.price_cents)
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            offer_code: @offer_code,
+            perceived_price_cents: new_perceived,
+            perceived_upgrade_price_cents: new_perceived,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        new_purchase = @subscription.reload.original_purchase
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code).to eq(@offer_code)
+        expect(new_discount.offer_code_amount).to eq(50)
+        expect(new_discount.offer_code_is_percent).to eq(true)
+      end
+
+      it "applies a different offer code when provided" do
+        new_offer_code = create(:offer_code, code: "newcode", amount_cents: nil, amount_percentage: 15, products: [@product], user: @product.user)
+        new_perceived = @original_tier_quarterly_price.price_cents - new_offer_code.amount_off(@original_tier_quarterly_price.price_cents)
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            offer_code: new_offer_code,
+            perceived_price_cents: new_perceived,
+            perceived_upgrade_price_cents: new_perceived,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        new_purchase = @subscription.reload.original_purchase
+        expect(new_purchase.offer_code).to eq(new_offer_code)
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code).to eq(new_offer_code)
+        expect(new_discount.offer_code_amount).to eq(15)
+        expect(new_discount.offer_code_is_percent).to eq(true)
+      end
+
+      it "does not update the plan when the same unchanged offer code is provided" do
+        original_purchase_id = @subscription.original_purchase.id
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(offer_code: @offer_code),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        expect(@subscription.reload.original_purchase.id).to eq(original_purchase_id)
+      end
+    end
+
     context "when restarting a completed installment plan" do
       it "returns an error and does not restart the subscription" do
         purchase = create(:installment_plan_purchase)
