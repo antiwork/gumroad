@@ -154,7 +154,6 @@ describe TwoFactorAuthenticationValidator, type: :controller do
 
     context "when user has TOTP enabled" do
       before do
-        Feature.activate(:authenticator_2fa)
         create(:totp_credential, :confirmed, user: @user)
       end
 
