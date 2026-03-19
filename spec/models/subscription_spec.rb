@@ -2283,7 +2283,7 @@ describe Subscription, :vcr do
           duration_in_months: 1
         )
 
-        new_offer_code = create(:offer_code, code: "newcode", amount_cents: 2_00, products: [@product])
+        new_offer_code = create(:offer_code, code: "newcode", amount_cents: 1_00, products: [@product])
 
         new_purchase = @subscription.update_current_plan!(
           new_variants: [@new_tier],
@@ -2295,7 +2295,7 @@ describe Subscription, :vcr do
         new_discount = new_purchase.purchase_offer_code_discount
         expect(new_discount).to be_present
         expect(new_discount.offer_code).to eq(new_offer_code)
-        expect(new_discount.offer_code_amount).to eq(2_00)
+        expect(new_discount.offer_code_amount).to eq(1_00)
         expect(new_discount.offer_code_is_percent).to eq(false)
       end
 
