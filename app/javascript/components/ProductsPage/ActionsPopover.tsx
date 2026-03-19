@@ -97,18 +97,30 @@ const ActionsPopover = ({
         </PopoverTrigger>
         <PopoverContent className="border-0 p-0 shadow-none">
           <Menu>
-            <MenuItem inert={!product.can_duplicate || isDuplicating} onClick={() => void handleDuplicate()}>
+            <MenuItem
+              inert={!product.can_duplicate || isDuplicating}
+              className={!product.can_duplicate || isDuplicating ? "opacity-30" : undefined}
+              onClick={() => void handleDuplicate()}
+            >
               <Copy className="size-5" />
               {isDuplicating ? "Duplicating..." : "Duplicate"}
             </MenuItem>
             {product.can_unarchive ? (
-              <MenuItem inert={isUnarchiving} onClick={() => void handleUnarchive()}>
+              <MenuItem
+                inert={isUnarchiving}
+                className={isUnarchiving ? "opacity-30" : undefined}
+                onClick={() => void handleUnarchive()}
+              >
                 <Archive className="size-5" />
                 {isUnarchiving ? "Unarchiving..." : "Unarchive"}
               </MenuItem>
             ) : null}
             {product.can_archive ? (
-              <MenuItem inert={isArchiving} onClick={() => void handleArchive()}>
+              <MenuItem
+                inert={isArchiving}
+                className={isArchiving ? "opacity-30" : undefined}
+                onClick={() => void handleArchive()}
+              >
                 <Archive className="size-5" />
                 {isArchiving ? "Archiving..." : "Archive"}
               </MenuItem>
@@ -116,6 +128,7 @@ const ActionsPopover = ({
             <MenuItem
               variant="danger"
               inert={!product.can_destroy || isDeleting}
+              className={!product.can_destroy || isDeleting ? "opacity-30" : undefined}
               onClick={() => setConfirmingDelete(true)}
             >
               <Trash className="size-5" />

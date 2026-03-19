@@ -67,7 +67,7 @@ export const NodeActionsMenu = ({
       >
         <PopoverAnchor>
           <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
-            <Button size="sm" color="filled">
+            <Button size="sm" color="filled" className="cursor-move">
               <DotsVerticalRounded pack="filled" className="size-5" />
             </Button>
           </PopoverTrigger>

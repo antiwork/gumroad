@@ -74,7 +74,10 @@ export const PageTab = ({
       role="tab"
     >
       {!disabled ? (
-        <Move className="invisible absolute left-0 size-5 text-muted group-hover/tab:visible" aria-grabbed={dragging} />
+        <Move
+          className="invisible absolute left-0 size-5 cursor-move text-muted group-hover/tab:visible"
+          aria-grabbed={dragging}
+        />
       ) : null}
       <PageIcon className="size-5" aria-label={PAGE_ICON_LABELS[icon]} />
       <span className="flex-1">

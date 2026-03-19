@@ -287,7 +287,7 @@ const CustomersPage = ({
                   </PopoverTrigger>
                 </WithTooltip>
               </PopoverAnchor>
-              <PopoverContent className="p-0">
+              <PopoverContent className="max-h-[calc(100vh-8rem)] overflow-y-auto p-0">
                 <Card className="w-140 border-none shadow-none">
                   <CardContent>
                     <ProductSelect

@@ -2,7 +2,7 @@ import { Archive } from "@boxicons/react";
 import * as React from "react";
 
 import { getSearchResults, ProductFilter, SearchRequest, SearchResults } from "$app/data/search";
-import { SORT_KEYS, PROFILE_SORT_KEYS } from "$app/parsers/product";
+import { PROFILE_SORT_KEYS, SORT_KEYS } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, getShortCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
@@ -11,7 +11,8 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Card as UICard, CardContent } from "$app/components/ui/Card";
+import { Skeleton } from "$app/components/Skeleton";
+import { CardContent, Card as UICard } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -391,7 +392,7 @@ export const CardGrid = ({
             {results?.products.map((result, idx) => <Card key={result.permalink} product={result} eager={idx < 4} />) ??
               Array(6)
                 .fill(0)
-                .map((_, i) => <div key={i} className="dummy" />)}
+                .map((_, i) => <Skeleton key={i} className="h-75 sm:h-95" />)}
           </ProductCardGrid>
           {pagination === "button" &&
           !((state.results?.total ?? 0) < (state.offset ?? 1) + (state.results?.products.length ?? 0)) ? (

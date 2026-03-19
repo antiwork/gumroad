@@ -1,0 +1,133 @@
+name: Enforce review cycles
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Log actions without posting comments"
+        type: boolean
+        default: false
+
+jobs:
+  enforce-review-cycles:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const MS_PER_HOUR = 60 * 60 * 1000;
+            const THRESHOLD_HOURS = 24;
+            const BOT_AUTHORS = ["gumclaw", "gumroad-buildkite", "dependabot", "renovate"];
+            const NAG_MARKER = "<!-- gumclaw-review-nag -->";
+            const ACTIONS_BOT = "github-actions[bot]";
+            const CHANGES_REQUESTED = "CHANGES_REQUESTED";
+            const FOOTER = "*This is an automated review-cycle reminder.*";
+            const dryRun = context.eventName === "workflow_dispatch" && "${{ inputs.dry_run }}" === "true";
+            const { owner, repo } = context.repo;
+            const now = Date.now();
+
+            const hoursSince = (isoDate) => Math.floor((now - new Date(isoDate).getTime()) / MS_PER_HOUR);
+
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: "open", per_page: 100
+            });
+
+            for (const pr of prs) {
+              if (pr.draft) {
+                core.info(`#${pr.number} — skipped (draft)`);
+                continue;
+              }
+
+              if (BOT_AUTHORS.includes(pr.user.login)) {
+                core.info(`#${pr.number} — skipped (author=${pr.user.login})`);
+                continue;
+              }
+
+              const reviews = await github.rest.pulls.listReviews({
+                owner, repo, pull_number: pr.number, per_page: 100
+              });
+
+              const latestReviewDate = reviews.data
+                .map(r => r.submitted_at)
+                .filter(Boolean)
+                .sort()
+                .pop();
+
+              const changesRequested = reviews.data.some(r => r.state === CHANGES_REQUESTED);
+              const lastActivity = latestReviewDate || pr.created_at;
+              const hoursWaiting = hoursSince(lastActivity);
+
+              if (hoursWaiting < THRESHOLD_HOURS) {
+                core.info(`#${pr.number} — ${hoursWaiting}h since last activity (under threshold)`);
+                continue;
+              }
+
+              const comments = await github.rest.issues.listComments({
+                owner, repo, issue_number: pr.number, per_page: 30,
+                sort: "created", direction: "desc"
+              });
+
+              const recentNag = comments.data.find(
+                c => c.user.login === ACTIONS_BOT && c.body.includes(NAG_MARKER)
+              );
+
+              if (recentNag) {
+                const nagHoursAgo = hoursSince(recentNag.created_at);
+                if (nagHoursAgo < THRESHOLD_HOURS) {
+                  core.info(`#${pr.number} — already nagged ${nagHoursAgo}h ago`);
+                  continue;
+                }
+              }
+
+              let body;
+              const author = pr.user.login;
+              const reviewers = pr.requested_reviewers.map(r => r.login);
+
+              if (changesRequested) {
+                body = [
+                  NAG_MARKER,
+                  `👋 @${author} — This PR has had changes requested for over **${hoursWaiting}h**. Could you address the review feedback when you get a chance? Keeping the review cycle under 24h helps keep things moving.`,
+                  "",
+                  FOOTER
+                ].join("\n");
+              } else if (reviewers.length > 0) {
+                const pings = reviewers.map(r => `@${r}`).join(" ");
+                body = [
+                  NAG_MARKER,
+                  `👋 ${pings} — PR #${pr.number} has been waiting for review for **${hoursWaiting}h**. Could you take a look when you get a chance? We're aiming for 24h review cycles.`,
+                  "",
+                  FOOTER
+                ].join("\n");
+              } else {
+                const commitsResp = await github.rest.repos.listCommits({
+                  owner, repo, per_page: 20
+                });
+                const contributors = [...new Set(
+                  commitsResp.data
+                    .map(c => c.author?.login)
+                    .filter(login => login && login !== author && !BOT_AUTHORS.includes(login))
+                )].slice(0, 3);
+
+                const suggestion = contributors.length > 0 ? contributors.join(", ") : "a teammate";
+                body = [
+                  NAG_MARKER,
+                  `👋 @${author} — This PR has been open for **${hoursWaiting}h** with no reviewers assigned. Consider requesting a review from ${suggestion} to keep things moving.`,
+                  "",
+                  FOOTER
+                ].join("\n");
+              }
+
+              if (dryRun) {
+                core.info(`#${pr.number} — [DRY RUN] would post:\n${body}`);
+              } else {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: pr.number, body
+                });
+                core.info(`#${pr.number} — reminder posted (${hoursWaiting}h waiting)`);
+              }
+            }

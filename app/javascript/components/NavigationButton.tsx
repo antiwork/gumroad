@@ -26,7 +26,7 @@ type NavigationButtonInertiaProps = NavigationButtonProps & {
 };
 
 export const NavigationButtonInertia = React.forwardRef<HTMLAnchorElement, NavigationButtonInertiaProps>(
-  ({ className, color, outline, size, disabled, children, onClick, style, inert, ...props }, ref) => {
+  ({ className, color, outline, size, disabled, children, onClick, inert, ...props }, ref) => {
     const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
 
     const filteredProps = Object.fromEntries(Object.entries(props).filter(([_, value]) => value !== undefined));
@@ -48,15 +48,12 @@ export const NavigationButtonInertia = React.forwardRef<HTMLAnchorElement, Navig
           buttonVariants({ variant, size, color: color && !outline ? color : undefined }),
           className,
           "no-underline",
+          disabled && "pointer-events-none opacity-30",
         )}
         ref={ref}
         inert={disabled}
         {...filteredProps}
         {...(handleClick && { onClick: handleClick })}
-        style={{
-          ...style,
-          ...(disabled ? { pointerEvents: "none", cursor: "not-allowed", opacity: 0.3 } : {}),
-        }}
       >
         {children}
       </Link>

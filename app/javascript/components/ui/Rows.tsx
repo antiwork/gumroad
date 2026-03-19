@@ -52,7 +52,7 @@ export const RowDetails = ({
 
 export const RowDragHandle = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={classNames("order-first -ml-4 text-muted", className)} {...props}>
+    <div ref={ref} className={classNames("order-first -ml-4 cursor-move text-muted", className)} {...props}>
       <DotsVerticalRounded pack="filled" className="size-5" />
     </div>
   ),

@@ -25,7 +25,7 @@ jobs:
 
   build_base:
     name: Build base image${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
-    runs-on: hetzner
+    runs-on: ubicloud-standard-4
     needs: ci_gate
     if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
@@ -33,12 +33,16 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: docker/login-action@v3
+      - name: Login to Quay
+        uses: nick-fields/retry@v3
         with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
-          logout: false
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$QUAY_PASSWORD" | docker login quay.io -u "$QUAY_USERNAME" --password-stdin
+        env:
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
       - name: Build and push base image
         env:
           WEB_BASE_REPO: quay.io/gumroad/web_base
@@ -77,7 +81,7 @@ jobs:
           fi
 
   build_test:
-    runs-on: hetzner
+    runs-on: ubicloud-standard-4
     name: Build test image${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     needs: build_base
     steps:
@@ -85,12 +89,16 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: docker/login-action@v3
+      - name: Login to Quay
+        uses: nick-fields/retry@v3
         with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
-          logout: false
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$QUAY_PASSWORD" | docker login quay.io -u "$QUAY_USERNAME" --password-stdin
+        env:
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
       - name: Build and push test image
         env:
           WEB_BASE_REPO: quay.io/gumroad/web_base
@@ -144,7 +152,7 @@ jobs:
     name: Test Fast ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
-    runs-on: hetzner
+    runs-on: ubicloud-standard-4
     needs: build_test
     strategy:
       fail-fast: false
@@ -156,44 +164,65 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: docker/login-action@v3
+      - name: Login to Quay
+        uses: nick-fields/retry@v3
         with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
-          logout: false
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$QUAY_PASSWORD" | docker login quay.io -u "$QUAY_USERNAME" --password-stdin
+        env:
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
       - name: Start services
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: docker compose -f docker/docker-compose-test-and-ci.yml up -d
         env:
-          COMPOSE_HTTP_TIMEOUT: 300
-        run: docker compose -f docker/docker-compose-test-and-ci.yml up -d
+          COMPOSE_HTTP_TIMEOUT: "300"
       - name: Wait for services
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+              docker/ci/wait_on_connection.sh db_test 3306
+
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+              docker/ci/wait_on_connection.sh elasticsearch 9200
+
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+              docker/ci/wait_on_connection.sh minio 9000
         env:
           WEB_REPO: quay.io/gumroad/web
-        run: |
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-            $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
-            docker/ci/wait_on_connection.sh db_test 3306
-
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-            $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
-            docker/ci/wait_on_connection.sh minio 9000
-        timeout-minutes: 5
-
       - name: Setup test database
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              -e RAILS_ENV=test \
+              $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+              bundle exec rake db:setup
         env:
           WEB_REPO: quay.io/gumroad/web
-        run: |
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-            -e RAILS_ENV=test \
-            $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
-            bundle exec rake db:setup
 
       - name: Run tests
         env:
           WEB_REPO: quay.io/gumroad/web
           KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
         run: |
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+          docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -e RUBY_YJIT_ENABLE=1 \
             -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC=${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }} \
             -e KNAPSACK_PRO_CI_NODE_TOTAL=${{ matrix.ci_node_total }} \
@@ -285,36 +314,58 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: docker/login-action@v3
+      - name: Login to Quay
+        uses: nick-fields/retry@v3
         with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
-          logout: false
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$QUAY_PASSWORD" | docker login quay.io -u "$QUAY_USERNAME" --password-stdin
+        env:
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
       - name: Start services
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: docker compose -f docker/docker-compose-test-and-ci.yml up -d
         env:
-          COMPOSE_HTTP_TIMEOUT: 300
-        run: docker compose -f docker/docker-compose-test-and-ci.yml up -d
+          COMPOSE_HTTP_TIMEOUT: "300"
       - name: Wait for services
-        env:
-          WEB_REPO: quay.io/gumroad/web
-        run: |
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-            $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
-            docker/ci/wait_on_connection.sh db_test 3306
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+              docker/ci/wait_on_connection.sh db_test 3306
 
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-            $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
-            docker/ci/wait_on_connection.sh minio 9000
-        timeout-minutes: 5
-      - name: Setup test database
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+              docker/ci/wait_on_connection.sh elasticsearch 9200
+
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+              docker/ci/wait_on_connection.sh minio 9000
         env:
           WEB_REPO: quay.io/gumroad/web
-        run: |
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
-            -e RAILS_ENV=test \
-            $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
-            bundle exec rake db:setup
+      - name: Setup test database
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+              -e RAILS_ENV=test \
+              $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+              bundle exec rake db:setup
+        env:
+          WEB_REPO: quay.io/gumroad/web
 
       - name: Run tests
         env:
@@ -342,7 +393,7 @@ jobs:
           chmod 777 ./test-logs
 
           # Run tests with volume mount to capture capybara artifacts and test logs
-          docker run --rm --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
+          docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
             -v "$(pwd)/test-logs:/app/log" \
             -e RUBY_YJIT_ENABLE \
@@ -389,7 +440,7 @@ jobs:
 
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
-    runs-on: ubicloud-standard-4
+    runs-on: ubicloud-standard-2
     needs: [test_fast, test_slow]
     if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:

@@ -4,6 +4,8 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { RESOURCE_SUBSCRIPTION_FIELDS } from "../responseFieldDefinitions";
 
 const ResourceSubscriptionsDescription = () => (
   <>
@@ -160,6 +162,17 @@ const ResourceSubscriptionsDescription = () => (
 
 export const CreateResourceSubscription = () => (
   <ApiEndpoint method="put" path="/resource_subscriptions" description={<ResourceSubscriptionsDescription />}>
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        {
+          name: "resource_subscription",
+          type: "object",
+          description: "The resource subscription object",
+          children: RESOURCE_SUBSCRIPTION_FIELDS,
+        },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/resource_subscriptions \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -192,6 +205,17 @@ export const GetResourceSubscriptions = () => (
         description='(string) - Currently there are 8 supported values - "sale", "refund", "dispute", "dispute_won", "cancellation", "subscription_updated", "subscription_ended", and "subscription_restarted".'
       />
     </ApiParameters>
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        {
+          name: "resource_subscriptions",
+          type: "array",
+          description: "Array of resource subscription objects",
+          children: RESOURCE_SUBSCRIPTION_FIELDS,
+        },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/resource_subscriptions \\
   -d "access_token=ACCESS_TOKEN" \\
