@@ -7,6 +7,7 @@ import { request } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { RecoveryCodes } from "$app/components/Settings/PasswordPage/RecoveryCodes";
 import { Skeleton } from "$app/components/Skeleton";
 import { Alert } from "$app/components/ui/Alert";
 import { Input } from "$app/components/ui/Input";
@@ -17,13 +18,6 @@ type Step = "setup" | "recovery";
 type SetupData = {
   secret: string;
   qr_svg: string;
-};
-
-const copyToClipboard = (text: string) => {
-  void navigator.clipboard.writeText(text).then(
-    () => showAlert("Copied to clipboard.", "success"),
-    () => showAlert("Failed to copy.", "error"),
-  );
 };
 
 export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
@@ -87,16 +81,6 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
     }
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([recoveryCodes.join("\n")], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "gumroad-recovery-codes.txt";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleDone = () => {
     onCancel();
     router.reload();
@@ -143,7 +127,18 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
             <code className="rounded border border-border bg-background p-3 font-mono text-sm break-all">
               {setupData?.secret}
             </code>
-            <Button onClick={() => setupData?.secret && copyToClipboard(setupData.secret)}>Copy</Button>
+            <Button
+              onClick={() => {
+                if (setupData?.secret) {
+                  void navigator.clipboard.writeText(setupData.secret).then(
+                    () => showAlert("Copied to clipboard.", "success"),
+                    () => showAlert("Failed to copy.", "error"),
+                  );
+                }
+              }}
+            >
+              Copy
+            </Button>
           </div>
         </Modal>
         {error ? <Alert variant="danger">{error}</Alert> : null}
@@ -172,25 +167,5 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
     );
   }
 
-  return (
-    <div className="grid gap-4">
-      <Alert variant="warning">Save these codes. You'll need them if you lose your authenticator app.</Alert>
-      <div className="grid w-fit gap-4">
-        <div className="grid grid-cols-2 gap-x-8 gap-y-2 rounded border border-border p-4 font-mono text-sm">
-          {recoveryCodes.map((recoveryCode) => (
-            <div key={recoveryCode}>{recoveryCode}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Button onClick={() => copyToClipboard(recoveryCodes.join("\n"))}>Copy all</Button>
-          <Button onClick={handleDownload}>Download</Button>
-        </div>
-      </div>
-      <div>
-        <Button color="accent" onClick={handleDone}>
-          Done
-        </Button>
-      </div>
-    </div>
-  );
+  return <RecoveryCodes codes={recoveryCodes} onDone={handleDone} />;
 };
