@@ -103,7 +103,7 @@ describe StripePayoutProcessor, :vcr do
 
     describe "instant payouts" do
       it "returns true when the user has an eligible balance" do
-        expect(described_class.is_user_payable(@u1, 10_01, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(true)
+        expect(described_class.is_user_payable(@u1, 100_01, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(true)
       end
 
       it "returns false when the user has a balance above the maximum instant payout amount" do
@@ -111,7 +111,7 @@ describe StripePayoutProcessor, :vcr do
       end
 
       it "returns false when the user has a balance below the minimum instant payout amount" do
-        expect(described_class.is_user_payable(@u1, 9_99, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(false)
+        expect(described_class.is_user_payable(@u1, 99_99, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(false)
       end
     end
 
