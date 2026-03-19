@@ -202,11 +202,11 @@ describe "Sales page", type: :system, js: true do
         fill_in "After", with: ""
         find(:label, "Before").click
 
-        expect(page).to have_button("3")
+        expect(page).to have_button("3", exact: true)
         check "Show active customers only"
-        expect(page).to_not have_button("3")
+        expect(page).to_not have_button("3", exact: true)
         uncheck "Show active customers only"
-        expect(page).to have_button("3")
+        expect(page).to have_button("3", exact: true)
       end
 
       it "prevents selecting the same product in both bought and not bought filters" do
