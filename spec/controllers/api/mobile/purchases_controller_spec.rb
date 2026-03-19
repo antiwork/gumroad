@@ -571,31 +571,26 @@ describe Api::Mobile::PurchasesController do
       end
     end
 
-    describe "filter by products" do
-      it "returns purchases for the specified products" do
-        product_1 = create(:product, user: create(:named_user))
-        product_2 = create(:product, user: create(:named_user))
-        product_3 = create(:product, user: create(:named_user))
-        purchase_1 = create(:purchase, purchaser: @purchaser, link: product_1)
-        purchase_2 = create(:purchase, purchaser: @purchaser, link: product_2)
-        create(:purchase, purchaser: @purchaser, link: product_3)
+    describe "filter by purchase_ids" do
+      it "returns purchases for the specified purchase IDs" do
+        purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        purchase_2 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
         index_model_records(Purchase)
 
-        get :search, params: @params.merge(products: [product_1.unique_permalink, product_2.unique_permalink])
+        get :search, params: @params.merge(purchase_ids: [ObfuscateIds.encrypt(purchase_1.id), ObfuscateIds.encrypt(purchase_2.id)])
 
         expect(response).to match_json_schema("api/mobile/purchases")
         expect(response.parsed_body[:purchases].size).to eq(2)
         expect(response.parsed_body[:purchases].pluck(:purchase_id)).to match_array([purchase_1.external_id, purchase_2.external_id])
       end
 
-      it "returns purchases for a single product" do
-        product_1 = create(:product, user: create(:named_user))
-        product_2 = create(:product, user: create(:named_user))
-        purchase_1 = create(:purchase, purchaser: @purchaser, link: product_1)
-        create(:purchase, purchaser: @purchaser, link: product_2)
+      it "returns purchases for a single purchase ID" do
+        purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
         index_model_records(Purchase)
 
-        get :search, params: @params.merge(products: product_1.unique_permalink)
+        get :search, params: @params.merge(purchase_ids: ObfuscateIds.encrypt(purchase_1.id))
 
         expect(response).to match_json_schema("api/mobile/purchases")
         expect(response.parsed_body[:purchases].size).to eq(1)
