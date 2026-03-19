@@ -95,9 +95,10 @@ class Subscription::UpdaterService
         end
 
         original_discount = subscription.original_purchase.purchase_offer_code_discount
-        discount_changed = if original_discount.present?
-          params[:clear_discount] ||
-            params[:offer_code] != original_discount.offer_code ||
+        discount_changed = if params[:clear_discount]
+          true
+        elsif params[:offer_code].present? && original_discount.present?
+          params[:offer_code] != original_discount.offer_code ||
             params[:offer_code].amount != original_discount.offer_code_amount ||
             params[:offer_code].is_percent? != original_discount.offer_code_is_percent ||
             params[:offer_code].duration_in_billing_cycles != original_discount.duration_in_billing_cycles
