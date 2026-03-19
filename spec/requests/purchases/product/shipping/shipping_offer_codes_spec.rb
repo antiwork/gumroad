@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe("Product Page - Shipping with offer codes", type: :system, js: true, shipping: true) do
+describe("Product Page - Shipping with offer codes", type: :system, js: true, shipping: true, force_vcr_on: true) do
   before do
     # Pin GBP exchange rate to avoid flakiness from currency fluctuations.
     # Rate 0.652578 gives: 100 GBP = $153.24 USD, shipping 20 GBP = $30.65 USD
