@@ -30,4 +30,27 @@ describe BeninBankAccount do
       expect(create(:benin_bank_account).routing_number).to be nil
     end
   end
+
+  describe "#validate_account_number" do
+    it "allows records that match the required account number regex" do
+      expect(build(:benin_bank_account)).to be_valid
+      expect(build(:benin_bank_account, account_number: "BJ66AJ06101001001KR390000760")).to be_valid
+
+      bj_bank_account = build(:benin_bank_account, account_number: "FR66BJ0610100100144390000769")
+      expect(bj_bank_account).to_not be_valid
+      expect(bj_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+
+      bj_bank_account = build(:benin_bank_account, account_number: "BJ66BJ061010010014439000076")
+      expect(bj_bank_account).to_not be_valid
+      expect(bj_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+
+      bj_bank_account = build(:benin_bank_account, account_number: "BJ66BJ06101001001443900007690")
+      expect(bj_bank_account).to_not be_valid
+      expect(bj_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+
+      bj_bank_account = build(:benin_bank_account, account_number: "9066890610100100144390000769")
+      expect(bj_bank_account).to_not be_valid
+      expect(bj_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    end
+  end
 end

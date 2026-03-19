@@ -16,7 +16,6 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { DateInput } from "$app/components/DateInput";
-import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -27,6 +26,7 @@ import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Alert } from "$app/components/ui/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -294,18 +294,15 @@ const TierEditor = ({
             {allEnabledPricesAreZero ? (
               <Alert variant="info">Free tiers require a pay what they want price.</Alert>
             ) : null}
-            <Details
-              summary={
+            <Details open={tier.customizable_price}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={tier.customizable_price}
                   onChange={(e) => updateTier({ customizable_price: e.target.checked })}
                   disabled={allEnabledPricesAreZero}
                   label="Allow customers to pay what they want"
                 />
-              }
-              className="toggle"
-              open={tier.customizable_price}
-            >
+              </DetailsToggle>
               <Dropdown>
                 <div
                   style={{
@@ -433,8 +430,8 @@ You can modify or cancel your membership at any time.`;
   }, 500);
 
   return (
-    <Details
-      summary={
+    <Details open={tier.apply_price_changes_to_existing_memberships}>
+      <DetailsToggle chevronPosition="none" className="mb-0">
         <Switch
           checked={tier.apply_price_changes_to_existing_memberships}
           onChange={(e) =>
@@ -445,10 +442,7 @@ You can modify or cancel your membership at any time.`;
           }
           label="Apply price changes to existing customers"
         />
-      }
-      className="toggle"
-      open={tier.apply_price_changes_to_existing_memberships}
-    >
+      </DetailsToggle>
       <Dropdown>
         <div className="grid gap-6">
           {initialEffectiveDate ? (

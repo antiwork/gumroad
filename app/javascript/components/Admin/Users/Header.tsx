@@ -9,6 +9,8 @@ import BlockedUserTooltip from "$app/components/Admin/Users/BlockedUserTooltip";
 import AdminUserStats from "$app/components/Admin/Users/Stats";
 import type { User } from "$app/components/Admin/Users/User";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { Avatar } from "$app/components/ui/Avatar";
+import { InlineList } from "$app/components/ui/InlineList";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type HeaderProps = {
@@ -26,14 +28,14 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
-        <img src={user.avatar_url} className="user-avatar" style={{ width: "var(--form-element-height)" }} alt="" />
+        <Avatar src={user.avatar_url} style={{ width: "var(--form-element-height)" }} alt="" />
         <div className="grid gap-2">
           <h2>
             <Link href={adminUserUrl} className={classNames({ active: url === adminUserUrl })}>
               {displayName}
             </Link>
           </h2>
-          <ul className="inline">
+          <InlineList>
             <li>
               <DateTimeWithRelativeTooltip date={user.created_at} />
             </li>
@@ -74,7 +76,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
             <li>
               <Link href={Routes.admin_user_payouts_url(user.external_id)}>Payouts</Link>
             </li>
-          </ul>
+          </InlineList>
 
           <AdminUserStats user_external_id={user.external_id} />
         </div>

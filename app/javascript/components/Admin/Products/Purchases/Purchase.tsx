@@ -1,6 +1,7 @@
 import React from "react";
 
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { InlineList } from "$app/components/ui/InlineList";
 
 export type ProductPurchase = {
   email: string;
@@ -62,7 +63,7 @@ const AdminProductPurchase = ({
             {gumroad_responsible_for_tax ? ` + ${formatted_gumroad_tax_amount} VAT` : null}
           </h5>
           <small>
-            <ul className="inline">
+            <InlineList>
               <li>{purchase_state}</li>
               {error_code ? <li>{error_code}</li> : null}
               {is_preorder_authorization ? <li>(pre-order auth)</li> : null}
@@ -80,7 +81,7 @@ const AdminProductPurchase = ({
               ) : null}
               {is_chargedback ? <li>(chargeback)</li> : null}
               {is_chargeback_reversed ? <li>(chargeback_reversed)</li> : null}
-            </ul>
+            </InlineList>
           </small>
         </div>
       </div>

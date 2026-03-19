@@ -201,7 +201,6 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:default_src] = ["'self'"]
     config.csp[:style_src] << "blob:" # Required by Shakapacker to serve CSS
     config.csp[:script_src] << "gumroad.dev:3035" # Required by webpack-dev-server
-    config.csp[:script_src] << "'unsafe-inline'" # Allow react-on-rails to inject server-rendering logs into the browser
     config.csp[:connect_src] << "gumroad.dev:3035" # Required by webpack-dev-server
     config.csp[:connect_src] << "wss://gumroad.dev:3035" # Required by webpack-dev-server
     config.csp[:connect_src] << "wss://#{ANYCABLE_HOST}:8081" # Required by AnyCable

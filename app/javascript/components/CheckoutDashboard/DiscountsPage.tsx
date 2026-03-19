@@ -12,6 +12,7 @@ import {
   getStatistics,
   updateDiscount,
 } from "$app/data/offer_code";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -23,7 +24,6 @@ import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
-import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
@@ -38,10 +38,12 @@ import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -444,10 +446,10 @@ const DiscountsPage = ({
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-                              <div role="menu">
-                                <div
-                                  role="menuitem"
+                              <Menu>
+                                <MenuItem
                                   inert={!offerCode.can_update || isLoading}
+                                  className={classNames((!offerCode.can_update || isLoading) && "opacity-30")}
                                   onClick={() => {
                                     setPopoverOfferCodeId(null);
                                     setSelectedOfferCodeId(offerCode.id);
@@ -455,12 +457,12 @@ const DiscountsPage = ({
                                   }}
                                 >
                                   <Copy className="size-5" />
-                                  &ensp;Duplicate
-                                </div>
-                                <div
-                                  role="menuitem"
-                                  className="danger"
+                                  Duplicate
+                                </MenuItem>
+                                <MenuItem
+                                  variant="danger"
                                   inert={!offerCode.can_update || isLoading}
+                                  className={!offerCode.can_update || isLoading ? "opacity-30" : undefined}
                                   onClick={asyncVoid(async (e) => {
                                     e.stopPropagation();
                                     try {
@@ -475,9 +477,9 @@ const DiscountsPage = ({
                                   })}
                                 >
                                   <Trash className="size-5" />
-                                  &ensp;Delete
-                                </div>
-                              </div>
+                                  Delete
+                                </MenuItem>
+                              </Menu>
                             </PopoverContent>
                           </Popover>
                         </div>
@@ -1033,17 +1035,14 @@ const Form = ({
           </Fieldset>
           <Fieldset className="gap-4">
             <FieldsetTitle>Settings</FieldsetTitle>
-            <Details
-              className="toggle"
-              open={limitQuantity}
-              summary={
+            <Details open={limitQuantity}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={limitQuantity}
                   onChange={(evt) => setLimitQuantity(evt.target.checked)}
                   label="Limit quantity"
                 />
-              }
-            >
+              </DetailsToggle>
               <Dropdown>
                 <Fieldset state={maxQuantity.error ? "danger" : undefined}>
                   <FieldsetTitle>
@@ -1062,17 +1061,14 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
-            <Details
-              className="toggle"
-              open={limitValidity}
-              summary={
+            <Details open={limitValidity}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={limitValidity}
                   onChange={(evt) => setLimitValidity(evt.target.checked)}
                   label="Limit validity period"
                 />
-              }
-            >
+              </DetailsToggle>
               <Dropdown className="gap-4 lg:grid-cols-2">
                 <Fieldset>
                   <FieldsetTitle>
@@ -1108,17 +1104,14 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
-            <Details
-              className="toggle"
-              open={hasMinimumAmount}
-              summary={
+            <Details open={hasMinimumAmount}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={hasMinimumAmount}
                   onChange={(evt) => setHasMinimumAmount(evt.target.checked)}
                   label="Set a minimum qualifying amount"
                 />
-              }
-            >
+              </DetailsToggle>
               <Dropdown>
                 <Fieldset state={minimumAmount.error ? "danger" : undefined}>
                   <FieldsetTitle>
@@ -1135,17 +1128,14 @@ const Form = ({
                 </Fieldset>
               </Dropdown>
             </Details>
-            <Details
-              className="toggle"
-              open={hasMinimumQuantity}
-              summary={
+            <Details open={hasMinimumQuantity}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
                 <Switch
                   checked={hasMinimumQuantity}
                   onChange={(evt) => setHasMinimumQuantity(evt.target.checked)}
                   label="Set a minimum quantity"
                 />
-              }
-            >
+              </DetailsToggle>
               <Dropdown>
                 <Fieldset state={minimumQuantity.error ? "danger" : undefined}>
                   <FieldsetTitle>

@@ -252,10 +252,10 @@ const ProductsTable = ({ sales }: TableProps) => {
           <TableHead {...thProps("revenue")}>Revenue</TableHead>
           <TableHead {...thProps("visits")}>Visits</TableHead>
           <TableHead {...thProps("today")}>Today</TableHead>
-          <TableHead className="text-singleline" {...thProps("last_7")}>
+          <TableHead className="truncate" {...thProps("last_7")}>
             Last 7 days
           </TableHead>
-          <TableHead className="text-singleline" {...thProps("last_30")}>
+          <TableHead className="truncate" {...thProps("last_30")}>
             Last 30 days
           </TableHead>
         </TableRow>

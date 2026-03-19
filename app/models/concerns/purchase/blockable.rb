@@ -181,6 +181,7 @@ module Purchase::Blockable
     def pause_payouts_for_seller_based_on_recent_failures!
       return if Feature.inactive?(:block_seller_based_on_recent_failures)
       return if IGNORED_ERROR_CODES.include?(error_code)
+      return if seller.verified?
 
       failed_seller_purchases_watch_minutes,
       max_seller_failed_purchases_price_cents,

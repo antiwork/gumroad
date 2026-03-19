@@ -1,11 +1,11 @@
 import { ArrowLeft, ChevronDown, ChevronUp, Paperclip, Trash } from "@boxicons/react";
 import type { Message } from "@helperai/client";
 import { useConversation, useRealtimeEvents, useCreateMessage, MessageContent } from "@helperai/react";
-import cx from "classnames";
 import pinkIcon from "images/pink-icon.png";
 import { startCase } from "lodash-es";
 import React from "react";
 
+import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
 
 import { Button } from "$app/components/Button";
@@ -13,6 +13,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Textarea } from "$app/components/ui/Textarea";
@@ -30,7 +31,7 @@ function MessageListItem({ message, isLastMessage }: { message: Message; isLastM
         className="peer cursor-pointer p-4 peer-hover:bg-(--active-bg) hover:bg-(--active-bg)"
         onClick={() => setIsExpanded((v) => !v)}
       >
-        <img className={cx("user-avatar w-9!", image === pinkIcon ? "border-none!" : "")} src={image} />
+        <Avatar className={classNames("w-9!", image === pinkIcon ? "border-none!" : "")} src={image} />
         <div className={`font-bold ${isExpanded ? "flex-1" : ""}`}>
           {message.role === "user" ? (currentSeller?.name ?? "You") : message.staffName || startCase(message.role)}
         </div>

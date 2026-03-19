@@ -28,6 +28,7 @@ import { Option, Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { Alert } from "$app/components/ui/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
@@ -305,8 +306,7 @@ const TeamMembersSection = ({
             <TableRow key={`${memberInfo.type}-${memberInfo.id}`}>
               <TableCell>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-4)" }}>
-                  <img
-                    className="user-avatar"
+                  <Avatar
                     style={{ width: "var(--spacer-6)" }}
                     src={memberInfo.avatar_url}
                     alt={`Avatar of ${memberInfo.name}`}
