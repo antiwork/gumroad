@@ -70,7 +70,11 @@ describe("Product Page - Shipping with offer codes", type: :system, js: true, sh
     add_to_cart(@product, offer_code: @offer_code)
     expect(page).to have_text("Subtotal US$153.24", normalize_ws: true)
     expect(page).to have_text("Shipping rate US$30.65", normalize_ws: true)
-    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true)
+    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+      fill_in "ZIP code", with: "85144"
+      page.execute_script("document.activeElement.blur()")
+      wait_for_ajax
+    end
 
     expect(page).to have_alert("Your purchase was successful!")
 
