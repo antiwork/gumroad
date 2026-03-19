@@ -563,7 +563,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             it "shows the payout-skipped notice" do
               visit balance_path
 
-              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because the account balance $5 USD was less than the minimum payout amount of $10 USD.")
+              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because the account balance $5 USD was less than the minimum payout amount of $100 USD.")
             end
           end
 

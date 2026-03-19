@@ -457,10 +457,10 @@ describe Payouts do
 
         seller = create(:compliant_user, payment_address: "seller@gr.co")
         create(:user_compliance_info, user: seller)
-        create(:balance, user: seller, date: Date.today - 3, amount_cents: 900)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 9900)
         seller2 = create(:compliant_user, payment_address: "seller@gr.co")
         create(:user_compliance_info, user: seller2)
-        create(:balance, user: seller2, date: Date.today - 3, amount_cents: 1000)
+        create(:balance, user: seller2, date: Date.today - 3, amount_cents: 10000)
         seller3 = create(:compliant_user, payment_address: "seller@gr.co")
         create(:user_compliance_info, user: seller3)
         expect(seller3.unpaid_balance_cents).to eq(0)
@@ -474,7 +474,7 @@ describe Payouts do
         end.not_to change { seller3.comments.count }
 
         date = Time.current.to_fs(:formatted_date_full_month)
-        content = "Payout on #{date} was skipped because the account balance $9 USD was less than the minimum payout amount of $10 USD."
+        content = "Payout on #{date} was skipped because the account balance $99 USD was less than the minimum payout amount of $100 USD."
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
       end
 
