@@ -44,6 +44,7 @@ module User::AsJson
         id: external_id,
         user_id: ObfuscateIds.encrypt(id),
         url: profile_url,
+        profile_picture_url: avatar_url,
         links: (links.presence && links.alive.map(&:general_permalink)),
       }
     end
