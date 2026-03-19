@@ -156,6 +156,7 @@ describe("Password Settings Scenario", type: :system, js: true) do
 
         click_on("Set up")
         expect(page).to have_text("Scan this QR code")
+        wait_for_ajax
 
         credential = user.reload.totp_credential
         expect(credential).to be_present

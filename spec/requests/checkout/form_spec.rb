@@ -208,6 +208,7 @@ describe("Checkout form page", type: :system, js: true) do
         visit checkout_form_path
 
         in_preview do
+          expect(page).to have_selector("h4", text: "Product 1")
           within_cart_item "Product 1" do
             expect(page).to have_text("Seller")
             expect(page).to have_text("Qty: 1")
