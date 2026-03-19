@@ -1,0 +1,4 @@
+{"type":"config","name":"Fix remaining flaky tests in Gumroad CI","metricName":"flaky_test_count","metricUnit":"","bestDirection":"lower"}
+{"run":1,"commit":"092b91e","metric":999,"metrics":{},"status":"crash","description":"Baseline attempt - script had bash arithmetic error with grep output","timestamp":1773946952858,"segment":0,"confidence":null}
+{"run":2,"commit":"092b91e","metric":97,"metrics":{},"status":"discard","description":"Baseline - metric counts too many (all payments_spec tests, not just flaky ones). Need better measurement.","timestamp":1773946974770,"segment":0,"confidence":null}
+{"run":3,"commit":"6591179","metric":999,"metrics":{},"status":"crash","description":"Permission denied on script","timestamp":1773947037918,"segment":0,"confidence":null}
