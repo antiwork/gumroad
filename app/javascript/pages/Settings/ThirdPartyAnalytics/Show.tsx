@@ -96,7 +96,8 @@ export default function ThirdPartyAnalyticsPage() {
                 Learn more
               </a>
               <div>
-                You can add a Facebook or TikTok tracking pixel and link your Google Analytics properties to track your visitors.
+                You can add a Facebook or TikTok tracking pixel and link your Google Analytics properties to track your
+                visitors.
               </div>
             </>
           }
