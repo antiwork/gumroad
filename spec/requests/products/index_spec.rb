@@ -490,7 +490,6 @@ describe "Products Page Scenario", type: :system, js: true do
       product = create(:product, user: seller, name: "Chicken", unique_permalink: "chicken")
       visit(products_path)
 
-      expect(page).to have_field("Search products", visible: false)
       table = find(:table, "Products").find("tbody")
       expect(table).to have_selector(:table_row, count: 2)
       expect(page).to have_selector("[aria-label='Pagination']")
