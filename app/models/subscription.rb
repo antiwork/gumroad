@@ -34,7 +34,7 @@ class Subscription < ApplicationRecord
   has_flags 1 => :is_test_subscription,
             2 => :cancelled_by_buyer,
             3 => :cancelled_by_admin,
-            4 => :flat_fee_applicable,
+            4 => :DEPRECATED_flat_fee_applicable,
             5 => :is_resubscription_pending_confirmation,
             6 => :mor_fee_applicable,
             7 => :is_installment_plan,
@@ -65,7 +65,6 @@ class Subscription < ApplicationRecord
   validate :must_have_payment_option
   validate :installment_plans_cannot_be_cancelled_by_buyer
 
-  before_create :enable_flat_fee
   before_create :enable_mor_fee
   after_create :update_last_payment_option
   after_save :create_interruption_event, if: -> { deactivated_at_previously_changed? }
@@ -989,10 +988,6 @@ class Subscription < ApplicationRecord
 
     def cached_subscription_events
       @_cached_subscription_events ||= subscription_events.order(occurred_at: :asc).to_a
-    end
-
-    def enable_flat_fee
-      self.flat_fee_applicable = true
     end
 
     def enable_mor_fee

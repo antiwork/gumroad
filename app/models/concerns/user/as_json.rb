@@ -28,11 +28,11 @@ module User::AsJson
 
   private
     def view_profile_scope?(options)
-      api_scopes_options(options).include?("view_profile")
+      (api_scopes_options(options) & %w[view_profile account]).present?
     end
 
     def valid_api_scope?(options)
-      (%w[edit_products view_sales revenue_share ifttt view_profile] & api_scopes_options(options)).present?
+      (%w[edit_products view_sales revenue_share ifttt view_profile account] & api_scopes_options(options)).present?
     end
 
     def api_scopes_options(options)
@@ -44,6 +44,7 @@ module User::AsJson
         id: external_id,
         user_id: ObfuscateIds.encrypt(id),
         url: profile_url,
+        profile_picture_url: avatar_url,
         links: (links.presence && links.alive.map(&:general_permalink)),
       }
     end

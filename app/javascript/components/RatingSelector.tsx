@@ -21,6 +21,7 @@ export const RatingSelector = ({ currentRating, onChangeCurrentRating, disabled 
             aria-checked={currentRating === rating}
             role="radio"
             inert={disabled}
+            className={disabled ? "opacity-30" : undefined}
             onMouseOver={() => setHoveredRating(rating)}
             onMouseOut={() => setHoveredRating(null)}
             onClick={() => onChangeCurrentRating(rating)}

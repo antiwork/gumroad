@@ -39,6 +39,12 @@ describe Api::V2::OfferCodesController do
         expect(result).to eq(success: true, offer_codes: [offer_code].as_json(api_scopes: ["view_public"]))
       end
     end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+      get @action, params: @params.merge(access_token: token.token)
+      expect(response).to be_successful
+    end
   end
 
   describe "POST 'create'" do

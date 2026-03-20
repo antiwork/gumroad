@@ -12,6 +12,7 @@ import {
   getStatistics,
   updateDiscount,
 } from "$app/data/offer_code";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -42,6 +43,7 @@ import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
@@ -444,10 +446,10 @@ const DiscountsPage = ({
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-                              <div role="menu">
-                                <div
-                                  role="menuitem"
+                              <Menu>
+                                <MenuItem
                                   inert={!offerCode.can_update || isLoading}
+                                  className={classNames((!offerCode.can_update || isLoading) && "opacity-30")}
                                   onClick={() => {
                                     setPopoverOfferCodeId(null);
                                     setSelectedOfferCodeId(offerCode.id);
@@ -455,12 +457,12 @@ const DiscountsPage = ({
                                   }}
                                 >
                                   <Copy className="size-5" />
-                                  &ensp;Duplicate
-                                </div>
-                                <div
-                                  role="menuitem"
-                                  className="danger"
+                                  Duplicate
+                                </MenuItem>
+                                <MenuItem
+                                  variant="danger"
                                   inert={!offerCode.can_update || isLoading}
+                                  className={!offerCode.can_update || isLoading ? "opacity-30" : undefined}
                                   onClick={asyncVoid(async (e) => {
                                     e.stopPropagation();
                                     try {
@@ -475,9 +477,9 @@ const DiscountsPage = ({
                                   })}
                                 >
                                   <Trash className="size-5" />
-                                  &ensp;Delete
-                                </div>
-                              </div>
+                                  Delete
+                                </MenuItem>
+                              </Menu>
                             </PopoverContent>
                           </Popover>
                         </div>

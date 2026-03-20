@@ -117,6 +117,12 @@ describe Api::V2::SubscribersController do
         expect(response.code).to eq "403"
       end
     end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+      get @action, params: { access_token: token.token, link_id: @product.external_id }
+      expect(response).to be_successful
+    end
   end
 
   describe "GET 'show'" do

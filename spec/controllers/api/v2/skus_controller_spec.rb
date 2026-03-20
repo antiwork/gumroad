@@ -82,5 +82,11 @@ describe Api::V2::SkusController do
         }.as_json(api_scopes: ["view_public"]))
       end
     end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+      get :index, params: @params.merge(access_token: token.token)
+      expect(response).to be_successful
+    end
   end
 end

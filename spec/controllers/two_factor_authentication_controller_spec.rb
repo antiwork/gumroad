@@ -245,5 +245,190 @@ describe TwoFactorAuthenticationController, type: :controller, inertia: true do
       expect(response).to redirect_to(two_factor_authentication_path)
       expect(flash[:notice]).to eq "Resent the authentication token, please check your inbox."
     end
+
+    context "when user has TOTP enabled" do
+      before do
+        Feature.activate_user(:authenticator_2fa, @user)
+        create(:totp_credential, :confirmed, user: @user)
+        controller.prepare_for_two_factor_authentication(@user)
+      end
+
+      it "does not resend and shows warning" do
+        expect do
+          post :resend_authentication_token, params: { user_id: @user.encrypted_external_id }
+        end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token)
+
+        expect(response).to redirect_to(two_factor_authentication_path)
+        expect(flash[:warning]).to eq "Cannot resend token for authenticator app."
+      end
+    end
+
+    context "when method is recovery" do
+      before do
+        Feature.activate_user(:authenticator_2fa, @user)
+        create(:totp_credential, :confirmed, user: @user)
+        controller.prepare_for_two_factor_authentication(@user)
+        controller.two_factor_auth_method = "recovery"
+      end
+
+      it "does not resend and shows warning" do
+        expect do
+          post :resend_authentication_token, params: { user_id: @user.encrypted_external_id }
+        end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token)
+
+        expect(response).to redirect_to(two_factor_authentication_path)
+        expect(flash[:warning]).to eq "Cannot resend token for authenticator app."
+      end
+    end
+  end
+
+  describe "POST switch_to_email" do
+    include_examples "check user in session for html request" do
+      subject(:call_action) { post :switch_to_email }
+    end
+
+    before do
+      Feature.activate_user(:authenticator_2fa, @user)
+      create(:totp_credential, :confirmed, user: @user)
+      controller.prepare_for_two_factor_authentication(@user)
+    end
+
+    it "switches method to email, sends token, and redirects" do
+      expect do
+        post :switch_to_email, params: { user_id: @user.encrypted_external_id }
+      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
+
+      expect(controller.send(:two_factor_auth_method)).to eq("email")
+      expect(response).to redirect_to(two_factor_authentication_path)
+      expect(flash[:notice]).to eq "Authentication token sent to #{@user.email}."
+    end
+  end
+
+  describe "POST switch_to_recovery" do
+    include_examples "check user in session for html request" do
+      subject(:call_action) { post :switch_to_recovery }
+    end
+
+    before do
+      Feature.activate_user(:authenticator_2fa, @user)
+      create(:totp_credential, :confirmed, user: @user)
+      controller.prepare_for_two_factor_authentication(@user)
+    end
+
+    it "switches method to recovery and redirects" do
+      post :switch_to_recovery, params: { user_id: @user.encrypted_external_id }
+
+      expect(controller.send(:two_factor_auth_method)).to eq("recovery")
+      expect(response).to redirect_to(two_factor_authentication_path)
+    end
+  end
+
+  describe "POST switch_to_authenticator" do
+    include_examples "check user in session for html request" do
+      subject(:call_action) { post :switch_to_authenticator }
+    end
+
+    before do
+      Feature.activate_user(:authenticator_2fa, @user)
+      create(:totp_credential, :confirmed, user: @user)
+      controller.prepare_for_two_factor_authentication(@user)
+      controller.two_factor_auth_method = "email"
+    end
+
+    it "switches method to totp and redirects" do
+      post :switch_to_authenticator, params: { user_id: @user.encrypted_external_id }
+
+      expect(controller.send(:two_factor_auth_method)).to eq("totp")
+      expect(response).to redirect_to(two_factor_authentication_path)
+    end
+  end
+
+  context "when user has TOTP enabled" do
+    let!(:totp_credential) { create(:totp_credential, :with_recovery_codes, user: @user) }
+
+    before do
+      Feature.activate_user(:authenticator_2fa, @user)
+      controller.prepare_for_two_factor_authentication(@user)
+    end
+
+    describe "GET show" do
+      it "returns totp as the two_factor_method" do
+        get :show
+
+        expect(response).to be_successful
+        expect(inertia.props[:two_factor_method]).to eq("totp")
+      end
+    end
+
+    describe "POST create with TOTP code" do
+      it "signs in with a valid TOTP code" do
+        code = totp_credential.otp_code
+
+        post :create, params: { token: code, user_id: @user.encrypted_external_id }
+
+        expect(flash[:notice]).to eq "Successfully logged in!"
+        expect(response).to redirect_to(controller.send(:login_path_for, @user))
+      end
+
+      it "rejects an invalid TOTP code" do
+        post :create, params: { token: "invalid", user_id: @user.encrypted_external_id }
+
+        expect(flash[:warning]).to eq "Invalid token, please try again."
+        expect(response).to redirect_to(two_factor_authentication_path)
+      end
+
+      it "does not accept email OTP codes when TOTP is the method" do
+        email_code = @user.otp_code
+
+        post :create, params: { token: email_code, user_id: @user.encrypted_external_id }
+
+        expect(response).to redirect_to(two_factor_authentication_path)
+        expect(flash[:warning]).to eq("Invalid token, please try again.")
+      end
+
+      it "does not accept recovery codes when method is totp" do
+        recovery_codes = totp_credential.generate_recovery_codes
+
+        post :create, params: { token: recovery_codes.first, user_id: @user.encrypted_external_id }
+
+        expect(flash[:warning]).to eq "Invalid token, please try again."
+      end
+    end
+
+    describe "POST create with recovery code" do
+      before do
+        controller.two_factor_auth_method = "recovery"
+      end
+
+      let(:recovery_codes) { totp_credential.generate_recovery_codes }
+
+      it "signs in with a valid recovery code" do
+        code = recovery_codes.first
+
+        post :create, params: { token: code, user_id: @user.encrypted_external_id }
+
+        expect(flash[:notice]).to eq "Successfully logged in!"
+        expect(response).to redirect_to(controller.send(:login_path_for, @user))
+        expect(totp_credential.reload.recovery_codes.size).to eq(9)
+      end
+
+      it "rejects an already-used recovery code" do
+        code = recovery_codes.first
+        totp_credential.redeem_recovery_code(code)
+
+        post :create, params: { token: code, user_id: @user.encrypted_external_id }
+
+        expect(flash[:warning]).to eq "Invalid token, please try again."
+      end
+
+      it "does not accept TOTP codes when method is recovery" do
+        totp_credential.generate_recovery_codes
+        code = totp_credential.otp_code
+
+        post :create, params: { token: code, user_id: @user.encrypted_external_id }
+
+        expect(flash[:warning]).to eq "Invalid token, please try again."
+      end
+    end
   end
 end

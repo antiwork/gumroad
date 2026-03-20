@@ -187,7 +187,7 @@ describe("ProductShowScenario", type: :system, js: true) do
 
       visit "#{@product.long_url}?wanted=true&quantity=3"
 
-      within "[role='listitem']" do
+      within("[role='listitem']", match: :first) do
         expect(page).to have_text(@membership.name)
         expect(page).to have_text("Qty: 3")
       end

@@ -895,7 +895,7 @@ const Form = ({
                   />
                 </Fieldset>
                 {selectedProduct ? (
-                  <div className="grid grid-cols-[1fr_auto_1fr] gap-2" aria-label="Upsell versions">
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" aria-label="Upsell versions">
                     <b>Version selected</b>
                     <div />
                     <b>Version to offer</b>
@@ -907,7 +907,7 @@ const Form = ({
                       );
                       return (
                         <React.Fragment key={option.id}>
-                          <InputGroup readOnly>{option.name}</InputGroup>
+                          <InputGroup>{option.name}</InputGroup>
                           <ArrowRightCircle className="size-5" />
                           <Select
                             options={selectedProduct.options.flatMap(({ id, name: label }) =>

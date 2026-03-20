@@ -115,7 +115,7 @@ export const ComboBox = <Option extends unknown>({
               tabIndex: 0,
             }),
       })}
-      <div hidden={!open} onMouseDown={(e) => e.preventDefault()}>
+      <div className={classNames(!open && "hidden")} onMouseDown={(e) => e.preventDefault()}>
         <datalist
           id={uid}
           onMouseOut={() => setFocusedOptionIndex(null)}

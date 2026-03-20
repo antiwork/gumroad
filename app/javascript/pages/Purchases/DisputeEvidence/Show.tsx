@@ -20,6 +20,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Label } from "$app/components/ui/Label";
 import { Radio } from "$app/components/ui/Radio";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
@@ -398,10 +399,10 @@ const Files = ({
             <FileDetail pack="filled" className="type-icon size-5" />
             <div>
               <h4>{blob.title}</h4>
-              <ul className="inline">
+              <InlineList>
                 <li>{FileUtils.getFileExtension(blob.filename).toUpperCase()}</li>
                 <li>{FileUtils.getFullFileSizeString(blob.byte_size)}</li>
-              </ul>
+              </InlineList>
             </div>
           </RowContent>
           <RowActions>
