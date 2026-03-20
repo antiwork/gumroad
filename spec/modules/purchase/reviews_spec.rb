@@ -175,6 +175,23 @@ describe Purchase::Reviews do
       end
     end
 
+    it "does not remove review from a standalone product when partially refunded" do
+      purchase = create(:purchase)
+      product = purchase.link
+
+      purchase.post_review(rating: 4, message: "great product")
+      expect(product.average_rating).to eq(4)
+      expect(purchase.product_review).to be_alive
+
+      partial_amount = purchase.total_transaction_cents / 2
+      purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, partial_amount), purchase.seller.id)
+
+      expect(purchase.reload.stripe_partially_refunded).to eq(true)
+      expect(purchase.product_review.reload).to be_alive
+      expect(product.reviews_count).to eq(1)
+      expect(product.average_rating).to eq(4)
+    end
+
     it "removes reviews from all products in a bundle when bundle is partially refunded" do
       bundle_purchase = create(:purchase, link: create(:product, :bundle))
       bundle_purchase.create_artifacts_and_send_receipt!
@@ -232,13 +249,14 @@ describe Purchase::Reviews do
         create(:purchase, should_exclude_product_review: true),
         create(:purchase, is_bundle_purchase: true),
         create(:purchase, is_commission_completion_purchase: true),
-        create(:purchase, stripe_partially_refunded: true)
+        create(:purchase, stripe_partially_refunded: true, is_bundle_product_purchase: true)
       ]
       @matching_purchases = [
         create(:purchase),
         create(:purchase, purchase_state: "gift_receiver_purchase_successful", is_gift_receiver_purchase: true),
         create(:free_trial_membership_purchase, should_exclude_product_review: false),
         create(:purchase_2, is_access_revoked: true),
+        create(:purchase, stripe_partially_refunded: true),
       ]
 
       true_original_purchase = create(:membership_purchase, is_original_subscription_purchase: true, is_archived_original_subscription_purchase: true)
