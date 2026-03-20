@@ -35,6 +35,7 @@ import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/
 import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { formatDate } from "$app/utils/date";
 import FileUtils from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
@@ -1187,7 +1188,10 @@ export const ContentTab = () => {
                             }}
                             aria-selected={item.id === selectedVariantId}
                             inert={product.has_same_rich_content_for_all_variants}
-                            className={product.has_same_rich_content_for_all_variants ? "opacity-30" : undefined}
+                            className={classNames(
+                              props.className,
+                              product.has_same_rich_content_for_all_variants ? "opacity-30" : undefined,
+                            )}
                           >
                             <div className="flex-1">
                               <h4>{item.name || "Untitled"}</h4>
