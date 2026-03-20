@@ -57,7 +57,8 @@ describe TaxCenterController, type: :controller, inertia: true do
 
     context "when seller is not from the US" do
       before do
-        seller.alive_user_compliance_info.update!(country: "Singapore")
+        seller.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_singapore, user: seller)
       end
 
       it "redirects to dashboard with alert" do
