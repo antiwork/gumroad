@@ -155,6 +155,5 @@ describe "User profile settings page", type: :system, js: true do
       expect(@user.seller_profile.background_color).to eq("#facade")
       expect(@user.seller_profile.font).to eq("Roboto Mono")
     end
-
   end
 end

@@ -72,4 +72,3 @@ export const getProduct = async (id: string) => {
   if (!response.ok) throw new ResponseError();
   return cast<ProductProps>(await response.json());
 };
-
