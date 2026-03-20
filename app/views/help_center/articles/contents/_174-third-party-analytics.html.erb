@@ -7,11 +7,11 @@
     </li>
     <li><a href="#Domain-Verification-D-m7W">Domain verification for Meta/Facebook</a></li>
     <li><a href="#Meta-Pixel-Yisi6">Meta Pixel</a></li>
+    <li><a href="#TikTok-Pixel-zK9mP">TikTok Pixel</a></li>
     <li><a href="#Snippets-j1elc">Snippets</a>
       <ul>
         <li><a href="#Google-Ads-0y3hm">Google Ads</a></li>
         <li><a href="#Twitter-nU6Nz" target="_self">𝕏 / Twitter</a></li>
-        <li><a href="#TikTok-nnzqY">TikTok</a></li>
       </ul>
     </li>
   </ul>
@@ -89,6 +89,45 @@
   <p><b>Troubleshoot</b></p>
   <p>If you don't see events going through, try turning off your browser extensions or ad-blockers as they can often block Pixel requests too. You should also test your Pixel setup with the <a href="https://chromewebstore.google.com/detail/meta-pixel-helper/fdgfkebogiimcoedlicjlajpkdmockpc" target="_blank" rel="noopener noreferrer">Meta Pixel Helper Chrome extension</a>.</p>
   <p>Learn more about the Meta Pixel <a href="https://www.facebook.com/help/435189689870514/" target="_blank">here</a>.</p>
+  <h3 id="TikTok-Pixel-zK9mP">TikTok Pixel</h3>
+  <p>A TikTok pixel lets you track visitors and conversions from your TikTok ads.</p>
+  <p><b>Step 1: Set up a pixel</b></p>
+  <ul>
+    <li>Follow <a href="https://ads.tiktok.com/help/article/get-started-pixel?lang=en" target="_blank">this TikTok help doc</a> to learn how to create a TikTok pixel.</li>
+  </ul>
+  <p><b>Step 2: Add your pixel to Gumroad</b></p>
+  <ul>
+    <li>Go to the <a href="https://gumroad.com/settings/third_party_analytics" target="_blank">Third-party analytics tab</a></li>
+    <li>Paste the Pixel ID in the TikTok Pixel field</li>
+  </ul>
+  <p><b>Step 3: Event Builder (optional)</b></p>
+  <p>Gumroad automatically sends ViewContent, AddToCart, and CompletePayment events to your TikTok pixel, so no additional setup is needed for basic tracking. However, if you want to track additional events beyond what Gumroad sends by default, you can use TikTok's <a href="https://ads.tiktok.com/help/article/event-builder?lang=en" target="_blank">Event Builder</a> to set them up by entering your product URL.</p>
+  <p><b>Step 4: Verify in TikTok Events Manager</b></p>
+  <p>The <a href="https://ads.tiktok.com/help/article/events-manager?lang=en" target="_blank">TikTok Events Manager</a> lets you see events firing from your Gumroad pages. You can use this data to create custom audiences and optimize your ad campaigns.</p>
+  <p>Here's a table showing how we map Gumroad events to TikTok Pixel events:</p>
+  <table>
+    <tbody>
+      <tr>
+        <th>Gumroad Event</th>
+        <th>TikTok Pixel</th>
+      </tr>
+      <tr>
+        <td>viewed</td>
+        <td>ViewContent</td>
+      </tr>
+      <tr>
+        <td>iwantthis</td>
+        <td>AddToCart</td>
+      </tr>
+      <tr>
+        <td>purchased</td>
+        <td>CompletePayment</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>For purchase events, we also pass the sale value, currency, product permalink, and content type for better conversion analysis.</p>
+  <p><b>Troubleshoot</b></p>
+  <p>If you don't see events going through, try turning off your browser extensions or ad-blockers as they can block TikTok Pixel requests. You can also use the <a href="https://chromewebstore.google.com/detail/tiktok-pixel-helper/aelgobmabdmlfmiblddjfnjodalhidnn" target="_blank">TikTok Pixel Helper Chrome extension</a> to verify your setup.</p>
   <h3 id="Snippets-j1elc">Snippets</h3>
   <p>You can add snippets provided by services like Google, Facebook, Twitter, and others to track conversions, set up retargeting, and measure ad performance. This code will be triggered based on your Location selection - on a product page, after a purchase is completed, or both.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/64816ecd7f8c2575e354488b/file-TUF4ntqLfY.png" %></figure>
@@ -117,16 +156,6 @@
   <pre>&lt;!-- Twitter conversion tracking base code --&gt; &lt;script&gt; !function(e,t,n,s,u,a){e.twq||(s=e.twq=function(){s.exe?s.exe.apply(s,arguments):s.queue.push(arguments); },s.version='1.1',s.queue=[],u=t.createElement(n),u.async=!0,u.src='https://static.ads-twitter.com/uwt.js', a=t.getElementsByTagName(n)[0],a.parentNode.insertBefore(u,a))}(window,document,'script'); twq('config','REPLACE_WITH_YOUR_TWITTER_PIXEL_ID'); // Twitter Pixel ID &lt;/script&gt; &lt;!-- End Twitter conversion tracking base code --&gt; &lt;!-- Twitter conversion tracking event code --&gt; &lt;script type="text/javascript"&gt; // Insert Twitter Event ID twq('event', 'REPLACE_WITH_YOUR_EVENT_ID', { value: $VALUE, currency: '$CURRENCY', conversion_id: '$ORDER' }); &lt;/script&gt; &lt;!-- End Twitter conversion tracking event code --&gt; </pre>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/63b8fd5cd0b6de7e3be2a86c/file-dAnYDRZjYu.png" %></figure>
   <p>You can learn more about Twitter Conversion tracking <a href="https://business.twitter.com/en/help/campaign-measurement-and-analytics/conversion-tracking-for-websites.html" target="_blank">here</a>.</p>
-  <h3 id="TikTok-nnzqY">TikTok</h3>
-  <p><b>Setting up the TikTok pixel:</b></p>
-  <p>You must set up your TikTok pixel first to begin tracking sales. You can receive your pixel by following the instructions explained <a href="https://ads.tiktok.com/help/article/get-started-pixel?lang=en" target="_blank">here</a>.</p>
-  <p>After you’ve received the pixel, paste it into the code box.</p>
-  <figure><%= image_tag "https://lh6.googleusercontent.com/B1iFItnbMT5709l_wxk02rE7n8Xh3ZBfw01rd7-SArOA8q4FrrftzgB9qRkSUkWGf35xDTYa_IqnWUx9lbWAb_APvwKTnlVdr8J1_755Ywxq1JHQyzgc1SDlhwrvDqM0vcqEh4HPyfqvC_jD8oyZ0OY" %></figure>
-  <p><b>Tracking sales:</b></p>
-  <p>To track sales via the TikTok pixel, set up a standard "Place an Order" event as detailed <a href="https://ads.tiktok.com/help/article/standard-events-parameters?redirected=2" target="_blank">here</a>. You can add the following code to the third-party analytics snippet section to track this event with the order value:</p>
-  <pre>ttq.track("Purchase", {  value: '$VALUE', currency: '$CURRENCY', });    </pre>
-  <p>The pixel and your “Place an Order” event combined should look like the snippet below:</p>
-  <pre>&lt;script&gt; !function (w, d, t) { w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i&lt;ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n&lt;ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&amp;lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)}; ttq.load('CFH83AJC77UUUGLE2TJG'); ttq.page(); }(window, document, 'ttq'); ttq.track("Purchase", {  value: '$VALUE', currency: '$CURRENCY', });     &lt;/script&gt; </pre>
 </div>
 <div>
   <h3>Related Articles</h3>
