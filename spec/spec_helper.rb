@@ -138,7 +138,7 @@ def browser_session_corrupted?(exception)
   return true if exception.is_a?(Selenium::WebDriver::Error::NoSuchWindowError)
   return true if exception.is_a?(Selenium::WebDriver::Error::InvalidSessionIdError)
   return true if exception.is_a?(Errno::ECONNREFUSED)
-  return true if exception.is_a?(NoMethodError) && exception.message.include?('unpack1')
+  return true if exception.is_a?(NoMethodError) && exception.message.include?("unpack1")
 
   msg = exception.message
   msg = "#{msg} #{exception.cause.message}" if exception.cause
@@ -313,7 +313,7 @@ RSpec.configure do |config|
       Rails.logger.warn("[RSpec] Browser session corrupted during reset: #{e.class}: #{e.message}. Restarting driver.")
       force_browser_restart!
     rescue NoMethodError => e
-      raise unless e.message.include?('unpack1')
+      raise unless e.message.include?("unpack1")
 
       Rails.logger.warn("[RSpec] Browser session corrupted during reset: #{e.class}: #{e.message}. Restarting driver.")
       force_browser_restart!
