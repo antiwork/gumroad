@@ -109,7 +109,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       options[:archived] = ActiveModel::Type::Boolean.new.cast(params[:archived]) if params[:archived]
       if params[:purchase_ids].present?
         purchase_ids = Array.wrap(params[:purchase_ids]).filter_map { |id| ObfuscateIds.decrypt(id) }
-        options[:id] = purchase_ids if purchase_ids.present?
+        options[:id] = purchase_ids.presence || [0]
       end
       options
     end

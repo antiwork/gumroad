@@ -585,6 +585,16 @@ describe Api::Mobile::PurchasesController do
         expect(response.parsed_body[:purchases].pluck(:purchase_id)).to match_array([purchase_1.external_id, purchase_2.external_id])
       end
 
+      it "returns no purchases when all purchase IDs are invalid" do
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        index_model_records(Purchase)
+
+        get :search, params: @params.merge(purchase_ids: ["invalid_id_1", "invalid_id_2"])
+
+        expect(response).to match_json_schema("api/mobile/purchases")
+        expect(response.parsed_body[:purchases]).to be_empty
+      end
+
       it "returns purchases for a single purchase ID" do
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
         create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
