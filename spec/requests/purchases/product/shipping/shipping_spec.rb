@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping: true) do
+describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping: true, force_vcr_on: true) do
   before do
     # Pin exchange rates to avoid flakiness from currency fluctuations.
     # GBP rate 0.652578 gives: 100 GBP = $153.24 USD, shipping 20 GBP = $30.65 USD
@@ -25,7 +25,11 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true)
+    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+      expect(page).to have_field("ZIP code", with: "85144")
+      page.execute_script("document.activeElement.blur()")
+      wait_for_ajax
+    end
 
     expect(Purchase.last.price_cents).to eq(18389)
     expect(Purchase.last.shipping_cents).to eq(3065)
@@ -44,7 +48,11 @@ describe("Product Page - Shipping Scenarios", type: :system, js: true, shipping:
 
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
-    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true)
+    check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+      expect(page).to have_field("ZIP code", with: "85144")
+      page.execute_script("document.activeElement.blur()")
+      wait_for_ajax
+    end
 
     expect(Purchase.last.price_cents).to eq(12000)
     expect(Purchase.last.shipping_cents).to eq(2000)

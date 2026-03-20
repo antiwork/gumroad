@@ -126,10 +126,6 @@ describe Order::ChargeService, :vcr do
       }
     end
 
-    before do
-      allow_any_instance_of(Purchase).to receive(:flat_fee_applicable?).and_return(true)
-    end
-
     it "charges all purchases in the order with the payment method provided in params" do
       create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 

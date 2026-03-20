@@ -561,6 +561,9 @@ Rails.application.routes.draw do
       get :verify
     end
     post "/two-factor/resend_authentication_token", to: "two_factor_authentication#resend_authentication_token", as: :resend_authentication_token
+    post "/two-factor/switch_to_email", to: "two_factor_authentication#switch_to_email", as: :switch_to_email_two_factor
+    post "/two-factor/switch_to_recovery", to: "two_factor_authentication#switch_to_recovery", as: :switch_to_recovery_two_factor
+    post "/two-factor/switch_to_authenticator", to: "two_factor_authentication#switch_to_authenticator", as: :switch_to_authenticator_two_factor
 
     # library
     get "/library", to: "library#index", as: :library

@@ -59,7 +59,7 @@ describe User::AsJson do
       subject(:returned_keys) { as_json.keys.collect(&:to_s) }
 
       let(:options) { {} }
-      let(:common_keys) { %w[name bio twitter_handle id user_id url links] }
+      let(:common_keys) { %w[name bio twitter_handle id user_id url profile_picture_url links] }
       let(:api_scope_keys) { %w[currency_type profile_url email] }
       let(:internal_use_keys) { %w[created_at sign_in_count current_sign_in_at last_sign_in_at current_sign_in_ip last_sign_in_ip purchases_count successful_purchases_count] }
 

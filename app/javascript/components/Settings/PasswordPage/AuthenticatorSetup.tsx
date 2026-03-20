@@ -104,6 +104,7 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
           {setupData ? (
             <div
               className="h-full w-full [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
+              data-testid="qr-code"
               dangerouslySetInnerHTML={{ __html: setupData.qr_svg }}
             />
           ) : (

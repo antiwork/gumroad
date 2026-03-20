@@ -4144,6 +4144,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
     describe "Ghanaian creator" do
       before do
+        allow(StripeMerchantAccountManager).to receive(:create_account)
+
         old_user_compliance_info = @user.alive_user_compliance_info
         new_user_compliance_info = old_user_compliance_info.dup
         new_user_compliance_info.country = "Ghana"

@@ -3167,21 +3167,17 @@ class Purchase < ApplicationRecord
 
     def calculate_additional_discover_fee_per_thousand
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+        subscription.original_purchase.discover_fee_per_thousand - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif is_preorder_charge?
-        preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) + PROCESSOR_FEE_PER_THOUSAND : 0)
+        preorder.authorization_purchase.discover_fee_per_thousand - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - PROCESSOR_FEE_PER_THOUSAND
       else
         GUMROAD_DISCOVER_FEE_PER_THOUSAND - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       end
     end
 
     def calculate_gumroad_fee_per_thousand
-      if flat_fee_applicable?
-        calculate_custom_fee_per_thousand
-        (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
-      else
-        (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round
-      end
+      calculate_custom_fee_per_thousand
+      (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
     end
 
     def calculate_custom_fee_per_thousand
@@ -3189,7 +3185,8 @@ class Purchase < ApplicationRecord
       return if charge_discover_fee?
 
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        self.custom_fee_per_thousand = subscription.original_purchase.custom_fee_per_thousand if subscription.original_purchase.custom_fee_per_thousand.present?
+        original_purchase = subscription.original_purchase
+        self.custom_fee_per_thousand = original_purchase.custom_fee_per_thousand if original_purchase&.custom_fee_per_thousand.present?
       elsif is_preorder_charge?
         self.custom_fee_per_thousand = preorder.authorization_purchase.custom_fee_per_thousand if preorder.authorization_purchase.custom_fee_per_thousand.present?
       elsif seller.custom_fee_per_thousand.present?
@@ -3199,12 +3196,6 @@ class Purchase < ApplicationRecord
 
     def gumroad_flat_fee_per_thousand
       seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge? ? 0 : GUMROAD_FLAT_FEE_PER_THOUSAND
-    end
-
-    def flat_fee_applicable?
-      # 10% flat fee is applicable to this purchase if it is not a recurring charge
-      # on a subscription that started before the flat fee was introduced.
-      subscription.blank? || subscription.flat_fee_applicable?
     end
 
     def calculate_taxes

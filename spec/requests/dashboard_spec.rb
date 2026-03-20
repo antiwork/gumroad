@@ -171,6 +171,7 @@ describe "Dashboard", js: true, type: :system do
 
     context "when tax_center feature is enabled" do
       before do
+        create(:user_compliance_info, user: seller)
         Feature.activate_user(:tax_center, seller)
       end
 

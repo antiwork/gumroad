@@ -62,10 +62,6 @@ class Subscription::UpdaterService
           original_purchase.update!(params[:contact_info])
         end
 
-        if !same_plan_and_price? || (is_resubscribing && overdue_for_charge)
-          subscription.update!(flat_fee_applicable: true) unless subscription.flat_fee_applicable?
-        end
-
         # Update card if necessary
         unless use_existing_card?
           had_saved_card = subscription.credit_card.present?
