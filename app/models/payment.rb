@@ -308,56 +308,44 @@ class Payment < ApplicationRecord
     end
 
     def sync_with_stripe
-      return unless processor == PayoutProcessorType::STRIPE
-
-      if state == CREATING
-        if created_at < 24.hours.ago
-          with_lock do
-            mark_failed!("Payment stuck in creating state")
-          end
-          StripePayoutProcessor.reverse_internal_transfer!(self)
-        end
-        return
-      end
-
-      return if stripe_transfer_id.blank? || stripe_connect_account_id.blank?
-
-      stripe_payout = Stripe::Payout.retrieve(stripe_transfer_id, { stripe_account: stripe_connect_account_id })
+      return if processor != PayoutProcessorType::STRIPE
+      return if [CREATING, PROCESSING].exclude?(state)
 
       needs_reverse_transfer = false
+      send_failure_email = false
 
-      with_lock do
-        case stripe_payout["status"]
-        when "paid"
-          return unless state == PROCESSING
-
-          self.processor_fee_cents ||= 0
-          self.arrival_date = stripe_payout["arrival_date"]
-          mark_completed!
-        when "canceled"
-          return unless state == PROCESSING
-
-          mark_cancelled!
-          needs_reverse_transfer = true
-        when "failed"
-          case state
-          when PROCESSING
+      if stripe_transfer_id.present? && stripe_connect_account_id.present?
+        stripe_payout = Stripe::Payout.retrieve(stripe_transfer_id, { stripe_account: stripe_connect_account_id })
+        with_lock do
+          case stripe_payout["status"]
+          when "paid"
+            self.processor_fee_cents ||= 0
+            self.arrival_date = stripe_payout["arrival_date"]
+            mark_processing! if state == CREATING
+            mark_completed!
+          when "canceled"
+            mark_processing! if state == CREATING
+            mark_cancelled!
+            needs_reverse_transfer = true
+          when "failed"
             mark_failed!
-          when COMPLETED
-            mark_returned!
-          else
-            return
-          end
-          needs_reverse_transfer = true
-          if stripe_payout["failure_code"].present?
-            self.failure_reason = stripe_payout["failure_code"]
-            save!
+            if stripe_payout["failure_code"].present?
+              self.failure_reason = stripe_payout["failure_code"]
+              save!
+            end
+            needs_reverse_transfer = true
+            send_failure_email = true
           end
         end
+      else
+        with_lock do
+          mark_failed!
+        end
+        needs_reverse_transfer = true
       end
 
+      send_payout_failure_email if send_failure_email
       StripePayoutProcessor.reverse_internal_transfer!(self) if needs_reverse_transfer
-      send_payout_failure_email if stripe_payout["status"] == "failed" && stripe_payout["failure_code"].present?
     rescue => e
       Rails.logger.error("Error syncing Stripe payout #{id}: #{e.message}")
       errors.add :base, e.message

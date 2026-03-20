@@ -21,18 +21,21 @@ class SyncStuckPayoutsJob
 
   private
     def stuck_payments(processor)
-      base_scope = Payment.where(processor:, state: %w(creating processing unclaimed))
+      stuck_payment_states = %w(creating processing)
+      stuck_payment_states << "unclaimed" if processor != PayoutProcessorType::STRIPE
 
-      return base_scope unless processor == PayoutProcessorType::STRIPE
+      base_scope = Payment.where(processor:, state: stuck_payment_states)
+
+      return base_scope if processor != PayoutProcessorType::STRIPE
 
       base_scope.where(
         "(state = 'creating' AND created_at < :creating_cutoff) OR " \
         "(state = 'processing' AND (" \
-          "(JSON_EXTRACT(json_data, '$.arrival_date') IS NOT NULL AND FROM_UNIXTIME(JSON_EXTRACT(json_data, '$.arrival_date')) < :now) OR " \
+          "(JSON_EXTRACT(json_data, '$.arrival_date') IS NOT NULL AND FROM_UNIXTIME(JSON_EXTRACT(json_data, '$.arrival_date')) < :today) OR " \
           "(JSON_EXTRACT(json_data, '$.arrival_date') IS NULL AND created_at < :processing_cutoff)" \
         "))",
         creating_cutoff: 24.hours.ago,
-        now: Time.current,
+        today: Date.current,
         processing_cutoff: 3.days.ago
       )
     end

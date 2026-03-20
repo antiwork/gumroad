@@ -285,50 +285,62 @@ describe Payment do
   end
 
   describe "#sync_with_stripe" do
-    context "when payment is stuck in creating for over 24 hours" do
-      it "fails the payment and reverses internal transfer" do
+    context "when payment is stuck in creating for over 24 hours without Stripe IDs" do
+      it "fails the payment and reverses internal transfer without sending failure email" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
                                    created_at: 3.days.ago)
 
         allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
+        allow(payment).to receive(:send_payout_failure_email)
 
         payment.send(:sync_with_stripe)
 
         expect(payment.state).to eq("failed")
-        expect(payment.failure_reason).to eq("Payment stuck in creating state")
+        expect(payment.failure_reason).to be_nil
         expect(StripePayoutProcessor).to have_received(:reverse_internal_transfer!).with(payment)
+        expect(payment).not_to have_received(:send_payout_failure_email)
       end
     end
 
-    context "when payment is in creating for less than 24 hours" do
-      it "does not fail the payment" do
+    context "when payment is stuck in creating for over 24 hours with Stripe IDs" do
+      it "retrieves Stripe payout status and transitions accordingly" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "creating",
-                                   created_at: 1.hour.ago)
+                                   stripe_transfer_id: "po_creating", stripe_connect_account_id: "acct_creating",
+                                   created_at: 3.days.ago)
 
-        payment.send(:sync_with_stripe)
-
-        expect(payment.state).to eq("creating")
-      end
-    end
-
-    context "when Stripe payout status is paid" do
-      it "marks the payment as completed" do
-        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
-                                   stripe_transfer_id: "po_123", stripe_connect_account_id: "acct_123")
-
-        stripe_payout = { "status" => "paid", "arrival_date" => 2.days.ago.to_i }
-        allow(Stripe::Payout).to receive(:retrieve).with("po_123", { stripe_account: "acct_123" }).and_return(stripe_payout)
+        stripe_payout = { "status" => "paid", "arrival_date" => 1.day.ago.to_i }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_creating", { stripe_account: "acct_creating" }).and_return(stripe_payout)
 
         payment.send(:sync_with_stripe)
 
         expect(payment.state).to eq("completed")
+        expect(payment.arrival_date).to eq(1.day.ago.to_i)
+      end
+    end
+
+    context "when Stripe payout status is paid" do
+      it "marks the payment as completed with arrival date" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_123", stripe_connect_account_id: "acct_123",
+                                   created_at: 3.days.ago)
+
+        stripe_payout = { "status" => "paid", "arrival_date" => 2.days.ago.to_i }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_123", { stripe_account: "acct_123" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
+
+        payment.send(:sync_with_stripe)
+
+        expect(payment.state).to eq("completed")
+        expect(payment.arrival_date).to eq(2.days.ago.to_i)
+        expect(StripePayoutProcessor).not_to have_received(:reverse_internal_transfer!)
       end
     end
 
     context "when Stripe payout status is failed" do
-      it "marks the payment as failed with failure reason" do
+      it "marks the payment as failed with failure code, reverses transfer, and sends failure email" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
-                                   stripe_transfer_id: "po_456", stripe_connect_account_id: "acct_456")
+                                   stripe_transfer_id: "po_456", stripe_connect_account_id: "acct_456",
+                                   created_at: 3.days.ago)
 
         stripe_payout = { "status" => "failed", "failure_code" => "account_closed" }
         allow(Stripe::Payout).to receive(:retrieve).with("po_456", { stripe_account: "acct_456" }).and_return(stripe_payout)
@@ -338,28 +350,54 @@ describe Payment do
         payment.send(:sync_with_stripe)
 
         expect(payment.state).to eq("failed")
+        expect(payment.failure_reason).to eq("account_closed")
+        expect(StripePayoutProcessor).to have_received(:reverse_internal_transfer!).with(payment)
+        expect(payment).to have_received(:send_payout_failure_email)
+      end
+
+      it "uses a default failure reason when no failure_code is present" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_no_code", stripe_connect_account_id: "acct_no_code",
+                                   created_at: 3.days.ago)
+
+        stripe_payout = { "status" => "failed" }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_no_code", { stripe_account: "acct_no_code" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
+        allow(payment).to receive(:send_payout_failure_email)
+
+        payment.send(:sync_with_stripe)
+
+        expect(payment.state).to eq("failed")
+        expect(payment.failure_reason).to be_nil
+        expect(StripePayoutProcessor).to have_received(:reverse_internal_transfer!).with(payment)
+        expect(payment).to have_received(:send_payout_failure_email)
       end
     end
 
     context "when Stripe payout status is canceled" do
-      it "marks the payment as cancelled" do
+      it "marks the payment as cancelled and reverses transfer without sending failure email" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
-                                   stripe_transfer_id: "po_789", stripe_connect_account_id: "acct_789")
+                                   stripe_transfer_id: "po_789", stripe_connect_account_id: "acct_789",
+                                   created_at: 3.days.ago)
 
         stripe_payout = { "status" => "canceled" }
         allow(Stripe::Payout).to receive(:retrieve).with("po_789", { stripe_account: "acct_789" }).and_return(stripe_payout)
         allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
+        allow(payment).to receive(:send_payout_failure_email)
 
         payment.send(:sync_with_stripe)
 
         expect(payment.state).to eq("cancelled")
+        expect(StripePayoutProcessor).to have_received(:reverse_internal_transfer!).with(payment)
+        expect(payment).not_to have_received(:send_payout_failure_email)
       end
     end
 
     context "when Stripe payout is still in transit" do
       it "does not change the payment state" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
-                                   stripe_transfer_id: "po_transit", stripe_connect_account_id: "acct_transit")
+                                   stripe_transfer_id: "po_transit", stripe_connect_account_id: "acct_transit",
+                                   created_at: 3.days.ago)
 
         stripe_payout = { "status" => "in_transit" }
         allow(Stripe::Payout).to receive(:retrieve).with("po_transit", { stripe_account: "acct_transit" }).and_return(stripe_payout)
@@ -373,15 +411,37 @@ describe Payment do
     context "when Stripe API raises an error" do
       it "logs the error and adds it to payment errors" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
-                                   stripe_transfer_id: "po_err", stripe_connect_account_id: "acct_err")
+                                   stripe_transfer_id: "po_err", stripe_connect_account_id: "acct_err",
+                                   created_at: 3.days.ago)
 
         allow(Stripe::Payout).to receive(:retrieve).and_raise(Stripe::StripeError.new("API error"))
-        expect(Rails.logger).to receive(:error).with(/Error syncing Stripe payout #{payment.id}/)
 
         payment.send(:sync_with_stripe)
 
         expect(payment.state).to eq("processing")
         expect(payment.errors[:base]).to include("API error")
+      end
+    end
+
+    context "when processor is not Stripe" do
+      it "does nothing" do
+        payment = create(:payment, processor: PayoutProcessorType::PAYPAL, state: "processing",
+                                   created_at: 3.days.ago)
+
+        payment.send(:sync_with_stripe)
+
+        expect(payment.state).to eq("processing")
+      end
+    end
+
+    context "when payment is in a terminal state" do
+      it "does nothing for failed payments" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "failed",
+                                   created_at: 3.days.ago)
+
+        payment.send(:sync_with_stripe)
+
+        expect(payment.state).to eq("failed")
       end
     end
   end
