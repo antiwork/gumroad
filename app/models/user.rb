@@ -7,7 +7,7 @@ class User < ApplicationRecord
   has_paper_trail
   has_one_time_password
   include Flipper::Identifier, FlagShihTzu, CurrencyHelper, Mongoable, JsonData, Deletable, MoneyBalance,
-          DeviseInternal, PayoutSchedule, SocialFacebook, SocialTwitter, SocialGoogle, SocialApple, SocialGoogleMobile,
+          DeviseInternal, PayoutSchedule, SocialGoogle, SocialApple, SocialGoogleMobile,
           StripeConnect, Stats, PaymentStats, FeatureStatus, Risk, Compliance, Validations, Taxation, PingNotification,
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,

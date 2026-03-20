@@ -274,10 +274,6 @@ update_tax_rate_cache_for_product_edit:
   cron: "0 15  * * 1"
   class: BuildTaxRateCacheWorker
   description: Re-build tax rate cache used for creator guidance during product creation/edit
-renew_facebook_access_tokens:
-  cron: "0 15 * * 1" # UTC 15:00 Monday
-  class: RenewFacebookAccessTokensWorker
-  description: Renew Facebook access tokens for connected accounts
 stripe_merchant_account_registration:
   cron: "0 0 * * 1" # UTC 00:00 Monday
   class: StripeCreateMerchantAccountsWorker

@@ -72,7 +72,7 @@ describe Settings::ProfilePolicy do
     end
   end
 
-  permissions :update_username?, :manage_social_connections? do
+  permissions :update_username? do
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)
       expect(subject).to permit(seller_context, seller)

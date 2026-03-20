@@ -64,18 +64,6 @@ describe "Login Feature Scenario", js: true, type: :system do
       OmniAuth.config.test_mode = true
     end
 
-    it "supports logging in with Facebook" do
-      OmniAuth.config.mock_auth[:facebook] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/facebook_omniauth.json")))
-      user.update!(facebook_uid: OmniAuth.config.mock_auth[:facebook][:uid])
-
-      visit signup_path
-
-      expect do
-        click_button "Facebook"
-        expect(page).to have_content("We're here to help you get paid for your work.")
-      end.not_to change(User, :count)
-    end
-
     it "supports logging in with Google" do
       OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/google_omniauth.json")))
       user.update!(google_uid: OmniAuth.config.mock_auth[:google_oauth2][:uid])
@@ -84,18 +72,6 @@ describe "Login Feature Scenario", js: true, type: :system do
 
       expect do
         click_button "Google"
-        expect(page).to have_content("We're here to help you get paid for your work.")
-      end.not_to change(User, :count)
-    end
-
-    it "supports logging in with X" do
-      OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json")))
-      user.update!(twitter_user_id: OmniAuth.config.mock_auth[:twitter][:extra][:raw_info][:id])
-
-      visit signup_path
-
-      expect do
-        click_button "X"
         expect(page).to have_content("We're here to help you get paid for your work.")
       end.not_to change(User, :count)
     end
