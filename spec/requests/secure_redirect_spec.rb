@@ -66,6 +66,7 @@ describe("Secure Redirect", js: true, type: :system) do
       it "redirects to the destination" do
         fill_in field_name, with: confirmation_text_2
         click_button "Continue"
+        wait_for_ajax
 
         expect(page).to have_current_path(destination_url)
       end

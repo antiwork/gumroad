@@ -406,6 +406,7 @@ export const USER_FIELDS: FieldDefinition[] = [
     condition: "available with the 'view_sales' scope",
   },
   { name: "url", type: "string", description: "User's Gumroad profile URL" },
+  { name: "profile_picture_url", type: "string", description: "URL of the user's profile picture" },
 ];
 
 export const OFFER_CODE_FIELDS: FieldDefinition[] = [

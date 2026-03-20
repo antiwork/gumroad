@@ -64,6 +64,7 @@ describe Api::V2::UsersController do
       expect(response.parsed_body["user"]["url"]).to be_present
       expect(response.parsed_body["user"]["email"]).to be_present
       expect(response.parsed_body["user"]["profile_url"]).to be_present
+      expect(response.parsed_body["user"]["profile_picture_url"]).to be_present
       expect(response.parsed_body["user"]["display_name"]).to be_present
     end
 
