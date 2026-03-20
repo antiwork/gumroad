@@ -120,5 +120,32 @@ describe "Login Feature Scenario", js: true, type: :system do
 
       expect(page).to have_alert(text: "An account does not exist with that email.")
     end
+
+    it "allows a user who originally signed up via Facebook to reset password and log in" do
+      facebook_user = create(:user, email: "fbuser@example.com", facebook_uid: "123456789")
+      facebook_user.update!(password: Devise.friendly_token[0, 20])
+
+      visit login_path
+
+      click_on "Forgot your password?"
+      fill_in "Email to send reset instructions to", with: "fbuser@example.com"
+      click_on "Send"
+
+      expect(page).to have_alert(text: "Password reset sent! Please make sure to check your spam folder.")
+
+      token = facebook_user.reload.send(:set_reset_password_token)
+      visit edit_user_password_path(reset_password_token: token)
+
+      fill_in "Enter a new password", with: "newSecurePassword123!"
+      fill_in "Enter same password to confirm", with: "newSecurePassword123!"
+      click_on "Reset password"
+
+      visit login_path
+      fill_in "Email", with: "fbuser@example.com"
+      fill_in "Password", with: "newSecurePassword123!"
+      click_on "Login"
+
+      expect(page).to have_content("Dashboard")
+    end
   end
 end
