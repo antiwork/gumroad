@@ -1,5 +1,5 @@
-<main class="stack">
-  <header>
+<main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+  <header class="flex flex-col gap-4 p-4 text-center">
     <div>
       <%= image_tag(@user.avatar_url, size: "72", alt: @user.display_name, class: "rounded-full") %>
     </div>
@@ -9,7 +9,7 @@
     </h2>
     <p><%= @user.email %></p>
   </header>
-  <footer>
+  <footer class="flex flex-col gap-4 p-4">
     <a href="<%= @oauth_authorize_url %>" class="inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-snug">Continue</a>
     <a href="<%= switch_account_oauth_mobile_pre_authorization_path %>?<%= request.query_string %>" class="inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-snug">Use a different account</a>
   </footer>
