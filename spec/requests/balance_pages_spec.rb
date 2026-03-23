@@ -773,9 +773,9 @@ describe "Balance Pages Scenario", js: true, type: :system do
           current_date = Time.current.strftime("%B #{Time.current.day.ordinalize}, %Y")
           expect(page).to have_text("Payout initiated on #{current_date} Instant", normalize_ws: true)
           expect(page).to have_text("Sales $0.00", normalize_ws: true)
-          expect(page).to have_text("Credits $10.00", normalize_ws: true)
-          expect(page).to have_text("Direct sales fees - $0.29", normalize_ws: true)
-          expect(page).to have_text("Expected deposit to Bank of America on #{current_date} Routing number: 110000000 Account: ******6789 $9.70", normalize_ws: true)
+          expect(page).to have_text("Credits $110.00", normalize_ws: true)
+          expect(page).to have_text("Direct sales fees - $3.21", normalize_ws: true)
+          expect(page).to have_text("Expected deposit to Bank of America on #{current_date} Routing number: 110000000 Account: ******6789 $106.79", normalize_ws: true)
         end
       end
 

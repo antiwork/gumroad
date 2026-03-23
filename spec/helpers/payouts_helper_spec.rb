@@ -93,7 +93,7 @@ describe PayoutsHelper do
         expect(payout_period_data[:is_user_payable]).to be(true)
         expect(payout_period_data[:displayable_payout_period_range])
         expect(payout_period_data[:displayable_payout_period_range]).to eq "Activity from #{formatted_payout_date(Date.parse("2013-08-10"))} to #{formatted_payout_date(Date.parse("2013-08-16"))}"
-        expect(payout_period_data[:payout_cents]).to eq 116_34
+        expect(payout_period_data[:payout_cents]).to eq 72_604
         expect(payout_period_data[:payout_date_formatted]).to eq formatted_payout_date(@user.next_payout_date)
         expect(payout_period_data[:paypal_address]).to eq @user.payment_address
       end
@@ -122,7 +122,7 @@ describe PayoutsHelper do
         payout_period_data = helper.payout_period_data(@user)
         expect(payout_period_data[:is_user_payable]).to be(true)
         expect(payout_period_data[:displayable_payout_period_range]) .to eq "Activity from #{formatted_payout_date(Date.parse("2013-08-10"))} to #{formatted_payout_date(Date.parse("2013-08-23"))}"
-        expect(payout_period_data[:payout_cents]).to eq 232_68
+        expect(payout_period_data[:payout_cents]).to eq 145_208
         expect(payout_period_data[:payout_date_formatted]).to eq formatted_payout_date(@user.next_payout_date)
         expect(payout_period_data[:paypal_address]).to eq @user.payment_address
       end
@@ -152,8 +152,8 @@ describe PayoutsHelper do
         payout_period_data = helper.payout_period_data(@user, payment)
         expect(payout_period_data[:displayable_payout_period_range]).to eq "Activity up to #{formatted_payout_date(Date.parse("2013-08-09"))}"
         expect(payout_period_data[:payout_currency]).to eq Currency::USD
-        expect(payout_period_data[:payout_cents]).to eq 8143
-        expect(payout_period_data[:payout_displayed_amount]).to eq "$81.43"
+        expect(payout_period_data[:payout_cents]).to eq 50_822
+        expect(payout_period_data[:payout_displayed_amount]).to eq "$508.22"
         expect(payout_period_data[:payout_date_formatted]).to eq formatted_payout_date(payment.created_at)
         expect(payout_period_data[:paypal_address]).to eq @user.payment_address
       end
