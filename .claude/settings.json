@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(bundle *)",
+      "Bash(yarn *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(rails *)",
+      "Bash(rake *)",
+      "Bash(rspec *)",
+      "Bash(rubocop *)",
+      "Bash(ls *)",
+      "Bash(mkdir *)",
+      "Bash(rm *)",
+      "Bash(mv *)",
+      "Bash(cp *)",
+      "Bash(sleep *)"
+    ]
+  }
+}

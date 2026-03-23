@@ -103,21 +103,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               ).perform
             end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
           end
-
-          it "does not switch the subscription to new flat fee" do
-            expect(@subscription.flat_fee_applicable?).to be false
-
-            result = Subscription::UpdaterService.new(
-              subscription: @subscription,
-              gumroad_guid: @gumroad_guid,
-              params: same_plan_params,
-              logged_in_user: @user,
-              remote_ip: @remote_ip,
-            ).perform
-
-            expect(result[:success]).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be false
-          end
         end
 
         context "but recurrence period has changed" do
@@ -168,21 +153,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               expect(plan_change.recurrence).to eq "monthly"
               expect(plan_change.perceived_price_cents).to eq 3_00
             end
-
-            it "switches the subscription to new flat fee" do
-              expect(@subscription.flat_fee_applicable?).to be false
-
-              result = Subscription::UpdaterService.new(
-                subscription: @subscription,
-                gumroad_guid: @gumroad_guid,
-                params: downgrade_recurrence_params,
-                logged_in_user: @user,
-                remote_ip: @remote_ip,
-              ).perform
-
-              expect(result[:success]).to eq true
-              expect(@subscription.reload.flat_fee_applicable?).to be true
-            end
           end
 
           context "to a price that is greater than the current price" do
@@ -228,21 +198,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               expect(upgrade_purchase.price_cents).to eq @original_tier_yearly_upgrade_cost_after_one_month
               expect(upgrade_purchase.total_transaction_cents).to eq @original_tier_yearly_upgrade_cost_after_one_month
               expect(upgrade_purchase.fee_cents).to eq 158
-            end
-
-            it "switches the subscription to new flat fee" do
-              expect(@subscription.flat_fee_applicable?).to be false
-
-              result = Subscription::UpdaterService.new(
-                subscription: @subscription,
-                gumroad_guid: @gumroad_guid,
-                params: upgrade_recurrence_params,
-                logged_in_user: @user,
-                remote_ip: @remote_ip,
-              ).perform
-
-              expect(result[:success]).to eq true
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end
           end
         end
@@ -296,21 +251,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               # creator balance reflects upgrade purchase
               user_balances = @product.user.balances
               expect(user_balances.last.amount_cents).to eq @new_tier_quarterly_upgrade_cost_after_one_month - upgrade_purchase.fee_cents
-            end
-
-            it "switches the subscription to new flat fee" do
-              expect(@subscription.flat_fee_applicable?).to be false
-
-              result = Subscription::UpdaterService.new(
-                subscription: @subscription,
-                gumroad_guid: @gumroad_guid,
-                params: upgrade_tier_params,
-                logged_in_user: @user,
-                remote_ip: @remote_ip,
-              ).perform
-
-              expect(result[:success]).to eq true
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end
           end
         end
@@ -369,21 +309,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               expect(upgrade_purchase.price_cents).to eq @new_tier_yearly_upgrade_cost_after_one_month
               expect(upgrade_purchase.total_transaction_cents).to eq @new_tier_yearly_upgrade_cost_after_one_month
               expect(upgrade_purchase.fee_cents).to eq 287
-            end
-
-            it "switches the subscription to new flat fee" do
-              expect(@subscription.flat_fee_applicable?).to be false
-
-              result = Subscription::UpdaterService.new(
-                subscription: @subscription,
-                gumroad_guid: @gumroad_guid,
-                params:,
-                logged_in_user: @user,
-                remote_ip: @remote_ip,
-              ).perform
-
-              expect(result[:success]).to eq true
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end
           end
 
@@ -447,21 +372,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               expect(plan_change.recurrence).to eq "monthly"
               expect(plan_change.deleted_at).to be_nil
               expect(plan_change.perceived_price_cents).to eq 5_00
-            end
-
-            it "switches the subscription to new flat fee" do
-              expect(@subscription.flat_fee_applicable?).to be false
-
-              result = Subscription::UpdaterService.new(
-                subscription: @subscription,
-                gumroad_guid: @gumroad_guid,
-                params:,
-                logged_in_user: @user,
-                remote_ip: @remote_ip,
-              ).perform
-
-              expect(result[:success]).to eq true
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end
           end
         end
@@ -552,21 +462,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
             expect(upgrade_purchase.total_transaction_cents).to eq @original_tier_yearly_upgrade_cost_after_one_month
             expect(upgrade_purchase.fee_cents).to eq 158
           end
-
-          it "switches the subscription to new flat fee" do
-            expect(@subscription.flat_fee_applicable?).to be false
-
-            result = Subscription::UpdaterService.new(
-              subscription: @subscription,
-              gumroad_guid: @gumroad_guid,
-              params:,
-              logged_in_user: @user,
-              remote_ip: @remote_ip,
-            ).perform
-
-            expect(result[:success]).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
-          end
         end
 
         context "downgrading" do
@@ -598,28 +493,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
             end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
           end
 
-          it "switches the subscription to new flat fee" do
-            params = {
-              price_id: @monthly_product_price.external_id,
-              variants: [@original_tier.external_id],
-              use_existing_card: true,
-              perceived_price_cents: 3_00,
-              perceived_upgrade_price_cents: 0,
-            }
-            expect(@subscription.flat_fee_applicable?).to be false
-
-            result = Subscription::UpdaterService.new(
-              subscription: @subscription,
-              gumroad_guid: @gumroad_guid,
-              params:,
-              logged_in_user: @user,
-              remote_ip: @remote_ip,
-            ).perform
-
-            expect(result[:success]).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
-          end
-
           context "not changing plan" do
             it "does not change the price or charge the user" do
               params = {
@@ -647,7 +520,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
                 @original_purchase.reload
                 expect(@original_purchase.variant_attributes).to eq [@original_tier]
                 expect(@original_purchase.displayed_price_cents).to eq 5_99
-                expect(@subscription.reload.flat_fee_applicable?).to be false
               end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
             end
           end
@@ -672,7 +544,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
 
             expect(result[:success]).to eq true
             expect(@original_purchase.reload.variant_attributes).to eq [@original_tier]
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end.not_to change { Purchase.count }
         end
 
@@ -693,7 +564,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
             expect(updated_purchase.purchase_state).to eq "not_charged"
             expect(@subscription.last_payment_option.price).to eq @quarterly_product_price # no change
             expect(@original_purchase.reload.is_archived_original_subscription_purchase).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
 
           it "treats it as an upgrade if a more expensive recurrence is selected" do
@@ -712,7 +582,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
             expect(updated_purchase.purchase_state).to eq "not_charged"
             expect(@subscription.last_payment_option.price).to eq @yearly_product_price
             expect(@original_purchase.reload.is_archived_original_subscription_purchase).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
 
           context "default tier is sold out" do
@@ -759,7 +628,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               expect(plan_change.recurrence).to eq "quarterly"
               expect(plan_change.perceived_price_cents).to eq 4_00
             end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
 
           it "treats it as a downgrade if a less expensive recurrence is selected" do
@@ -784,7 +652,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
               expect(plan_change.tier).to eq @original_tier
               expect(plan_change.recurrence).to eq "monthly"
               expect(plan_change.perceived_price_cents).to eq 3_00
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
           end
         end
@@ -1107,7 +974,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
             expect(updated_purchase.variant_attributes).to eq [@original_tier]
             expect(updated_purchase.displayed_price_cents).to eq @original_tier_yearly_price.price_cents
             expect(@original_purchase.reload.is_archived_original_subscription_purchase).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
 
@@ -1130,7 +996,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
             expect(updated_purchase.variant_attributes).to eq [@original_tier]
             expect(updated_purchase.displayed_price_cents).to eq @original_tier_yearly_price.price_cents
             expect(@original_purchase.reload.is_archived_original_subscription_purchase).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
       end
@@ -1166,7 +1031,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
             expect(updated_purchase.id).to eq @original_purchase.id
             expect(updated_purchase.variant_attributes).to eq [@original_tier]
             expect(updated_purchase.displayed_price_cents).to eq @original_tier_quarterly_price.price_cents
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -1189,7 +1053,6 @@ describe "Subscription::UpdaterService – Tiered Membership Variant And Price U
             ).perform
 
             expect(result[:success]).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
       end

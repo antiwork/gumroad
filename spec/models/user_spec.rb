@@ -2934,55 +2934,23 @@ describe User, :vcr do
       @user = create(:user)
     end
 
-    context "when tier pricing is enabled" do
+    context "when the seller has $100K revenue" do
       before do
-        allow_any_instance_of(User).to receive(:tier_pricing_enabled?).and_return(true)
+        @user.update!(tier_state: 100_000)
       end
 
-      context "when the seller has $100K revenue" do
-        before do
-          @user.update!(tier_state: 100_000)
-        end
-
-        it "returns true" do
-          expect(@user.auto_transcode_videos?).to eq true
-        end
-      end
-
-      context "when the seller less than $100K revenue" do
-        before do
-          @user.update!(tier_state: 1_000)
-        end
-
-        it "returns false" do
-          expect(@user.auto_transcode_videos?).to eq false
-        end
+      it "returns true" do
+        expect(@user.auto_transcode_videos?).to eq true
       end
     end
 
-    context "when tier pricing is disabled" do
+    context "when the seller less than $100K revenue" do
       before do
-        allow_any_instance_of(User).to receive(:tier_pricing_enabled?).and_return(false)
+        @user.update!(tier_state: 1_000)
       end
 
-      context "when the seller has $100K revenue" do
-        before do
-          allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_000)
-        end
-
-        it "returns true" do
-          expect(@user.auto_transcode_videos?).to eq true
-        end
-      end
-
-      context "when the seller less than $100K revenue" do
-        before do
-          allow(@user).to receive(:sales_cents_total).and_return(1_000)
-        end
-
-        it "returns false" do
-          expect(@user.auto_transcode_videos?).to eq false
-        end
+      it "returns false" do
+        expect(@user.auto_transcode_videos?).to eq false
       end
     end
   end

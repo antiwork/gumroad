@@ -30,6 +30,17 @@ describe PurchaseSearchService do
       expect(get_records(purchaser: [purchaser_1, purchaser_2.id])).to match_array([purchase_1, purchase_2, purchase_3])
     end
 
+    it "can filter by id" do
+      purchase_1 = create(:purchase)
+      purchase_2 = create(:purchase)
+      purchase_3 = create(:purchase)
+      index_model_records(Purchase)
+
+      expect(get_records(id: purchase_1.id)).to match_array([purchase_1])
+      expect(get_records(id: [purchase_1.id, purchase_2.id])).to match_array([purchase_1, purchase_2])
+      expect(get_records(id: [purchase_1.id, purchase_2.id, purchase_3.id])).to match_array([purchase_1, purchase_2, purchase_3])
+    end
+
     it "can filter by product, and exclude product" do
       product_1 = create(:product)
       purchase_1, purchase_2 = create_list(:purchase, 2, link: product_1)

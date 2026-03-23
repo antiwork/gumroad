@@ -95,7 +95,7 @@ const CollaboratorsPage = () => {
                         />
                         <div>
                           <span className="whitespace-nowrap">{collaborator.name || "Collaborator"}</span>
-                          <small className="line-clamp-1">{collaborator.email}</small>
+                          <small className="line-clamp-1 block">{collaborator.email}</small>
                         </div>
                         {collaborator.setup_incomplete ? (
                           <WithTooltip tip="Not receiving payouts" position="top">

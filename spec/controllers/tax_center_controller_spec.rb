@@ -9,6 +9,7 @@ describe TaxCenterController, type: :controller, inertia: true do
   let(:seller) { create(:user, created_at: 2.years.ago) }
 
   before do
+    create(:user_compliance_info, user: seller)
     Feature.activate_user(:tax_center, seller)
   end
 
@@ -44,6 +45,20 @@ describe TaxCenterController, type: :controller, inertia: true do
     context "when tax_center feature is disabled" do
       before do
         Feature.deactivate_user(:tax_center, seller)
+      end
+
+      it "redirects to dashboard with alert" do
+        get :index
+
+        expect(response).to redirect_to(dashboard_path)
+        expect(flash[:alert]).to eq("Tax center is not enabled for your account.")
+      end
+    end
+
+    context "when seller is not from the US" do
+      before do
+        seller.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_singapore, user: seller)
       end
 
       it "redirects to dashboard with alert" do

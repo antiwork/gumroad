@@ -147,7 +147,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                     </a>
                   </h4>
                   {payoutPeriodData.discover_sales_count > 0 ? (
-                    <small className="text-muted">
+                    <small className="block text-muted">
                       on {payoutPeriodData.discover_sales_count}{" "}
                       {payoutPeriodData.discover_sales_count === 1 ? "sale" : "sales"}
                     </small>
@@ -166,7 +166,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                     </a>
                   </h4>
                   {payoutPeriodData.direct_sales_count > 0 ? (
-                    <small className="text-muted">
+                    <small className="block text-muted">
                       on {payoutPeriodData.direct_sales_count}{" "}
                       {payoutPeriodData.direct_sales_count === 1 ? "sale" : "sales"}
                     </small>

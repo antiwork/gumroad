@@ -239,6 +239,198 @@ describe Subscription::RestartAtCheckoutService do
       end
     end
 
+    describe "quantity passthrough" do
+      let(:expensive_product) { create(:membership_product, user: seller, price_cents: 10_00) }
+      let!(:subscription) do
+        create_subscription_for_product(
+          product: expensive_product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      it "uses params[:quantity] when provided" do
+        subscription.original_purchase.update!(quantity: 3)
+
+        service = described_class.new(
+          subscription: subscription,
+          product: expensive_product,
+          params: base_params.merge(price_id: expensive_product.prices.alive.first.external_id, quantity: "5"),
+          buyer: buyer
+        )
+
+        transformed_params = service.send(:updater_service_params)
+
+        expect(transformed_params[:quantity]).to eq(5)
+      end
+
+      it "falls back to original purchase quantity when params[:quantity] is not provided" do
+        subscription.original_purchase.update!(quantity: 3)
+
+        service = described_class.new(
+          subscription: subscription,
+          product: expensive_product,
+          params: base_params.merge(price_id: expensive_product.prices.alive.first.external_id),
+          buyer: buyer
+        )
+
+        transformed_params = service.send(:updater_service_params)
+
+        expect(transformed_params[:quantity]).to eq(3)
+      end
+
+      it "passes quantity of 1 for single-quantity subscriptions" do
+        service = described_class.new(
+          subscription: subscription,
+          product: expensive_product,
+          params: base_params.merge(price_id: expensive_product.prices.alive.first.external_id),
+          buyer: buyer
+        )
+
+        transformed_params = service.send(:updater_service_params)
+
+        expect(transformed_params[:quantity]).to eq(1)
+      end
+    end
+
+    describe "offer code resolution" do
+      let(:expensive_product) { create(:membership_product, user: seller, price_cents: 10_00) }
+
+      let!(:subscription) do
+        create_subscription_for_product(
+          product: expensive_product,
+          purchaser: buyer,
+          email: email,
+          cancelled_at: 1.day.ago,
+          cancelled_by_buyer: true,
+          deactivated_at: 1.day.ago
+        )
+      end
+
+      let(:offer_code_params) do
+        {
+          purchase: {
+            email: email,
+            perceived_price_cents: expensive_product.price_cents,
+            browser_guid: browser_guid
+          },
+          price_id: expensive_product.prices.alive.first.external_id,
+          remote_ip: "127.0.0.1"
+        }
+      end
+
+      context "when no discount code is entered" do
+        it "does not include offer_code in params" do
+          service = described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: offer_code_params,
+            buyer: buyer
+          )
+
+          transformed_params = service.send(:updater_service_params)
+
+          expect(transformed_params).not_to have_key(:offer_code)
+        end
+
+        it "sets clear_discount to true when the original purchase has a discount" do
+          offer_code = create(:offer_code, amount_cents: nil, amount_percentage: 25, products: [expensive_product], user: seller)
+          original_purchase = subscription.original_purchase
+          original_purchase.update!(offer_code: offer_code)
+          original_purchase.create_purchase_offer_code_discount!(
+            offer_code: offer_code,
+            offer_code_amount: 25,
+            offer_code_is_percent: true,
+            pre_discount_minimum_price_cents: original_purchase.minimum_paid_price_cents_per_unit_before_discount
+          )
+
+          service = described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: offer_code_params,
+            buyer: buyer
+          )
+
+          transformed_params = service.send(:updater_service_params)
+
+          expect(transformed_params[:clear_discount]).to eq(true)
+        end
+
+        it "sets clear_discount to false when the original purchase has no discount" do
+          service = described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: offer_code_params,
+            buyer: buyer
+          )
+
+          transformed_params = service.send(:updater_service_params)
+
+          expect(transformed_params[:clear_discount]).to eq(false)
+        end
+      end
+
+      context "when a valid discount code is entered" do
+        let(:offer_code) { create(:offer_code, amount_cents: nil, amount_percentage: 40, products: [expensive_product], user: seller) }
+
+        it "passes the offer code to UpdaterService" do
+          params_with_discount = offer_code_params.deep_merge(
+            purchase: { discount_code: offer_code.code }
+          )
+
+          service = described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: params_with_discount,
+            buyer: buyer
+          )
+
+          transformed_params = service.send(:updater_service_params)
+
+          expect(transformed_params[:offer_code]).to eq(offer_code)
+        end
+
+        it "sets clear_discount to false when an offer code is entered" do
+          params_with_discount = offer_code_params.deep_merge(
+            purchase: { discount_code: offer_code.code }
+          )
+
+          service = described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: params_with_discount,
+            buyer: buyer
+          )
+
+          transformed_params = service.send(:updater_service_params)
+
+          expect(transformed_params[:clear_discount]).to eq(false)
+        end
+      end
+
+      context "when an invalid discount code is entered" do
+        it "does not include offer_code in params" do
+          params_with_discount = offer_code_params.deep_merge(
+            purchase: { discount_code: "NONEXISTENT" }
+          )
+
+          service = described_class.new(
+            subscription: subscription,
+            product: expensive_product,
+            params: params_with_discount,
+            buyer: buyer
+          )
+
+          transformed_params = service.send(:updater_service_params)
+
+          expect(transformed_params).not_to have_key(:offer_code)
+        end
+      end
+    end
+
     # Integration tests - verify error handling works correctly
     # Success cases are covered by UpdaterService specs; we just verify delegation
     describe "integration behavior" do

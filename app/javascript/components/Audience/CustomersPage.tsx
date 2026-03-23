@@ -1265,7 +1265,7 @@ const CustomerDrawer = ({
                             {post.name}
                           </a>
                         </h5>
-                        <small className="text-muted">{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
+                        <small className="block text-muted">{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
                       </div>
                       <Button
                         color="primary"
@@ -1325,7 +1325,7 @@ const CustomerDrawer = ({
                             email.name
                           )}
                         </h5>
-                        <small className="text-muted">{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
+                        <small className="block text-muted">{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
                       </div>
                       {email.type === "receipt" ? (
                         <Button
@@ -1687,7 +1687,7 @@ const EmailSection = ({
                   Edit
                 </button>
               ) : (
-                <small className="text-muted">
+                <small className="block text-muted">
                   You cannot change the email of this purchase, because it was made by an existing user. Please ask them
                   to go to gumroad.com/settings to update their email.
                 </small>

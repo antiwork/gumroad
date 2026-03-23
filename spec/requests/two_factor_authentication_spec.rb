@@ -70,7 +70,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
         expect(page).to have_link "Gumroad", href: UrlService.root_domain_with_protocol
 
         fill_in "Token", with: user.otp_code, fill_options: { clear: :backspace }
-        click_on "Login"
 
         # Wait for dashboard content to appear
         expect(page).to have_current_path(dashboard_path)
@@ -82,7 +81,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
         expect(page).to have_content "Two-Factor Authentication"
 
         fill_in "Token", with: user.otp_code, fill_options: { clear: :backspace }
-        click_on "Login"
 
         expect(page).to have_current_path(dashboard_path)
 
@@ -103,8 +101,7 @@ describe "Two-Factor Authentication", js: true, type: :system do
         login_to_app
         expect(page).to have_content "Two-Factor Authentication"
 
-        fill_in "Token", with: "abcd", fill_options: { clear: :backspace }
-        click_on "Login"
+        fill_in "Token", with: "123456", fill_options: { clear: :backspace }
 
         expect(page).to have_content("Invalid token, please try again.")
       end
@@ -125,13 +122,72 @@ describe "Two-Factor Authentication", js: true, type: :system do
     end
   end
 
+  context "when user has TOTP enabled" do
+    before do
+      Feature.activate_user(:authenticator_2fa, user)
+      create(:totp_credential, :with_recovery_codes, user: user)
+    end
+
+    it "logs in with valid TOTP code" do
+      login_to_app
+
+      expect(page).to have_content "Two-Factor Authentication"
+      expect(page).to have_content "Enter the code from your authenticator app."
+      expect(page).not_to have_button "Resend Authentication Token"
+
+      fill_in "Authenticator Code", with: "123456", fill_options: { clear: :backspace }
+      expect(page).to have_content "Invalid token, please try again."
+
+      fill_in "Authenticator Code", with: user.totp_credential.otp_code, fill_options: { clear: :backspace }
+      expect(page).to have_current_path(dashboard_path)
+    end
+
+    it "supports switching to email verification" do
+      expect do
+        login_to_app
+        expect(page).to have_content "Authenticator Code"
+
+        click_on "Use email instead"
+
+        expect(page).to have_content "Authentication token sent to #{user.email}."
+        expect(page).to have_content "Authentication Token"
+        expect(page).to have_button "Resend Authentication Token"
+        expect(page).not_to have_button "Use email instead"
+      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).once.with(user.id, email_provider: nil)
+
+      fill_in "Authentication Token", with: user.otp_code, fill_options: { clear: :backspace }
+      expect(page).to have_current_path(dashboard_path)
+    end
+
+    it "supports switching to and from recovery code" do
+      recovery_codes = user.totp_credential.generate_recovery_codes
+
+      login_to_app
+      expect(page).to have_content "Authenticator Code"
+
+      click_on "Use a recovery code"
+      expect(page).to have_content "Enter one of your recovery codes."
+      fill_in "Recovery Code", with: "INVALID1", fill_options: { clear: :backspace }
+      click_on "Login"
+      expect(page).to have_content "Invalid token, please try again."
+
+      click_on "Use authenticator app"
+      expect(page).to have_content "Enter the code from your authenticator app."
+
+      click_on "Use a recovery code"
+      fill_in "Recovery Code", with: recovery_codes.first, fill_options: { clear: :backspace }
+      click_on "Login"
+      expect(page).to have_current_path(dashboard_path)
+    end
+  end
+
   describe "Two factor auth verification link" do
     it "navigates to logged in path" do
       login_to_app
       expect(page).to have_content "Two-Factor Authentication"
 
       # Fill the data before opening a new window to make sure the page is fully loaded before switching to the new page.
-      fill_in "Token", with: "invalid", fill_options: { clear: :backspace }
+      fill_in "Token", with: "123", fill_options: { clear: :backspace }
 
       new_window = open_new_window
       within_window new_window do
@@ -168,7 +224,6 @@ describe "Two-Factor Authentication", js: true, type: :system do
       expect(page).to have_content "Two-Factor Authentication"
 
       fill_in "Token", with: user.otp_code, fill_options: { clear: :backspace }
-      click_on "Login"
 
       expect(page).to have_current_path(dashboard_path)
     end
