@@ -34,18 +34,19 @@ import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
+import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { CodeBlock } from "$app/components/TiptapExtensions/CodeBlock";
 import { Image, uploadImages } from "$app/components/TiptapExtensions/Image";
-import { Link, Button as TiptapButton } from "$app/components/TiptapExtensions/Link";
+import { Link, LinkDialog, Button as TiptapButton } from "$app/components/TiptapExtensions/Link";
 import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Menu as MenuContainer, MenuItem as MenuListItem, MenuItemRadio } from "$app/components/ui/Menu";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
 import { Position, WithTooltip } from "$app/components/WithTooltip";
 
-import { Raw } from "./TiptapExtensions/MediaEmbed";
+import { EmbedMediaForm, insertMediaEmbed, Raw } from "./TiptapExtensions/MediaEmbed";
 
 export const getInsertAtFromSelection = ({ $head, anchor, empty, from }: Selection): number => {
   let insertAt = from;
@@ -156,8 +157,8 @@ export const PopoverMenuItem = ({
 
 declare module "@tiptap/core" {
   type MenuItemOptions = {
-    menuItem?: (editor: Editor) => React.ReactNode;
-    submenu?: { menu: "insert"; item: (editor: Editor) => React.ReactNode };
+    menuItem?: (editor: Editor, onOpen?: () => void) => React.ReactNode;
+    submenu?: { menu: "insert"; item: (editor: Editor, onOpen?: () => void) => React.ReactNode };
   };
   /* eslint-disable */
   interface NodeConfig<Options, Storage> extends MenuItemOptions {}
@@ -358,6 +359,8 @@ export const RichTextEditorToolbar = ({
 
   const [isUpsellModalOpen, setIsUpsellModalOpen] = React.useState(false);
   const [isReviewModalOpen, setIsReviewModalOpen] = React.useState(false);
+  const [embedDialogType, setEmbedDialogType] = React.useState<"embed" | "twitter" | null>(null);
+  const [linkDialogType, setLinkDialogType] = React.useState<"link" | "button" | null>(null);
 
   const handleUpsellInsert = (product: Product, variant: ProductOption | null, discount: InputtedDiscount | null) => {
     editor
@@ -417,6 +420,19 @@ export const RichTextEditorToolbar = ({
     (extension) => extension.config.menuItem && !extension.config.submenu,
   );
   if (insertMenuItems.length < 2) topMenuItems.push(...insertMenuItems);
+
+  const openDialogForExtension = (name: string) => {
+    switch (name) {
+      case "raw":
+        return () => setEmbedDialogType("twitter");
+      case "videoEmbed":
+        return () => setEmbedDialogType("embed");
+      case "button":
+        return () => setLinkDialogType("button");
+      default:
+        return undefined;
+    }
+  };
 
   return (
     <ToolbarTooltipContext.Provider value={showTooltipState}>
@@ -518,7 +534,7 @@ export const RichTextEditorToolbar = ({
                     onClick={() => editor.chain().focus().setHorizontalRule().run()}
                   />
                 ) : (
-                  extension.config.menuItem?.(editor)
+                  extension.config.menuItem?.(editor, openDialogForExtension(extension.name))
                 )}
               </React.Fragment>
             ))}
@@ -547,7 +563,7 @@ export const RichTextEditorToolbar = ({
                             </PopoverClose>
                           ) : (
                             <PopoverClose asChild>
-                              <div>{item.config.submenu?.item(editor)}</div>
+                              <div>{item.config.submenu?.item(editor, openDialogForExtension(item.name))}</div>
                             </PopoverClose>
                           )}
                         </React.Fragment>
@@ -603,6 +619,25 @@ export const RichTextEditorToolbar = ({
           onInsert={handleReviewInsert}
           productId={productId}
         />
+      ) : null}
+      {embedDialogType ? (
+        <Modal
+          open
+          onClose={() => setEmbedDialogType(null)}
+          title={`Insert ${embedDialogType === "embed" ? "video" : "post"}`}
+        >
+          <EmbedMediaForm
+            type={embedDialogType}
+            onEmbedReceived={(data) => {
+              insertMediaEmbed(editor, data);
+              setEmbedDialogType(null);
+            }}
+            onClose={() => setEmbedDialogType(null)}
+          />
+        </Modal>
+      ) : null}
+      {linkDialogType ? (
+        <LinkDialog editor={editor} type={linkDialogType} onClose={() => setLinkDialogType(null)} />
       ) : null}
     </ToolbarTooltipContext.Provider>
   );

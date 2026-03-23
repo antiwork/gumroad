@@ -86,7 +86,6 @@ describe("Product Page - Shipping physical preoder", type: :system, js: true, sh
         el.dispatchEvent(new Event('change', { bubbles: true }));
         el.dispatchEvent(new Event('blur', { bubbles: true }));
       JS
-      wait_for_ajax
       expect(page).to have_text("Subtotal US$16", normalize_ws: true)
       expect(page).to have_text("Sales tax US$1.07", normalize_ws: true)
       expect(page).to have_text("Shipping rate US$4", normalize_ws: true)

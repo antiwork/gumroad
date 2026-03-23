@@ -13,7 +13,6 @@ type SearchProps = {
 };
 
 export const Search = ({ onSearch, value: initialValue, placeholder = "Search" }: SearchProps) => {
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = React.useState(initialValue);
 
   return (
@@ -25,13 +24,11 @@ export const Search = ({ onSearch, value: initialValue, placeholder = "Search" }
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
-      <PopoverContent sideOffset={4} onOpenAutoFocus={() => searchInputRef.current?.focus()}>
+      <PopoverContent sideOffset={4}>
         <InputGroup>
           <SearchIcon className="size-5 text-muted" />
           <Input
-            ref={searchInputRef}
             value={searchQuery}
-            autoFocus
             type="text"
             placeholder={placeholder}
             onChange={(e) => {

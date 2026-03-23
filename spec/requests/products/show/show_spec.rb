@@ -639,15 +639,13 @@ describe("ProductShowScenario", type: :system, js: true) do
   it "includes a share menu with social links and copy functionality" do
     product = create(:product)
     visit product.long_url
-    select_disclosure "Share" do
-      expect(page).to have_link("Share on X")
-      expect(page).to have_link("Share on Facebook")
-      copy_button = find_button("Copy link")
-      copy_button.hover
-      expect(copy_button).to have_tooltip(text: "Copy product URL")
-      copy_button.click
-      expect(copy_button).to have_tooltip(text: "Copied")
-    end
+    toggle_disclosure "Share"
+    expect(page).to have_link("Share on X")
+    expect(page).to have_link("Share on Facebook")
+    find_button("Copy link").hover
+    expect(find_button("Copy link")).to have_tooltip(text: "Copy product URL")
+    find_button("Copy link").click
+    expect(find_button("Copy link")).to have_tooltip(text: "Copied")
   end
 
   describe "discover layout" do

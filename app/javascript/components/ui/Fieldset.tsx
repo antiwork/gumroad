@@ -56,7 +56,7 @@ export const FieldsetTitle = React.forwardRef<
 ));
 FieldsetTitle.displayName = "FieldsetTitle";
 
-const descriptionVariants = cva("text-muted", {
+const descriptionVariants = cva("block text-muted", {
   variants: {
     state: {
       default: "",

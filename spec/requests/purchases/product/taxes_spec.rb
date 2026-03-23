@@ -5,12 +5,19 @@ require("spec_helper")
 describe("Product Page - Tax Scenarios", type: :system, js: true) do
   def set_zip_code_via_js(zip_code)
     zip_field = find_field("ZIP code")
+    page.execute_script(<<~JS, zip_field)
+      var el = arguments[0];
+      var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(el, '');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new Event('blur', { bubbles: true }));
+    JS
+    sleep 0.1
     page.execute_script(<<~JS, zip_field, zip_code)
       var el = arguments[0];
       var zip = arguments[1];
       var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      setter.call(el, '');
-      el.dispatchEvent(new Event('input', { bubbles: true }));
       setter.call(el, zip);
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -31,7 +38,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
         expect(page).to have_select("State", selected: "AZ")
         set_zip_code_via_js("85144")
-        wait_for_ajax
         expect(page).to have_text("Sales tax", normalize_ws: true)
         expect(page).to have_text("Total US$553.50", normalize_ws: true)
       end
@@ -72,7 +78,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         add_to_cart(@product, option: "type 1")
         check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
           set_zip_code_via_js("85144")
-          wait_for_ajax
           expect(page).to have_text("Total US$555.16", normalize_ws: true)
         end
 
@@ -105,7 +110,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         add_to_cart(@product, offer_code:)
         check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
           set_zip_code_via_js("85144")
-          wait_for_ajax
           expect(page).to have_text("Total US$442.80", normalize_ws: true)
         end
 
@@ -138,14 +142,12 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         add_to_cart(@product)
         fill_checkout_form(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" })
         set_zip_code_via_js("85144")
-        wait_for_ajax
         expect(page).to have_text("Subtotal US$500", normalize_ws: true)
         expect(page).to_not have_text("Tip US$", normalize_ws: true)
         expect(page).to have_text("Sales tax US$53.50", normalize_ws: true)
         expect(page).to have_text("Total US$553.50", normalize_ws: true)
 
         choose "20%"
-        wait_for_ajax
         expect(page).to have_text("Subtotal US$600", normalize_ws: true)
         expect(page).to have_text("Add a tip? US$100", normalize_ws: true)
         expect(page).to have_text("Sales tax US$58.85", normalize_ws: true)
@@ -189,7 +191,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       add_to_cart(product)
       check_out(product, zip_code: "53703") do
         set_zip_code_via_js("53703")
-        wait_for_ajax
         expect(page).to have_text("Total US$105.50", normalize_ws: true)
       end
 
@@ -209,7 +210,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       add_to_cart(product)
       check_out(product, address: { street: "1 S Pinckney St", state: "WI", city: "Madison", zip_code: "53703" }, should_verify_address: true) do
         set_zip_code_via_js("53703")
-        wait_for_ajax
         expect(page).to have_text("Total US$105.50", normalize_ws: true)
       end
 
@@ -229,7 +229,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       add_to_cart(product)
       check_out(product, zip_code: "98121") do
         set_zip_code_via_js("98121")
-        wait_for_ajax
         expect(page).to have_text("Total US$110.35", normalize_ws: true)
       end
 
@@ -249,7 +248,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       add_to_cart(product)
       check_out(product, address: { street: "2031 7th Ave", state: "WA", city: "Seattle", zip_code: "98121" }, should_verify_address: true) do
         set_zip_code_via_js("98121")
-        wait_for_ajax
         expect(page).to have_text("Total US$110.35", normalize_ws: true)
       end
 
@@ -269,7 +267,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       add_to_cart(product)
       check_out(product, zip_code: "53703") do
         set_zip_code_via_js("53703")
-        wait_for_ajax
         expect(page).to have_text("Total US$105.50", normalize_ws: true)
       end
 
@@ -289,7 +286,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       add_to_cart(product)
       check_out(product, zip_code: "98121") do
         set_zip_code_via_js("98121")
-        wait_for_ajax
         expect(page).to have_text("Total US$110.35", normalize_ws: true)
       end
 
@@ -3752,7 +3748,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       expect(page).to have_select("Country", selected: "Canada")
       expect(page).to have_select("Province", selected: "BC")
-      wait_for_ajax
       expect(page).to have_text("Total US$112", normalize_ws: true)
 
       check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
@@ -3778,12 +3773,10 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       expect(page).to have_select("Country", selected: "Canada")
       expect(page).to have_select("Province", selected: "ON")
-      wait_for_ajax
       expect(page).to have_text("Total US$113", normalize_ws: true)
 
       select "QC", from: "Province"
       page.execute_script("document.activeElement.blur()")
-      wait_for_ajax
       expect(page).to have_text("Total US$114.98", normalize_ws: true)
 
       check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
@@ -3812,16 +3805,13 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "ON")
-        wait_for_ajax
         expect(page).to have_text("Total US$113", normalize_ws: true)
 
         select "BC", from: "Province"
         page.execute_script("document.activeElement.blur()")
-        wait_for_ajax
         expect(page).to have_text("Total US$112", normalize_ws: true)
 
         check_out(product, address: { street: "568 Beatty St", city: "Vancouver", state: "BC", zip_code: "V6B 2L3" }, should_verify_address: true) do
-          wait_for_ajax
           expect(page).to have_text("Total US$112", normalize_ws: true)
         end
 
@@ -3844,10 +3834,11 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "ON")
-        expect(page).to_not have_field("Business QST ID (optional)")
+        expect(page).to_not have_field("Business QST ID (optional)", wait: 10)
 
         select "QC", from: "Province"
-        expect(page).to have_field("Business QST ID (optional)")
+        page.execute_script("document.activeElement.blur()")
+        expect(page).to have_field("Business QST ID (optional)", wait: 10)
         check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
@@ -3870,6 +3861,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         add_to_cart(product)
 
         select "Canada", from: "Country"
+        expect(page).to have_text("Total US$105", normalize_ws: true, wait: 10)
         check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
@@ -3895,7 +3887,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "QC")
 
-        expect(page).to have_field("Business QST ID (optional)")
+        expect(page).to have_field("Business QST ID (optional)", wait: 10)
         check_out(product, qst_id: "1002092821TQ0001", zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
@@ -3927,7 +3919,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "QC")
 
-        expect(page).to have_field("Business QST ID (optional)")
+        expect(page).to have_field("Business QST ID (optional)", wait: 10)
         check_out(product, qst_id: "NR00005576", zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last

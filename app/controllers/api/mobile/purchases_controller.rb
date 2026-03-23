@@ -107,6 +107,10 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
 
       options[:seller] = User.where(external_id: Array.wrap(params[:seller])) if params[:seller]
       options[:archived] = ActiveModel::Type::Boolean.new.cast(params[:archived]) if params[:archived]
+      if params[:purchase_ids].present?
+        purchase_ids = Array.wrap(params[:purchase_ids]).filter_map { |id| ObfuscateIds.decrypt(id) }
+        options[:id] = purchase_ids.presence || [0]
+      end
       options
     end
 

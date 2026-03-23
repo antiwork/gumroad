@@ -6,7 +6,6 @@ describe BlackRecurringService do
   describe "state transitions" do
     before do
       @black_recurring_service = create(:black_recurring_service, state: "inactive")
-      allow_any_instance_of(User).to receive(:tier_pricing_enabled?).and_return(false)
 
       @mail_double = double
       allow(@mail_double).to receive(:deliver_later)

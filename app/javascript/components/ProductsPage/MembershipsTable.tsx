@@ -113,7 +113,7 @@ export const ProductsPageMembershipsTable = (props: {
                   <h4 className="font-bold">{membership.name}</h4>
                 </a>
                 <a href={membership.url} title={membership.url} target="_blank" rel="noreferrer">
-                  <small>{membership.url_without_protocol}</small>
+                  <small className="block">{membership.url_without_protocol}</small>
                 </a>
               </TableCell>
 
@@ -121,14 +121,16 @@ export const ProductsPageMembershipsTable = (props: {
                 {membership.successful_sales_count.toLocaleString(userAgentInfo.locale)}
 
                 {membership.remaining_for_sale_count ? (
-                  <small>{membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
+                  <small className="block">
+                    {membership.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining
+                  </small>
                 ) : null}
               </TableCell>
 
               <TableCell className="whitespace-nowrap">
                 {formatPriceCentsWithCurrencySymbol("usd", membership.revenue, { symbolFormat: "short" })}
 
-                <small>
+                <small className="block">
                   {membership.has_duration
                     ? `Including pending payments: ${formatPriceCentsWithCurrencySymbol(
                         "usd",
