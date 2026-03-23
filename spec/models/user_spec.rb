@@ -3353,8 +3353,8 @@ describe User, :vcr do
     let(:user) { create(:user) }
 
     it "returns the payout threshold" do
-      user.payout_threshold_cents = 2000
-      expect(user.minimum_payout_amount_cents).to eq(2000)
+      user.payout_threshold_cents = 20_000
+      expect(user.minimum_payout_amount_cents).to eq(20_000)
     end
 
     describe "when the user is in a cross-border payout country" do
@@ -3362,9 +3362,9 @@ describe User, :vcr do
       let!(:compliance_info) { create(:user_compliance_info_korea, user:) }
 
       it "returns the higher of payout threshold and country minimum" do
-        expect(user.minimum_payout_amount_cents).to eq(3474)
-        user.payout_threshold_cents = 4000
-        expect(user.minimum_payout_amount_cents).to eq(4000)
+        expect(user.minimum_payout_amount_cents).to eq(Payouts::MIN_AMOUNT_CENTS)
+        user.payout_threshold_cents = 20_000
+        expect(user.minimum_payout_amount_cents).to eq(20_000)
       end
     end
   end

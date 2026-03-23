@@ -349,19 +349,19 @@ describe PaypalPayoutProcessor do
   describe "pay via paypal and handle IPNs", :vcr do
     before do
       @u1 = create(:singaporean_user_with_compliance_info, payment_address: "amir_1351103838_biz@gumroad.com")
-      @balance1_1 = create(:balance, user: @u1, amount_cents: 501, date: Date.today - 8)
-      @balance1_2 = create(:balance, user: @u1, amount_cents: 500, date: Date.today - 9)
+      @balance1_1 = create(:balance, user: @u1, amount_cents: 50_01, date: Date.today - 8)
+      @balance1_2 = create(:balance, user: @u1, amount_cents: 50_00, date: Date.today - 9)
 
       @u2 = create(:singaporean_user_with_compliance_info, payment_address: "amir2_1351103838_biz@gumroad.com")
-      @balance2 = create(:balance, user: @u2, amount_cents: 1002, date: Date.today - 8)
+      @balance2 = create(:balance, user: @u2, amount_cents: 100_02, date: Date.today - 8)
 
       @u3 = create(:singaporean_user_with_compliance_info, payment_address: "")
       create(:merchant_account_paypal, user: @u3, charge_processor_merchant_id: "B66YJBBNCRW6L")
-      @balance3 = create(:balance, user: @u3, amount_cents: 1003, date: Date.today - 8)
+      @balance3 = create(:balance, user: @u3, amount_cents: 100_03, date: Date.today - 8)
 
       @u4 = create(:singaporean_user_with_compliance_info, payment_address: "amir4_1351103838_biz@gumroad.com")
       create(:merchant_account_paypal, user: @u4, charge_processor_merchant_id: "B66YJBBNCRW6L")
-      @balance4 = create(:balance, user: @u4, amount_cents: 1004, date: Date.today - 8)
+      @balance4 = create(:balance, user: @u4, amount_cents: 100_04, date: Date.today - 8)
 
       WebMock.stub_request(:post, PAYPAL_ENDPOINT)
              .to_return(body: "TIMESTAMP=2012%2d10%2d26T20%3a29%3a14Z&CORRELATIONID=c51c5e0cecbce&ACK=Success&VERSION=90%2e0&BUILD=4072860")
@@ -450,7 +450,7 @@ describe PaypalPayoutProcessor do
       expect(p3.processor_fee_cents).to eq 359
 
       expect(@u1.reload.unpaid_balance_cents).to eq 0
-      expect(@u2.reload.unpaid_balance_cents).to eq 1002
+      expect(@u2.reload.unpaid_balance_cents).to eq 100_02
       expect(@u3.reload.unpaid_balance_cents).to eq 0
       expect(@u4.reload.unpaid_balance_cents).to eq 0
 
@@ -476,7 +476,7 @@ describe PaypalPayoutProcessor do
       expect(@balance4.reload.state).to eq "unpaid"
 
       expect(@u3.reload.unpaid_balance_cents).to eq 0
-      expect(@u4.reload.unpaid_balance_cents).to eq 1004
+      expect(@u4.reload.unpaid_balance_cents).to eq 100_04
     end
 
     it "decreases the user's balance by the amount of the payment and not down to 0" do
@@ -547,9 +547,9 @@ describe PaypalPayoutProcessor do
     describe "more" do
       before do
         @u1 = create(:singaporean_user_with_compliance_info, payment_address: "bob1@example.com")
-        @balance1_1 = create(:balance, user: @u1, amount_cents: 1_000, date: Date.today - 10)
-        @balance1_2 = create(:balance, user: @u1, amount_cents: 2_000, date: Date.today - 9)
-        @balance1_3 = create(:balance, user: @u1, amount_cents: 3_000, date: Date.today - 8)
+        @balance1_1 = create(:balance, user: @u1, amount_cents: 4_000, date: Date.today - 10)
+        @balance1_2 = create(:balance, user: @u1, amount_cents: 4_000, date: Date.today - 9)
+        @balance1_3 = create(:balance, user: @u1, amount_cents: 4_000, date: Date.today - 8)
         @balance1_4 = create(:balance, user: @u1, amount_cents: 4_000, date: Date.today)
 
         @u2 = create(:singaporean_user_with_compliance_info, payment_address: "bob1@example.com")
@@ -635,7 +635,7 @@ describe PaypalPayoutProcessor do
         expect(@balance2_4.reload.state).to eq "unpaid"
         expect(@balance3.reload.state).to eq "unpaid"
 
-        expect(@u1.unpaid_balance_cents).to eq 10_000
+        expect(@u1.unpaid_balance_cents).to eq 16_000
         expect(@u2.unpaid_balance_cents).to eq 100_000
         expect(@u3.unpaid_balance_cents).to eq 4000
 
@@ -695,7 +695,7 @@ describe PaypalPayoutProcessor do
         expect(@balance2_3.reload.state).to eq "paid"
         expect(@balance2_4.reload.state).to eq "unpaid"
 
-        expect(@u1.reload.unpaid_balance_cents).to eq 10_000
+        expect(@u1.reload.unpaid_balance_cents).to eq 16_000
         expect(@u2.reload.unpaid_balance_cents).to eq 40_000
         expect(@u3.reload.unpaid_balance_cents).to eq 4000
       end
