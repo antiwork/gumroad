@@ -35,7 +35,7 @@ const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
         <Link href={Routes.admin_user_path(product.user.external_id)} title={product.user.external_id}>
           {userName}
         </Link>
-        <small>
+        <small className="block">
           <DateTimeWithRelativeTooltip date={product.created_at} />
         </small>
       </TableCell>

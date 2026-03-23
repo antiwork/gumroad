@@ -204,7 +204,7 @@ export default function UtmLinksIndex() {
                       <h4>
                         <TruncatedTextWithTooltip text={link.title} maxLength={35} />
                       </h4>
-                      <small>
+                      <small className="block">
                         <a href={link.destination_option?.url} target="_blank" rel="noopener noreferrer">
                           <TruncatedTextWithTooltip text={link.destination_option?.label ?? ""} maxLength={35} />
                         </a>

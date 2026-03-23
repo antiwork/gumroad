@@ -154,20 +154,39 @@ describe TwoFactorAuthenticationValidator, type: :controller do
 
     context "when user has TOTP enabled" do
       before do
-        Feature.activate(:authenticator_2fa)
         create(:totp_credential, :confirmed, user: @user)
       end
 
-      it "sets the auth method to totp in session" do
-        controller.prepare_for_two_factor_authentication(@user)
+      context "when authenticator_2fa flag is active for the user" do
+        before do
+          Feature.activate_user(:authenticator_2fa, @user)
+        end
 
-        expect(controller.two_factor_auth_method).to eq("totp")
+        it "sets the auth method to totp in session" do
+          controller.prepare_for_two_factor_authentication(@user)
+
+          expect(controller.two_factor_auth_method).to eq("totp")
+        end
+
+        it "does not send authentication token email" do
+          expect do
+            controller.prepare_for_two_factor_authentication(@user)
+          end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token)
+        end
       end
 
-      it "does not send authentication token email" do
-        expect do
+      context "when authenticator_2fa flag is not active for the user" do
+        it "falls back to email method" do
           controller.prepare_for_two_factor_authentication(@user)
-        end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token)
+
+          expect(controller.two_factor_auth_method).to eq("email")
+        end
+
+        it "sends authentication token email" do
+          expect do
+            controller.prepare_for_two_factor_authentication(@user)
+          end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
+        end
       end
     end
 
@@ -177,6 +196,16 @@ describe TwoFactorAuthenticationValidator, type: :controller do
 
         expect(controller.two_factor_auth_method).to eq("email")
       end
+    end
+  end
+
+  describe "#two_factor_auth_method=" do
+    it "updates the auth method in session" do
+      controller.prepare_for_two_factor_authentication(@user)
+
+      controller.two_factor_auth_method = "recovery"
+
+      expect(controller.two_factor_auth_method).to eq("recovery")
     end
   end
 

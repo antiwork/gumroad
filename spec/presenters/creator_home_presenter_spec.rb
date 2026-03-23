@@ -349,7 +349,8 @@ describe CreatorHomePresenter do
         )
       end
 
-      it "returns empty tax forms when tax_center feature flag is enabled" do
+      it "returns empty tax forms when tax_center feature flag is enabled for US user" do
+        create(:user_compliance_info, user: seller)
         Feature.activate_user(:tax_center, seller)
 
         create(:user_tax_form, user: seller, tax_year: 2021, tax_form_type: "us_1099_k")
@@ -359,6 +360,15 @@ describe CreatorHomePresenter do
         expect(props[:tax_center_enabled]).to be(true)
         expect(props[:tax_forms]).to eq([])
         expect(props[:show_1099_download_notice]).to be(true)
+      end
+
+      it "disables tax center for non-US user even with feature flag enabled" do
+        create(:user_compliance_info_singapore, user: seller)
+        Feature.activate_user(:tax_center, seller)
+
+        props = presenter.creator_home_props
+
+        expect(props[:tax_center_enabled]).to be(false)
       end
     end
   end

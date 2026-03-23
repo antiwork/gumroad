@@ -28,7 +28,7 @@ class TwoFactorAuthenticationController < ApplicationController
   end
 
   def resend_authentication_token
-    if two_factor_auth_method == "totp"
+    if two_factor_auth_method != "email"
       redirect_to two_factor_authentication_path, warning: "Cannot resend token for authenticator app.", status: :see_other
       return
     end
@@ -36,6 +36,25 @@ class TwoFactorAuthenticationController < ApplicationController
     @user.send_authentication_token!
 
     redirect_to two_factor_authentication_path, notice: "Resent the authentication token, please check your inbox.", status: :see_other
+  end
+
+  def switch_to_email
+    self.two_factor_auth_method = "email"
+    @user.send_authentication_token!
+
+    redirect_to two_factor_authentication_path, notice: "Authentication token sent to #{@user.email}.", status: :see_other
+  end
+
+  def switch_to_recovery
+    self.two_factor_auth_method = "recovery"
+
+    redirect_to two_factor_authentication_path, status: :see_other
+  end
+
+  def switch_to_authenticator
+    self.two_factor_auth_method = "totp"
+
+    redirect_to two_factor_authentication_path, status: :see_other
   end
 
   private
@@ -49,16 +68,19 @@ class TwoFactorAuthenticationController < ApplicationController
 
         redirect_to login_path_for(@user), notice: "Successfully logged in!", status: :see_other
       else
-        redirect_to two_factor_authentication_path, warning: "Invalid token, please try again."
+        redirect_to two_factor_authentication_path, warning: "Invalid token, please try again.", status: :see_other
       end
     end
 
     def valid_two_factor_token?(user, token)
-      if two_factor_auth_method == "totp"
+      case two_factor_auth_method
+      when "totp"
         return true if user.totp_credential&.verify_code(token)
+        return true if !Rails.env.production? && token == User::DEFAULT_AUTH_TOKEN
+        false
+      when "recovery"
         return true if user.totp_credential&.redeem_recovery_code(token)
         return true if !Rails.env.production? && token == User::DEFAULT_AUTH_TOKEN
-
         false
       else
         user.token_authenticated?(token)

@@ -571,6 +571,43 @@ describe Api::Mobile::PurchasesController do
       end
     end
 
+    describe "filter by purchase_ids" do
+      it "returns purchases for the specified purchase IDs" do
+        purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        purchase_2 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        index_model_records(Purchase)
+
+        get :search, params: @params.merge(purchase_ids: [ObfuscateIds.encrypt(purchase_1.id), ObfuscateIds.encrypt(purchase_2.id)])
+
+        expect(response).to match_json_schema("api/mobile/purchases")
+        expect(response.parsed_body[:purchases].size).to eq(2)
+        expect(response.parsed_body[:purchases].pluck(:purchase_id)).to match_array([purchase_1.external_id, purchase_2.external_id])
+      end
+
+      it "returns no purchases when all purchase IDs are invalid" do
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        index_model_records(Purchase)
+
+        get :search, params: @params.merge(purchase_ids: ["invalid_id_1", "invalid_id_2"])
+
+        expect(response).to match_json_schema("api/mobile/purchases")
+        expect(response.parsed_body[:purchases]).to be_empty
+      end
+
+      it "returns purchases for a single purchase ID" do
+        purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        index_model_records(Purchase)
+
+        get :search, params: @params.merge(purchase_ids: ObfuscateIds.encrypt(purchase_1.id))
+
+        expect(response).to match_json_schema("api/mobile/purchases")
+        expect(response.parsed_body[:purchases].size).to eq(1)
+        expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_1.external_id)
+      end
+    end
+
     describe "query by product details" do
       it "returns purchases for a given user matching creator description" do
         seller_1 = create(:named_user, name: "Daniel")

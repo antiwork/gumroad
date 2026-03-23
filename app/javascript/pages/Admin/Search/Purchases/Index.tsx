@@ -129,7 +129,7 @@ export default function Purchases() {
                     <CopyToClipboard text={purchase.email}>
                       <Copy className="size-5" />
                     </CopyToClipboard>
-                    <small>
+                    <small className="block">
                       <DateTimeWithRelativeTooltip date={purchase.created_at} />
                     </small>
                   </TableCell>

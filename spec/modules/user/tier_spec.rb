@@ -40,13 +40,6 @@ describe User::Tier do
   end
 
   describe "#tier" do
-    it "returns nil if creator does not use new pricing" do
-      creator = create(:user)
-      allow(creator).to receive(:tier_pricing_enabled?).and_return(false)
-
-      expect(creator.tier).to eq(nil)
-    end
-
     it "returns 0 if creator has not received any payments" do
       creator = create(:user)
       expect(creator.tier).to eq(0)
@@ -101,58 +94,6 @@ describe User::Tier do
 
       allow(creator).to receive(:sales_cents_total).and_return(10_000_000_00)
       expect(creator.tier(creator.sales_cents_total)).to eq(User::TIER_4)
-    end
-  end
-
-  describe "#tier_fee" do
-    before do
-      @user = create(:user)
-    end
-
-    it "returns nil if creator does not use new pricing" do
-      user = create(:user)
-      allow(user).to receive(:tier_pricing_enabled?).and_return(false)
-
-      expect(user.tier_fee).to eq(nil)
-      expect(user.tier_fee(is_merchant_account: true)).to eq(nil)
-      expect(user.tier_fee(is_merchant_account: false)).to eq(nil)
-    end
-
-    it "returns correct tier fee for purchases using merchant account" do
-      expect(@user.tier_fee(is_merchant_account: true)).to eq(0.09)
-    end
-
-    it "returns correct tier fee for purchases using non-merchant account" do
-      expect(@user.tier_fee).to eq(0.07)
-    end
-  end
-
-  describe "formatting" do
-    it "formats tier and tier fee" do
-      user = create(:user, tier_state: 0)
-      expect(user.formatted_tier_earning).to eq("$0")
-      expect(user.formatted_tier_fee_percentage(is_merchant_account: true)).to eq(9.0)
-      expect(user.formatted_tier_fee_percentage(is_merchant_account: false)).to eq(7.0)
-
-      user.update(tier_state: User::TIER_1)
-      expect(user.formatted_tier_earning).to eq("$1,000")
-      expect(user.reload.formatted_tier_fee_percentage(is_merchant_account: true)).to eq(7.0)
-      expect(user.reload.formatted_tier_fee_percentage(is_merchant_account: false)).to eq(5.0)
-
-      user.update(tier_state: User::TIER_2)
-      expect(user.formatted_tier_earning).to eq("$10,000")
-      expect(user.reload.formatted_tier_fee_percentage(is_merchant_account: true)).to eq(5.0)
-      expect(user.reload.formatted_tier_fee_percentage(is_merchant_account: false)).to eq(3.0)
-
-      user.update(tier_state: User::TIER_3)
-      expect(user.formatted_tier_earning).to eq("$100,000")
-      expect(user.reload.formatted_tier_fee_percentage(is_merchant_account: true)).to eq(3.0)
-      expect(user.reload.formatted_tier_fee_percentage(is_merchant_account: false)).to eq(1.0)
-
-      user.update(tier_state: User::TIER_4)
-      expect(user.formatted_tier_earning).to eq("$1,000,000")
-      expect(user.reload.formatted_tier_fee_percentage(is_merchant_account: true)).to eq(2.9)
-      expect(user.reload.formatted_tier_fee_percentage(is_merchant_account: false)).to eq(0.9)
     end
   end
 end

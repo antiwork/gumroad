@@ -201,7 +201,7 @@ const TierEditor = ({
         <div>
           <h3>{tier.name || "Untitled"}</h3>
           {tier.active_subscribers_count ? (
-            <small>
+            <small className="block">
               {tier.active_subscribers_count} {tier.active_subscribers_count === 1 ? "supporter" : "supporters"}
             </small>
           ) : null}

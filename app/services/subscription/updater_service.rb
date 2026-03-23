@@ -62,10 +62,6 @@ class Subscription::UpdaterService
           original_purchase.update!(params[:contact_info])
         end
 
-        if !same_plan_and_price? || (is_resubscribing && overdue_for_charge)
-          subscription.update!(flat_fee_applicable: true) unless subscription.flat_fee_applicable?
-        end
-
         # Update card if necessary
         unless use_existing_card?
           had_saved_card = subscription.credit_card.present?
@@ -94,12 +90,26 @@ class Subscription::UpdaterService
           end
         end
 
-        unless same_plan_and_price?
-          self.new_purchase = subscription.update_current_plan!( # here we have an error
+        original_discount = subscription.original_purchase.purchase_offer_code_discount
+        discount_changed = if params[:clear_discount]
+          true
+        elsif params[:offer_code].present? && original_discount.present?
+          params[:offer_code] != original_discount.offer_code ||
+            params[:offer_code].amount != original_discount.offer_code_amount ||
+            params[:offer_code].is_percent? != original_discount.offer_code_is_percent ||
+            params[:offer_code].duration_in_billing_cycles != original_discount.duration_in_billing_cycles
+        else
+          params[:offer_code].present?
+        end
+
+        if !same_plan_and_price? || (is_resubscribing && discount_changed)
+          self.new_purchase = subscription.update_current_plan!(
             new_variants: variants,
             new_price: price,
             new_quantity: params[:quantity],
             perceived_price_cents: params[:price_range],
+            offer_code: params[:offer_code],
+            clear_discount: params[:clear_discount],
           )
           subscription.reload
         end

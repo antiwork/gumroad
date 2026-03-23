@@ -14,6 +14,7 @@ import {
   Cart,
   DollarCircle,
   Envelope,
+  Gift,
   Handshake,
   HomeAlt2,
   MessageBubble,
@@ -174,6 +175,11 @@ export const Nav = (props: Props) => {
             Routes.dashboard_utm_links_url(routeParams),
             Routes.churn_dashboard_url(routeParams),
           ]}
+        />
+        <ClientNavLink
+          text="Affiliates"
+          icon={<Gift pack="filled" className="size-5" />}
+          href={Routes.affiliates_url(routeParams)}
         />
         {loggedInUser?.policies.balance.index ? (
           <ClientNavLink

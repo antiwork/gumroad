@@ -852,7 +852,7 @@ class User < ApplicationRecord
   end
 
   def auto_transcode_videos?
-    tier_pricing_enabled? ? tier >= TIER_3 : sales_cents_total >= TIER_3
+    tier >= TIER_3
   end
 
   def read_attribute_for_validation(attr)
