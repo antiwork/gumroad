@@ -242,7 +242,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
         top_period_data = {
           status: "not_payable",
           should_be_shown_currencies_always: true,
-          minimum_payout_amount_cents: 1000,
+          minimum_payout_amount_cents: 10_000,
         }
 
         data = {
@@ -563,7 +563,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             it "shows the payout-skipped notice" do
               visit balance_path
 
-              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because the account balance $5 USD was less than the minimum payout amount of $10 USD.")
+              expect(page).to have_text("Payout on #{Time.current.to_fs(:formatted_date_full_month)} was skipped because the account balance $5 USD was less than the minimum payout amount of $100 USD.")
             end
           end
 
@@ -708,7 +708,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
           payout_note: nil,
           type: "standard",
           has_stripe_connect: false,
-          minimum_payout_amount_cents: 1000,
+          minimum_payout_amount_cents: 10_000,
           is_payable: true
         }
         allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)

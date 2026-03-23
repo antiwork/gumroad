@@ -120,7 +120,7 @@ describe Api::Internal::Helper::PayoutsController do
 
         before do
           create(:payment_completed, user:, created_at: 8.days.ago)
-          create(:balance, user:, date: 10.days.ago, amount_cents: 20_00)
+          create(:balance, user:, date: 10.days.ago, amount_cents: 200_00)
           create(:ach_account_stripe_succeed, user:)
           create(:merchant_account_stripe, user:)
         end
@@ -137,7 +137,7 @@ describe Api::Internal::Helper::PayoutsController do
       context "when last successful payout was more than a week ago" do
         before do
           create(:payment_completed, user:, created_at: 8.days.ago)
-          create(:balance, user:, date: 10.days.ago, amount_cents: 20_00)
+          create(:balance, user:, date: 10.days.ago, amount_cents: 200_00)
         end
 
         context "when user is payable" do
