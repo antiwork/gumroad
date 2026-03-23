@@ -27,12 +27,7 @@ Doorkeeper.configure do
 
   # From https://github.com/doorkeeper-gem/doorkeeper/wiki/Using-Resource-Owner-Password-Credentials-flow
   resource_owner_from_credentials do |_routes|
-    if params.key?(:facebookToken)
-      profile = User.fb_object("me", token: params[:facebookToken])
-      user =  User.find_by(facebook_uid: profile["id"])
-    elsif params.key?(:twitterToken)
-      user = User.where(twitter_oauth_token: params[:twitterToken]).first
-    elsif params.key?(:appleAuthorizationCode) && params.key?(:appleAppType)
+    if params.key?(:appleAuthorizationCode) && params.key?(:appleAppType)
       user = User.find_for_apple_auth(authorization_code: params[:appleAuthorizationCode], app_type: params[:appleAppType])
     elsif params.key?(:googleIdToken)
       user = User.find_for_google_mobile_auth(google_id_token: params[:googleIdToken])
