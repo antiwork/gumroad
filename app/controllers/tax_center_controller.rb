@@ -52,7 +52,7 @@ class TaxCenterController < Sellers::BaseController
 
   private
     def ensure_tax_center_enabled
-      return if Feature.active?(:tax_center, current_seller)
+      return if current_seller.tax_center_enabled?
 
       redirect_to dashboard_path, alert: "Tax center is not enabled for your account."
     end

@@ -129,7 +129,7 @@ const WorkflowRow = ({
     <div className="flex items-center">
       <h3 style={{ marginRight: "auto" }}>{workflow.name}</h3>
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
-        {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
+        {workflow.published ? <small className="block">Published</small> : <small className="block">Unpublished</small>}
         <div className="flex flex-wrap gap-2">
           <Button asChild size="icon">
             <Link

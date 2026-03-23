@@ -46,7 +46,7 @@ const IncomingCollaboratorsTableRow = ({
         />
         <div>
           <span className="whitespace-nowrap">{incomingCollaborator.seller_name || "Collaborator"}</span>
-          <small className="line-clamp-1">{incomingCollaborator.seller_email}</small>
+          <small className="line-clamp-1 block">{incomingCollaborator.seller_email}</small>
         </div>
       </div>
     </TableCell>

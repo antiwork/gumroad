@@ -10,14 +10,12 @@ import { assertResponseError, request } from "$app/utils/request";
 import { sanitizeHtml } from "$app/utils/sanitize";
 
 import { Button } from "$app/components/Button";
-import { Modal } from "$app/components/Modal";
 import { MenuItem } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
-import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
 declare module "@tiptap/core" {
@@ -34,10 +32,9 @@ declare module "@tiptap/core" {
 const MEDIA_EMBED_SUPPORTING_PROVIDERS = ["YouTube", "Vimeo", "Wistia, Inc.", "Dailymotion"];
 
 const VideoEmbed = Extension.create({
-  menuItem: (editor) => (
-    <WithDialog editor={editor} type="embed">
-      <MenuItem name="Insert video" icon={<Video className="size-5" />} />
-    </WithDialog>
+  name: "videoEmbed",
+  menuItem: (_editor, onOpen) => (
+    <MenuItem name="Insert video" icon={<Video className="size-5" />} onClick={() => onOpen?.()} />
   ),
 });
 
@@ -81,20 +78,16 @@ export const Raw = TiptapNode.create({
     };
     return walk(doc);
   },
-  menuItem: (editor) => (
-    <WithDialog editor={editor} type="twitter">
-      <MenuItem name="Insert post" icon={<TwitterX pack="brands" className="size-5" />} />
-    </WithDialog>
+  menuItem: (_editor, onOpen) => (
+    <MenuItem name="Insert post" icon={<TwitterX pack="brands" className="size-5" />} onClick={() => onOpen?.()} />
   ),
   submenu: {
     menu: "insert",
-    item: (editor) => (
-      <WithDialog editor={editor} type="twitter">
-        <MenuListItem>
-          <TwitterX pack="brands" className="size-5" />
-          <span>X post</span>
-        </MenuListItem>
-      </WithDialog>
+    item: (_editor, onOpen) => (
+      <div role="menuitem" onClick={onOpen}>
+        <TwitterX pack="brands" className="size-5" />
+        <span>X post</span>
+      </div>
     ),
   },
   addCommands() {
@@ -202,35 +195,6 @@ export const insertMediaEmbed = (editor: Editor, data: IframelyEmbedData) => {
       .setRaw({ html: data.html, title: data.title, url: data.url, thumbnail: data.thumbnail_url })
       .run();
   }
-};
-
-const WithDialog = ({
-  editor,
-  type,
-  children,
-}: {
-  editor: Editor;
-  type: "embed" | "twitter";
-  children: React.ReactNode;
-}) => {
-  const [open, setOpen] = React.useState(false);
-  return (
-    <>
-      {open ? (
-        <Modal open onClose={() => setOpen(false)} title={`Insert ${type === "embed" ? "video" : "post"}`}>
-          <EmbedMediaForm
-            type={type}
-            onEmbedReceived={(data) => {
-              insertMediaEmbed(editor, data);
-              setOpen(false);
-            }}
-            onClose={() => setOpen(false)}
-          />
-        </Modal>
-      ) : null}
-      <div onClick={() => setOpen(true)}>{children}</div>
-    </>
-  );
 };
 
 export const ExternalMediaFileEmbed = TiptapNode.create({

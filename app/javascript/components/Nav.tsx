@@ -100,17 +100,19 @@ export const NavLinkDropdownItem = ({
   icon,
   href,
   onClick,
+  component: Component = "a",
 }: {
   text: string;
   icon: React.ReactNode;
   href: string;
   onClick?: (ev: React.MouseEvent<HTMLAnchorElement>) => void;
+  component?: "a" | React.ComponentType<Record<string, unknown>>;
 }) => (
   <MenuItem asChild>
-    <a href={href} onClick={onClick} className="no-underline">
+    <Component href={href} onClick={onClick} className="no-underline">
       {icon}
       {text}
-    </a>
+    </Component>
   </MenuItem>
 );
 

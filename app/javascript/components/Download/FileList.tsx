@@ -575,7 +575,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
                   : "[&::-moz-meter-bar]:[background:currentColor] [&::-webkit-meter-optimum-value]:[background:currentColor]",
               )}
             />
-            <small>{humanizedDuration(file.duration - latestMediaLocation)} left</small>
+            <small className="block">{humanizedDuration(file.duration - latestMediaLocation)} left</small>
           </div>
         ) : null}
         {file.description?.trim() ? (

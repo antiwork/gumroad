@@ -314,7 +314,7 @@ const TeamMembersSection = ({
                   <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
                     <div>
                       {memberInfo.name}
-                      <small>{memberInfo.email}</small>
+                      <small className="block">{memberInfo.email}</small>
                     </div>
                     {memberInfo.is_expired ? (
                       <WithTooltip

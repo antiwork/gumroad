@@ -121,7 +121,7 @@ export default function AuthorizedApplicationsPage() {
                           {application.is_own_app ? <span> (Your application)</span> : null}
                         </h3>
                         <p>
-                          <small>
+                          <small className="block">
                             First authorized on:{" "}
                             {parseISO(application.first_authorized_at).toLocaleDateString(userAgentInfo.locale, {
                               month: "long",
