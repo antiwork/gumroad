@@ -528,15 +528,20 @@ def vcr_turned_on
 end
 
 def only_matching_vcr_request_from(hosts)
+  hooks = VCR.request_ignorer.hooks[:ignore_request]
+
   VCR.configure do |c|
     c.ignore_request do |request|
       !hosts.any? { |host| request.uri.match?(host) }
     end
   end
 
+  added_hook = hooks.last
+
   begin
     yield
   ensure
+    hooks.delete(added_hook)
     configure_vcr
   end
 end
