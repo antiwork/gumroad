@@ -27,7 +27,7 @@ module ProductFileListHelpers
     row = find_embed(name:)
     page.scroll_to row, align: :center
     row.find("h4").hover
-    expect(row).not_to have_selector("[role='progressbar']")
+    expect(find_embed(name:)).not_to have_selector("[role='progressbar']")
   end
 
   def rename_file_embed(from:, to:)
