@@ -48,6 +48,10 @@ describe "Admin Pages Scenario", type: :system, js: true do
       select_disclosure "Toggle Search"
     end
 
+    it "auto-focuses the first input" do
+      expect(page).to have_field("Search users (email, name, ID)", focused: true)
+    end
+
     it "searches users by query field" do
       fill_in "Search users (email, name, ID)", with: "joe@example.com\n"
       expect(page).to have_selector("h1", text: "Search for joe@example.com")

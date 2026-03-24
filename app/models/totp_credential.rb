@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "bcrypt"
+
 class TotpCredential < ApplicationRecord
   has_one_time_password column_name: :otp_secret
 

@@ -120,6 +120,7 @@ def prepare_mysql
 end
 
 DB_CORRUPTION_PATTERN = /SAVEPOINT.*does not exist|Lost connection|gone away/i
+BROWSER_CORRUPTION_PATTERN = /unpack1|no such window|invalid session id/i
 
 def reset_db_connection(example)
   return unless example.exception&.message&.match?(DB_CORRUPTION_PATTERN)
@@ -130,6 +131,38 @@ def reset_db_connection(example)
   prepare_mysql
 rescue StandardError => e
   Rails.logger.warn("[RSpec retry] Pool disconnect failed: #{e.class}: #{e.message}")
+end
+
+def browser_session_corrupted?(exception)
+  return false unless exception
+  return true if exception.is_a?(Selenium::WebDriver::Error::NoSuchWindowError)
+  return true if exception.is_a?(Selenium::WebDriver::Error::InvalidSessionIdError)
+  return true if exception.is_a?(Errno::ECONNREFUSED)
+  return true if exception.is_a?(NoMethodError) && exception.message.include?("unpack1")
+
+  msg = exception.message
+  msg = "#{msg} #{exception.cause.message}" if exception.cause
+  msg.match?(BROWSER_CORRUPTION_PATTERN)
+end
+
+def force_browser_restart!
+  return unless Capybara.current_session.driver.is_a?(Capybara::Selenium::Driver)
+
+  begin
+    Capybara.current_session.driver.quit
+  rescue StandardError
+    nil
+  end
+  Capybara.reset_sessions!
+rescue StandardError => e
+  Rails.logger.warn("[RSpec] Browser restart failed: #{e.class}: #{e.message}")
+end
+
+def reset_browser_session(example)
+  return unless browser_session_corrupted?(example.exception)
+
+  Rails.logger.warn("[RSpec retry] Browser session corrupted: #{example.exception.class}: #{example.exception.message}. Restarting driver.")
+  force_browser_restart!
 end
 
 # Harden teardown_fixtures so that a corrupted SAVEPOINT doesn't skip pool
@@ -181,7 +214,10 @@ RSpec.configure do |config|
     # show exception that triggers a retry if verbose_retry is set to true
     config.display_try_failure_messages = true
     config.default_retry_count = 3
-    config.retry_callback = proc { |example| reset_db_connection(example) }
+    config.retry_callback = proc do |example|
+      reset_db_connection(example)
+      reset_browser_session(example)
+    end
   end
 
   config.before(:suite) do
@@ -269,7 +305,19 @@ RSpec.configure do |config|
 
   config.after(:each) do |example|
     capture_state_on_failure(example)
-    Capybara.reset_sessions!
+    begin
+      Capybara.reset_sessions!
+    rescue Selenium::WebDriver::Error::NoSuchWindowError,
+           Selenium::WebDriver::Error::InvalidSessionIdError,
+           Errno::ECONNREFUSED => e
+      Rails.logger.warn("[RSpec] Browser session corrupted during reset: #{e.class}: #{e.message}. Restarting driver.")
+      force_browser_restart!
+    rescue NoMethodError => e
+      raise unless e.message.include?("unpack1")
+
+      Rails.logger.warn("[RSpec] Browser session corrupted during reset: #{e.class}: #{e.message}. Restarting driver.")
+      force_browser_restart!
+    end
     WebMock.allow_net_connect!
   end
 
@@ -480,15 +528,20 @@ def vcr_turned_on
 end
 
 def only_matching_vcr_request_from(hosts)
+  hooks = VCR.request_ignorer.hooks[:ignore_request]
+
   VCR.configure do |c|
     c.ignore_request do |request|
       !hosts.any? { |host| request.uri.match?(host) }
     end
   end
 
+  added_hook = hooks.last
+
   begin
     yield
   ensure
+    hooks.delete(added_hook)
     configure_vcr
   end
 end

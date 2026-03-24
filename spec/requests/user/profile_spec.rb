@@ -427,12 +427,12 @@ describe "User profile page", type: :system, js: true do
         add_section "Rich text"
         save_changes
 
+        editor = within_section "New section", section_element: :section do
+          find("[contenteditable=true]").tap(&:click)
+        end
+        toggle_disclosure "Text formats"
+        find(:radio_button, "Title").click
         within_section "New section", section_element: :section do
-          editor = find("[contenteditable=true]")
-          editor.click
-          select_disclosure "Text formats" do
-            choose "Title"
-          end
           editor.send_keys "Heading\nSome more text"
           attach_file(file_fixture("test.jpg")) do
             click_on "Insert image"
@@ -471,7 +471,7 @@ describe "User profile page", type: :system, js: true do
           click_on "Subscribe"
         end
 
-        within_section "Subscribe to receive email updates from Gumbot." do
+        within_section "Subscribe to receive email updates from Gumbot.", section_element: :section do
           expect(page).to have_field("Your email address")
           expect(page).to have_button("Subscribe")
         end
@@ -489,7 +489,7 @@ describe "User profile page", type: :system, js: true do
         end
         save_changes
 
-        within_section "Subscribe now or else" do
+        within_section "Subscribe now or else", section_element: :section do
           expect(page).to have_field("Your email address")
           expect(page).to have_button("Follow")
         end
@@ -516,7 +516,7 @@ describe "User profile page", type: :system, js: true do
           click_on "Featured Product"
           select_combo_box_option search: "Product 2", from: "Featured Product"
         end
-        within_section "My featured product" do
+        within_section "My featured product", section_element: :section do
           expect(page).to have_section "Product 2", section_element: :article
         end
         save_changes
@@ -526,7 +526,7 @@ describe "User profile page", type: :system, js: true do
           click_on "Featured Product"
           select_combo_box_option search: "Product 3", from: "Featured Product"
         end
-        within_section "My featured product" do
+        within_section "My featured product", section_element: :section do
           expect(page).to have_section "Product 3", section_element: :article
         end
         save_changes
@@ -554,7 +554,7 @@ describe "User profile page", type: :system, js: true do
           click_on "Featured Product"
           select_combo_box_option search: "Buy me a coffee", from: "Featured Product"
         end
-        within_section "My featured product" do
+        within_section "My featured product", section_element: :section do
           expect(page).to_not have_section "Buy me a coffee", section_element: :article
           expect(page).to have_section "Buy me a coffee", section_element: :section
           expect(page).to have_selector("h1", text: "Buy me a coffee")

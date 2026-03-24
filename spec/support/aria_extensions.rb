@@ -280,6 +280,53 @@ Capybara.modify_selector(:disclosure_button) do
   describe_expression_filters
 end
 
+# Override select_disclosure/toggle_disclosure to handle Radix Popover re-renders.
+# Without forceMount, Radix may re-render content after initial mount (for positioning),
+# invalidating the `within` scope reference. We retry once with a fresh reference.
+# On the second StaleElementReferenceError (from popover closing during the block),
+# the block action already completed, so we can safely continue.
+module CapybaraAccessibleSelectors
+  module Actions
+    def select_disclosure(name = nil, **find_options, &block)
+      button = _locate_disclosure_button(name, **find_options)
+      _toggle_disclosure_button(button, true)
+
+      if block_given?
+        _run_in_disclosure(name, **find_options, &block)
+      else
+        _locate_disclosure(name, **find_options)
+      end
+    end
+
+    def toggle_disclosure(name = nil, expand: nil, **find_options, &block)
+      button = _locate_disclosure_button(name, **find_options)
+      _toggle_disclosure_button(button, expand)
+
+      _run_in_disclosure(name, **find_options, &block) if block_given?
+
+      button
+    end
+
+    private
+      def _run_in_disclosure(name, **find_options, &block)
+        attempts = 0
+        begin
+          attempts += 1
+          disclosure = if is_a?(Capybara::Node::Element) && name.nil?
+            _locate_disclosure(name, **find_options)
+          else
+            Capybara.page.find(:disclosure, name, **find_options)
+          end
+          block_executed = false
+          wrapped_block = proc { block.call; block_executed = true }
+          Capybara.page.within(disclosure, &wrapped_block)
+        rescue Selenium::WebDriver::Error::StaleElementReferenceError
+          retry if !block_executed && attempts == 1
+        end
+      end
+  end
+end
+
 module Capybara
   module Node
     module Actions

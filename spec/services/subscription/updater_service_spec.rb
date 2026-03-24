@@ -142,21 +142,6 @@ describe Subscription::UpdaterService, :vcr do
           expect(@user.credit_card).to eq @credit_card
         end
 
-        it "does not switch the subscription to new flat fee" do
-          expect(@subscription.flat_fee_applicable?).to be false
-
-          result = Subscription::UpdaterService.new(
-            subscription: @subscription,
-            gumroad_guid: @gumroad_guid,
-            params: update_card_params,
-            logged_in_user: @user,
-            remote_ip: @remote_ip,
-            ).perform
-
-          expect(result[:success]).to eq true
-          expect(@subscription.reload.flat_fee_applicable?).to be false
-        end
-
         context "when the new card requires e-mandate" do
           it "updates the subscription but not the user's card" do
             Subscription::UpdaterService.new(
@@ -308,21 +293,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(result[:success]).to eq true
             expect(@subscription.reload).to be_alive
           end
-
-          it "switches the subscription to new flat fee" do
-            expect(@subscription.flat_fee_applicable?).to be false
-
-            result = Subscription::UpdaterService.new(
-              subscription: @subscription,
-              gumroad_guid: @gumroad_guid,
-              params: existing_card_params,
-              logged_in_user: @user,
-              remote_ip: @remote_ip,
-              ).perform
-
-            expect(result[:success]).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
-          end
         end
 
         context "using a new card" do
@@ -394,21 +364,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(@user.credit_card).to eq old_user_card
           end
 
-          it "switches the subscription to new flat fee" do
-            expect(@subscription.flat_fee_applicable?).to be false
-
-            result = Subscription::UpdaterService.new(
-              subscription: @subscription,
-              gumroad_guid: @gumroad_guid,
-              params:,
-              logged_in_user: @user,
-              remote_ip: @remote_ip,
-              ).perform
-
-            expect(result[:success]).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
-          end
-
           context "when the new card requires e-mandate" do
             let(:params) do
               {
@@ -468,8 +423,6 @@ describe Subscription::UpdaterService, :vcr do
               perceived_upgrade_price_cents: old_price_cents,
             }
 
-            expect(@subscription.flat_fee_applicable?).to be false
-
             expect do
               Subscription::UpdaterService.new(
                 subscription: @subscription,
@@ -484,7 +437,6 @@ describe Subscription::UpdaterService, :vcr do
 
             expect(last_purchase.id).not_to eq @original_purchase.id
             expect(last_purchase.displayed_price_cents).to eq old_price_cents
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
 
@@ -502,7 +454,6 @@ describe Subscription::UpdaterService, :vcr do
 
               expect(result[:success]).to eq true
               expect(result[:success_message]).to eq "Membership restarted"
-              expect(@subscription.reload.flat_fee_applicable?).to be true
 
               updated_purchase = @subscription.reload.original_purchase
               expect(updated_purchase.id).not_to eq @original_purchase.id
@@ -522,7 +473,6 @@ describe Subscription::UpdaterService, :vcr do
 
             expect(result[:success]).to eq true
             expect(result[:success_message]).to eq "Membership restarted"
-            expect(@subscription.reload.flat_fee_applicable?).to be true
 
             updated_purchase = @subscription.reload.original_purchase
             expect(updated_purchase.id).not_to eq @original_purchase.id
@@ -542,7 +492,6 @@ describe Subscription::UpdaterService, :vcr do
 
               expect(result[:success]).to eq true
               expect(result[:success_message]).to eq "Membership restarted"
-              expect(@subscription.reload.flat_fee_applicable?).to be true
 
               updated_purchase = @subscription.reload.original_purchase
               expect(updated_purchase.id).not_to eq @original_purchase.id
@@ -563,7 +512,6 @@ describe Subscription::UpdaterService, :vcr do
 
             expect(result[:success]).to eq true
             expect(result[:success_message]).to eq "Membership restarted"
-            expect(@subscription.reload.flat_fee_applicable?).to be true
 
             updated_purchase = @subscription.reload.original_purchase
             expect(updated_purchase.id).not_to eq @original_purchase.id
@@ -587,7 +535,6 @@ describe Subscription::UpdaterService, :vcr do
 
             expect(result[:success]).to eq true
             expect(result[:requires_card_action]).to be true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
 
             updated_purchase = @subscription.reload.original_purchase
             expect(updated_purchase.id).not_to eq @original_purchase.id
@@ -603,7 +550,6 @@ describe Subscription::UpdaterService, :vcr do
 
           context "when increasing quantity" do
             it "immediately updates the purchase and charges the user" do
-              expect(@subscription.flat_fee_applicable?).to be false
               travel_to(@originally_subscribed_at + 1.day)
               result = Subscription::UpdaterService.new(
                 subscription: @subscription,
@@ -620,13 +566,11 @@ describe Subscription::UpdaterService, :vcr do
               original_purchase = @subscription.original_purchase
               expect(original_purchase.displayed_price_cents).to eq 1797
               expect(original_purchase.quantity).to eq 3
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end
           end
 
           context "when decreasing quantity" do
             it "creates a plan change and does not charge the user" do
-              expect(@subscription.flat_fee_applicable?).to be false
               travel_to(@originally_subscribed_at + 1.day)
               result = Subscription::UpdaterService.new(
                 subscription: @subscription,
@@ -640,7 +584,6 @@ describe Subscription::UpdaterService, :vcr do
               plan_change = @subscription.subscription_plan_changes.first
               expect(plan_change.quantity).to eq(1)
               expect(plan_change.perceived_price_cents).to eq 599
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end
           end
         end
@@ -660,7 +603,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(result[:success]).to eq false
             expect(result[:error_message]).to eq "This subscription cannot be restarted."
             expect(@subscription.reload).not_to be_alive
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -679,7 +621,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(result[:success]).to eq false
             expect(result[:error_message]).to eq "This subscription cannot be restarted."
             expect(@subscription.reload).not_to be_alive
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
       end
@@ -722,7 +663,6 @@ describe Subscription::UpdaterService, :vcr do
           expect(@subscription.credit_card).not_to eq old_subscription_card
           expect(@user.reload.credit_card).to be
           expect(@user.credit_card).to eq old_user_card
-          expect(@subscription.reload.flat_fee_applicable?).to be false
         end
 
         it "applies any plan changes immediately" do
@@ -743,7 +683,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(updated_purchase.id).not_to eq @original_purchase.id
             expect(updated_purchase.price_cents).to eq @original_tier_monthly_price.price_cents
           end.not_to change { SubscriptionPlanChange.count }
-          expect(@subscription.reload.flat_fee_applicable?).to be true
         end
 
         it "updates the card and charges the user correctly if seller has a connected Stripe account" do
@@ -785,7 +724,6 @@ describe Subscription::UpdaterService, :vcr do
           expect(@subscription.credit_card).not_to eq old_subscription_card
           expect(@user.reload.credit_card).to be
           expect(@user.credit_card).to eq old_user_card
-          expect(@subscription.reload.flat_fee_applicable?).to be false
         end
 
         context "when the new card requires e-mandate" do
@@ -876,7 +814,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(upgrade_purchase.price_cents).to eq 3_38
             expect(upgrade_purchase.total_transaction_cents).to eq 3_38
             expect(upgrade_purchase.fee_cents).to eq 124
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
 
           context "when the card requires e-mandate" do
@@ -919,7 +856,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(upgrade_purchase.price_cents).to eq 3_38
               expect(upgrade_purchase.total_transaction_cents).to eq 3_38
               expect(upgrade_purchase.fee_cents).to eq 124
-              expect(@subscription.reload.flat_fee_applicable?).to be true
 
               expect(response[:success]).to be true
               expect(response[:requires_card_action]).to be true
@@ -963,7 +899,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(@subscription.last_payment_option.price).to eq @quarterly_product_price
 
             expect(@subscription.reload.purchases.count).to eq 1
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
       end
@@ -1005,7 +940,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(updated_purchase.purchase_state).to eq "not_charged"
             expect(@subscription.last_payment_option.price).to eq @yearly_product_price
             expect(@original_purchase.reload.is_archived_original_subscription_purchase).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
 
           it "charges the pro-rated rate for the new variant for the remainder of the period" do
@@ -1095,7 +1029,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(plan_change.recurrence).to eq "monthly"
             expect(plan_change.deleted_at).to be_nil
             expect(plan_change.perceived_price_cents).to eq 5_01
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
       end
@@ -1128,7 +1061,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(updated_purchase.purchase_state).to eq "not_charged"
             expect(updated_purchase.variant_attributes).to eq [@new_tier]
             expect(updated_purchase.displayed_price_cents).to eq 10_50
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
 
           it "sends a subscription_updated notification" do
@@ -1179,7 +1111,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(updated_purchase.purchase_state).to eq "not_charged"
               expect(updated_purchase.variant_attributes).to eq [@lower_tier]
               expect(updated_purchase.displayed_price_cents).to eq 4_00
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end.not_to change { SubscriptionPlanChange.count }
           end
 
@@ -1226,7 +1157,6 @@ describe Subscription::UpdaterService, :vcr do
           ).perform
 
           expect(result[:success]).to eq true
-          expect(@subscription.reload.flat_fee_applicable?).to be false
 
           @original_purchase.reload
           expect(@original_purchase.email).to eq email
@@ -1253,7 +1183,6 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(result[:success]).to eq true
-            expect(@subscription.reload.flat_fee_applicable?).to be true
 
             updated_purchase = @subscription.reload.original_purchase
             expect(updated_purchase.email).to eq email
@@ -1291,7 +1220,6 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(plan_change.reload).not_to be_deleted
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -1316,7 +1244,6 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(plan_change.reload).to be_deleted
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
 
@@ -1346,7 +1273,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(new_plan_change.recurrence).to eq "monthly"
               expect(new_plan_change.perceived_price_cents).to eq 5_00
             end.to change { @subscription.reload.subscription_plan_changes.count }.by(1)
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
 
           it "deletes existing plan changes" do
@@ -1378,7 +1304,6 @@ describe Subscription::UpdaterService, :vcr do
 
             updated_purchase = @subscription.reload.original_purchase
             expect(license.reload.purchase_id).to eq updated_purchase.id
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
 
@@ -1393,7 +1318,6 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(license.reload.purchase_id).to eq @original_purchase.id
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
 
@@ -1408,7 +1332,6 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(license.reload.purchase_id).to eq @original_purchase.id
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
       end
@@ -1431,7 +1354,6 @@ describe Subscription::UpdaterService, :vcr do
 
             updated_purchase = @subscription.reload.original_purchase
             expect(@email_info.reload.purchase_id).to eq updated_purchase.id
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
 
@@ -1446,7 +1368,6 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(@email_info.reload.purchase_id).to eq @original_purchase.id
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
 
           it "restores the comments with the original_purchase" do
@@ -1479,7 +1400,6 @@ describe Subscription::UpdaterService, :vcr do
             ).perform
 
             expect(@email_info.reload.purchase_id).to eq @original_purchase.id
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
       end
@@ -1500,7 +1420,6 @@ describe Subscription::UpdaterService, :vcr do
 
           updated_purchase = @subscription.reload.original_purchase
           expect(updated_purchase.url_redirect).not_to be_nil
-          expect(@subscription.reload.flat_fee_applicable?).to be true
         end
       end
 
@@ -1527,7 +1446,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(updated_purchase.id).to eq @original_purchase.id
               expect(updated_purchase.displayed_price_cents).to eq @original_price
             end.not_to change { Purchase.count }
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -1546,7 +1464,6 @@ describe Subscription::UpdaterService, :vcr do
             upgrade_purchase = @subscription.reload.purchases.is_upgrade_purchase.last
 
             expect(upgrade_purchase.displayed_price_cents).to eq @new_tier_quarterly_upgrade_cost_after_one_month
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
 
@@ -1572,7 +1489,6 @@ describe Subscription::UpdaterService, :vcr do
                 expect(updated_purchase.id).to eq @original_purchase.id
                 expect(updated_purchase.displayed_price_cents).to eq @original_price
               end.not_to change { Purchase.count }
-              expect(@subscription.reload.flat_fee_applicable?).to be false
             end
           end
 
@@ -1591,7 +1507,6 @@ describe Subscription::UpdaterService, :vcr do
               upgrade_purchase = @subscription.reload.purchases.is_upgrade_purchase.last
 
               expect(upgrade_purchase.displayed_price_cents).to eq @new_tier_quarterly_upgrade_cost_after_one_month
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end
           end
         end
@@ -1621,7 +1536,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(updated_purchase.displayed_price_cents).to eq @original_price
               expect(@subscription.subscription_plan_changes.count).to eq 0
             end.not_to change { Purchase.count }
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -1640,7 +1554,6 @@ describe Subscription::UpdaterService, :vcr do
             upgrade_purchase = @subscription.reload.purchases.is_upgrade_purchase.last
 
             expect(upgrade_purchase.displayed_price_cents).to eq @new_tier_quarterly_upgrade_cost_after_one_month
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
         end
 
@@ -1667,7 +1580,6 @@ describe Subscription::UpdaterService, :vcr do
                 expect(updated_purchase.displayed_price_cents).to eq @original_price
                 expect(@subscription.subscription_plan_changes.count).to eq 0
               end.not_to change { Purchase.count }
-              expect(@subscription.reload.flat_fee_applicable?).to be false
             end
           end
 
@@ -1686,7 +1598,6 @@ describe Subscription::UpdaterService, :vcr do
               upgrade_purchase = @subscription.reload.purchases.is_upgrade_purchase.last
 
               expect(upgrade_purchase.displayed_price_cents).to eq @new_tier_quarterly_upgrade_cost_after_one_month
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end
           end
         end
@@ -1706,8 +1617,6 @@ describe Subscription::UpdaterService, :vcr do
               logged_in_user: @user,
               remote_ip: @remote_ip,
             ).perform
-
-            expect(@subscription.reload.flat_fee_applicable?).to be true
 
             updated_purchase = @subscription.reload.original_purchase
             upgrade_purchase = @subscription.purchases.last
@@ -1740,7 +1649,6 @@ describe Subscription::UpdaterService, :vcr do
           expect(@subscription.credit_card).not_to eq @credit_card
           expect(@user.credit_card).to be
           expect(@user.credit_card).to eq @credit_card
-          expect(@subscription.reload.flat_fee_applicable?).to be false
         end
 
         it "allows updating contact info" do
@@ -1753,8 +1661,6 @@ describe Subscription::UpdaterService, :vcr do
           ).perform
 
           expect(result[:success]).to eq true
-
-          expect(@subscription.reload.flat_fee_applicable?).to be false
 
           @original_purchase.reload
           expect(@original_purchase.email).to eq email
@@ -1778,7 +1684,6 @@ describe Subscription::UpdaterService, :vcr do
 
             expect(result[:success]).to eq false
             expect(result[:error_message]).to eq "Changing plans for fixed-length subscriptions is not currently supported."
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end.not_to change { @subscription.reload.purchases.count }
         end
 
@@ -1794,7 +1699,6 @@ describe Subscription::UpdaterService, :vcr do
 
             expect(result[:success]).to eq false
             expect(result[:error_message]).to eq "Changing plans for fixed-length subscriptions is not currently supported."
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end.not_to change { @subscription.reload.purchases.count }
         end
       end
@@ -1901,7 +1805,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(result[:success]).to eq false
             expect(result[:error_message]).to eq "Please select a valid tier and payment option."
             expect(@subscription.reload.original_purchase.variant_attributes).to eq [@original_tier]
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -1940,7 +1843,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(result[:success]).to eq false
             expect(result[:error_message]).to eq "Please select a valid tier and payment option."
             expect(@subscription.reload.price).to eq @quarterly_product_price
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -1981,7 +1883,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(result[:success]).to eq false
             expect(result[:error_message]).to eq "The price just changed! Refresh the page for the updated price."
             expect(@subscription.reload.price).to eq @quarterly_product_price
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -2021,7 +1922,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(result[:success]).to eq false
             expect(result[:error_message]).to eq "The price just changed! Refresh the page for the updated price."
             expect(@subscription.reload.price).to eq @quarterly_product_price
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -2054,7 +1954,6 @@ describe Subscription::UpdaterService, :vcr do
                 expect(result[:error_message]).to eq("Your card was declined.")
                 expect(@subscription.reload.original_purchase.variant_attributes).to eq [@original_tier]
                 expect(@subscription.price).to eq @quarterly_product_price
-                expect(@subscription.reload.flat_fee_applicable?).to be false
               end.not_to change { @subscription.reload.purchases.successful.not_is_original_subscription_purchase.count }
             end
 
@@ -2080,7 +1979,6 @@ describe Subscription::UpdaterService, :vcr do
                 expect(@subscription.reload.original_purchase.variant_attributes).to eq [@original_tier]
                 expect(@subscription.price).to eq @quarterly_product_price
                 expect(@subscription.credit_card).to eq @credit_card
-                expect(@subscription.reload.flat_fee_applicable?).to be false
               end.not_to change { @subscription.reload.purchases.successful.not_is_original_subscription_purchase.count }
             end
 
@@ -2141,7 +2039,6 @@ describe Subscription::UpdaterService, :vcr do
             expect(@original_purchase.reload.variant_attributes).to eq [@original_tier]
             expect(@original_purchase.displayed_price_cents).to eq @original_tier_quarterly_price.price_cents
             expect(@subscription.reload.price).to eq @quarterly_product_price
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
 
           context "when old plan price has changed" do
@@ -2162,7 +2059,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(updated_purchase.id).to eq @original_purchase.id
               expect(@original_purchase.reload.variant_attributes).to eq [@original_tier]
               expect(@original_purchase.displayed_price_cents).to eq 5_99
-              expect(@subscription.reload.flat_fee_applicable?).to be false
             end
           end
         end
@@ -2190,7 +2086,6 @@ describe Subscription::UpdaterService, :vcr do
 
             expect(result[:success]).to eq false
             expect(result[:error_message]).to eq "Please enter an amount greater than or equal to the minimum."
-            expect(@subscription.reload.flat_fee_applicable?).to be false
           end
         end
 
@@ -2215,7 +2110,6 @@ describe Subscription::UpdaterService, :vcr do
 
               expect(result[:success]).to eq false
               expect(result[:error_message]).to eq "Validation failed: valid email required"
-              expect(@subscription.reload.flat_fee_applicable?).to be false
             end
           end
         end
@@ -2242,7 +2136,6 @@ describe Subscription::UpdaterService, :vcr do
 
                 expect(result[:success]).to eq false
                 expect(result[:error_message]).to eq "The price just changed! Refresh the page for the updated price."
-                expect(@subscription.reload.flat_fee_applicable?).to be false
               end
             end
 
@@ -2266,7 +2159,6 @@ describe Subscription::UpdaterService, :vcr do
 
                 expect(result[:success]).to eq false
                 expect(result[:error_message]).to eq "The price just changed! Refresh the page for the updated price."
-                expect(@subscription.reload.flat_fee_applicable?).to be false
               end
             end
           end
@@ -2292,7 +2184,6 @@ describe Subscription::UpdaterService, :vcr do
 
                 expect(result[:success]).to eq false
                 expect(result[:error_message]).to eq "The price just changed! Refresh the page for the updated price."
-                expect(@subscription.reload.flat_fee_applicable?).to be false
               end
             end
 
@@ -2316,7 +2207,6 @@ describe Subscription::UpdaterService, :vcr do
 
                 expect(result[:success]).to eq false
                 expect(result[:error_message]).to eq "The price just changed! Refresh the page for the updated price."
-                expect(@subscription.reload.flat_fee_applicable?).to be false
               end
             end
           end
@@ -2636,7 +2526,6 @@ describe Subscription::UpdaterService, :vcr do
         @price_cents = @product.default_price_cents
         @yearly_price = create(:price, link: @product, recurrence: BasePrice::Recurrence::YEARLY, price_cents: 10_00)
         @subscription = create(:subscription, link: @product, credit_card: @credit_card, user: @user)
-        @subscription.update!(flat_fee_applicable: false)
         # confirm that it's a monthly subscription
         expect(@subscription.recurrence).to eq "monthly"
 
@@ -2693,7 +2582,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(@user.credit_card).to be
               expect(@user.credit_card).to eq @user_credit_card
               expect(@user.credit_card).not_to eq @credit_card
-              expect(@subscription.reload.flat_fee_applicable?).to be false
             end.not_to change { @subscription.reload.purchases.count }
           end
         end
@@ -2716,7 +2604,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(@subscription.credit_card).not_to eq @credit_card
               expect(@user.reload.credit_card).to eq @user_credit_card
               expect(@user.credit_card).not_to eq @credit_card
-              expect(@subscription.reload.flat_fee_applicable?).to be false
             end.not_to change { @subscription.reload.purchases.count }
           end
         end
@@ -2751,7 +2638,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(@subscription.credit_card).not_to eq @credit_card
               expect(@subscription.credit_card.card_type).to eq "paypal"
               expect(@user.reload.credit_card).not_to eq @subscription.credit_card
-              expect(@subscription.reload.flat_fee_applicable?).to be false
             end.not_to change { @subscription.reload.purchases.count }
           end
         end
@@ -2789,7 +2675,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(result[:success]).to eq true
               expect(result[:success_message]).to eq "Membership restarted"
               expect(@subscription.reload.cancelled_at).to be_nil
-              expect(@subscription.reload.flat_fee_applicable?).to be false
             end.not_to change { @subscription.reload.purchases.not_is_original_subscription_purchase.count }
           end
         end
@@ -2813,7 +2698,6 @@ describe Subscription::UpdaterService, :vcr do
               expect(result[:success]).to eq true
               expect(result[:success_message]).to eq "Membership restarted"
               expect(@subscription.reload.cancelled_at).to be_nil
-              expect(@subscription.reload.flat_fee_applicable?).to be true
             end.to change { @subscription.reload.purchases.successful.not_is_original_subscription_purchase.count }.by(1)
           end
         end
@@ -2855,7 +2739,6 @@ describe Subscription::UpdaterService, :vcr do
             last_charge = @subscription.purchases.successful.last
             expect(last_charge.id).not_to eq @original_purchase.id
             expect(last_charge.displayed_price_cents).to eq 10_00
-            expect(@subscription.reload.flat_fee_applicable?).to be true
           end
 
           it "does not send a subscription_updated notification" do
@@ -2871,6 +2754,154 @@ describe Subscription::UpdaterService, :vcr do
             expect(PostToPingEndpointsWorker).not_to have_enqueued_sidekiq_job(nil, nil, ResourceSubscription::SUBSCRIPTION_UPDATED_RESOURCE_NAME, @subscription.id, anything)
           end
         end
+      end
+    end
+
+    context "when restarting with offer code changes" do
+      let(:free_trial) { false }
+
+      before :each do
+        setup_subscription
+
+        @offer_code = create(:offer_code, amount_cents: nil, amount_percentage: 25, products: [@product], user: @product.user)
+        @original_purchase.update!(offer_code: @offer_code)
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount
+        )
+
+        @remote_ip = "11.22.33.44"
+        @gumroad_guid = "abc123"
+
+        allow_any_instance_of(Purchase).to receive(:mandate_options_for_stripe).and_return({
+                                                                                             payment_method_options: {
+                                                                                               card: {
+                                                                                                 mandate_options: {
+                                                                                                   reference: StripeChargeProcessor::MANDATE_PREFIX + SecureRandom.hex,
+                                                                                                   amount_type: "maximum",
+                                                                                                   amount: 100_00,
+                                                                                                   start_date: Time.current.to_i,
+                                                                                                   interval: "sporadic",
+                                                                                                   supported_types: ["india"]
+                                                                                                 }
+                                                                                               }
+                                                                                             }
+                                                                                           })
+
+        travel_to(@originally_subscribed_at + 4.months)
+        @subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true)
+      end
+
+      let(:restart_params) do
+        {
+          price_id: @quarterly_product_price.external_id,
+          variants: [@original_tier.external_id],
+          quantity: 1,
+          use_existing_card: true,
+          perceived_price_cents: @original_tier_quarterly_price.price_cents,
+          perceived_upgrade_price_cents: @original_tier_quarterly_price.price_cents,
+        }
+      end
+
+      it "clears the discount when restarting without an offer code" do
+        original_purchase = @subscription.original_purchase
+        expect(original_purchase.purchase_offer_code_discount).to be_present
+
+        full_price = @original_tier_quarterly_price.price_cents
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            clear_discount: true,
+            perceived_price_cents: full_price,
+            perceived_upgrade_price_cents: full_price,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        new_purchase = @subscription.reload.original_purchase
+        expect(new_purchase.id).not_to eq(original_purchase.id)
+        expect(new_purchase.offer_code).to be_nil
+        expect(new_purchase.purchase_offer_code_discount).to be_nil
+      end
+
+      it "updates the discount when the seller changed the offer code percentage" do
+        original_discount = @subscription.original_purchase.purchase_offer_code_discount
+        expect(original_discount.offer_code_amount).to eq(25)
+
+        @offer_code.update!(amount_percentage: 50)
+        new_perceived = @original_tier_quarterly_price.price_cents - @offer_code.amount_off(@original_tier_quarterly_price.price_cents)
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            offer_code: @offer_code,
+            perceived_price_cents: new_perceived,
+            perceived_upgrade_price_cents: new_perceived,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        new_purchase = @subscription.reload.original_purchase
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code).to eq(@offer_code)
+        expect(new_discount.offer_code_amount).to eq(50)
+        expect(new_discount.offer_code_is_percent).to eq(true)
+      end
+
+      it "applies a different offer code when provided" do
+        new_offer_code = create(:offer_code, code: "newcode", amount_cents: nil, amount_percentage: 15, products: [@product], user: @product.user)
+        new_perceived = @original_tier_quarterly_price.price_cents - new_offer_code.amount_off(@original_tier_quarterly_price.price_cents)
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            offer_code: new_offer_code,
+            perceived_price_cents: new_perceived,
+            perceived_upgrade_price_cents: new_perceived,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        new_purchase = @subscription.reload.original_purchase
+        expect(new_purchase.offer_code).to eq(new_offer_code)
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code).to eq(new_offer_code)
+        expect(new_discount.offer_code_amount).to eq(15)
+        expect(new_discount.offer_code_is_percent).to eq(true)
+      end
+
+      it "does not update the plan when the same unchanged offer code is provided" do
+        original_purchase_id = @subscription.original_purchase.id
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(offer_code: @offer_code),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq true
+        expect(@subscription.reload.original_purchase.id).to eq(original_purchase_id)
       end
     end
 

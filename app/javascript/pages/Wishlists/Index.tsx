@@ -89,7 +89,7 @@ export default function WishlistsPage() {
                       <h4>{wishlist.name}</h4>
                     </a>
                     <a href={wishlist.url} target="_blank" rel="noreferrer">
-                      <small>{wishlist.url}</small>
+                      <small className="block">{wishlist.url}</small>
                     </a>
                   </TableCell>
                   <TableCell>{wishlist.product_count}</TableCell>

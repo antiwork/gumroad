@@ -186,6 +186,27 @@ class Rack::Attack
                      throttle_params: Proc.new { |req| req.params["user_id"] }
 
   # Initial: 10rpm, Max: 60 requests/3 days (per user)
+  throttle_by_params path: "/two-factor/switch_to_email",
+                     requests: 10,
+                     method: :post,
+                     period: 60.seconds,
+                     throttle_params: Proc.new { |req| req.params["user_id"] }
+
+  # Initial: 10rpm, Max: 60 requests/3 days (per user)
+  throttle_by_params path: "/two-factor/switch_to_recovery",
+                     requests: 10,
+                     method: :post,
+                     period: 60.seconds,
+                     throttle_params: Proc.new { |req| req.params["user_id"] }
+
+  # Initial: 10rpm, Max: 60 requests/3 days (per user)
+  throttle_by_params path: "/two-factor/switch_to_authenticator",
+                     requests: 10,
+                     method: :post,
+                     period: 60.seconds,
+                     throttle_params: Proc.new { |req| req.params["user_id"] }
+
+  # Initial: 10rpm, Max: 60 requests/3 days (per user)
   throttle_by_params path: "/settings/totp/confirm",
                      requests: 10,
                      method: :post,

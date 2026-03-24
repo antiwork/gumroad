@@ -309,6 +309,12 @@ sync_all_paypal_payouts:
   description: Syncs all PayPal payouts that are stuck in processing
   args:
     - "PAYPAL"
+sync_stuck_stripe_payouts:
+  cron: "0 14 * * *" # UTC 14:00 daily
+  class: SyncStuckPayoutsJob
+  description: Syncs Stripe payouts stuck in creating or processing
+  args:
+    - "STRIPE"
 delete_expired_product_cached_values:
   cron: "0 16 * * 0" # UTC 16:00 Sunday
   class: DeleteExpiredProductCachedValuesWorker

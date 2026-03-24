@@ -1,15 +1,19 @@
-import { useForm, usePage } from "@inertiajs/react";
+import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { SettingPage } from "$app/parsers/settings";
+import { asyncVoid } from "$app/utils/promise";
+import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { PasswordInput } from "$app/components/PasswordInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
+import { AuthenticatorSetup } from "$app/components/Settings/PasswordPage/AuthenticatorSetup";
+import { RecoveryCodes } from "$app/components/Settings/PasswordPage/RecoveryCodes";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Label } from "$app/components/ui/Label";
 
@@ -27,6 +31,10 @@ export default function PasswordPage() {
   const props = cast<PasswordPageProps>(usePage().props);
   const uid = React.useId();
   const [requireOldPassword, setRequireOldPassword] = React.useState(props.require_old_password);
+  const [settingUp, setSettingUp] = React.useState(false);
+  const [removingAuthenticatorApp, setRemovingAuthenticatorApp] = React.useState(false);
+  const [regeneratedCodes, setRegeneratedCodes] = React.useState<string[] | null>(null);
+  const [regenerating, setRegenerating] = React.useState(false);
 
   const form = useForm({
     user: {
@@ -56,6 +64,59 @@ export default function PasswordPage() {
       },
     });
   };
+
+  const handleRemoveAuthenticatorApp = asyncVoid(async () => {
+    setRemovingAuthenticatorApp(true);
+
+    try {
+      const response = await request({
+        url: Routes.settings_totp_path(),
+        method: "DELETE",
+        accept: "json",
+      });
+      const result = cast<{ success: boolean; error_message?: string }>(await response.json());
+      if (!response.ok || !result.success) {
+        throw new ResponseError(result.error_message ?? "Sorry, something went wrong. Please try again.");
+      }
+
+      showAlert("Authenticator app removed.", "success");
+      setRegeneratedCodes(null);
+      router.reload();
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    } finally {
+      setRemovingAuthenticatorApp(false);
+    }
+  });
+
+  const handleRegenerateRecoveryCodes = asyncVoid(async () => {
+    setRegenerating(true);
+
+    try {
+      const response = await request({
+        url: Routes.regenerate_recovery_codes_settings_totp_path(),
+        method: "POST",
+        accept: "json",
+      });
+      const result = cast<{ success: boolean; recovery_codes?: string[]; error_message?: string }>(
+        await response.json(),
+      );
+      if (!response.ok || !result.success) {
+        throw new ResponseError(result.error_message ?? "Sorry, something went wrong. Please try again.");
+      }
+
+      if (!result.recovery_codes?.length) {
+        throw new ResponseError("No recovery codes were generated. Please try again.");
+      }
+      setRegeneratedCodes(result.recovery_codes);
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    } finally {
+      setRegenerating(false);
+    }
+  });
 
   return (
     <SettingsLayout currentPage="password" pages={props.settings_pages}>
@@ -103,19 +164,37 @@ export default function PasswordPage() {
               Use an authenticator app to get verification codes without waiting for an email.
             </Alert>
           )}
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="grid gap-2">
               <div className="font-bold">Authenticator app</div>
-              <small className="text-muted">Get verification codes from an app on your device.</small>
+              <FieldsetDescription>Get verification codes from an app on your device.</FieldsetDescription>
             </div>
             {props.authenticator_app_enabled ? (
-              <Button color="danger" outline>
-                Remove
+              <div className="flex shrink-0 gap-2">
+                <Button onClick={handleRegenerateRecoveryCodes} disabled={regenerating || removingAuthenticatorApp}>
+                  {regenerating ? "Regenerating..." : "Regenerate recovery codes"}
+                </Button>
+                <Button
+                  color="danger"
+                  outline
+                  onClick={handleRemoveAuthenticatorApp}
+                  disabled={removingAuthenticatorApp || regenerating}
+                >
+                  {removingAuthenticatorApp ? "Removing..." : "Remove"}
+                </Button>
+              </div>
+            ) : settingUp ? null : (
+              <Button color="accent" onClick={() => setSettingUp(true)}>
+                Set up
               </Button>
-            ) : (
-              <Button color="primary">Set up</Button>
             )}
           </div>
+          {settingUp && !props.authenticator_app_enabled ? (
+            <AuthenticatorSetup onCancel={() => setSettingUp(false)} />
+          ) : null}
+          {props.authenticator_app_enabled && regeneratedCodes ? (
+            <RecoveryCodes codes={regeneratedCodes} onDone={() => setRegeneratedCodes(null)} />
+          ) : null}
         </FormSection>
       ) : null}
     </SettingsLayout>

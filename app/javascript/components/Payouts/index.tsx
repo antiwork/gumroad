@@ -30,7 +30,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 import placeholder from "$assets/images/placeholders/payouts.png";
 
 const INSTANT_PAYOUT_FEE_PERCENTAGE = 0.03;
-const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 1000;
+const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10000;
 const MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 999900;
 
 type StripeConnectAccount = { payout_method_type: "stripe_connect"; stripe_connect_account_id: string };
@@ -391,7 +391,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                     </a>
                   </h4>
                   {payoutPeriodData.discover_sales_count > 0 ? (
-                    <small className="text-muted">
+                    <small className="block text-muted">
                       on {payoutPeriodData.discover_sales_count}{" "}
                       {payoutPeriodData.discover_sales_count === 1 ? "sale" : "sales"}
                     </small>
@@ -410,7 +410,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                     </a>
                   </h4>
                   {payoutPeriodData.direct_sales_count > 0 ? (
-                    <small className="text-muted">
+                    <small className="block text-muted">
                       on {payoutPeriodData.direct_sales_count}{" "}
                       {payoutPeriodData.direct_sales_count === 1 ? "sale" : "sales"}
                     </small>

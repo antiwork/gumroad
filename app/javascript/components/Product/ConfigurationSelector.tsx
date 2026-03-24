@@ -271,7 +271,7 @@ export const OptionRadioButton = ({
         )}
         <div>
           <h4>{name}</h4>
-          {quantityLeft != null ? <small>{`${quantityLeft} left`}</small> : null}
+          {quantityLeft != null ? <small className="block">{`${quantityLeft} left`}</small> : null}
           {description ? (
             <div>
               <Breaklines text={description} />

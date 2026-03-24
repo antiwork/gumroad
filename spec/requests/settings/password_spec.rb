@@ -150,6 +150,50 @@ describe("Password Settings Scenario", type: :system, js: true) do
         expect(page).to have_text("Authenticator app")
         expect(page).to have_button("Set up")
       end
+
+      it "allows setting up and then removing the authenticator app" do
+        visit settings_password_path
+
+        click_on("Set up")
+        expect(page).to have_text("Scan this QR code")
+        expect(page).to have_selector("[data-testid='qr-code']")
+
+        credential = user.reload.totp_credential
+        expect(credential).to be_present
+        expect(credential).not_to be_confirmed
+
+        fill_in("Enter the code from your authenticator app", with: credential.otp_code)
+        click_on("Verify")
+
+        expect(page).to have_text("Save these codes")
+        expect(credential.reload).to be_confirmed
+
+        click_on("Done")
+        expect(page).to have_button("Remove")
+
+        click_on("Remove")
+        expect(page).to have_button("Set up")
+        expect(user.reload.totp_credential).to be_nil
+      end
+
+      context "when authenticator app is enabled" do
+        before do
+          create(:totp_credential, :with_recovery_codes, user:)
+        end
+
+        it "allows regenerating recovery codes" do
+          visit settings_password_path
+
+          click_on("Regenerate recovery codes")
+
+          expect(page).to have_text("Save these codes")
+          expect(page).to have_button("Copy all")
+          expect(page).to have_button("Download")
+
+          click_on("Done")
+          expect(page).not_to have_text("Save these codes")
+        end
+      end
     end
 
     context "when feature flag is not active" do

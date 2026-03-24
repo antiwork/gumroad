@@ -23,7 +23,7 @@ describe "Dashboard", js: true, type: :system do
           },
           next_payout_period_data: {
             should_be_shown_currencies_always: false,
-            minimum_payout_amount_cents: 1_000,
+            minimum_payout_amount_cents: 10_000,
             is_user_payable: false,
             status: :not_payable
           },
@@ -171,6 +171,7 @@ describe "Dashboard", js: true, type: :system do
 
     context "when tax_center feature is enabled" do
       before do
+        create(:user_compliance_info, user: seller)
         Feature.activate_user(:tax_center, seller)
       end
 

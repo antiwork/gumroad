@@ -49,7 +49,7 @@ describe PayoutsHelper do
 
     it "returns the proper sales amount for the current payout period given sales that span 2 payout periods" do
       @user = create(:singaporean_user_with_compliance_info, payment_address: "balance@gumroad.com")
-      link = create(:product, user: @user, price_cents: 20_00)
+      link = create(:product, user: @user, price_cents: 120_00)
 
 
       (0..1).each do |days_count|
@@ -63,9 +63,9 @@ describe PayoutsHelper do
         expect(payout_period_data[:is_user_payable]).to be(true)
         expect(payout_period_data[:displayable_payout_period_range])
           .to eq "Activity up to #{formatted_payout_date(Date.parse("2013-09-06"))}"
-        expect(payout_period_data[:payout_cents]).to eq 1662
-        expect(payout_period_data[:payout_displayed_amount]).to eq("$16.62")
-        expect(payout_period_data[:sales_cents]).to eq 2000
+        expect(payout_period_data[:payout_cents]).to eq 10_372
+        expect(payout_period_data[:payout_displayed_amount]).to eq("$103.72")
+        expect(payout_period_data[:sales_cents]).to eq 12_000
         expect(payout_period_data[:payout_date_formatted]).to eq formatted_payout_date(@user.next_payout_date)
         expect(payout_period_data[:paypal_address]).to eq @user.payment_address
       end
@@ -73,7 +73,7 @@ describe PayoutsHelper do
 
     it "returns the proper data for the current payout period given sales that span 2 payout periods and one old payment" do
       @user = create(:singaporean_user_with_compliance_info, user_risk_state: "compliant", payment_address: "balance@gumroad.com")
-      link = create(:product, user: @user, price_cents: 20_00)
+      link = create(:product, user: @user, price_cents: 120_00)
 
       # 8/16 is a payout friday
       (0..13).each do |days_count|
@@ -93,7 +93,7 @@ describe PayoutsHelper do
         expect(payout_period_data[:is_user_payable]).to be(true)
         expect(payout_period_data[:displayable_payout_period_range])
         expect(payout_period_data[:displayable_payout_period_range]).to eq "Activity from #{formatted_payout_date(Date.parse("2013-08-10"))} to #{formatted_payout_date(Date.parse("2013-08-16"))}"
-        expect(payout_period_data[:payout_cents]).to eq 116_34
+        expect(payout_period_data[:payout_cents]).to eq 72_604
         expect(payout_period_data[:payout_date_formatted]).to eq formatted_payout_date(@user.next_payout_date)
         expect(payout_period_data[:paypal_address]).to eq @user.payment_address
       end
@@ -102,7 +102,7 @@ describe PayoutsHelper do
     it "returns the proper date for the current payout period given sales that span 2 payout periods \
         given that today falls after the latest unpaid payout period" do
       @user = create(:singaporean_user_with_compliance_info, user_risk_state: "compliant", payment_address: "balance@gumroad.com")
-      link = create(:product, user: @user, price_cents: 20_00)
+      link = create(:product, user: @user, price_cents: 120_00)
 
       # 8/16 is a payout friday
 
@@ -122,7 +122,7 @@ describe PayoutsHelper do
         payout_period_data = helper.payout_period_data(@user)
         expect(payout_period_data[:is_user_payable]).to be(true)
         expect(payout_period_data[:displayable_payout_period_range]) .to eq "Activity from #{formatted_payout_date(Date.parse("2013-08-10"))} to #{formatted_payout_date(Date.parse("2013-08-23"))}"
-        expect(payout_period_data[:payout_cents]).to eq 232_68
+        expect(payout_period_data[:payout_cents]).to eq 145_208
         expect(payout_period_data[:payout_date_formatted]).to eq formatted_payout_date(@user.next_payout_date)
         expect(payout_period_data[:paypal_address]).to eq @user.payment_address
       end
@@ -130,7 +130,7 @@ describe PayoutsHelper do
 
     it "returns the proper date for an old payment" do
       @user = create(:singaporean_user_with_compliance_info, payment_address: "balance@gumroad.com")
-      link = create(:product, user: @user, price_cents: 20_00)
+      link = create(:product, user: @user, price_cents: 120_00)
 
       # 8/16 is a payout friday
       (0..20).each do |days_count|
@@ -152,15 +152,15 @@ describe PayoutsHelper do
         payout_period_data = helper.payout_period_data(@user, payment)
         expect(payout_period_data[:displayable_payout_period_range]).to eq "Activity up to #{formatted_payout_date(Date.parse("2013-08-09"))}"
         expect(payout_period_data[:payout_currency]).to eq Currency::USD
-        expect(payout_period_data[:payout_cents]).to eq 8143
-        expect(payout_period_data[:payout_displayed_amount]).to eq "$81.43"
+        expect(payout_period_data[:payout_cents]).to eq 50_822
+        expect(payout_period_data[:payout_displayed_amount]).to eq "$508.22"
         expect(payout_period_data[:payout_date_formatted]).to eq formatted_payout_date(payment.created_at)
         expect(payout_period_data[:paypal_address]).to eq @user.payment_address
       end
     end
 
     describe "displayable_payout_period_range" do
-      let(:seller) { create(:compliant_user, unpaid_balance_cents: 10_01) }
+      let(:seller) { create(:compliant_user, unpaid_balance_cents: 100_01) }
       let!(:merchant_account) { create(:merchant_account_stripe_connect, user: seller) }
       let(:stripe_connect_account_id) { merchant_account.charge_processor_merchant_id }
 
@@ -201,7 +201,7 @@ describe PayoutsHelper do
     it "makes sure that balances are correct for seller and affiliate user when an affiliate credit \
         is paid out in one pay period and then refunded in the next", :vcr do
       @seller = create(:singaporean_user_with_compliance_info, payment_address: "sahil@gumroad.com")
-      link = create(:product, user: @seller, price_cents: 20_000)
+      link = create(:product, user: @seller, price_cents: 100_000)
       @affiliate_user = create(:singaporean_user_with_compliance_info, payment_address: "balance@gumroad.com")
       @direct_affiliate = create(:direct_affiliate, affiliate_user: @affiliate_user, seller: @seller, affiliate_basis_points: 1500, products: [link])
 
@@ -238,19 +238,19 @@ describe PayoutsHelper do
     it "shows minimum payout volume for user without enough balance" do
       user = create(:user)
       expect(self.payout_period_data(user)[:is_user_payable]).to eq(false)
-      expect(self.payout_period_data(user)[:minimum_payout_amount_cents]).to eq(1000)
+      expect(self.payout_period_data(user)[:minimum_payout_amount_cents]).to eq(10000)
     end
 
     it "shows payout data without payout given and no previous payouts" do
       travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
         user = create(:user)
         create(:ach_account, user:)
-        create(:balance, user:, amount_cents: 10_00, date: Date.current)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
         create(:bank, routing_number: "110000000", name: "Bank of America")
         expect(self.payout_period_data(user)[:is_user_payable]).to eq(true)
         expect(self.payout_period_data(user)[:displayable_payout_period_range]).to eq("Activity up to now")
         expect(self.payout_period_data(user)[:payout_date_formatted]).to eq("March 13th, 2015")
-        expect(self.payout_period_data(user)[:payout_cents]).to eq(1000)
+        expect(self.payout_period_data(user)[:payout_cents]).to eq(10000)
         expect(self.payout_period_data(user)[:bank_number]).to eq("110000000")
         expect(self.payout_period_data(user)[:account_number]).to eq("******1234")
         expect(self.payout_period_data(user)[:bank_account_type]).to eq("ACH")
@@ -265,12 +265,12 @@ describe PayoutsHelper do
         payment = create(:payment, user:, amount_cents: 10_00)
         balance = create(:balance, user:, amount_cents: 10_00, date: Date.current - 30.days, state: "paid")
         payment.balances << balance
-        create(:balance, user:, amount_cents: 10_00, date: Date.current)
+        create(:balance, user:, amount_cents: 100_00, date: Date.current)
         create(:bank, routing_number: "110000000", name: "Bank of America")
         expect(self.payout_period_data(user)[:is_user_payable]).to eq(true)
         expect(self.payout_period_data(user)[:displayable_payout_period_range]).to eq("Activity since March 1st, 2015")
         expect(self.payout_period_data(user)[:payout_date_formatted]).to eq("March 13th, 2015")
-        expect(self.payout_period_data(user)[:payout_cents]).to eq(1000)
+        expect(self.payout_period_data(user)[:payout_cents]).to eq(10000)
         expect(self.payout_period_data(user)[:bank_number]).to eq("110000000")
         expect(self.payout_period_data(user)[:account_number]).to eq("******1234")
         expect(self.payout_period_data(user)[:bank_name]).to eq("Bank of America")
