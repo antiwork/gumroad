@@ -33,7 +33,6 @@ describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: tr
   describe "PUT update" do
     google_analytics_id = "G-1234567"
     facebook_pixel_id = "123456789"
-    tiktok_pixel_id = "CFH83AJC77UUUGLE2TJG"
     facebook_meta_tag = '<meta name="facebook-domain-verification" content="dkd8382hfdjs" />'
 
     context "when all of the fields are valid" do
@@ -43,7 +42,6 @@ describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: tr
             disable_third_party_analytics: false,
             google_analytics_id:,
             facebook_pixel_id:,
-            tiktok_pixel_id:,
             skip_free_sale_analytics: true,
             enable_verify_domain_third_party_services: true,
             facebook_meta_tag:,
@@ -56,7 +54,6 @@ describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: tr
         expect(seller.disable_third_party_analytics).to eq(false)
         expect(seller.google_analytics_id).to eq(google_analytics_id)
         expect(seller.facebook_pixel_id).to eq(facebook_pixel_id)
-        expect(seller.tiktok_pixel_id).to eq(tiktok_pixel_id)
         expect(seller.skip_free_sale_analytics).to eq(true)
         expect(seller.enable_verify_domain_third_party_services).to eq(true)
         expect(seller.facebook_meta_tag).to eq(facebook_meta_tag)
@@ -70,7 +67,6 @@ describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: tr
             disable_third_party_analytics: false,
             google_analytics_id: "bad",
             facebook_pixel_id:,
-            tiktok_pixel_id:,
             skip_free_sale_analytics: true,
             enable_verify_domain_third_party_services: true,
             facebook_meta_tag:,
@@ -85,25 +81,9 @@ describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: tr
         expect(seller.disable_third_party_analytics).to eq(false)
         expect(seller.google_analytics_id).to be_nil
         expect(seller.facebook_pixel_id).to be_nil
-        expect(seller.tiktok_pixel_id).to be_nil
         expect(seller.skip_free_sale_analytics).to eq(false)
         expect(seller.enable_verify_domain_third_party_services).to eq(false)
         expect(seller.facebook_meta_tag).to be_nil
-      end
-
-      it "returns an error response for invalid TikTok Pixel ID" do
-        put :update, params: {
-          user: {
-            tiktok_pixel_id: "invalid-pixel!",
-          }
-        }
-
-        expect(response).to redirect_to(settings_third_party_analytics_path)
-        expect(response).to have_http_status :found
-        expect(flash[:alert]).to eq("Please enter a valid TikTok Pixel ID")
-
-        seller.reload
-        expect(seller.tiktok_pixel_id).to be_nil
       end
     end
 
