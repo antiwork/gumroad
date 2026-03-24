@@ -63,7 +63,7 @@ class User::PasswordsController < Devise::PasswordsController
 
         if session[:verify_two_factor_auth_for] == user.id
           redirect_to two_factor_authentication_path(next: root_path), status: :see_other,
-            notice: "Your password has been reset. Please complete two-factor authentication to continue."
+                                                                       notice: "Your password has been reset. Please complete two-factor authentication to continue."
         else
           redirect_to root_path, status: :see_other, notice: "Your password has been reset, and you're now logged in."
         end
