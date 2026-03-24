@@ -114,6 +114,33 @@ describe Bundles::ContentController, inertia: true do
       end
     end
 
+    context "when adding a product with a single alive variant and no variant_id" do
+      let(:product_with_single_alive_variant) { create(:product_with_digital_versions, user: seller) }
+
+      before do
+        product_with_single_alive_variant.alive_variants.last.mark_deleted!
+      end
+
+      it "updates bundle products successfully" do
+        put :update, params: {
+          bundle_id: bundle.external_id,
+          products: [
+            {
+              product_id: product_with_single_alive_variant.external_id,
+              quantity: 1,
+            }
+          ]
+        }
+
+        expect(response).to redirect_to(edit_bundle_content_path(bundle.external_id))
+        expect(flash[:notice]).to eq("Changes saved!")
+
+        updated_bundle_product = bundle.reload.bundle_products.alive.find_by(product_id: product_with_single_alive_variant.id)
+        expect(updated_bundle_product).to be_present
+        expect(updated_bundle_product.variant).to be_nil
+      end
+    end
+
     context "when there is a validation error" do
       let(:published_bundle) do
         bundle = create(:product, :bundle, user: seller, price_cents: 2000, draft: false)
