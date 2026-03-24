@@ -27,7 +27,7 @@ module User::PingNotification
       next if oauth_application.nil? || oauth_application.deleted?
 
       can_view_sales = Doorkeeper::AccessToken.active_for(self).where(application_id: oauth_application.id).find do |token|
-        token.includes_scope?(:view_sales)
+        token.includes_scope?(:view_sales) || token.includes_scope?(:account)
       end
       post_urls << [resource_subscription.post_url, resource_subscription.content_type] if oauth_application && resource_subscription.post_url.present? && can_view_sales
     end

@@ -91,10 +91,10 @@ describe InstantPayoutsService, :vcr do
         end
       end
 
-      context "when seller has a balance less than $10" do
+      context "when seller has a balance less than $100" do
         before do
-          create(:balance, amount_cents: 500, holding_amount_cents: 500, user: seller, date: Date.yesterday, merchant_account: @merchant_account)
-          Stripe::Transfer.create(destination: @stripe_account.id, currency: "usd", amount: 5_00)
+          create(:balance, amount_cents: 50_00, holding_amount_cents: 50_00, user: seller, date: Date.yesterday, merchant_account: @merchant_account)
+          allow(StripePayoutProcessor).to receive(:instantly_payable_amount_cents_on_stripe).and_return(50_00)
         end
 
         it "returns error message" do
@@ -102,7 +102,7 @@ describe InstantPayoutsService, :vcr do
             result = described_class.new(seller).perform
             expect(result).to eq(
               success: false,
-              error: "You need at least $10 in your balance to request an instant payout."
+              error: "You need at least $100 in your balance to request an instant payout."
             )
           end.not_to change { Payment.count }
         end

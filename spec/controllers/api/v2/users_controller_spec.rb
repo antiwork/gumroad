@@ -64,6 +64,15 @@ describe Api::V2::UsersController do
       expect(response.parsed_body["user"]["url"]).to be_present
       expect(response.parsed_body["user"]["email"]).to be_present
       expect(response.parsed_body["user"]["profile_url"]).to be_present
+      expect(response.parsed_body["user"]["profile_picture_url"]).to be_present
+      expect(response.parsed_body["user"]["display_name"]).to be_present
+    end
+
+    it "grants full access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+      get @action, params: { access_token: token.token }
+      expect(response).to be_successful
+      expect(response.parsed_body["user"]["email"]).to eq(@user.form_email)
       expect(response.parsed_body["user"]["display_name"]).to be_present
     end
   end

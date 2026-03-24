@@ -269,6 +269,7 @@ describe SettingsPresenter do
         disable_third_party_analytics: false,
         google_analytics_id: "",
         facebook_pixel_id: "",
+        tiktok_pixel_id: "",
         skip_free_sale_analytics: false,
         facebook_meta_tag: "",
         enable_verify_domain_third_party_services: false,
@@ -288,6 +289,7 @@ describe SettingsPresenter do
           disable_third_party_analytics: true,
           google_analytics_id: "G-123456789-1",
           facebook_pixel_id: "1234567899",
+          tiktok_pixel_id: "CFH83AJC77UUUGLE2TJG",
           skip_free_sale_analytics: true,
           facebook_meta_tag: '<meta name="facebook-domain-verification" content="y5fgkbh7x91y5tnt6yt3sttk" />',
           enable_verify_domain_third_party_services: true,
@@ -325,13 +327,13 @@ describe SettingsPresenter do
       end
 
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:)
+        expect(presenter.password_props).to eq(require_old_password: false, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false)
       end
     end
 
     context "when seller is registered using email" do
       it "returns the correct props" do
-        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:)
+        expect(presenter.password_props).to eq(require_old_password: true, settings_pages:, show_authenticator_app_settings: false, authenticator_app_enabled: false)
       end
     end
   end
@@ -569,8 +571,8 @@ describe SettingsPresenter do
         payouts_paused_by: nil,
         payouts_paused_for_reason: nil,
         payouts_paused_by_user: false,
-        payout_threshold_cents: 1000,
-        minimum_payout_threshold_cents: 1000,
+        payout_threshold_cents: Payouts::MIN_AMOUNT_CENTS,
+        minimum_payout_threshold_cents: Payouts::MIN_AMOUNT_CENTS,
         payout_country_name: nil,
         payout_frequency: User::PayoutSchedule::WEEKLY,
         payout_frequency_daily_supported: false,

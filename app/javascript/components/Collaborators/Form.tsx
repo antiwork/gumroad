@@ -300,7 +300,7 @@ const CollaboratorForm = ({
                       <TableCell>
                         <Label htmlFor={`enable-product-${product.id}`}>{product.name}</Label>
                         {product.has_another_collaborator || product.has_affiliates ? (
-                          <small className="text-muted">
+                          <small className="block text-muted">
                             {product.has_another_collaborator
                               ? "Already has a collaborator"
                               : "Selecting this product will remove all its affiliates."}

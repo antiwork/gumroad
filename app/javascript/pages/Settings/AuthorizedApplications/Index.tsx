@@ -26,6 +26,7 @@ type AuthorizedApplication = {
 };
 
 type Scope =
+  | "account"
   | "edit_products"
   | "ifttt"
   | "mark_sales_as_shipped"
@@ -41,6 +42,7 @@ type Scope =
   | "creator_api";
 
 const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
+  account: "Full access to your account.",
   edit_products: "Create new products and edit your existing products.",
   ifttt: "See your sales data.",
   mark_sales_as_shipped: "Mark your sales as shipped.",
@@ -119,7 +121,7 @@ export default function AuthorizedApplicationsPage() {
                           {application.is_own_app ? <span> (Your application)</span> : null}
                         </h3>
                         <p>
-                          <small>
+                          <small className="block">
                             First authorized on:{" "}
                             {parseISO(application.first_authorized_at).toLocaleDateString(userAgentInfo.locale, {
                               month: "long",

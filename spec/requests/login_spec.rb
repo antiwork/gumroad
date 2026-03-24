@@ -64,18 +64,6 @@ describe "Login Feature Scenario", js: true, type: :system do
       OmniAuth.config.test_mode = true
     end
 
-    it "supports logging in with Facebook" do
-      OmniAuth.config.mock_auth[:facebook] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/facebook_omniauth.json")))
-      user.update!(facebook_uid: OmniAuth.config.mock_auth[:facebook][:uid])
-
-      visit signup_path
-
-      expect do
-        click_button "Facebook"
-        expect(page).to have_content("We're here to help you get paid for your work.")
-      end.not_to change(User, :count)
-    end
-
     it "supports logging in with Google" do
       OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/google_omniauth.json")))
       user.update!(google_uid: OmniAuth.config.mock_auth[:google_oauth2][:uid])
@@ -84,18 +72,6 @@ describe "Login Feature Scenario", js: true, type: :system do
 
       expect do
         click_button "Google"
-        expect(page).to have_content("We're here to help you get paid for your work.")
-      end.not_to change(User, :count)
-    end
-
-    it "supports logging in with X" do
-      OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json")))
-      user.update!(twitter_user_id: OmniAuth.config.mock_auth[:twitter][:extra][:raw_info][:id])
-
-      visit signup_path
-
-      expect do
-        click_button "X"
         expect(page).to have_content("We're here to help you get paid for your work.")
       end.not_to change(User, :count)
     end
@@ -143,6 +119,33 @@ describe "Login Feature Scenario", js: true, type: :system do
       click_on "Send"
 
       expect(page).to have_alert(text: "An account does not exist with that email.")
+    end
+
+    it "allows a user who originally signed up via Facebook to reset password and log in" do
+      facebook_user = create(:user, email: "fbuser@example.com", facebook_uid: "123456789")
+      facebook_user.update!(password: Devise.friendly_token[0, 20])
+
+      visit login_path
+
+      click_on "Forgot your password?"
+      fill_in "Email to send reset instructions to", with: "fbuser@example.com"
+      click_on "Send"
+
+      expect(page).to have_alert(text: "Password reset sent! Please make sure to check your spam folder.")
+
+      token = facebook_user.reload.send(:set_reset_password_token)
+      visit edit_user_password_path(reset_password_token: token)
+
+      fill_in "Enter a new password", with: "newSecurePassword123!"
+      fill_in "Enter same password to confirm", with: "newSecurePassword123!"
+      click_on "Reset password"
+
+      visit login_path
+      fill_in "Email", with: "fbuser@example.com"
+      fill_in "Password", with: "newSecurePassword123!"
+      click_on "Login"
+
+      expect(page).to have_content("Dashboard")
     end
   end
 end

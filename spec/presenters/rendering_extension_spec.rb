@@ -115,7 +115,6 @@ describe "RenderingExtension" do
                     show: true,
                   },
                   settings_profile: {
-                    manage_social_connections: false,
                     update: true,
                     update_username: false
                   },

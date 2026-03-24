@@ -6,7 +6,7 @@ mobile_oauth_app = OauthApplication.where(uid: "MOBILE_DEVELOPMENT_CLIENT_kx3sRp
 mobile_oauth_app = OauthApplication.new if mobile_oauth_app.nil?
 
 mobile_oauth_app.owner = User.find_by(email: "seller@gumroad.com")
-mobile_oauth_app.scopes = "mobile_api creator_api"
+mobile_oauth_app.scopes = "mobile_api creator_api account"
 mobile_oauth_app.redirect_uri = "gumroadmobile://"
 mobile_oauth_app.name = "development expo oauth app"
 mobile_oauth_app.uid = "MOBILE_DEVELOPMENT_CLIENT_kx3sRpN217qPwqk9s"

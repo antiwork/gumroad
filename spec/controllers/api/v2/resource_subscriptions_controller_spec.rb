@@ -49,6 +49,12 @@ describe Api::V2::ResourceSubscriptionsController do
       expect(response.parsed_body["success"]).to eq(false)
       expect(response.parsed_body["message"]).to eq("Valid resource_name parameter required")
     end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+      get :index, params: { access_token: token.token, resource_name: "sale" }
+      expect(response).to be_successful
+    end
   end
 
   describe "PUT 'create'" do

@@ -1,15 +1,12 @@
-import { FontFamily, TwitterX } from "@boxicons/react";
-import { Head, router, useForm, usePage } from "@inertiajs/react";
+import { FontFamily } from "@boxicons/react";
+import { Head, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import { unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile, ProfileSettings } from "$app/parsers/profile";
 import { SettingPage } from "$app/parsers/settings";
 import { classNames } from "$app/utils/classNames";
 import { getContrastColor, hexToRgb } from "$app/utils/color";
-import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
@@ -18,9 +15,7 @@ import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { Profile, Props as ProfileProps } from "$app/components/Profile";
 import { LogoInput } from "$app/components/Profile/Settings/LogoInput";
-import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
-import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { ColorPicker } from "$app/components/ui/ColorPicker";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -76,16 +71,6 @@ export default function SettingsPage() {
       preserveScroll: true,
     });
   };
-
-  const handleUnlinkTwitter = asyncVoid(async () => {
-    try {
-      await unlinkTwitter();
-      router.reload();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  });
 
   const subdomain = `${profileSettings.username}.${rootDomain}`;
 
@@ -162,28 +147,6 @@ export default function SettingsPage() {
               }}
               disabled={!canUpdate}
             />
-            {loggedInUser?.policies.settings_profile.manage_social_connections ? (
-              <Fieldset>
-                <FieldsetTitle>Social links</FieldsetTitle>
-                {creatorProfile.twitter_handle ? (
-                  <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
-                    <TwitterX pack="brands" className="size-5" />
-                    Disconnect {creatorProfile.twitter_handle} from X
-                  </Button>
-                ) : (
-                  <SocialAuthButton
-                    provider="twitter"
-                    href={Routes.user_twitter_omniauth_authorize_path({
-                      state: "link_twitter_account",
-                      x_auth_access_type: "read",
-                    })}
-                  >
-                    <TwitterX pack="brands" className="size-5" />
-                    Connect to X
-                  </SocialAuthButton>
-                )}
-              </Fieldset>
-            ) : null}
           </section>
           <section className="grid gap-8 border-t border-border p-4 md:p-8">
             <header className="grid content-start gap-3">

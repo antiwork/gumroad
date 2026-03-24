@@ -22,9 +22,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
     visit edit_link_path(@product.unique_permalink) + "/content"
     fixture_file = file_fixture("Alice's Adventures in Wonderland.pdf")
     with_throttled_network(fixture_file) do
-      select_disclosure "Upload files" do
-        attach_product_file(fixture_file)
-      end
+      select_disclosure "Upload files"
+      attach_product_file(fixture_file)
 
       button = find_button("Save changes", disabled: true)
       button.hover
@@ -59,9 +58,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "allows to mark video files as stream-only" do
     visit edit_link_path(@product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("sample.mov"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("sample.mov"))
     wait_for_file_embed_to_finish_uploading(name: "sample")
     within find_embed(name: "sample") do
       click_on "Edit"
@@ -94,9 +92,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
   it "displays file size after save properly" do
     @product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
     visit edit_link_path(@product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     expect(page).to have_embed(name: "Alice's Adventures in Wonderland")
     save_change
@@ -278,9 +275,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
   it "allows setting ISBN on newly uploaded PDF files" do
     product = create(:product, user: seller)
     visit edit_link_path(product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     within find_embed(name: "Alice's Adventures in Wonderland") do
       click_on "Edit"
@@ -293,9 +289,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "allows to rename files multiple times", :sidekiq_inline do
     visit edit_link_path(@product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     save_change
 
@@ -359,9 +354,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
       expect(page).to have_text("Episode 1 description")
     end
 
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("sample.mov"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("sample.mov"))
     wait_for_file_embed_to_finish_uploading(name: "sample")
     sleep 0.5 # wait for the editor to update the content
 
@@ -395,12 +389,11 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
     select_tab "Content"
 
-    select_disclosure "Upload files" do
-      attach_product_file([
-                            file_fixture("test.mp3"),
-                            file_fixture("Alice's Adventures in Wonderland.pdf")
-                          ])
-    end
+    select_disclosure "Upload files"
+    attach_product_file([
+                          file_fixture("test.mp3"),
+                          file_fixture("Alice's Adventures in Wonderland.pdf")
+                        ])
     sleep 0.5 # wait for the editor to update the content
     send_keys :enter
     within_file_group "Untitled" do
@@ -471,9 +464,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
       select_tab "Content"
 
-      select_disclosure "Upload files" do
-        attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-      end
+      select_disclosure "Upload files"
+      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
       wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
       sleep 0.5 # wait for the editor to update the content
 
@@ -506,9 +498,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
       select_tab "Content"
 
-      select_disclosure "Upload files" do
-        attach_product_file(file_fixture("sample.mov"))
-      end
+      select_disclosure "Upload files"
+      attach_product_file(file_fixture("sample.mov"))
       wait_for_file_embed_to_finish_uploading(name: "sample")
       sleep 0.5 # wait for the editor to update the content
 
@@ -591,9 +582,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
     select_tab "Content"
 
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     save_change
 
@@ -601,9 +591,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
     select_combo_box_option("Untitled 2", from: "Select a version")
     expect(page).to_not have_embed(name: "Alice's Adventures in Wonderland")
 
-    select_disclosure "Upload files" do
-      click_on "Existing product files"
-    end
+    select_disclosure "Upload files"
+    click_on "Existing product files"
 
     within_modal "Select existing product files" do
       expect(page).to have_text("Alice's Adventures in Wonderland")

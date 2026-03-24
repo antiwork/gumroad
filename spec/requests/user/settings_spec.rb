@@ -155,36 +155,5 @@ describe "User profile settings page", type: :system, js: true do
       expect(@user.seller_profile.background_color).to eq("#facade")
       expect(@user.seller_profile.font).to eq("Roboto Mono")
     end
-
-    it "saves connected or disconnected Twitter account" do
-      visit settings_profile_path
-      expect(page).to have_button("Connect to X")
-      OmniAuth.config.test_mode = true
-      OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new JSON.parse(File.open("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json").read)
-      OmniAuth.config.before_callback_phase do |env|
-        env["omniauth.params"] = { "state" => "link_twitter_account" }
-      end
-      click_on "Connect to X"
-      expect(@user.reload.twitter_handle).not_to be_nil
-      click_on "Disconnect #{@user.twitter_handle} from X"
-      wait_for_ajax
-      expect(@user.reload.twitter_handle).to be_nil
-      expect(page).to have_button("Connect to X")
-      # Reset the before_callback_phase to avoid making other X tests flaky.
-      OmniAuth.config.before_callback_phase = nil
-    end
-
-    context "when logged user has role admin" do
-      include_context "with switching account to user as admin for seller" do
-        let(:seller) { @user }
-      end
-
-      it "does not show social links" do
-        visit settings_profile_path
-
-        expect(page).not_to have_text("Social links")
-        expect(page).not_to have_link("Connect to X", href: user_twitter_omniauth_authorize_path(state: "link_twitter_account", x_auth_access_type: "read"))
-      end
-    end
   end
 end

@@ -124,7 +124,9 @@ export const Search = ({ query, setQuery }: { query?: string | undefined; setQue
               />
               <div>
                 {highlightQuery(item.name)}
-                <small className="text-muted">{item.seller_name ? `Product by ${item.seller_name}` : "Product"}</small>
+                <small className="block text-muted">
+                  {item.seller_name ? `Product by ${item.seller_name}` : "Product"}
+                </small>
               </div>
             </a>
           )}

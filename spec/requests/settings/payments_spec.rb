@@ -4144,6 +4144,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
     describe "Ghanaian creator" do
       before do
+        allow(StripeMerchantAccountManager).to receive(:create_account)
+
         old_user_compliance_info = @user.alive_user_compliance_info
         new_user_compliance_info = old_user_compliance_info.dup
         new_user_compliance_info.country = "Ghana"
@@ -6450,21 +6452,21 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       it "allows updating the payout threshold" do
         visit settings_payments_path
 
-        field = find_field("Minimum payout threshold", with: "10")
-        field.fill_in(with: "5")
+        field = find_field("Minimum payout threshold", with: "100")
+        field.fill_in(with: "50")
 
         expect(field["aria-invalid"]).to eq("true")
-        expect(page).to have_text("The minimum payout threshold for United States is $10.")
+        expect(page).to have_text("The minimum payout threshold for United States is $100.")
         expect(page).to have_button("Update settings", disabled: true)
 
-        field.fill_in(with: "15")
+        field.fill_in(with: "150")
         expect(field["aria-invalid"]).to eq("false")
-        expect(page).to have_text("The minimum payout threshold for United States is $10.")
+        expect(page).to have_text("The minimum payout threshold for United States is $100.")
 
         click_on "Update settings"
 
         expect(page).to have_alert(text: "Thanks! You're all set.")
-        expect(user.reload.minimum_payout_amount_cents).to eq(1500)
+        expect(user.reload.minimum_payout_amount_cents).to eq(15_000)
       end
 
       context "when the user is in a cross-border payout country" do
@@ -6478,37 +6480,37 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         it "shows the minimum payout threshold for the country" do
           visit settings_payments_path
 
-          field = find_field("Minimum payout threshold", with: "34.74")
-          field.fill_in(with: "30")
+          field = find_field("Minimum payout threshold", with: "100")
+          field.fill_in(with: "50")
 
           expect(field["aria-invalid"]).to eq("true")
-          expect(page).to have_text("The minimum payout threshold for South Korea is $34.74.")
+          expect(page).to have_text("The minimum payout threshold for South Korea is $100.")
           expect(page).to have_button("Update settings", disabled: true)
 
-          field.fill_in(with: "40")
+          field.fill_in(with: "150")
           expect(field["aria-invalid"]).to eq("false")
-          expect(page).to have_text("The minimum payout threshold for South Korea is $34.74.")
+          expect(page).to have_text("The minimum payout threshold for South Korea is $100.")
 
           click_on "Update settings"
 
           expect(page).to have_alert(text: "Thanks! You're all set.")
-          expect(user.reload.minimum_payout_amount_cents).to eq(4000)
+          expect(user.reload.minimum_payout_amount_cents).to eq(15_000)
         end
 
         it "loads the raw stored payout threshold in the form field, not the effective minimum" do
-          user.update!(payout_threshold_cents: 1000)
+          user.update!(payout_threshold_cents: 5000)
 
           visit settings_payments_path
 
           field = find_field("Minimum payout threshold")
-          expect(field.value).to eq("10")
+          expect(field.value).to eq("50")
 
-          fill_in "Minimum payout threshold", with: "35", fill_options: { clear: :backspace }
+          fill_in "Minimum payout threshold", with: "105", fill_options: { clear: :backspace }
 
           click_on "Update settings"
 
           expect(page).to have_alert(text: "Thanks! You're all set.")
-          expect(user.reload.payout_threshold_cents).to eq(3500)
+          expect(user.reload.payout_threshold_cents).to eq(10_500)
         end
       end
     end

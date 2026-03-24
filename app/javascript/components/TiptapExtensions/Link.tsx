@@ -17,44 +17,30 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 
-export const WithDialog = ({
+export const LinkDialog = ({
   editor,
   type,
-  children,
+  onClose,
 }: {
   editor: Editor;
   type: "link" | "button";
-  children: React.ReactNode;
+  onClose: () => void;
 }) => {
-  const [addingLink, setAddingLink] = React.useState<{ label: string; url: string } | null>(null);
+  const [addingLink, setAddingLink] = React.useState<{ label: string; url: string }>(() => {
+    const { from, to, empty } = editor.view.state.selection;
+    const label = empty ? "" : editor.state.doc.textBetween(from, to, "");
+    return { label, url: "" };
+  });
   const labelInputRef = React.useRef<HTMLInputElement | null>(null);
   const linkInputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
-    if (addingLink !== null) {
-      setTimeout(() => labelInputRef.current?.focus(), 0);
-    }
-  }, [addingLink?.label]);
-
-  React.useEffect(() => {
-    if (type === "link" && (addingLink?.label !== "" || editor.isActive("image"))) {
-      setTimeout(() => linkInputRef.current?.focus(), 0);
-    }
-  }, [addingLink?.url]);
-
-  const onLinkMenuItemClick = () => {
-    const { from, to, empty } = editor.view.state.selection;
-    const label = empty ? "" : editor.state.doc.textBetween(from, to, "");
-    if (editor.getAttributes("image").link) {
-      editor.chain().updateAttributes("image", { link: null }).run();
-    } else {
-      setAddingLink({ label, url: "" });
-    }
-  };
+    const shouldFocusUrl = type === "link" && (addingLink.label !== "" || editor.isActive("image"));
+    const target = shouldFocusUrl ? linkInputRef : labelInputRef;
+    setTimeout(() => target.current?.focus(), 0);
+  }, []);
 
   const onAddLink = () => {
-    if (!addingLink) return;
-
     const href = validateUrl(addingLink.url);
     if (!href) {
       showAlert("Please enter a valid URL.", "error");
@@ -87,42 +73,37 @@ export const WithDialog = ({
       });
     }
     chain.run();
-    setAddingLink(null);
+    onClose();
   };
 
   return (
-    <>
-      {addingLink !== null ? (
-        <Modal open onClose={() => setAddingLink(null)} title={`Insert ${type === "link" ? "link" : "button"}`}>
-          {!editor.isActive("image") ? (
-            <Input
-              ref={labelInputRef}
-              type="text"
-              placeholder="Enter text"
-              value={addingLink.label}
-              onChange={(el) => setAddingLink({ label: el.target.value, url: addingLink.url || "" })}
-              onKeyDown={(el) => {
-                if (el.key === "Enter") onAddLink();
-              }}
-            />
-          ) : null}
-          <Input
-            ref={linkInputRef}
-            type="text"
-            placeholder="Enter URL"
-            value={addingLink.url}
-            onChange={(el) => setAddingLink({ label: addingLink.label || "", url: el.target.value })}
-            onKeyDown={(el) => {
-              if (el.key === "Enter") onAddLink();
-            }}
-          />
-          <Button color="primary" onClick={onAddLink}>
-            {type === "link" ? "Add link" : "Add button"}
-          </Button>
-        </Modal>
+    <Modal open onClose={onClose} title={`Insert ${type === "link" ? "link" : "button"}`}>
+      {!editor.isActive("image") ? (
+        <Input
+          ref={labelInputRef}
+          type="text"
+          placeholder="Enter text"
+          value={addingLink.label}
+          onChange={(el) => setAddingLink({ ...addingLink, label: el.target.value })}
+          onKeyDown={(el) => {
+            if (el.key === "Enter") onAddLink();
+          }}
+        />
       ) : null}
-      <div onClick={onLinkMenuItemClick}>{children}</div>
-    </>
+      <Input
+        ref={linkInputRef}
+        type="text"
+        placeholder="Enter URL"
+        value={addingLink.url}
+        onChange={(el) => setAddingLink({ ...addingLink, url: el.target.value })}
+        onKeyDown={(el) => {
+          if (el.key === "Enter") onAddLink();
+        }}
+      />
+      <Button color="primary" onClick={onAddLink}>
+        {type === "link" ? "Add link" : "Add button"}
+      </Button>
+    </Modal>
   );
 };
 
@@ -314,34 +295,42 @@ const TiptapButton = Node.create({
   addNodeView() {
     return ReactNodeViewRenderer(LinkNodeView);
   },
-  menuItem: (editor) => (
-    <WithDialog editor={editor} type="button">
-      <MenuItem name="Insert button" icon={<ButtonIcon className="size-5" />} />
-    </WithDialog>
+  menuItem: (_editor, onOpen) => (
+    <MenuItem name="Insert button" icon={<ButtonIcon className="size-5" />} onClick={() => onOpen?.()} />
   ),
   submenu: {
     menu: "insert",
-    item: (editor) => (
-      <WithDialog editor={editor} type="button">
-        <div role="menuitem">
-          <CursorClick className="size-5" />
-          <span>Button</span>
-        </div>
-      </WithDialog>
+    item: (_editor, onOpen) => (
+      <div role="menuitem" onClick={onOpen}>
+        <CursorClick className="size-5" />
+        <span>Button</span>
+      </div>
     ),
   },
 });
 export { TiptapButton as Button };
 
-export const LinkMenuItem = ({ editor }: { editor: Editor }) => (
-  <WithDialog editor={editor} type="link">
-    <MenuItem
-      name="Insert link"
-      icon={<LinkIcon className="size-5" />}
-      active={editor.isActive("link") || !!editor.getAttributes("image").link}
-    />
-  </WithDialog>
-);
+export const LinkMenuItem = ({ editor }: { editor: Editor }) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const handleOpen = () => {
+    if (editor.getAttributes("image").link) {
+      editor.chain().updateAttributes("image", { link: null }).run();
+    } else {
+      setIsOpen(true);
+    }
+  };
+  return (
+    <>
+      <MenuItem
+        name="Insert link"
+        icon={<LinkIcon className="size-5" />}
+        active={editor.isActive("link") || !!editor.getAttributes("image").link}
+        onClick={handleOpen}
+      />
+      {isOpen ? <LinkDialog editor={editor} type="link" onClose={() => setIsOpen(false)} /> : null}
+    </>
+  );
+};
 
 export const Link = Node.create({
   name: "tiptap-link",

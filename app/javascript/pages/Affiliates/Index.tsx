@@ -58,19 +58,10 @@ const AffiliatesNavigation = () => (
 const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; onSearch: (query: string) => void }) => {
   const [searchBoxOpen, setSearchBoxOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState(initialQuery);
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
-  const wasOpenedRef = React.useRef(false);
-
-  React.useEffect(() => {
-    if (searchBoxOpen) {
-      searchInputRef.current?.focus();
-      wasOpenedRef.current = true;
-    }
-  }, [searchBoxOpen]);
 
   React.useEffect(() => {
     setInputValue(initialQuery);
-    if (wasOpenedRef.current && initialQuery.length > 0) {
+    if (searchBoxOpen && initialQuery.length > 0) {
       setSearchBoxOpen(true);
     }
   }, [initialQuery]);
@@ -93,15 +84,7 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       <PopoverContent>
         <InputGroup>
           <Search className="size-5 text-muted" />
-          <Input
-            ref={searchInputRef}
-            value={inputValue}
-            autoFocus
-            type="text"
-            placeholder="Search"
-            aria-label="Search"
-            onChange={handleChange}
-          />
+          <Input value={inputValue} type="text" placeholder="Search" aria-label="Search" onChange={handleChange} />
         </InputGroup>
       </PopoverContent>
     </Popover>
@@ -170,7 +153,7 @@ const AffiliateRequestsTable = ({
               <TableRow key={affiliateRequest.id}>
                 <TableCell>
                   {affiliateRequest.name}
-                  <small className="text-muted">{affiliateRequest.email}</small>
+                  <small className="block text-muted">{affiliateRequest.email}</small>
                 </TableCell>
 
                 <TableCell>{affiliateRequest.promotion}</TableCell>

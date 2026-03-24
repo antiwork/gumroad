@@ -1766,84 +1766,6 @@ describe Purchase, :vcr do
     end
   end
 
-  describe "tier fee" do
-    def create_purchase(is_merchant: false, charge_discover_fee: false, price_cents: 0, discover_fee_per_thousand: nil)
-      creator = create(:user)
-
-      allow_any_instance_of(User).to receive(:recommendations_enabled?).and_return(charge_discover_fee)
-      allow_any_instance_of(Purchase).to receive(:charged_using_gumroad_merchant_account?).and_return(is_merchant)
-      allow_any_instance_of(Purchase).to receive(:flat_fee_applicable?).and_return(false)
-      product = build(:product, user: creator)
-      product.discover_fee_per_thousand = discover_fee_per_thousand if discover_fee_per_thousand
-      product.save
-      purchase = create(:purchase, link: product, was_product_recommended: charge_discover_fee, price_cents: 10_00)
-      purchase
-    end
-
-    context "non-merchant account" do
-      context "discover purchase" do
-        it "uses correct tier fee" do
-          purchase = create_purchase(charge_discover_fee: true, price_cents: 10_00)
-
-          tier_fee = 70
-          discover_fee = 200
-          expect(purchase.fee_cents).to eq(tier_fee + discover_fee)
-        end
-      end
-
-      context "discover ad purchase" do
-        it "uses correct discover fee" do
-          purchase = create_purchase(charge_discover_fee: true, price_cents: 10_00, discover_fee_per_thousand: 300)
-
-          tier_fee = 70
-          discover_fee = 200
-          expect(purchase.fee_cents).to eq(tier_fee + discover_fee)
-        end
-      end
-
-      context "non-discover purchase" do
-        it "uses correct tier fee" do
-          purchase = create_purchase(charge_discover_fee: false, price_cents: 10_00)
-
-          tier_fee = 120
-          expect(purchase.fee_cents).to eq(tier_fee)
-        end
-      end
-    end
-
-    context "merchant account" do
-      context "discover purchase" do
-        it "uses correct tier fee" do
-          purchase = create_purchase(is_merchant: true, charge_discover_fee: true, price_cents: 10_00)
-
-          tier_fee = 90
-          discover_fee = 171
-          expect(purchase.fee_cents).to eq(tier_fee + discover_fee)
-        end
-      end
-
-      context "discover purchase" do
-        it "uses correct discover fee" do
-          purchase = create_purchase(is_merchant: true, charge_discover_fee: true, price_cents: 10_00, discover_fee_per_thousand: 300)
-
-          tier_fee = 90
-          discover_fee = 171
-          expect(purchase.fee_cents).to eq(tier_fee + discover_fee)
-        end
-      end
-
-      context "non-discover purchase" do
-        it "uses correct tier fee" do
-          purchase = create_purchase(is_merchant: true, charge_discover_fee: false, price_cents: 10_00)
-
-          tier_fee = 90
-          fixed_fee = 80
-          expect(purchase.fee_cents).to eq(tier_fee + fixed_fee)
-        end
-      end
-    end
-  end
-
   describe "new flat fee" do
     before do
       @creator = create(:user)
@@ -1855,7 +1777,6 @@ describe Purchase, :vcr do
         purchase = create(:purchase, link: @product, purchase_state: "in_progress", chargeable: create(:chargeable))
         purchase.process!
 
-        expect(purchase.send(:flat_fee_applicable?)).to be true
         expect(purchase.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
         expect(purchase.fee_cents).to eq(209) # 100 (10pc gumroad fee) + 50c + 29 (2.9 pc stripe fee) + 30 (30c fixed stripe fee)
       end
@@ -1868,7 +1789,6 @@ describe Purchase, :vcr do
         purchase = create(:purchase, link: @product, purchase_state: "in_progress", chargeable: create(:chargeable))
         purchase.process!
 
-        expect(purchase.send(:flat_fee_applicable?)).to be true
         expect(purchase.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
         expect(purchase.merchant_account).to eq(merchant_account)
         expect(purchase.fee_cents).to eq(209) # 100 (10pc gumroad fee) + 50c + 29 (2.9 pc stripe fee) + 30 (30c fixed stripe fee)
@@ -1882,7 +1802,6 @@ describe Purchase, :vcr do
         purchase = create(:purchase, link: @product, purchase_state: "in_progress", chargeable: create(:native_paypal_chargeable))
         purchase.process!
 
-        expect(purchase.send(:flat_fee_applicable?)).to be true
         expect(purchase.charge_processor_id).to eq(PaypalChargeProcessor.charge_processor_id)
         expect(purchase.merchant_account).to eq(merchant_account)
         expect(purchase.fee_cents).to eq(150) # 100 (10pc gumroad fee) + 50c
@@ -1894,7 +1813,6 @@ describe Purchase, :vcr do
         purchase = create(:purchase, link: @product, purchase_state: "in_progress", chargeable: create(:paypal_chargeable))
         purchase.process!
 
-        expect(purchase.send(:flat_fee_applicable?)).to be true
         expect(purchase.charge_processor_id).to eq(BraintreeChargeProcessor.charge_processor_id)
         expect(purchase.fee_cents).to eq(209) # 100 (10pc gumroad fee) + 50c + 29 (2.9 pc paypal fee) + 30 (30c fixed paypal fee)
       end
@@ -1907,13 +1825,11 @@ describe Purchase, :vcr do
       stripe_purchase = create(:purchase, link: @product, purchase_state: "in_progress", was_product_recommended: true, chargeable: create(:chargeable))
       stripe_purchase.process!
       expect(stripe_purchase.reload.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
-      expect(stripe_purchase.send(:flat_fee_applicable?)).to be true
       expect(stripe_purchase.fee_cents).to eq(300) # flat 30% discover fee
 
       braintree_purchase = create(:purchase, link: @product, purchase_state: "in_progress", was_product_recommended: true, chargeable: create(:paypal_chargeable))
       braintree_purchase.process!
       expect(braintree_purchase.reload.charge_processor_id).to eq(BraintreeChargeProcessor.charge_processor_id)
-      expect(braintree_purchase.send(:flat_fee_applicable?)).to be true
       expect(braintree_purchase.fee_cents).to eq(300) # flat 30% discover fee
 
       Feature.activate_user(:merchant_migration, @creator)
@@ -1921,7 +1837,6 @@ describe Purchase, :vcr do
       stripe_connect_purchase = create(:purchase, link: @product, purchase_state: "in_progress", was_product_recommended: true, chargeable: create(:chargeable, product_permalink: @product.unique_permalink))
       stripe_connect_purchase.process!
       expect(stripe_connect_purchase.reload.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
-      expect(stripe_connect_purchase.send(:flat_fee_applicable?)).to be true
       expect(stripe_connect_purchase.merchant_account).to eq(stripe_connect_account)
       expect(stripe_connect_purchase.fee_cents).to eq(300) # flat 30% discover fee
       Feature.deactivate_user(:merchant_migration, @creator)
@@ -1930,7 +1845,6 @@ describe Purchase, :vcr do
       paypal_connect_purchase = create(:purchase, link: @product, purchase_state: "in_progress", was_product_recommended: true, chargeable: create(:native_paypal_chargeable))
       paypal_connect_purchase.process!
       expect(paypal_connect_purchase.reload.charge_processor_id).to eq(PaypalChargeProcessor.charge_processor_id)
-      expect(paypal_connect_purchase.send(:flat_fee_applicable?)).to be true
       expect(paypal_connect_purchase.merchant_account).to eq(paypal_connect_account)
       expect(paypal_connect_purchase.fee_cents).to eq(300) # flat 30% discover fee
     end
@@ -4772,58 +4686,6 @@ describe Purchase, :vcr do
     end
   end
 
-
-  describe "#flat_fee_applicable?" do
-    before do
-      @creator = create(:user, created_at: Date.new(2022, 12, 15))
-    end
-
-    it "returns true for regular product purchase" do
-      purchase = create(:purchase, link: create(:product, user: @creator))
-
-      expect(purchase.send(:flat_fee_applicable?)).to be true
-    end
-
-    it "returns false for original subscription purchase if flat fee is not applicable to the subscription" do
-      product = create(:product, user: @creator)
-      subscription = create(:subscription, link: product)
-      subscription.update!(flat_fee_applicable: false)
-
-      original_purchase = create(:purchase, link: product, subscription:, is_original_subscription_purchase: true)
-
-      expect(original_purchase.send(:flat_fee_applicable?)).to be false
-    end
-
-    it "returns true for original subscription purchase if flat fee is applicable to the subscription" do
-      product = create(:product, user: @creator)
-      subscription = create(:subscription, link: product)
-
-      original_purchase = create(:purchase, link: product, subscription:, is_original_subscription_purchase: true)
-
-      expect(original_purchase.send(:flat_fee_applicable?)).to be true
-    end
-
-    it "returns false for recurring charge if flat fee is not applicable to the subscription" do
-      product = create(:product, user: @creator)
-      subscription = create(:subscription, link: product)
-      subscription.update!(flat_fee_applicable: false)
-
-      create(:purchase, link: product, subscription:, is_original_subscription_purchase: true)
-      recurring_charge = create(:purchase, link: product, subscription:, is_original_subscription_purchase: false)
-
-      expect(recurring_charge.send(:flat_fee_applicable?)).to be false
-    end
-
-    it "returns true for recurring charge if flat fee is applicable to the subscription" do
-      product = create(:product, user: @creator)
-      subscription = create(:subscription, link: product)
-
-      create(:purchase, link: product, subscription:, is_original_subscription_purchase: true)
-      recurring_charge = create(:purchase, link: product, subscription:, is_original_subscription_purchase: false)
-
-      expect(recurring_charge.send(:flat_fee_applicable?)).to be true
-    end
-  end
 
   describe "#paypal_refund_expired?" do
     before do

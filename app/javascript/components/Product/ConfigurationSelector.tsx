@@ -261,17 +261,17 @@ export const OptionRadioButton = ({
             })}
             {isPWYW ? "+" : null}
             {recurrence ? ` ${recurrenceLabels[recurrence]}` : null}
-            <div itemProp="price" hidden>
+            <div itemProp="price" className="hidden">
               {formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, discountedPriceCents)}
             </div>
-            <div itemProp="priceCurrency" hidden>
+            <div itemProp="priceCurrency" className="hidden">
               {currencyCode}
             </div>
           </Pill>
         )}
         <div>
           <h4>{name}</h4>
-          {quantityLeft != null ? <small>{`${quantityLeft} left`}</small> : null}
+          {quantityLeft != null ? <small className="block">{`${quantityLeft} left`}</small> : null}
           {description ? (
             <div>
               <Breaklines text={description} />
@@ -738,10 +738,10 @@ export const ConfigurationSelector = React.forwardRef<
                 hidePrice={hidePrices}
               />
             ))}
-          <div itemProp="offerCount" hidden>
+          <div itemProp="offerCount" className="hidden">
             {product.options.length}
           </div>
-          <div itemProp="lowPrice" hidden>
+          <div itemProp="lowPrice" className="hidden">
             {formatPriceCentsWithoutCurrencySymbol(
               product.currency_code,
               Math.min(
@@ -749,7 +749,7 @@ export const ConfigurationSelector = React.forwardRef<
               ),
             )}
           </div>
-          <div itemProp="priceCurrency" hidden>
+          <div itemProp="priceCurrency" className="hidden">
             {product.currency_code}
           </div>
         </Tabs>

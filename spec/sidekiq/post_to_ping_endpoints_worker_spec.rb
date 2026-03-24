@@ -511,6 +511,25 @@ describe PostToPingEndpointsWorker, :vcr do
       expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(another_resource_subscription.post_url, params, another_resource_subscription.content_type, @user.id)
     end
 
+    it "posts to the app's post url if the token has account scope" do
+      @token.revoke
+
+      another_app = create(:oauth_application, owner: create(:user), name: "another app")
+      create("doorkeeper/access_token", application: another_app, resource_owner_id: @user.id, scopes: "account")
+      another_resource_subscription = create(:resource_subscription, oauth_application: another_app, user: @user, post_url: "http://preposterous.com")
+      purchase = create(:purchase, link: @product, price_cents: 500, email: "ibuy@gumroad.com")
+
+      PostToPingEndpointsWorker.new.perform(purchase.id, nil)
+
+      params = @default_params.call(purchase).merge(
+        product_name: @product.name,
+        product_permalink: @product.long_url,
+        permalink: "abc",
+        email: "ibuy@gumroad.com"
+      )
+      expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(another_resource_subscription.post_url, params, another_resource_subscription.content_type, @user.id)
+    end
+
     it "posts to the app's post url even if the token is expired" do
       @token.update!(expires_in: -10.minutes)
       expect(@token.expired?).to be(true)

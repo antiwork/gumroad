@@ -122,6 +122,7 @@ export const ShareSection = ({
               <div
                 {...props}
                 inert={isSelectionInWishlist(wishlist)}
+                className={isSelectionInWishlist(wishlist) ? "opacity-30" : undefined}
                 onClick={(e) => {
                   props.onClick?.(e);
                   void addProduct(Promise.resolve({ newlyCreated: false, wishlist }));
@@ -186,7 +187,7 @@ export const ShareSection = ({
               </Button>
             </PopoverTrigger>
           </PopoverAnchor>
-          <PopoverContent sideOffset={4}>
+          <PopoverContent sideOffset={4} onFocusOutside={(e) => e.preventDefault()}>
             <div className="grid grid-cols-1 gap-4">
               <TwitterShareButton url={product.long_url} text={`Buy ${product.name} on @Gumroad`} />
               <FacebookShareButton url={product.long_url} text={product.name} />

@@ -51,5 +51,7 @@ class RedisKey
     def unreviewed_users_cutoff_date = "admin:unreviewed_users_cutoff_date"
     def paypal_topup_needed = "paypal:topup_needed"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"
+    def mobile_minimum_version = "mobile:minimum_version"
+    def mobile_minimum_update_created_at = "mobile:minimum_update_created_at"
   end
 end

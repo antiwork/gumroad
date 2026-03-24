@@ -171,7 +171,7 @@ describe Api::V2::PayoutsController do
         before do
           # Set up seller with unpaid balance and payout capability
           create(:ach_account, user: @seller)
-          create(:balance, user: @seller, amount_cents: 15_00, date: Date.parse("2025-09-10"), state: "unpaid")
+          create(:balance, user: @seller, amount_cents: 150_00, date: Date.parse("2025-09-10"), state: "unpaid")
           create(:bank, routing_number: "110000000", name: "Bank of America")
         end
 
@@ -190,7 +190,7 @@ describe Api::V2::PayoutsController do
 
           expect(upcoming_payouts.length).to eq(1)
           upcoming_payout = upcoming_payouts.first
-          expect(upcoming_payout["amount"]).to eq("15.00")
+          expect(upcoming_payout["amount"]).to eq("150.00")
           expect(upcoming_payout["currency"]).to eq(Currency::USD)
           expect(upcoming_payout["status"]).to eq(@seller.payouts_status)
           expect(upcoming_payout["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
@@ -311,7 +311,7 @@ describe Api::V2::PayoutsController do
         end
 
         it "reflects current unpaid balance up to payout period end date" do
-          create(:balance, user: @seller, amount_cents: 5_00, date: Date.parse("2025-09-08"), state: "unpaid")
+          create(:balance, user: @seller, amount_cents: 50_00, date: Date.parse("2025-09-08"), state: "unpaid")
 
           get :index, params: @params
 
@@ -320,12 +320,12 @@ describe Api::V2::PayoutsController do
 
           expect(upcoming_payouts.length).to eq(1)
           upcoming_payout = upcoming_payouts.first
-          expect(upcoming_payout["amount"]).to eq("20.00")
+          expect(upcoming_payout["amount"]).to eq("200.00")
         end
 
         it "does not include upcoming payout when user is not payable due to minimum threshold" do
           @seller.balances.delete_all
-          create(:balance, user: @seller, amount_cents: 5_00, date: Date.current, state: "unpaid") # Below $10 minimum
+          create(:balance, user: @seller, amount_cents: 50_00, date: Date.current, state: "unpaid") # Below $100 minimum
 
           get :index, params: @params
 
@@ -362,12 +362,12 @@ describe Api::V2::PayoutsController do
 
           expect(upcoming_payouts.length).to eq(1)
           upcoming_payout = upcoming_payouts.first
-          expect(upcoming_payout["amount"]).to eq("15.00")
+          expect(upcoming_payout["amount"]).to eq("150.00")
           expect(payouts.length).to eq(2)
         end
 
         it "handles multiple upcoming payouts correctly" do
-          create(:balance, user: @seller, amount_cents: 20_00, date: Date.new(2025, 9, 15), state: "unpaid")
+          create(:balance, user: @seller, amount_cents: 200_00, date: Date.new(2025, 9, 15), state: "unpaid")
 
           get :index, params: @params
 
@@ -376,9 +376,9 @@ describe Api::V2::PayoutsController do
 
           expect(upcoming_payouts.length).to eq(2)
 
-          expect(upcoming_payouts.first["amount"]).to eq("20.00")
+          expect(upcoming_payouts.first["amount"]).to eq("200.00")
           expect(upcoming_payouts.first["created_at"]).to eq(Time.zone.parse("2025-09-26").iso8601)
-          expect(upcoming_payouts.second["amount"]).to eq("15.00")
+          expect(upcoming_payouts.second["amount"]).to eq("150.00")
           expect(upcoming_payouts.second["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
         end
       end
@@ -394,6 +394,12 @@ describe Api::V2::PayoutsController do
         get :index, params: @params
         expect(response.code).to eq "403"
       end
+    end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+      get :index, params: { access_token: token.token }
+      expect(response).to be_successful
     end
   end
 
@@ -667,7 +673,7 @@ describe Api::V2::PayoutsController do
     before do
       # Set up seller with unpaid balance and payout capability
       create(:ach_account, user: @seller)
-      create(:balance, user: @seller, amount_cents: 15_00, date: Date.parse("2025-09-10"), state: "unpaid")
+      create(:balance, user: @seller, amount_cents: 150_00, date: Date.parse("2025-09-10"), state: "unpaid")
       create(:bank, routing_number: "110000000", name: "Bank of America")
 
       @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_payouts")
@@ -689,7 +695,7 @@ describe Api::V2::PayoutsController do
 
       expect(upcoming_payouts.length).to eq(1)
       upcoming_payout = upcoming_payouts.first
-      expect(upcoming_payout["amount"]).to eq("15.00")
+      expect(upcoming_payout["amount"]).to eq("150.00")
       expect(upcoming_payout["currency"]).to eq(Currency::USD)
       expect(upcoming_payout["status"]).to eq(@seller.payouts_status)
       expect(upcoming_payout["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
@@ -734,7 +740,7 @@ describe Api::V2::PayoutsController do
     end
 
     it "reflects current unpaid balance up to payout period end date" do
-      create(:balance, user: @seller, amount_cents: 5_00, date: Date.parse("2025-09-08"), state: "unpaid")
+      create(:balance, user: @seller, amount_cents: 50_00, date: Date.parse("2025-09-08"), state: "unpaid")
 
       get :upcoming, params: @params
 
@@ -743,12 +749,12 @@ describe Api::V2::PayoutsController do
 
       expect(upcoming_payouts.length).to eq(1)
       upcoming_payout = upcoming_payouts.first
-      expect(upcoming_payout["amount"]).to eq("20.00")
+      expect(upcoming_payout["amount"]).to eq("200.00")
     end
 
     it "does not include upcoming payout when user is not payable due to minimum threshold" do
       @seller.balances.delete_all
-      create(:balance, user: @seller, amount_cents: 5_00, date: Date.current, state: "unpaid") # Below $10 minimum
+      create(:balance, user: @seller, amount_cents: 50_00, date: Date.current, state: "unpaid") # Below $100 minimum
 
       get :upcoming, params: @params
 
@@ -773,7 +779,7 @@ describe Api::V2::PayoutsController do
     end
 
     it "handles multiple upcoming payouts correctly" do
-      create(:balance, user: @seller, amount_cents: 20_00, date: Date.new(2025, 9, 15), state: "unpaid")
+      create(:balance, user: @seller, amount_cents: 200_00, date: Date.new(2025, 9, 15), state: "unpaid")
 
       get :upcoming, params: @params
 
@@ -782,9 +788,9 @@ describe Api::V2::PayoutsController do
 
       expect(upcoming_payouts.length).to eq(2)
 
-      expect(upcoming_payouts.first["amount"]).to eq("15.00")
+      expect(upcoming_payouts.first["amount"]).to eq("150.00")
       expect(upcoming_payouts.first["created_at"]).to eq(Time.zone.parse("2025-09-19").iso8601)
-      expect(upcoming_payouts.second["amount"]).to eq("20.00")
+      expect(upcoming_payouts.second["amount"]).to eq("200.00")
       expect(upcoming_payouts.second["created_at"]).to eq(Time.zone.parse("2025-09-26").iso8601)
     end
   end

@@ -12,6 +12,7 @@ import { assertResponseError, request } from "$app/utils/request";
 
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+import { Skeleton } from "$app/components/Skeleton";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { StretchedLink } from "$app/components/ui/StretchedLink";
@@ -173,7 +174,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         data-drag-handle
       >
         {isLoading ? (
-          <div className="dummy h-32"></div>
+          <Skeleton className="h-32" />
         ) : product ? (
           <ProductCard className="lg:h-32 lg:flex-row">
             <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0">

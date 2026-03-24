@@ -242,6 +242,7 @@ Rails.application.routes.draw do
       end
 
       namespace :internal do
+        resource :mobile_minimum_version, only: :show
         resources :home_page_numbers, only: :index
         namespace :helper do
           post :webhook, to: "webhook#handle"
@@ -358,7 +359,6 @@ Rails.application.routes.draw do
       get "logout", to: "logins#destroy"
       delete "logout", to: "logins#destroy"
       scope "/users" do
-        get "/check_twitter_link", to: "users/oauth#check_twitter_link"
         get "/unsubscribe/:id", to: "users#email_unsubscribe", as: :user_unsubscribe
         scope module: :users do
           get "subscribe_review_reminders", to: "review_reminders#subscribe", as: :user_subscribe_review_reminders
@@ -430,27 +430,22 @@ Rails.application.routes.draw do
 
     draw(:admin)
 
-    post "/settings/store_facebook_token", to: "users/oauth#async_facebook_store_token", as: :ajax_facebook_access_token
-
-    get "/settings/async_twitter_complete", to: "users/oauth#async_twitter_complete", as: :async_twitter_complete
-
     # user account settings stuff
     resource :settings, only: [] do
       resources :applications, only: [] do
         resources :access_tokens, only: :create, controller: "oauth/access_tokens"
       end
       get :profiles, to: redirect("/settings")
-      resource :connections, only: [] do
-        member do
-          post :unlink_twitter
-        end
-      end
     end
     namespace :settings do
       resource :main, only: %i[show update], path: "", controller: "main" do
         post :resend_confirmation_email
       end
       resource :password, only: %i[show update], controller: "password"
+      resource :totp, only: %i[create destroy], controller: "totp" do
+        post :confirm
+        post :regenerate_recovery_codes
+      end
       resource :profile, only: %i[show update], controller: "profile"
       resource :third_party_analytics, only: %i[show update], controller: "third_party_analytics"
       resource :advanced, only: %i[show update], controller: "advanced"
@@ -557,6 +552,9 @@ Rails.application.routes.draw do
       get :verify
     end
     post "/two-factor/resend_authentication_token", to: "two_factor_authentication#resend_authentication_token", as: :resend_authentication_token
+    post "/two-factor/switch_to_email", to: "two_factor_authentication#switch_to_email", as: :switch_to_email_two_factor
+    post "/two-factor/switch_to_recovery", to: "two_factor_authentication#switch_to_recovery", as: :switch_to_recovery_two_factor
+    post "/two-factor/switch_to_authenticator", to: "two_factor_authentication#switch_to_authenticator", as: :switch_to_authenticator_two_factor
 
     # library
     get "/library", to: "library#index", as: :library

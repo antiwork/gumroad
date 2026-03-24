@@ -186,7 +186,12 @@ class Payment < ApplicationRecord
   def sync_with_payout_processor
     return unless NON_TERMINAL_STATES.include?(state)
 
-    sync_with_paypal if processor == PayoutProcessorType::PAYPAL
+    case processor
+    when PayoutProcessorType::PAYPAL
+      sync_with_paypal
+    when PayoutProcessorType::STRIPE
+      sync_with_stripe
+    end
   end
 
   def as_json(options = {})
@@ -263,40 +268,86 @@ class Payment < ApplicationRecord
     def sync_with_paypal
       return unless processor == PayoutProcessorType::PAYPAL
 
-      # For split mode payouts we only sync if we have the txn_ids of individual split parts,
-      # and do not look up or search by PayPal email address.
-      # As these are large payouts (usually over $5k or $10k), they include multiple parts with same amount,
-      # like 3 split parts of $3k each or similar.
-      if was_created_in_split_mode?
-        split_payments_info.each_with_index do |split_payment_info, index|
-          new_payment_state =
-            PaypalPayoutProcessor.get_latest_payment_state_from_paypal(split_payment_info["amount_cents"],
-                                                                       split_payment_info["txn_id"],
-                                                                       created_at.beginning_of_day - 1.day,
-                                                                       split_payment_info["state"])
-          split_payments_info[index]["state"] = new_payment_state
-        end
-        save!
+      with_lock do
+        # For split mode payouts we only sync if we have the txn_ids of individual split parts,
+        # and do not look up or search by PayPal email address.
+        # As these are large payouts (usually over $5k or $10k), they include multiple parts with same amount,
+        # like 3 split parts of $3k each or similar.
+        if was_created_in_split_mode?
+          split_payments_info.each_with_index do |split_payment_info, index|
+            new_payment_state =
+              PaypalPayoutProcessor.get_latest_payment_state_from_paypal(split_payment_info["amount_cents"],
+                                                                         split_payment_info["txn_id"],
+                                                                         created_at.beginning_of_day - 1.day,
+                                                                         split_payment_info["state"])
+            split_payments_info[index]["state"] = new_payment_state
+          end
+          save!
 
-        if split_payments_info.map { _1["state"] }.uniq.count > 1
-          errors.add :base, "Not all split payout parts are in the same state for payout #{id}. This needs to be handled manually."
+          if split_payments_info.map { _1["state"] }.uniq.count > 1
+            errors.add :base, "Not all split payout parts are in the same state for payout #{id}. This needs to be handled manually."
+          else
+            PaypalPayoutProcessor.update_split_payment_state(self)
+          end
         else
-          PaypalPayoutProcessor.update_split_payment_state(self)
-        end
-      else
-        paypal_response = PaypalPayoutProcessor.search_payment_on_paypal(amount_cents:, transaction_id: txn_id, payment_address:,
-                                                                         start_date: created_at.beginning_of_day - 1.day,
-                                                                         end_date: created_at.end_of_day + 1.day)
-        if paypal_response.nil?
-          transition_to_new_state("failed")
-        else
-          transition_to_new_state(paypal_response[:state], transaction_id: paypal_response[:transaction_id],
-                                                           correlation_id: paypal_response[:correlation_id],
-                                                           paypal_fee: paypal_response[:paypal_fee])
+          paypal_response = PaypalPayoutProcessor.search_payment_on_paypal(amount_cents:, transaction_id: txn_id, payment_address:,
+                                                                           start_date: created_at.beginning_of_day - 1.day,
+                                                                           end_date: created_at.end_of_day + 1.day)
+          if paypal_response.nil?
+            transition_to_new_state("failed")
+          else
+            transition_to_new_state(paypal_response[:state], transaction_id: paypal_response[:transaction_id],
+                                                             correlation_id: paypal_response[:correlation_id],
+                                                             paypal_fee: paypal_response[:paypal_fee])
+          end
         end
       end
     rescue => e
       Rails.logger.error("Error syncing PayPal payout #{id}: #{e.message}")
+      errors.add :base, e.message
+    end
+
+    def sync_with_stripe
+      return if processor != PayoutProcessorType::STRIPE
+      return if [CREATING, PROCESSING].exclude?(state)
+
+      needs_reverse_transfer = false
+      send_failure_email = false
+
+      if stripe_transfer_id.present? && stripe_connect_account_id.present?
+        stripe_payout = Stripe::Payout.retrieve(stripe_transfer_id, { stripe_account: stripe_connect_account_id })
+        with_lock do
+          case stripe_payout["status"]
+          when "paid"
+            self.processor_fee_cents ||= 0
+            self.arrival_date = stripe_payout["arrival_date"]
+            mark_processing! if state == CREATING
+            mark_completed!
+          when "canceled"
+            mark_processing! if state == CREATING
+            mark_cancelled!
+            needs_reverse_transfer = true
+          when "failed"
+            mark_failed!
+            if stripe_payout["failure_code"].present?
+              self.failure_reason = stripe_payout["failure_code"]
+              save!
+            end
+            needs_reverse_transfer = true
+            send_failure_email = true
+          end
+        end
+      else
+        with_lock do
+          mark_failed!
+        end
+        needs_reverse_transfer = true
+      end
+
+      send_payout_failure_email if send_failure_email
+      StripePayoutProcessor.reverse_internal_transfer!(self) if needs_reverse_transfer
+    rescue => e
+      Rails.logger.error("Error syncing Stripe payout #{id}: #{e.message}")
       errors.add :base, e.message
     end
 

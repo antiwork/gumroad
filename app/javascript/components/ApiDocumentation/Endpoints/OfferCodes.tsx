@@ -4,6 +4,22 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { OFFER_CODE_FIELDS } from "../responseFieldDefinitions";
+
+const OfferCodeResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      {
+        name: "offer_code",
+        type: "object",
+        description: "The offer code object",
+        children: OFFER_CODE_FIELDS,
+      },
+    ])}
+  </ApiResponseFields>
+);
 
 export const GetOfferCodes = () => (
   <ApiEndpoint
@@ -11,6 +27,17 @@ export const GetOfferCodes = () => (
     path="/products/:product_id/offer_codes"
     description="Retrieve all of the existing offer codes for a product. Either amount_cents or percent_off will be returned depending if the offer code is a fixed amount off or a percentage off. A universal offer code is one that applies to all products."
   >
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        {
+          name: "offer_codes",
+          type: "array",
+          description: "Array of offer code objects",
+          children: OFFER_CODE_FIELDS,
+        },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/offer_codes \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -45,6 +72,7 @@ export const GetOfferCode = () => (
     path="/products/:product_id/offer_codes/:id"
     description="Retrieve the details of a specific offer code of a product"
   >
+    <OfferCodeResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/offer_codes/bfi_30HLgGWL8H2wo_Gzlg== \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -80,6 +108,7 @@ export const CreateOfferCode = () => (
       <ApiParameter name="max_purchase_count" description="(optional)" />
       <ApiParameter name="universal" description="(optional, true or false) Default: false" />
     </ApiParameters>
+    <OfferCodeResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/offer_codes \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -113,6 +142,7 @@ export const UpdateOfferCode = () => (
       <ApiParameter name="offer_code" />
       <ApiParameter name="max_purchase_count" />
     </ApiParameters>
+    <OfferCodeResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/offer_codes/bfi_30HLgGWL8H2wo_Gzlg== \\
   -d "access_token=ACCESS_TOKEN" \\
