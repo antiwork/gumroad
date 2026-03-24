@@ -45,10 +45,9 @@ class BundleProduct < ApplicationRecord
     end
 
     def versioned_product_has_variant
-      return unless product.has_multiple_variants?
-      return if variant.present?
-
-      errors.add(:base, "Bundle product must have variant specified for versioned product")
+      if product.has_multiple_variants? && variant.blank?
+        errors.add(:base, "Bundle product must have variant specified for versioned product")
+      end
     end
 
     def variant_belongs_to_product
