@@ -30,6 +30,7 @@ module WithProductFiles
     existing_files = alive_product_files
     existing_files_by_external_id = existing_files.index_by(&:external_id)
     should_check_pdf_stampability = false
+    rich_content_id_mappings = {}
 
     files_params.each do |file_params|
       next unless file_params[:url].present?
@@ -58,10 +59,7 @@ module WithProductFiles
 
         should_check_pdf_stampability = true if product_file.saved_change_to_pdf_stamp_enabled? && product_file.pdf_stamp_enabled?
 
-        # Update file embed IDs in rich content params before persisting changes
-        if external_id != product_file.external_id
-          rich_content_params.each { update_rich_content_file_id(_1, external_id, product_file.external_id) }
-        end
+        rich_content_id_mappings[external_id] = product_file.external_id if external_id != product_file.external_id
         save_subtitle_files(product_file, subtitle_files_params)
         product_file.thumbnail.attach thumbnail_signed_id if thumbnail_signed_id.present?
       rescue ActiveRecord::RecordInvalid => e
@@ -70,6 +68,10 @@ module WithProductFiles
         link&.errors&.add(:base, "Could not process your thumbnail, please upload an image with size smaller than 5 MB.") if e.message.include?("Could not process your thumbnail, please upload an image with size smaller than 5 MB.")
         raise e
       end
+    end
+
+    if rich_content_id_mappings.any?
+      rich_content_params.each { apply_rich_content_id_mappings(_1, rich_content_id_mappings) }
     end
 
     (existing_files - files_to_keep).each(&:mark_deleted)
@@ -256,10 +258,10 @@ module WithProductFiles
       dropbox_file.save!
     end
 
-    def update_rich_content_file_id(rich_content, from, to)
-      if rich_content["type"] == "fileEmbed" && rich_content["attrs"]["id"] == from
-        rich_content["attrs"]["id"] = to
+    def apply_rich_content_id_mappings(rich_content, mappings)
+      if rich_content["type"] == "fileEmbed" && mappings.key?(rich_content["attrs"]["id"])
+        rich_content["attrs"]["id"] = mappings[rich_content["attrs"]["id"]]
       end
-      rich_content["content"].each { update_rich_content_file_id(_1, from, to) } if rich_content["content"].present?
+      rich_content["content"]&.each { apply_rich_content_id_mappings(_1, mappings) }
     end
 end
