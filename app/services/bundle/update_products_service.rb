@@ -8,7 +8,7 @@ class Bundle::UpdateProductsService
 
   def perform
     products_to_process = @products.dup
-    bundle_products = @bundle.bundle_products.includes(:product)
+    bundle_products = @bundle.bundle_products.alive.includes(:product)
 
     bundle_products.each do |bundle_product|
       new_bundle_product = products_to_process.find { _1[:product_id] == bundle_product.product.external_id }
@@ -22,7 +22,7 @@ class Bundle::UpdateProductsService
         products_to_process.delete(new_bundle_product)
         update_has_outdated_purchases
       else
-        bundle_product.mark_deleted!
+        bundle_product.mark_deleted(validate: false)
       end
     end
 
