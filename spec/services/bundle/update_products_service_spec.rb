@@ -41,5 +41,21 @@ describe Bundle::UpdateProductsService do
       expect(stale_bundle_product.reload).to be_deleted
       expect(bundle.reload.bundle_products.alive.pluck(:product_id)).to include(replacement_product.id)
     end
+
+    it "restores a previously deleted bundle product instead of creating a duplicate" do
+      deleted_bundle_product = create(:bundle_product, bundle:, product: replacement_product)
+      deleted_bundle_product.update_column(:deleted_at, Time.current)
+
+      expect do
+        described_class.new(
+          bundle:,
+          products: [{ product_id: replacement_product.external_id, quantity: 1, position: 0 }]
+        ).perform
+      end.not_to change(BundleProduct, :count)
+
+      expect(deleted_bundle_product.reload).to be_alive
+      expect(deleted_bundle_product.position).to eq(0)
+      expect(bundle.reload.bundle_products.alive.pluck(:product_id)).to contain_exactly(replacement_product.id)
+    end
   end
 end
