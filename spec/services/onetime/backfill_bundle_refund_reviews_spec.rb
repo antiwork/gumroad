@@ -58,29 +58,34 @@ describe Onetime::BackfillBundleRefundReviews do
       end
     end
 
-    context "when bundle was refunded after PR #2460" do
+    context "when product purchases already have the refund flag but reviews were not removed" do
       let!(:bundle_purchase) do
         purchase = create(:purchase, link: create(:product, :bundle), created_at: Date.new(2026, 2, 1))
         purchase.create_artifacts_and_send_receipt!
-        purchase.update_columns(stripe_refunded: true)
+        purchase.update_columns(stripe_partially_refunded: true)
         purchase
       end
 
-      it "skips purchases after the cutoff date" do
+      it "explicitly repairs reviews and updates stats" do
         bundle_purchase.product_purchases.each do |pp|
-          pp.post_review(rating: 1, message: "bad")
+          pp.post_review(rating: 3, message: "ok")
+          expect(pp.product_review).to be_alive
+          expect(pp.link.reviews_count).to eq(1)
+          pp.update_columns(stripe_partially_refunded: true)
         end
 
         described_class.new(dry_run: false).process
 
         bundle_purchase.product_purchases.each do |pp|
-          expect(pp.reload.stripe_refunded).to be_nil
-          expect(pp.product_review.reload).to be_alive
+          pp.reload
+          expect(pp.stripe_partially_refunded).to eq(true)
+          expect(pp.product_review.reload).to be_deleted
+          expect(pp.link.reviews_count).to eq(0)
         end
       end
     end
 
-    context "when product purchase is already refunded" do
+    context "when product purchase is already refunded and review is already deleted" do
       let!(:bundle_purchase) do
         purchase = create(:purchase, link: create(:product, :bundle), created_at: Date.new(2025, 6, 1))
         purchase.create_artifacts_and_send_receipt!
@@ -88,7 +93,7 @@ describe Onetime::BackfillBundleRefundReviews do
         purchase
       end
 
-      it "skips already-refunded product purchases" do
+      it "skips already-repaired product purchases" do
         bundle_purchase.product_purchases.each do |pp|
           pp.post_review(rating: 1, message: "bad")
           pp.update_columns(stripe_refunded: true)

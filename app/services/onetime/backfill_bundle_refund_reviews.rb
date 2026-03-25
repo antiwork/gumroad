@@ -1,20 +1,22 @@
 # frozen_string_literal: true
 
 # Backfill script to fix orphaned reviews from bundle purchases that were
-# fully or partially refunded before PR #2460 (merged 2026-01-06) added
-# `mark_product_purchases_as_refunded!`.
+# fully or partially refunded.
 #
-# Before that PR, refunding a bundle set `stripe_refunded` or
-# `stripe_partially_refunded` on the bundle purchase but never cascaded
-# to the individual product purchases. Reviews on those product purchases
-# were never soft-deleted.
+# Two categories of broken data:
+# 1. Pre-PR #2460 (merged 2026-01-06): refunding a bundle never cascaded
+#    refund flags to product purchases, so reviews were never removed.
+#    Fix: set the missing flag via `update!` to trigger the after_save callback.
+# 2. Post-PR #2460: `mark_product_purchases_as_refunded!` correctly set
+#    `stripe_partially_refunded` on product purchases, but the review logic
+#    did not check that flag, so reviews survived despite the flag being set.
+#    Fix: explicitly delete the review and update stats since re-saving an
+#    unchanged flag would not trigger callbacks.
 #
 # Usage:
 #   Onetime::BackfillBundleRefundReviews.new(dry_run: true).process  # preview
 #   Onetime::BackfillBundleRefundReviews.new(dry_run: false).process # execute
 class Onetime::BackfillBundleRefundReviews < Onetime::Base
-  PR_2460_MERGE_DATE = Date.new(2026, 1, 6).freeze
-
   def initialize(dry_run: true)
     @dry_run = dry_run
     @affected_count = 0
@@ -27,10 +29,14 @@ class Onetime::BackfillBundleRefundReviews < Onetime::Base
       is_partially_refunded = !bundle_purchase.stripe_refunded? && bundle_purchase.stripe_partially_refunded?
 
       bundle_purchase.product_purchases.each do |product_purchase|
-        next if is_partially_refunded && product_purchase.stripe_partially_refunded?
-        next if !is_partially_refunded && product_purchase.stripe_refunded?
-
         review = product_purchase.product_review
+
+        if is_partially_refunded
+          next if product_purchase.stripe_partially_refunded? && (review.nil? || review.deleted?)
+        else
+          next if product_purchase.stripe_refunded?
+        end
+
         refund_type = is_partially_refunded ? "partial" : "full"
 
         if @dry_run
@@ -41,7 +47,10 @@ class Onetime::BackfillBundleRefundReviews < Onetime::Base
           )
           @affected_count += 1
         else
-          if is_partially_refunded
+          if is_partially_refunded && product_purchase.stripe_partially_refunded?
+            product_purchase.link.update_review_stat_via_rating_change(review.rating, nil)
+            review.mark_deleted!
+          elsif is_partially_refunded
             product_purchase.update!(stripe_partially_refunded: true)
           else
             product_purchase.update!(stripe_refunded: true)
@@ -73,7 +82,6 @@ class Onetime::BackfillBundleRefundReviews < Onetime::Base
       Purchase
         .where(Purchase.is_bundle_purchase_condition)
         .where("purchases.stripe_refunded = true OR purchases.stripe_partially_refunded = true")
-        .where("purchases.created_at < ?", PR_2460_MERGE_DATE)
         .includes(product_purchases: [:product_review, :link])
     end
 end
