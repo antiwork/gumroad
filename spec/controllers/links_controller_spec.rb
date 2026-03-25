@@ -1309,16 +1309,6 @@ describe LinksController, :vcr, inertia: true do
         end
 
         it "does not produce transitive ID collisions when a new file's external_id matches another file's placeholder ID" do
-          # The transitive collision bug: when saving two new files with rich content embeds,
-          # if File A's persisted external_id happens to equal File B's placeholder ID,
-          # sequential replacement corrupts both embeds to the same ID.
-          #
-          # Example with the old code (sequential replacement inside loop):
-          #   Mapping: placeholder_a → placeholder_b, placeholder_b → real_b
-          #   Step 1: replace placeholder_a → placeholder_b (BOTH embeds now have "placeholder_b")
-          #   Step 2: replace placeholder_b → real_b (BOTH embeds now have "real_b" — collision!)
-          #
-          # The fix collects all mappings into a hash, then applies them in a single pass.
           rich_content_node = {
             "type" => "doc",
             "content" => [
