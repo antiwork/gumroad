@@ -1,6 +1,5 @@
 import * as FacebookPixel from "$app/data/facebook_pixel";
 import * as GoogleAnalytics from "$app/data/google_analytics";
-import * as TikTokPixel from "$app/data/tiktok_pixel";
 import { AnalyticsData } from "$app/parsers/product";
 
 export type GumroadEvents = keyof typeof ProductEventsTitles;
@@ -39,24 +38,21 @@ export type BeginCheckoutEvent = {
 export type ProductAnalyticsEvent = ViewedEvent | IWantThisEvent | BeginCheckoutEvent | PurchasedEvent;
 
 export type AnalyticsConfig = GoogleAnalytics.GoogleAnalyticsConfig &
-  FacebookPixel.FacebookPixelConfig &
-  TikTokPixel.TikTokPixelConfig & { trackFreeSales: boolean; id: string };
+  FacebookPixel.FacebookPixelConfig & { trackFreeSales: boolean; id: string };
 
 const configs = new Map<string, AnalyticsConfig>();
 
 export function startTrackingForSeller(id: string, data: AnalyticsData) {
-  if (configs.has(id) || !(data.google_analytics_id || data.facebook_pixel_id || data.tiktok_pixel_id)) return;
+  if (configs.has(id) || !(data.google_analytics_id || data.facebook_pixel_id)) return;
   const config: AnalyticsConfig = {
     id,
     facebookPixelId: data.facebook_pixel_id,
     googleAnalyticsId: data.google_analytics_id,
-    tiktokPixelId: data.tiktok_pixel_id,
     trackFreeSales: data.free_sales,
   };
   configs.set(id, config);
   GoogleAnalytics.startTrackingForSeller(config);
   FacebookPixel.startTrackingForSeller(config);
-  TikTokPixel.startTrackingForSeller(config);
 }
 
 export function trackProductEvent(id: string, data: ProductAnalyticsEvent) {
@@ -65,5 +61,4 @@ export function trackProductEvent(id: string, data: ProductAnalyticsEvent) {
 
   GoogleAnalytics.trackProductEvent(config, data);
   if (data.action !== "begin_checkout") FacebookPixel.trackProductEvent(config, data);
-  if (data.action !== "begin_checkout") TikTokPixel.trackProductEvent(config, data);
 }

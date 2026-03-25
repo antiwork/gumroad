@@ -56,8 +56,18 @@ class User::PasswordsController < Devise::PasswordsController
       redirect_to edit_user_password_path(reset_password_token: reset_password_token), warning: error_message
     else
       user.invalidate_active_sessions!
-      sign_in user unless user.deleted?
-      redirect_to root_path, status: :see_other, notice: "Your password has been reset, and you're now logged in."
+      if user.deleted?
+        redirect_to root_path, status: :see_other, notice: "Your password has been reset."
+      else
+        sign_in_or_prepare_for_two_factor_auth(user)
+
+        if session[:verify_two_factor_auth_for] == user.id
+          redirect_to two_factor_authentication_path(next: root_path), status: :see_other,
+                                                                       notice: "Your password has been reset. Please complete two-factor authentication to continue."
+        else
+          redirect_to root_path, status: :see_other, notice: "Your password has been reset, and you're now logged in."
+        end
+      end
     end
   end
 

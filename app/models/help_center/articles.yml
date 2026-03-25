@@ -252,7 +252,7 @@
 - id: 174
   slug: "174-third-party-analytics"
   title: "Third-party analytics"
-  description: "Google Analytics Cross-domain tracking Domain verification for Meta/Facebook Meta Pixel TikTok Pixel Snippets Google Ads 𝕏 / Twitter Google Analytics Google ended su"
+  description: "Google Analytics Cross-domain tracking Domain verification for Meta/Facebook Meta Pixel Snippets Google Ads 𝕏 / Twitter TikTok Google Analytics Google ended su"
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
 - id: 176
   slug: "176-metadata-for-audio-files"

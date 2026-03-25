@@ -56,7 +56,6 @@ export type CardProduct = {
 export type AnalyticsData = {
   google_analytics_id: string | null;
   facebook_pixel_id: string | null;
-  tiktok_pixel_id: string | null;
   free_sales: boolean;
 };
 

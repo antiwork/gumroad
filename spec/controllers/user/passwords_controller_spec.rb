@@ -82,6 +82,48 @@ describe User::PasswordsController, type: :controller, inertia: true do
       post :update, params: { user: { password: "password_new", password_confirmation: "password_new", reset_password_token: @user.send_reset_password_instructions } }
     end
 
+    context "when the user has email two-factor authentication enabled" do
+      before do
+        @user = create(:user, skip_enabling_two_factor_authentication: false)
+      end
+
+      it "redirects to two-factor authentication instead of signing the user in" do
+        token = @user.send_reset_password_instructions
+
+        expect do
+          post :update, params: { user: { password: "password_new", password_confirmation: "password_new", reset_password_token: token } }
+        end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
+
+        expect(controller.logged_in_user).to be_nil
+        expect(session[:verify_two_factor_auth_for]).to eq(@user.id)
+        expect(session[:two_factor_auth_method]).to eq("email")
+        expect(flash[:notice]).to eq("Your password has been reset. Please complete two-factor authentication to continue.")
+        expect(response).to redirect_to(two_factor_authentication_path(next: root_path))
+      end
+    end
+
+    context "when the user has authenticator-app two-factor authentication enabled" do
+      before do
+        @user = create(:user, skip_enabling_two_factor_authentication: false)
+        Feature.activate_user(:authenticator_2fa, @user)
+        create(:totp_credential, :confirmed, user: @user)
+      end
+
+      it "redirects to two-factor authentication and keeps the authenticator method" do
+        token = @user.send_reset_password_instructions
+
+        expect do
+          post :update, params: { user: { password: "password_new", password_confirmation: "password_new", reset_password_token: token } }
+        end.not_to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token)
+
+        expect(controller.logged_in_user).to be_nil
+        expect(session[:verify_two_factor_auth_for]).to eq(@user.id)
+        expect(session[:two_factor_auth_method]).to eq("totp")
+        expect(flash[:notice]).to eq("Your password has been reset. Please complete two-factor authentication to continue.")
+        expect(response).to redirect_to(two_factor_authentication_path(next: root_path))
+      end
+    end
+
     describe "should fail when there are errors" do
       let(:old_password) { @user.password }
 

@@ -124,7 +124,6 @@ export const ProductPreview = ({
           analytics: {
             google_analytics_id: null,
             facebook_pixel_id: null,
-            tiktok_pixel_id: null,
             free_sales: false,
           },
           has_third_party_analytics: false,

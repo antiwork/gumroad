@@ -3961,7 +3961,6 @@ describe LinksController, :vcr, inertia: true do
         [
           "gr:google_analytics:enabled",
           "gr:fb_pixel:enabled",
-          "gr:tiktok_pixel:enabled",
         ].each do |property|
           expect(html.xpath("//meta[@property='#{property}']/@content").text).to eq("false")
         end
