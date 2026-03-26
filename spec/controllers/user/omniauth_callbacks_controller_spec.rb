@@ -40,7 +40,7 @@ describe User::OmniauthCallbacksController do
         user = User.last
         expect(user.email).to eq("stripe.connect@gum.co")
         expect(user.confirmed?).to be true
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
 
       it "redirects directly to completion when user has no email" do
@@ -61,7 +61,7 @@ describe User::OmniauthCallbacksController do
         user = User.last
         expect(user.email).to eq("stripe.connect@gum.co")
         expect(controller.user_signed_in?).to be false
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
 
       it "does not create a new user if the email is already taken" do
@@ -69,7 +69,7 @@ describe User::OmniauthCallbacksController do
 
         expect { post :stripe_connect }.not_to change { User.count }
 
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
     end
 
@@ -147,7 +147,7 @@ describe User::OmniauthCallbacksController do
         expect(user.email).to eq("stripe.connect@gum.co")
         expect(purchase1.reload.purchaser_id).to eq(user.id)
         expect(purchase2.reload.purchaser_id).to eq(user.id)
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
     end
 
@@ -172,7 +172,7 @@ describe User::OmniauthCallbacksController do
 
         expect { post :stripe_connect }.not_to change { User.count }
 
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
 
       it "allows existing users with matching email (without Stripe connected) to log in" do
@@ -180,7 +180,7 @@ describe User::OmniauthCallbacksController do
 
         expect { post :stripe_connect }.not_to change { User.count }
 
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
 
       it "allows existing users without email to log in" do
@@ -240,13 +240,19 @@ describe User::OmniauthCallbacksController do
 
       it "does not allow user to login with Google only" do
         post :google_oauth2
-        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: dashboard_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: dashboard_path)
       end
 
       it "keeps referral intact" do
         request.env["omniauth.origin"] = balance_path
         post :google_oauth2
-        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: balance_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: balance_path)
+      end
+
+      it "sanitizes external domain in referral to a relative path" do
+        request.env["omniauth.origin"] = "https://evil.com/phishing"
+        post :google_oauth2
+        expect(response).to redirect_to two_factor_authentication_path(next: "/phishing")
       end
     end
 
