@@ -718,6 +718,22 @@ describe CheckoutPresenter do
           expect(result[:contact_info][:country]).to eq "BR"
         end
       end
+
+      context "when the subscription is deactivated" do
+        before do
+          @subscription.update!(cancelled_at: 1.day.ago, deactivated_at: 1.day.ago, cancelled_by_buyer: true)
+        end
+
+        it "displays the current price for the tier" do
+          new_price = @original_price_cents + 500
+          @tier_price.update!(price_cents: new_price)
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
+
+          displayed_tier_price = result[:product][:options][0][:recurrence_price_values]["monthly"][:price_cents]
+          expect(displayed_tier_price).to eq new_price
+        end
+      end
     end
 
     context "non-tiered membership product" do
