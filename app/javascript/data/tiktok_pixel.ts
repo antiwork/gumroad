@@ -43,6 +43,6 @@ export function startTrackingForSeller(data: TikTokPixelConfig) {
 
   if (typeof ttq === "undefined") loadTikTokPixelScript();
   ttq.load(data.tiktokPixelId);
-  ttq.page();
+  ttq.instance(data.tiktokPixelId).page();
   initializedPixels.add(data.tiktokPixelId);
 }
