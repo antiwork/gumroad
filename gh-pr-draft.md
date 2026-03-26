@@ -3,6 +3,7 @@
 Configure Sentry for error monitoring alongside Bugsnag, and introduce an `ErrorNotifier` abstraction that sends to both.
 
 **Changes:**
+
 - Add `sentry-ruby` and `sentry-rails` gems
 - Add Sentry initializer (`config/initializers/sentry.rb`) with DSN from GlobalConfig, 1% trace sampling, and sensible exception exclusions
 - Add `ErrorNotifier` service that wraps both `Bugsnag.notify` and `Sentry.capture_exception`/`capture_message`, including support for severity, metadata, and block-style reporting
