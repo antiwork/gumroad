@@ -170,8 +170,10 @@ class CheckoutPresenter
       variants: subscription.original_purchase.tiers,
       price_cents: subscription.current_plan_displayed_price_cents / subscription.original_purchase.quantity,
     }
+    show_current_prices = subscription.deactivated? ||
+      (subscription.alive? && !subscription.overdue_for_charge? && product.recurrence_price_enabled?(subscription.recurrence))
     options = (variant_category = product.variant_categories_alive.first) ? variant_category.variants.in_order.alive.map do
-      |variant| subscription.alive? && !subscription.overdue_for_charge? && product.recurrence_price_enabled?(subscription.recurrence) ? variant.to_option : variant.to_option(subscription_attrs: tier_attrs)
+      |variant| show_current_prices ? variant.to_option : variant.to_option(subscription_attrs: tier_attrs)
     end : []
     tier = subscription.original_purchase.variant_attributes.first
     if tier.present? && !options.any? { |option| option[:id] == tier.external_id }

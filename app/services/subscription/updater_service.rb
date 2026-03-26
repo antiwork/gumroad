@@ -102,7 +102,7 @@ class Subscription::UpdaterService
           params[:offer_code].present?
         end
 
-        if !same_plan_and_price? || (is_resubscribing && discount_changed)
+        if !same_plan_and_price? || (is_resubscribing && (discount_changed || price_changed?))
           self.new_purchase = subscription.update_current_plan!(
             new_variants: variants,
             new_price: price,
@@ -412,6 +412,13 @@ class Subscription::UpdaterService
 
     def pwyw?
       variants.any? { |v| v.customizable_price? }
+    end
+
+    def price_changed?
+      return false if pwyw?
+      tier_price = subscription.send(:tier_price)
+      return false unless tier_price.present?
+      subscription.current_subscription_price_cents / original_purchase.quantity != tier_price.price_cents
     end
 
     def same_pwyw_price?
