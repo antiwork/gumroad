@@ -188,7 +188,7 @@ class PaypalMerchantAccountManager
 
     def notify_bugsnag
       ErrorNotifier.notify(request: response.request,
-                     response:)
+                           response:)
     end
 
     def handle_merchant_account_updated_event(paypal_event)
