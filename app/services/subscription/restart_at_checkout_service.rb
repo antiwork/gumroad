@@ -33,6 +33,7 @@ class Subscription::RestartAtCheckoutService
       {
         variants: params[:variants] || default_variant_ids,
         price_id: params[:price_id] || subscription.price&.external_id,
+        price_range: perceived_price_cents,
         perceived_price_cents: perceived_price_cents,
         perceived_upgrade_price_cents: perceived_price_cents,
         quantity: params[:quantity]&.to_i.presence || subscription.original_purchase.quantity,
