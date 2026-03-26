@@ -292,7 +292,7 @@ class User < ApplicationRecord
   LINK_PROPERTIES = %w[username twitter_handle bio name google_analytics_id flags
                        facebook_pixel_id tiktok_pixel_id skip_free_sale_analytics disable_third_party_analytics].freeze
 
-  after_update :clear_products_cache, if: -> (user) { (User::LINK_PROPERTIES & user.saved_changes.keys).present? || user.saved_change_to_json_data? || (%w[font background_color highlight_color] & user.seller_profile&.saved_changes&.keys).present? }
+  after_update :clear_products_cache, if: -> (user) { (User::LINK_PROPERTIES & user.saved_changes.keys).present? || user.tiktok_pixel_id_changed_in_json_data? || (%w[font background_color highlight_color] & user.seller_profile&.saved_changes&.keys).present? }
 
   after_save :create_updated_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
   after_save :delete_old_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
@@ -708,6 +708,13 @@ class User < ApplicationRecord
 
   def time_fields
     attributes.keys.keep_if { |key| key.include?("_at") && send(key) }
+  end
+
+  def tiktok_pixel_id_changed_in_json_data?
+    return false unless saved_change_to_json_data?
+
+    old_json, new_json = saved_change_to_json_data
+    (old_json || {})["tiktok_pixel_id"] != (new_json || {})["tiktok_pixel_id"]
   end
 
   def clear_products_cache
