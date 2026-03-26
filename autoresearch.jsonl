@@ -1,0 +1,1 @@
+{"type":"config","name":"Fix flaky embed test — 5 consecutive green CI runs","metricName":"consecutive_greens","metricUnit":"","bestDirection":"higher"}

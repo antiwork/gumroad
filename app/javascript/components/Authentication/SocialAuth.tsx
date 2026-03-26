@@ -25,7 +25,7 @@ export const SocialAuth = () => {
       ) : null}
       <SocialAuthButton
         provider="google"
-        href={Routes.user_google_oauth2_omniauth_authorize_path({ referer: next, x_auth_access_type: "read" })}
+        href={Routes.user_google_oauth2_omniauth_authorize_path({ origin: next, x_auth_access_type: "read" })}
       >
         <Google pack="brands" className="size-5" />
         Google

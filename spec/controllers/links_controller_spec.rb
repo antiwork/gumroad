@@ -1308,6 +1308,26 @@ describe LinksController, :vcr, inertia: true do
           expect(@product.reload.rich_content_json).to eq([{ id: rich_content.external_id, page_id: rich_content.external_id, variant_id: nil, title: "Page title", description: { type: "doc", content: old_rich_content.dup.concat([{ "type" => "fileEmbed", "attrs" => { "id" => new_external_id_1, "uid" => "64e84875-c795-567c-d2dd-96336ab093d5" } }, { "type" => "fileEmbed", "attrs" => { "id" => new_external_id_2, "uid" => "0c042930-2df1-4583-82ef-a6317213868d" } }]) }, updated_at: rich_content.reload.updated_at }])
         end
 
+        it "does not produce transitive ID collisions when a new file's external_id matches another file's placeholder ID" do
+          rich_content_node = {
+            "type" => "doc",
+            "content" => [
+              { "type" => "fileEmbed", "attrs" => { "id" => "placeholder_a" } },
+              { "type" => "fileEmbed", "attrs" => { "id" => "placeholder_b" } },
+            ],
+          }
+
+          mappings = {
+            "placeholder_a" => "placeholder_b",  # File A's new external_id == File B's old placeholder
+            "placeholder_b" => "real_b",          # File B's new external_id
+          }
+
+          @product.send(:apply_rich_content_id_mappings, rich_content_node, mappings)
+
+          embed_ids = rich_content_node["content"].map { |node| node["attrs"]["id"] }
+          expect(embed_ids).to eq(["placeholder_b", "real_b"])
+        end
+
         it "saves variant-level rich content containing file embeds with the persisted IDs" do
           external_id1 = "ext1"
           external_id2 = "ext2"

@@ -76,6 +76,16 @@ describe "Login Feature Scenario", js: true, type: :system do
       end.not_to change(User, :count)
     end
 
+    it "redirects to the next path after Google login" do
+      OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/google_omniauth.json")))
+      user.update!(google_uid: OmniAuth.config.mock_auth[:google_oauth2][:uid])
+
+      visit login_path(next: balance_path)
+
+      click_button "Google"
+      expect(page).to have_current_path(balance_path)
+    end
+
     it "supports logging in with Stripe" do
       OmniAuth.config.mock_auth[:stripe_connect] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/stripe_connect_omniauth.json")))
       create(:merchant_account_stripe_connect, user:, charge_processor_merchant_id: OmniAuth.config.mock_auth[:stripe_connect][:uid])

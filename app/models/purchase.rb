@@ -457,6 +457,9 @@ class Purchase < ApplicationRecord
   }
   scope :paid, -> { successful.where("purchases.price_cents > 0").where("stripe_refunded is null OR stripe_refunded = 0") }
   scope :not_fully_refunded, -> { where("purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0") }
+  scope :not_partially_refunded_bundle_product_purchase, -> {
+    where("purchases.stripe_partially_refunded IS NULL OR purchases.stripe_partially_refunded = false").or(not_is_bundle_product_purchase)
+  }
   # always include subscription purchase regardless if refunded or not to show up in library and customers tab:
   scope :not_refunded_except_subscriptions, lambda {
     where("(purchases.subscription_id IS NULL AND (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)) OR " \

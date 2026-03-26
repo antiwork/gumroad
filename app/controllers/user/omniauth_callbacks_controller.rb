@@ -70,7 +70,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
       if user.email.present?
         sign_in_or_prepare_for_two_factor_auth(user)
-        return safe_redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
+        return redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       else
         sign_in user
         return safe_redirect_to oauth_completions_stripe_path
@@ -136,9 +136,9 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     end
 
     def post_auth_redirect(user)
-      referer = params[:referer].presence || request.env.dig("omniauth.params", "referer")
+      referer = params[:referer].presence || request.env.dig("omniauth.params", "referer") || request.env["omniauth.origin"]
       if referer.present? && referer != "/"
-        referer
+        safe_redirect_path(referer)
       else
         safe_redirect_path(helpers.signed_in_user_home(user))
       end
