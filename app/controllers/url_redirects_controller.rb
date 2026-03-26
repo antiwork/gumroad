@@ -228,18 +228,18 @@ class UrlRedirectsController < ApplicationController
 
     purchase = @url_redirect.purchase
     if purchase && (purchase.stripe_refunded || (purchase.chargeback_date.present? && !purchase.chargeback_reversed) || purchase.is_access_revoked)
-      return render json: { success: false, error: "Not found" }, status: :not_found
+      return e404_json
     end
-    return render json: { success: false, error: "Not found" }, status: :not_found if @url_redirect.rental_expired?
-    return render json: { success: false, error: "Not found" }, status: :not_found if purchase&.subscription && !purchase.subscription.grant_access_to_product?
+    return e404_json if @url_redirect.rental_expired?
+    return e404_json if purchase&.subscription && !purchase.subscription.grant_access_to_product?
     if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
-      return render json: { success: false, error: "Not found" }, status: :not_found
+      return e404_json
     end
     if purchase.present? && @url_redirect.has_been_seen && @url_redirect.imported_customer.blank?
       identity_verified = cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
                           (purchase.purchaser.present? && purchase.purchaser == logged_in_user) ||
                           purchase.ip_address == request.remote_ip
-      return render json: { success: false, error: "Not found" }, status: :not_found if !identity_verified
+      return e404_json if !identity_verified
     end
 
     @product_file = @url_redirect.product_file(params[:file_external_id])
