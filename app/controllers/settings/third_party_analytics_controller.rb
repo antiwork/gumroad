@@ -34,6 +34,7 @@ class Settings::ThirdPartyAnalyticsController < Settings::BaseController
         :disable_third_party_analytics,
         :google_analytics_id,
         :facebook_pixel_id,
+        :tiktok_pixel_id,
         :skip_free_sale_analytics,
         :enable_verify_domain_third_party_services,
         :facebook_meta_tag,
