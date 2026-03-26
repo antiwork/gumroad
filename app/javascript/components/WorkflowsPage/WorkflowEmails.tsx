@@ -440,7 +440,6 @@ const EmailRow = ({
 }: EmailRowProps) => {
   const [editorContent, setEditorContent] = React.useState(email.message);
   const handleMessageChange = useDebouncedCallback((message: string) => onChange({ message }), 500);
-  const selfRef = React.useRef<HTMLDivElement>(null);
   const nameInputRef = React.useRef<null | HTMLInputElement>(null);
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
   React.useEffect(() => {
@@ -448,8 +447,6 @@ const EmailRow = ({
 
     const { fieldName } = focusedFieldInfo;
     if (fieldName === "name") nameInputRef.current?.focus();
-    if (fieldName && fieldName !== "message" && fieldName !== "stream_only")
-      selfRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [focusedFieldInfo, email.id]);
   React.useEffect(() => {
     if (expanded) setEditorContent(email.message);
@@ -462,7 +459,7 @@ const EmailRow = ({
     );
 
   return (
-    <Row role="listitem" ref={selfRef} aria-label="Email">
+    <Row role="listitem" aria-label="Email">
       <RowContent>
         <Envelope pack="filled" className="type-icon size-5" />
         <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
@@ -590,9 +587,9 @@ const EmailPreview = ({
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
 
   React.useEffect(() => {
-    if (!focusedFieldInfo) return;
-    const timeoutId = setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 500);
-    return () => clearTimeout(timeoutId);
+    if (!focusedFieldInfo || !selfRef.current) return;
+    const sidebar = selfRef.current.closest("aside");
+    if (sidebar) sidebar.scrollTo({ top: selfRef.current.offsetTop - sidebar.offsetTop, behavior: "smooth" });
   }, [focusedFieldInfo]);
 
   return (
