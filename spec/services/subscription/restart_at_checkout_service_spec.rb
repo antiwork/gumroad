@@ -434,8 +434,8 @@ describe Subscription::RestartAtCheckoutService do
 
     describe "PWYW subscription restart with discount change" do
       let(:pwyw_product) { create(:membership_product, user: seller, price_cents: 0, customizable_price: true) }
-      let(:original_offer_code) { create(:offer_code, amount_cents: nil, amount_percentage: 85, products: [pwyw_product], user: seller) }
-      let(:new_offer_code) { create(:offer_code, amount_cents: nil, amount_percentage: 80, products: [pwyw_product], user: seller) }
+      let(:original_offer_code) { create(:offer_code, code: "original85", amount_cents: nil, amount_percentage: 85, products: [pwyw_product], user: seller) }
+      let(:new_offer_code) { create(:offer_code, code: "new80", amount_cents: nil, amount_percentage: 80, products: [pwyw_product], user: seller) }
 
       let!(:subscription) do
         sub = create(:subscription, link: pwyw_product, user: buyer)
