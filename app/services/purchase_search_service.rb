@@ -65,6 +65,7 @@ class PurchaseSearchService
 
   def initialize(options = {})
     @options = DEFAULT_OPTIONS.merge(options)
+    apply_for_library
     build_body
   end
 
