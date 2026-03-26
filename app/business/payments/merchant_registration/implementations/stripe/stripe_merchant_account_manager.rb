@@ -101,13 +101,13 @@ module StripeMerchantAccountManager
       DefaultAbandonedCartWorkflowGeneratorService.new(seller: user).generate if merchant_account.is_a_stripe_connect_account?
     rescue => e
       Rails.logger.error("Failed to generate default abandoned cart workflow for user #{user.id}: #{e.message}")
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
     end
 
     merchant_account
   rescue Stripe::StripeError => e
     cleanup_failed_merchant_account(merchant_account) if merchant_account.present?
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     raise
   end
 
@@ -263,7 +263,7 @@ module StripeMerchantAccountManager
     return ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if e.message["Invalid account number"] ||
                                                                             e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"]
 
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
   rescue Stripe::CardError => e
     Rails.logger.error "Stripe::CardError request ID #{e.request_id} when updating bank account #{bank_account.id} for stripe account #{stripe_account.inspect}"
 
@@ -316,7 +316,7 @@ module StripeMerchantAccountManager
       begin
         Stripe::Account.delete(merchant_account.charge_processor_merchant_id)
       rescue Stripe::StripeError => cleanup_error
-        Bugsnag.notify(cleanup_error)
+        ErrorNotifier.notify(cleanup_error)
       end
     end
     merchant_account.mark_deleted!

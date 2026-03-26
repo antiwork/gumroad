@@ -21,7 +21,7 @@ module Purchase::Risk
       check_for_past_fraudulent_ips
     end
   rescue Timeout::Error => e
-    # Bugsnag.notify(e)
+    # ErrorNotifier.notify(e)
     logger.info("Check for fraud: Could not check for fraud for purchase #{id}. Exception: #{e.message}")
     nil
   end

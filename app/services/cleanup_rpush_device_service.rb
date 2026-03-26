@@ -10,6 +10,6 @@ class CleanupRpushDeviceService
     @feedback.destroy
   rescue => e
     Rails.logger.error "Could not clean up a device token based on APN feedback #{@feedback.inspect}: #{e.inspect}"
-    Bugsnag.notify "Could not clean up a device token based on APN feedback #{@feedback.inspect}: #{e.inspect}"
+    ErrorNotifier.notify "Could not clean up a device token based on APN feedback #{@feedback.inspect}: #{e.inspect}"
   end
 end

@@ -195,7 +195,7 @@ class Purchase::CreateService < Purchase::BaseService
         error_message = if buyer.present?
           "You already have an active subscription to this membership. Visit your Library to manage it."
         else
-          Bugsnag.notify(StandardError.new("Existing subscription checkout attempt")) do |report|
+          ErrorNotifier.notify(StandardError.new("Existing subscription checkout attempt")) do |report|
             report.severity = "info"
             report.add_metadata(:subscription, {
                                   subscription_id: active_subscription.id,

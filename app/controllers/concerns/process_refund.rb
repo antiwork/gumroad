@@ -18,7 +18,7 @@ module ProcessRefund
           render json: { success: false, message: purchase.errors.full_messages.to_sentence }
         end
       rescue ActiveRecord::RecordInvalid => e
-        Bugsnag.notify(e)
+        ErrorNotifier.notify(e)
         render json: { success: false, message: "Sorry, something went wrong." }, status: :unprocessable_entity
       end
     end

@@ -29,7 +29,7 @@ class Settings::MainController < Settings::BaseController
 
     redirect_to settings_main_path, status: :see_other, notice: "Your account has been updated!"
   rescue StandardError => e
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     error_message = current_seller.errors.full_messages.to_sentence.presence ||
       "Something broke. We're looking into what happened. Sorry about this!"
     redirect_to settings_main_path, alert: error_message

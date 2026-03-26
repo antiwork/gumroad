@@ -65,7 +65,7 @@ class PaypalEventHandler
       elsif paypal_event["txn_type"].in?(IGNORED_TRANSACTION_TYPES)
         nil
       else
-        Bugsnag.notify("No message handler for PayPal message for transaction ID : #{paypal_event.try(:[], 'txn_id')}", paypal_event:)
+        ErrorNotifier.notify("No message handler for PayPal message for transaction ID : #{paypal_event.try(:[], 'txn_id')}", paypal_event:)
         nil
       end
     end

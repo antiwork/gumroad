@@ -187,7 +187,7 @@ class PaypalMerchantAccountManager
     end
 
     def notify_bugsnag
-      Bugsnag.notify(request: response.request,
+      ErrorNotifier.notify(request: response.request,
                      response:)
     end
 

@@ -24,7 +24,7 @@ class Settings::ThirdPartyAnalyticsController < Settings::BaseController
   rescue ThirdPartyAnalytic::ThirdPartyAnalyticInvalid => e
     redirect_to settings_third_party_analytics_path, alert: e.message
   rescue StandardError => e
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     redirect_to settings_third_party_analytics_path, alert: "Something broke. We're looking into what happened. Sorry about this!"
   end
 

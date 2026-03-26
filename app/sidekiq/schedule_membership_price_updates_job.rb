@@ -62,7 +62,7 @@ class ScheduleMembershipPriceUpdatesJob
         else
           "price has not changed"
         end
-        Bugsnag.notify("Not adding a plan change for membership price change - subscription_id: #{subscription.id} - reason: #{reason}")
+        ErrorNotifier.notify("Not adding a plan change for membership price change - subscription_id: #{subscription.id} - reason: #{reason}")
         next
       end
 

@@ -28,7 +28,7 @@ class SendPreorderSellerSummaryWorker
 
   private
     def notify_bugsnag_and_raise(error_message)
-      Bugsnag.notify(error_message)
+      ErrorNotifier.notify(error_message)
       raise error_message
     end
 end

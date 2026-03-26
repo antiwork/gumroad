@@ -62,7 +62,7 @@ class CheckoutController < ApplicationController
 
     redirect_to checkout_path, status: :see_other
   rescue ActiveRecord::RecordInvalid => e
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     Rails.logger.error(e.full_message) if Rails.env.development?
     redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
   end

@@ -19,7 +19,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
         # Cache empty array for requests that timeout to reduce the load on database.
         # TODO: Remove this once we fix the bottleneck with the purchases_json generation
         Rails.logger.info "Error generating purchases json for user: #{current_resource_owner.id}, #{e.class} => #{e.message}"
-        Bugsnag.notify(e)
+        ErrorNotifier.notify(e)
         []
       end
     end

@@ -315,7 +315,7 @@ class Subscription::UpdaterService
       return unless tiered_membership?
       return if same_plan_and_price?
       unless new_purchase.present?
-        Bugsnag.notify("SubscriptionUpdater: new_purchase missing when sending API notification")
+        ErrorNotifier.notify("SubscriptionUpdater: new_purchase missing when sending API notification")
         return
       end
 

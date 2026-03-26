@@ -379,7 +379,7 @@ class PaypalChargeProcessor
 
   def self.update_order_from_product_info(paypal_order_id, product_info)
     if paypal_order_id.blank? || product_info.blank?
-      Bugsnag.notify("PayPal order ID or product info not present in update order request")
+      ErrorNotifier.notify("PayPal order ID or product info not present in update order request")
       raise ChargeProcessorError, "PayPal order ID or product info not present in update order request"
     end
 
@@ -413,7 +413,7 @@ class PaypalChargeProcessor
 
   def self.create_order(purchase_unit_info)
     if purchase_unit_info.blank?
-      Bugsnag.notify("Products are not present in create order request")
+      ErrorNotifier.notify("Products are not present in create order request")
       raise ChargeProcessorError, "Products are not present in create order request"
     end
     paypal_rest_api = PaypalRestApi.new

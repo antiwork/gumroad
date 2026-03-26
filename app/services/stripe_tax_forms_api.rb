@@ -25,7 +25,7 @@ class StripeTaxFormsApi
 
     pdf
   rescue HTTParty::Error => e
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     nil
   end
 
@@ -47,7 +47,7 @@ class StripeTaxFormsApi
       tax_forms
     end
   rescue Stripe::StripeError => e
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     {}
   end
 

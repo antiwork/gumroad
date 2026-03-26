@@ -68,7 +68,7 @@ module PunditAuthorization
       "Your current role as #{team_membership.role.humanize} cannot perform this action."
     rescue ActiveRecord::RecordNotFound
       # This should not happen, but if it does, we want to be notified so we can fix it
-      Bugsnag.notify("Team: Could not find membership for user #{logged_in_user.id} and seller #{current_seller.id}")
+      ErrorNotifier.notify("Team: Could not find membership for user #{logged_in_user.id} and seller #{current_seller.id}")
 
       "You are not allowed to perform this action."
     end

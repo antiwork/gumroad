@@ -8,7 +8,7 @@ class DuplicateProductWorker
     ProductDuplicatorService.new(product_id).duplicate
   rescue => e
     logger.error("Error while duplicating product id '#{product_id}': #{e.inspect}")
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
   ensure
     product = Link.find(product_id)
     product.is_duplicating = false
