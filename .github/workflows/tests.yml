@@ -23,11 +23,13 @@ jobs:
     steps:
       - run: true
 
-  build_base:
-    name: Build base image${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+  build:
+    name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: ubicloud-standard-4
     needs: ci_gate
     if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    env:
+      DOCKER_BUILDKIT: 1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -79,26 +81,6 @@ jobs:
           else
             logger "$WEB_BASE_REPO:$WEB_BASE_SHA already exists"
           fi
-
-  build_test:
-    runs-on: ubicloud-standard-4
-    name: Build test image${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
-    needs: build_base
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Login to Quay
-        uses: nick-fields/retry@v3
-        with:
-          timeout_seconds: 120
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: echo "$QUAY_PASSWORD" | docker login quay.io -u "$QUAY_USERNAME" --password-stdin
-        env:
-          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
-          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
       - name: Build and push test image
         env:
           WEB_BASE_REPO: quay.io/gumroad/web_base
@@ -153,7 +135,7 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
     runs-on: ubicloud-standard-4
-    needs: build_test
+    needs: build
     strategy:
       fail-fast: false
       matrix:
@@ -256,7 +238,7 @@ jobs:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
       WEB_REPO: quay.io/gumroad/web
     runs-on: ubicloud-standard-4
-    needs: build_test
+    needs: build
     strategy:
       fail-fast: false
       matrix:
