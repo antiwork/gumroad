@@ -938,6 +938,13 @@ GEM
     semantic_range (3.0.0)
     sendgrid-ruby (6.7.0)
       ruby_http_client (~> 3.4)
+    sentry-rails (6.5.0)
+      railties (>= 5.2.0)
+      sentry-ruby (~> 6.5.0)
+    sentry-ruby (6.5.0)
+      bigdecimal
+      concurrent-ruby (~> 1.0, >= 1.0.2)
+      logger
     shakapacker (8.0.1)
       activesupport (>= 5.2)
       package_json
@@ -1225,6 +1232,8 @@ DEPENDENCIES
   secure_headers (~> 6.5)
   selenium-webdriver (~> 4.35)
   sendgrid-ruby (~> 6.6)
+  sentry-rails
+  sentry-ruby
   shakapacker (~> 8.0)
   shoulda-matchers (~> 6.0)
   sidekiq (~> 7.2)

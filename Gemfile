@@ -6,6 +6,8 @@ ruby file: ".ruby-version"
 
 gem "rails", "7.1.6"
 gem "rake", "13.2.1"
+gem "sentry-ruby"
+gem "sentry-rails"
 
 install_if -> { ENV["BUNDLE_GEMS__CONTRIBSYS__COM"] } do
   source "https://gems.contribsys.com/" do
