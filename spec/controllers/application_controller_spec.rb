@@ -484,5 +484,4 @@ describe ApplicationController do
       expect(session).to_not have_key(:signup_referrer)
     end
   end
-
 end
