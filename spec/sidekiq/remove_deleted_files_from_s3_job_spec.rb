@@ -52,14 +52,14 @@ describe RemoveDeletedFilesFromS3Job do
     expect(subtitle_file_2.reload.deleted_from_cdn_at).to be_nil
   end
 
-  it "notifies Bugsnag and continues when there's an error removing a file" do
+  it "notifies error tracker and continues when there's an error removing a file" do
     instance = described_class.new
     product_file_1 = create(:product_file, deleted_at: 26.hours.ago)
     product_file_2 = create(:product_file, deleted_at: 26.hours.ago)
 
     allow(instance).to receive(:remove_record_files).and_call_original
     allow(instance).to receive(:remove_record_files).with(satisfy { _1.id == product_file_1.id }).and_raise(RuntimeError.new)
-    expect(Bugsnag).to receive(:notify).with(an_instance_of(RuntimeError))
+    expect(ErrorNotifier).to receive(:notify).with(an_instance_of(RuntimeError))
 
     instance.perform
     expect(product_file_1.deleted_from_cdn_at).to be_nil

@@ -3,15 +3,10 @@
 class ErrorNotifier
   class << self
     def notify(exception_or_message, **context, &block)
-      notify_bugsnag(exception_or_message, **context, &block)
       notify_sentry(exception_or_message, **context, &block)
     end
 
     private
-      def notify_bugsnag(exception_or_message, **context, &block)
-        Bugsnag.notify(exception_or_message, **context, &block)
-      end
-
       def notify_sentry(exception_or_message, **context, &block)
         if exception_or_message.is_a?(Exception)
           Sentry.capture_exception(exception_or_message) do |scope|

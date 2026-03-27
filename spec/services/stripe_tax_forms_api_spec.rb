@@ -31,7 +31,7 @@ describe StripeTaxFormsApi, vcr: { cassette_name: "StripeTaxFormsApi/tax_forms" 
 
     it "returns empty hash on Stripe API error" do
       allow(Stripe).to receive(:raw_request).and_raise(Stripe::APIConnectionError.new("Connection failed"))
-      expect(Bugsnag).to receive(:notify).with(instance_of(Stripe::APIConnectionError))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::APIConnectionError))
 
       result = service.tax_forms_by_year
 
@@ -66,7 +66,7 @@ describe StripeTaxFormsApi, vcr: { cassette_name: "StripeTaxFormsApi/tax_forms" 
 
     it "returns nil when there is an error" do
       allow(HTTParty).to receive(:get).and_raise(HTTParty::Error.new("Connection failed"))
-      expect(Bugsnag).to receive(:notify).with(instance_of(HTTParty::Error))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(HTTParty::Error))
 
       result = service.download_tax_form
 

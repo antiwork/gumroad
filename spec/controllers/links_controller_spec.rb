@@ -120,8 +120,8 @@ describe LinksController, :vcr, inertia: true do
           allow_any_instance_of(Link).to receive(:publish!).and_raise("error")
         end
 
-        it "sends a Bugsnag notification" do
-          expect(Bugsnag).to receive(:notify).once
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify).once
 
           post :publish, params: { id: @disabled_link.unique_permalink }
         end

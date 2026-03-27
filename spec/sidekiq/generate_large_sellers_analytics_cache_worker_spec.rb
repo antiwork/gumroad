@@ -25,7 +25,7 @@ describe GenerateLargeSellersAnalyticsCacheWorker do
     it "rescues and report errors" do
       # user 1
       expect(CreatorAnalytics::CachingProxy).to receive(:new).with(@user_1).and_raise("Something went wrong")
-      expect(Bugsnag).to receive(:notify) do |exception|
+      expect(ErrorNotifier).to receive(:notify) do |exception|
         expect(exception.message).to eq("Something went wrong")
       end
       # user 2

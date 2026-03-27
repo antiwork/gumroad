@@ -205,8 +205,6 @@ GEM
       builder (>= 3.2.4)
       rexml (>= 3.1.9)
     bson (5.1.1)
-    bugsnag (6.27.1)
-      concurrent-ruby (~> 1.0)
     builder (3.3.0)
     bullet (8.0.8)
       activesupport (>= 3.0.0)
@@ -1116,7 +1114,6 @@ DEPENDENCIES
   benchmark (~> 0.4)
   bootsnap (~> 1.15)
   braintree (~> 4.9)
-  bugsnag (~> 6.25)
   builder (~> 3.2)
   bullet
   bundler

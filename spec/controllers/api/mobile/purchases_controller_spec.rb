@@ -215,7 +215,7 @@ describe Api::Mobile::PurchasesController do
     it "responds with an empty list on error" do
       allow_any_instance_of(Purchase).to receive(:json_data_for_mobile).and_raise(StandardError.new("error"))
       create(:purchase, purchaser: @purchaser)
-      expect(Bugsnag).to receive(:notify).once
+      expect(ErrorNotifier).to receive(:notify).once
 
       get :index, params: @params
 

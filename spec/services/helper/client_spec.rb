@@ -61,7 +61,7 @@ describe Helper::Client do
     end
 
     context "when the request fails" do
-      it "notifies Bugsnag" do
+      it "notifies error tracker" do
         stub_request(:patch, "https://api.helper.ai/api/v1/mailboxes/gumroad/conversations/#{conversation_id}/")
           .with(
             body: hash_including(status: "closed", timestamp: instance_of(Integer)),
@@ -69,7 +69,7 @@ describe Helper::Client do
           )
           .to_return(status: 422)
 
-        expect(Bugsnag).to receive(:notify).with("Helper error: could not close conversation", conversation_id:)
+        expect(ErrorNotifier).to receive(:notify).with("Helper error: could not close conversation", conversation_id:)
         expect(helper.close_conversation(conversation_id:)).to be false
       end
     end
@@ -103,11 +103,11 @@ describe Helper::Client do
     end
 
     context "when the request fails" do
-      it "notifies Bugsnag" do
+      it "notifies error tracker" do
         stub_request(:post, "https://api.helper.ai/api/v1/mailboxes/gumroad/conversations/#{conversation_id}/emails/")
           .to_return(status: 422)
 
-        expect(Bugsnag).to receive(:notify).with("Helper error: could not send reply", conversation_id:, message:)
+        expect(ErrorNotifier).to receive(:notify).with("Helper error: could not send reply", conversation_id:, message:)
         expect(helper.send_reply(conversation_id:, message:)).to be false
       end
     end
@@ -125,11 +125,11 @@ describe Helper::Client do
     end
 
     context "when the request fails" do
-      it "notifies Bugsnag" do
+      it "notifies error tracker" do
         stub_request(:post, "https://api.helper.ai/api/v1/mailboxes/gumroad/conversations/#{conversation_id}/notes/")
           .to_return(status: 422)
 
-        expect(Bugsnag).to receive(:notify).with("Helper error: could not add note", conversation_id:, message:)
+        expect(ErrorNotifier).to receive(:notify).with("Helper error: could not add note", conversation_id:, message:)
         expect(helper.add_note(conversation_id:, message:)).to be false
       end
     end

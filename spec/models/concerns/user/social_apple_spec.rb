@@ -71,8 +71,8 @@ describe User::SocialApple do
     end
 
     context "when the uid is blank" do
-      it "returns nil and notifies Bugsnag" do
-        expect(Bugsnag).to receive(:notify).with("Apple OAuth data is missing a uid")
+      it "returns nil and notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).with("Apple OAuth data is missing a uid")
 
         result = User.find_or_create_for_apple_oauth({ "uid" => "", "info" => {} })
         expect(result).to be_nil

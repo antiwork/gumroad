@@ -878,8 +878,8 @@ describe PaypalChargeProcessor, :vcr do
         end.to raise_error(ZeroDivisionError)
       end
 
-      it "notifies Bugsnag" do
-        expect(Bugsnag).to receive(:notify).exactly(:once)
+      it "notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).exactly(:once)
         begin
           PaypalChargeProcessor.create_order(nil)
         rescue StandardError
@@ -888,8 +888,8 @@ describe PaypalChargeProcessor, :vcr do
       end
 
       context "when `purchase` is empty" do
-        it "notifies Bugsnag and raises the exception" do
-          expect(Bugsnag).to receive(:notify).exactly(:once)
+        it "notifies error tracker and raises the exception" do
+          expect(ErrorNotifier).to receive(:notify).exactly(:once)
           expect { PaypalChargeProcessor.create_order(nil) }.to raise_error(ChargeProcessorError)
         end
       end

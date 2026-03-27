@@ -43,11 +43,11 @@ describe User::MoneyBalance do
         expect(@user.unpaid_balance_cents(via: :elasticsearch)).to eq 0
       end
 
-      it "still returns the correct balance if Elasticsearch call failed and sends error to Bugsnag" do
+      it "still returns the correct balance if Elasticsearch call failed and sends error notification" do
         create(:balance, user: @user, amount_cents: 100, state: "unpaid", date: 1.day.ago)
         create(:balance, user: @user, amount_cents: 200, state: "unpaid", date: 3.days.ago)
         expect(Balance).to receive(:amount_cents_sum_for).with(@user).and_raise(Net::OpenTimeout)
-        expect(Bugsnag).to receive(:notify).and_call_original
+        expect(ErrorNotifier).to receive(:notify).and_call_original
         expect(@user.unpaid_balance_cents(via: :elasticsearch)).to eq 300
       end
     end

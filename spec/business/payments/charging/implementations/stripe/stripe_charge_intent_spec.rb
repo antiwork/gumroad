@@ -153,8 +153,8 @@ describe StripeChargeIntent, :vcr do
         allow(processor_payment_intent.next_action).to receive(:type).and_return "redirect_to_url"
       end
 
-      it "notifies us via Bugsnag" do
-        expect(Bugsnag).to receive(:notify).with(/requires an unsupported action/)
+      it "notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).with(/requires an unsupported action/)
         described_class.new(payment_intent: processor_payment_intent)
       end
     end
