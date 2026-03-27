@@ -1,8 +1,8 @@
 services:
   db_test:
     image: quay.io/gumroad/mysql:8.0.32
-    volumes:
-      - mysql_data:/var/lib/mysql
+    tmpfs:
+      - /var/lib/mysql:size=512M
     ports:
       - "3306"
     environment:
@@ -12,6 +12,11 @@ services:
       - "--default-authentication-plugin=mysql_native_password"
       - "--collation-server=utf8mb4_unicode_ci"
       - "--character-set-server=utf8mb4"
+      - "--innodb-flush-log-at-trx-commit=0"
+      - "--innodb-doublewrite=0"
+      - "--sync-binlog=0"
+      - "--innodb-flush-method=nosync"
+      - "--skip-log-bin"
 
   redis:
     image: quay.io/gumroad/redis:7.0.7
@@ -33,7 +38,7 @@ services:
     ports:
       - "9200"
     environment:
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
       - "discovery.type=single-node"
 
   memcached:
@@ -112,7 +117,6 @@ services:
       done < /fixture-files-public.txt; echo \"Fixture files copied successfully\"; exit 0; "
 
 volumes:
-  mysql_data:
   redis_data:
   mongo_data:
   minio_data:
