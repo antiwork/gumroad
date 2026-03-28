@@ -6,6 +6,10 @@ class ThumbnailsController < Sellers::BaseController
   def create
     authorize Thumbnail
 
+    if !params[:thumbnail].respond_to?(:permit)
+      return render(json: { success: false, error: "Invalid thumbnail parameter. Expected signed_blob_id." }, status: :bad_request)
+    end
+
     thumbnail = @product.thumbnail || @product.build_thumbnail
 
     if permitted_params[:signed_blob_id].present?

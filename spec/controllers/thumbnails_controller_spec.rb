@@ -39,6 +39,15 @@ describe ThumbnailsController, :vcr do
       end
     end
 
+    it "returns error when thumbnail param is a raw file upload instead of signed_blob_id" do
+      expect do
+        post(:create, params: { link_id: product.unique_permalink, thumbnail: fixture_file_upload("Austin's Mojo.png", "image/png"), format: :json })
+      end.to_not change { Thumbnail.count }
+
+      expect(response.status).to eq(400)
+      expect(response.parsed_body).to eq({ "success" => false, "error" => "Invalid thumbnail parameter. Expected signed_blob_id." })
+    end
+
     context "with using image file" do
       it "fails for an invalid thumbnail" do
         expect(product.thumbnail).to eq(nil)
