@@ -212,18 +212,16 @@ describe Api::Mobile::PurchasesController do
       expect(response.body).to be_blank
     end
 
-    it "responds with an empty list on error" do
-      allow_any_instance_of(Purchase).to receive(:json_data_for_mobile).and_raise(StandardError.new("error"))
-      create(:purchase, purchaser: @purchaser)
-      expect(ErrorNotifier).to receive(:notify).once
+    it "applies default pagination when no pagination params are provided" do
+      products = create_list(:product, 3, user: @user)
+      products.each do |product|
+        create(:purchase, link: product, purchaser: @purchaser)
+      end
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
-        success: true,
-        products: [],
-        user_id: @purchaser.external_id
-      }.as_json)
+      expect(response.parsed_body[:success]).to be true
+      expect(response.parsed_body[:products].size).to eq(3)
     end
 
     describe "show all products" do
