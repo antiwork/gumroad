@@ -109,7 +109,7 @@ class UrlRedirectsController < ApplicationController
           StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
         end
 
-        return redirect_to(@url_redirect.download_page_url)
+        return redirect_to(@url_redirect.download_page_url, allow_other_host: true)
       end
 
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)

@@ -1007,6 +1007,19 @@ describe UrlRedirectsController, inertia: true do
         expect(flash[:warning]).to eq("We are preparing the file for download. You will receive an email when it is ready.")
         expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(url_redirect.purchase_id, true).on("critical")
       end
+
+      context "when accessed via custom domain", type: :request do
+        it "redirects to download page without raising UnsafeRedirectError" do
+          product_file = create(:readable_document, link: @product, pdf_stamp_enabled: true)
+          url_redirect = UrlRedirect.find_by(token: @token)
+          custom_domain = create(:custom_domain, user: @product.user)
+
+          get url_redirect_download_product_files_path(url_redirect.token, product_file_ids: [product_file.external_id]),
+              headers: { "HOST" => custom_domain.domain }
+
+          expect(response).to redirect_to(url_redirect.download_page_url)
+        end
+      end
     end
   end
 
