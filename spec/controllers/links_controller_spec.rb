@@ -198,6 +198,17 @@ describe LinksController, :vcr, inertia: true do
           expect(@product.reload.deleted_at.present?).to be(true)
         end
       end
+
+      it "allows deletion when default_offer_code is no longer associated with the product" do
+        product = create(:product, user: seller)
+        offer_code = create(:offer_code, user: seller, products: [product])
+        product.update!(default_offer_code: offer_code)
+        offer_code.products = []
+
+        delete :destroy, params: { id: product.unique_permalink }
+
+        expect(product.reload.deleted_at).to be_present
+      end
     end
 
     describe "GET edit" do
