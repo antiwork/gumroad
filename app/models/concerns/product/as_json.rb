@@ -79,6 +79,7 @@ module Product::AsJson
       cached_default_price_cents = default_price_cents
 
       ppp_factors = purchasing_power_parity_enabled? ? options[:preloaded_ppp_factors] || PurchasingPowerParityService.new.get_all_countries_factors(user) : nil
+      slim = options[:slim]
 
       json = as_json(original: true, only: keep).merge!(
         "id" => external_id,
@@ -97,14 +98,14 @@ module Product::AsJson
         "custom_summary" => custom_summary,
         "is_tiered_membership" => is_tiered_membership?,
         "recurrences" => is_tiered_membership? ? prices.alive.is_buy.map(&:recurrence).uniq : nil,
-        "rich_content" => rich_content_json,
-        "has_same_rich_content_for_all_variants" => has_same_rich_content_for_all_variants?,
-        "files" => ordered_alive_product_files.map do |f|
+        "rich_content" => slim ? nil : rich_content_json,
+        "has_same_rich_content_for_all_variants" => slim ? nil : has_same_rich_content_for_all_variants?,
+        "files" => slim ? nil : ordered_alive_product_files.map do |f|
           {
             id: f.external_id,
             name: f.display_name,
             size: f.size,
-            url: f.url,
+            url: f.signed_url,
             filetype: f.filetype,
             filegroup: f.filegroup,
           }
@@ -129,7 +130,7 @@ module Product::AsJson
                 is_pay_what_you_want: variant.customizable_price?,
                 recurrence_prices: is_tiered_membership? ? variant.recurrence_price_values : nil,
                 url: nil, # Deprecated
-                rich_content: variant.rich_content_json,
+                rich_content: slim ? nil : variant.rich_content_json,
               }
             end.map do
               ppp_factors.blank? ? _1 :

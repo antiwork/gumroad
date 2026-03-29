@@ -1,24 +1,36 @@
 # frozen_string_literal: true
 
 class Api::V2::LinksController < Api::V2::BaseController
+  BASE_PRODUCT_ASSOCIATIONS = [
+    :preorder_link, :tags, :taxonomy,
+    { display_asset_previews: [:file_attachment, :file_blob] },
+    { bundle_products: [:product, :variant] },
+  ].freeze
+
+  INDEX_PRODUCT_ASSOCIATIONS = (BASE_PRODUCT_ASSOCIATIONS + [
+    { variant_categories_alive: [:alive_variants] },
+  ]).freeze
+
+  SHOW_PRODUCT_ASSOCIATIONS = (BASE_PRODUCT_ASSOCIATIONS + [
+    :ordered_alive_product_files,
+    :alive_rich_contents,
+    { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },
+  ]).freeze
+
   before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy]) { doorkeeper_authorize! :edit_products }
   before_action :check_types_of_file_objects, only: [:update, :create]
   before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy]
   before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy]
-  before_action :preload_product_associations, only: [:show]
 
   def index
     products = current_resource_owner.products.visible.includes(
-      :preorder_link, :tags, :taxonomy,
-      :alive_rich_contents, :ordered_alive_product_files,
-      { display_asset_previews: [:file_attachment, :file_blob] },
-      bundle_products: [:product, :variant],
-      variant_categories_alive: [{ alive_variants: :alive_rich_contents }],
+      *INDEX_PRODUCT_ASSOCIATIONS
     ).order(created_at: :desc)
 
     as_json_options = {
       api_scopes: doorkeeper_token.scopes,
+      slim: true,
       preloaded_ppp_factors: PurchasingPowerParityService.new.get_all_countries_factors(current_resource_owner)
     }
 
@@ -32,6 +44,7 @@ class Api::V2::LinksController < Api::V2::BaseController
   end
 
   def show
+    ActiveRecord::Associations::Preloader.new(records: [@product], associations: SHOW_PRODUCT_ASSOCIATIONS).call
     success_with_product(@product)
   end
 
@@ -71,19 +84,6 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     def error_with_product(product = nil)
       error_with_object(:product, product)
-    end
-
-    def preload_product_associations
-      ActiveRecord::Associations::Preloader.new(
-        records: [@product],
-        associations: [
-          :preorder_link, :tags, :taxonomy,
-          :alive_rich_contents, :ordered_alive_product_files,
-          { display_asset_previews: [:file_attachment, :file_blob] },
-          { bundle_products: [:product, :variant] },
-          { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },
-        ]
-      ).call
     end
 
     def check_types_of_file_objects

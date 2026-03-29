@@ -31,7 +31,7 @@ describe Api::V2::LinksController do
         expect(response.parsed_body).to eq({
           success: true,
           products: [@product2, @product1]
-        }.as_json(api_scopes: ["view_public"]))
+        }.as_json(api_scopes: ["view_public"], slim: true))
       end
     end
 
@@ -45,7 +45,7 @@ describe Api::V2::LinksController do
         get @action, params: @params
         @product1.reload
         @product2.reload
-        expect(response.parsed_body).to eq({ success: true, products: [@product2, @product1] }.as_json(api_scopes: ["view_sales"]))
+        expect(response.parsed_body).to eq({ success: true, products: [@product2, @product1] }.as_json(api_scopes: ["view_sales"], slim: true))
       end
     end
 
@@ -223,14 +223,25 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["product"]).to have_key("has_same_rich_content_for_all_variants")
       end
 
-      it "includes files array" do
+      it "includes files array with signed URLs for uploaded files" do
         file = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf")
 
         get :show, params: @params
-        expect(response.parsed_body["product"]["files"]).to be_an(Array)
-        expect(response.parsed_body["product"]["files"].first["id"]).to eq(file.external_id)
-        expect(response.parsed_body["product"]["files"].first["filetype"]).to eq(file.filetype)
-        expect(response.parsed_body["product"]["files"].first["filegroup"]).to eq(file.filegroup)
+        files = response.parsed_body["product"]["files"]
+        expect(files).to be_an(Array)
+        expect(files.first["id"]).to eq(file.external_id)
+        expect(files.first["filetype"]).to eq(file.filetype)
+        expect(files.first["filegroup"]).to eq(file.filegroup)
+        expect(files.first["url"]).not_to eq(file.url)
+        expect(files.first["url"]).to be_present
+      end
+
+      it "includes raw URL for external link files" do
+        file = create(:product_file, link: @product, url: "https://example.com/my-file.zip", filetype: "link")
+
+        get :show, params: @params
+        files = response.parsed_body["product"]["files"]
+        expect(files.first["url"]).to eq("https://example.com/my-file.zip")
       end
 
       it "includes covers array and main_cover_id" do
