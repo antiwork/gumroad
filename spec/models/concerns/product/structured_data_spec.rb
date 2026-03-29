@@ -23,7 +23,7 @@ describe Product::StructuredData do
           product.display_product_reviews = false
           product.save!
           create(:product_review_stat, link: product, reviews_count: 5, average_rating: 4.5,
-                 ratings_of_five_count: 4, ratings_of_four_count: 1)
+                                       ratings_of_five_count: 4, ratings_of_four_count: 1)
         end
 
         it "returns an empty hash" do
@@ -36,7 +36,7 @@ describe Product::StructuredData do
           product.display_product_reviews = true
           product.save!
           create(:product_review_stat, link: product, reviews_count: 12, average_rating: 4.8,
-                 ratings_of_five_count: 10, ratings_of_four_count: 2)
+                                       ratings_of_five_count: 10, ratings_of_four_count: 2)
         end
 
         it "returns a Product schema" do
@@ -254,7 +254,7 @@ describe Product::StructuredData do
           product.display_product_reviews = true
           product.save!
           create(:product_review_stat, link: product, reviews_count: 8, average_rating: 4.3,
-                 ratings_of_five_count: 5, ratings_of_four_count: 3)
+                                       ratings_of_five_count: 5, ratings_of_four_count: 3)
         end
 
         it "includes aggregateRating in the Book schema" do
@@ -275,7 +275,7 @@ describe Product::StructuredData do
           product.display_product_reviews = false
           product.save!
           create(:product_review_stat, link: product, reviews_count: 8, average_rating: 4.3,
-                 ratings_of_five_count: 5, ratings_of_four_count: 3)
+                                       ratings_of_five_count: 5, ratings_of_four_count: 3)
         end
 
         it "does not include aggregateRating" do
