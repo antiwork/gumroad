@@ -14,7 +14,7 @@ class CommunityChatRecapMailer < ApplicationMailer
     recap_run = @recaps.first.community_chat_recap_run
     @recap_frequency = recap_run.recap_frequency
 
-    subject = "Your #{@recap_frequency} #{@seller.name.truncate(20)} community recap: #{humanized_duration(@recap_frequency, recap_run)}"
+    subject = "Your #{@recap_frequency} #{@seller.name.to_s.truncate(20)} community recap: #{humanized_duration(@recap_frequency, recap_run)}"
 
     mail(
       to: user.form_email,
