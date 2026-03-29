@@ -727,6 +727,39 @@ describe Order::ChargeService, :vcr do
     end
   end
 
+  describe "#ensure_all_purchases_processed" do
+    it "does not raise when purchases is nil" do
+      order = create(:order)
+      service = Order::ChargeService.new(order:, params: { line_items: [] })
+      expect { service.send(:ensure_all_purchases_processed, nil) }.not_to raise_error
+    end
+
+    it "does not raise NoMethodError when an error occurs before non_free_seller_purchases is assigned" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 10_00)
+      line_items = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ]
+      }
+      params = line_items.merge(
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      )
+
+      order, _ = Order::CreateService.new(params:).perform
+
+      allow(order.charges).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      expect { Order::ChargeService.new(order:, params:).perform }.not_to raise_error
+    end
+  end
+
   describe "#mandate_options_for_stripe" do
     let!(:seller) { create(:user) }
     let!(:membership_product) { create(:membership_product_with_preset_tiered_pricing, user: seller) }

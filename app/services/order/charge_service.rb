@@ -233,6 +233,8 @@ class Order::ChargeService
   end
 
   def ensure_all_purchases_processed(purchases)
+    return if purchases.nil?
+
     purchases.each do |purchase|
       line_item_uid = params[:line_items].find do |line_item|
         purchase.link.unique_permalink == line_item[:permalink] &&
