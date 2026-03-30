@@ -22,7 +22,7 @@ import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
@@ -46,6 +46,7 @@ import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-compo
 import { Avatar } from "$app/components/ui/Avatar";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Select } from "$app/components/ui/Select";

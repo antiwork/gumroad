@@ -1,7 +1,7 @@
 import { Facebook } from "@boxicons/react";
 import * as React from "react";
 
-import { NavigationButton } from "$app/components/Button";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 
 const isFbSdkInitialized = () => typeof FB !== "undefined";
 

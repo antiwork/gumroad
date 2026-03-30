@@ -8,7 +8,7 @@ import { signupAndAddPurchaseToLibrary } from "$app/data/open_in_app";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { PageListLayout } from "$app/components/Download/PageListLayout";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
@@ -20,6 +20,7 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 export type PurchaseCustomField = {

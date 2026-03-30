@@ -8,11 +8,11 @@ import { isUrlValid } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { NavigationButtonInertia } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 
 import { AffiliateForm, AffiliateProduct } from "./Form";

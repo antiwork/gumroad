@@ -1,9 +1,46 @@
 import { Link } from "@inertiajs/react";
+import type { VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-import { buttonVariants, NavigationButtonProps } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
+import type { BrandName } from "$app/components/Button";
+import { ButtonColor } from "$app/components/design";
+
+type ButtonVariation = {
+  color?: ButtonColor | BrandName | undefined;
+  outline?: boolean | undefined;
+};
+
+export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutRef<"a">, "color">, ButtonVariation {
+  size?: VariantProps<typeof buttonVariants>["size"];
+  disabled?: boolean | undefined;
+}
+
+export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
+  ({ className, color, outline, size, disabled, children, ...props }, ref) => (
+    <Button asChild className={className} color={color} outline={outline} size={size} disabled={disabled}>
+      <a
+        ref={ref}
+        inert={disabled}
+        {...props}
+        onClick={(evt) => {
+          if (props.onClick == null) return;
+
+          if (props.href == null || props.href === "#") evt.preventDefault();
+
+          props.onClick(evt);
+
+          evt.stopPropagation();
+        }}
+      >
+        {children}
+      </a>
+    </Button>
+  ),
+);
+NavigationButton.displayName = "NavigationButton";
 
 /*
     This component is for inertia specific navigation button,

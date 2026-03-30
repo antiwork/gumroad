@@ -6,13 +6,13 @@ import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
-import { NavigationButton } from "$app/components/Button";
 import { getNotForSaleMessage, Product, ProductDiscount, Purchase } from "$app/components/Product";
 import {
   applySelection,
   hasMetDiscountConditions,
   PriceSelection,
 } from "$app/components/Product/ConfigurationSelector";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 

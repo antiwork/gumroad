@@ -7,7 +7,7 @@ import { trackUserProductAction } from "$app/data/user_action_event";
 import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CartItem } from "$app/components/Checkout/cartState";
 import { useState } from "$app/components/Checkout/payment";
 import { DiscordButton } from "$app/components/DiscordButton";
@@ -18,6 +18,7 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 
 export const LineItem = ({
   name,

@@ -3,8 +3,8 @@ import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { ArticleLink } from "$app/components/HelpCenterPage/types";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Input } from "$app/components/ui/Input";
+import { NavigationButtonInertia } from "$app/components/ui/NavigationButton";
 
 import { HelpCenterLayout } from "../Layout";
 

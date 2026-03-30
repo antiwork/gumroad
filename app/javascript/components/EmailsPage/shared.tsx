@@ -7,11 +7,12 @@ import { formatStatNumber } from "$app/utils/formatStatNumber";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { EditEmailButton, NewEmailButton } from "$app/components/EmailsPage/Layout";
 import { ViewEmailButton } from "$app/components/EmailsPage/ViewEmailButton";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 
 type DeleteEmailModalProps = {
   installment: { id: string; name: string } | null;

@@ -2,7 +2,7 @@ import { Link, Plus } from "@boxicons/react";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
@@ -16,6 +16,7 @@ import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
 

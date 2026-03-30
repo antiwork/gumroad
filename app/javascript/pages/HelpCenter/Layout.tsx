@@ -3,10 +3,11 @@ import { HelperClientProvider } from "@helperai/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { NewTicketModal } from "$app/components/support/NewTicketModal";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";

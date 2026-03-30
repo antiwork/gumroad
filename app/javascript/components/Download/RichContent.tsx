@@ -12,7 +12,7 @@ import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
 import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
 import { License, useContentFiles } from "$app/components/DownloadPage/WithContent";
@@ -28,6 +28,7 @@ import { ExternalMediaFileEmbed } from "$app/components/TiptapExtensions/MediaEm
 import { MoreLikeThis } from "$app/components/TiptapExtensions/MoreLikeThis";
 import { Posts } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 

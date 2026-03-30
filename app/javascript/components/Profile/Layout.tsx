@@ -3,7 +3,6 @@ import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
 
-import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCartItemsCount } from "$app/components/Checkout/useCartItemsCount";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
@@ -11,6 +10,7 @@ import { PoweredByFooter } from "$app/components/PoweredByFooter";
 import { TopCreatorBadge } from "$app/components/Product/AuthorByline";
 import { FollowForm } from "$app/components/Profile/FollowForm";
 import { Avatar } from "$app/components/ui/Avatar";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 

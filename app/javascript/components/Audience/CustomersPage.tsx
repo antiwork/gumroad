@@ -69,14 +69,13 @@ import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton, buttonVariants } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { FileKindIcon } from "$app/components/FileRowContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -94,6 +93,7 @@ import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui
 import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { NavigationButton, NavigationButtonInertia } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";

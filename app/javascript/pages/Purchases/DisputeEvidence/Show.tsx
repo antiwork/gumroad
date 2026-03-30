@@ -14,7 +14,7 @@ import {
 } from "$app/data/purchase/dispute_evidence_data";
 import FileUtils from "$app/utils/file";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -22,6 +22,7 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InlineList } from "$app/components/ui/InlineList";
 import { Label } from "$app/components/ui/Label";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Radio } from "$app/components/ui/Radio";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { Textarea } from "$app/components/ui/Textarea";

@@ -1,8 +1,9 @@
 import { ChevronDown, Dropbox as DropboxIcon, FileCode } from "@boxicons/react";
 import * as React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 
 type Props = { zip_path: string; files: { url: string; filename: string | null }[] };
 

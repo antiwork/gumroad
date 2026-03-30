@@ -12,12 +12,13 @@ import { classNames } from "$app/utils/classNames";
 import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Input } from "$app/components/ui/Input";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 

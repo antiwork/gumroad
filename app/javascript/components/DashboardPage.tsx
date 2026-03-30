@@ -6,7 +6,7 @@ import * as React from "react";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
 import { EmailBlastIcon } from "$app/components/icons/getting-started/EmailBlastIcon";
@@ -22,6 +22,7 @@ import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { Alert } from "$app/components/ui/Alert";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";

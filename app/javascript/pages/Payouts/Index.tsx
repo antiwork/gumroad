@@ -8,10 +8,9 @@ import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymb
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import {
   type BankAccount,
   type CurrentPayoutsDataAndPaymentMethodWithUserPayable,
@@ -26,6 +25,7 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { NavigationButton, NavigationButtonInertia } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";

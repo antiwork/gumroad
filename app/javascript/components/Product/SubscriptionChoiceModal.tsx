@@ -1,8 +1,9 @@
 import * as React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { Purchase } from "$app/components/Product";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 
 type Props = {
   purchase: Purchase;

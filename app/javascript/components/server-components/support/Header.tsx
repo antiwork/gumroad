@@ -2,9 +2,10 @@ import { Github, Search } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";

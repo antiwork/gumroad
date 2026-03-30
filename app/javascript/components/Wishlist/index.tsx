@@ -8,13 +8,14 @@ import { classNames } from "$app/utils/classNames";
 import { RecurrenceId, recurrenceNames } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Card } from "$app/components/Product/Card";
 import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Avatar } from "$app/components/ui/Avatar";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";

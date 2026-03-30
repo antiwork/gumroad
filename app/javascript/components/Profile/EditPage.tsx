@@ -10,7 +10,7 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError } from "$app/utils/request";
 
 import AutoLink from "$app/components/AutoLink";
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { Modal } from "$app/components/Modal";
 import { ProfileProps, TabWithId, useTabs } from "$app/components/Profile";
@@ -18,6 +18,7 @@ import { SectionLayout } from "$app/components/Profile/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";

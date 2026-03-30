@@ -26,7 +26,6 @@ import { variantLabel } from "$app/utils/labels";
 import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
-import { NavigationButton } from "$app/components/Button";
 import {
   CartItem,
   CartItemEnd,
@@ -71,6 +70,7 @@ import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";

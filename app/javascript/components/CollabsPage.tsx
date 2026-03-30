@@ -3,12 +3,12 @@ import * as React from "react";
 import { Membership, Product } from "$app/data/collabs";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { PaginationProps } from "$app/components/Pagination";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { CollabsMembershipsTable } from "$app/components/ProductsPage/Collabs/MembershipsTable";
 import { CollabsProductsTable } from "$app/components/ProductsPage/Collabs/ProductsTable";
 import { Stats as StatsComponent } from "$app/components/Stats";
+import { NavigationButtonInertia } from "$app/components/ui/NavigationButton";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";

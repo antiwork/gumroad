@@ -1,7 +1,7 @@
 import { TwitterX } from "@boxicons/react";
 import * as React from "react";
 
-import { NavigationButton } from "$app/components/Button";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 
 // if true
 export const TwitterShareButton = ({ url, text = "Join me on @Gumroad!" }: { url: string; text?: string }) => {

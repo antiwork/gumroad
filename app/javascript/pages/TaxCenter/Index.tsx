@@ -6,11 +6,11 @@ import { cast } from "ts-safe-cast";
 
 import { classNames } from "$app/utils/classNames";
 
-import { NavigationButton } from "$app/components/Button";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Select } from "$app/components/ui/Select";

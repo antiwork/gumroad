@@ -4,7 +4,6 @@ import * as React from "react";
 import { classNames } from "$app/utils/classNames";
 import { getRootTaxonomy, getRootTaxonomyCss, Taxonomy } from "$app/utils/discover";
 
-import { NavigationButton } from "$app/components/Button";
 import { CartNavigationButton } from "$app/components/Checkout/CartNavigationButton";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { Nav } from "$app/components/Discover/Nav";
@@ -12,6 +11,7 @@ import { Search } from "$app/components/Discover/Search";
 import { useDomains } from "$app/components/DomainSettings";
 import { Logo } from "$app/components/Logo";
 import { Avatar } from "$app/components/ui/Avatar";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 const UserActionButtons: React.FC = () => {

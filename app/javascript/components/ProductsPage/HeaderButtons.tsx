@@ -2,8 +2,8 @@ import { usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
 
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Search } from "$app/components/Search";
+import { NavigationButtonInertia } from "$app/components/ui/NavigationButton";
 
 type Props = {
   query: string;

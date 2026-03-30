@@ -9,7 +9,7 @@ import { classNames } from "$app/utils/classNames";
 import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
@@ -19,6 +19,7 @@ import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { Alert } from "$app/components/ui/Alert";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";

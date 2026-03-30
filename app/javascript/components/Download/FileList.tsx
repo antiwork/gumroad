@@ -22,7 +22,7 @@ import { createJWPlayer } from "$app/utils/jwPlayer";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { AudioPlayerContainer } from "$app/components/DownloadPage/AudioPlayerContainer";
 import { useIsMobileAppView, useMediaUrls, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
 import { FileRowContent } from "$app/components/FileRowContent";
@@ -32,6 +32,7 @@ import { ProgressPie } from "$app/components/ProgressPie";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useReactNativeMessage } from "$app/components/useReactNativeMessage";

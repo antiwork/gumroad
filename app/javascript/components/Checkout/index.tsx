@@ -11,7 +11,7 @@ import { variantLabel } from "$app/utils/labels";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { formatAmountPerRecurrence, recurrenceNames, recurrenceDurationLabels } from "$app/utils/recurringPricing";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import {
   CartItem,
   CartItemFooter,
@@ -39,6 +39,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";

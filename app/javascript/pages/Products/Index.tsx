@@ -1,13 +1,13 @@
 import { Deferred, usePage } from "@inertiajs/react";
 import React from "react";
 
-import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import ProductsPage from "$app/components/ProductsPage";
 import { ProductsContentLoading } from "$app/components/ProductsPage/ContentLoading";
 import { HeaderButtons } from "$app/components/ProductsPage/HeaderButtons";
 import { type ProductsPageProps } from "$app/components/ProductsPage/ProductsPageProps";
 import { useProductsSearch } from "$app/components/ProductsPage/useProductsSearch";
+import { NavigationButtonInertia } from "$app/components/ui/NavigationButton";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 
 import placeholder from "$assets/images/product_nudge.svg";

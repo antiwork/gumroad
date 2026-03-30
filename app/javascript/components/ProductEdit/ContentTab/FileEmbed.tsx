@@ -16,7 +16,7 @@ import { getMimeType } from "$app/utils/mimetypes";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
-import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 import { connectedFileRowClassName } from "$app/components/Download/RichContent";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
@@ -40,6 +40,7 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";

@@ -3,10 +3,10 @@ import * as React from "react";
 import { CardProduct } from "$app/parsers/product";
 import { formatPriceCentsWithCurrencySymbol, CurrencyCode } from "$app/utils/currency";
 
-import { NavigationButton } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Radio } from "$app/components/ui/Radio";
 
 type BundleProduct = CardProduct & {

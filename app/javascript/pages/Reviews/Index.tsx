@@ -4,7 +4,7 @@ import { cast } from "ts-safe-cast";
 
 import { ProductNativeType } from "$app/parsers/product";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Layout } from "$app/components/Library/Layout";
@@ -14,6 +14,7 @@ import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { RatingStars } from "$app/components/RatingStars";
 import { ReviewForm } from "$app/components/ReviewForm";
 import { Card } from "$app/components/ui/Card";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableRow } from "$app/components/ui/Table";
 import { useOnChange } from "$app/components/useOnChange";

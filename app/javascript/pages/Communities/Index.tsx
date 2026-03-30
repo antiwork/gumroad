@@ -10,7 +10,7 @@ import cable from "$app/channels/consumer";
 import { Community, CommunityChatMessage, Seller, NotificationSettings } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { ChatMessageInput } from "$app/components/Communities/ChatMessageInput";
 import { ChatMessageList } from "$app/components/Communities/ChatMessageList";
 import { CommunityList } from "$app/components/Communities/CommunityList";
@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
+import { NavigationButton } from "$app/components/ui/NavigationButton";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
