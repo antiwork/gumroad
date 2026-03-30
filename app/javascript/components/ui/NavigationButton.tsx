@@ -4,14 +4,7 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-import { Button, buttonVariants } from "$app/components/Button";
-import type { BrandName } from "$app/components/Button";
-import { ButtonColor } from "$app/components/design";
-
-type ButtonVariation = {
-  color?: ButtonColor | BrandName | undefined;
-  outline?: boolean | undefined;
-};
+import { Button, buttonVariants, type ButtonVariation } from "$app/components/Button";
 
 export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutRef<"a">, "color">, ButtonVariation {
   size?: VariantProps<typeof buttonVariants>["size"];

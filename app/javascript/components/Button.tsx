@@ -108,7 +108,7 @@ export const buttonVariants = cva(
   },
 );
 
-type ButtonVariation = {
+export type ButtonVariation = {
   color?: ButtonColor | BrandName | undefined;
   outline?: boolean | undefined;
 };
