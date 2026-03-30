@@ -33,6 +33,22 @@ describe Api::V2::LinksController do
           products: [@product2, @product1]
         }.as_json(api_scopes: ["view_public"], slim: true))
       end
+
+      it "omits detail-only fields from the slim response" do
+        versioned_product = create(:product_with_digital_versions, user: @user, created_at: Time.current + 7200)
+        create(:product_file, link: versioned_product, url: "#{S3_BASE_URL}specs/test.pdf")
+        create(:rich_content, entity: versioned_product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }])
+        create(:rich_content, entity: versioned_product.alive_variants.first, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "variant" }] }])
+
+        get @action, params: @params
+
+        product = response.parsed_body["products"].find { |item| item["id"] == versioned_product.external_id }
+        expect(product).to be_present
+        expect(product).not_to have_key("rich_content")
+        expect(product).not_to have_key("has_same_rich_content_for_all_variants")
+        expect(product).not_to have_key("files")
+        expect(product["variants"].first["options"].first).not_to have_key("rich_content")
+      end
     end
 
     describe "when logged in with sales scope" do

@@ -98,18 +98,6 @@ module Product::AsJson
         "custom_summary" => custom_summary,
         "is_tiered_membership" => is_tiered_membership?,
         "recurrences" => is_tiered_membership? ? prices.alive.is_buy.map(&:recurrence).uniq : nil,
-        "rich_content" => slim ? nil : rich_content_json,
-        "has_same_rich_content_for_all_variants" => slim ? nil : has_same_rich_content_for_all_variants?,
-        "files" => slim ? nil : ordered_alive_product_files.map do |f|
-          {
-            id: f.external_id,
-            name: f.display_name,
-            size: f.size,
-            url: f.signed_url,
-            filetype: f.filetype,
-            filegroup: f.filegroup,
-          }
-        end,
         "covers" => display_asset_previews.as_json,
         "main_cover_id" => main_preview&.guid,
         "bundle_products" => is_bundle? ? bundle_products.select(&:alive?).sort_by(&:position).map do |bp|
@@ -130,8 +118,9 @@ module Product::AsJson
                 is_pay_what_you_want: variant.customizable_price?,
                 recurrence_prices: is_tiered_membership? ? variant.recurrence_price_values : nil,
                 url: nil, # Deprecated
-                rich_content: slim ? nil : variant.rich_content_json,
-              }
+              }.tap do |option|
+                option[:rich_content] = variant.rich_content_json unless slim
+              end
             end.map do
               ppp_factors.blank? ? _1 :
                 _1.merge({
@@ -144,6 +133,23 @@ module Product::AsJson
           }
         end
       )
+
+      unless slim
+        json.merge!(
+          "rich_content" => rich_content_json,
+          "has_same_rich_content_for_all_variants" => has_same_rich_content_for_all_variants?,
+          "files" => ordered_alive_product_files.map do |f|
+            {
+              id: f.external_id,
+              name: f.display_name,
+              size: f.size,
+              url: f.signed_url,
+              filetype: f.filetype,
+              filegroup: f.filegroup,
+            }
+          end
+        )
+      end
 
       if preorder_link.present?
         json.merge!(
