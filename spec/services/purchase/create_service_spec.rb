@@ -3673,7 +3673,7 @@ describe Purchase::CreateService, :vcr do
 
         it "does not return the existing subscription error" do
           service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:)
-          _purchase, error = service.perform rescue nil
+          _purchase, error = service.perform
 
           expect(error).not_to eq("You already have an active subscription to this membership. Visit your Library to manage it.")
         end
@@ -3696,7 +3696,7 @@ describe Purchase::CreateService, :vcr do
           allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
 
           service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:)
-          service.perform rescue nil
+          service.perform
 
           expect(Subscription::UpdaterService).not_to have_received(:new)
         end
@@ -3710,7 +3710,7 @@ describe Purchase::CreateService, :vcr do
             purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer: nil).perform
 
             expect(purchase).to be_nil
-            expect(error).to be_present
+            expect(error).to eq("You already have an active subscription to this membership. Visit your Library to manage it.")
           end.not_to change(Purchase, :count)
         end
       end

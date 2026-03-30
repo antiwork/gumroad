@@ -28,10 +28,10 @@ export const SubscriptionChoiceModal = ({ purchase, checkoutUrl, open, onClose }
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <NavigationButton href={newSubscriptionHref} target="_top">
-            No, start a new subscription
+            Start a new subscription
           </NavigationButton>
           <NavigationButton href={purchase.membership.manage_url} color="black" target="_blank">
-            Yes, resume subscription
+            Resume subscription
           </NavigationButton>
         </div>
       </Modal>
@@ -49,7 +49,7 @@ export const SubscriptionChoiceModal = ({ purchase, checkoutUrl, open, onClose }
       <div className="grid gap-3 sm:grid-cols-2">
         <Button onClick={onClose}>Cancel</Button>
         <NavigationButton href={newSubscriptionHref} color="black" target="_top">
-          Yes, start a new subscription
+          Start a new subscription
         </NavigationButton>
       </div>
     </Modal>

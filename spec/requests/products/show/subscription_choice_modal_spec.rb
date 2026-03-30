@@ -32,7 +32,7 @@ describe "Subscription choice modal on product page", :js, type: :system do
 
   context "when logged-in buyer has an active subscription" do
     before do
-      create_subscription_with_purchase(state: :active)
+      create_subscription_with_purchase
       login_as buyer
     end
 
@@ -42,15 +42,15 @@ describe "Subscription choice modal on product page", :js, type: :system do
       click_on "Purchase again"
 
       expect(page).to have_text("You already have an active subscription")
-      expect(page).to have_link("Yes, start a new subscription")
-      expect(page).not_to have_link("Yes, resume subscription")
+      expect(page).to have_link("Start a new subscription")
+      expect(page).not_to have_link("Resume subscription")
     end
 
     it "navigates to checkout with force_new_subscription when starting new subscription" do
       visit short_link_path(product)
 
       click_on "Purchase again"
-      click_on "Yes, start a new subscription"
+      click_on "Start a new subscription"
 
       expect(page).to have_current_path(%r{/checkout})
     end
@@ -68,8 +68,8 @@ describe "Subscription choice modal on product page", :js, type: :system do
       click_on "Purchase again"
 
       expect(page).to have_text("Resume your previous subscription?")
-      expect(page).to have_link("Yes, resume subscription")
-      expect(page).to have_link("No, start a new subscription")
+      expect(page).to have_link("Resume subscription")
+      expect(page).to have_link("Start a new subscription")
     end
   end
 

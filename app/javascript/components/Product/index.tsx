@@ -258,8 +258,7 @@ export const Product = ({
   disableAnalytics?: boolean;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);
-  const [subscriptionModalOpen, setSubscriptionModalOpen] = React.useState(false);
-  const [checkoutUrlForModal, setCheckoutUrlForModal] = React.useState("");
+  const [checkoutUrlForModal, setCheckoutUrlForModal] = React.useState<string | null>(null);
   const loggedInUser = useLoggedInUser();
   const descriptionEditor = useRichTextEditor({
     // delay initialization to avoid errors in SSR
@@ -596,7 +595,6 @@ export const Product = ({
               ) {
                 e.preventDefault();
                 setCheckoutUrlForModal(e.currentTarget.href);
-                setSubscriptionModalOpen(true);
               }
             }}
           />
@@ -648,9 +646,9 @@ export const Product = ({
       {purchase && (purchase.membership || purchase.subscription_has_lapsed) && product.is_recurring_billing ? (
         <SubscriptionChoiceModal
           purchase={purchase}
-          checkoutUrl={checkoutUrlForModal}
-          open={subscriptionModalOpen}
-          onClose={() => setSubscriptionModalOpen(false)}
+          checkoutUrl={checkoutUrlForModal ?? ""}
+          open={checkoutUrlForModal !== null}
+          onClose={() => setCheckoutUrlForModal(null)}
         />
       ) : null}
     </article>
