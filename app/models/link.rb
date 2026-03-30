@@ -1042,7 +1042,7 @@ class Link < ApplicationRecord
     attrs[:options] = options
     attrs[:option] = attrs[:options].find { |o| o[:id] == params[:option] } || (native_type != NATIVE_TYPE_COFFEE ? attrs[:options].find { |o| o[:quantity_left] != 0 } : nil)
     variant = attrs[:option] ? Variant.find_by_external_id(attrs[:option][:id]) : nil
-    prices = (is_tiered_membership ? variant : self).prices.is_buy.alive
+    prices = (is_tiered_membership && variant ? variant : self).prices.is_buy.alive
     recurrence = is_recurring_billing ? prices.find { |price| price.recurrence == params[:recurrence] } || prices.find { |price| price.recurrence == default_price_recurrence.recurrence } : nil
     attrs[:recurrence] = recurrence&.recurrence
     attrs[:pay_in_installments] = !!params[:pay_in_installments] && allow_installment_plan?
