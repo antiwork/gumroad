@@ -114,7 +114,9 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   );
   const updateEmail = (id: string, value: Partial<EditableEmailFormState>) => {
     setEmails((prev) => prev.map((email) => (email.id === id ? { ...email, ...value } : email)));
-    setFocusedFieldInfo({ emailId: id, fieldName: Object.keys(value)[0] ?? null });
+    setFocusedFieldInfo((prev) =>
+      prev?.emailId === id ? prev : { emailId: id, fieldName: Object.keys(value)[0] ?? null },
+    );
     if (value.name !== undefined && invalidFields.some((invalidField) => invalidField.emailId === id)) {
       setInvalidFields((prev) => prev.filter((invalidField) => !(invalidField.emailId === id)));
     }
@@ -447,7 +449,7 @@ const EmailRow = ({
     const { fieldName } = focusedFieldInfo;
     if (fieldName === "name") nameInputRef.current?.focus();
     if (fieldName !== "message" && fieldName !== "stream_only") selfRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [focusedFieldInfo]);
+  }, [focusedFieldInfo, email.id]);
   React.useEffect(() => {
     if (expanded) setEditorContent(email.message);
   }, [expanded]);
@@ -587,8 +589,10 @@ const EmailPreview = ({
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
 
   React.useEffect(() => {
-    if (isEditing) setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth" }), 500);
-  });
+    if (!isEditing) return;
+    const timeoutId = setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 500);
+    return () => clearTimeout(timeoutId);
+  }, [isEditing]);
 
   return (
     <section className="flex flex-col gap-4" ref={selfRef}>
