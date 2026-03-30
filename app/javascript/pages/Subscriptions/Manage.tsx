@@ -112,7 +112,7 @@ export default function SubscriptionsManage() {
 
   const subscriptionEntity = subscription.is_installment_plan ? "installment plan" : "membership";
   const restartable = !subscription.alive || subscription.pending_cancellation;
-  const isResubscribing = !subscription.alive && !subscription.pending_cancellation;
+  const isResubscribing = !subscription.alive && !subscription.pending_cancellation && !subscription.is_installment_plan;
   const initialSelection = {
     recurrence: subscription.recurrence,
     rent: false,
