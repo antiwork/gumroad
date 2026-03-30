@@ -18,7 +18,7 @@ class SignupController < Devise::RegistrationsController
   def new
     set_meta_tag(title: "Sign Up")
     auth_presenter = AuthPresenter.new(params:, application: @application)
-    render inertia: "Signup/New", props: auth_presenter.signup_props
+    render inertia: "Signup/New", props: auth_presenter.signup_props.merge(is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?)
   end
 
   def create

@@ -79,8 +79,8 @@ RSpec.describe SendCommunityChatRecapNotificationsJob do
         end
 
         context "when an error occurs" do
-          it "notifies Bugsnag" do
-            expect(Bugsnag).to receive(:notify).with(ActiveRecord::RecordNotFound)
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify).with(ActiveRecord::RecordNotFound)
 
             job.perform("non-existing-id")
           end

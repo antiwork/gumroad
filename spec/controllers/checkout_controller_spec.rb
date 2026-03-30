@@ -45,6 +45,7 @@ describe CheckoutController, type: :controller, inertia: true do
       expect(meta_by_property).to include(
         "gr:google_analytics:enabled" => "true",
         "gr:fb_pixel:enabled" => "true",
+        "gr:tiktok_pixel:enabled" => "true",
         "gr:logged_in_user:id" => "",
         "gr:page:type" => "",
         "gr:facebook_sdk:enabled" => "true"

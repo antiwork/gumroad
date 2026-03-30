@@ -99,12 +99,12 @@ describe MillionDollarMilestoneCheckWorker do
       expect(seller.reload.million_dollar_announcement_sent).to eq(true)
     end
 
-    it "sends Bugsnag notification if announcement cannot be marked as sent" do
+    it "notifies error tracker if announcement cannot be marked as sent" do
       allow_any_instance_of(User).to receive(:gross_sales_cents_total_as_seller).and_return(1_000_000_00)
       allow_any_instance_of(User).to receive(:update).and_return(false)
       create(:purchase, seller:, link: product, created_at: 15.days.ago)
 
-      expect(Bugsnag).to receive(:notify).with("Failed to send Slack notification for million dollar milestone", user_id: seller.id)
+      expect(ErrorNotifier).to receive(:notify).with("Failed to send Slack notification for million dollar milestone", user_id: seller.id)
 
       described_class.new.perform
     end
@@ -118,7 +118,7 @@ describe MillionDollarMilestoneCheckWorker do
       allow_any_instance_of(User).to receive(:gross_sales_cents_total_as_seller).and_return(1_000_000_00)
       allow_any_instance_of(User).to receive(:update).and_return(false)
 
-      expect(Bugsnag).to receive(:notify).with("Failed to send Slack notification for million dollar milestone", user_id: anything).twice
+      expect(ErrorNotifier).to receive(:notify).with("Failed to send Slack notification for million dollar milestone", user_id: anything).twice
 
       described_class.new.perform
     end

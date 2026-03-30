@@ -53,7 +53,7 @@ class PayoutUsersService
     rescue => e
       Rails.logger.error "Error in PayoutUsersService creating payment for user ID #{user_id} => #{e.class.name}: #{e.message}"
       Rails.logger.error "Error in PayoutUsersService creating payment for user ID #{user_id} => #{e.backtrace.join("\n")}"
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       next
     end
 

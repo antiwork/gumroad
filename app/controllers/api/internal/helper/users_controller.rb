@@ -126,7 +126,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         }
       end
     rescue HTTParty::Error, Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, Errno::ECONNREFUSED, SocketError => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
 
       render json: {
         success: false,
@@ -469,7 +469,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         appeal_url: appeal_url
       }
     rescue HTTParty::Error, Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, Errno::ECONNREFUSED, SocketError => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
 
       render json: {
         success: false,

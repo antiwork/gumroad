@@ -196,6 +196,123 @@ describe User::OmniauthCallbacksController do
     end
   end
 
+  describe "#apple" do
+    before do
+      OmniAuth.config.mock_auth[:apple] = OmniAuth::AuthHash.new fetch_json("apple")
+      request.env["omniauth.auth"] = fetch_json("apple")
+      request.env["omniauth.params"] = { "state" => true }
+    end
+
+    it "creates user if none exists" do
+      expect do
+        post :apple
+      end.to change { User.count }.by(1)
+
+      user = User.last
+      expect(user.name).to eq "Jane Appleseed"
+      expect(user.email).to eq "apple-user@example.com"
+      expect(user.user_external_authentications.find_by(provider: "apple")&.uid).to eq "001234.abcdef1234567890abcdef1234567890.1234"
+      expect(user.global_affiliate).to be_present
+    end
+
+    it "associates past purchases with the same email to the new user" do
+      email = request.env["omniauth.auth"]["info"]["email"]
+      purchase1 = create(:purchase, email:)
+      purchase2 = create(:purchase, email:)
+      expect(purchase1.purchaser_id).to be_nil
+      expect(purchase2.purchaser_id).to be_nil
+
+      post :apple
+
+      user = User.last
+      expect(purchase1.reload.purchaser_id).to eq(user.id)
+      expect(purchase2.reload.purchaser_id).to eq(user.id)
+    end
+
+    context "when user is admin" do
+      it "does not allow user to login" do
+        allow(User).to receive(:new).and_return(create(:admin_user))
+
+        post :apple
+
+        expect(flash[:alert]).to eq "You're an admin, you can't login with Apple."
+        expect(response).to redirect_to login_path
+      end
+    end
+
+    context "when user is marked as deleted" do
+      let!(:user) { create(:user, deleted_at: Time.current) }
+
+      before do
+        UserExternalAuthentication.create!(user:, provider: "apple", uid: "001234.abcdef1234567890abcdef1234567890.1234")
+      end
+
+      it "does not allow user to login" do
+        post :apple
+
+        expect(flash[:alert]).to eq ACCOUNT_DELETION_ERROR_MSG
+        expect(response).to redirect_to login_path
+      end
+    end
+
+    context "when user has 2FA" do
+      let!(:user) do
+        u = create(:user, email: "apple-user@example.com", two_factor_authentication_enabled: true)
+        UserExternalAuthentication.create!(user: u, provider: "apple", uid: "001234.abcdef1234567890abcdef1234567890.1234")
+        u
+      end
+
+      it "does not allow user to login with Apple only" do
+        post :apple
+        expect(response).to redirect_to two_factor_authentication_path(next: dashboard_path)
+      end
+
+      it "keeps referral intact" do
+        post :apple, params: { referer: balance_path }
+        expect(response).to redirect_to two_factor_authentication_path(next: balance_path)
+      end
+    end
+
+    context "linking account" do
+      it "links apple account to existing account" do
+        user = create(:user, email: "apple-user@example.com")
+
+        allow(controller).to receive(:current_user).and_return(user)
+
+        post :apple
+
+        user.reload
+
+        expect(user.name).to eq "Jane Appleseed"
+        expect(user.email).to eq "apple-user@example.com"
+        expect(user.user_external_authentications.find_by(provider: "apple")&.uid).to eq "001234.abcdef1234567890abcdef1234567890.1234"
+      end
+    end
+
+    context "when user is not created" do
+      shared_examples "redirects to signup with error message" do
+        it "redirects to the signup page with an error flash message" do
+          post :apple
+
+          expect(flash[:alert]).to eq "Sorry, something went wrong. Please try again."
+          expect(response).to redirect_to signup_path
+        end
+      end
+
+      context "when the user is not persisted" do
+        before { allow(User).to receive(:find_or_create_for_apple_oauth).and_return(User.new) }
+
+        include_examples "redirects to signup with error message"
+      end
+
+      context "when there's an error creating the user" do
+        before { allow(User).to receive(:find_or_create_for_apple_oauth).and_return(nil) }
+
+        include_examples "redirects to signup with error message"
+      end
+    end
+  end
+
   describe "#google_oauth2" do
     before do
       OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new fetch_json("google")

@@ -742,8 +742,8 @@ const SendToKindleContainer = ({
         data: { email: emailEntry, file_external_id: fileId },
       });
 
-      const json = cast<{ success: boolean }>(await response.json());
-      if (!json.success) throw new ResponseError("Please enter a valid Kindle email address.");
+      const json = cast<{ success: boolean; error?: string }>(await response.json());
+      if (!json.success) throw new ResponseError(json.error ?? "Something went wrong.");
 
       showAlert("It's been sent to your Kindle.", "success");
       onDone();

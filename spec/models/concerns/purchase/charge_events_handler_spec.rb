@@ -296,7 +296,7 @@ describe Purchase::ChargeEventsHandler, :vcr do
         it "does not process the message" do
           expect(purchase).to_not receive(:process_refund_or_chargeback_for_purchase_balance)
           expect(purchase).to_not receive(:process_refund_or_chargeback_for_affiliate_credit_balance)
-          expect(Bugsnag).to receive(:notify)
+          expect(ErrorNotifier).to receive(:notify)
 
           Purchase.handle_charge_event(build(:charge_event_dispute_formalized, charge_id: purchase.stripe_transaction_id))
         end
@@ -305,7 +305,7 @@ describe Purchase::ChargeEventsHandler, :vcr do
       describe "chargeback reversed notification received" do
         it "does not process the message" do
           expect(Credit).to_not receive(:create)
-          expect(Bugsnag).to receive(:notify)
+          expect(ErrorNotifier).to receive(:notify)
 
           Purchase.handle_charge_event(build(:charge_event_dispute_won, charge_id: purchase.stripe_transaction_id))
         end
@@ -329,8 +329,8 @@ describe Purchase::ChargeEventsHandler, :vcr do
           purchase.save!
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           Purchase.handle_charge_event(build(:charge_event_dispute_formalized, charge_id: purchase.stripe_transaction_id))
         end
       end
@@ -340,7 +340,7 @@ describe Purchase::ChargeEventsHandler, :vcr do
           expect_any_instance_of(Purchase).to receive(:refund_purchase!).and_call_original
           expect_any_instance_of(Purchase).to receive(:process_refund_or_chargeback_for_purchase_balance)
           expect_any_instance_of(Purchase).to receive(:process_refund_or_chargeback_for_affiliate_credit_balance)
-          expect_any_instance_of(Bugsnag).to_not receive(:notify)
+          expect_any_instance_of(ErrorNotifier).to_not receive(:notify)
 
           Purchase.handle_charge_event(build(:charge_event_settlement_declined, charge_id: purchase.stripe_transaction_id, flow_of_funds: settlement_decline_flow_of_funds))
         end

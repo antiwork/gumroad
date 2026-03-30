@@ -44,7 +44,7 @@ class StripeChargeIntent < ChargeIntent
 
     def validate_next_action
       if payment_intent.status == StripeIntentStatus::REQUIRES_ACTION && payment_intent.next_action.type != StripeIntentStatus::ACTION_TYPE_USE_SDK
-        Bugsnag.notify "Stripe charge intent #{id} requires an unsupported action: #{payment_intent.next_action.type}"
+        ErrorNotifier.notify "Stripe charge intent #{id} requires an unsupported action: #{payment_intent.next_action.type}"
       end
     end
 end

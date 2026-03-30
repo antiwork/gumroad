@@ -13,7 +13,7 @@ class DisputeEvidence::GenerateReceiptImageService
     binary_data = generate_screenshot
 
     unless binary_data
-      Bugsnag.notify("DisputeEvidence::GenerateRefundPolicyImageService: Could not generate screenshot for purchase ID #{purchase.id}")
+      ErrorNotifier.notify("DisputeEvidence::GenerateRefundPolicyImageService: Could not generate screenshot for purchase ID #{purchase.id}")
       return
     end
 

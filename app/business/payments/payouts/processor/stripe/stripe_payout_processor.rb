@@ -182,14 +182,14 @@ class StripePayoutProcessor
     []
   rescue Stripe::InvalidRequestError => e
     failed = true
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     [e.message]
   rescue Stripe::AuthenticationError, Stripe::APIConnectionError
     failed = true
     raise
   rescue Stripe::StripeError => e
     failed = true
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     [e.message]
   ensure
     payment.mark_failed! if failed
@@ -260,7 +260,7 @@ class StripePayoutProcessor
     elsif e.message["Insufficient funds in Stripe account"]
       failure_reason = Payment::FailureReason::INSUFFICIENT_FUNDS
     else
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
     end
     Rails.logger.info("Payouts: Payout errors for user with id: #{payment.user_id} #{e.message}")
     [e.message]
@@ -269,7 +269,7 @@ class StripePayoutProcessor
     raise
   rescue Stripe::StripeError => e
     failed = true
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     Rails.logger.info("Payouts: Payout errors for user with id: #{payment.user_id} #{e.message}")
     [e.message]
   ensure

@@ -6,6 +6,8 @@ ruby file: ".ruby-version"
 
 gem "rails", "7.1.6"
 gem "rake", "13.2.1"
+gem "sentry-ruby"
+gem "sentry-rails"
 
 install_if -> { ENV["BUNDLE_GEMS__CONTRIBSYS__COM"] } do
   source "https://gems.contribsys.com/" do
@@ -77,7 +79,6 @@ gem "aws-sdk-sns", "~> 1.57"
 gem "babel-transpiler", "~> 0.7"
 gem "bootsnap", "~> 1.15", require: false
 gem "braintree", "~> 4.9"
-gem "bugsnag", "~> 6.25"
 gem "builder", "~> 3.2"
 gem "closure_tree", "~> 7.4"
 gem "color", "~> 1.8"
@@ -126,6 +127,7 @@ gem "money", "~> 6.16"
 gem "mongoid", "~> 9.0"
 gem "mysql2", ">= 0.5.6"
 gem "nokogiri", "~> 1.13"
+gem "omniauth-apple", "~> 1.3"
 gem "omniauth-google-oauth2", "~> 1.1", ">= 1.1.1"
 gem "omniauth-rails_csrf_protection", "~> 1.0"
 # Update to a normal release once https://github.com/isaacsanders/omniauth-stripe-connect/issues/67 is fixed

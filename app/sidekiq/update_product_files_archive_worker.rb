@@ -105,7 +105,7 @@ class UpdateProductFilesArchiveWorker
     delete_temp_zip_file_if_exists(zip_archive_filename)
 
     product_files_archive.mark_failed!
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     Rails.logger.info("UpdateProductFilesArchive Job #{product_files_archive.id} failed - #{e.class.name}: #{e.message}")
     raise e
   ensure

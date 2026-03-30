@@ -187,10 +187,10 @@ describe Api::Internal::Helper::UsersController do
     end
 
     context "when api call to iffy raises a network error" do
-      it "notifies Bugsnag and returns an error response" do
+      it "notifies error tracker and returns an error response" do
         network_error = HTTParty::Error.new("Connection failed")
         allow(HTTParty).to receive(:get).and_raise(network_error)
-        expect(Bugsnag).to receive(:notify).with(network_error)
+        expect(ErrorNotifier).to receive(:notify).with(network_error)
 
         get :user_suspension_info, params: { email: user.email }
 
@@ -366,10 +366,10 @@ describe Api::Internal::Helper::UsersController do
     end
 
     context "when api call to iffy raises a network error" do
-      it "notifies Bugsnag and returns an error response" do
+      it "notifies error tracker and returns an error response" do
         network_error = HTTParty::Error.new("Connection failed")
         allow(HTTParty).to receive(:get).and_raise(network_error)
-        expect(Bugsnag).to receive(:notify).with(network_error)
+        expect(ErrorNotifier).to receive(:notify).with(network_error)
 
         post :create_appeal, params: { email: user.email, reason: "test" }
 

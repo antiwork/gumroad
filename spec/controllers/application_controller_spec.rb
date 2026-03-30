@@ -484,44 +484,4 @@ describe ApplicationController do
       expect(session).to_not have_key(:signup_referrer)
     end
   end
-
-  describe "#add_user_to_bugsnag" do
-    controller do
-      # We can't test `before_bugsnag_notify` in test mode, so we're using an action as a proxy
-      def index
-        # By default, Bugsnag reports the user's id as an IP address
-        $bugsnag_event = OpenStruct.new(user: { id: "127.0.0.1" })
-
-        add_user_to_bugsnag($bugsnag_event)
-        render plain: ""
-      end
-    end
-
-    it "does not add user details when not logged in" do
-      get :index
-      expect($bugsnag_event.user).to eq(id: "127.0.0.1")
-    end
-
-
-    it "adds user info when logged in" do
-      user = create(:user, username: "joe", name: "Joe", email: "joe@example.com")
-
-      expected_hash = {
-        email: "joe@example.com",
-        locale: user.locale,
-        id: user.id,
-        name: "Joe",
-        username: "joe",
-      }
-
-      allow(controller).to receive(:current_user).and_return(user)
-      get :index
-      expect($bugsnag_event.user).to include(expected_hash)
-
-      allow(controller).to receive(:current_user).and_return(nil)
-      allow(controller).to receive(:current_resource_owner).and_return(user)
-      get :index
-      expect($bugsnag_event.user).to include(expected_hash)
-    end
-  end
 end

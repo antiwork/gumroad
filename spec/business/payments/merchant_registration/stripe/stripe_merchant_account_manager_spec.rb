@@ -8518,7 +8518,7 @@ describe StripeMerchantAccountManager, :vcr do
 
         allow(Stripe::Account).to receive(:create).and_return(fake_stripe_account)
         allow(Stripe::Account).to receive(:create_person).and_raise(Stripe::InvalidRequestError.new("person creation failed", "person"))
-        allow(Bugsnag).to receive(:notify)
+        allow(ErrorNotifier).to receive(:notify)
       end
 
       it "deletes the Stripe account and marks the merchant account as deleted" do
@@ -8537,7 +8537,7 @@ describe StripeMerchantAccountManager, :vcr do
           subject.create_account(user, passphrase: "1234")
         end.to raise_error(Stripe::InvalidRequestError)
         expect(user.merchant_accounts.alive.count).to eq(0)
-        expect(Bugsnag).to have_received(:notify).at_least(:twice)
+        expect(ErrorNotifier).to have_received(:notify).at_least(:twice)
       end
     end
 
@@ -9164,7 +9164,7 @@ describe StripeMerchantAccountManager, :vcr do
           }
         )).and_call_original
 
-        expect(Bugsnag).not_to receive(:notify)
+        expect(ErrorNotifier).not_to receive(:notify)
         expect { subject.update_bank_account(user, passphrase: "1234") }.not_to raise_error
       end
     end

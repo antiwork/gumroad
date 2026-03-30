@@ -46,7 +46,7 @@ RSpec.describe StripeAccountSessionsController do
 
       it "handles stripe errors" do
         expect(Stripe::AccountSession).to receive(:create).and_raise(StandardError.new("Stripe error"))
-        expect(Bugsnag).to receive(:notify).with("Failed to create stripe account session for user #{seller.id}: Stripe error")
+        expect(ErrorNotifier).to receive(:notify).with("Failed to create stripe account session for user #{seller.id}: Stripe error")
 
         post :create
         expect(response).to have_http_status(:ok)

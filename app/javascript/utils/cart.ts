@@ -60,6 +60,7 @@ export const PLACEHOLDER_CART_ITEM: CartItem = {
     analytics: {
       google_analytics_id: null,
       facebook_pixel_id: null,
+      tiktok_pixel_id: null,
       free_sales: false,
     },
     has_tipping_enabled: true,

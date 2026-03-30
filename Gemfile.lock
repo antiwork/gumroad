@@ -205,8 +205,6 @@ GEM
       builder (>= 3.2.4)
       rexml (>= 3.1.9)
     bson (5.1.1)
-    bugsnag (6.27.1)
-      concurrent-ruby (~> 1.0)
     builder (3.3.0)
     bullet (8.0.8)
       activesupport (>= 3.0.0)
@@ -612,6 +610,9 @@ GEM
       hashie (>= 3.4.6)
       rack (>= 2.2.3)
       rack-protection
+    omniauth-apple (1.4.0)
+      json-jwt
+      omniauth-oauth2
     omniauth-google-oauth2 (1.1.2)
       jwt (>= 2.0)
       oauth2 (~> 2.0)
@@ -938,6 +939,13 @@ GEM
     semantic_range (3.0.0)
     sendgrid-ruby (6.7.0)
       ruby_http_client (~> 3.4)
+    sentry-rails (6.5.0)
+      railties (>= 5.2.0)
+      sentry-ruby (~> 6.5.0)
+    sentry-ruby (6.5.0)
+      bigdecimal
+      concurrent-ruby (~> 1.0, >= 1.0.2)
+      logger
     shakapacker (8.0.1)
       activesupport (>= 5.2)
       package_json
@@ -1106,7 +1114,6 @@ DEPENDENCIES
   benchmark (~> 0.4)
   bootsnap (~> 1.15)
   braintree (~> 4.9)
-  bugsnag (~> 6.25)
   builder (~> 3.2)
   bullet
   bundler
@@ -1166,6 +1173,7 @@ DEPENDENCIES
   mongoid (~> 9.0)
   mysql2 (>= 0.5.6)
   nokogiri (~> 1.13)
+  omniauth-apple (~> 1.3)
   omniauth-google-oauth2 (~> 1.1, >= 1.1.1)
   omniauth-rails_csrf_protection (~> 1.0)
   omniauth-stripe-connect!
@@ -1225,6 +1233,8 @@ DEPENDENCIES
   secure_headers (~> 6.5)
   selenium-webdriver (~> 4.35)
   sendgrid-ruby (~> 6.6)
+  sentry-rails
+  sentry-ruby
   shakapacker (~> 8.0)
   shoulda-matchers (~> 6.0)
   sidekiq (~> 7.2)

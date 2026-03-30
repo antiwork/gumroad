@@ -6,6 +6,7 @@ export type ThirdPartyAnalytics = {
   disable_third_party_analytics: boolean;
   google_analytics_id: string;
   facebook_pixel_id: string;
+  tiktok_pixel_id: string;
   skip_free_sale_analytics: boolean;
   enable_verify_domain_third_party_services: boolean;
   facebook_meta_tag: string;

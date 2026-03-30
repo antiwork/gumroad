@@ -149,7 +149,7 @@ class CreateUsStateMonthlySalesReportsJob
         rescue Taxjar::Error::UnprocessableEntity => e
           Rails.logger.info("CreateUSStateSalesReportsJob: Purchase with external ID #{purchase.external_id} was already created as a TaxJar transaction. #{e.class}: #{e.message}")
         rescue Taxjar::Error::BadRequest => e
-          Bugsnag.notify(e)
+          ErrorNotifier.notify(e)
           Rails.logger.info("CreateUSStateSalesReportsJob: Failed to create TaxJar transaction for purchase with external ID #{purchase.external_id}. #{e.class}: #{e.message}")
         end
 

@@ -551,8 +551,6 @@ def stub_pwned_password_check
 end
 
 def stub_webmock
-  WebMock.stub_request(:post, "https://notify.bugsnag.com/")
-  WebMock.stub_request(:post, "https://sessions.bugsnag.com/")
   WebMock.stub_request(:post, %r{iffy-live\.gumroad\.com/people/buyer_info})
       .with(body: "{\"require_zip\": false}", headers: { status: %w[200 OK], content_type: "application/json" })
   stub_pwned_password_check

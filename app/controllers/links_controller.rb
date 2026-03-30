@@ -446,7 +446,7 @@ class LinksController < ApplicationController
     rescue Link::LinkInvalid, ActiveRecord::RecordInvalid
       return render json: { success: false, error_message: @product.errors.full_messages[0] }
     rescue => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
     end
 
@@ -783,7 +783,7 @@ class LinksController < ApplicationController
         thumbnail.file.analyze
         thumbnail.save!
       rescue => e
-        Bugsnag.notify(e)
+        ErrorNotifier.notify(e)
       end
     end
 
@@ -815,7 +815,7 @@ class LinksController < ApplicationController
           rich_content.save!
         end
       rescue => e
-        Bugsnag.notify(e)
+        ErrorNotifier.notify(e)
       end
     end
 end

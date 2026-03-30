@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "omniauth-apple"
 require "omniauth-google-oauth2"
 
 # Use this hook to configure devise mailer, warden hooks and so forth.
@@ -272,6 +273,15 @@ Devise.setup do |config|
                   GOOGLE_CLIENT_ID,
                   GOOGLE_CLIENT_SECRET,
                   scope: "email,profile"
+
+  config.omniauth :apple,
+                  APPLE_CLIENT_ID,
+                  "",
+                  scope: "email name",
+                  team_id: APPLE_TEAM_ID,
+                  key_id: APPLE_KEY_ID,
+                  pem: APPLE_PRIVATE_KEY,
+                  provider_ignores_state: true
 
   # ==> Warden configuration
   # If you want to use other strategies, that are not supported by Devise, or

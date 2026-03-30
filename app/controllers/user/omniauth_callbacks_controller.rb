@@ -3,6 +3,8 @@
 class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   include PageMeta::Base
 
+  skip_before_action :verify_authenticity_token, only: [:apple]
+
   before_action :set_default_page_title
   before_action :set_csrf_meta_tags
   before_action :set_default_meta_tags
@@ -86,25 +88,12 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
   def google_oauth2
     @user = User.find_or_create_for_google_oauth2(request.env["omniauth.auth"])
+    sign_in_with_oauth("Google")
+  end
 
-    if @user&.persisted?
-      if @user.is_team_member?
-        flash[:alert] = "You're an admin, you can't login with Google."
-        redirect_to login_path
-      elsif @user.deleted?
-        flash[:alert] = "You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!"
-        redirect_to login_path
-      elsif @user.email.present?
-        sign_in_or_prepare_for_two_factor_auth(@user)
-        redirect_to two_factor_authentication_path(next: post_auth_redirect(@user))
-      else
-        sign_in @user
-        safe_redirect_to post_auth_redirect(@user)
-      end
-    else
-      flash[:alert] = "Sorry, something went wrong. Please try again."
-      redirect_to signup_path
-    end
+  def apple
+    @user = User.find_or_create_for_apple_oauth(request.env["omniauth.auth"])
+    sign_in_with_oauth("Apple")
   end
 
   def failure
@@ -112,6 +101,10 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       redirect_to settings_payments_path, notice: params[:error_description]
     else
       Rails.logger.info("OAuth failure and request state unexpected: #{params}")
+      Rails.logger.info("OAuth failure message: #{failure_message}")
+      Rails.logger.info("OAuth failure kind: #{request.env['omniauth.error.type']}")
+      Rails.logger.info("OAuth failure strategy: #{request.env['omniauth.error.strategy']&.name}")
+      Rails.logger.info("OAuth failure error: #{request.env['omniauth.error']&.class} - #{request.env['omniauth.error']&.message}")
       super
     end
   end
@@ -121,8 +114,29 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       @hide_layouts = true
     end
 
+    def sign_in_with_oauth(provider_name)
+      if @user&.persisted?
+        if @user.is_team_member?
+          flash[:alert] = "You're an admin, you can't login with #{provider_name}."
+          redirect_to login_path
+        elsif @user.deleted?
+          flash[:alert] = "You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!"
+          redirect_to login_path
+        elsif @user.email.present?
+          sign_in_or_prepare_for_two_factor_auth(@user)
+          redirect_to two_factor_authentication_path(next: post_auth_redirect(@user))
+        else
+          sign_in @user
+          safe_redirect_to post_auth_redirect(@user)
+        end
+      else
+        flash[:alert] = "Sorry, something went wrong. Please try again."
+        redirect_to signup_path
+      end
+    end
+
     def post_auth_redirect(user)
-      referer = params[:referer].presence || request.env["omniauth.origin"]
+      referer = params[:referer].presence || request.env.dig("omniauth.params", "referer") || request.env["omniauth.origin"]
       if referer.present? && referer != "/"
         safe_redirect_path(referer)
       else

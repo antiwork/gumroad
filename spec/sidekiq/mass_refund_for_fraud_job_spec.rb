@@ -42,7 +42,7 @@ describe MassRefundForFraudJob do
       expect(purchase1).to receive(:refund_for_fraud_and_block_buyer!).with(admin_user.id).and_raise(StandardError.new("Refund failed"))
       expect(purchase2).to receive(:refund_for_fraud_and_block_buyer!).with(admin_user.id)
 
-      expect(Bugsnag).to receive(:notify).with(instance_of(StandardError))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError))
       expect(Rails.logger).to receive(:info).with(/Mass fraud refund completed for product #{product.id}: 1 succeeded, 1 failed/)
 
       described_class.new.perform(product.id, external_ids, admin_user.id)

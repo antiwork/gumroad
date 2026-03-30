@@ -65,6 +65,6 @@ class Communities::ChatMessagesController < ApplicationController
       )
     rescue => e
       Rails.logger.error("Error broadcasting message to community channel: #{e.message}")
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
     end
 end

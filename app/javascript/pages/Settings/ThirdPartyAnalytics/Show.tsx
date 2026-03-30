@@ -96,7 +96,8 @@ export default function ThirdPartyAnalyticsPage() {
                 Learn more
               </a>
               <div>
-                You can add a Facebook tracking pixel and link your Google Analytics properties to track your visitors.
+                You can add a Facebook or TikTok tracking pixel and link your Google Analytics properties to track your
+                visitors.
               </div>
             </>
           }
@@ -138,6 +139,21 @@ export default function ThirdPartyAnalyticsPage() {
                   placeholder="9127380912836192"
                   value={thirdPartyAnalytics.facebook_pixel_id}
                   onChange={(evt) => updateThirdPartyAnalytics({ facebook_pixel_id: evt.target.value })}
+                />
+              </Fieldset>
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}tiktokPixel`}>TikTok Pixel</Label>
+                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                    Learn more
+                  </a>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}tiktokPixel`}
+                  type="text"
+                  placeholder="CFH83AJC77UUUGLE2TJG"
+                  value={thirdPartyAnalytics.tiktok_pixel_id}
+                  onChange={(evt) => updateThirdPartyAnalytics({ tiktok_pixel_id: evt.target.value })}
                 />
               </Fieldset>
               <Label>

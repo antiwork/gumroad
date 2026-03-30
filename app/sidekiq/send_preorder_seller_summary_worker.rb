@@ -9,7 +9,7 @@ class SendPreorderSellerSummaryWorker
 
   def perform(preorder_link_id, attempts = 0)
     if attempts >= MAX_ATTEMPTS_TO_WAIT_FOR_ALL_CHARGED
-      notify_bugsnag_and_raise "Timed out waiting for all preorders to be charged. PreorderLink: #{preorder_link_id}."
+      notify_and_raise "Timed out waiting for all preorders to be charged. PreorderLink: #{preorder_link_id}."
     end
 
     preorder_link = PreorderLink.find(preorder_link_id)
@@ -27,8 +27,8 @@ class SendPreorderSellerSummaryWorker
   end
 
   private
-    def notify_bugsnag_and_raise(error_message)
-      Bugsnag.notify(error_message)
+    def notify_and_raise(error_message)
+      ErrorNotifier.notify(error_message)
       raise error_message
     end
 end
