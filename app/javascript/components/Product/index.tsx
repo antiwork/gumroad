@@ -647,7 +647,6 @@ export const Product = ({
         <SubscriptionChoiceModal
           purchase={purchase}
           checkoutUrl={checkoutUrlForModal ?? ""}
-          open={checkoutUrlForModal !== null}
           onClose={() => setCheckoutUrlForModal(null)}
         />
       ) : null}

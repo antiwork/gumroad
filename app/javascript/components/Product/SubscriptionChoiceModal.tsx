@@ -7,11 +7,11 @@ import { Purchase } from "$app/components/Product";
 type Props = {
   purchase: Purchase;
   checkoutUrl: string;
-  open: boolean;
   onClose: () => void;
 };
 
-export const SubscriptionChoiceModal = ({ purchase, checkoutUrl, open, onClose }: Props) => {
+export const SubscriptionChoiceModal = ({ purchase, checkoutUrl, onClose }: Props) => {
+  const open = checkoutUrl !== "";
   const newSubscriptionHref = React.useMemo(() => {
     if (!checkoutUrl) return "";
     const url = new URL(checkoutUrl, window.location.origin);
