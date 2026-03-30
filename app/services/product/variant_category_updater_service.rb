@@ -101,7 +101,7 @@ class Product::VariantCategoryUpdaterService
       if notify_members_of_price_change
         ScheduleMembershipPriceUpdatesJob.perform_async(variant.id)
       elsif variant.flags_previously_changed? || variant.subscription_price_change_effective_date_previously_changed?
-        Bugsnag.notify("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: #{variant.apply_price_changes_to_existing_memberships?}; subscription_price_change_effective_date: #{variant.subscription_price_change_effective_date}")
+        ErrorNotifier.notify("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: #{variant.apply_price_changes_to_existing_memberships?}; subscription_price_change_effective_date: #{variant.subscription_price_change_effective_date}")
       end
 
       variant

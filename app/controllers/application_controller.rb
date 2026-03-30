@@ -35,9 +35,6 @@ class ApplicationController < ActionController::Base
   before_action :set_signup_referrer, if: -> { logged_in_user.nil? }
   before_action :check_suspended, if: -> { logged_in_user.present? && logged_in_user.suspended? }
 
-  before_bugsnag_notify :add_user_to_bugsnag
-  BUGSNAG_USER_FIELDS = %i[id email username name created_at locale]
-
   before_action :set_gumroad_guid
 
   before_action :set_paper_trail_whodunnit
@@ -272,24 +269,6 @@ class ApplicationController < ActionController::Base
 
     def hide_layouts
       @hide_layouts = true
-    end
-
-    def add_user_to_bugsnag(event)
-      # We can't test a real execution of this method because Bugsnag won't call it in the test environment.
-      # The following line protects the app in case the internal API changes and `event.user` changes type.
-      # In this situation, the user will not be reported anymore, which the team will notice and fix.
-      return unless event.respond_to?(:user) && event.respond_to?(:user=) && event.user.is_a?(Hash)
-
-      # The "User" tab gets automatically filled by Bugsnag,
-      # however it doesn't support `current_resource_owner`, so we need to overwrite it in all cases.
-      user = logged_in_user
-      user ||= current_resource_owner if respond_to?(:current_resource_owner)
-      return unless user
-
-      event.user ||= {}
-      BUGSNAG_USER_FIELDS.each do |field|
-        event.user[field] = user.public_send(field)
-      end
     end
 
     def set_signup_referrer

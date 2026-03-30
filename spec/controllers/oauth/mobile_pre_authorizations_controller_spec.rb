@@ -12,7 +12,8 @@ describe Oauth::MobilePreAuthorizationsController do
         sign_in @user
       end
 
-      it "renders the pre-authorization prompt with user details" do
+      it "renders the pre-authorization prompt with user details and sets the mobile app cookie" do
+        request.env["HTTPS"] = "on"
         get :new, params: { client_id: "abc", redirect_uri: "gumroadmobile://", response_type: "code" }
 
         expect(response).to have_http_status(:ok)
@@ -21,14 +22,17 @@ describe Oauth::MobilePreAuthorizationsController do
         expect(response.body).to include("/oauth/authorize?client_id=abc&amp;redirect_uri=gumroadmobile%3A%2F%2F&amp;response_type=code")
         expect(response.body).to include("Continue")
         expect(response.body).to include("Use a different account")
+        expect(response.headers["Set-Cookie"]).to include(a_string_including("gumroad_mobile_app=1"))
       end
     end
 
     context "when user is not logged in" do
-      it "redirects to the oauth authorize url with query params" do
+      it "redirects to the oauth authorize url with query params and sets the mobile app cookie" do
+        request.env["HTTPS"] = "on"
         get :new, params: { client_id: "abc", redirect_uri: "gumroadmobile://", response_type: "code" }
 
         expect(response).to redirect_to("/oauth/authorize?client_id=abc&redirect_uri=gumroadmobile%3A%2F%2F&response_type=code")
+        expect(response.headers["Set-Cookie"]).to include(a_string_including("gumroad_mobile_app=1"))
       end
     end
   end

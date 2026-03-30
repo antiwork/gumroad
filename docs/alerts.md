@@ -16,11 +16,11 @@ Then navigate to http://localhost:8080/nomad/production/allocations to see con
 
 ## Clues
 
-Here are the things to look for immediately in the Bugsnags:
+Here are the things to look for immediately in Sentry:
 
 1. Cannot find Purchase/User/Link with id=#
 2. NoMethodError: undefined method `[]' for nil:NilClass (and the line here has to do with Mongo)
-3. If Bugsnag is not showing anything, but users are complaining, check out https://gumroad.com/admin/sidekiq and see the Processing list at the bottom. If any job is processing for over 1 minute, then that worker is in a bad state.
+3. If Sentry is not showing anything, but users are complaining, check out https://gumroad.com/admin/sidekiq and see the Processing list at the bottom. If any job is processing for over 1 minute, then that worker is in a bad state.
 4. No space left on device
 5. Don't trust Cloudwatch average metrics for a group, because almost all servers may be Healthy, not receiving any traffic, and the average will look totally normal. Check all instances individually to see what they're doing, re CPU/RAM utilization.
 6. Following on point before, nomad might give some clues on (blue/green) web workers not processing traffic. EC2 Status ≠ Container status.

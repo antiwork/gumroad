@@ -14,6 +14,8 @@ class User < ApplicationRecord
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
           AttributeBlockable, PayoutInfo
 
+  has_many :user_external_authentications, dependent: :destroy
+
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 
   # Minimum tags count to show tags section on user profile page
@@ -169,6 +171,7 @@ class User < ApplicationRecord
   attr_json_data_accessor :custom_fee_per_thousand
   attr_json_data_accessor :payouts_paused_by
   attr_json_data_accessor :daily_product_creation_limit
+  attr_json_data_accessor :tiktok_pixel_id
 
   attr_blockable :email
   attr_blockable :form_email, object_type: :email
@@ -198,6 +201,7 @@ class User < ApplicationRecord
   validates :support_email, email_format: true, allow_blank: true, if: :support_email_changed?
   validates :support_email, not_reserved_email_domain: true, allow_blank: true, if: :support_email_changed?, unless: :is_team_member?
   validate :google_analytics_id_valid
+  validate :tiktok_pixel_id_valid
   validate :avatar_is_valid
   validate :payout_frequency_is_valid
 
@@ -216,6 +220,8 @@ class User < ApplicationRecord
   validate :account_created_ip_is_not_blocked, on: :create
   validate :facebook_meta_tag_is_valid
   validates :payment_address, email_format: true, allow_blank: true
+
+  before_validation { self.tiktok_pixel_id = tiktok_pixel_id.strip if tiktok_pixel_id.present? }
 
   before_save :append_http
   before_save :save_external_id
@@ -286,9 +292,9 @@ class User < ApplicationRecord
             check_for_column: false
 
   LINK_PROPERTIES = %w[username twitter_handle bio name google_analytics_id flags
-                       facebook_pixel_id skip_free_sale_analytics disable_third_party_analytics].freeze
+                       facebook_pixel_id tiktok_pixel_id skip_free_sale_analytics disable_third_party_analytics].freeze
 
-  after_update :clear_products_cache, if: -> (user) { (User::LINK_PROPERTIES & user.saved_changes.keys).present? || (%w[font background_color highlight_color] & user.seller_profile&.saved_changes&.keys).present? }
+  after_update :clear_products_cache, if: -> (user) { (User::LINK_PROPERTIES & user.saved_changes.keys).present? || user.tiktok_pixel_id_changed_in_json_data? || (%w[font background_color highlight_color] & user.seller_profile&.saved_changes&.keys).present? }
 
   after_save :create_updated_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
   after_save :delete_old_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
@@ -704,6 +710,13 @@ class User < ApplicationRecord
 
   def time_fields
     attributes.keys.keep_if { |key| key.include?("_at") && send(key) }
+  end
+
+  def tiktok_pixel_id_changed_in_json_data?
+    return false unless saved_change_to_json_data?
+
+    old_json, new_json = saved_change_to_json_data
+    (old_json || {})["tiktok_pixel_id"] != (new_json || {})["tiktok_pixel_id"]
   end
 
   def clear_products_cache

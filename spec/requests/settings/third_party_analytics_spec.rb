@@ -42,6 +42,15 @@ describe("Third-party Analytics Settings Scenario", type: :system, js: true) do
       expect(seller.reload.facebook_pixel_id).to eq(facebook_pixel_id)
     end
 
+    it "saves the TikTok pixel" do
+      tiktok_pixel_id = "CFH83AJC77UUUGLE2TJG"
+      visit settings_third_party_analytics_path
+      fill_in "TikTok Pixel", with: tiktok_pixel_id
+      click_on "Update settings"
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(seller.reload.tiktok_pixel_id).to eq(tiktok_pixel_id)
+    end
+
     it "saves the $0 purchase setting" do
       visit settings_third_party_analytics_path
       uncheck "Send 'Purchase' events for free ($0) sales"

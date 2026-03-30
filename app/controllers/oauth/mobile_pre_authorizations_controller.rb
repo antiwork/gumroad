@@ -4,6 +4,13 @@ class Oauth::MobilePreAuthorizationsController < ApplicationController
   before_action :hide_layouts
 
   def new
+    cookies[:is_gumroad_mobile_app] = {
+      value: "1",
+      expires: 5.minutes.from_now,
+      secure: true,
+      same_site: :none,
+    }
+
     @oauth_authorize_url = "/oauth/authorize?#{request.query_string}"
 
     if logged_in_user

@@ -376,6 +376,6 @@ class Payment < ApplicationRecord
       DefaultAbandonedCartWorkflowGeneratorService.new(seller: user).generate if user.present?
     rescue => e
       Rails.logger.error("Failed to generate default abandoned cart workflow for user #{user.id}: #{e.message}")
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
     end
 end

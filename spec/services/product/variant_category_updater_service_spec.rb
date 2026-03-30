@@ -76,8 +76,8 @@ describe Product::VariantCategoryUpdaterService do
         end
 
         context "when the flags previously changed" do
-          it "notifies Bugsnag" do
-            expect(Bugsnag).to receive(:notify).with("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: false; subscription_price_change_effective_date: #{was_subscription_price_change_effective_date}")
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify).with("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: false; subscription_price_change_effective_date: #{was_subscription_price_change_effective_date}")
 
             Product::VariantCategoryUpdaterService.new(product: product, category_params: variant_category_params).perform
           end
@@ -89,8 +89,8 @@ describe Product::VariantCategoryUpdaterService do
           let(:was_subscription_price_change_effective_date) { 7.days.from_now.to_date }
           let(:subscription_price_change_effective_date) { 10.days.from_now.to_date }
 
-          it "notifies Bugsnag" do
-            expect(Bugsnag).to receive(:notify).with("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: false; subscription_price_change_effective_date: #{subscription_price_change_effective_date}")
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify).with("Not notifying subscribers of membership price change - tier: #{variant.id}; apply_price_changes_to_existing_memberships: false; subscription_price_change_effective_date: #{subscription_price_change_effective_date}")
 
             Product::VariantCategoryUpdaterService.new(product: product, category_params: variant_category_params).perform
           end

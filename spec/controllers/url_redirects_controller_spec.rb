@@ -1572,6 +1572,156 @@ describe UrlRedirectsController, inertia: true do
       expect(event.platform).to eq Platform::WEB
     end
 
+    context "when file_external_id belongs to a different product" do
+      let(:other_product) { create(:product_with_pdf_file) }
+      let(:other_file) { other_product.product_files.alive.last }
+
+      it "returns not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: other_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("File not found")
+      end
+    end
+
+    context "when file_external_id is missing" do
+      it "returns not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("File not found")
+      end
+    end
+
+    context "when file_external_id is invalid" do
+      it "returns not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: "nonexistent", email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("File not found")
+      end
+    end
+
+    context "when the file is not eligible for Kindle" do
+      before do
+        product_file.update!(size: Link::MAX_ALLOWED_FILE_SIZE_FOR_SEND_TO_KINDLE + 1)
+      end
+
+      it "returns unprocessable entity" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("This file cannot be sent to Kindle")
+      end
+    end
+
+    context "when purchase is refunded" do
+      before do
+        purchase.update!(stripe_refunded: true)
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
+    context "when purchase has chargeback" do
+      before do
+        purchase.update!(chargeback_date: Time.current)
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
+    context "when access is revoked" do
+      before do
+        purchase.update!(is_access_revoked: true)
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
+    context "when a different user is signed in" do
+      before do
+        purchase.update!(purchaser: create(:user))
+        sign_in create(:user)
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
+    context "when identity is not verified" do
+      before do
+        url_redirect.update!(has_been_seen: true)
+        purchase.update!(purchaser: create(:user), ip_address: "1.2.3.4")
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
     describe "invalid kindle emails" do
       it "cannot create a user with a bad kindle email address" do
         expect do

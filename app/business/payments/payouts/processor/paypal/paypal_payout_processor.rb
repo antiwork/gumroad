@@ -132,7 +132,7 @@ class PaypalPayoutProcessor
     rescue => e
       Rails.logger.error "Error processing payment #{payment.id} => #{e.class.name}: #{e.message}"
       Rails.logger.error "Error processing payment #{payment.id} => #{e.backtrace.join("\n")}"
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       next
     end
 
@@ -349,7 +349,7 @@ class PaypalPayoutProcessor
       payment.mark_failed!
     elsif no_split_payments_are_processing
       # This means that no split payments are in the processing state. It also means that some of them have failed and some have succeeded.
-      Bugsnag.notify("Payment id #{payment.id} was split and some of the split payments failed and some succeeded")
+      ErrorNotifier.notify("Payment id #{payment.id} was split and some of the split payments failed and some succeeded")
     end
   end
 

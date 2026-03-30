@@ -162,7 +162,7 @@ describe PaypalEventHandler do
             it "does nothing with express checkout messages for Order creation and does not error out" do
               expect(Payment).to_not receive(:find)
               expect(Purchase).to_not receive(:find_by_external_id)
-              expect(Bugsnag).to_not receive(:notify)
+              expect(ErrorNotifier).to_not receive(:notify)
 
               described_class.new(@payload).handle_paypal_event
             end
@@ -183,7 +183,7 @@ describe PaypalEventHandler do
             it "does nothing with express checkout messages for Order creation and does not error out" do
               expect(Payment).to_not receive(:find)
               expect(Purchase).to_not receive(:find_by_external_id)
-              expect(Bugsnag).to_not receive(:notify)
+              expect(ErrorNotifier).to_not receive(:notify)
 
               described_class.new(@payload).handle_paypal_event
             end
@@ -204,7 +204,7 @@ describe PaypalEventHandler do
             it "does nothing with invalid transaction ipn" do
               expect(Payment).to_not receive(:find)
               expect(Purchase).to_not receive(:find_by_external_id)
-              expect(Bugsnag).to_not receive(:notify)
+              expect(ErrorNotifier).to_not receive(:notify)
 
               described_class.new(@payload).handle_paypal_event
             end
@@ -225,7 +225,7 @@ describe PaypalEventHandler do
             it "does nothing with express checkout messages for new billing agreeement and does not error out" do
               expect(Payment).to_not receive(:find)
               expect(Purchase).to_not receive(:find_by_external_id)
-              expect(Bugsnag).to_not receive(:notify)
+              expect(ErrorNotifier).to_not receive(:notify)
 
               described_class.new(@payload).handle_paypal_event
             end

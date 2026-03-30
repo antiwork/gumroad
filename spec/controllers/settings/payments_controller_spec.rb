@@ -1198,8 +1198,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(flash[:notice]).to eq("Your country has been updated!")
       end
 
-      it "notifies Bugsnag if there is an error" do
-        expect(Bugsnag).to receive(:notify).exactly(:once)
+      it "notifies error tracker if there is an error" do
+        expect(ErrorNotifier).to receive(:notify).exactly(:once)
         allow_any_instance_of(User).to receive(:update!).and_raise(StandardError)
 
         put :update, params: { user: { updated_country_code: "GB" } }

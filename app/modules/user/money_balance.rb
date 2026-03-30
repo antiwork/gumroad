@@ -7,7 +7,7 @@ class User
         begin
           Balance.amount_cents_sum_for(self)
         rescue => e
-          Bugsnag.notify(e)
+          ErrorNotifier.notify(e)
           unpaid_balance_cents(via: :sql)
         end
       else

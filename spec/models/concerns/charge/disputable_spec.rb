@@ -896,8 +896,8 @@ describe Charge::Disputable, :vcr do
             @p.save!
           end
 
-          it "bugsnag notifies the occurrence" do
-            expect(Bugsnag).to receive(:notify).with("Invalid charge event received for successful Purchase #{@p.external_id} - " \
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify).with("Invalid charge event received for successful Purchase #{@p.external_id} - " \
                                                      "received reversal won notification with ID #{@e.charge_event_id} but was not disputed.")
             Purchase.handle_charge_event(@e)
           end

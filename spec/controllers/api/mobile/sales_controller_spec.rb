@@ -98,8 +98,8 @@ describe Api::Mobile::SalesController, :vcr do
         allow_any_instance_of(Purchase).to receive(:refund!).and_raise(ActiveRecord::RecordInvalid)
       end
 
-      it "notifies Bugsnag and responds with error message" do
-        expect(Bugsnag).to receive(:notify).with(instance_of(ActiveRecord::RecordInvalid))
+      it "notifies error tracker and responds with error message" do
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordInvalid))
 
         patch :refund, params: @params.merge(id: @purchase.external_id, amount: "100")
 

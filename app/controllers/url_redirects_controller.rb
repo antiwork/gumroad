@@ -226,19 +226,36 @@ class UrlRedirectsController < ApplicationController
   def send_to_kindle
     return render json: { success: false, error: "Please enter a valid Kindle email address" } if params[:email].blank?
 
+    purchase = @url_redirect.purchase
+    if purchase && (purchase.stripe_refunded || (purchase.chargeback_date.present? && !purchase.chargeback_reversed) || purchase.is_access_revoked)
+      return e404_json
+    end
+    return e404_json if @url_redirect.rental_expired?
+    return e404_json if purchase&.subscription && !purchase.subscription.grant_access_to_product?
+    if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
+      return e404_json
+    end
+    if purchase.present? && @url_redirect.has_been_seen && @url_redirect.imported_customer.blank?
+      identity_verified = cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
+                          (purchase.purchaser.present? && purchase.purchaser == logged_in_user) ||
+                          purchase.ip_address == request.remote_ip
+      return e404_json if !identity_verified
+    end
+
+    @product_file = @url_redirect.product_file(params[:file_external_id])
+    return render json: { success: false, error: "File not found" }, status: :not_found if @product_file.nil?
+    return render json: { success: false, error: "This file cannot be sent to Kindle" }, status: :unprocessable_entity if !@product_file.can_send_to_kindle?
+
     if logged_in_user.present?
       logged_in_user.kindle_email = params[:email]
       return render json: { success: false, error: logged_in_user.errors.full_messages.to_sentence } unless logged_in_user.save
     end
 
-    @product_file = ProductFile.find_by_external_id(params[:file_external_id])
-    begin
-      @product_file.send_to_kindle(params[:email])
-      create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ)
-      render json: { success: true }
-    rescue ArgumentError => e
-      render json: { success: false, error: e.message }
-    end
+    @product_file.send_to_kindle(params[:email])
+    create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ)
+    render json: { success: true }
+  rescue ArgumentError => e
+    render json: { success: false, error: e.message }
   end
 
   # Consumption event is created by front-end code

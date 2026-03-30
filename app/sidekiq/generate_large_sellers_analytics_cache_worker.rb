@@ -8,7 +8,7 @@ class GenerateLargeSellersAnalyticsCacheWorker
     User.joins(:large_seller).find_each do |user|
       CreatorAnalytics::CachingProxy.new(user).generate_cache
     rescue => e
-      Bugsnag.notify(e) do |report|
+      ErrorNotifier.notify(e) do |report|
         report.add_tab(:user_info, id: user.id)
       end
     end

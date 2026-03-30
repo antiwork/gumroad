@@ -1125,7 +1125,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.string "native_type", default: "digital", null: false
     t.integer "discover_fee_per_thousand", default: 100, null: false
     t.string "support_email"
-    t.integer "default_offer_code_id"
+    t.bigint "default_offer_code_id"
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
     t.index ["default_offer_code_id"], name: "index_links_on_default_offer_code_id"
@@ -2470,6 +2470,16 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.index ["user_id", "state"], name: "index_user_compliance_info_requests_on_user_id_and_state"
   end
 
+  create_table "user_external_authentications", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "provider", null: false
+    t.string "uid", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider", "uid"], name: "index_user_external_authentications_on_provider_and_uid", unique: true
+    t.index ["user_id"], name: "index_user_external_authentications_on_user_id"
+  end
+
   create_table "user_tax_forms", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.integer "tax_year", null: false
@@ -2547,6 +2557,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011937) do
     t.string "notification_content_type", default: "application/x-www-form-urlencoded"
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
+    t.string "tiktok_pixel_id"
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"

@@ -27,7 +27,7 @@
 
 1. Be present during deployment of your migration.
 2. Monitor:
-   - Bugsnag for recent production errors
+   - Sentry for recent production errors
    - Cloudwatch Web dashboard (errors rate, successful purchases)
 3. Use `./logs.sh` in `nomad/production` to view migration logs.
 4. For large table migrations, ensure experienced support is available.

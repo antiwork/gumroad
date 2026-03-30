@@ -15,6 +15,7 @@ describe MobileTrackingPresenter do
         analytics: {
           google_analytics_id: nil,
           facebook_pixel_id: nil,
+          tiktok_pixel_id: nil,
           free_sales: true,
         },
         has_product_third_party_analytics: false,

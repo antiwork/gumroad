@@ -24,7 +24,7 @@ class Settings::PaymentsController < Settings::BaseController
         flash[:notice] = "Your country has been updated!"
         return redirect_to settings_payments_path, status: :see_other
       rescue => e
-        Bugsnag.notify("Update country failed for user #{current_seller.id} (from #{compliance_info.country_code} to #{updated_country_code}): #{e}")
+        ErrorNotifier.notify("Update country failed for user #{current_seller.id} (from #{compliance_info.country_code} to #{updated_country_code}): #{e}")
         return redirect_with_error("Country update failed")
       end
     end

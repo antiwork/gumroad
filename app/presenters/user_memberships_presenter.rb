@@ -21,7 +21,7 @@ class UserMembershipsPresenter
     # Allowing the user to switch to the other seller account will prevent switching back their own
     # account
     # It _should_ not happen. Notify rather than allowing that scenario
-    Bugsnag.notify("Missing owner team membership for user #{pundit_user.user.id}")
+    ErrorNotifier.notify("Missing owner team membership for user #{pundit_user.user.id}")
     []
   end
 

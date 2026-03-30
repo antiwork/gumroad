@@ -162,11 +162,11 @@ describe EmailDeliveryObserver::HandleCustomerEmailInfo do
           )
         end
 
-        it "notifies Bugsnag" do
-          expect(Bugsnag).to receive(:notify) do |error|
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify) do |error|
             expect(error).to be_a(EmailDeliveryObserver::HandleCustomerEmailInfo::InvalidHeaderError)
             expect(error.message.to_s).to eq("Failed to parse sendgrid header: unexpected character: 'invalid' at line 1 column 1")
-            expect(JSON.parse(error.bugsnag_meta_data[:debug]).keys).to include(MailerInfo::SENDGRID_X_SMTPAPI_HEADER)
+            expect(JSON.parse(error.sentry_context[:debug]).keys).to include(MailerInfo::SENDGRID_X_SMTPAPI_HEADER)
           end
 
           expect do
@@ -204,11 +204,11 @@ describe EmailDeliveryObserver::HandleCustomerEmailInfo do
           )
         end
 
-        it "notifies Bugsnag" do
-          expect(Bugsnag).to receive(:notify) do |error|
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify) do |error|
             expect(error).to be_a(EmailDeliveryObserver::HandleCustomerEmailInfo::InvalidHeaderError)
             expect(error.message.to_s).to eq("Failed to parse resend header: undefined method 'value' for nil")
-            expect(JSON.parse(error.bugsnag_meta_data[:debug]).keys).to include(MailerInfo.header_name(:mailer_class))
+            expect(JSON.parse(error.sentry_context[:debug]).keys).to include(MailerInfo.header_name(:mailer_class))
           end
 
           expect do

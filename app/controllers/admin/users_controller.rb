@@ -38,7 +38,7 @@ class Admin::UsersController < Admin::BaseController
       begin
         CreatorMailer.top_creator_announcement(user_id: @user.id).deliver_later
       rescue => e
-        Bugsnag.notify(e)
+        ErrorNotifier.notify(e)
         Rails.logger.error("Failed to enqueue top_creator_announcement for user #{@user.id}: #{e.message}")
       end
     end

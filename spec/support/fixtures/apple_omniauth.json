@@ -1,0 +1,23 @@
+{
+  "provider": "apple",
+  "uid": "001234.abcdef1234567890abcdef1234567890.1234",
+  "info": {
+    "email": "apple-user@example.com",
+    "name": "Jane Appleseed",
+    "first_name": "Jane",
+    "last_name": "Appleseed"
+  },
+  "credentials": {
+    "token": "apple_access_token_123",
+    "refresh_token": "apple_refresh_token_123",
+    "expires_at": 1685420310,
+    "expires": true
+  },
+  "extra": {
+    "raw_info": {
+      "email": "apple-user@example.com",
+      "email_verified": "true",
+      "sub": "001234.abcdef1234567890abcdef1234567890.1234"
+    }
+  }
+}

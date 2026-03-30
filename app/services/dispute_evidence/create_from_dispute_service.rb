@@ -40,7 +40,7 @@ class DisputeEvidence::CreateFromDisputeService
     dispute_evidence.save!
 
     if dispute_evidence.customer_communication_file_max_size < DisputeEvidence::MINIMUM_RECOMMENDED_CUSTOMER_COMMUNICATION_FILE_SIZE
-      Bugsnag.notify(
+      ErrorNotifier.notify(
         "DisputeEvidence::CreateFromDisputeService - Allowed file size on dispute evidence #{dispute_evidence.id} for " \
         "customer_communication_file is too low: " + number_to_human_size(dispute_evidence.customer_communication_file_max_size)
       )
@@ -75,7 +75,7 @@ class DisputeEvidence::CreateFromDisputeService
       image = DisputeEvidence::GenerateReceiptImageService.perform(purchase)
 
       unless image
-        Bugsnag.notify("CreateFromDisputeService: Could not generate receipt_image for purchase ID #{purchase.id}")
+        ErrorNotifier.notify("CreateFromDisputeService: Could not generate receipt_image for purchase ID #{purchase.id}")
         return
       end
 
@@ -116,7 +116,7 @@ class DisputeEvidence::CreateFromDisputeService
         content_type: "image/jpeg"
       )
     rescue DisputeEvidence::GenerateRefundPolicyImageService::ImageTooLargeError
-      Bugsnag.notify("DisputeEvidence::CreateFromDisputeService (purchase #{purchase.id}): Refund policy image not attached because was too large")
+      ErrorNotifier.notify("DisputeEvidence::CreateFromDisputeService (purchase #{purchase.id}): Refund policy image not attached because was too large")
     end
 
     def mobile_purchase?

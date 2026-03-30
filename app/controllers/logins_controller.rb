@@ -22,7 +22,7 @@ class LoginsController < Devise::SessionsController
 
     set_meta_tag(title: "Log In")
     auth_presenter = AuthPresenter.new(params:, application: @application)
-    render inertia: "Logins/New", props: auth_presenter.login_props
+    render inertia: "Logins/New", props: auth_presenter.login_props.merge(is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?)
   end
 
   def create

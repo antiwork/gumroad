@@ -1,0 +1,10 @@
+changelog:
+  categories:
+    - title: Features
+      labels: [enhancement, feature]
+    - title: Bug fixes
+      labels: [bug, fix]
+    - title: Performance
+      labels: [performance]
+    - title: Internal
+      labels: ["*"]
