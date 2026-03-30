@@ -237,7 +237,7 @@ describe Api::V2::LinksController do
       end
 
       it "includes raw URL for external link files" do
-        file = create(:product_file, link: @product, url: "https://example.com/my-file.zip", filetype: "link")
+        create(:product_file, link: @product, url: "https://example.com/my-file.zip", filetype: "link")
 
         get :show, params: @params
         files = response.parsed_body["product"]["files"]
