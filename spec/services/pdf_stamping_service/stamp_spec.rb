@@ -36,7 +36,9 @@ describe PdfStampingService::Stamp do
 
     before do
       allow(described_class).to receive(:perform!).and_wrap_original do |method, **args|
-        created_file_paths << method.call(**args)
+        result = method.call(**args)
+        created_file_paths << result
+        result
       end
     end
 
@@ -59,7 +61,6 @@ describe PdfStampingService::Stamp do
       end
 
       stamped_path = described_class.perform!(product_file:, watermark_text:)
-      created_file_paths << stamped_path
 
       reader = PDF::Reader.new(stamped_path)
       expect(reader.page_count).to eq(original_page_count)
