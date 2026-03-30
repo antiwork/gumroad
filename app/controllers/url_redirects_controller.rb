@@ -125,12 +125,19 @@ class UrlRedirectsController < ApplicationController
       render json: { url: }
     else
       e404 if archive.nil?
-      redirect_to(
-        signed_download_url_for_s3_key_and_filename(archive.s3_key, archive.s3_filename),
-        allow_other_host: true
-      )
-      event_type = params[:folder_id].present? ? ConsumptionEvent::EVENT_TYPE_FOLDER_DOWNLOAD : ConsumptionEvent::EVENT_TYPE_DOWNLOAD_ALL
-      create_consumption_event!(event_type)
+      begin
+        redirect_to(
+          signed_download_url_for_s3_key_and_filename(archive.s3_key, archive.s3_filename),
+          allow_other_host: true
+        )
+        event_type = params[:folder_id].present? ? ConsumptionEvent::EVENT_TYPE_FOLDER_DOWNLOAD : ConsumptionEvent::EVENT_TYPE_DOWNLOAD_ALL
+        create_consumption_event!(event_type)
+      rescue Aws::S3::Errors::NotFound
+        archive.mark_in_progress!
+        archive.generate_zip_archive!
+        flash[:warning] = "We are preparing the file for download. Please try again shortly."
+        redirect_to(@url_redirect.download_page_url)
+      end
     end
   end
 
