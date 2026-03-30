@@ -92,6 +92,7 @@ export type CartItem = {
   } | null;
   call_start_time: string | null;
   pay_in_installments: boolean;
+  force_new_subscription: boolean;
 };
 
 export type CrossSell = {
@@ -116,6 +117,7 @@ export type ProductToAdd = {
   call_start_time: string | null;
   accepted_offer: { id: string } | null;
   pay_in_installments: boolean;
+  force_new_subscription: boolean;
 };
 
 export type CartState = {

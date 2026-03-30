@@ -26,7 +26,7 @@ class PaypalMerchantAccountManager
     if post_partner_referral_success?
       partner_referral_success_response_data
     else
-      notify_bugsnag_partner_referral_error
+      notify_partner_referral_error
       partner_referral_failure_response_data
     end
   end
@@ -180,13 +180,13 @@ class PaypalMerchantAccountManager
       end
     end
 
-    def notify_bugsnag_partner_referral_error
+    def notify_partner_referral_error
       return if %w[INTERNAL_SERVICE_ERROR PERMISSION_DENIED CONNECTION_ERROR].include?(response_error_name)
 
-      notify_bugsnag
+      notify_error
     end
 
-    def notify_bugsnag
+    def notify_error
       ErrorNotifier.notify("PayPal partner referral error",
                            request: response.request,
                            response:)

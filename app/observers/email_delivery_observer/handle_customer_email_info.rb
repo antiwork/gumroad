@@ -9,7 +9,7 @@ module EmailDeliveryObserver::HandleCustomerEmailInfo
       @metadata = metadata
     end
 
-    def bugsnag_meta_data
+    def sentry_context
       { debug: metadata }
     end
   end

@@ -66,6 +66,7 @@ const GUMROAD_PARAMS = [
   "recommender_model_name",
   "call_start_time",
   "pay_in_installments",
+  "force_new_subscription",
 ];
 
 type CheckoutIndexPageProps = {
@@ -446,6 +447,7 @@ const CheckoutIndexPage = () => {
               !cartForm.data.cart.rejectPppDiscount &&
               discounted.discount?.type === "ppp" &&
               item.price !== 0,
+            forceNewSubscription: item.force_new_subscription,
             acceptedOffer: item.accepted_offer ?? null,
             bundleProducts: item.product.bundle_products.map((bundleProduct) => ({
               productId: bundleProduct.product_id,
@@ -608,6 +610,7 @@ const CheckoutIndexPage = () => {
               referrer: originalCartItem.referrer,
               recommender_model_name: null,
               pay_in_installments: originalCartItem.pay_in_installments,
+              force_new_subscription: originalCartItem.force_new_subscription,
               accepted_offer: {
                 id: currentOffer.id,
                 original_product_id: originalCartItem.product.id,

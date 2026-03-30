@@ -410,17 +410,18 @@ describe Subscription::UpdaterService, :vcr do
         end
 
         context "when the price has changed" do
-          it "charges the pre-existing price" do
+          it "charges the current price" do
             old_price_cents = @original_tier_quarterly_price.price_cents
-            @original_tier_quarterly_price.update!(price_cents: old_price_cents + 500)
+            new_price_cents = old_price_cents + 500
+            @original_tier_quarterly_price.update!(price_cents: new_price_cents)
 
             params = {
               price_id: @quarterly_product_price.external_id,
               variants: [@original_tier.external_id],
               quantity: 1,
               use_existing_card: true,
-              perceived_price_cents: old_price_cents,
-              perceived_upgrade_price_cents: old_price_cents,
+              perceived_price_cents: new_price_cents,
+              perceived_upgrade_price_cents: new_price_cents,
             }
 
             expect do
@@ -436,7 +437,7 @@ describe Subscription::UpdaterService, :vcr do
             last_purchase = @subscription.last_successful_charge
 
             expect(last_purchase.id).not_to eq @original_purchase.id
-            expect(last_purchase.displayed_price_cents).to eq old_price_cents
+            expect(last_purchase.displayed_price_cents).to eq new_price_cents
           end
         end
 

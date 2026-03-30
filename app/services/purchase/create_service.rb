@@ -15,6 +15,7 @@ class Purchase::CreateService < Purchase::BaseService
     @purchase_params = params[:purchase]
     @gift_params = params[:gift].presence
     @buyer = buyer
+    @force_new_subscription = !!params[:force_new_subscription]
   end
 
   def perform
@@ -179,7 +180,7 @@ class Purchase::CreateService < Purchase::BaseService
     end
 
     def should_check_for_restartable_subscription?
-      product.is_recurring_billing && !is_gift?
+      product.is_recurring_billing && !is_gift? && !(buyer.present? && @force_new_subscription)
     end
 
     def handle_existing_subscription

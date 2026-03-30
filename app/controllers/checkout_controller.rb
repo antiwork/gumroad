@@ -126,7 +126,7 @@ class CheckoutController < ApplicationController
         discountCodes: [:code, :fromUrl],
         items: [
           :option_id, :affiliate_id, :price, :quantity, :recurrence, :recommended_by, :rent,
-          :referrer, :recommender_model_name, :call_start_time, :pay_in_installments,
+          :referrer, :recommender_model_name, :call_start_time, :pay_in_installments, :force_new_subscription,
           url_parameters: {}, product: [:id], accepted_offer: [:id, :original_product_id, :original_variant_id],
         ]
       )

@@ -212,7 +212,7 @@ describe ForeignWebhooksController do
     context "with missing headers" do
       it "returns bad request when signature is missing" do
         request.headers["svix-signature"] = nil
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Missing signature")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Missing signature")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -221,7 +221,7 @@ describe ForeignWebhooksController do
 
       it "returns bad request when timestamp is missing" do
         request.headers["svix-timestamp"] = nil
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Missing timestamp")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Missing timestamp")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -230,7 +230,7 @@ describe ForeignWebhooksController do
 
       it "returns bad request when message ID is missing" do
         request.headers["svix-id"] = nil
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Missing message ID")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Missing message ID")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -241,7 +241,7 @@ describe ForeignWebhooksController do
     context "with invalid signature" do
       it "returns bad request when signature format is invalid" do
         request.headers["svix-signature"] = "invalid"
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Invalid signature format")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Invalid signature format")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -250,7 +250,7 @@ describe ForeignWebhooksController do
 
       it "returns bad request when signature is incorrect" do
         request.headers["svix-signature"] = "v1,invalid"
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Invalid signature")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Invalid signature")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -261,7 +261,7 @@ describe ForeignWebhooksController do
     context "with old timestamp" do
       it "returns bad request when timestamp is too old" do
         request.headers["svix-timestamp"] = (6.minutes.ago.to_i).to_s
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Timestamp too old")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Timestamp too old")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)

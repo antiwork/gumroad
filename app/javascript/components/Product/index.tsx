@@ -57,6 +57,7 @@ import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExp
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { ShareSection } from "$app/components/Product/ShareSection";
+import { SubscriptionChoiceModal } from "$app/components/Product/SubscriptionChoiceModal";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
@@ -257,6 +258,8 @@ export const Product = ({
   disableAnalytics?: boolean;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);
+  const [checkoutUrlForModal, setCheckoutUrlForModal] = React.useState<string | null>(null);
+  const loggedInUser = useLoggedInUser();
   const descriptionEditor = useRichTextEditor({
     // delay initialization to avoid errors in SSR
     initialValue: pageLoaded ? product.description_html : null,
@@ -580,7 +583,19 @@ export const Product = ({
             label={ctaLabel}
             showInstallmentPlanNotes
             onClick={(e) => {
-              if (!validate()) e.preventDefault();
+              if (!validate()) {
+                e.preventDefault();
+                return;
+              }
+              if (
+                loggedInUser &&
+                purchase &&
+                (purchase.membership || purchase.subscription_has_lapsed) &&
+                product.is_recurring_billing
+              ) {
+                e.preventDefault();
+                setCheckoutUrlForModal(e.currentTarget.href);
+              }
             }}
           />
           {product.sales_count !== null ? (
@@ -628,6 +643,13 @@ export const Product = ({
         </section>
         {product.ratings ? <Reviews ratings={product.ratings} productId={product.id} seller={product.seller} /> : null}
       </section>
+      {purchase && (purchase.membership || purchase.subscription_has_lapsed) && product.is_recurring_billing ? (
+        <SubscriptionChoiceModal
+          purchase={purchase}
+          checkoutUrl={checkoutUrlForModal ?? ""}
+          onClose={() => setCheckoutUrlForModal(null)}
+        />
+      ) : null}
     </article>
   );
 };

@@ -86,6 +86,7 @@ describe Subscription::RestartAtCheckoutService do
 
         expect(transformed_params[:perceived_price_cents]).to eq(product.price_cents)
         expect(transformed_params[:perceived_upgrade_price_cents]).to eq(product.price_cents)
+        expect(transformed_params[:price_range]).to eq(product.price_cents)
         expect(transformed_params[:price_id]).to eq(product.prices.alive.first.external_id)
         expect(transformed_params[:use_existing_card]).to be true
       end
@@ -428,6 +429,62 @@ describe Subscription::RestartAtCheckoutService do
 
           expect(transformed_params).not_to have_key(:offer_code)
         end
+      end
+    end
+
+    describe "PWYW subscription restart with discount change" do
+      let(:pwyw_product) { create(:membership_product, user: seller, price_cents: 0, customizable_price: true) }
+      let(:original_offer_code) { create(:offer_code, code: "original85", amount_cents: nil, amount_percentage: 85, products: [pwyw_product], user: seller) }
+      let(:new_offer_code) { create(:offer_code, code: "new80", amount_cents: nil, amount_percentage: 80, products: [pwyw_product], user: seller) }
+
+      let!(:subscription) do
+        sub = create(:subscription, link: pwyw_product, user: buyer)
+        purchase = create(:purchase,
+                          link: pwyw_product,
+                          purchaser: buyer,
+                          email: email,
+                          subscription: sub,
+                          is_original_subscription_purchase: true,
+                          price_cents: 500_00,
+                          displayed_price_cents: 500_00,
+                          perceived_price_cents: 500_00,
+                          offer_code: original_offer_code,
+                          variant_attributes: pwyw_product.tiers.to_a)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code: original_offer_code,
+          offer_code_amount: 85,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: purchase.minimum_paid_price_cents_per_unit_before_discount
+        )
+        sub.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true, deactivated_at: 1.day.ago)
+        sub
+      end
+
+      it "passes price_range so PWYW price is preserved when discount changes" do
+        perceived_price = 500_00
+        params = {
+          purchase: {
+            email: email,
+            perceived_price_cents: perceived_price,
+            browser_guid: browser_guid,
+            discount_code: new_offer_code.code
+          },
+          price_id: pwyw_product.prices.alive.first.external_id,
+          remote_ip: "127.0.0.1"
+        }
+
+        service = described_class.new(
+          subscription: subscription,
+          product: pwyw_product,
+          params: params,
+          buyer: buyer
+        )
+
+        transformed_params = service.send(:updater_service_params)
+
+        expect(transformed_params[:price_range]).to eq(perceived_price)
+        expect(transformed_params[:perceived_price_cents]).to eq(perceived_price)
+        expect(transformed_params[:offer_code]).to eq(new_offer_code)
       end
     end
 

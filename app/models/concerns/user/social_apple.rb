@@ -6,7 +6,7 @@ module User::SocialApple
   class_methods do
     def find_or_create_for_apple_oauth(data)
       if data["uid"].blank?
-        Bugsnag.notify("Apple OAuth data is missing a uid")
+        ErrorNotifier.notify("Apple OAuth data is missing a uid")
         return nil
       end
 
@@ -38,7 +38,7 @@ module User::SocialApple
       user
     rescue ActiveRecord::RecordInvalid => e
       logger.error("Error finding or creating user via Apple OAuth: #{e.message}")
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       nil
     end
 

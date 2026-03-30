@@ -49,3 +49,7 @@ logger "Starting production deployment"
 DEPLOYMENT_FROM_CI=true bin/deploy
 
 logger "Successfully deployed $WEB_REPO:$PRODUCTION_TAG to production"
+
+# Create GitHub Release with calendar versioning and auto-generated changelog
+logger "Creating GitHub Release"
+source .buildkite/scripts/create_github_release.sh

@@ -74,6 +74,7 @@ describe CartPresenter do
                 referrer: "direct",
                 call_start_time: call_start_time,
                 pay_in_installments: true,
+                force_new_subscription: false,
               },
               {
                 product: a_hash_including(permalink: recurring_product.unique_permalink),
@@ -90,6 +91,7 @@ describe CartPresenter do
                 referrer: "direct",
                 call_start_time: nil,
                 pay_in_installments: false,
+                force_new_subscription: false,
               },
               {
                 product: a_hash_including(permalink: simple_product.unique_permalink),
@@ -106,6 +108,7 @@ describe CartPresenter do
                 referrer: "google.com",
                 call_start_time: nil,
                 pay_in_installments: false,
+                force_new_subscription: false,
               },
             ],
           }
@@ -173,6 +176,7 @@ describe CartPresenter do
                   referrer: "direct",
                   call_start_time: nil,
                   pay_in_installments: false,
+                  force_new_subscription: false,
                   accepted_offer: {
                     id: upsell.external_id,
                     original_product_id: upsell.product.external_id,

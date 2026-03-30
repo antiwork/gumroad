@@ -172,6 +172,7 @@ class Order::CreateService
         purchase_params[:url_parameters] = parse_url_parameters_from_referrer(product)
       end
 
+      force_new_subscription = purchase_params.delete(:force_new_subscription)
       gift_params = purchase_params.extract!(:giftee_email, :giftee_id, :gift_note)
       additional_params = purchase_params.extract!(
         :is_gift, :price_id, :wallet_type, :perceived_free_trial_duration, :accepted_offer,
@@ -181,6 +182,7 @@ class Order::CreateService
       {
         purchase: purchase_params,
         gift: gift_params,
+        force_new_subscription:,
       }.merge(additional_params.to_hash.deep_symbolize_keys)
     end
 

@@ -215,7 +215,7 @@ describe Api::Mobile::PurchasesController do
     it "responds with an empty list on error" do
       allow_any_instance_of(Purchase).to receive(:json_data_for_mobile).and_raise(StandardError.new("error"))
       create(:purchase, purchaser: @purchaser)
-      expect(Bugsnag).to receive(:notify).once
+      expect(ErrorNotifier).to receive(:notify).once
 
       get :index, params: @params
 
@@ -606,6 +606,29 @@ describe Api::Mobile::PurchasesController do
         expect(response.parsed_body[:purchases].size).to eq(1)
         expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_1.external_id)
       end
+    end
+
+    it "excludes purchases deleted by buyer" do
+      purchase = create(:purchase, purchaser: @purchaser)
+      create(:purchase, purchaser: @purchaser, is_deleted_by_buyer: true)
+      index_model_records(Purchase)
+
+      get :search, params: @params
+
+      expect(response.parsed_body[:purchases].size).to eq(1)
+      expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase.external_id)
+    end
+
+    it "excludes expired rental purchases" do
+      purchase = create(:purchase, purchaser: @purchaser)
+      rental_purchase = create(:purchase, purchaser: @purchaser)
+      rental_purchase.update_columns(rental_expired: true)
+      index_model_records(Purchase)
+
+      get :search, params: @params
+
+      expect(response.parsed_body[:purchases].size).to eq(1)
+      expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase.external_id)
     end
 
     describe "query by product details" do

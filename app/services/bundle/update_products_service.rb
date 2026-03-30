@@ -22,7 +22,7 @@ class Bundle::UpdateProductsService
         products_to_process.delete(new_bundle_product)
         update_has_outdated_purchases
       else
-        bundle_product.mark_deleted!
+        bundle_product.mark_deleted(validate: false)
       end
     end
 

@@ -283,10 +283,10 @@ describe TaxjarApi, :vcr do
                                                          shipping_dollars: 20.0)).to eq(expected_calculation)
     end
 
-    it "notifies Bugsnag and propagates a TaxJar client error" do
+    it "notifies error tracker and propagates a TaxJar client error" do
       expect_any_instance_of(Taxjar::Client).to receive(:tax_for_order).and_raise(Taxjar::Error::BadRequest)
 
-      expect(Bugsnag).to receive(:notify).exactly(:once)
+      expect(ErrorNotifier).to receive(:notify).exactly(:once)
 
       expect do
         described_class.new.calculate_tax_for_order(origin:,

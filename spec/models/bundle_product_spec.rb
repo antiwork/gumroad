@@ -70,6 +70,18 @@ describe BundleProduct do
       end
     end
 
+    context "when the product has a single alive variant and no variant is set" do
+      before do
+        bundle_product.product = create(:product_with_digital_versions, user: bundle_product.bundle.user)
+        bundle_product.product.alive_variants.last.mark_deleted!
+        bundle_product.variant = nil
+      end
+
+      it "doesn't add an error" do
+        expect(bundle_product).to be_valid
+      end
+    end
+
     context "when the variant doesn't belong to the product" do
       before do
         bundle_product.variant = create(:variant)

@@ -3660,5 +3660,50 @@ describe Purchase::CreateService, :vcr do
         expect(error).to be_nil
       end
     end
+
+    context "when force_new_subscription is true" do
+      before do
+        membership_params[:force_new_subscription] = true
+      end
+
+      context "when buyer has an active subscription" do
+        before do
+          create_subscription_for(product: membership_product, purchaser: buyer, email: email)
+        end
+
+        it "skips the subscription check" do
+          service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:)
+
+          expect(service.send(:should_check_for_restartable_subscription?)).to be false
+        end
+      end
+
+      context "when buyer has a restartable subscription" do
+        before do
+          create_subscription_for(
+            product: membership_product,
+            purchaser: buyer,
+            email: email,
+            cancelled_at: 1.day.ago,
+            cancelled_by_buyer: true,
+            deactivated_at: 1.day.ago
+          )
+        end
+
+        it "skips the subscription check" do
+          service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:)
+
+          expect(service.send(:should_check_for_restartable_subscription?)).to be false
+        end
+      end
+
+      context "when buyer is not logged in" do
+        it "still checks for existing subscriptions" do
+          service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer: nil)
+
+          expect(service.send(:should_check_for_restartable_subscription?)).to be true
+        end
+      end
+    end
   end
 end

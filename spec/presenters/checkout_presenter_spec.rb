@@ -189,7 +189,8 @@ describe CheckoutPresenter do
           recommender_model_name: nil,
           call_start_time: nil,
           accepted_offer: nil,
-          pay_in_installments: false
+          pay_in_installments: false,
+          force_new_subscription: false
         }],
         max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
         cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
@@ -228,7 +229,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           },
           {
             product: a_hash_including(id: rental_product.external_id),
@@ -242,7 +244,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           },
           {
             product: a_hash_including(id: subscription_product.external_id),
@@ -256,7 +259,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           },
           {
             product: a_hash_including(id: versioned_product.external_id),
@@ -270,7 +274,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           }
         ]
       )
@@ -317,7 +322,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           }]
         )
       end
@@ -364,7 +370,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           }
         ]
       )
@@ -709,6 +716,22 @@ describe CheckoutPresenter do
         it "uses the IP country" do
           result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
           expect(result[:contact_info][:country]).to eq "BR"
+        end
+      end
+
+      context "when the subscription is deactivated" do
+        before do
+          @subscription.update!(cancelled_at: 1.day.ago, deactivated_at: 1.day.ago, cancelled_by_buyer: true)
+        end
+
+        it "displays the current price for the tier" do
+          new_price = @original_price_cents + 500
+          @tier_price.update!(price_cents: new_price)
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
+
+          displayed_tier_price = result[:product][:options][0][:recurrence_price_values]["monthly"][:price_cents]
+          expect(displayed_tier_price).to eq new_price
         end
       end
     end

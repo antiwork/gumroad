@@ -30,11 +30,12 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
   def search
     result = PurchaseSearchService.search(search_options)
     pagination = Pagy.new(count: result.response.hits.total.value, page: @page, limit: @items)
+    purchases = result.records.not_rental_expired
 
     render json: {
       success: true,
       user_id: current_resource_owner.external_id,
-      purchases: purchases_to_json(result.records),
+      purchases: purchases_to_json(purchases),
       sellers: formatted_sellers_agg(result.aggregations.seller_ids),
       meta: { pagination: PagyPresenter.new(pagination).metadata }
     }
@@ -89,13 +90,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       options = {
         buyer_query: params[:q],
         purchaser: current_resource_owner,
-        state: Purchase::ALL_SUCCESS_STATES,
-        exclude_refunded_except_subscriptions: true,
-        exclude_unreversed_chargedback: true,
-        exclude_non_original_subscription_purchases: true,
-        exclude_deactivated_subscriptions: true,
-        exclude_bundle_product_purchases: true,
-        exclude_commission_completion_purchases: true,
+        for_library: true,
         track_total_hits: true,
         from: ((@page - 1) * @items),
         size: @items,

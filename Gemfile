@@ -79,7 +79,6 @@ gem "aws-sdk-sns", "~> 1.57"
 gem "babel-transpiler", "~> 0.7"
 gem "bootsnap", "~> 1.15", require: false
 gem "braintree", "~> 4.9"
-gem "bugsnag", "~> 6.25"
 gem "builder", "~> 3.2"
 gem "closure_tree", "~> 7.4"
 gem "color", "~> 1.8"
