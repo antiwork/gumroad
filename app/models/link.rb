@@ -1317,6 +1317,7 @@ class Link < ApplicationRecord
 
     def alive_category_variants_presence
       return if deleted_at.present?
+      return if archived?
 
       has_alive_categories_without_variants = variant_categories.alive.left_joins(:alive_variants).where(base_variants: { id: nil }).exists?
 
@@ -1326,6 +1327,8 @@ class Link < ApplicationRecord
     end
 
     def valid_tier_version_structure
+      return if archived?
+
       if variant_categories.alive.size != 1
         errors.add(:base, "Memberships should only have one Tier version category.")
         raise LinkInvalid, "Memberships should only have one Tier version category."
