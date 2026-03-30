@@ -235,8 +235,9 @@ describe DashboardProductsPagePresenter do
       expect((page1_ids + page2_ids) - products.map(&:id)).to be_empty
     end
 
-    it "raises on page overflow" do
-      expect { described_class.new(pundit_user:, products_page: 10).products_table_props }.to raise_error(Pagy::OverflowError)
+    it "returns last page on page overflow" do
+      props = described_class.new(pundit_user:, products_page: 10).products_table_props
+      expect(props[:products_pagination]).to eq(page: 3, pages: 3)
     end
 
     context "when some products are deleted" do
@@ -280,8 +281,9 @@ describe DashboardProductsPagePresenter do
       expect((page1_ids + page2_ids) - memberships.map(&:id)).to be_empty
     end
 
-    it "raises on page overflow" do
-      expect { described_class.new(pundit_user:, memberships_page: 10).memberships_table_props }.to raise_error(Pagy::OverflowError)
+    it "returns last page on page overflow" do
+      props = described_class.new(pundit_user:, memberships_page: 10).memberships_table_props
+      expect(props[:memberships_pagination]).to eq(page: 3, pages: 3)
     end
 
     context "when some memberships are deleted" do
