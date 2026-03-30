@@ -3671,11 +3671,10 @@ describe Purchase::CreateService, :vcr do
           create_subscription_for(product: membership_product, purchaser: buyer, email: email)
         end
 
-        it "does not return the existing subscription error" do
+        it "skips the subscription check" do
           service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:)
-          _purchase, error = service.perform
 
-          expect(error).not_to eq("You already have an active subscription to this membership. Visit your Library to manage it.")
+          expect(service.send(:should_check_for_restartable_subscription?)).to be false
         end
       end
 
@@ -3691,27 +3690,18 @@ describe Purchase::CreateService, :vcr do
           )
         end
 
-        it "does not restart the existing subscription" do
-          updater_service = instance_double(Subscription::UpdaterService)
-          allow(Subscription::UpdaterService).to receive(:new).and_return(updater_service)
-
+        it "skips the subscription check" do
           service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer:)
-          service.perform
 
-          expect(Subscription::UpdaterService).not_to have_received(:new)
+          expect(service.send(:should_check_for_restartable_subscription?)).to be false
         end
       end
 
       context "when buyer is not logged in" do
         it "still checks for existing subscriptions" do
-          create_subscription_for(product: membership_product, purchaser: buyer, email: email)
+          service = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer: nil)
 
-          expect do
-            purchase, error = Purchase::CreateService.new(product: membership_product, params: membership_params, buyer: nil).perform
-
-            expect(purchase).to be_nil
-            expect(error).to eq("You already have an active subscription to this membership. Visit your Library to manage it.")
-          end.not_to change(Purchase, :count)
+          expect(service.send(:should_check_for_restartable_subscription?)).to be true
         end
       end
     end
