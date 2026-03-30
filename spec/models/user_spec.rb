@@ -1312,6 +1312,15 @@ describe User, :vcr do
           expect(@user_with_avatar.resized_avatar_url(size: 256)).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{variant}")
         end
       end
+
+      context "when avatar is attached but file is missing from storage" do
+        it "returns URL to default avatar" do
+          allow(@user.avatar).to receive(:attached?).and_return(true)
+          allow(@user.avatar).to receive(:variant).and_raise(ActiveStorage::FileNotFoundError)
+
+          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+        end
+      end
     end
 
     describe "avatar_url" do
