@@ -448,7 +448,7 @@ const EmailRow = ({
 
     const { fieldName } = focusedFieldInfo;
     if (fieldName === "name") nameInputRef.current?.focus();
-    if (fieldName !== "message" && fieldName !== "stream_only") selfRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (fieldName && fieldName !== "message" && fieldName !== "stream_only") selfRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [focusedFieldInfo, email.id]);
   React.useEffect(() => {
     if (expanded) setEditorContent(email.message);
