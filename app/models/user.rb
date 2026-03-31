@@ -526,7 +526,9 @@ class User < ApplicationRecord
     products.purchasing_power_parity_disabled.or(products.by_external_ids(external_ids)).each do |product|
       should_disable = external_ids.include?(product.external_id)
 
-      product.update!(purchasing_power_parity_disabled: should_disable) unless should_disable && product.purchasing_power_parity_disabled?
+      next if should_disable && product.purchasing_power_parity_disabled?
+      product.purchasing_power_parity_disabled = should_disable
+      product.save!(validate: false)
     end
   end
 

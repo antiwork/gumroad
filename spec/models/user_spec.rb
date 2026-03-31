@@ -3112,6 +3112,16 @@ describe User, :vcr do
       expect(@user.reload.purchasing_power_parity_excluded_product_external_ids).to eq([@product_1.external_id])
       expect(@product_2.reload.purchasing_power_parity_disabled).to eq(false)
     end
+
+    it "updates PPP flag on a published bundle with no bundle products" do
+      bundle = create(:product, user: @user, is_bundle: true, purchase_disabled_at: nil)
+
+      expect do
+        @user.update_purchasing_power_parity_excluded_products!([bundle.external_id])
+      end.not_to raise_error
+
+      expect(bundle.reload.purchasing_power_parity_disabled).to eq(true)
+    end
   end
 
   describe "#eligible_for_service_products?" do
