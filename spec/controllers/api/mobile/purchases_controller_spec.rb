@@ -623,12 +623,11 @@ describe Api::Mobile::PurchasesController do
     end
 
     describe "query by product details" do
-      it "returns purchases matching product name, seller name, or description" do
+      it "returns purchases matching product name or seller name" do
         seller_1 = create(:named_user, name: "Daniel")
         seller_2 = create(:named_user, name: "Julia")
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_1, name: "Profit & Loss"))
         create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
-        purchase_3 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2, description: "classic"))
 
         get :search, params: @params.merge(q: "daniel")
         expect(response).to match_json_schema("api/mobile/purchases")
@@ -641,11 +640,7 @@ describe Api::Mobile::PurchasesController do
         expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_1.external_id)
 
         get :search, params: @params.merge(q: "julia")
-        expect(response.parsed_body[:purchases].size).to eq(2)
-
-        get :search, params: @params.merge(q: "classic")
         expect(response.parsed_body[:purchases].size).to eq(1)
-        expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_3.external_id)
       end
     end
 

@@ -87,7 +87,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       if params[:q].present?
         query = "%#{ActiveRecord::Base.sanitize_sql_like(params[:q])}%"
         purchases = purchases.where(
-          "links.name LIKE :q OR sellers.name LIKE :q OR links.description LIKE :q", q: query
+          "links.name LIKE :q OR sellers.name LIKE :q", q: query
         )
       end
 
