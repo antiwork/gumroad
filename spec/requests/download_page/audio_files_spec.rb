@@ -258,4 +258,25 @@ describe("Download Page Audio files", type: :system, js: true) do
       end
     end
   end
+
+  describe "mobile app display" do
+    it "renders the mobile app audio row on legacy file list pages" do
+      audio_file = @product.product_files.first
+      visit("/d/#{@url_redirect.token}?display=mobile_app")
+
+      expect(page).to have_button("Play")
+      expect(page).to have_text("MP3")
+      expect(page).to have_text("0m 46s")
+      expect(page).to_not have_button("Pause")
+      expect(page).to_not have_text(" left")
+      expect(page).to_not have_selector("meter")
+
+      page.execute_script %Q(
+        window.dispatchEvent(new CustomEvent("mobile_app_audio_player_info", { detail: { fileId: "#{audio_file.external_id}", isPlaying: true, latestMediaLocation: "24" } }));
+      ).squish
+      expect(page).to have_button("Pause")
+      expect(page).to have_text("0m 22s left")
+      expect(page).to have_selector("meter[value*='0.52']")
+    end
+  end
 end
