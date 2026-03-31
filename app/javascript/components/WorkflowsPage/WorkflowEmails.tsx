@@ -589,7 +589,7 @@ const EmailPreview = ({
   React.useEffect(() => {
     if (!focusedFieldInfo || !selfRef.current) return;
     const sidebar = selfRef.current.closest("aside");
-    if (sidebar) sidebar.scrollTo({ top: selfRef.current.offsetTop - sidebar.offsetTop, behavior: "smooth" });
+    if (sidebar) sidebar.scrollTo({ top: selfRef.current.offsetTop, behavior: "smooth" });
   }, [focusedFieldInfo]);
 
   return (
