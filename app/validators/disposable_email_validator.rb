@@ -22,7 +22,6 @@ class DisposableEmailValidator < ActiveModel::EachValidator
     end
 
     private
-
       def load_domains
         return Set.new if !File.exist?(DISPOSABLE_DOMAINS_PATH)
 
