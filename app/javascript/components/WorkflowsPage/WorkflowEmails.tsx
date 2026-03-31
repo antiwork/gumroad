@@ -314,7 +314,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
             <EmailPreview
               key={email.id}
               email={email}
-              isEditing={focusedFieldInfo?.emailId === email.id}
+              focusedFieldInfo={focusedFieldInfo?.emailId === email.id ? focusedFieldInfo : null}
               workflowTrigger={workflowTrigger}
               gumroadAddress={context.gumroad_address}
             />
@@ -568,12 +568,12 @@ const EmailRow = ({
 
 const EmailPreview = ({
   email,
-  isEditing,
+  focusedFieldInfo,
   workflowTrigger,
   gumroadAddress,
 }: {
   email: EmailFormState;
-  isEditing: boolean;
+  focusedFieldInfo: FocusedFieldInfo | null;
   workflowTrigger: WorkflowTrigger;
   gumroadAddress: string;
 }) => {
@@ -589,10 +589,10 @@ const EmailPreview = ({
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
 
   React.useEffect(() => {
-    if (!isEditing) return;
+    if (!focusedFieldInfo) return;
     const timeoutId = setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 500);
     return () => clearTimeout(timeoutId);
-  }, [isEditing]);
+  }, [focusedFieldInfo]);
 
   return (
     <section className="flex flex-col gap-4" ref={selfRef}>
