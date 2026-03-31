@@ -38,7 +38,7 @@ type Props = {
 };
 
 const MIN_FEE_PERCENT = 1;
-const MAX_FEE_PERCENT = 90;
+const MAX_FEE_PERCENT = 75;
 const isValidFeePercent = (fee: number | null) => fee !== null && fee >= MIN_FEE_PERCENT && fee <= MAX_FEE_PERCENT;
 const validateProduct = (product: SelfServeAffiliateProduct): InvalidProductAttrs => {
   const invalidAttributes: InvalidProductAttrs = new Set();
