@@ -12,7 +12,7 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          AttributeBlockable, PayoutInfo
+          AttributeBlockable, PayoutInfo, EmailNormalization
 
   has_many :user_external_authentications, dependent: :destroy
 
@@ -218,6 +218,8 @@ class User < ApplicationRecord
   validate :json_data, :json_data_must_be_hash
   validate :account_created_email_domain_is_not_blocked, on: :create
   validate :account_created_ip_is_not_blocked, on: :create
+  validate :email_not_from_suspended_gmail_variant, on: :create
+  validates :email, disposable_email: true, on: :create, if: -> { Feature.active?(:block_disposable_emails_at_signup) }
   validate :facebook_meta_tag_is_valid
   validates :payment_address, email_format: true, allow_blank: true
 
