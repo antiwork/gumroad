@@ -971,6 +971,29 @@ describe UrlRedirectsController, inertia: true do
       expect(response).to redirect_to("https://example.com/file.srt")
     end
 
+    context "when the S3 object is missing" do
+      it "returns a 404 JSON error for JSON requests" do
+        file = create(:product_file, link: @product)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+        get :download_product_files, format: :json, params: { product_file_ids: [file.external_id], id: @token }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["error"]).to eq("The file is no longer available.")
+      end
+
+      it "redirects to the download page with a warning for HTML requests" do
+        file = create(:product_file, link: @product)
+        url_redirect = UrlRedirect.find_by(token: @token)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+        get :download_product_files, format: :html, params: { id: @token, product_file_ids: [file.external_id] }
+
+        expect(response).to redirect_to(url_redirect.download_page_url)
+        expect(flash[:warning]).to eq("The file is no longer available. Please contact the seller.")
+      end
+    end
+
     context "when a PDF must be stamped and stamped file is missing" do
       it "shows alert, enqueues job (critical, notify=true), and redirects to download page" do
         product_file = create(:readable_document, link: @product, pdf_stamp_enabled: true)

@@ -115,6 +115,13 @@ class UrlRedirectsController < ApplicationController
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
     end
+  rescue Aws::S3::Errors::NotFound
+    if request.format.json?
+      render(json: { error: "The file is no longer available." }, status: :not_found)
+    else
+      flash[:warning] = "The file is no longer available. Please contact the seller."
+      redirect_to(@url_redirect.download_page_url)
+    end
   end
 
   def download_archive
