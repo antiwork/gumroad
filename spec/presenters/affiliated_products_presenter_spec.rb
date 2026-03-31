@@ -270,10 +270,11 @@ describe AffiliatedProductsPresenter do
         expect(pagination[:pages]).to eq(2)
       end
 
-      it "raises an error if out of range" do
-        expect do
-          described_class.new(affiliate_user, page: 3).affiliated_products_page_props
-        end.to raise_error(Pagy::OverflowError)
+      it "returns the last page if out of range" do
+        props = described_class.new(affiliate_user, page: 3).affiliated_products_page_props
+        pagination = props[:pagination]
+        expect(pagination[:page]).to eq(2)
+        expect(pagination[:pages]).to eq(2)
       end
     end
 
