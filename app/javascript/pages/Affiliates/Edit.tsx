@@ -87,10 +87,10 @@ export default function AffiliatesEdit() {
 
     if (
       applyToAllProducts &&
-      (!data.affiliate.fee_percent || data.affiliate.fee_percent < 1 || data.affiliate.fee_percent > 90)
+      (!data.affiliate.fee_percent || data.affiliate.fee_percent < 1 || data.affiliate.fee_percent > 75)
     ) {
-      form.setError("affiliate.fee_percent", "Commission must be between 1% and 90%");
-      showAlert("Commission must be between 1% and 90%", "error");
+      form.setError("affiliate.fee_percent", "Commission must be between 1% and 75%");
+      showAlert("Commission must be between 1% and 75%", "error");
       return;
     }
 
@@ -102,10 +102,10 @@ export default function AffiliatesEdit() {
 
     if (
       !applyToAllProducts &&
-      data.affiliate.products.some((p) => p.enabled && (!p.fee_percent || p.fee_percent < 1 || p.fee_percent > 90))
+      data.affiliate.products.some((p) => p.enabled && (!p.fee_percent || p.fee_percent < 1 || p.fee_percent > 75))
     ) {
-      form.setError("affiliate.products", "All enabled products must have commission between 1% and 90%");
-      showAlert("All enabled products must have commission between 1% and 90%", "error");
+      form.setError("affiliate.products", "All enabled products must have commission between 1% and 75%");
+      showAlert("All enabled products must have commission between 1% and 75%", "error");
       return;
     }
 
