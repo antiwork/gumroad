@@ -627,7 +627,7 @@ describe Api::Mobile::PurchasesController do
         seller_1 = create(:named_user, name: "Daniel")
         seller_2 = create(:named_user, name: "Julia")
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_1, name: "Profit & Loss"))
-        purchase_2 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
         purchase_3 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2, description: "classic"))
 
         get :search, params: @params.merge(q: "daniel")
