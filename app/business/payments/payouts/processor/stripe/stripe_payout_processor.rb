@@ -169,6 +169,7 @@ class StripePayoutProcessor
         },
         { stripe_account: payment.stripe_connect_account_id }
       )
+      raise "Balance transaction not yet available for destination payment #{destination_payment.id}" if destination_payment.balance_transaction.nil?
       payment.amount_cents += destination_payment.balance_transaction.amount
       payment.stripe_internal_transfer_id = internal_transfer.id
     end
@@ -197,6 +198,9 @@ class StripePayoutProcessor
     failed = true
     ErrorNotifier.notify(e)
     [e.message]
+  rescue RuntimeError
+    failed = true
+    raise
   ensure
     payment.mark_failed! if failed
   end

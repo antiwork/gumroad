@@ -281,6 +281,50 @@ describe StripePayoutProcessor, :vcr do
     end
   end
 
+  describe "prepare_payment_and_set_amount when balance_transaction is nil" do
+    let(:user) { create(:user) }
+    let(:merchant_account) { create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+    let!(:gumroad_merchant_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    end
+    let(:balance_held_by_gumroad) { create(:balance, user:, merchant_account: gumroad_merchant_account, state: "processing", amount_cents: 10_00, holding_amount_cents: 10_00) }
+    let(:payment) do
+      payment = create(:payment, user:, currency: nil, amount_cents: nil, state: "processing")
+      payment.balances << balance_held_by_gumroad
+      payment
+    end
+
+    let(:internal_transfer) do
+      transfer = double
+      allow(transfer).to receive(:id).and_return("tr_1234")
+      allow(transfer).to receive(:destination_payment).and_return("py_1234")
+      transfer
+    end
+
+    let(:destination_payment) do
+      dest = double
+      allow(dest).to receive(:id).and_return("py_1234")
+      allow(dest).to receive(:balance_transaction).and_return(nil)
+      dest
+    end
+
+    before do
+      merchant_account
+      user.reload
+      allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_return(internal_transfer)
+      allow(Stripe::Charge).to receive(:retrieve).and_return(destination_payment)
+    end
+
+    it "raises an error and marks the payment as failed" do
+      expect {
+        described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
+      }.to raise_error(RuntimeError, /Balance transaction not yet available/)
+      payment.reload
+      expect(payment.state).to eq("failed")
+    end
+  end
+
   describe "prepare_payment_and_set_amount for Korean bank account" do
     let(:user) { create(:user) }
     let(:bank_account) { create(:korea_bank_account, user:) }
