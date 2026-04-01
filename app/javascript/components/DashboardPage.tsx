@@ -1,4 +1,4 @@
-import { CheckCircle, ChevronsDownUp, ChevronsUpDown, Circle } from "@boxicons/react";
+import { CheckCircle, ChevronsDownUp, ChevronsUpDown, Circle, X } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
@@ -28,6 +28,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
+import { request } from "$app/utils/request";
 
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
 
@@ -47,14 +48,15 @@ export type DashboardPageProps = {
   name: string;
   has_sale: boolean;
   getting_started_stats: {
-    customized_profile: boolean;
-    first_follower: boolean;
-    first_product: boolean;
-    first_sale: boolean;
-    first_payout: boolean;
-    first_email: boolean;
-    purchased_small_bets: boolean;
+    customized_profile?: boolean;
+    first_follower?: boolean;
+    first_product?: boolean;
+    first_sale?: boolean;
+    first_payout?: boolean;
+    first_email?: boolean;
+    purchased_small_bets?: boolean;
   };
+  getting_started_dismissed: boolean;
   sales: ProductRow[];
   balances: {
     balance: string;
@@ -298,6 +300,7 @@ const GETTING_STARTED_MINIMIZED_KEY = "dashboardGettingStartedMinimized";
 
 export const DashboardPage = ({
   getting_started_stats,
+  getting_started_dismissed,
   sales,
   activity_items,
   balances,
@@ -308,6 +311,7 @@ export const DashboardPage = ({
 }: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
+  const [gettingStartedDismissed, setGettingStartedDismissed] = React.useState<boolean>(getting_started_dismissed);
 
   useRunOnce(() => {
     setGettingStartedMinimized(window.localStorage.getItem(GETTING_STARTED_MINIMIZED_KEY) === "true");
@@ -317,6 +321,15 @@ export const DashboardPage = ({
     const newState = !gettingStartedMinimized;
     window.localStorage.setItem(GETTING_STARTED_MINIMIZED_KEY, JSON.stringify(newState));
     setGettingStartedMinimized(newState);
+  };
+
+  const dismissGettingStarted = async () => {
+    setGettingStartedDismissed(true);
+    await request({
+      method: "POST",
+      url: Routes.dashboard_dismiss_getting_started_checklist_path(),
+      accept: "json",
+    });
   };
 
   return (
@@ -354,26 +367,40 @@ export const DashboardPage = ({
       ) : null}
 
       {loggedInUser?.policies.settings_payments_user.show
-        ? Object.values(getting_started_stats).some((v) => !v) && (
+        ? !gettingStartedDismissed &&
+            Object.values(getting_started_stats).some((v) => !v) && (
             <div className="grid gap-4 p-4 md:p-8">
               <div className="flex items-center justify-between">
                 <h2>Getting started</h2>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    toggleGettingStarted();
-                  }}
-                  aria-label={gettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
-                  style={{ display: "flex", alignItems: "center", gap: "var(--spacer-1)" }}
-                >
-                  <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
-                  {gettingStartedMinimized ? (
-                    <ChevronsUpDown className="size-5" style={{ width: "20px", height: "20px" }} />
-                  ) : (
-                    <ChevronsDownUp className="size-5" style={{ width: "20px", height: "20px" }} />
-                  )}
-                </a>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      toggleGettingStarted();
+                    }}
+                    aria-label={gettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
+                    style={{ display: "flex", alignItems: "center", gap: "var(--spacer-1)" }}
+                  >
+                    <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
+                    {gettingStartedMinimized ? (
+                      <ChevronsUpDown className="size-5" style={{ width: "20px", height: "20px" }} />
+                    ) : (
+                      <ChevronsDownUp className="size-5" style={{ width: "20px", height: "20px" }} />
+                    )}
+                  </a>
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void dismissGettingStarted();
+                    }}
+                    aria-label="Dismiss getting started"
+                    style={{ display: "flex", alignItems: "center" }}
+                  >
+                    <X style={{ width: "20px", height: "20px" }} />
+                  </a>
+                </div>
               </div>
               <div className="grid w-full grid-cols-1 gap-4 min-[2000px]:grid-cols-8 sm:grid-cols-2 xl:grid-cols-4">
                 {GETTING_STARTED_ITEMS.map((item) => (

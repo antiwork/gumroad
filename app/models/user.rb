@@ -263,7 +263,7 @@ class User < ApplicationRecord
             26 => :collect_eu_vat,
             27 => :is_eu_vat_exclusive,
             28 => :is_team_member,
-            29 => :DEPRECATED_has_payout_privilege,
+            29 => :has_dismissed_getting_started_checklist,
             30 => :DEPRECATED_has_risk_privilege,
             31 => :disable_paypal_sales,
             32 => :all_adult_products,
