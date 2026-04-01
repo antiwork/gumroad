@@ -175,7 +175,7 @@ describe DashboardController, type: :controller, inertia: true do
         get :index
 
         expect(response).to be_successful
-        expect(inertia.props[:creator_home][:getting_started_stats]).to eq({ "first_product" => false })
+        expect(inertia.props[:creator_home][:getting_started_stats]).to eq({ first_product: false })
         expect(inertia.props[:creator_home][:getting_started_dismissed]).to be(true)
       end
     end
