@@ -219,7 +219,6 @@ class User < ApplicationRecord
   validate :account_created_email_domain_is_not_blocked, on: :create
   validate :account_created_ip_is_not_blocked, on: :create
   validate :email_not_from_suspended_gmail_variant, on: :create
-  validates :email, disposable_email: true, on: :create, if: -> { Feature.active?(:block_disposable_emails_at_signup) }
   validate :facebook_meta_tag_is_valid
   validates :payment_address, email_format: true, allow_blank: true
 
