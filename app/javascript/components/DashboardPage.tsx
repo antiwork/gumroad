@@ -372,7 +372,7 @@ export const DashboardPage = ({
             <div className="grid gap-4 p-4 md:p-8">
               <div className="flex items-center justify-between">
                 <h2>Getting started</h2>
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
+                <div className="flex items-center gap-2">
                   <a
                     href="#"
                     onClick={(e) => {
@@ -380,13 +380,13 @@ export const DashboardPage = ({
                       toggleGettingStarted();
                     }}
                     aria-label={gettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
-                    style={{ display: "flex", alignItems: "center", gap: "var(--spacer-1)" }}
+                    className="flex items-center gap-1"
                   >
                     <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
                     {gettingStartedMinimized ? (
-                      <ChevronsUpDown className="size-5" style={{ width: "20px", height: "20px" }} />
+                      <ChevronsUpDown className="size-5" />
                     ) : (
-                      <ChevronsDownUp className="size-5" style={{ width: "20px", height: "20px" }} />
+                      <ChevronsDownUp className="size-5" />
                     )}
                   </a>
                   <a
@@ -396,9 +396,9 @@ export const DashboardPage = ({
                       void dismissGettingStarted();
                     }}
                     aria-label="Dismiss getting started"
-                    style={{ display: "flex", alignItems: "center" }}
+                    className="flex items-center"
                   >
-                    <X style={{ width: "20px", height: "20px" }} />
+                    <X className="size-5" />
                   </a>
                 </div>
               </div>
