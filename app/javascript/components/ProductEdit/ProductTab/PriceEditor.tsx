@@ -26,6 +26,7 @@ export const PriceEditor = ({
   numberOfInstallments,
   onAllowInstallmentPlanChange,
   onNumberOfInstallmentsChange,
+  maxEffectivePriceCents,
   currencyCodeSelector,
 }: {
   priceCents: number;
@@ -40,6 +41,7 @@ export const PriceEditor = ({
   numberOfInstallments: number | null;
   onAllowInstallmentPlanChange: (allowed: boolean) => void;
   onNumberOfInstallmentsChange: (numberOfInstallments: number) => void;
+  maxEffectivePriceCents?: number;
   currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void };
 }) => {
   const uid = React.useId();
@@ -89,7 +91,7 @@ export const PriceEditor = ({
       </Details>
       {eligibleForInstallmentPlans ? (
         <InstallmentPlanEditor
-          totalAmountCents={priceCents}
+          totalAmountCents={maxEffectivePriceCents ?? priceCents}
           isPWYW={isPWYW}
           allowInstallmentPayments={allowInstallmentPlan}
           numberOfInstallments={numberOfInstallments}

@@ -296,6 +296,14 @@ export const ProductTab = () => {
                           installment_plan: { ...product.installment_plan, number_of_installments: value },
                         })
                       }
+                      maxEffectivePriceCents={Math.max(
+                        product.price_cents,
+                        ...product.variants.map(
+                          (v) =>
+                            product.price_cents +
+                            ("price_difference_cents" in v ? (v.price_difference_cents ?? 0) : 0),
+                        ),
+                      )}
                     />
                     {product.native_type === "commission" ? (
                       <p

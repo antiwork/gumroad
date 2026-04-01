@@ -85,7 +85,8 @@ class ProductInstallmentPlan < ApplicationRecord
         errors.add(:base, 'Installment plans are not available for "pay what you want" pricing')
       end
 
-      if link.currency["min_price"] * (number_of_installments || 0) > link.price_cents
+      max_price_cents = [link.price_cents, link.price_cents + (link.alive_variants.maximum(:price_difference_cents) || 0)].max
+      if link.currency["min_price"] * (number_of_installments || 0) > max_price_cents
         errors.add(:base, "The minimum price for each installment must be at least #{formatted_amount_in_currency(link.currency["min_price"], link.price_currency_type, no_cents_if_whole: true)}.")
       end
     end
