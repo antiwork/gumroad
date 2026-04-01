@@ -197,6 +197,7 @@ class User < ApplicationRecord
   validates_presence_of :email, if: :email_required?
   validate :email_almost_unique
   validates :email, email_format: true, allow_blank: true, if: :email_changed?
+  validates :email, disposable_email: true, on: :create, if: -> { Feature.active?(:block_disposable_emails_at_signup) }
   validates :kindle_email, format: { with: KINDLE_EMAIL_REGEX }, allow_blank: true, if: :kindle_email_changed?
   validates :support_email, email_format: true, allow_blank: true, if: :support_email_changed?
   validates :support_email, not_reserved_email_domain: true, allow_blank: true, if: :support_email_changed?, unless: :is_team_member?
