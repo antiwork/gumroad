@@ -44,7 +44,11 @@ class ApplicationController < ActionController::Base
   add_flash_types :warning
 
   def redirect_to_next
-    safe_redirect_to(params[:next])
+    if params[:next].present?
+      safe_redirect_to(params[:next])
+    else
+      redirect_to root_path
+    end
   end
 
   def safe_redirect_path(path, allow_subdomain_host: true)

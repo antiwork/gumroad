@@ -1939,6 +1939,15 @@ describe UrlRedirectsController, inertia: true do
       expect(response).to redirect_to("/r/#{@token}")
     end
 
+    it "redirects to root path when next param is missing" do
+      user = create(:user)
+
+      sign_in user
+      post :change_purchaser, params: { id: @token, email: @url_redirect.purchase.email }
+
+      expect(response).to redirect_to(root_path)
+    end
+
     it "redirects to the check_purchaser page if the email is incorrect" do
       user = create(:user)
 
