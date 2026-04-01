@@ -300,8 +300,7 @@ export const ProductTab = () => {
                         product.price_cents,
                         ...product.variants.map(
                           (v) =>
-                            product.price_cents +
-                            ("price_difference_cents" in v ? (v.price_difference_cents ?? 0) : 0),
+                            product.price_cents + ("price_difference_cents" in v ? (v.price_difference_cents ?? 0) : 0),
                         ),
                       )}
                     />
