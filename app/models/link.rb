@@ -402,8 +402,6 @@ class Link < ApplicationRecord
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
-    enforce_two_factor_authentication_for_new_sellers!
-
     if auto_transcode_videos?
       transcode_videos!
     else
@@ -1277,15 +1275,6 @@ class Link < ApplicationRecord
 
       errors.add(:base, "You must connect at least one payment method before you can publish this product for sale.")
       raise LinkInvalid, "You must connect at least one payment method before you can publish this product for sale."
-    end
-
-    def enforce_two_factor_authentication_for_new_sellers!
-      return if Feature.inactive?(:require_2fa_before_selling)
-      return if user.totp_enabled?
-      return if user.links.alive.where(draft: false).where.not(id: id).exists?
-
-      errors.add(:base, "You must set up two-factor authentication before you can publish your first product. Go to Settings > Security to enable it.")
-      raise LinkInvalid, "You must set up two-factor authentication before you can publish your first product. Go to Settings > Security to enable it."
     end
 
     def free_trial_only_enabled_if_recurring_billing
