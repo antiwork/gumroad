@@ -35,8 +35,9 @@ describe User::EmailNormalization do
   end
 
   describe ".abusive_gmail_variant_exists?" do
-    context "when a suspended account exists with the normalized base email" do
-      let!(:suspended_user) { create(:user, :suspended, email: "abuser@gmail.com") }
+    context "when the normalized email is in the Redis set" do
+      before { GmailAbuseFilter.add!("abuser@gmail.com") }
+      after { $redis.del(GmailAbuseFilter::REDIS_KEY) }
 
       it "detects plus-addressed variants" do
         expect(User.abusive_gmail_variant_exists?("abuser+random123@gmail.com")).to be(true)
@@ -51,33 +52,13 @@ describe User::EmailNormalization do
       end
     end
 
-    context "when a suspended account exists with a plus-addressed email" do
-      let!(:suspended_user) { create(:user, :suspended, email: "abuser+old@gmail.com") }
-
-      it "detects new plus-addressed variants from the same base" do
-        expect(User.abusive_gmail_variant_exists?("abuser+new@gmail.com")).to be(true)
-      end
-    end
-
-    context "when a flagged account exists" do
-      let!(:flagged_user) { create(:user, :flagged_for_tos_violation, email: "flagged@gmail.com") }
-
-      it "detects variants of the flagged account" do
-        expect(User.abusive_gmail_variant_exists?("flagged+test@gmail.com")).to be(true)
-      end
-    end
-
-    context "when the existing account is compliant" do
-      let!(:compliant_user) { create(:compliant_user, email: "gooduser@gmail.com") }
-
+    context "when the normalized email is not in the Redis set" do
       it "returns false" do
         expect(User.abusive_gmail_variant_exists?("gooduser+test@gmail.com")).to be(false)
       end
     end
 
     context "with non-Gmail addresses" do
-      let!(:suspended_user) { create(:user, :suspended, email: "abuser@example.com") }
-
       it "returns false" do
         expect(User.abusive_gmail_variant_exists?("abuser+test@example.com")).to be(false)
       end
@@ -85,16 +66,14 @@ describe User::EmailNormalization do
   end
 
   describe "email_not_from_suspended_gmail_variant validation" do
-    before do
-      Feature.activate(:block_gmail_abuse_at_signup)
-    end
-
+    before { Feature.activate(:block_gmail_abuse_at_signup) }
     after do
       Feature.deactivate(:block_gmail_abuse_at_signup)
+      $redis.del(GmailAbuseFilter::REDIS_KEY)
     end
 
-    context "when a suspended account exists with the same normalized Gmail address" do
-      let!(:suspended_user) { create(:user, :suspended, email: "scammer@gmail.com") }
+    context "when a suspended account's normalized email is in the filter" do
+      before { GmailAbuseFilter.add!("scammer@gmail.com") }
 
       it "blocks signup with a plus-addressed variant" do
         user = build(:user, email: "scammer+new@gmail.com")
@@ -109,7 +88,7 @@ describe User::EmailNormalization do
       end
     end
 
-    context "when no suspended account exists" do
+    context "when no matching email is in the filter" do
       it "allows signup" do
         user = build(:user, email: "newuser+tag@gmail.com")
         user.valid?(:create)
@@ -118,10 +97,12 @@ describe User::EmailNormalization do
     end
 
     context "when the feature flag is disabled" do
-      before { Feature.deactivate(:block_gmail_abuse_at_signup) }
+      before do
+        Feature.deactivate(:block_gmail_abuse_at_signup)
+        GmailAbuseFilter.add!("scammer@gmail.com")
+      end
 
       it "skips the validation" do
-        create(:user, :suspended, email: "scammer@gmail.com")
         user = build(:user, email: "scammer+new@gmail.com")
         user.valid?(:create)
         expect(user.errors[:base]).to be_empty
