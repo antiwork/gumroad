@@ -264,6 +264,23 @@ describe StripePayoutProcessor, :vcr do
     end
   end
 
+  describe "prepare_payment_and_set_amount when merchant_account is nil" do
+    let(:user) { create(:user) }
+    let(:payment) { create(:payment, user:, currency: nil, amount_cents: nil) }
+    let(:balance) { create(:balance, user:, merchant_account: create(:merchant_account, user:)) }
+
+    before do
+      allow(described_class).to receive(:get_payout_details).and_return([nil, [balance], []])
+    end
+
+    it "returns an error and marks the payment as failed" do
+      errors = described_class.prepare_payment_and_set_amount(payment, [balance])
+
+      expect(errors).to eq(["Cannot process payout: no valid merchant account found for user."])
+      expect(payment.reload.state).to eq("failed")
+    end
+  end
+
   describe "prepare_payment_and_set_amount for Korean bank account" do
     let(:user) { create(:user) }
     let(:bank_account) { create(:korea_bank_account, user:) }

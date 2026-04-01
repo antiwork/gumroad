@@ -134,6 +134,12 @@ class StripePayoutProcessor
   # Returns an array of errors.
   def self.prepare_payment_and_set_amount(payment, balances)
     merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(payment.user, balances)
+
+    if merchant_account.nil?
+      payment.mark_failed!
+      return ["Cannot process payout: no valid merchant account found for user."]
+    end
+
     payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
     payment.currency = merchant_account.currency
     payment.amount_cents = 0
