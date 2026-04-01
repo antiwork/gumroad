@@ -29,17 +29,18 @@ module User::EmailNormalization
       local, domain = normalized.split("@", 2)
       return false if GMAIL_DOMAINS.exclude?(domain)
 
-      exact_match = User.where("LOWER(email) = ?", "#{local}@#{domain}")
-      plus_match = User.where("LOWER(email) LIKE ?", "#{local}+%@#{domain}")
-      normalized_match = User.where(
-        "REPLACE(LOWER(SUBSTRING_INDEX(email, '+', 1)), '.', '') = ? AND LOWER(SUBSTRING_INDEX(email, '@', -1)) IN (?)",
+      abusive_users = User.where(user_risk_state: ABUSIVE_RISK_STATES)
+
+      exact_match = abusive_users.where("email = ?", "#{local}@#{domain}")
+      plus_match = abusive_users.where("email LIKE ?", "#{local}+%@#{domain}")
+      normalized_match = abusive_users.where(
+        "REPLACE(SUBSTRING_INDEX(email, '+', 1), '.', '') = ? AND SUBSTRING_INDEX(email, '@', -1) IN (?)",
         local, GMAIL_DOMAINS
       )
 
       exact_match
         .or(plus_match)
         .or(normalized_match)
-        .where(user_risk_state: ABUSIVE_RISK_STATES)
         .exists?
     end
   end
