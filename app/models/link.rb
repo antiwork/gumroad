@@ -1252,6 +1252,7 @@ class Link < ApplicationRecord
     def default_offer_code_must_be_valid
       return unless default_offer_code.present?
       return if being_marked_as_deleted?
+      return unless new_record? || default_offer_code_id_changed?
 
       if !user.offer_codes.alive.where(id: default_offer_code.id).exists?
         errors.add(:default_offer_code, "must belong to your offer codes")
