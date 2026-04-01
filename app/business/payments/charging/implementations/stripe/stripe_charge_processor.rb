@@ -126,10 +126,15 @@ class StripeChargeProcessor
     end
     balance_transaction = charge.balance_transaction
     if balance_transaction.is_a?(String)
-      merchant_account = Purchase.find(charge.transfer_group).merchant_account rescue nil
-      balance_transaction = merchant_account&.is_a_stripe_connect_account? ?
-                              Stripe::BalanceTransaction.retrieve({ id: balance_transaction }, { stripe_account: merchant_account.charge_processor_merchant_id }) :
-                              Stripe::BalanceTransaction.retrieve({ id: balance_transaction })
+      begin
+        merchant_account = Purchase.find(charge.transfer_group).merchant_account rescue nil
+        balance_transaction = merchant_account&.is_a_stripe_connect_account? ?
+                                Stripe::BalanceTransaction.retrieve({ id: balance_transaction }, { stripe_account: merchant_account.charge_processor_merchant_id }) :
+                                Stripe::BalanceTransaction.retrieve({ id: balance_transaction })
+      rescue Stripe::InvalidRequestError => e
+        Rails.logger.error("Failed to retrieve balance transaction: #{e.message}")
+        balance_transaction = nil
+      end
     end
     StripeCharge.new(charge, balance_transaction, charge.application_fee.try(:balance_transaction),
                      stripe_destination_payment.try(:balance_transaction), destination_transfer)
