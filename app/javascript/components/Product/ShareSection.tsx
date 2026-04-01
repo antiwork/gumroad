@@ -122,7 +122,7 @@ export const ShareSection = ({
               <div
                 {...props}
                 inert={isSelectionInWishlist(wishlist)}
-                className={classNames(props.className, isSelectionInWishlist(wishlist) && "opacity-30")}
+                className={classNames(props.className, isSelectionInWishlist(wishlist) ? "opacity-30" : undefined)}
                 onClick={(e) => {
                   props.onClick?.(e);
                   void addProduct(Promise.resolve({ newlyCreated: false, wishlist }));
