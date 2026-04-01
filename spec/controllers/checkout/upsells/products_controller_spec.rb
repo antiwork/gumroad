@@ -79,6 +79,16 @@ describe Checkout::Upsells::ProductsController do
       )
     end
 
+    it "limits results to MAX_PRODUCTS" do
+      sign_in seller
+
+      stub_const("Checkout::Upsells::ProductsController::MAX_PRODUCTS", 2)
+      get :index
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.length).to eq(2)
+    end
+
     context "with custom domain" do
       before do
         @request.host = "example.com"
