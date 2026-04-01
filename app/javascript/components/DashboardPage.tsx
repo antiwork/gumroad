@@ -4,6 +4,7 @@ import cx from "classnames";
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { request } from "$app/utils/request";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { Button, NavigationButton } from "$app/components/Button";
@@ -28,7 +29,6 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
-import { request } from "$app/utils/request";
 
 import placeholderImage from "$assets/images/placeholders/dashboard.png";
 
@@ -368,7 +368,7 @@ export const DashboardPage = ({
 
       {loggedInUser?.policies.settings_payments_user.show
         ? !gettingStartedDismissed &&
-            Object.values(getting_started_stats).some((v) => !v) && (
+          Object.values(getting_started_stats).some((v) => !v) && (
             <div className="grid gap-4 p-4 md:p-8">
               <div className="flex items-center justify-between">
                 <h2>Getting started</h2>
