@@ -193,7 +193,86 @@ class Api::V2::LinksController < Api::V2::BaseController
   end
 
   def update
-    e404
+    if @product.is_tiered_membership && params.key?(:price)
+      return render_response(false, message: "Price cannot be updated for tiered membership products. Use the variant endpoints to manage tier pricing.")
+    end
+
+    @normalized_files = normalize_params_recursively(params[:files]) if params.key?(:files)
+    @normalized_rich_content = normalize_params_recursively(params[:rich_content]) if params.key?(:rich_content)
+
+    begin
+      ActiveRecord::Base.transaction do
+        attrs = {}
+        attrs[:name] = params[:name] if params.key?(:name)
+        attrs[:custom_permalink] = params[:custom_permalink] if params.key?(:custom_permalink)
+        attrs[:price_cents] = params[:price] if params.key?(:price)
+        attrs[:price_currency_type] = params[:price_currency_type] if params.key?(:price_currency_type)
+        attrs[:customizable_price] = params[:customizable_price] if params.key?(:customizable_price)
+        attrs[:suggested_price_cents] = params[:suggested_price_cents] if params.key?(:suggested_price_cents)
+        attrs[:max_purchase_count] = params[:max_purchase_count] if params.key?(:max_purchase_count)
+        attrs[:quantity_enabled] = params[:quantity_enabled] if params.key?(:quantity_enabled)
+        attrs[:is_adult] = params[:is_adult] if params.key?(:is_adult)
+        attrs[:display_product_reviews] = params[:display_product_reviews] if params.key?(:display_product_reviews)
+        attrs[:should_show_sales_count] = params[:should_show_sales_count] if params.key?(:should_show_sales_count)
+        attrs[:taxonomy_id] = params[:taxonomy_id] if params.key?(:taxonomy_id)
+        attrs[:custom_receipt] = params[:custom_receipt] if params.key?(:custom_receipt)
+        @product.assign_attributes(attrs)
+
+        if params.key?(:description)
+          @product.description = SaveContentUpsellsService.new(seller: @product.user, content: params[:description], old_content: @product.description_was).from_html
+        end
+
+        if params.key?(:custom_summary)
+          @product.json_data["custom_summary"] = params[:custom_summary]
+        end
+
+        if params.key?(:files)
+          validate_file_embed_conflicts!
+
+          rich_content_params = build_rich_content_params
+          file_params = params.dup
+          file_params[:files] = @normalized_files
+          SaveFilesService.perform(@product, file_params, rich_content_params)
+        end
+
+        @product.save!
+
+        @product.save_tags!(params[:tags]) if params.key?(:tags)
+
+        if params.key?(:cover_ids)
+          cover_ids = normalize_params_recursively(params[:cover_ids])
+          @product.reorder_previews(cover_ids.map.with_index.to_h)
+        end
+
+        if params.key?(:rich_content)
+          save_rich_content!
+          Product::SavePostPurchaseCustomFieldsService.new(@product).perform
+          @product.is_licensed = @product.has_embedded_license_key?
+          @product.is_multiseat_license = false if !@product.is_licensed
+          @product.save!
+        end
+
+        @product.generate_product_files_archives! if params.key?(:files) || params.key?(:rich_content)
+      end
+    rescue Link::LinkInvalid => e
+      return if performed?
+      return render_response(false, message: e.message)
+    rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid => e
+      return if performed?
+      object = e.respond_to?(:record) ? e.record : nil
+      if object == @product || object.nil?
+        return error_with_product(@product)
+      else
+        return render_response(false, message: object.errors.full_messages.to_sentence)
+      end
+    end
+
+    offer_code_warning = check_offer_code_validity
+    if offer_code_warning
+      success_with_object(:product, @product, warning: offer_code_warning)
+    else
+      success_with_product(@product)
+    end
   end
 
   def disable
@@ -279,4 +358,120 @@ class Api::V2::LinksController < Api::V2::BaseController
 
       (existing_rich_contents - rich_contents_to_keep).each(&:mark_deleted!)
     end
+
+    def normalize_params_recursively(obj)
+      case obj
+      when ActionController::Parameters
+        normalize_params_recursively(obj.to_unsafe_h)
+      when Hash
+        if obj.keys.all? { |k| k.to_s.match?(/\A\d+\z/) }
+          obj.sort_by { |k, _| k.to_i }.map { |_, v| normalize_params_recursively(v) }
+        else
+          obj.transform_values { |v| normalize_params_recursively(v) }.with_indifferent_access
+        end
+      when Array
+        obj.map { |v| normalize_params_recursively(v) }
+      else
+        obj
+      end
+    end
+
+    def validate_file_embed_conflicts!
+      existing_file_ids = @product.alive_product_files.map(&:external_id)
+      incoming_file_ids = (@normalized_files || []).filter_map { |f| f[:id] }
+      removing_ids = existing_file_ids - incoming_file_ids
+      return if removing_ids.empty?
+
+      product_embed_ids = if @normalized_rich_content
+        extract_file_embed_ids_from_params(@normalized_rich_content)
+      else
+        @product.alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order).map { ObfuscateIds.encrypt(_1) }
+      end
+
+      variant_embed_ids = @product.alive_variants.flat_map { |v| v.alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order) }.map { ObfuscateIds.encrypt(_1) }
+
+      all_embed_ids = (product_embed_ids + variant_embed_ids).uniq
+      conflicting = removing_ids & all_embed_ids
+      return if conflicting.empty?
+
+      raise Link::LinkInvalid, "Cannot remove files still referenced in rich content: #{conflicting.join(", ")}. Remove the file embeds from rich content first, or send both changes together."
+    end
+
+    def unwrap_description_content(description)
+      if description.respond_to?(:key?) && description.key?(:content)
+        description[:content] || []
+      else
+        Array(description)
+      end
+    end
+
+    def extract_file_embed_ids_from_params(rich_content_pages)
+      return [] if rich_content_pages.blank?
+
+      rich_content_pages.flat_map { |page|
+        content = unwrap_description_content(page[:description])
+        next [] if content.blank?
+        extract_file_ids_from_nodes(content)
+      }.compact.uniq
+    end
+
+    def extract_file_ids_from_nodes(nodes)
+      nodes.flat_map do |node|
+        ids = []
+        if node[:type] == RichContent::FILE_EMBED_NODE_TYPE
+          id = node.dig(:attrs, :id)
+          ids << id if id.present?
+        end
+        child_content = node[:content]
+        ids.concat(extract_file_ids_from_nodes(Array(child_content))) if child_content.present?
+        ids
+      end
+    end
+
+    def build_rich_content_params
+      return [] if @normalized_rich_content.blank?
+
+      @normalized_rich_content.flat_map { |page| unwrap_description_content(page[:description]) }
+    end
+
+    def save_rich_content!
+      rich_content = @normalized_rich_content || []
+      existing_rich_contents = @product.alive_rich_contents.to_a
+      rich_contents_to_keep = []
+
+      rich_content.each.with_index do |page, index|
+        description_content = unwrap_description_content(page[:description])
+        page_id = page[:id]
+        page_title = page[:title]
+
+        record = existing_rich_contents.find { |c| c.external_id == page_id } || @product.alive_rich_contents.build
+        description_content = SaveContentUpsellsService.new(seller: @product.user, content: description_content, old_content: record.description || []).from_rich_content
+        record.update!(title: page_title.presence, description: description_content.presence || [], position: index)
+        rich_contents_to_keep << record
+      end
+
+      (existing_rich_contents - rich_contents_to_keep).each(&:mark_deleted!)
+    end
+
+    def check_offer_code_validity
+      offer_codes = @product.product_and_universal_offer_codes
+      invalid_currency_offer_codes = offer_codes.reject { |oc| oc.is_currency_valid?(@product) }.map(&:code)
+      invalid_amount_offer_codes = offer_codes.reject { _1.is_amount_valid?(@product) }.map(&:code)
+      all_invalid = (invalid_currency_offer_codes + invalid_amount_offer_codes).uniq
+      return nil if all_invalid.empty?
+
+      has_currency = invalid_currency_offer_codes.any?
+      has_amount = invalid_amount_offer_codes.any?
+
+      issue = if has_currency && has_amount
+        "#{all_invalid.count > 1 ? "have" : "has"} currency mismatches or would discount this product below #{@product.min_price_formatted}"
+      elsif has_currency
+        "#{all_invalid.count > 1 ? "have" : "has"} currency #{"mismatch".pluralize(all_invalid.count)} with this product"
+      else
+        "#{all_invalid.count > 1 ? "discount" : "discounts"} this product below #{@product.min_price_formatted}"
+      end
+
+      "The following offer #{"code".pluralize(all_invalid.count)} #{issue}: #{all_invalid.join(", ")}. Please update #{all_invalid.length > 1 ? "them or they" : "it or it"} will not work at checkout."
+    end
+
 end
