@@ -894,7 +894,7 @@ describe Api::V2::LinksController do
       it "removes rich content pages not in the request" do
         create(:rich_content, entity: @product, title: "Will Be Removed", description: [], position: 0)
 
-        put @action, params: @params.merge(rich_content: [])
+        put @action, params: @params.merge(rich_content: []), as: :json
         expect(response.parsed_body["success"]).to be(true)
         expect(@product.reload.alive_rich_contents.count).to eq(0)
       end
@@ -924,7 +924,7 @@ describe Api::V2::LinksController do
 
       it "does not delete existing rich content when only files change" do
         rc = create(:rich_content, entity: @product, title: "Keep", description: [], position: 0)
-        put @action, params: @params.merge(files: [])
+        put @action, params: @params.merge(files: []), as: :json
         expect(response.parsed_body["success"]).to be(true)
         expect(rc.reload.alive?).to be(true)
       end
@@ -935,7 +935,7 @@ describe Api::V2::LinksController do
                  { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
                ], position: 0)
 
-        put @action, params: @params.merge(files: [])
+        put @action, params: @params.merge(files: []), as: :json
         expect(response.parsed_body["success"]).to be(false)
         expect(response.parsed_body["message"]).to include("Cannot remove files")
         expect(file.reload.alive?).to be(true)
@@ -950,8 +950,9 @@ describe Api::V2::LinksController do
         put @action, params: @params.merge(
           files: [],
           rich_content: [{ title: "Page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "No embed" }] }] } }]
-        )
+        ), as: :json
         expect(response.parsed_body["success"]).to be(true)
+        expect(file.reload.alive?).to be(false)
       end
 
       it "reorders covers via cover_ids" do
