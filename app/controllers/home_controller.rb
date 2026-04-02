@@ -75,6 +75,10 @@ class HomeController < ApplicationController
     set_meta_tag(property: "og:url", content: terms_url)
   end
 
+  def features_md
+    render plain: FeaturesMarkdownGenerator.call, content_type: "text/markdown"
+  end
+
   def small_bets
     set_meta_tag(title: "Small Bets by Gumroad")
     set_meta_tag(name: "description", content: "Explore the Small Bets initiative by Gumroad. Learn, experiment, and grow with small, actionable projects.")
