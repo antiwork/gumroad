@@ -19,6 +19,7 @@ import { GettingStartedIconProps } from "$app/components/icons/getting-started/G
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Modal } from "$app/components/Modal";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
@@ -312,6 +313,7 @@ export const DashboardPage = ({
   const loggedInUser = useLoggedInUser();
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
   const [gettingStartedDismissed, setGettingStartedDismissed] = React.useState<boolean>(getting_started_dismissed);
+  const [showDismissConfirmation, setShowDismissConfirmation] = React.useState<boolean>(false);
 
   useRunOnce(() => {
     setGettingStartedMinimized(window.localStorage.getItem(GETTING_STARTED_MINIMIZED_KEY) === "true");
@@ -393,7 +395,7 @@ export const DashboardPage = ({
                     href="#"
                     onClick={(e) => {
                       e.preventDefault();
-                      void dismissGettingStarted();
+                      setShowDismissConfirmation(true);
                     }}
                     aria-label="Dismiss getting started"
                     className="flex items-center"
@@ -415,6 +417,27 @@ export const DashboardPage = ({
                   />
                 ))}
               </div>
+              <Modal
+                open={showDismissConfirmation}
+                onClose={() => setShowDismissConfirmation(false)}
+                title="Hide getting started checklist?"
+                footer={
+                  <>
+                    <Button onClick={() => setShowDismissConfirmation(false)}>Cancel</Button>
+                    <Button
+                      color="danger"
+                      onClick={() => {
+                        setShowDismissConfirmation(false);
+                        void dismissGettingStarted();
+                      }}
+                    >
+                      Yes, hide it
+                    </Button>
+                  </>
+                }
+              >
+                <p>The checklist will be permanently hidden and cannot be brought back.</p>
+              </Modal>
             </div>
           )
         : null}
