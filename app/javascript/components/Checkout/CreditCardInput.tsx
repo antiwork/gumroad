@@ -62,9 +62,8 @@ export const CreditCardInput = ({
                 const inputStyle = window.getComputedStyle(el);
                 const color = getCssVariable("color").split(" ").join(",");
                 const placeholderColor = `rgb(${color}, ${getCssVariable("gray-3")})`;
-                const sanitizedFontFamily = inputStyle.fontFamily.replace(/\\[0-9a-fA-F]+\s?/g, "");
                 setBaseStripeStyle({
-                  fontFamily: sanitizedFontFamily || "sans-serif",
+                  fontFamily: inputStyle.fontFamily,
                   color: inputStyle.color,
                   iconColor: placeholderColor,
                   "::placeholder": { color: placeholderColor },
