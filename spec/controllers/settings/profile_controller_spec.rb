@@ -112,6 +112,36 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(flash[:alert]).to eq("The logo is already removed. Please refresh the page and try again.")
     end
 
+    it "handles duplicate attachment gracefully when avatar is already attached with the same blob" do
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: fixture_file_upload("smilie.png"),
+        filename: "smilie.png",
+      )
+      seller.avatar.attach(blob)
+
+      put :update, params: { profile_picture_blob_id: blob.signed_id }
+
+      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to have_http_status :see_other
+      expect(flash[:notice]).to eq("Changes saved!")
+      expect(seller.avatar.attached?).to be(true)
+    end
+
+    it "handles concurrent avatar attachment race condition" do
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: fixture_file_upload("smilie.png"),
+        filename: "smilie.png",
+      )
+
+      allow_any_instance_of(ActiveStorage::Attached::One).to receive(:attach).and_raise(ActiveRecord::RecordNotUnique)
+
+      put :update, params: { profile_picture_blob_id: blob.signed_id }
+
+      expect(response).to redirect_to(settings_profile_path)
+      expect(response).to have_http_status :see_other
+      expect(flash[:notice]).to eq("Changes saved!")
+    end
+
     it "regenerates the subscribe preview when the avatar changes" do
       allow_any_instance_of(User).to receive(:generate_subscribe_preview).and_call_original
 
