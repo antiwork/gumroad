@@ -20,8 +20,8 @@ class LibraryPresenter
         :variant_attributes,
         :bundle_purchase,
         link: {
-          display_asset_previews: { file_attachment: :blob },
-          thumbnail_alive: { file_attachment: :blob },
+          display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+          thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
           user: { avatar_attachment: :blob }
         }
       )
