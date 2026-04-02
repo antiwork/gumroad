@@ -549,4 +549,35 @@ describe "Product with installment plan", type: :system, js: true do
       end
     end
   end
+
+  context "when the product has a free base price with paid variants" do
+    let!(:product) { create(:product, name: "Freemium product", user: seller, price_cents: 0) }
+    let!(:variant_category) { create(:variant_category, link: product, title: "Tier") }
+    let!(:free_variant) { create(:variant, variant_category: variant_category, name: "Free", price_difference_cents: 0) }
+    let!(:pro_variant) { create(:variant, variant_category: variant_category, name: "Pro", price_difference_cents: 1000) }
+    let!(:installment_plan) do
+      product.update_column(:customizable_price, false)
+      plan = ProductInstallmentPlan.new(link: product.reload, number_of_installments: 2, recurrence: "monthly")
+      plan.save!(validate: false)
+      plan
+    end
+
+    it "hides the installment button for the free variant and shows it for the paid variant" do
+      visit product.long_url
+
+      choose "Free"
+      expect(page).not_to have_text("Pay in 2 installments")
+
+      choose "Pro"
+      expect(page).to have_text("Pay in 2 installments")
+    end
+
+    it "shows installment notes for the paid variant on the product page" do
+      visit product.long_url
+
+      choose "Pro"
+      expect(page).to have_text("Pay in 2 installments")
+      expect(page).to have_text("2 equal monthly installments of $5", normalize_ws: true)
+    end
+  end
 end

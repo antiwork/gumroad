@@ -165,7 +165,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
                     : "I want this!")}
         </NavigationButton>
 
-        {product.installment_plan && product.installment_plan.number_of_installments > 1 ? (
+        {product.installment_plan && product.installment_plan.number_of_installments > 1 && discountedPriceCents > 0 ? (
           <>
             <NavigationButton
               color="black"

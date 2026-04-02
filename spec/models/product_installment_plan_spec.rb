@@ -179,6 +179,13 @@ RSpec.describe ProductInstallmentPlan do
         expect(installment_plan.errors[:base])
           .to include("The minimum price for each installment must be at least 0.99 USD.")
       end
+
+      it "is valid when PWYW is on but paid variants exist" do
+        product.update_column(:customizable_price, true)
+        product.reload
+        installment_plan.number_of_installments = 2
+        expect(installment_plan).to be_valid
+      end
     end
   end
 

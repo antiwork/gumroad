@@ -81,7 +81,8 @@ class ProductInstallmentPlan < ApplicationRecord
     end
 
     def validate_installment_payment_price
-      if link.customizable_price?
+      has_paid_variants = (link.alive_variants.maximum(:price_difference_cents) || 0) > 0
+      if link.customizable_price? && !has_paid_variants
         errors.add(:base, 'Installment plans are not available for "pay what you want" pricing')
       end
 
