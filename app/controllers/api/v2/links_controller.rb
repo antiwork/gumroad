@@ -408,11 +408,11 @@ class Api::V2::LinksController < Api::V2::BaseController
     def extract_file_embed_ids_from_params(rich_content_pages)
       return [] if rich_content_pages.blank?
 
-      rich_content_pages.flat_map { |page|
+      rich_content_pages.flat_map do |page|
         content = unwrap_description_content(page[:description])
         next [] if content.blank?
         extract_file_ids_from_nodes(content)
-      }.compact.uniq
+      end.compact.uniq
     end
 
     def extract_file_ids_from_nodes(nodes)
@@ -473,5 +473,4 @@ class Api::V2::LinksController < Api::V2::BaseController
 
       "The following offer #{"code".pluralize(all_invalid.count)} #{issue}: #{all_invalid.join(", ")}. Please update #{all_invalid.length > 1 ? "them or they" : "it or it"} will not work at checkout."
     end
-
 end

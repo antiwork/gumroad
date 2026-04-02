@@ -880,9 +880,9 @@ describe Api::V2::LinksController do
         existing_rc = create(:rich_content, entity: @product, title: "Page 1", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Old" }] }], position: 0)
 
         put @action, params: @params.merge(rich_content: [
-          { id: existing_rc.external_id, title: "Page 1 Updated", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "New" }] }] } },
-          { title: "Page 2", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Brand new page" }] }] } }
-        ])
+                                             { id: existing_rc.external_id, title: "Page 1 Updated", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "New" }] }] } },
+                                             { title: "Page 2", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Brand new page" }] }] } }
+                                           ])
         expect(response.parsed_body["success"]).to be(true)
         @product.reload
         pages = @product.alive_rich_contents.order(:position)
@@ -904,9 +904,9 @@ describe Api::V2::LinksController do
         new_file_url = "#{S3_BASE_URL}attachments/#{@user.external_id}/#{SecureRandom.hex}/original/new_file.pdf"
 
         put @action, params: @params.merge(files: [
-          { id: existing_file.external_id, url: existing_file.url, display_name: "Existing" },
-          { url: new_file_url, display_name: "New File" }
-        ])
+                                             { id: existing_file.external_id, url: existing_file.url, display_name: "Existing" },
+                                             { url: new_file_url, display_name: "New File" }
+                                           ])
         expect(response.parsed_body["success"]).to be(true)
         @product.reload
         alive_files = @product.product_files.alive
@@ -916,8 +916,8 @@ describe Api::V2::LinksController do
       it "does not delete existing files when only rich_content changes" do
         file = create(:product_file, link: @product)
         put @action, params: @params.merge(rich_content: [
-          { title: "Page 1", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "test" }] }] } }
-        ])
+                                             { title: "Page 1", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "test" }] }] } }
+                                           ])
         expect(response.parsed_body["success"]).to be(true)
         expect(file.reload.alive?).to be(true)
       end
@@ -932,8 +932,8 @@ describe Api::V2::LinksController do
       it "rejects removing a file still referenced by product-level rich content" do
         file = create(:product_file, link: @product)
         create(:rich_content, entity: @product, title: "Page", description: [
-          { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
-        ], position: 0)
+                 { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
+               ], position: 0)
 
         put @action, params: @params.merge(files: [])
         expect(response.parsed_body["success"]).to be(false)
@@ -944,8 +944,8 @@ describe Api::V2::LinksController do
       it "allows removing a file and its embed in the same request" do
         file = create(:product_file, link: @product)
         create(:rich_content, entity: @product, title: "Page", description: [
-          { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
-        ], position: 0)
+                 { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
+               ], position: 0)
 
         put @action, params: @params.merge(
           files: [],
@@ -977,16 +977,16 @@ describe Api::V2::LinksController do
       it "runs SavePostPurchaseCustomFieldsService after rich content changes" do
         expect_any_instance_of(Product::SavePostPurchaseCustomFieldsService).to receive(:perform).and_call_original
         put @action, params: @params.merge(rich_content: [
-          { title: "Page", description: { type: "doc", content: [{ type: "shortAnswer", attrs: { label: "Your name" } }] } }
-        ])
+                                             { title: "Page", description: { type: "doc", content: [{ type: "shortAnswer", attrs: { label: "Your name" } }] } }
+                                           ])
         expect(response.parsed_body["success"]).to be(true)
       end
 
       it "recomputes is_licensed after rich content changes" do
         @product.update!(is_licensed: false)
         put @action, params: @params.merge(rich_content: [
-          { title: "Page", description: { type: "doc", content: [{ type: "licenseKey" }] } }
-        ])
+                                             { title: "Page", description: { type: "doc", content: [{ type: "licenseKey" }] } }
+                                           ])
         expect(response.parsed_body["success"]).to be(true)
         expect(@product.reload.is_licensed).to be(true)
       end
