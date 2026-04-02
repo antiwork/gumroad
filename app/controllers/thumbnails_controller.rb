@@ -22,7 +22,7 @@ class ThumbnailsController < Sellers::BaseController
     else
       render(json: { success: false, error: thumbnail.errors.any? ? thumbnail.errors.full_messages.to_sentence : "Could not process your preview, please try again." })
     end
-  rescue *INTERNET_EXCEPTIONS
+  rescue ActiveRecord::InvalidForeignKey, ActiveStorage::FileNotFoundError, *INTERNET_EXCEPTIONS
     render(json: { success: false, error: "Could not process your thumbnail, please try again." })
   end
 

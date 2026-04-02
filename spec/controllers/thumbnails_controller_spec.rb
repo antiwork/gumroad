@@ -82,6 +82,30 @@ describe ThumbnailsController, :vcr do
       end
     end
 
+    it "returns an error when the file is not found in storage" do
+      allow_any_instance_of(ActiveStorage::Blob).to receive(:analyze).and_raise(ActiveStorage::FileNotFoundError)
+
+      expect do
+        post(:create, params: { link_id: product.unique_permalink, thumbnail: { signed_blob_id: blob.signed_id }, format: :json })
+      end.not_to change { Thumbnail.count }
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq({ "success" => false, "error" => "Could not process your thumbnail, please try again." })
+    end
+
+    it "returns an error when the blob is purged before attach completes" do
+      allow_any_instance_of(ActiveStorage::Attached::One).to receive(:attach).and_raise(
+        ActiveRecord::InvalidForeignKey.new("Cannot add or update a child row: a foreign key constraint fails")
+      )
+
+      expect do
+        post(:create, params: { link_id: product.unique_permalink, thumbnail: { signed_blob_id: blob.signed_id }, format: :json })
+      end.not_to change { Thumbnail.count }
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq({ "success" => false, "error" => "Could not process your thumbnail, please try again." })
+    end
+
     it "restores deleted thumbnail if exists" do
       product.update!(thumbnail: create(:thumbnail))
       product.thumbnail.mark_deleted!
