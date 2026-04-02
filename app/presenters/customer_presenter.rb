@@ -31,7 +31,7 @@ class CustomerPresenter
       id: purchase.external_id,
       email: purchase.email,
       giftee_email: purchase.giftee_email,
-      name: purchase.full_name || "",
+      name: purchase.full_name.try(:strip).presence || purchase.purchaser&.name || "",
       physical: purchase.sku.present? ?
         {
           sku: purchase.sku.custom_name_or_external_id,

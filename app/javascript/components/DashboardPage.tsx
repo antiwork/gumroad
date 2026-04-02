@@ -1,9 +1,10 @@
-import { CheckCircle, ChevronsDownUp, ChevronsUpDown, Circle } from "@boxicons/react";
+import { CheckCircle, ChevronsDownUp, ChevronsUpDown, Circle, X } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { request } from "$app/utils/request";
 
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { Button, NavigationButton } from "$app/components/Button";
@@ -18,6 +19,7 @@ import { GettingStartedIconProps } from "$app/components/icons/getting-started/G
 import { MakeAccountIcon } from "$app/components/icons/getting-started/MakeAccountIcon";
 import { SmallBetsIcon } from "$app/components/icons/getting-started/SmallBetsIcon";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { Modal } from "$app/components/Modal";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
@@ -47,14 +49,15 @@ export type DashboardPageProps = {
   name: string;
   has_sale: boolean;
   getting_started_stats: {
-    customized_profile: boolean;
-    first_follower: boolean;
-    first_product: boolean;
-    first_sale: boolean;
-    first_payout: boolean;
-    first_email: boolean;
-    purchased_small_bets: boolean;
+    customized_profile?: boolean;
+    first_follower?: boolean;
+    first_product?: boolean;
+    first_sale?: boolean;
+    first_payout?: boolean;
+    first_email?: boolean;
+    purchased_small_bets?: boolean;
   };
+  getting_started_dismissed: boolean;
   sales: ProductRow[];
   balances: {
     balance: string;
@@ -88,49 +91,49 @@ const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
   },
   {
     name: "Make an impression",
-    getCompleted: (stats) => stats.customized_profile,
+    getCompleted: (stats) => !!stats.customized_profile,
     link: Routes.settings_profile_path(),
     IconComponent: CustomizeProfileIcon,
     description: "Customize your profile.",
   },
   {
     name: "Showtime",
-    getCompleted: (stats) => stats.first_product,
+    getCompleted: (stats) => !!stats.first_product,
     link: Routes.new_product_path(),
     IconComponent: FirstProductIcon,
     description: "Create your first product.",
   },
   {
     name: "Build your tribe",
-    getCompleted: (stats) => stats.first_follower,
+    getCompleted: (stats) => !!stats.first_follower,
     link: Routes.followers_path(),
     IconComponent: FirstFollowerIcon,
     description: "Get your first follower.",
   },
   {
     name: "Cha-ching",
-    getCompleted: (stats) => stats.first_sale,
+    getCompleted: (stats) => !!stats.first_sale,
     link: Routes.sales_dashboard_path(),
     IconComponent: FirstSaleIcon,
     description: "Make your first sale.",
   },
   {
     name: "Money inbound",
-    getCompleted: (stats) => stats.first_payout,
+    getCompleted: (stats) => !!stats.first_payout,
     link: Routes.settings_payments_path(),
     IconComponent: FirstPayoutIcon,
     description: "Get your first pay out.",
   },
   {
     name: "Making waves",
-    getCompleted: (stats) => stats.first_email,
+    getCompleted: (stats) => !!stats.first_email,
     link: Routes.posts_path(),
     IconComponent: EmailBlastIcon,
     description: "Send out your first email blast.",
   },
   {
     name: "Smart move",
-    getCompleted: (stats) => stats.purchased_small_bets,
+    getCompleted: (stats) => !!stats.purchased_small_bets,
     link: Routes.small_bets_url(),
     IconComponent: SmallBetsIcon,
     description: "Sign up for Small Bets.",
@@ -298,6 +301,7 @@ const GETTING_STARTED_MINIMIZED_KEY = "dashboardGettingStartedMinimized";
 
 export const DashboardPage = ({
   getting_started_stats,
+  getting_started_dismissed,
   sales,
   activity_items,
   balances,
@@ -308,6 +312,8 @@ export const DashboardPage = ({
 }: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
+  const [gettingStartedDismissed, setGettingStartedDismissed] = React.useState<boolean>(getting_started_dismissed);
+  const [showDismissConfirmation, setShowDismissConfirmation] = React.useState<boolean>(false);
 
   useRunOnce(() => {
     setGettingStartedMinimized(window.localStorage.getItem(GETTING_STARTED_MINIMIZED_KEY) === "true");
@@ -317,6 +323,15 @@ export const DashboardPage = ({
     const newState = !gettingStartedMinimized;
     window.localStorage.setItem(GETTING_STARTED_MINIMIZED_KEY, JSON.stringify(newState));
     setGettingStartedMinimized(newState);
+  };
+
+  const dismissGettingStarted = async () => {
+    setGettingStartedDismissed(true);
+    await request({
+      method: "POST",
+      url: Routes.dashboard_dismiss_getting_started_checklist_path(),
+      accept: "json",
+    });
   };
 
   return (
@@ -354,26 +369,40 @@ export const DashboardPage = ({
       ) : null}
 
       {loggedInUser?.policies.settings_payments_user.show
-        ? Object.values(getting_started_stats).some((v) => !v) && (
+        ? !gettingStartedDismissed &&
+          Object.values(getting_started_stats).some((v) => !v) && (
             <div className="grid gap-4 p-4 md:p-8">
               <div className="flex items-center justify-between">
                 <h2>Getting started</h2>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    toggleGettingStarted();
-                  }}
-                  aria-label={gettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
-                  style={{ display: "flex", alignItems: "center", gap: "var(--spacer-1)" }}
-                >
-                  <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
-                  {gettingStartedMinimized ? (
-                    <ChevronsUpDown className="size-5" style={{ width: "20px", height: "20px" }} />
-                  ) : (
-                    <ChevronsDownUp className="size-5" style={{ width: "20px", height: "20px" }} />
-                  )}
-                </a>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      toggleGettingStarted();
+                    }}
+                    aria-label={gettingStartedMinimized ? "Expand getting started" : "Minimize getting started"}
+                    className="flex items-center gap-1"
+                  >
+                    <span>{gettingStartedMinimized ? "Show more" : "Show less"}</span>
+                    {gettingStartedMinimized ? (
+                      <ChevronsUpDown className="size-5" />
+                    ) : (
+                      <ChevronsDownUp className="size-5" />
+                    )}
+                  </a>
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setShowDismissConfirmation(true);
+                    }}
+                    aria-label="Dismiss getting started"
+                    className="flex items-center"
+                  >
+                    <X className="size-5" />
+                  </a>
+                </div>
               </div>
               <div className="grid w-full grid-cols-1 gap-4 min-[2000px]:grid-cols-8 sm:grid-cols-2 xl:grid-cols-4">
                 {GETTING_STARTED_ITEMS.map((item) => (
@@ -388,6 +417,27 @@ export const DashboardPage = ({
                   />
                 ))}
               </div>
+              <Modal
+                open={showDismissConfirmation}
+                onClose={() => setShowDismissConfirmation(false)}
+                title="Hide getting started checklist?"
+                footer={
+                  <>
+                    <Button onClick={() => setShowDismissConfirmation(false)}>Cancel</Button>
+                    <Button
+                      color="danger"
+                      onClick={() => {
+                        setShowDismissConfirmation(false);
+                        void dismissGettingStarted();
+                      }}
+                    >
+                      Yes, hide it
+                    </Button>
+                  </>
+                }
+              >
+                <p>The checklist will be permanently hidden and cannot be brought back.</p>
+              </Modal>
             </div>
           )
         : null}

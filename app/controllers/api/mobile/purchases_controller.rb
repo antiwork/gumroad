@@ -28,15 +28,18 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
   end
 
   def search
-    result = PurchaseSearchService.search(search_options)
-    pagination = Pagy.new(count: result.response.hits.total.value, page: @page, limit: @items)
-    purchases = result.records.not_rental_expired
+    purchases = search_purchases
+    page = (params[:page] || 1).to_i
+    items = (params[:items] || DEFAULT_SEARCH_RESULTS_SIZE).to_i
+
+    pagination = Pagy.new(count: purchases.count(:all), page: page, limit: items)
+    paginated_purchases = purchases.offset((page - 1) * items).limit(items)
 
     render json: {
       success: true,
       user_id: current_resource_owner.external_id,
-      purchases: purchases_to_json(purchases),
-      sellers: formatted_sellers_agg(result.aggregations.seller_ids),
+      purchases: purchases_to_json(paginated_purchases),
+      sellers: sellers_from_purchases(purchases),
       meta: { pagination: PagyPresenter.new(pagination).metadata }
     }
   end
@@ -75,50 +78,48 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
       purchases.map(&:json_data_for_mobile)
     end
 
-    def search_options
-      @page = (params[:page] || 1).to_i
-      @items = (params[:items] || DEFAULT_SEARCH_RESULTS_SIZE).to_i
-      raise Pagy::VariableError.new(nil, :page, ">= 1", @page) if @page.zero? # manual validation
-      sort = (Array.wrap(params[:order]).presence || ["score", "date-desc"]).map do |order_by|
-        case order_by
-        when "score" then :_score
-        when "date-desc" then [{ created_at: :desc }, { id: :desc }]
-        when "date-asc" then [{ created_at: :asc }, { id: :asc }]
-        end
-      end.flatten.compact
+    def search_purchases
+      purchases = current_resource_owner.purchases.for_mobile_listing
 
-      options = {
-        buyer_query: params[:q],
-        purchaser: current_resource_owner,
-        for_library: true,
-        track_total_hits: true,
-        from: ((@page - 1) * @items),
-        size: @items,
-        sort:,
-        aggs: {
-          seller_ids: { terms: { field: "seller_id" } }
-        }
-      }
+      if params[:q].present?
+        query = "%#{ActiveRecord::Base.sanitize_sql_like(params[:q])}%"
+        purchases = purchases.left_joins(:link, :seller).where("links.name LIKE :q OR users.name LIKE :q", q: query)
+      end
 
-      options[:seller] = User.where(external_id: Array.wrap(params[:seller])) if params[:seller]
-      options[:archived] = ActiveModel::Type::Boolean.new.cast(params[:archived]) if params[:archived]
+      if params[:seller].present?
+        purchases = purchases.where(seller_id: User.where(external_id: Array.wrap(params[:seller])).select(:id))
+      end
+
+      if params[:archived].present?
+        archived = ActiveModel::Type::Boolean.new.cast(params[:archived])
+        purchases = archived ? purchases.is_archived : purchases.not_is_archived
+      end
+
       if params[:purchase_ids].present?
         purchase_ids = Array.wrap(params[:purchase_ids]).filter_map { |id| ObfuscateIds.decrypt(id) }
-        options[:id] = purchase_ids.presence || [0]
+        purchases = purchases.where(id: purchase_ids.presence || [0])
       end
-      options
+
+      case params[:order] || "date-desc"
+      when "date-desc" then purchases = purchases.reorder(created_at: :desc, id: :desc)
+      when "date-asc" then purchases = purchases.reorder(created_at: :asc, id: :asc)
+      end
+
+      purchases
     end
 
-    def formatted_sellers_agg(sellers_agg)
-      buckets = sellers_agg.buckets
-      sellers = User.where(id: buckets.pluck("key")).index_by(&:id)
-      buckets.map do |bucket|
-        seller = sellers.fetch(bucket["key"])
+    def sellers_from_purchases(purchases)
+      seller_counts = purchases.group(:seller_id).count
+      sellers = User.where(id: seller_counts.keys).index_by(&:id)
+      seller_counts.map do |seller_id, count|
+        seller = sellers[seller_id]
+        next if seller.nil?
+
         {
           id: seller.external_id,
           name: seller.name,
-          purchases_count: bucket["doc_count"]
+          purchases_count: count
         }
-      end
+      end.compact
     end
 end

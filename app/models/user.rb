@@ -197,6 +197,7 @@ class User < ApplicationRecord
   validates_presence_of :email, if: :email_required?
   validate :email_almost_unique
   validates :email, email_format: true, allow_blank: true, if: :email_changed?
+  validates :email, disposable_email: true, on: :create, if: -> { Feature.active?(:block_disposable_emails_at_signup) }
   validates :kindle_email, format: { with: KINDLE_EMAIL_REGEX }, allow_blank: true, if: :kindle_email_changed?
   validates :support_email, email_format: true, allow_blank: true, if: :support_email_changed?
   validates :support_email, not_reserved_email_domain: true, allow_blank: true, if: :support_email_changed?, unless: :is_team_member?
@@ -264,7 +265,7 @@ class User < ApplicationRecord
             26 => :collect_eu_vat,
             27 => :is_eu_vat_exclusive,
             28 => :is_team_member,
-            29 => :DEPRECATED_has_payout_privilege,
+            29 => :has_dismissed_getting_started_checklist,
             30 => :DEPRECATED_has_risk_privilege,
             31 => :disable_paypal_sales,
             32 => :all_adult_products,

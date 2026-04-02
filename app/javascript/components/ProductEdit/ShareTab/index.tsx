@@ -1,8 +1,8 @@
-import { Link, Plus } from "@boxicons/react";
+import { Link } from "@boxicons/react";
 import hands from "images/illustrations/hands.png";
 import * as React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
@@ -22,7 +22,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();
 
-  const { id, product, updateProduct, profileSections, taxonomies, isListedOnDiscover } = useProductEditContext();
+  const { product, updateProduct, profileSections, taxonomies, isListedOnDiscover } = useProductEditContext();
 
   const url = useProductUrl();
   const discoverUrl = useDiscoverUrl();
@@ -49,15 +49,6 @@ export const ShareTab = () => {
                   Copy URL
                 </Button>
               </CopyToClipboard>
-              <NavigationButton
-                href={`https://gum.new?productId=${id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                color="accent"
-              >
-                <Plus className="size-5" />
-                Create Gum
-              </NavigationButton>
             </div>
           </section>
           <ProfileSectionsEditor
