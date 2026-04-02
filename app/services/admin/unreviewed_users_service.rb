@@ -2,6 +2,7 @@
 
 class Admin::UnreviewedUsersService
   MINIMUM_BALANCE_CENTS = 1000
+  HIGH_BALANCE_THRESHOLD_CENTS = 10_000
   DEFAULT_CUTOFF_DATE = "2024-01-01"
   MAX_CACHED_USERS = 1000
 
@@ -54,12 +55,27 @@ class Admin::UnreviewedUsersService
 
   private
     def base_scope
-      User
+      unreviewed_ids = User
         .joins(:balances)
         .where(user_risk_state: "not_reviewed")
         .where("users.created_at >= ?", cutoff_date)
         .merge(Balance.unpaid)
         .group("users.id")
         .having("SUM(balances.amount_cents) > ?", MINIMUM_BALANCE_CENTS)
+        .select("users.id")
+
+      high_balance_ids = User
+        .joins(:balances)
+        .where("users.created_at >= ?", cutoff_date)
+        .merge(Balance.unpaid)
+        .group("users.id")
+        .having("SUM(balances.amount_cents) > ?", HIGH_BALANCE_THRESHOLD_CENTS)
+        .select("users.id")
+
+      User
+        .joins(:balances)
+        .where("users.id IN (#{unreviewed_ids.to_sql}) OR users.id IN (#{high_balance_ids.to_sql})")
+        .merge(Balance.unpaid)
+        .group("users.id")
     end
 end

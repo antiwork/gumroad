@@ -18,6 +18,8 @@ type UnreviewedUser = {
   account_age_days: number;
   admin_url: string;
   created_at: string;
+  user_risk_state: string;
+  high_balance: boolean;
 };
 
 type PageProps = {
@@ -50,7 +52,7 @@ const UnreviewedUsersPage = () => {
     <div className="flex flex-col gap-4">
       <div className="text-sm text-muted">
         Top {users.length.toLocaleString()} of {total_count.toLocaleString()} unreviewed users with unpaid balance &gt;
-        $10 (created since {cutoff_date})
+        $10 or any users with unpaid balance &gt; $100 (created since {cutoff_date})
       </div>
       <Table>
         <TableHeader>
@@ -58,6 +60,7 @@ const UnreviewedUsersPage = () => {
             <TableHead>User</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Email</TableHead>
+            <TableHead>Status</TableHead>
             <TableHead>Revenue sources</TableHead>
             <TableHead>Payout method</TableHead>
             <TableHead>Account age</TableHead>
@@ -81,6 +84,20 @@ const UnreviewedUsersPage = () => {
                 <Link href={user.admin_url} className="hover:underline">
                   {user.email}
                 </Link>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-wrap gap-1">
+                  {user.user_risk_state === "not_reviewed" ? (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                      unreviewed
+                    </span>
+                  ) : null}
+                  {user.high_balance ? (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                      high balance
+                    </span>
+                  ) : null}
+                </div>
               </TableCell>
               <TableCell>
                 <div className="flex flex-wrap gap-1">

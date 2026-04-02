@@ -62,6 +62,26 @@ describe Admin::UnreviewedUserPresenter do
       expect(props[:account_age_days]).to eq(30)
     end
 
+    it "returns user_risk_state" do
+      props = described_class.new(user).props
+
+      expect(props[:user_risk_state]).to eq("not_reviewed")
+    end
+
+    it "returns high_balance as false when balance <= $100" do
+      props = described_class.new(user).props
+
+      expect(props[:high_balance]).to be false
+    end
+
+    it "returns high_balance as true when balance > $100" do
+      allow(user).to receive(:total_balance_cents).and_return(15_000)
+
+      props = described_class.new(user).props
+
+      expect(props[:high_balance]).to be true
+    end
+
     describe "payout_method" do
       it "returns nil when no payout method is configured" do
         user.update!(payment_address: nil)

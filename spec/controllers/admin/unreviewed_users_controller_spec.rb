@@ -94,12 +94,30 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
           user.update!(user_risk_state: "compliant")
         end
 
-        it "filters out users who are no longer not_reviewed" do
+        it "filters out users who are no longer not_reviewed and do not have high balance" do
           get :index
 
           expect(inertia.props[:users]).to be_empty
-          # total_count still reflects cached total
           expect(inertia.props[:total_count]).to eq(1)
+        end
+      end
+
+      context "when reviewed user has high balance" do
+        let!(:user) do
+          create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
+        end
+
+        before do
+          create(:balance, user:, amount_cents: 15_000)
+          Admin::UnreviewedUsersService.cache_users_data!
+          user.update!(user_risk_state: "compliant")
+        end
+
+        it "keeps high-balance users even after review" do
+          get :index
+
+          expect(inertia.props[:users].size).to eq(1)
+          expect(inertia.props[:users].first[:high_balance]).to be true
         end
       end
     end

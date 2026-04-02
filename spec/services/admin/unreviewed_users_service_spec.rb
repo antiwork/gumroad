@@ -51,11 +51,19 @@ describe Admin::UnreviewedUsersService do
       expect(described_class.new.users_with_unpaid_balance).to be_empty
     end
 
-    it "excludes compliant users" do
+    it "excludes compliant users with balance <= $100" do
       compliant_user = create(:user, user_risk_state: "compliant", created_at: 1.year.ago)
       create(:balance, user: compliant_user, amount_cents: 5000)
 
       expect(described_class.new.users_with_unpaid_balance).to be_empty
+    end
+
+    it "includes compliant users with balance > $100" do
+      compliant_user = create(:user, user_risk_state: "compliant", created_at: 1.year.ago)
+      create(:balance, user: compliant_user, amount_cents: 15_000)
+
+      users = described_class.new.users_with_unpaid_balance
+      expect(users.map(&:id)).to include(compliant_user.id)
     end
 
     it "excludes users created before cutoff date" do

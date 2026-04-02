@@ -19,7 +19,9 @@ class Admin::UnreviewedUsersController < Admin::BaseController
     external_ids = cached_data[:users].map { |u| u[:external_id] }
     still_unreviewed_external_ids = User.where(external_id: external_ids, user_risk_state: "not_reviewed").pluck(:external_id).to_set
 
-    still_unreviewed_users = cached_data[:users].select { |u| still_unreviewed_external_ids.include?(u[:external_id]) }
+    still_unreviewed_users = cached_data[:users].select do |u|
+      still_unreviewed_external_ids.include?(u[:external_id]) || u[:high_balance]
+    end
 
     render inertia: "Admin/UnreviewedUsers/Index",
            props: {

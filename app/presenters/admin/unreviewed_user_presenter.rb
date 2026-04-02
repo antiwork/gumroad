@@ -19,7 +19,9 @@ class Admin::UnreviewedUserPresenter
       payout_method: payout_method,
       account_age_days: account_age_days,
       admin_url: admin_user_path(user.external_id),
-      created_at: user.created_at.iso8601
+      created_at: user.created_at.iso8601,
+      user_risk_state: user.user_risk_state,
+      high_balance: user.total_balance_cents.to_i > Admin::UnreviewedUsersService::HIGH_BALANCE_THRESHOLD_CENTS
     }
   end
 
