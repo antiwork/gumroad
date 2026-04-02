@@ -345,7 +345,7 @@ class User < ApplicationRecord
     after_transition %i[suspended_for_fraud suspended_for_tos_violation not_reviewed] => %i[compliant on_probation], :do => :unblock_seller_ip!
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant, do: :enable_sellers_other_accounts
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation], :do => :create_updated_stripe_apple_pay_domain
-    after_transition %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation] => %i[compliant on_probation not_reviewed],
+    after_transition %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation] => %i[compliant on_probation],
                      :do => :remove_from_gmail_abuse_filter
 
     event :mark_compliant do

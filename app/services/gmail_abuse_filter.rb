@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class GmailAbuseFilter
-  REDIS_KEY = "gmail_abuse:normalized_emails"
+  REDIS_KEY = RedisKey.gmail_abuse_normalized_emails
 
   class << self
     def exists?(email)
