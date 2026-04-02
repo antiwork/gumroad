@@ -10,11 +10,13 @@ module CurrencyHelper
   end
 
   def symbol_for(type = :usd)
-    CURRENCY_CHOICES[type.to_sym][:symbol]
+    currency = CURRENCY_CHOICES[type.to_sym] || CURRENCY_CHOICES[:usd]
+    currency[:symbol]
   end
 
   def min_price_for(type = :usd)
-    CURRENCY_CHOICES[type.to_sym][:min_price]
+    currency = CURRENCY_CHOICES[type.to_sym] || CURRENCY_CHOICES[:usd]
+    currency[:min_price]
   end
 
   def currency_choices

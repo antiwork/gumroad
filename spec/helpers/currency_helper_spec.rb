@@ -29,12 +29,20 @@ describe CurrencyHelper do
       expect(symbol_for(:usd)).to eq "$"
       expect(symbol_for(:gbp)).to eq "£"
     end
+
+    it "falls back to USD for unknown currency types" do
+      expect(symbol_for(:xyz)).to eq "$"
+    end
   end
 
   describe "#min_price_for" do
     it "returns the correct value" do
       expect(min_price_for(:usd)).to eq 99
       expect(min_price_for(:gbp)).to eq 59
+    end
+
+    it "falls back to USD for unknown currency types" do
+      expect(min_price_for(:xyz)).to eq 99
     end
   end
 
