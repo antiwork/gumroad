@@ -298,6 +298,7 @@ Rails.application.routes.draw do
     get "/careers", to: "careers#index"
     get "/careers/:slug", to: "careers#show", as: :career
     get "/features", to: "home#features"
+    get "/features.md", to: "home#features_md"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
     get "/prohibited", to: "home#prohibited"
