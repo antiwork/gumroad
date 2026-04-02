@@ -270,12 +270,15 @@ export const ProductTab = () => {
                       priceCents={product.price_cents}
                       suggestedPriceCents={product.suggested_price_cents}
                       isPWYW={product.customizable_price}
-                      setPriceCents={(priceCents) =>
+                      setPriceCents={(priceCents) => {
+                        const hasPaidVariantPrices = product.variants.some(
+                          (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
+                        );
                         updateProduct({
                           price_cents: priceCents,
-                          ...(priceCents === 0 && { customizable_price: true }),
-                        })
-                      }
+                          ...(priceCents === 0 && !hasPaidVariantPrices && { customizable_price: true }),
+                        });
+                      }}
                       setSuggestedPriceCents={(suggestedPriceCents) =>
                         updateProduct({ suggested_price_cents: suggestedPriceCents })
                       }
@@ -296,6 +299,16 @@ export const ProductTab = () => {
                           installment_plan: { ...product.installment_plan, number_of_installments: value },
                         })
                       }
+                      maxEffectivePriceCents={Math.max(
+                        product.price_cents,
+                        ...product.variants.map(
+                          (v) =>
+                            product.price_cents + ("price_difference_cents" in v ? (v.price_difference_cents ?? 0) : 0),
+                        ),
+                      )}
+                      hasPaidVariants={product.variants.some(
+                        (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
+                      )}
                     />
                     {product.native_type === "commission" ? (
                       <p

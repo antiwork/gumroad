@@ -449,6 +449,32 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(product.reload.installment_plan).to be_nil
   end
 
+  it "allows enabling installment plans for free products with paid variants" do
+    product.installment_plan&.destroy!
+    variant_category = create(:variant_category, link: product, title: "Tier")
+    create(:variant, variant_category: variant_category, name: "Free", price_difference_cents: 0)
+    create(:variant, variant_category: variant_category, name: "Pro", price_difference_cents: 1000)
+
+    visit edit_link_path(product.unique_permalink)
+
+    within_section "Pricing" do
+      fill_in "Amount", with: 0
+    end
+
+    save_change
+    product.reload
+    expect(product.customizable_price).to be false
+
+    within_section "Pricing" do
+      expect(page).to have_unchecked_field("Allow customers to pay what they want", disabled: false)
+      check "Allow customers to pay in installments"
+      fill_in "Number of installments", with: 2
+    end
+
+    save_change
+    expect(product.reload.installment_plan.number_of_installments).to eq(2)
+  end
+
   it "allows user to update custom permalink and limit product sales" do
     visit edit_link_path(product.unique_permalink)
     new_custom_permalink = "cba"

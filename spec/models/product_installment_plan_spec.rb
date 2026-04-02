@@ -156,6 +156,37 @@ RSpec.describe ProductInstallmentPlan do
       expect(installment_plan.errors[:base])
         .to include('Installment plans are not available for "pay what you want" pricing')
     end
+
+    context "when the base price is zero but variants have paid price differences" do
+      let(:product) { create(:product, price_cents: 0, price_currency_type: "usd") }
+      let(:variant_category) { create(:variant_category, link: product) }
+
+      before do
+        create(:variant, variant_category: variant_category, price_difference_cents: 500)
+        create(:variant, variant_category: variant_category, price_difference_cents: 1000)
+        product.update_column(:customizable_price, false)
+        product.reload
+      end
+
+      it "is valid when variant prices satisfy the minimum installment price" do
+        installment_plan.number_of_installments = 2
+        expect(installment_plan).to be_valid
+      end
+
+      it "is not valid when variant prices are too low for the number of installments" do
+        installment_plan.number_of_installments = 11
+        expect(installment_plan).not_to be_valid
+        expect(installment_plan.errors[:base])
+          .to include("The minimum price for each installment must be at least 0.99 USD.")
+      end
+
+      it "is valid when PWYW is on but paid variants exist" do
+        product.update_column(:customizable_price, true)
+        product.reload
+        installment_plan.number_of_installments = 2
+        expect(installment_plan).to be_valid
+      end
+    end
   end
 
   describe "#calculate_installment_payment_price_cents" do
