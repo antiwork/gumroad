@@ -602,12 +602,13 @@ describe Api::Mobile::PurchasesController do
     end
 
     it "returns correct pagination count when purchases have multiple url redirects" do
-      create(:purchase, purchaser: @purchaser)
-      create(:purchase, purchaser: @purchaser)
-      newest_purchase = create(:purchase, purchaser: @purchaser)
+      seller = create(:named_user, name: "Duplicated Seller")
+      create(:purchase, purchaser: @purchaser, seller: seller, link: create(:product, user: seller))
+      create(:purchase, purchaser: @purchaser, seller: seller, link: create(:product, user: seller))
+      newest_purchase = create(:purchase, purchaser: @purchaser, seller: seller, link: create(:product, user: seller))
       create_list(:url_redirect, 5, purchase: newest_purchase)
 
-      get :search, params: @params.merge(items: 3)
+      get :search, params: @params.merge(items: 3, q: "Duplicated")
 
       expect(response.parsed_body[:purchases].size).to eq(3)
       expect(response.parsed_body[:meta][:pagination][:count]).to eq(3)
