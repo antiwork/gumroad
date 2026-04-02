@@ -226,13 +226,11 @@ class Api::V2::LinksController < Api::V2::BaseController
           @product.json_data["custom_summary"] = params[:custom_summary]
         end
 
-        if params.key?(:files)
+        unless @normalized_files.nil?
           validate_file_embed_conflicts!
 
           rich_content_params = build_rich_content_params
-          file_params = params.dup
-          file_params[:files] = @normalized_files
-          SaveFilesService.perform(@product, file_params, rich_content_params)
+          SaveFilesService.perform(@product, { files: @normalized_files }, rich_content_params)
         end
 
         @product.save!
@@ -244,7 +242,7 @@ class Api::V2::LinksController < Api::V2::BaseController
           @product.reorder_previews(cover_ids.map.with_index.to_h)
         end
 
-        if params.key?(:rich_content)
+        unless @normalized_rich_content.nil?
           save_rich_content!
           Product::SavePostPurchaseCustomFieldsService.new(@product).perform
           @product.is_licensed = @product.has_embedded_license_key?
@@ -252,7 +250,7 @@ class Api::V2::LinksController < Api::V2::BaseController
           @product.save!
         end
 
-        @product.generate_product_files_archives! if params.key?(:files) || params.key?(:rich_content)
+        @product.generate_product_files_archives! if !@normalized_files.nil? || !@normalized_rich_content.nil?
       end
     rescue Link::LinkInvalid => e
       return if performed?

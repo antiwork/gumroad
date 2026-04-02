@@ -846,8 +846,8 @@ describe Api::V2::LinksController do
       end
 
       it "returns warning when price change invalidates existing offer codes" do
-        create(:offer_code, user: @user, products: [@product], amount_cents: 400)
-        put @action, params: @params.merge(price: 100)
+        create(:offer_code, user: @user, products: [@product], amount_cents: 100)
+        put @action, params: @params.merge(price: 150)
         body = response.parsed_body
         expect(body["success"]).to be(true)
         expect(body["warning"]).to be_present
@@ -969,6 +969,7 @@ describe Api::V2::LinksController do
       end
 
       it "ignores has_same_rich_content_for_all_variants" do
+        @product.update!(has_same_rich_content_for_all_variants: true)
         put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
         expect(response.parsed_body["success"]).to be(true)
         expect(@product.reload.has_same_rich_content_for_all_variants?).to be(true)
