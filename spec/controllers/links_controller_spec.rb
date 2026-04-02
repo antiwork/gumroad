@@ -3982,11 +3982,11 @@ describe LinksController, :vcr, inertia: true do
     end
 
     describe "GET cart_items_count" do
-      it "renders the Inertia page" do
+      it "returns 0 when no cart exists" do
         get :cart_items_count
 
         expect(inertia.component).to eq("Products/CartItemsCount")
-        expect(inertia.props[:cart]).to be_nil
+        expect(inertia.props[:cart_items_count]).to eq(0)
 
         html = Nokogiri::HTML.parse(response.body)
         [
@@ -3998,7 +3998,7 @@ describe LinksController, :vcr, inertia: true do
         end
       end
 
-      it "returns cart props when the user has a cart with items" do
+      it "returns the count of alive cart products" do
         sign_in @user
         product = create(:product)
         cart = create(:cart, user: @user, email: @user.email)
@@ -4007,18 +4007,19 @@ describe LinksController, :vcr, inertia: true do
         get :cart_items_count
 
         expect(inertia.component).to eq("Products/CartItemsCount")
-        expect(inertia.props[:cart]).to match(
-          email: @user.email,
-          returnUrl: "",
-          rejectPppDiscount: false,
-          discountCodes: [],
-          items: [
-            a_hash_including(
-              product: a_hash_including(permalink: product.unique_permalink),
-              quantity: 1,
-            ),
-          ],
-        )
+        expect(inertia.props[:cart_items_count]).to eq(1)
+      end
+
+      it "does not count deleted cart products" do
+        sign_in @user
+        product = create(:product)
+        cart = create(:cart, user: @user, email: @user.email)
+        create(:cart_product, cart:, product:)
+        create(:cart_product, cart:, product: create(:product), deleted_at: Time.current)
+
+        get :cart_items_count
+
+        expect(inertia.props[:cart_items_count]).to eq(1)
       end
     end
 
