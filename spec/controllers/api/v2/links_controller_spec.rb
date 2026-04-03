@@ -1150,8 +1150,8 @@ describe Api::V2::LinksController do
           product_file = create(:product_file, link: @product)
           @product.update!(has_same_rich_content_for_all_variants: true)
           create(:rich_content, entity: @product, title: "Page with file", description: [
-            { "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }
-          ], position: 0)
+                   { "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }
+                 ], position: 0)
 
           put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
           expect(response.parsed_body["success"]).to be(true)
