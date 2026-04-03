@@ -296,6 +296,13 @@ class Rack::Attack
                             requests: 120,
                             period: 60.seconds
 
+  # Initial: 10rpm, Max: 50 requests/9 hours
+  throttle_by_ip path: /\A\/(api\/)?v2\/products(\.\w+)?\z/, method: :post, requests: 10, period: 60.seconds
+
+  # Initial: 30rpm, Max: 150 requests/9 hours
+  throttle_by_ip path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :put, requests: 30, period: 60.seconds
+  throttle_by_ip path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :patch, requests: 30, period: 60.seconds
+
   # Do not throttle for health check requests
   safelist("allow from localhost", &:localhost?)
 end
