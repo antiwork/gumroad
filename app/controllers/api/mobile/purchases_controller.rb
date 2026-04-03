@@ -79,11 +79,11 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
     end
 
     def search_purchases
-      purchases = current_resource_owner.purchases.for_mobile_listing.joins(:link, :seller)
+      purchases = current_resource_owner.purchases.for_mobile_listing
 
       if params[:q].present?
         query = "%#{ActiveRecord::Base.sanitize_sql_like(params[:q])}%"
-        purchases = purchases.where("links.name LIKE :q OR users.name LIKE :q", q: query)
+        purchases = purchases.left_joins(:link, :seller).where("links.name LIKE :q OR users.name LIKE :q", q: query)
       end
 
       if params[:seller].present?
