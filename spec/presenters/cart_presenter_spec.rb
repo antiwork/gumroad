@@ -116,6 +116,36 @@ describe CartPresenter do
       end
     end
 
+    context "when the cart contains archived products" do
+      let(:cart) { create(:cart, user:) }
+      let(:archived_product) { create(:product, archived: true) }
+      let(:active_product) { create(:product) }
+
+      before do
+        create(:cart_product, cart:, product: archived_product)
+        create(:cart_product, cart:, product: active_product)
+      end
+
+      it "excludes archived products from cart items" do
+        props = presenter.cart_props
+        permalinks = props[:items].map { |item| item[:product][:permalink] }
+
+        expect(permalinks).to include(active_product.unique_permalink)
+        expect(permalinks).not_to include(archived_product.unique_permalink)
+      end
+
+      context "when all cart products are archived" do
+        before do
+          active_product.update!(archived: true)
+        end
+
+        it "returns an empty items list" do
+          props = presenter.cart_props
+          expect(props[:items]).to be_empty
+        end
+      end
+    end
+
     context "with discount codes and offers" do
       context "when the user has accepeted an upsell" do
         let(:discount_codes) do
