@@ -507,12 +507,12 @@ $accent-color: map-get($colors, "pink"); // [1]
 
               .user-avatar {
                 display: inline;
-                width: size(0.875);
-                height: size(0.875);
+                border-radius: border-radius(3);
+                width: $big-icon-size;
+                aspect-ratio: 1;
+                flex-shrink: 0;
+                border: $border;
                 margin-right: spacer(2);
-                vertical-align: middle;
-                border-radius: border-radius(4);
-                object-fit: cover;
               }
 
               &.product-stats {
@@ -699,12 +699,12 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       .user-avatar {
         display: inline;
-        width: size(1);
-        height: size(1);
+        border-radius: border-radius(3);
+        width: $big-icon-size;
+        aspect-ratio: 1;
+        flex-shrink: 0;
+        border: $border;
         margin-right: spacer(2); // [5]
-        vertical-align: middle;
-        border-radius: border-radius(4);
-        object-fit: cover;
       }
     }
   }
