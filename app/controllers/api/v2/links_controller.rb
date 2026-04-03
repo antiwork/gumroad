@@ -46,7 +46,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     begin
       @product.publish!
-    rescue Link::LinkInvalid
+    rescue Link::LinkInvalid, ActiveRecord::RecordInvalid
       return error_with_product(@product)
     rescue => e
       ErrorNotifier.notify(e)

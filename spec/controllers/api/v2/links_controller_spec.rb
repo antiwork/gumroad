@@ -350,6 +350,24 @@ describe Api::V2::LinksController do
           expect(@product.purchase_disabled_at).to_not be_nil
         end
       end
+
+      context "when a variant category has no alive variants" do
+        before do
+          @product.update!(purchase_disabled_at: 1.day.ago)
+          category = create(:variant_category, link: @product)
+          variant = create(:variant, variant_category: category)
+          variant.update!(deleted_at: Time.current)
+        end
+
+        it "returns a validation error instead of notifying error tracker" do
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          put @action, params: @params
+
+          expect(response.parsed_body["success"]).to eq(false)
+          expect(response.parsed_body["message"]).to include("product versions must have at least one option")
+        end
+      end
     end
   end
 
