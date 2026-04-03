@@ -173,7 +173,6 @@ jobs:
             fi
             if [ $i -eq 3 ]; then
               echo "Failed to pull test image after 3 attempts"
-              wait $COMPOSE_PID || true
               exit 1
             fi
             echo "Pull attempt $i failed, retrying in 5s..."
@@ -354,7 +353,6 @@ jobs:
             fi
             if [ $i -eq 3 ]; then
               echo "Failed to pull test image after 3 attempts"
-              wait $COMPOSE_PID || true
               exit 1
             fi
             echo "Pull attempt $i failed, retrying in 5s..."
