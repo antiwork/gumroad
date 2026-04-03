@@ -64,6 +64,8 @@ Rails.application.routes.draw do
         resources :skus, only: [:index]
         resources :subscribers, only: [:index]
         put "bundle_contents", to: "bundle_contents#update"
+        resource :thumbnail, only: [:create, :destroy]
+        resources :covers, only: [:create, :destroy]
         member do
           put "disable"
           put "enable"
