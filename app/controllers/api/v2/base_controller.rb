@@ -91,4 +91,29 @@ class Api::V2::BaseController < ApplicationController
         next_page_url: next_page_url(next_page_key)
       }
     end
+
+    def unwrap_description_content(description)
+      if description.respond_to?(:key?) && description.key?(:content)
+        description[:content] || []
+      else
+        Array(description)
+      end
+    end
+
+    def normalize_params_recursively(obj)
+      case obj
+      when ActionController::Parameters
+        normalize_params_recursively(obj.to_unsafe_h)
+      when Hash
+        if obj.keys.all? { |k| k.to_s.match?(/\A\d+\z/) }
+          obj.sort_by { |k, _| k.to_i }.map { |_, v| normalize_params_recursively(v) }
+        else
+          obj.transform_values { |v| normalize_params_recursively(v) }.with_indifferent_access
+        end
+      when Array
+        obj.map { |v| normalize_params_recursively(v) }
+      else
+        obj
+      end
+    end
 end

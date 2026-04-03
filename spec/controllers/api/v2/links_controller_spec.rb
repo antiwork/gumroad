@@ -979,13 +979,6 @@ describe Api::V2::LinksController do
         expect(@product.display_asset_previews.map(&:guid)).to eq([preview2.guid, preview1.guid])
       end
 
-      it "ignores has_same_rich_content_for_all_variants" do
-        @product.update!(has_same_rich_content_for_all_variants: true)
-        put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
-        expect(response.parsed_body["success"]).to be(true)
-        expect(@product.reload.has_same_rich_content_for_all_variants?).to be(true)
-      end
-
       it "runs SavePostPurchaseCustomFieldsService after rich content changes" do
         expect_any_instance_of(Product::SavePostPurchaseCustomFieldsService).to receive(:perform).and_call_original
         put @action, params: @params.merge(rich_content: [
@@ -1009,6 +1002,213 @@ describe Api::V2::LinksController do
         expect(body["success"]).to be(true)
         expect(body["product"]).to be_present
         expect(body["product"]["name"]).to eq("Response Check")
+      end
+
+      it "updates has_same_rich_content_for_all_variants to false" do
+        @product.update!(has_same_rich_content_for_all_variants: true)
+        put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.has_same_rich_content_for_all_variants?).to eq false
+      end
+
+      it "updates has_same_rich_content_for_all_variants to true" do
+        @product.update!(has_same_rich_content_for_all_variants: false)
+        put @action, params: @params.merge(has_same_rich_content_for_all_variants: true)
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.has_same_rich_content_for_all_variants?).to eq true
+      end
+
+      it "does not trigger content migration when has_same_rich_content_for_all_variants is sent unchanged alongside other flag changes" do
+        variant_category = create(:variant_category, link: @product)
+        variant = create(:variant, variant_category: variant_category)
+        @product.update!(has_same_rich_content_for_all_variants: false)
+        variant_rc = create(:rich_content, entity: variant, title: "Variant Page", description: [], position: 0)
+
+        put @action, params: @params.merge(has_same_rich_content_for_all_variants: false, is_adult: true)
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.is_adult).to eq true
+        expect(variant_rc.reload).to be_alive
+      end
+
+      it "recomputes is_licensed when has_same_rich_content_for_all_variants changes" do
+        variant_category = create(:variant_category, link: @product)
+        variant = create(:variant, variant_category: variant_category)
+        create(:rich_content, entity: variant, description: [{ "type" => "licenseKey" }], position: 0)
+        @product.update!(has_same_rich_content_for_all_variants: true, is_licensed: false)
+
+        put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.is_licensed).to eq true
+      end
+
+      it "runs SavePostPurchaseCustomFieldsService when has_same_rich_content_for_all_variants changes" do
+        expect_any_instance_of(Product::SavePostPurchaseCustomFieldsService).to receive(:perform)
+        put @action, params: @params.merge(has_same_rich_content_for_all_variants: true)
+      end
+
+      it "regenerates product file archives when has_same_rich_content_for_all_variants changes" do
+        @product.update!(has_same_rich_content_for_all_variants: true)
+        expect_any_instance_of(Link).to receive(:generate_product_files_archives!)
+        put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
+      end
+
+      describe "content migration when toggling has_same_rich_content_for_all_variants" do
+        let(:variant_category) { create(:variant_category, link: @product) }
+        let(:variant1) { create(:variant, variant_category: variant_category, name: "Tier 1") }
+        let(:variant2) { create(:variant, variant_category: variant_category, name: "Tier 2") }
+
+        it "copies single variant content to product when switching to shared (true)" do
+          variant1
+          variant2
+          @product.update!(has_same_rich_content_for_all_variants: false)
+          create(:rich_content, entity: variant1, title: "Variant Page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "From variant" }] }], position: 0)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: true)
+          expect(response.parsed_body["success"]).to be(true)
+          @product.reload
+          expect(@product.alive_rich_contents.count).to eq 1
+          expect(@product.alive_rich_contents.first.title).to eq "Variant Page"
+          expect(variant1.reload.alive_rich_contents.count).to eq 0
+          expect(variant2.reload.alive_rich_contents.count).to eq 0
+        end
+
+        it "rejects switching to shared when multiple variants have distinct content" do
+          variant1
+          variant2
+          @product.update!(has_same_rich_content_for_all_variants: false)
+          create(:rich_content, entity: variant1, title: "V1 Page", description: [], position: 0)
+          create(:rich_content, entity: variant2, title: "V2 Page", description: [], position: 0)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: true)
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["message"]).to include("multiple variants have distinct content")
+          expect(@product.reload.has_same_rich_content_for_all_variants?).to eq false
+        end
+
+        it "allows switching back to shared when all variants have identical content (round-trip)" do
+          variant1
+          variant2
+          @product.update!(has_same_rich_content_for_all_variants: true)
+          create(:rich_content, entity: @product, title: "Shared Page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }], position: 0)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
+          expect(response.parsed_body["success"]).to be(true)
+          expect(variant1.reload.alive_rich_contents.count).to eq 1
+          expect(variant2.reload.alive_rich_contents.count).to eq 1
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: true)
+          expect(response.parsed_body["success"]).to be(true)
+          @product.reload
+          expect(@product.has_same_rich_content_for_all_variants?).to eq true
+          expect(@product.alive_rich_contents.count).to eq 1
+          expect(@product.alive_rich_contents.first.title).to eq "Shared Page"
+          expect(variant1.reload.alive_rich_contents.count).to eq 0
+          expect(variant2.reload.alive_rich_contents.count).to eq 0
+        end
+
+        it "rejects switching to shared when both product and variant content exist" do
+          variant1
+          @product.update!(has_same_rich_content_for_all_variants: false)
+          create(:rich_content, entity: @product, title: "Product Page", description: [], position: 0)
+          create(:rich_content, entity: variant1, title: "Variant Page", description: [], position: 0)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: true)
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["message"]).to include("both product-level and variant-level content exist")
+          expect(@product.reload.has_same_rich_content_for_all_variants?).to eq false
+        end
+
+        it "copies product content to all variants when switching to per-variant (false)" do
+          variant1
+          variant2
+          @product.update!(has_same_rich_content_for_all_variants: true)
+          create(:rich_content, entity: @product, title: "Shared Page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Shared" }] }], position: 0)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
+          expect(response.parsed_body["success"]).to be(true)
+          @product.reload
+          expect(@product.alive_rich_contents.count).to eq 0
+          expect(variant1.reload.alive_rich_contents.count).to eq 1
+          expect(variant1.alive_rich_contents.first.title).to eq "Shared Page"
+          expect(variant2.reload.alive_rich_contents.count).to eq 1
+          expect(variant2.alive_rich_contents.first.title).to eq "Shared Page"
+        end
+
+        it "rejects switching to per-variant when product has no variants" do
+          @product.update!(has_same_rich_content_for_all_variants: true)
+          existing_rc = create(:rich_content, entity: @product, title: "Shared Page", description: [], position: 0)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["message"]).to include("no variants")
+          expect(@product.reload.has_same_rich_content_for_all_variants?).to eq true
+          expect(existing_rc.reload).to be_alive
+        end
+
+        it "rebinds variant.product_files from migrated file embeds when switching to per-variant" do
+          variant1
+          product_file = create(:product_file, link: @product)
+          @product.update!(has_same_rich_content_for_all_variants: true)
+          create(:rich_content, entity: @product, title: "Page with file", description: [
+            { "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }
+          ], position: 0)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
+          expect(response.parsed_body["success"]).to be(true)
+          expect(variant1.reload.product_files).to include(product_file)
+        end
+
+        it "clears variant pages and writes replacement when switching to shared with rich_content" do
+          variant1
+          @product.update!(has_same_rich_content_for_all_variants: false)
+          create(:rich_content, entity: variant1, title: "Old Variant Page", description: [], position: 0)
+
+          put @action, params: @params.merge(
+            has_same_rich_content_for_all_variants: true,
+            rich_content: [{ title: "New Shared Page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Replacement" }] }] } }]
+          )
+          expect(response.parsed_body["success"]).to be(true)
+          @product.reload
+          expect(@product.alive_rich_contents.count).to eq 1
+          expect(@product.alive_rich_contents.first.title).to eq "New Shared Page"
+          expect(variant1.reload.alive_rich_contents.count).to eq 0
+        end
+
+        it "rejects switching to per-variant with rich_content in the same request" do
+          variant1
+          @product.update!(has_same_rich_content_for_all_variants: true)
+          existing_rc = create(:rich_content, entity: @product, title: "Old Shared Page", description: [], position: 0)
+
+          put @action, params: @params.merge(
+            has_same_rich_content_for_all_variants: false,
+            rich_content: [{ title: "New Page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Replacement" }] }] } }]
+          )
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["message"]).to include("per-variant mode")
+          expect(@product.reload.has_same_rich_content_for_all_variants?).to eq true
+          expect(existing_rc.reload).to be_alive
+        end
+
+        it "rejects product-level rich_content when already in per-variant mode" do
+          variant1
+          @product.update!(has_same_rich_content_for_all_variants: false)
+
+          put @action, params: @params.merge(
+            rich_content: [{ title: "Product Page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "test" }] }] } }]
+          )
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["message"]).to include("per-variant mode")
+        end
+
+        it "allows product-level rich_content when flag is false but no variants exist" do
+          @product.update!(has_same_rich_content_for_all_variants: false)
+
+          put @action, params: @params.merge(
+            rich_content: [{ title: "Product Page", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "test" }] }] } }]
+          )
+          expect(response.parsed_body["success"]).to be(true)
+          expect(@product.reload.alive_rich_contents.count).to eq 1
+        end
       end
     end
   end

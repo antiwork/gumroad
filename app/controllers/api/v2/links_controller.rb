@@ -216,6 +216,13 @@ class Api::V2::LinksController < Api::V2::BaseController
         attrs[:should_show_sales_count] = params[:should_show_sales_count] if params.key?(:should_show_sales_count)
         attrs[:taxonomy_id] = params[:taxonomy_id] if params.key?(:taxonomy_id)
         attrs[:custom_receipt] = params[:custom_receipt] if params.key?(:custom_receipt)
+
+        @rich_content_flag_was = @product.has_same_rich_content_for_all_variants?
+
+        if params.key?(:has_same_rich_content_for_all_variants)
+          attrs[:has_same_rich_content_for_all_variants] = ActiveModel::Type::Boolean.new.cast(params[:has_same_rich_content_for_all_variants])
+        end
+
         @product.assign_attributes(attrs)
 
         if params.key?(:description)
@@ -226,8 +233,10 @@ class Api::V2::LinksController < Api::V2::BaseController
           @product.json_data["custom_summary"] = params[:custom_summary]
         end
 
+        flag_changed = @product.has_same_rich_content_for_all_variants? != @rich_content_flag_was
+
         unless @normalized_files.nil?
-          validate_file_embed_conflicts!
+          validate_file_embed_conflicts!(skip_variant_embeds: flag_changed && @product.has_same_rich_content_for_all_variants? && !@normalized_rich_content.nil?)
 
           rich_content_params = build_rich_content_params
           SaveFilesService.perform(@product, { files: @normalized_files }, rich_content_params)
@@ -242,15 +251,33 @@ class Api::V2::LinksController < Api::V2::BaseController
           @product.reorder_previews(cover_ids.map.with_index.to_h)
         end
 
+        if !@normalized_rich_content.nil? && !@product.has_same_rich_content_for_all_variants? && @product.alive_variants.exists?
+          raise Link::LinkInvalid, "Cannot update product-level rich content while in per-variant mode. Set has_same_rich_content_for_all_variants to true first, or use the variant endpoint to update per-variant content."
+        end
+
+        if flag_changed
+          if @normalized_rich_content.nil?
+            migrate_rich_content_for_flag_change!
+          else
+            clear_inactive_rich_content_side!
+            strip_upsell_ids_from_normalized_rich_content!
+          end
+        end
+
+        rich_content_or_flag_changed = !@normalized_rich_content.nil? || flag_changed
+
         unless @normalized_rich_content.nil?
           save_rich_content!
+        end
+
+        if rich_content_or_flag_changed
           Product::SavePostPurchaseCustomFieldsService.new(@product).perform
           @product.is_licensed = @product.has_embedded_license_key?
           @product.is_multiseat_license = false if !@product.is_licensed
           @product.save!
         end
 
-        @product.generate_product_files_archives! if !@normalized_files.nil? || !@normalized_rich_content.nil?
+        @product.generate_product_files_archives! if !@normalized_files.nil? || rich_content_or_flag_changed
       end
     rescue Link::LinkInvalid => e
       return if performed?
@@ -374,7 +401,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
     end
 
-    def validate_file_embed_conflicts!
+    def validate_file_embed_conflicts!(skip_variant_embeds: false)
       existing_file_ids = @product.alive_product_files.map(&:external_id)
       incoming_file_ids = (@normalized_files || []).filter_map { |f| f[:id] }
       removing_ids = existing_file_ids - incoming_file_ids
@@ -386,7 +413,11 @@ class Api::V2::LinksController < Api::V2::BaseController
         @product.alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order).map { ObfuscateIds.encrypt(_1) }
       end
 
-      variant_embed_ids = @product.alive_variants.flat_map { |v| v.alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order) }.map { ObfuscateIds.encrypt(_1) }
+      variant_embed_ids = if skip_variant_embeds
+        []
+      else
+        @product.alive_variants.flat_map { |v| v.alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order) }.map { ObfuscateIds.encrypt(_1) }
+      end
 
       all_embed_ids = (product_embed_ids + variant_embed_ids).uniq
       conflicting = removing_ids & all_embed_ids
@@ -402,6 +433,7 @@ class Api::V2::LinksController < Api::V2::BaseController
         Array(description)
       end
     end
+
 
     def extract_file_embed_ids_from_params(rich_content_pages)
       return [] if rich_content_pages.blank?
@@ -449,6 +481,131 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
 
       (existing_rich_contents - rich_contents_to_keep).each(&:mark_deleted!)
+    end
+
+    def migrate_rich_content_for_flag_change!
+      if @product.has_same_rich_content_for_all_variants?
+        migrate_to_shared_rich_content!
+      else
+        migrate_to_per_variant_rich_content!
+      end
+    end
+
+    def migrate_to_shared_rich_content!
+      variants_with_content = @product.alive_variants.select { |v| v.alive_rich_contents.any? }
+
+      if @product.alive_rich_contents.any? && variants_with_content.any?
+        raise Link::LinkInvalid, "Cannot switch to shared content: both product-level and variant-level content exist. Remove one side first, or send replacement rich_content in the same request."
+      end
+
+      if variants_with_content.length > 1
+        canonical = canonicalize_rich_contents(variants_with_content.first)
+        all_identical = variants_with_content.all? { |v| canonicalize_rich_contents(v) == canonical }
+        if !all_identical
+          raise Link::LinkInvalid, "Cannot switch to shared content: multiple variants have distinct content. Remove variant content first, or send replacement rich_content in the same request."
+        end
+      end
+
+      source_variant = nil
+      if @product.alive_rich_contents.empty? && variants_with_content.any?
+        source_variant = variants_with_content.first
+        source_variant.alive_rich_contents.sort_by(&:position).each_with_index do |rc, index|
+          @product.alive_rich_contents.create!(title: rc.title, description: rc.description, position: index)
+        end
+      end
+
+      @product.alive_variants.each do |variant|
+        retire_upsells_from_rich_contents!(variant.alive_rich_contents) if variant != source_variant
+        variant.alive_rich_contents.each(&:mark_deleted!)
+        variant.product_files = []
+      end
+    end
+
+    def clear_inactive_rich_content_side!
+      if @product.has_same_rich_content_for_all_variants?
+        clear_variant_rich_content!
+      else
+        retire_upsells_from_rich_contents!(@product.alive_rich_contents)
+        @product.alive_rich_contents.each(&:mark_deleted!)
+      end
+    end
+
+    def clear_variant_rich_content!(retire_upsells: true)
+      @product.alive_variants.each do |variant|
+        retire_upsells_from_rich_contents!(variant.alive_rich_contents) if retire_upsells
+        variant.alive_rich_contents.each(&:mark_deleted!)
+        variant.product_files = []
+      end
+    end
+
+    def migrate_to_per_variant_rich_content!
+      product_pages = @product.alive_rich_contents.sort_by(&:position)
+      return if product_pages.empty?
+
+      if @product.alive_variants.empty?
+        raise Link::LinkInvalid, "Cannot switch to per-variant content: the product has no variants to migrate content to."
+      end
+
+      @product.alive_variants.each do |variant|
+        variant.alive_rich_contents.each(&:mark_deleted!)
+        variant.product_files = []
+
+        created = product_pages.each_with_index.map do |rc, index|
+          cloned_description = strip_upsell_ids(rc.description)
+          cloned_description = SaveContentUpsellsService.new(
+            seller: @product.user,
+            content: cloned_description,
+            old_content: []
+          ).from_rich_content
+          variant.alive_rich_contents.create!(title: rc.title, description: cloned_description, position: index)
+        end
+
+        file_ids = created.flat_map { _1.embedded_product_file_ids_in_order }.uniq
+        variant.product_files = file_ids.any? ? @product.product_files.alive.where(id: file_ids) : []
+      end
+
+      retire_upsells_from_rich_contents!(product_pages)
+      product_pages.each(&:mark_deleted!)
+    end
+
+    def retire_upsells_from_rich_contents!(rich_contents)
+      upsell_ids = rich_contents.flat_map do |rc|
+        rc.description.filter_map { |node| node["type"] == "upsellCard" ? node.dig("attrs", "id") : nil }
+      end
+      upsell_ids.each do |upsell_id|
+        upsell = @product.user.upsells.find_by_external_id(upsell_id)
+        if upsell
+          upsell.offer_code&.mark_deleted!
+          upsell.mark_deleted!
+        end
+      end
+    end
+
+    def canonicalize_rich_contents(entity)
+      entity.alive_rich_contents.sort_by(&:position).map do |rc|
+        [rc.title, strip_upsell_ids(rc.description)]
+      end
+    end
+
+    def strip_upsell_ids_from_normalized_rich_content!
+      return if @normalized_rich_content.nil?
+
+      @normalized_rich_content = @normalized_rich_content.map do |page|
+        page = page.dup
+        description = unwrap_description_content(page[:description])
+        page[:description] = { type: "doc", content: strip_upsell_ids(description) }
+        page
+      end
+    end
+
+    def strip_upsell_ids(description)
+      description.map do |node|
+        if node["type"] == "upsellCard" && node.dig("attrs", "id").present?
+          node = node.deep_dup
+          node["attrs"].delete("id")
+        end
+        node
+      end
     end
 
     def check_offer_code_validity
