@@ -19,8 +19,8 @@ class Api::V2::CoversController < Api::V2::BaseController
 
     if asset_preview.save
       render_response(true,
-        covers: @product.display_asset_previews,
-        main_cover_id: @product.main_preview&.guid)
+                      covers: @product.display_asset_previews,
+                      main_cover_id: @product.main_preview&.guid)
     else
       asset_preview.file&.blob&.purge
       error_with_creating_object(:cover, asset_preview)
@@ -37,8 +37,8 @@ class Api::V2::CoversController < Api::V2::BaseController
 
     if asset_preview&.mark_deleted!
       render_response(true,
-        covers: @product.display_asset_previews,
-        main_cover_id: @product.main_preview&.guid)
+                      covers: @product.display_asset_previews,
+                      main_cover_id: @product.main_preview&.guid)
     else
       render_response(false, message: "The cover was not found.")
     end
