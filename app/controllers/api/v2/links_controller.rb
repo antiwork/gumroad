@@ -154,6 +154,8 @@ class Api::V2::LinksController < Api::V2::BaseController
         @product.is_multiseat_license = false if !@product.is_licensed
         @product.save!
       end
+
+      @product.generate_product_files_archives! if params.key?(:files)
     end
 
     success_with_product(@product.reload)
