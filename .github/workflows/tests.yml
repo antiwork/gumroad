@@ -157,29 +157,19 @@ jobs:
           QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
           QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
       - name: Start services and pull test image
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            docker pull --quiet $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} &
+            PULL_PID=$!
+            docker compose -f docker/docker-compose-test-and-ci.yml up -d
+            wait $PULL_PID
         env:
           COMPOSE_HTTP_TIMEOUT: "300"
           WEB_REPO: quay.io/gumroad/web
-        run: |
-          # Start services in background
-          docker compose -f docker/docker-compose-test-and-ci.yml up -d &
-          COMPOSE_PID=$!
-
-          # Pull test image with retries (transient Quay.io failures are common)
-          IMAGE=$WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          for i in 1 2 3; do
-            if docker pull --quiet "$IMAGE"; then
-              break
-            fi
-            if [ $i -eq 3 ]; then
-              echo "Failed to pull test image after 3 attempts"
-              exit 1
-            fi
-            echo "Pull attempt $i failed, retrying in 5s..."
-            sleep 5
-          done
-
-          wait $COMPOSE_PID
       - name: Wait for services
         uses: nick-fields/retry@v3
         with:
@@ -337,29 +327,19 @@ jobs:
           QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
           QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
       - name: Start services and pull test image
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            docker pull --quiet $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} &
+            PULL_PID=$!
+            docker compose -f docker/docker-compose-test-and-ci.yml up -d
+            wait $PULL_PID
         env:
           COMPOSE_HTTP_TIMEOUT: "300"
           WEB_REPO: quay.io/gumroad/web
-        run: |
-          # Start services in background
-          docker compose -f docker/docker-compose-test-and-ci.yml up -d &
-          COMPOSE_PID=$!
-
-          # Pull test image with retries (transient Quay.io failures are common)
-          IMAGE=$WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          for i in 1 2 3; do
-            if docker pull --quiet "$IMAGE"; then
-              break
-            fi
-            if [ $i -eq 3 ]; then
-              echo "Failed to pull test image after 3 attempts"
-              exit 1
-            fi
-            echo "Pull attempt $i failed, retrying in 5s..."
-            sleep 5
-          done
-
-          wait $COMPOSE_PID
       - name: Wait for services
         uses: nick-fields/retry@v3
         with:
