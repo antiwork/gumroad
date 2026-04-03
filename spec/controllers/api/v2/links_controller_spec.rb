@@ -31,7 +31,23 @@ describe Api::V2::LinksController do
         expect(response.parsed_body).to eq({
           success: true,
           products: [@product2, @product1]
-        }.as_json(api_scopes: ["view_public"]))
+        }.as_json(api_scopes: ["view_public"], slim: true))
+      end
+
+      it "omits detail-only fields from the slim response" do
+        versioned_product = create(:product_with_digital_versions, user: @user, created_at: Time.current + 7200)
+        create(:product_file, link: versioned_product, url: "#{S3_BASE_URL}specs/test.pdf")
+        create(:rich_content, entity: versioned_product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }])
+        create(:rich_content, entity: versioned_product.alive_variants.first, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "variant" }] }])
+
+        get @action, params: @params
+
+        product = response.parsed_body["products"].find { |item| item["id"] == versioned_product.external_id }
+        expect(product).to be_present
+        expect(product).not_to have_key("rich_content")
+        expect(product).not_to have_key("has_same_rich_content_for_all_variants")
+        expect(product).not_to have_key("files")
+        expect(product["variants"].first["options"].first).not_to have_key("rich_content")
       end
     end
 
@@ -45,7 +61,7 @@ describe Api::V2::LinksController do
         get @action, params: @params
         @product1.reload
         @product2.reload
-        expect(response.parsed_body).to eq({ success: true, products: [@product2, @product1] }.as_json(api_scopes: ["view_sales"]))
+        expect(response.parsed_body).to eq({ success: true, products: [@product2, @product1] }.as_json(api_scopes: ["view_sales"], slim: true))
       end
     end
 
@@ -54,6 +70,42 @@ describe Api::V2::LinksController do
       get @action, params: { access_token: token.token }
       expect(response).to be_successful
       expect(response.parsed_body["products"]).to be_present
+    end
+
+    describe "query count" do
+      def count_sql_queries(&block)
+        count = 0
+        ActiveSupport::Notifications.subscribed(->(*) { count += 1 }, "sql.active_record", &block)
+        count
+      end
+
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_public")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "batch loads file_attachment and file_blob for covers (not one query per record)" do
+        3.times { create(:asset_preview, link: @product1) }
+        3.times { create(:asset_preview, link: @product2) }
+
+        cover_attachment_queries = []
+        cover_blob_queries = []
+        counter = lambda { |*, payload|
+          sql = payload[:sql]
+          next if sql.nil? || sql.include?("VariantRecord") || sql.include?("INSERT")
+          cover_attachment_queries << sql if sql.include?("active_storage_attachments") && sql.include?("AssetPreview")
+          cover_blob_queries << sql if sql.include?("active_storage_blobs") && !sql.include?("INNER JOIN")
+        }
+
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+          get @action, params: @params
+        end
+
+        expect(cover_attachment_queries.count).to eq(1)
+        expect(cover_attachment_queries.first).to include("IN (")
+        expect(cover_blob_queries.count).to eq(1)
+        expect(cover_blob_queries.first).to include("IN (")
+      end
     end
   end
 
@@ -165,6 +217,84 @@ describe Api::V2::LinksController do
             expect(response.parsed_body["product"]["purchasing_power_parity_prices"].values.all? { _1 == 0 }).to eq(true)
           end
         end
+      end
+    end
+
+    describe "product JSON fields" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_public")
+        @params.merge!(access_token: @token.token)
+      end
+
+      it "includes rich_content array" do
+        create(:rich_content, entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }])
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["rich_content"]).to be_an(Array)
+        expect(response.parsed_body["product"]["rich_content"].first["description"]).to eq({ "type" => "doc", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }] })
+      end
+
+      it "includes has_same_rich_content_for_all_variants" do
+        get :show, params: @params
+        expect(response.parsed_body["product"]).to have_key("has_same_rich_content_for_all_variants")
+      end
+
+      it "includes files array with signed URLs for uploaded files" do
+        file = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf")
+
+        get :show, params: @params
+        files = response.parsed_body["product"]["files"]
+        expect(files).to be_an(Array)
+        expect(files.first["id"]).to eq(file.external_id)
+        expect(files.first["filetype"]).to eq(file.filetype)
+        expect(files.first["filegroup"]).to eq(file.filegroup)
+        expect(files.first["url"]).not_to eq(file.url)
+        expect(files.first["url"]).to be_present
+      end
+
+      it "includes raw URL for external link files" do
+        create(:product_file, link: @product, url: "https://example.com/my-file.zip", filetype: "link")
+
+        get :show, params: @params
+        files = response.parsed_body["product"]["files"]
+        expect(files.first["url"]).to eq("https://example.com/my-file.zip")
+      end
+
+      it "includes covers array and main_cover_id" do
+        cover = create(:asset_preview, link: @product)
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["covers"]).to be_an(Array)
+        expect(response.parsed_body["product"]["covers"].first["id"]).to eq(cover.guid)
+        expect(response.parsed_body["product"]["main_cover_id"]).to eq(cover.guid)
+      end
+
+      it "includes bundle_products for bundle products" do
+        bundle = create(:product, :bundle, user: @user)
+        @params.merge!(id: bundle.external_id)
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["bundle_products"]).to be_an(Array)
+        expect(response.parsed_body["product"]["bundle_products"].length).to eq(bundle.bundle_products.alive.count)
+        expect(response.parsed_body["product"]["bundle_products"].first).to include("product_id", "quantity", "position")
+      end
+
+      it "includes empty bundle_products for non-bundle products" do
+        get :show, params: @params
+        expect(response.parsed_body["product"]["bundle_products"]).to eq([])
+      end
+
+      it "includes rich_content in variant options" do
+        variant_product = create(:product_with_digital_versions, user: @user)
+        variant = variant_product.alive_variants.first
+        create(:rich_content, entity: variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "variant content" }] }])
+        @params.merge!(id: variant_product.external_id)
+
+        get :show, params: @params
+        options = response.parsed_body["product"]["variants"][0]["options"]
+        first_option = options.find { |o| o["rich_content"].any? }
+        expect(first_option).to be_present
+        expect(first_option["rich_content"].first["description"]).to eq({ "type" => "doc", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "variant content" }] }] })
       end
     end
 
