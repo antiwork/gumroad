@@ -112,6 +112,16 @@ describe Api::Mobile::PurchasesController do
       expect(response.parsed_body[:products][0][:thumbnail_url]).to eq(thumbnail.url)
     end
 
+    it "falls back to asset preview for thumbnail url when no thumbnail exists" do
+      product = create(:product, user: @user)
+      asset_preview = create(:asset_preview, link: product)
+      create(:purchase_with_balance, link: product, purchaser: @purchaser, seller: @user)
+
+      get :index, params: @params
+
+      expect(response.parsed_body[:products][0][:thumbnail_url]).to eq(asset_preview.url)
+    end
+
     it "displays subscription products" do
       # Alive Subscription
       subscription = create(:subscription, link: @subscription_product, user: @purchaser)
