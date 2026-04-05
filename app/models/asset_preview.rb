@@ -176,6 +176,7 @@ class AssetPreview < ApplicationRecord
     new_url = Addressable::URI.escape(new_url) unless URI::ABS_URI.match?(new_url)
     new_uri = URI.parse(new_url)
     raise URI::InvalidURIError.new("URL '#{new_url}' is not a web url") unless new_uri.scheme.in?(["http", "https"])
+    raise URI::InvalidURIError.new("URL must include a valid host") if new_uri.host.blank?
     new_url = new_uri.to_s
     embeddable = OEmbedFinder.embeddable_from_url(new_url)
 

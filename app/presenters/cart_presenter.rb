@@ -12,7 +12,7 @@ class CartPresenter
   def cart_props
     return if cart.nil?
 
-    cart_products = cart.cart_products.alive.order(created_at: :desc)
+    cart_products = cart.cart_products.alive.joins(:product).merge(Link.not_archived).order(created_at: :desc)
 
     {
       email: cart.email.presence,

@@ -63,6 +63,7 @@ Rails.application.routes.draw do
         end
         resources :skus, only: [:index]
         resources :subscribers, only: [:index]
+        put "bundle_contents", to: "bundle_contents#update"
         member do
           put "disable"
           put "enable"

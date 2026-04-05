@@ -12,7 +12,7 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          AttributeBlockable, PayoutInfo
+          AttributeBlockable, PayoutInfo, EmailNormalization
 
   has_many :user_external_authentications, dependent: :destroy
 
@@ -219,6 +219,7 @@ class User < ApplicationRecord
   validate :json_data, :json_data_must_be_hash
   validate :account_created_email_domain_is_not_blocked, on: :create
   validate :account_created_ip_is_not_blocked, on: :create
+  validate :email_not_from_suspended_gmail_variant, on: :create
   validate :facebook_meta_tag_is_valid
   validates :payment_address, email_format: true, allow_blank: true
 
@@ -335,6 +336,8 @@ class User < ApplicationRecord
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :log_suspension_time_to_mongo
+    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation],
+                     :do => :add_to_gmail_abuse_filter
 
     after_transition any => :compliant, :do => :enable_refunds!
 
@@ -343,6 +346,8 @@ class User < ApplicationRecord
     after_transition %i[suspended_for_fraud suspended_for_tos_violation not_reviewed] => %i[compliant on_probation], :do => :unblock_seller_ip!
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant, do: :enable_sellers_other_accounts
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation], :do => :create_updated_stripe_apple_pay_domain
+    after_transition %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation] => %i[compliant on_probation],
+                     :do => :remove_from_gmail_abuse_filter
 
     event :mark_compliant do
       transition all => :compliant
