@@ -25,20 +25,6 @@ Doorkeeper.configure do
     current_user.presence || redirect_to("/oauth/login?next=#{CGI.escape request.fullpath}")
   end
 
-  # From https://github.com/doorkeeper-gem/doorkeeper/wiki/Using-Resource-Owner-Password-Credentials-flow
-  resource_owner_from_credentials do |_routes|
-    if params.key?(:appleAuthorizationCode) && params.key?(:appleAppType)
-      user = User.find_for_apple_auth(authorization_code: params[:appleAuthorizationCode], app_type: params[:appleAppType])
-    elsif params.key?(:googleIdToken)
-      user = User.find_for_google_mobile_auth(google_id_token: params[:googleIdToken])
-    else
-      next if params[:username].blank?
-      user = User.where("username = ? OR email = ?", params[:username], params[:username]).first || User.where("unconfirmed_email = ?", params[:username]).first
-      next unless user&.valid_password?(params[:password])
-    end
-    user if user&.alive?
-  end
-
   authorization_code_expires_in 10.minutes
   access_token_expires_in nil
 
@@ -54,7 +40,7 @@ Doorkeeper.configure do
 
   use_refresh_token
 
-  grant_flows %w[authorization_code client_credentials password]
+  grant_flows %w[authorization_code client_credentials]
 
   skip_authorization do |_resource_owner, client|
     client.uid == OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID
