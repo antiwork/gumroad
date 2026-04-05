@@ -67,6 +67,5 @@ module User::SocialApple
 
         user
       end
-
   end
 end

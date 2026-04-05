@@ -156,5 +156,4 @@ describe("Authentication Scenario", type: :system, js: true) do
       expect(page).to have_link("Products")
     end
   end
-
 end

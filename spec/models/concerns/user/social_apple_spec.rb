@@ -100,5 +100,4 @@ describe User::SocialApple do
       end
     end
   end
-
 end
