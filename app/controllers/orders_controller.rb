@@ -3,6 +3,7 @@
 class OrdersController < ApplicationController
   include ValidateRecaptcha, Events, Order::ResponseHelpers
 
+  before_action :normalize_line_items, only: :create
   before_action :validate_order_request, only: :create
   before_action :fetch_affiliates, only: :create
 
@@ -55,6 +56,12 @@ class OrdersController < ApplicationController
   end
 
   private
+    def normalize_line_items
+      if params[:line_items].is_a?(ActionController::Parameters)
+        params[:line_items] = params[:line_items].values
+      end
+    end
+
     def validate_order_request
       # Don't allow the order to go through if the buyer is a bot. Pretend that the order succeeded instead.
       return render json: { success: true } if is_bot?

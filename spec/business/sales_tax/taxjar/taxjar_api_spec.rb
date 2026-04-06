@@ -283,10 +283,10 @@ describe TaxjarApi, :vcr do
                                                          shipping_dollars: 20.0)).to eq(expected_calculation)
     end
 
-    it "notifies error tracker and propagates a TaxJar client error" do
+    it "propagates a TaxJar BadRequest error without notifying error tracker" do
       expect_any_instance_of(Taxjar::Client).to receive(:tax_for_order).and_raise(Taxjar::Error::BadRequest)
 
-      expect(ErrorNotifier).to receive(:notify).exactly(:once)
+      expect(ErrorNotifier).not_to receive(:notify)
 
       expect do
         described_class.new.calculate_tax_for_order(origin:,
@@ -297,6 +297,22 @@ describe TaxjarApi, :vcr do
                                                     unit_price_dollars: 100.0,
                                                     shipping_dollars: 20.0)
       end.to raise_error(Taxjar::Error::BadRequest)
+    end
+
+    it "notifies error tracker and propagates other TaxJar client errors" do
+      expect_any_instance_of(Taxjar::Client).to receive(:tax_for_order).and_raise(Taxjar::Error::Unauthorized)
+
+      expect(ErrorNotifier).to receive(:notify).exactly(:once)
+
+      expect do
+        described_class.new.calculate_tax_for_order(origin:,
+                                                    destination:,
+                                                    nexus_address:,
+                                                    quantity: 1,
+                                                    product_tax_code: nil,
+                                                    unit_price_dollars: 100.0,
+                                                    shipping_dollars: 20.0)
+      end.to raise_error(Taxjar::Error::Unauthorized)
     end
 
     it "propagates a TaxJar server error" do

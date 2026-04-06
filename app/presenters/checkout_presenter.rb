@@ -87,7 +87,7 @@ class CheckoutPresenter
               upsell_offered_variant_id: upsell_variant.present? &&
                 (
                   product.upsell.seller == logged_in_user ||
-                  purchases.none? { |purchase| purchase[:product] == product && purchase[:variant] == upsell_variant.offered_variant }
+                  !already_purchased?(product, upsell_variant.offered_variant)
                 ) &&
                 upsell_variant.offered_variant.available? ?
                   upsell_variant.offered_variant.external_id :
@@ -135,7 +135,7 @@ class CheckoutPresenter
           (cross_sell.variant.blank? || cross_sell.variant.available?) &&
           (
             cross_sell.seller == logged_in_user ||
-            purchases.none? { |purchase| purchase[:product] == cross_sell.product && purchase[:variant] == cross_sell.variant }
+            !already_purchased?(cross_sell.product, cross_sell.variant)
           )
 
         offered_product = cross_sell.product
@@ -331,6 +331,16 @@ class CheckoutPresenter
     end
 
     def purchases
-      @_purchases ||= logged_in_user&.purchases&.map { |purchase| { product: purchase.link, variant: purchase.variant_attributes.first } } || []
+      @_purchases ||= logged_in_user&.purchases&.includes(:link, :variant_attributes)&.map { |purchase| { product: purchase.link, variant: purchase.variant_attributes.first } } || []
+    end
+
+    def purchased_product_variant_set
+      @_purchased_product_variant_set ||= purchases.each_with_object(Set.new) do |purchase, set|
+        set.add([purchase[:product]&.id, purchase[:variant]&.id])
+      end
+    end
+
+    def already_purchased?(product, variant)
+      purchased_product_variant_set.include?([product&.id, variant&.id])
     end
 end
