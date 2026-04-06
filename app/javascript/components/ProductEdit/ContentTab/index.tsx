@@ -143,10 +143,10 @@ const FileUploadMenu = ({
       </MenuItem>
     </PopoverClose>
     <PopoverClose asChild>
-      <div role="menuitem" onClick={onClickComputerFiles}>
+      <MenuItem onClick={onClickComputerFiles}>
         <Paperclip className="size-5" />
         <span>Computer files</span>
-      </div>
+      </MenuItem>
     </PopoverClose>
     {existingFiles.length > 0 ? (
       <PopoverClose asChild>
