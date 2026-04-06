@@ -33,7 +33,7 @@ class ApplicationController < ActionController::Base
   before_action :redirect_to_custom_subdomain
 
   before_action :set_signup_referrer, if: -> { logged_in_user.nil? }
-  before_action :check_suspended, if: -> { logged_in_user.present? && logged_in_user.suspended? }
+  before_action :check_suspended, if: -> { logged_in_user.present? && logged_in_user.suspended? && !request.get? && !request.head? }
 
   before_action :set_gumroad_guid
 
@@ -261,7 +261,7 @@ class ApplicationController < ActionController::Base
       respond_to do |format|
         format.html do
           flash[:warning] = "You can't perform this action because your account has been suspended."
-          redirect_to root_path unless request.path == root_path
+          redirect_back fallback_location: root_path
         end
         format.json { render json: { success: false, error_message: "You can't perform this action because your account has been suspended." } }
       end

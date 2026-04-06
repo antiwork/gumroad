@@ -27,8 +27,7 @@ class UrlRedirectsController < ApplicationController
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD) }, only: [:show]
   after_action -> { create_download_page_view_consumption_event! }, only: [:download_page]
 
-  skip_before_action :check_suspended, only: %i[show stream confirm confirm_page download_page
-                                                download_subtitle_file download_archive download_product_files]
+  skip_before_action :check_suspended, only: %i[confirm]
   before_action :set_noindex_header, only: %i[confirm_page download_page]
 
   rescue_from ActionController::RoutingError do |exception|
