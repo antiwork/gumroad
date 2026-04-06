@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class AddIdempotencyKeyToComments < ActiveRecord::Migration[7.2]
+class AddIdempotencyKeyToComments < ActiveRecord::Migration[7.1]
   def change
     change_table :comments, bulk: true do |t|
       t.string :idempotency_key, null: true
