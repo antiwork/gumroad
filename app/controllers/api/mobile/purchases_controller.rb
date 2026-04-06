@@ -5,16 +5,21 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
   before_action :fetch_purchase, only: [:purchase_attributes, :archive, :unarchive]
   DEFAULT_SEARCH_RESULTS_SIZE = 10
   DEFAULT_PER_PAGE = 100
+  MAX_PER_PAGE = 100
 
   def index
     purchases = current_resource_owner.purchases.for_mobile_listing
     page = (params[:page] || 1).to_i
-    per_page = (params[:per_page] || DEFAULT_PER_PAGE).to_i
-    purchases_json = purchases_to_json(
-      purchases.page_with_kaminari(page).per(per_page)
-    )
+    per_page = [[(params[:per_page] || DEFAULT_PER_PAGE).to_i, 1].max, MAX_PER_PAGE].min
+    pagination = Pagy.new(count: purchases.count, page: page, limit: per_page)
+    purchases_json = purchases_to_json(purchases.page_with_kaminari(page).per(per_page))
 
-    render json: { success: true, products: purchases_json, user_id: current_resource_owner.external_id }
+    render json: {
+      success: true,
+      products: purchases_json,
+      user_id: current_resource_owner.external_id,
+      meta: { pagination: PagyPresenter.new(pagination).metadata }
+    }
   end
 
   def search

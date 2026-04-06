@@ -133,9 +133,9 @@ describe Api::Mobile::PurchasesController do
       # Both subscriptions should appear in the response
 
       get :index, params: @params
-      expect(response.parsed_body).to eq({ success: true,
-                                           products: [subscription_purchase.json_data_for_mobile, dead_subscription_purchase.json_data_for_mobile],
-                                           user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+      expect(response.parsed_body).to include({ success: true,
+                                                products: [dead_subscription_purchase.json_data_for_mobile, subscription_purchase.json_data_for_mobile],
+                                                user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
     end
 
     it "does not return unsuccessful purchases" do
@@ -152,9 +152,9 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
-        products: purchases[1..2].sort_by(&:created_at).map { |purchase| purchase.json_data_for_mobile },
+        products: purchases[1..2].sort_by { -_1.id }.map { |purchase| purchase.json_data_for_mobile },
         user_id: @purchaser.external_id
       }.as_json(api_scopes: ["mobile_api"]))
     end
@@ -167,7 +167,7 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
         products: [],
         user_id: @purchaser.external_id
@@ -179,7 +179,7 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
         products: [],
         user_id: @purchaser.external_id
@@ -193,7 +193,7 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
         products: [archived_purchase.json_data_for_mobile],
         user_id: @purchaser.external_id
@@ -210,6 +210,14 @@ describe Api::Mobile::PurchasesController do
 
       expect(response.code).to eq("403")
       expect(response.body).to be_blank
+    end
+
+    it "returns pagination metadata" do
+      create(:purchase_with_balance, link: @mobile_friendly_pdf_product, purchaser: @purchaser, seller: @user)
+
+      get :index, params: @params
+
+      expect(response.parsed_body["meta"]["pagination"].keys).to match_array(%w[count items last next page pages prev])
     end
 
     it "applies default pagination when no pagination params are provided" do
@@ -241,10 +249,10 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at)
-                                                       .map { |purchase| purchase.json_data_for_mobile }.compact,
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }
+                                                            .map { |purchase| purchase.json_data_for_mobile }.compact,
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
 
       it "includes mobile unfriendly products" do
@@ -263,9 +271,9 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at).map(&:json_data_for_mobile).compact,
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }.map(&:json_data_for_mobile).compact,
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
 
       it "includes preorder products", :vcr do
@@ -294,10 +302,10 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at)
-                                                  .map { |purchase| purchase.json_data_for_mobile }.compact,
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }
+                                                       .map { |purchase| purchase.json_data_for_mobile }.compact,
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
 
       it "paginates results when pagination params are given" do
@@ -309,9 +317,9 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params.merge(page: 1, per_page: 2)
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at).map(&:json_data_for_mobile).compact.first(2),
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }.map(&:json_data_for_mobile).compact.first(2),
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
     end
   end
