@@ -438,9 +438,9 @@ describe Api::Internal::Helper::UsersController do
       it "creates a comment and returns it" do
         idempotency_key = SecureRandom.uuid
 
-        expect {
+        expect do
           post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
-        }.to change { user.comments.count }.by(1)
+        end.to change { user.comments.count }.by(1)
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["success"]).to be true
@@ -477,9 +477,9 @@ describe Api::Internal::Helper::UsersController do
         post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
         first_response = response.parsed_body
 
-        expect {
+        expect do
           post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
-        }.not_to change { user.comments.count }
+        end.not_to change { user.comments.count }
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["comment"]["id"]).to eq(first_response["comment"]["id"])

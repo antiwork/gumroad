@@ -612,5 +612,4 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       }, status: :service_unavailable
     end
   end
-
 end
