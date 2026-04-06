@@ -248,6 +248,5 @@ describe HelperUserInfoService do
         expect(result[:can_add_comment]).to be false
       end
     end
-
   end
 end
