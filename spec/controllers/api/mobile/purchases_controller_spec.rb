@@ -456,6 +456,7 @@ describe Api::Mobile::PurchasesController do
       delete :destroy, params: @params.merge(id: purchase.external_id)
 
       expect(response).to have_http_status :not_found
+      expect(response.parsed_body).to eq({ success: false, message: "Could not find purchase" }.as_json)
     end
   end
 
