@@ -758,6 +758,34 @@ describe Order::ChargeService, :vcr do
 
       expect { Order::ChargeService.new(order:, params:).perform }.not_to raise_error
     end
+
+    it "falls back to seller_purchases for cleanup when non_free_seller_purchases is nil" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 10_00)
+      line_items = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ]
+      }
+      params = line_items.merge(
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      )
+
+      order, _ = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+
+      allow(order.charges).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      Order::ChargeService.new(order:, params:).perform
+      purchase.reload
+      expect(purchase).to be_failed
+    end
   end
 
   describe "#mandate_options_for_stripe" do

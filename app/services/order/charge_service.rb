@@ -77,7 +77,7 @@ class Order::ChargeService
     ensure
       # Ensure all purchases of the charge are transitioned to a terminal state
       # and each line item has a response
-      ensure_all_purchases_processed(non_free_seller_purchases)
+      ensure_all_purchases_processed(non_free_seller_purchases || seller_purchases.select(&:in_progress?))
     end
 
     charge_responses
