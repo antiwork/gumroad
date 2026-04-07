@@ -44,7 +44,7 @@ class Api::Mobile::AnalyticsController < Api::Mobile::BaseController
   def products
     pagination, records = pagy(current_resource_owner.products_for_creator_analytics, limit_max: nil, limit_param: :items)
     render json: {
-      products: records.as_json(mobile: true),
+      products: records.as_json(original: true, only: [:id]),
       meta: { pagination: PagyPresenter.new(pagination).metadata }
     }
   end

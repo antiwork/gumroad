@@ -232,7 +232,7 @@ describe Api::Mobile::AnalyticsController do
       end
     end
 
-    it "returns list of products, ordered by the most recent" do
+    it "returns list of product ids, ordered by the most recent" do
       products = create_list(:product, 2, user: @user)
 
       get :products, params: @params
@@ -241,10 +241,7 @@ describe Api::Mobile::AnalyticsController do
       expect(returned_products.size).to eq(2)
 
       last_product = products.last
-      expect(returned_products.first).to include(
-        "name" => last_product.name,
-        "unique_permalink" => last_product.unique_permalink,
-      )
+      expect(returned_products.first).to eq("id" => last_product.id)
     end
   end
 end
