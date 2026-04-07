@@ -40,9 +40,8 @@ class Api::V2::CoversController < Api::V2::BaseController
   end
 
   private
-
-  def success_with_covers
-    covers = @product.display_asset_previews.reload
-    render_response(true, covers: covers, main_cover_id: covers.first&.guid)
-  end
+    def success_with_covers
+      covers = @product.display_asset_previews.reload
+      render_response(true, covers: covers, main_cover_id: covers.first&.guid)
+    end
 end
