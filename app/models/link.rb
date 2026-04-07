@@ -1335,6 +1335,7 @@ class Link < ApplicationRecord
     def valid_tier_version_structure
       return if deleted_at.present?
       return if archived?
+      return if purchase_disabled_at.present? && purchase_disabled_at_changed?
 
       if variant_categories.alive.size != 1
         errors.add(:base, "Memberships should only have one Tier version category.")

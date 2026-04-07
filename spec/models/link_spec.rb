@@ -4495,6 +4495,24 @@ describe Link, :vcr do
         expect(product.is_unpublished_by_admin).to eq true
       end
     end
+
+    context "when a tiered membership has an invalid tier structure" do
+      let(:membership) { create(:product, is_tiered_membership: true) }
+
+      before do
+        # Put the membership in an invalid state by deleting all variant categories
+        membership.variant_categories.alive.each { |vc| vc.update!(deleted_at: Time.current) }
+      end
+
+      it "allows unpublishing despite invalid tier structure" do
+        expect { membership.unpublish! }.not_to raise_error
+        expect(membership.reload.purchase_disabled_at).to be_present
+      end
+
+      it "still validates tier structure on other updates" do
+        expect { membership.update!(name: "New Name") }.to raise_error(Link::LinkInvalid, "Memberships should only have one Tier version category.")
+      end
+    end
   end
 
   describe "#alive?" do
