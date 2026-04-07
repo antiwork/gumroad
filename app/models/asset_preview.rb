@@ -79,9 +79,13 @@ class AssetPreview < ApplicationRecord
     oembed && oembed["info"]["height"].to_i
   end
 
+  IMAGE_PROCESSING_TIMEOUT_SECONDS = 30
+
   def retina_variant
     return unless file.attached?
-    file.variant(resize_to_limit: [retina_width, nil]).processed
+    Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
+      file.variant(resize_to_limit: [retina_width, nil]).processed
+    end
   end
 
   def display_type
