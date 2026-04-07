@@ -1312,6 +1312,15 @@ describe User, :vcr do
           expect(@user_with_avatar.resized_avatar_url(size: 256)).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{variant}")
         end
       end
+
+      context "when avatar is attached but file is missing from storage" do
+        it "returns URL to default avatar" do
+          allow(@user.avatar).to receive(:attached?).and_return(true)
+          allow(@user.avatar).to receive(:variant).and_raise(ActiveStorage::FileNotFoundError)
+
+          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+        end
+      end
     end
 
     describe "avatar_url" do
@@ -3111,6 +3120,16 @@ describe User, :vcr do
 
       expect(@user.reload.purchasing_power_parity_excluded_product_external_ids).to eq([@product_1.external_id])
       expect(@product_2.reload.purchasing_power_parity_disabled).to eq(false)
+    end
+
+    it "updates PPP flag on a published bundle with no bundle products" do
+      bundle = create(:product, user: @user, is_bundle: true, purchase_disabled_at: nil)
+
+      expect do
+        @user.update_purchasing_power_parity_excluded_products!([bundle.external_id])
+      end.not_to raise_error
+
+      expect(bundle.reload.purchasing_power_parity_disabled).to eq(true)
     end
   end
 

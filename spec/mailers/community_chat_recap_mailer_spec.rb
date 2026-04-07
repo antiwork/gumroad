@@ -66,6 +66,14 @@ describe CommunityChatRecapMailer do
         end
       end
 
+      context "when seller name is nil" do
+        let(:seller) { create(:user, name: nil) }
+
+        it "does not raise an error" do
+          expect(mail.subject).to eq("Your weekly  community recap: March 17-23, 2025")
+        end
+      end
+
       context "when recap spans different months in same year" do
         let(:from_date) { Date.new(2025, 3, 30) }
         let(:to_date) { Date.new(2025, 4, 5) }

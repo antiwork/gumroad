@@ -51,13 +51,7 @@ class Rack::Attack
   def self.throttle_with_exponential_backoff(name:, requests:, period:, max_level: 5, &block_proc)
     block = Proc.new do |req|
       block_proc.call(req)
-    rescue Rack::QueryParser::InvalidParameterError
-      # Looks like this request contains invalid params. We already have an
-      # "invalid_params" throttle rule defined below, therefore, we don't need
-      # to throttle it here again.
-      # Also, this request will be passed down the middleware hierarchy. Thus
-      # to prevent this exception from polluting our error reporting tool
-      # we will gracefully handle it in the CatchBadRequestErrors middleware.
+    rescue Rack::QueryParser::InvalidParameterError, TypeError
       nil
     end
 
@@ -295,6 +289,13 @@ class Rack::Attack
   throttle_by_ip_for_period path: /\A\/\.well-known\/acme-challenge\//,
                             requests: 120,
                             period: 60.seconds
+
+  # Initial: 10rpm, Max: 50 requests/9 hours
+  throttle_by_ip path: /\A\/(api\/)?v2\/products(\.\w+)?\z/, method: :post, requests: 10, period: 60.seconds
+
+  # Initial: 30rpm, Max: 150 requests/9 hours
+  throttle_by_ip path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :put, requests: 30, period: 60.seconds
+  throttle_by_ip path: /\A\/(api\/)?v2\/products\/[^\/]+(\.\w+)?\z/, method: :patch, requests: 30, period: 60.seconds
 
   # Do not throttle for health check requests
   safelist("allow from localhost", &:localhost?)

@@ -432,6 +432,8 @@ class ContactingCreatorMailer < ApplicationMailer
   def video_transcode_failed(product_file_id)
     @subject = "A video failed to transcode."
     product_file = ProductFile.find(product_file_id)
+    return do_not_send if product_file.link.nil?
+
     @video_transcode_error = "We attempted to transcode a video (#{product_file.s3_filename}) from your product #{product_file.link.name}, but were unable to do so."
     @seller = product_file.user
   end

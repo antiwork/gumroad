@@ -169,6 +169,12 @@ describe AssetPreview, :vcr do
       end.to raise_error(URI::InvalidURIError, /not a web url/)
     end
 
+    it "rejects URLs without a host" do
+      expect do
+        asset_preview.url = "https:///path"
+      end.to raise_error(URI::InvalidURIError, /valid host/)
+    end
+
     it "blocks SSRF attempts to localhost", :skip_ssrf_stub do
       expect do
         asset_preview.url = "http://127.0.0.1:6379/"

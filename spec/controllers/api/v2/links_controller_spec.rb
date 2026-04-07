@@ -31,7 +31,23 @@ describe Api::V2::LinksController do
         expect(response.parsed_body).to eq({
           success: true,
           products: [@product2, @product1]
-        }.as_json(api_scopes: ["view_public"]))
+        }.as_json(api_scopes: ["view_public"], slim: true))
+      end
+
+      it "omits detail-only fields from the slim response" do
+        versioned_product = create(:product_with_digital_versions, user: @user, created_at: Time.current + 7200)
+        create(:product_file, link: versioned_product, url: "#{S3_BASE_URL}specs/test.pdf")
+        create(:rich_content, entity: versioned_product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }])
+        create(:rich_content, entity: versioned_product.alive_variants.first, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "variant" }] }])
+
+        get @action, params: @params
+
+        product = response.parsed_body["products"].find { |item| item["id"] == versioned_product.external_id }
+        expect(product).to be_present
+        expect(product).not_to have_key("rich_content")
+        expect(product).not_to have_key("has_same_rich_content_for_all_variants")
+        expect(product).not_to have_key("files")
+        expect(product["variants"].first["options"].first).not_to have_key("rich_content")
       end
     end
 
@@ -45,7 +61,7 @@ describe Api::V2::LinksController do
         get @action, params: @params
         @product1.reload
         @product2.reload
-        expect(response.parsed_body).to eq({ success: true, products: [@product2, @product1] }.as_json(api_scopes: ["view_sales"]))
+        expect(response.parsed_body).to eq({ success: true, products: [@product2, @product1] }.as_json(api_scopes: ["view_sales"], slim: true))
       end
     end
 
@@ -55,12 +71,48 @@ describe Api::V2::LinksController do
       expect(response).to be_successful
       expect(response.parsed_body["products"]).to be_present
     end
+
+    describe "query count" do
+      def count_sql_queries(&block)
+        count = 0
+        ActiveSupport::Notifications.subscribed(->(*) { count += 1 }, "sql.active_record", &block)
+        count
+      end
+
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_public")
+        @params.merge!(format: :json, access_token: @token.token)
+      end
+
+      it "batch loads file_attachment and file_blob for covers (not one query per record)" do
+        3.times { create(:asset_preview, link: @product1) }
+        3.times { create(:asset_preview, link: @product2) }
+
+        cover_attachment_queries = []
+        cover_blob_queries = []
+        counter = lambda { |*, payload|
+          sql = payload[:sql]
+          next if sql.nil? || sql.include?("VariantRecord") || sql.include?("INSERT")
+          cover_attachment_queries << sql if sql.include?("active_storage_attachments") && sql.include?("AssetPreview")
+          cover_blob_queries << sql if sql.include?("active_storage_blobs") && !sql.include?("INNER JOIN")
+        }
+
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+          get @action, params: @params
+        end
+
+        expect(cover_attachment_queries.count).to eq(1)
+        expect(cover_attachment_queries.first).to include("IN (")
+        expect(cover_blob_queries.count).to eq(1)
+        expect(cover_blob_queries.first).to include("IN (")
+      end
+    end
   end
 
   describe "POST 'create'" do
     before do
       @action = :create
-      @params = { name: "Some product", url: "http://www.google.com", price: 200 }
+      @params = { name: "Some product", price: 200 }
     end
 
     it_behaves_like "authorized oauth v1 api method"
@@ -68,13 +120,459 @@ describe Api::V2::LinksController do
 
     describe "when logged in with edit_products scope" do
       before do
-        @product = create(:product, user: @user, description: "des1", price_cents: 500)
         @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products")
+        @params.merge!(access_token: @token.token)
+        Taxonomy.find_or_create_by!(slug: "other")
+      end
+
+      it "creates a digital product with minimal params" do
+        expect do
+          post @action, params: @params
+        end.to change { @user.links.count }.by(1)
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["success"]).to be true
+
+        product = @user.links.last
+        expect(product.name).to eq("Some product")
+        expect(product.price_cents).to eq(200)
+        expect(product.native_type).to eq("digital")
+        expect(product.draft).to be true
+        expect(product.purchase_disabled_at).to be_present
+        expect(product.display_product_reviews).to be true
+      end
+
+      it "creates a product with all optional params" do
+        post @action, params: @params.merge(
+          description: "<p>A great product</p>",
+          native_type: "course",
+          price_currency_type: "eur",
+          customizable_price: true,
+          suggested_price_cents: 500,
+          custom_permalink: "my-course",
+          custom_summary: "A short summary",
+          max_purchase_count: 50,
+          tags: ["ruby", "rails"]
+        )
+
+        expect(response).to be_successful
+        product = @user.links.last
+        expect(product.description).to eq("<p>A great product</p>")
+        expect(product.native_type).to eq("course")
+        expect(product.price_currency_type).to eq("eur")
+        expect(product.customizable_price).to be true
+        expect(product.suggested_price_cents).to eq(500)
+        expect(product.custom_permalink).to eq("my-course")
+        expect(product.json_data["custom_summary"]).to eq("A short summary")
+        expect(product.max_purchase_count).to eq(50)
+        expect(product.tags.pluck(:name)).to match_array(["ruby", "rails"])
+      end
+
+      it "creates a membership and derives is_recurring_billing from native_type" do
+        post @action, params: @params.merge(
+          native_type: "membership",
+          subscription_duration: "monthly"
+        )
+
+        expect(response).to be_successful
+        product = @user.links.last
+        expect(product.native_type).to eq("membership")
+        expect(product.is_recurring_billing).to be true
+        expect(product.is_tiered_membership).to be true
+        expect(product.should_show_all_posts).to be true
+        expect(product.subscription_duration).to eq("monthly")
+      end
+
+      it "creates a bundle product" do
+        post @action, params: @params.merge(native_type: "bundle")
+
+        expect(response).to be_successful
+        product = @user.links.last
+        expect(product.native_type).to eq("bundle")
+        expect(product.is_bundle).to be true
+      end
+
+      it "creates a coffee product with donate prompt" do
+        @user.update!(created_at: 2.months.ago)
+
+        post @action, params: @params.merge(native_type: "coffee")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be true
+        product = @user.links.last
+        expect(product.native_type).to eq("coffee")
+        expect(product.json_data["custom_button_text_option"]).to eq("donate_prompt")
+      end
+
+      it "creates a call product" do
+        @user.update!(created_at: 2.months.ago)
+
+        post @action, params: @params.merge(native_type: "call")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be true
+        product = @user.links.last
+        expect(product.native_type).to eq("call")
+        expect(product.call_limitation_info).to be_present
+      end
+
+      it "rejects service types when seller is not eligible" do
+        @user.update!(created_at: Time.current)
+
+        post @action, params: @params.merge(native_type: "call")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+      end
+
+      it "rejects unsupported types" do
+        %w[podcast newsletter audiobook physical].each do |unsupported_type|
+          post @action, params: @params.merge(native_type: unsupported_type)
+
+          expect(response).to be_successful
+          expect(response.parsed_body["success"]).to be false
+          expect(response.parsed_body["message"]).to include("not supported for creation")
+        end
+      end
+
+      it "rejects commission when commissions feature flag is off" do
+        post @action, params: @params.merge(native_type: "commission")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("do not have access")
+      end
+
+      it "rejects subscription_duration for non-membership products" do
+        post @action, params: @params.merge(subscription_duration: "monthly")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("only valid for membership")
+      end
+
+      it "respects daily creation limit", :enforce_product_creation_limit do
+        @user.links.delete_all
+        limit = @user.compliant? ? 100 : 10
+        create_list(:product, limit, user: @user)
+
+        post @action, params: @params
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("products per day")
+      end
+
+      it "rejects invalid subscription_duration" do
+        post @action, params: @params.merge(native_type: "membership", subscription_duration: "weekly")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("Invalid subscription duration")
+      end
+
+      it "rejects invalid price_currency_type" do
+        post @action, params: @params.merge(price_currency_type: "xyz")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("not a supported currency")
+      end
+
+      it "returns validation errors in standard format" do
+        post @action, params: @params.merge(name: "")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to be_present
+      end
+
+      it "starts as a draft with purchase_disabled_at set" do
+        post @action, params: @params
+
+        product = @user.links.last
+        expect(product.draft).to be true
+        expect(product.purchase_disabled_at).to be_present
+      end
+
+      it "saves tags correctly" do
+        post @action, params: @params.merge(tags: ["valid-tag"])
+
+        expect(response).to be_successful
+        expect(@user.links.last.tags.pluck(:name)).to eq(["valid-tag"])
+      end
+
+      it "rejects non-array tags" do
+        post @action, params: @params.merge(tags: "oops")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("tags must be an array")
+      end
+
+      it "rejects tags with non-string elements" do
+        post @action, params: @params.merge(tags: ["valid", { nested: "hash" }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("tags must be an array of strings")
+      end
+
+      it "rejects non-array rich_content" do
+        post @action, params: @params.merge(rich_content: "oops")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("rich_content must be an array")
+      end
+
+      it "rejects rich_content pages with non-object description" do
+        post @action, params: @params.merge(rich_content: [{ description: "oops" }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("description must be a JSON object or array")
+      end
+
+      it "rejects rich_content with non-array wrapper content" do
+        post @action, params: @params.merge(rich_content: [{ description: { type: "doc", content: "oops" } }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("content must be an array")
+      end
+
+      it "rejects rich_content with hash wrapper content" do
+        post @action, params: @params.merge(rich_content: [{ description: { type: "doc", content: { foo: "bar" } } }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("content must be an array")
+      end
+
+      it "rejects rich_content with non-object content nodes in wrapper" do
+        post @action, params: @params.merge(rich_content: [{ description: { type: "doc", content: [1, "text"] } }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("content node must be a JSON object")
+      end
+
+      it "rejects rich_content with non-object content nodes in raw array" do
+        post @action, params: @params.merge(rich_content: [{ description: [1, 2] }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("content node must be a JSON object")
+      end
+
+      it "rejects rich_content with non-object elements" do
+        post @action, params: @params.merge(rich_content: ["oops"])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("rich_content must be an array of content page objects")
+      end
+
+      it "rejects non-array files" do
+        post @action, params: @params.merge(files: "oops")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("files must be an array")
+      end
+
+      it "rejects file objects missing url" do
+        post @action, params: @params.merge(files: [{ display_name: "No URL" }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("must include a url string")
+      end
+
+      it "rejects file urls that are not the seller's S3 path" do
+        post @action, params: @params.merge(files: [{ url: "https://evil.com/malware.exe" }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("must reference your own uploaded files")
+      end
+
+      it "rejects file urls with path traversal" do
+        post @action, params: @params.merge(files: [{ url: "#{S3_BASE_URL}attachments/#{@user.external_id}/../../other-user/secret.pdf" }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("must reference your own uploaded files")
+      end
+
+      it "rejects file urls from another seller's S3 path" do
+        other_user = create(:user)
+        post @action, params: @params.merge(files: [{ url: "#{S3_BASE_URL}attachments/#{other_user.external_id}/test/original/stolen.pdf" }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("must reference your own uploaded files")
+      end
+
+      it "rejects files with non-object elements" do
+        post @action, params: @params.merge(files: ["oops"])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("files must be an array of file objects")
+      end
+
+      it "defaults taxonomy to 'other' when not specified" do
+        post @action, params: @params
+
+        product = @user.links.last
+        expect(product.taxonomy.slug).to eq("other")
+      end
+
+      it "uses the seller's currency when currency is omitted" do
+        @user.update!(currency_type: "gbp")
+
+        post @action, params: @params
+
+        product = @user.links.last
+        expect(product.price_currency_type).to eq("gbp")
+      end
+
+      it "rejects invalid taxonomy_id" do
+        post @action, params: @params.merge(taxonomy_id: 999999)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("Invalid taxonomy_id")
+      end
+
+      it "creates a product with rich content pages" do
+        rich_content = [
+          {
+            title: "Getting Started",
+            description: {
+              type: "doc",
+              content: [
+                { type: "paragraph", content: [{ type: "text", text: "Welcome!" }] }
+              ]
+            }
+          },
+          {
+            title: "Chapter 2",
+            description: {
+              type: "doc",
+              content: [
+                { type: "paragraph", content: [{ type: "text", text: "More content" }] }
+              ]
+            }
+          }
+        ]
+
+        post @action, params: @params.merge(rich_content:)
+
+        expect(response).to be_successful
+        product = @user.links.last
+        expect(product.alive_rich_contents.count).to eq(2)
+        expect(product.alive_rich_contents.order(:position).first.title).to eq("Getting Started")
+        expect(product.alive_rich_contents.order(:position).last.title).to eq("Chapter 2")
+      end
+
+      it "creates a product with files" do
+        s3_key = "attachments/#{@user.external_id}/test/original/course.pdf"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key).put(body: "test content")
+
+        files = [
+          {
+            url: "#{S3_BASE_URL}#{s3_key}",
+            display_name: "Course PDF"
+          }
+        ]
+
+        post @action, params: @params.merge(files:)
+
+        body = response.parsed_body
+        expect(body["success"]).to eq(true), "Expected success but got: #{body.inspect}"
+        product = @user.links.last
+        expect(product).to be_present
+        expect(product.product_files.alive.count).to eq(1)
+        expect(product.product_files.alive.first.display_name).to eq("Course PDF")
+      end
+
+      it "creates a product with files and rich content referencing those files" do
+        temp_id = "temp-file-1"
+        s3_key = "attachments/#{@user.external_id}/test/original/doc.pdf"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key).put(body: "test content")
+
+        file_url = "#{S3_BASE_URL}#{s3_key}"
+        files = [{ id: temp_id, url: file_url, display_name: "Doc" }]
+        rich_content = [
+          {
+            title: "Page 1",
+            description: {
+              type: "doc",
+              content: [
+                { type: "fileEmbed", attrs: { id: temp_id, uid: SecureRandom.uuid } }
+              ]
+            }
+          }
+        ]
+
+        post @action, params: @params.merge(files:, rich_content:)
+
+        body = response.parsed_body
+        expect(body["success"]).to eq(true), "Expected success but got: #{body.inspect}"
+        product = @user.links.last
+        expect(product.product_files.alive.count).to eq(1)
+        expect(product.alive_rich_contents.count).to eq(1)
+
+        real_file_id = product.product_files.alive.first.external_id
+        embed_id = product.alive_rich_contents.first.description.dig(0, "attrs", "id")
+        expect(embed_id).to eq(real_file_id)
+      end
+
+      it "processes upsell-card markup in description" do
+        upsell_product = create(:product, user: @user)
+        description = %(<p>Check this out</p><upsell-card productid="#{upsell_product.external_id}"></upsell-card>)
+
+        post @action, params: @params.merge(description:)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be true
+        product = @user.links.last
+        parsed = Nokogiri::HTML.fragment(product.description)
+        upsell_card = parsed.at_css("upsell-card")
+        expect(upsell_card).to be_present
+        expect(upsell_card["id"]).to be_present
+        expect(Upsell.find_by_external_id(upsell_card["id"])).to be_present
+      end
+
+      it "returns the product in the response" do
+        post @action, params: @params
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["product"]).to be_present
+        expect(body["product"]["name"]).to eq("Some product")
+        expect(body["product"]["price"]).to eq(200)
+        expect(body["product"]["published"]).to be false
+      end
+    end
+
+    describe "when logged in with account scope" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
         @params.merge!(access_token: @token.token)
       end
 
-      it "returns a 404" do
-        expect { post @action, params: @params }.to raise_error(ActionController::RoutingError)
+      it "creates a product via API key auth" do
+        expect do
+          post @action, params: @params
+        end.to change { @user.links.count }.by(1)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be true
       end
     end
   end
@@ -165,6 +663,84 @@ describe Api::V2::LinksController do
             expect(response.parsed_body["product"]["purchasing_power_parity_prices"].values.all? { _1 == 0 }).to eq(true)
           end
         end
+      end
+    end
+
+    describe "product JSON fields" do
+      before do
+        @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_public")
+        @params.merge!(access_token: @token.token)
+      end
+
+      it "includes rich_content array" do
+        create(:rich_content, entity: @product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }])
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["rich_content"]).to be_an(Array)
+        expect(response.parsed_body["product"]["rich_content"].first["description"]).to eq({ "type" => "doc", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "hello" }] }] })
+      end
+
+      it "includes has_same_rich_content_for_all_variants" do
+        get :show, params: @params
+        expect(response.parsed_body["product"]).to have_key("has_same_rich_content_for_all_variants")
+      end
+
+      it "includes files array with signed URLs for uploaded files" do
+        file = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf")
+
+        get :show, params: @params
+        files = response.parsed_body["product"]["files"]
+        expect(files).to be_an(Array)
+        expect(files.first["id"]).to eq(file.external_id)
+        expect(files.first["filetype"]).to eq(file.filetype)
+        expect(files.first["filegroup"]).to eq(file.filegroup)
+        expect(files.first["url"]).not_to eq(file.url)
+        expect(files.first["url"]).to be_present
+      end
+
+      it "includes raw URL for external link files" do
+        create(:product_file, link: @product, url: "https://example.com/my-file.zip", filetype: "link")
+
+        get :show, params: @params
+        files = response.parsed_body["product"]["files"]
+        expect(files.first["url"]).to eq("https://example.com/my-file.zip")
+      end
+
+      it "includes covers array and main_cover_id" do
+        cover = create(:asset_preview, link: @product)
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["covers"]).to be_an(Array)
+        expect(response.parsed_body["product"]["covers"].first["id"]).to eq(cover.guid)
+        expect(response.parsed_body["product"]["main_cover_id"]).to eq(cover.guid)
+      end
+
+      it "includes bundle_products for bundle products" do
+        bundle = create(:product, :bundle, user: @user)
+        @params.merge!(id: bundle.external_id)
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["bundle_products"]).to be_an(Array)
+        expect(response.parsed_body["product"]["bundle_products"].length).to eq(bundle.bundle_products.alive.count)
+        expect(response.parsed_body["product"]["bundle_products"].first).to include("product_id", "quantity", "position")
+      end
+
+      it "includes empty bundle_products for non-bundle products" do
+        get :show, params: @params
+        expect(response.parsed_body["product"]["bundle_products"]).to eq([])
+      end
+
+      it "includes rich_content in variant options" do
+        variant_product = create(:product_with_digital_versions, user: @user)
+        variant = variant_product.alive_variants.first
+        create(:rich_content, entity: variant, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "variant content" }] }])
+        @params.merge!(id: variant_product.external_id)
+
+        get :show, params: @params
+        options = response.parsed_body["product"]["variants"][0]["options"]
+        first_option = options.find { |o| o["rich_content"].any? }
+        expect(first_option).to be_present
+        expect(first_option["rich_content"].first["description"]).to eq({ "type" => "doc", "content" => [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "variant content" }] }] })
       end
     end
 
@@ -348,6 +924,24 @@ describe Api::V2::LinksController do
           put @action, params: @params
 
           expect(@product.purchase_disabled_at).to_not be_nil
+        end
+      end
+
+      context "when a variant category has no alive variants" do
+        before do
+          @product.update!(purchase_disabled_at: 1.day.ago)
+          category = create(:variant_category, link: @product)
+          variant = create(:variant, variant_category: category)
+          variant.update!(deleted_at: Time.current)
+        end
+
+        it "returns a validation error instead of notifying error tracker" do
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          put @action, params: @params
+
+          expect(response.parsed_body["success"]).to eq(false)
+          expect(response.parsed_body["message"]).to include("product versions must have at least one option")
         end
       end
     end

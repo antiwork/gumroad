@@ -1625,6 +1625,15 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include @product_file.link.name
       expect(mail.body.encoded).to include "Please try re-encoding it locally on your computer and uploading it again."
     end
+
+    it "returns early without error when the associated link has been deleted" do
+      product_file = create(:product_file, link: @product)
+      product_file.update_column(:link_id, nil)
+
+      mail = ContactingCreatorMailer.video_transcode_failed(product_file.id)
+
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
   end
 
   describe "tax_form_1099k" do

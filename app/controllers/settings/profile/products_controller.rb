@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Settings::Profile::ProductsController < ApplicationController
+class Settings::Profile::ProductsController < Settings::BaseController
   def show
     product = current_seller.products.find_by_external_id!(params[:id])
     authorize product

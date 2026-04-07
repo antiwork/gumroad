@@ -40,9 +40,10 @@ const MerchantAccount = ({ external_id, charge_processor_id, alive, charge_proce
 const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [data, setData] = React.useState<AdminUserMerchantAccountsData | null>(null);
+  const [hasFetched, setHasFetched] = React.useState(false);
 
   const elementRef = useIsIntersecting<HTMLDivElement>((isIntersecting) => {
-    if (!isIntersecting || data) return;
+    if (!isIntersecting || hasFetched) return;
 
     const fetchMerchantAccounts = async () => {
       setIsLoading(true);
@@ -53,30 +54,35 @@ const AdminUserMerchantAccounts = ({ user }: AdminUserMerchantAccountsProps) => 
       });
       setData(cast<AdminUserMerchantAccountsData>(await response.json()));
       setIsLoading(false);
+      setHasFetched(true);
     };
 
     void fetchMerchantAccounts();
   });
 
+  const pending = isLoading || !hasFetched;
+
   return (
     <div ref={elementRef}>
       <h3>Merchant Accounts</h3>
 
-      {isLoading ? <LoadingSpinner /> : null}
+      {pending ? <LoadingSpinner /> : null}
 
-      {data?.merchant_accounts && data.merchant_accounts.length > 0 ? (
+      {!pending && data?.merchant_accounts && data.merchant_accounts.length > 0 ? (
         <InlineList>
           {data.merchant_accounts.map((merchant_account: MerchantAccountProps) => (
             <MerchantAccount key={merchant_account.external_id} {...merchant_account} />
           ))}
         </InlineList>
-      ) : (
+      ) : null}
+
+      {!pending && (!data?.merchant_accounts || data.merchant_accounts.length === 0) ? (
         <Alert role="status" variant="info">
           No merchant accounts.
         </Alert>
-      )}
+      ) : null}
 
-      {!data?.has_stripe_account && (
+      {!pending && !data?.has_stripe_account && (
         <div className="mt-2 flex flex-wrap gap-2">
           <AdminActionButton
             label="Create Managed Account"

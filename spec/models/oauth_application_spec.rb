@@ -181,6 +181,18 @@ describe OauthApplication do
       expect(@oauth_application.access_grants).to all be_revoked
     end
 
+    it "marks multiple resource subscriptions as deleted in bulk" do
+      create_list(:resource_subscription, 3, oauth_application: @oauth_application)
+
+      expect do
+        @oauth_application.mark_deleted!
+      end.to change { @oauth_application.resource_subscriptions.alive.count }.from(4).to(0)
+
+      @oauth_application.resource_subscriptions.each do |rs|
+        expect(rs.deleted_at).to be_present
+      end
+    end
+
     it "revokes access tokens" do
       expect do
         @oauth_application.mark_deleted!

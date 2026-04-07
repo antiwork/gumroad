@@ -507,6 +507,11 @@ $accent-color: map-get($colors, "pink"); // [1]
 
               .user-avatar {
                 display: inline;
+                border-radius: border-radius(3);
+                width: $big-icon-size;
+                aspect-ratio: 1;
+                flex-shrink: 0;
+                border: $border;
                 margin-right: spacer(2);
               }
 
@@ -694,6 +699,11 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       .user-avatar {
         display: inline;
+        border-radius: border-radius(3);
+        width: $big-icon-size;
+        aspect-ratio: 1;
+        flex-shrink: 0;
+        border: $border;
         margin-right: spacer(2); // [5]
       }
     }

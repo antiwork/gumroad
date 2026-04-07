@@ -109,11 +109,18 @@ class UrlRedirectsController < ApplicationController
           StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
         end
 
-        return redirect_to(@url_redirect.download_page_url)
+        return redirect_to(@url_redirect.download_page_url, allow_other_host: true)
       end
 
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
+    end
+  rescue Aws::S3::Errors::NotFound
+    if request.format.json?
+      render(json: { error: "The file is no longer available." }, status: :not_found)
+    else
+      flash[:warning] = "The file is no longer available. Please contact the seller."
+      redirect_to(@url_redirect.download_page_url, allow_other_host: true)
     end
   end
 
@@ -136,7 +143,7 @@ class UrlRedirectsController < ApplicationController
         archive.mark_in_progress!
         archive.generate_zip_archive!
         flash[:warning] = "We are preparing the file for download. Please try again shortly."
-        redirect_to(@url_redirect.download_page_url)
+        redirect_to(@url_redirect.download_page_url, allow_other_host: true)
       end
     end
   end
