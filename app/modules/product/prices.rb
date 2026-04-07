@@ -297,7 +297,7 @@ module Product::Prices
       # 1. there are multiple tiers, or
       # 2. any tiers have PWYW enabled, or
       # 3. there's only 1 tier but it has multiple prices
-      tiers.size > 1 || tiers.where(customizable_price: true).exists? || default_tier.prices.alive.is_buy.size > 1
+      tiers.size > 1 || tiers.where(customizable_price: true).exists? || (default_tier.present? && default_tier.prices.alive.is_buy.size > 1)
     end
 
     def lowest_tier_price(for_default_duration: false)
@@ -306,7 +306,8 @@ module Product::Prices
       prices = VariantPrice.where(variant_id: tiers.map(&:id)).alive.is_buy
       prices = prices.where(recurrence: subscription_duration) if for_default_duration
       prices.order("price_cents asc").take ||
-        default_tier.prices.is_buy.build(price_cents: 0, recurrence: subscription_duration)
+        default_tier&.prices&.is_buy&.build(price_cents: 0, recurrence: subscription_duration) ||
+        VariantPrice.new(price_cents: 0, recurrence: subscription_duration)
     end
 
     def lowest_variant_price_difference_cents

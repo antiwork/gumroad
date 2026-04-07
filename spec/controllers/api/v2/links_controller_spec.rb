@@ -767,6 +767,24 @@ describe Api::V2::LinksController do
       expect(response).to be_successful
       expect(response.parsed_body["product"]).to have_key("sales_count")
     end
+
+    context "when product is a tiered membership with no default tier" do
+      before do
+        token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_public")
+        @product = create(:membership_product, user: @user)
+        @product.tier_category.tiers.each { |tier| tier.update_columns(deleted_at: Time.current) }
+        @product.reload
+        @params = { id: @product.external_id, access_token: token.token }
+      end
+
+      it "returns product data without raising an error" do
+        get :show, params: @params
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be true
+        expect(response.parsed_body["product"]).to be_present
+      end
+    end
   end
 
   describe "PUT 'update'" do
