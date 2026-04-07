@@ -363,7 +363,7 @@ module Product::Searchable
       end
 
       search_options = search_options.to_hash
-      search_options[:query][:bool][:must] << params[:search] if params[:search].is_a?(Hash)
+      search_options[:query][:bool][:must] << params[:search] if params[:search]
 
       if (params[:ids].present? || params[:section].is_a?(SellerProfileSection)) && params[:sort] == ProductSortKey::PAGE_LAYOUT
         product_ids = params[:ids] || params[:section].shown_products
