@@ -20,9 +20,8 @@ class Api::V2::ThumbnailsController < Api::V2::BaseController
       error_with_creating_object(:thumbnail, thumbnail)
     end
   rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound
-    thumbnail&.file&.blob&.purge
     render_response(false, message: "The signed_blob_id is invalid or expired.")
-  rescue *INTERNET_EXCEPTIONS
+  rescue ActiveRecord::InvalidForeignKey, ActiveStorage::FileNotFoundError, *INTERNET_EXCEPTIONS
     render_response(false, message: "Could not process your thumbnail, please try again.")
   end
 
