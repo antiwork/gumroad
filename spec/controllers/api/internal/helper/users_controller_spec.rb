@@ -41,7 +41,16 @@ describe Api::Internal::Helper::UsersController do
         get :user_info, params: params
 
         expect(response).to have_http_status(:success)
-        expect(response.body).to eq({ success: true, customer: { metadata: {} } }.to_json)
+        expect(response.parsed_body).to eq(
+          {
+            "success" => true,
+            "customer" => {
+              "comments" => [],
+              "can_add_comment" => false,
+              "metadata" => {}
+            }
+          }
+        )
       end
     end
 
