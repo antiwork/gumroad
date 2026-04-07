@@ -907,7 +907,10 @@ describe Api::V2::LinksController do
 
       it "updates files" do
         existing_file = create(:product_file, link: @product)
-        new_file_url = "#{S3_BASE_URL}attachments/#{@user.external_id}/#{SecureRandom.hex}/original/new_file.pdf"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(existing_file.s3_key).put(body: "test content")
+        new_s3_key = "attachments/#{@user.external_id}/#{SecureRandom.hex}/original/new_file.pdf"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(new_s3_key).put(body: "test content")
+        new_file_url = "#{S3_BASE_URL}#{new_s3_key}"
 
         put @action, params: @params.merge(files: [
                                              { id: existing_file.external_id, url: existing_file.url, display_name: "Existing" },
@@ -921,6 +924,7 @@ describe Api::V2::LinksController do
 
       it "does not delete existing files when only rich_content changes" do
         file = create(:product_file, link: @product)
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(file.s3_key).put(body: "test content")
         put @action, params: @params.merge(rich_content: [
                                              { title: "Page 1", description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "test" }] }] } }
                                            ])
