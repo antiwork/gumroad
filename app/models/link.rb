@@ -1327,6 +1327,7 @@ class Link < ApplicationRecord
     end
 
     def valid_tier_version_structure
+      return if deleted_at.present?
       return if archived?
 
       if variant_categories.alive.size != 1
