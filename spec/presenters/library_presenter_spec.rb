@@ -203,6 +203,43 @@ describe LibraryPresenter do
       end
     end
 
+    describe "has_third_party_analytics" do
+      it "detects product-level receipt analytics" do
+        create(:third_party_analytic, user: creator, link: product, location: "receipt", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(true)
+      end
+
+      it "detects product-level analytics with 'all' location" do
+        create(:third_party_analytic, user: creator, link: product, location: "all", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(true)
+      end
+
+      it "detects user-level universal receipt analytics" do
+        create(:third_party_analytic, user: creator, link: nil, location: "receipt", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(true)
+      end
+
+      it "ignores deleted analytics" do
+        create(:third_party_analytic, user: creator, link: product, location: "receipt", analytics_code: "<script>test</script>", deleted_at: 1.day.ago)
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(false)
+      end
+
+      it "ignores analytics for non-receipt locations" do
+        create(:third_party_analytic, user: creator, link: product, location: "product", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(false)
+      end
+    end
+
     describe "bundle purchase" do
       let(:purchase1) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }
       let(:purchase2) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }

@@ -214,6 +214,7 @@ Rails.application.routes.draw do
         get "/purchases/purchase_attributes/:id", to: "purchases#purchase_attributes"
         post "/purchases/:id/archive", to: "purchases#archive"
         post "/purchases/:id/unarchive", to: "purchases#unarchive"
+        delete "/purchases/:id", to: "purchases#destroy"
         get "/url_redirects/get_url_redirect_attributes/:id", to: "url_redirects#url_redirect_attributes"
         get "/url_redirects/fetch_placeholder_products", to: "url_redirects#fetch_placeholder_products"
         get "/url_redirects/stream/:token/:product_file_id", to: "url_redirects#stream", as: :stream_video

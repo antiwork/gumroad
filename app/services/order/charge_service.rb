@@ -24,6 +24,8 @@ class Order::ChargeService
     purchases_by_seller = order.purchases.reject { _1.processor_payment_intent.present? }.group_by(&:seller_id)
 
     purchases_by_seller.each do |seller_id, seller_purchases|
+      self.charge_intent = nil
+      self.setup_intent = nil
       charge = order.charges.create!(seller_id:)
       seller_purchases.each do |purchase|
         purchase.charge = charge
@@ -77,7 +79,7 @@ class Order::ChargeService
     ensure
       # Ensure all purchases of the charge are transitioned to a terminal state
       # and each line item has a response
-      ensure_all_purchases_processed(non_free_seller_purchases)
+      ensure_all_purchases_processed(non_free_seller_purchases || seller_purchases.select(&:in_progress?))
     end
 
     charge_responses
@@ -233,6 +235,8 @@ class Order::ChargeService
   end
 
   def ensure_all_purchases_processed(purchases)
+    return if purchases.nil?
+
     purchases.each do |purchase|
       line_item_uid = params[:line_items].find do |line_item|
         purchase.link.unique_permalink == line_item[:permalink] &&
@@ -249,7 +253,10 @@ class Order::ChargeService
       # unless there's an SCA verification pending in which case all purchases
       # are expected to be in progress, and we schedule a job to check them back later.
       if purchase.in_progress?
-        if charge_intent&.requires_action? || setup_intent&.requires_action?
+        if purchase.free_purchase? || (purchase.is_test_purchase? && !purchase.is_preorder_authorization?)
+          Purchase::MarkSuccessfulService.new(purchase).perform
+          purchase.handle_recommended_purchase if purchase.was_product_recommended
+        elsif charge_intent&.requires_action? || setup_intent&.requires_action?
           # Check back later to see if the purchase has been completed. If not, transition to a failed state.
           FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
         else

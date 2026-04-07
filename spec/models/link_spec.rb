@@ -4800,4 +4800,22 @@ describe Link, :vcr do
       end
     end
   end
+
+  describe "#cart_item" do
+    context "when product is a tiered membership and the variant record is missing" do
+      let(:product) { create(:membership_product) }
+
+      before do
+        product.tier_category.variants.each { |v| v.update!(deleted_at: Time.current) }
+      end
+
+      it "falls back to the product prices instead of raising NoMethodError" do
+        result = product.cart_item({})
+
+        expect(result).to be_a(Hash)
+        expect(result).to have_key(:option)
+        expect(result).to have_key(:price)
+      end
+    end
+  end
 end
