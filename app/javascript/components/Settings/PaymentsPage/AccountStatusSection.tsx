@@ -16,12 +16,24 @@ export type AccountStatus = {
 
 const statusBadge = (accountStatus: AccountStatus) => {
   if (accountStatus.is_suspended) {
-    return <span className="inline-flex items-center rounded-full bg-danger/20 px-2 py-0.5 text-sm font-medium text-danger">Suspended</span>;
+    return (
+      <span className="inline-flex items-center rounded-full bg-danger/20 px-2 py-0.5 text-sm font-medium text-danger">
+        Suspended
+      </span>
+    );
   }
   if (accountStatus.is_under_review) {
-    return <span className="inline-flex items-center rounded-full bg-warning/20 px-2 py-0.5 text-sm font-medium text-warning">Under Review</span>;
+    return (
+      <span className="inline-flex items-center rounded-full bg-warning/20 px-2 py-0.5 text-sm font-medium text-warning">
+        Under Review
+      </span>
+    );
   }
-  return <span className="inline-flex items-center rounded-full bg-success/20 px-2 py-0.5 text-sm font-medium text-success">Active</span>;
+  return (
+    <span className="inline-flex items-center rounded-full bg-success/20 px-2 py-0.5 text-sm font-medium text-success">
+      Active
+    </span>
+  );
 };
 
 export default function AccountStatusSection({
@@ -35,13 +47,14 @@ export default function AccountStatusSection({
 }) {
   if (!accountStatus.show_section) return null;
 
-  const payoutPausedReason = payoutsPausedBy === "stripe"
-    ? "Payouts paused by payment processor. Please check for pending verification requirements."
-    : payoutsPausedBy === "admin"
-      ? `Payouts paused by Gumroad.${payoutsPausedForReason ? ` Reason: ${payoutsPausedForReason}` : ""}`
-      : payoutsPausedBy === "system"
-        ? "Payouts paused for a security review."
-        : null;
+  const payoutPausedReason =
+    payoutsPausedBy === "stripe"
+      ? "Payouts paused by payment processor. Please check for pending verification requirements."
+      : payoutsPausedBy === "admin"
+        ? `Payouts paused by Gumroad.${payoutsPausedForReason ? ` Reason: ${payoutsPausedForReason}` : ""}`
+        : payoutsPausedBy === "system"
+          ? "Payouts paused for a security review."
+          : null;
 
   return (
     <FormSection
@@ -54,9 +67,7 @@ export default function AccountStatusSection({
     >
       <div className="flex flex-col gap-4">
         {accountStatus.is_suspended && accountStatus.suspension_reason ? (
-          <Alert variant="danger">
-            {accountStatus.suspension_reason}
-          </Alert>
+          <Alert variant="danger">{accountStatus.suspension_reason}</Alert>
         ) : null}
 
         {payoutPausedReason ? (
@@ -77,11 +88,7 @@ export default function AccountStatusSection({
           </Alert>
         ) : null}
 
-        {accountStatus.gumroad_status ? (
-          <Alert variant="info">
-            {accountStatus.gumroad_status}
-          </Alert>
-        ) : null}
+        {accountStatus.gumroad_status ? <Alert variant="info">{accountStatus.gumroad_status}</Alert> : null}
       </div>
     </FormSection>
   );
