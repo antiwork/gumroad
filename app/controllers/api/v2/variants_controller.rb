@@ -143,5 +143,4 @@ class Api::V2::VariantsController < Api::V2::BaseController
       retire_upsells_from_rich_contents!(removed)
       removed.each(&:mark_deleted!)
     end
-
 end
