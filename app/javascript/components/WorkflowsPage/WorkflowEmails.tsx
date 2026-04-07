@@ -114,7 +114,9 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   );
   const updateEmail = (id: string, value: Partial<EditableEmailFormState>) => {
     setEmails((prev) => prev.map((email) => (email.id === id ? { ...email, ...value } : email)));
-    setFocusedFieldInfo({ emailId: id, fieldName: Object.keys(value)[0] ?? null });
+    setFocusedFieldInfo((prev) =>
+      prev?.emailId === id ? prev : { emailId: id, fieldName: Object.keys(value)[0] ?? null },
+    );
     if (value.name !== undefined && invalidFields.some((invalidField) => invalidField.emailId === id)) {
       setInvalidFields((prev) => prev.filter((invalidField) => !(invalidField.emailId === id)));
     }
@@ -312,7 +314,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
             <EmailPreview
               key={email.id}
               email={email}
-              isEditing={focusedFieldInfo?.emailId === email.id}
+              focusedFieldInfo={focusedFieldInfo?.emailId === email.id ? focusedFieldInfo : null}
               workflowTrigger={workflowTrigger}
               gumroadAddress={context.gumroad_address}
             />
@@ -438,7 +440,6 @@ const EmailRow = ({
 }: EmailRowProps) => {
   const [editorContent, setEditorContent] = React.useState(email.message);
   const handleMessageChange = useDebouncedCallback((message: string) => onChange({ message }), 500);
-  const selfRef = React.useRef<HTMLDivElement>(null);
   const nameInputRef = React.useRef<null | HTMLInputElement>(null);
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
   React.useEffect(() => {
@@ -446,8 +447,7 @@ const EmailRow = ({
 
     const { fieldName } = focusedFieldInfo;
     if (fieldName === "name") nameInputRef.current?.focus();
-    if (fieldName !== "message" && fieldName !== "stream_only") selfRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [focusedFieldInfo]);
+  }, [focusedFieldInfo, email.id]);
   React.useEffect(() => {
     if (expanded) setEditorContent(email.message);
   }, [expanded]);
@@ -459,7 +459,7 @@ const EmailRow = ({
     );
 
   return (
-    <Row role="listitem" ref={selfRef} aria-label="Email">
+    <Row role="listitem" aria-label="Email">
       <RowContent>
         <Envelope pack="filled" className="type-icon size-5" />
         <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
@@ -566,12 +566,12 @@ const EmailRow = ({
 
 const EmailPreview = ({
   email,
-  isEditing,
+  focusedFieldInfo,
   workflowTrigger,
   gumroadAddress,
 }: {
   email: EmailFormState;
-  isEditing: boolean;
+  focusedFieldInfo: FocusedFieldInfo | null;
   workflowTrigger: WorkflowTrigger;
   gumroadAddress: string;
 }) => {
@@ -587,8 +587,10 @@ const EmailPreview = ({
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
 
   React.useEffect(() => {
-    if (isEditing) setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth" }), 500);
-  });
+    if (!focusedFieldInfo || !selfRef.current) return;
+    const sidebar = selfRef.current.closest("aside");
+    if (sidebar) sidebar.scrollTo({ top: selfRef.current.offsetTop, behavior: "smooth" });
+  }, [focusedFieldInfo]);
 
   return (
     <section className="flex flex-col gap-4" ref={selfRef}>

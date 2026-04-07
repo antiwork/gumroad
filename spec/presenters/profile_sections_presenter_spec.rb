@@ -132,7 +132,8 @@ describe ProfileSectionsPresenter do
         recommended_by: nil,
         target: Product::Layout::PROFILE,
         show_seller: false,
-        compute_description: false
+        compute_description: false,
+        compute_inventory: false
       ).and_call_original
 
       expect(ProductPresenter).to receive(:card_for_web).with(
@@ -141,7 +142,8 @@ describe ProfileSectionsPresenter do
         recommended_by: nil,
         target: Product::Layout::PROFILE,
         show_seller: false,
-        compute_description: false
+        compute_description: false,
+        compute_inventory: false
       ).and_call_original
 
       subject.props(request:, pundit_user:, seller_custom_domain_url: nil)

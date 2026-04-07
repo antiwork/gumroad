@@ -35,6 +35,12 @@ describe CreatorHomePresenter do
       expect(presenter.creator_home_props[:has_sale]).to eq(true)
     end
 
+    it "returns only first_product in getting started stats when checklist is dismissed" do
+      seller.update!(has_dismissed_getting_started_checklist: true)
+
+      expect(presenter.creator_home_props[:getting_started_stats]).to eq({ "first_product" => false })
+    end
+
     it "includes initial user getting started stats" do
       expect(presenter.creator_home_props[:getting_started_stats]).to match(
         {

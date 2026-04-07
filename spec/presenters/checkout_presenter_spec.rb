@@ -544,6 +544,35 @@ describe CheckoutPresenter do
     end
   end
 
+  describe "#checkout_product" do
+    it "eager loads purchases to avoid N+1 queries" do
+      seller = create(:named_user)
+      product = create(:product, user: seller)
+      other_products = create_list(:product, 3, user: seller)
+
+      buyer = create(:user)
+      other_products.each do |other_product|
+        variant = create(:variant, variant_category: create(:variant_category, link: other_product))
+        create(:purchase, link: other_product, purchaser: buyer, variant_attributes: [variant])
+      end
+
+      instance = described_class.new(logged_in_user: buyer, ip: "127.0.0.1")
+      cart_item = product.cart_item({})
+
+      queries = []
+      callback = lambda { |_name, _start, _finish, _id, payload|
+        queries << payload[:sql] if payload[:sql] && !payload[:name]&.match?(/SCHEMA|TRANSACTION/)
+      }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        instance.checkout_product(product, cart_item, {})
+      end
+
+      purchase_queries = queries.select { |sql| sql.match?(/purchases/i) }
+      expect(purchase_queries.size).to be <= 2
+    end
+  end
+
   describe "#subscription_manager_props", :vcr do
     context "tiered membership product" do
       before :each do

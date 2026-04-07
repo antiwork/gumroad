@@ -63,6 +63,7 @@ Rails.application.routes.draw do
         end
         resources :skus, only: [:index]
         resources :subscribers, only: [:index]
+        put "bundle_contents", to: "bundle_contents#update"
         member do
           put "disable"
           put "enable"
@@ -213,6 +214,7 @@ Rails.application.routes.draw do
         get "/purchases/purchase_attributes/:id", to: "purchases#purchase_attributes"
         post "/purchases/:id/archive", to: "purchases#archive"
         post "/purchases/:id/unarchive", to: "purchases#unarchive"
+        delete "/purchases/:id", to: "purchases#destroy"
         get "/url_redirects/get_url_redirect_attributes/:id", to: "url_redirects#url_redirect_attributes"
         get "/url_redirects/fetch_placeholder_products", to: "url_redirects#fetch_placeholder_products"
         get "/url_redirects/stream/:token/:product_file_id", to: "url_redirects#stream", as: :stream_video
@@ -298,6 +300,7 @@ Rails.application.routes.draw do
     get "/careers", to: "careers#index"
     get "/careers/:slug", to: "careers#show", as: :career
     get "/features", to: "home#features"
+    get "/features.md", to: "home#features_md"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
     get "/prohibited", to: "home#prohibited"
@@ -747,6 +750,7 @@ Rails.application.routes.draw do
     get "/dashboard/active_members_count" => "dashboard#active_members_count", as: :dashboard_active_members_count
     get "/dashboard/monthly_recurring_revenue" => "dashboard#monthly_recurring_revenue", as: :dashboard_monthly_recurring_revenue
     get "/dashboard/download_tax_form" => "dashboard#download_tax_form", as: :dashboard_download_tax_form
+    post "/dashboard/dismiss_getting_started_checklist" => "dashboard#dismiss_getting_started_checklist", as: :dashboard_dismiss_getting_started_checklist
 
     get "/products", to: "links#index", as: :products
     get "/l/:id", to: "links#show", defaults: { format: "html" }, as: :short_link

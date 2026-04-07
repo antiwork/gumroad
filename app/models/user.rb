@@ -12,7 +12,7 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          AttributeBlockable, PayoutInfo
+          AttributeBlockable, PayoutInfo, EmailNormalization
 
   has_many :user_external_authentications, dependent: :destroy
 
@@ -197,6 +197,7 @@ class User < ApplicationRecord
   validates_presence_of :email, if: :email_required?
   validate :email_almost_unique
   validates :email, email_format: true, allow_blank: true, if: :email_changed?
+  validates :email, disposable_email: true, on: :create, if: -> { Feature.active?(:block_disposable_emails_at_signup) }
   validates :kindle_email, format: { with: KINDLE_EMAIL_REGEX }, allow_blank: true, if: :kindle_email_changed?
   validates :support_email, email_format: true, allow_blank: true, if: :support_email_changed?
   validates :support_email, not_reserved_email_domain: true, allow_blank: true, if: :support_email_changed?, unless: :is_team_member?
@@ -218,6 +219,7 @@ class User < ApplicationRecord
   validate :json_data, :json_data_must_be_hash
   validate :account_created_email_domain_is_not_blocked, on: :create
   validate :account_created_ip_is_not_blocked, on: :create
+  validate :email_not_from_suspended_gmail_variant, on: :create
   validate :facebook_meta_tag_is_valid
   validates :payment_address, email_format: true, allow_blank: true
 
@@ -263,7 +265,7 @@ class User < ApplicationRecord
             26 => :collect_eu_vat,
             27 => :is_eu_vat_exclusive,
             28 => :is_team_member,
-            29 => :DEPRECATED_has_payout_privilege,
+            29 => :has_dismissed_getting_started_checklist,
             30 => :DEPRECATED_has_risk_privilege,
             31 => :disable_paypal_sales,
             32 => :all_adult_products,
@@ -334,6 +336,8 @@ class User < ApplicationRecord
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :log_suspension_time_to_mongo
+    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation],
+                     :do => :add_to_gmail_abuse_filter
 
     after_transition any => :compliant, :do => :enable_refunds!
 
@@ -342,6 +346,8 @@ class User < ApplicationRecord
     after_transition %i[suspended_for_fraud suspended_for_tos_violation not_reviewed] => %i[compliant on_probation], :do => :unblock_seller_ip!
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => :compliant, do: :enable_sellers_other_accounts
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation], :do => :create_updated_stripe_apple_pay_domain
+    after_transition %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation] => %i[compliant on_probation],
+                     :do => :remove_from_gmail_abuse_filter
 
     event :mark_compliant do
       transition all => :compliant
@@ -422,6 +428,9 @@ class User < ApplicationRecord
   def resized_avatar_url(size:)
     return ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png") unless avatar.attached?
     cdn_url_for(avatar.variant(resize_to_limit: [size, size]).processed.url)
+  rescue ActiveStorage::FileNotFoundError => e
+    Rails.logger.warn("User#resized_avatar_url error (#{id}): #{e.class} => #{e.message}")
+    ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")
   end
 
   def avatar_url
@@ -526,7 +535,9 @@ class User < ApplicationRecord
     products.purchasing_power_parity_disabled.or(products.by_external_ids(external_ids)).each do |product|
       should_disable = external_ids.include?(product.external_id)
 
-      product.update!(purchasing_power_parity_disabled: should_disable) unless should_disable && product.purchasing_power_parity_disabled?
+      next if should_disable && product.purchasing_power_parity_disabled?
+      product.purchasing_power_parity_disabled = should_disable
+      product.save!(validate: false)
     end
   end
 

@@ -11,14 +11,14 @@ export const Rows = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElem
 );
 Rows.displayName = "Rows";
 
-export const Row = ({
-  className,
-  asChild,
-  ...props
-}: { className?: string; asChild?: boolean } & React.HTMLProps<HTMLDivElement>) => {
+export const Row = React.forwardRef<
+  HTMLDivElement,
+  { className?: string; asChild?: boolean } & React.HTMLProps<HTMLDivElement>
+>(({ className, asChild, ...props }, ref) => {
   const Component = asChild ? Slot : "div";
   return (
     <Component
+      ref={ref}
       className={classNames(
         "grid items-center gap-4 border-border p-4 not-last:border-b sm:grid-cols-[minmax(30%,1fr)_auto]",
         className,
@@ -26,7 +26,8 @@ export const Row = ({
       {...props}
     />
   );
-};
+});
+Row.displayName = "Row";
 
 export const RowContent = ({
   className,

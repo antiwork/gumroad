@@ -727,6 +727,136 @@ describe Order::ChargeService, :vcr do
     end
   end
 
+  describe "#ensure_all_purchases_processed" do
+    it "does not raise when purchases is nil" do
+      order = create(:order)
+      service = Order::ChargeService.new(order:, params: { line_items: [] })
+      expect { service.send(:ensure_all_purchases_processed, nil) }.not_to raise_error
+    end
+
+    it "does not raise NoMethodError when an error occurs before non_free_seller_purchases is assigned" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 10_00)
+      line_items = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ]
+      }
+      params = line_items.merge(
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      )
+
+      order, _ = Order::CreateService.new(params:).perform
+
+      allow(order.charges).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      expect { Order::ChargeService.new(order:, params:).perform }.not_to raise_error
+    end
+
+    it "falls back to seller_purchases for cleanup when non_free_seller_purchases is nil" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 10_00)
+      line_items = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ]
+      }
+      params = line_items.merge(
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      )
+
+      order, _ = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+
+      allow(order.charges).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      Order::ChargeService.new(order:, params:).perform
+      purchase.reload
+      expect(purchase).to be_failed
+    end
+
+    it "marks free purchases as successful in the fallback path when an exception occurs before non_free_seller_purchases is assigned" do
+      seller = create(:user)
+      free_product = create(:product, user: seller, price_cents: 0)
+      paid_product = create(:product, user: seller, price_cents: 10_00)
+      params = {
+        line_items: [
+          { uid: "uid-free", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+          { uid: "uid-paid", permalink: paid_product.unique_permalink, perceived_price_cents: paid_product.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+
+      order, _ = Order::CreateService.new(params:).perform
+      allow(order.charges).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      Order::ChargeService.new(order:, params:).perform
+
+      expect(order.purchases.find_by(link: free_product).reload).to be_successful
+      expect(order.purchases.find_by(link: paid_product).reload).to be_failed
+    end
+
+    it "does not schedule FailAbandonedPurchaseWorker due to stale charge_intent from a prior seller when an exception occurs" do
+      seller_a = create(:user)
+      seller_b = create(:user)
+      product_a = create(:product, user: seller_a, price_cents: 10_00)
+      product_b = create(:product, user: seller_b, price_cents: 20_00)
+      params = {
+        line_items: [
+          { uid: "uid-a", permalink: product_a.unique_permalink, perceived_price_cents: product_a.price_cents, quantity: 1 },
+          { uid: "uid-b", permalink: product_b.unique_permalink, perceived_price_cents: product_b.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+
+      order, _ = Order::CreateService.new(params:).perform
+      purchase_b = order.purchases.find_by(link: product_b)
+
+      service = Order::ChargeService.new(order:, params:)
+      requires_action_intent = double("charge_intent", requires_action?: true, succeeded?: false, client_secret: "cs_test_xxx", id: "pi_test_xxx")
+
+      call_count = 0
+      allow(service).to receive(:create_charge_for_seller_purchases) do |purchases, *|
+        call_count += 1
+        if call_count == 1
+          service.charge_intent = requires_action_intent
+          purchases.each { |p| p.create_processor_payment_intent!(intent_id: requires_action_intent.id) }
+        else
+          raise StandardError, "Simulated failure for seller B"
+        end
+      end
+
+      service.perform
+
+      expect(purchase_b.reload).to be_failed
+      expect(FailAbandonedPurchaseWorker.jobs.select { |j| j["args"] == [purchase_b.id] }.size).to eq(0)
+    end
+  end
+
   describe "#mandate_options_for_stripe" do
     let!(:seller) { create(:user) }
     let!(:membership_product) { create(:membership_product_with_preset_tiered_pricing, user: seller) }

@@ -13,4 +13,5 @@ class DashboardPolicy < ApplicationPolicy
   def active_members_count? = index?
   def monthly_recurring_revenue? = index?
   def download_tax_form? = index?
+  def dismiss_getting_started_checklist? = index?
 end

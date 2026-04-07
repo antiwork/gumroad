@@ -14,9 +14,10 @@ type AdminUserPayoutInfoProps = {
 const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [data, setData] = React.useState<PayoutInfoProps | null>(null);
+  const [hasFetched, setHasFetched] = React.useState(false);
 
   const elementRef = useIsIntersecting<HTMLDivElement>((isIntersecting) => {
-    if (!isIntersecting || data) return;
+    if (!isIntersecting || hasFetched) return;
 
     const fetchPayoutInfo = async () => {
       setIsLoading(true);
@@ -27,6 +28,7 @@ const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
       });
       setData(cast<PayoutInfoProps>(await response.json()));
       setIsLoading(false);
+      setHasFetched(true);
     };
 
     void fetchPayoutInfo();
@@ -35,7 +37,7 @@ const AdminUserPayoutInfo = ({ user }: AdminUserPayoutInfoProps) => {
   return (
     <div ref={elementRef}>
       <h3>Payout Info</h3>
-      <PayoutInfo user_external_id={user.external_id} payoutInfo={data} isLoading={isLoading} />
+      <PayoutInfo user_external_id={user.external_id} payoutInfo={data} isLoading={isLoading || !hasFetched} />
     </div>
   );
 };
