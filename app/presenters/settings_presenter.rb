@@ -219,6 +219,7 @@ class SettingsPresenter
       payouts_paused_internally: seller.payouts_paused_internally?,
       payouts_paused_by: seller.payouts_paused_by_source,
       payouts_paused_for_reason: seller.payouts_paused_for_reason,
+      account_status: account_status_details,
       payouts_paused_by_user: seller.payouts_paused_by_user?,
       payout_threshold_cents: seller.payout_threshold_cents,
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
@@ -244,6 +245,47 @@ class SettingsPresenter
   end
 
   private
+    def account_status_details
+      pending_compliance = seller.user_compliance_info_requests.requested.exists?
+      is_suspended = seller.suspended?
+      is_under_review = seller.on_probation? || seller.flagged?
+      payouts_paused_not_by_user = seller.payouts_paused_internally?
+
+      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || pending_compliance
+
+      suspension_reason = if seller.suspended_for_fraud?
+        "Your account has been suspended due to fraudulent activity."
+      elsif seller.suspended_for_tos_violation?
+        "Your account has been suspended for a policy violation."
+      end
+
+      compliance_actions = []
+      if pending_compliance && seller.stripe_account.present?
+        compliance_actions << "Complete pending verification requirements via Stripe"
+      end
+      if pending_compliance && seller.stripe_account.blank?
+        seller.user_compliance_info_requests.requested.each do |request|
+          message = request.verification_error_message || "Provide required information: #{request.field_needed.humanize}"
+          compliance_actions << message
+        end
+      end
+
+      gumroad_status = if is_under_review && !is_suspended
+        "Your account is under review. Payouts may be held until the review is complete."
+      end
+
+      {
+        show_section:,
+        account_state: seller.user_risk_state,
+        is_suspended:,
+        is_under_review:,
+        suspension_reason:,
+        pending_compliance: pending_compliance,
+        compliance_actions:,
+        gumroad_status:,
+      }
+    end
+
     def user_details(user_compliance_info)
       {
         country_supports_native_payouts: seller.native_payouts_supported?,

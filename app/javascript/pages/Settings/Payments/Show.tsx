@@ -19,6 +19,7 @@ import { PriceInput } from "$app/components/PriceInput";
 import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
 import { Layout } from "$app/components/Settings/Layout";
 import AccountDetailsSection from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
+import AccountStatusSection, { type AccountStatus } from "$app/components/Settings/PaymentsPage/AccountStatusSection";
 import AusBackTaxesSection, { type AusBacktaxDetails } from "$app/components/Settings/PaymentsPage/AusBackTaxesSection";
 import BankAccountSection, {
   BankAccountDetails,
@@ -94,6 +95,7 @@ type PaymentsPageProps = {
   payouts_paused_internally: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   payouts_paused_for_reason: string | null;
+  account_status: AccountStatus;
   payouts_paused_by_user: boolean;
   payout_threshold_cents: number;
   minimum_payout_threshold_cents: number;
@@ -927,6 +929,12 @@ export default function PaymentsPage() {
             </div>
           )}
         </FormSection>
+
+        <AccountStatusSection
+          accountStatus={props.account_status}
+          payoutsPausedBy={props.payouts_paused_by}
+          payoutsPausedForReason={props.payouts_paused_for_reason}
+        />
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
           <AusBackTaxesSection
