@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class Settings::PaymentsController < Settings::BaseController
+  skip_before_action :check_suspended
   include ActionView::Helpers::SanitizeHelper
 
   before_action :authorize

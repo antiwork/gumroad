@@ -76,8 +76,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       end
 
       it "shows section for suspended user with reason" do
-        seller.flag_for_tos_violation!(author_name: "test")
-        seller.suspend_for_tos_violation!(author_name: "test")
+        seller.flag_for_tos_violation!(author_name: "test", bulk: true)
+        seller.suspend_for_tos_violation!(author_name: "test", bulk: true)
 
         get :show
 

@@ -1,7 +1,10 @@
 import * as React from "react";
 
+import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { Alert } from "$app/components/ui/Alert";
 import { FormSection } from "$app/components/ui/FormSection";
+
+import logo from "$assets/images/logo-g.svg";
 
 export type AccountStatus = {
   show_section: boolean;
@@ -14,58 +17,73 @@ export type AccountStatus = {
   gumroad_status: string | null;
 };
 
-const statusBadge = (accountStatus: AccountStatus) => {
-  if (accountStatus.is_suspended) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-danger/20 px-2 py-0.5 text-sm font-medium text-danger">
-        Suspended
-      </span>
-    );
-  }
-  if (accountStatus.is_under_review) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-warning/20 px-2 py-0.5 text-sm font-medium text-warning">
-        Under Review
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded-full bg-success/20 px-2 py-0.5 text-sm font-medium text-success">
-      Active
-    </span>
-  );
-};
-
 export default function AccountStatusSection({
   accountStatus,
   payoutsPausedBy,
   payoutsPausedForReason,
+  showVerificationSection,
+  userJoinedAt,
+  locale,
 }: {
   accountStatus: AccountStatus;
   payoutsPausedBy: "stripe" | "admin" | "system" | "user" | null;
   payoutsPausedForReason: string | null;
+  showVerificationSection: boolean;
+  userJoinedAt: string;
+  locale: string;
 }) {
-  if (!accountStatus.show_section) return null;
-
   const payoutPausedReason =
-    payoutsPausedBy === "stripe"
-      ? "Payouts paused by payment processor. Please check for pending verification requirements."
-      : payoutsPausedBy === "admin"
-        ? `Payouts paused by Gumroad.${payoutsPausedForReason ? ` Reason: ${payoutsPausedForReason}` : ""}`
-        : payoutsPausedBy === "system"
-          ? "Payouts paused for a security review."
-          : null;
+    payoutsPausedBy === "stripe" ? (
+      <>
+        Payouts paused by payment processor.{" "}
+        <a href="/settings/payments/remediation" className="underline">
+          Complete pending verification requirements
+        </a>{" "}
+        to resolve this.
+      </>
+    ) : payoutsPausedBy === "admin" ? (
+      <>
+        {`Payouts paused by Gumroad.${payoutsPausedForReason ? ` Reason: ${payoutsPausedForReason}` : ""}`} If you have
+        questions,{" "}
+        <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
+          contact support
+        </a>
+        .
+      </>
+    ) : payoutsPausedBy === "system" ? (
+      <>
+        Payouts paused for a security review. If you have questions,{" "}
+        <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
+          contact support
+        </a>
+        .
+      </>
+    ) : null;
 
   return (
-    <FormSection
-      header={
-        <div className="flex items-center gap-3">
-          <h2>Account status</h2>
-          {statusBadge(accountStatus)}
-        </div>
-      }
-    >
+    <FormSection header={<h2>Account status</h2>}>
       <div className="flex flex-col gap-4">
+        {showVerificationSection ? (
+          <StripeConnectEmbeddedNotificationBanner />
+        ) : (
+          <div className="flex flex-col">
+            <Alert role="status" variant="success">
+              Your identity has been verified!
+            </Alert>
+            <div className="mt-4 flex items-center">
+              <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />
+              <span className="text-sm text-muted">
+                Creator since{" "}
+                {new Date(userJoinedAt).toLocaleDateString(locale, {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
+          </div>
+        )}
+
         {accountStatus.is_suspended && accountStatus.suspension_reason ? (
           <Alert variant="danger">{accountStatus.suspension_reason}</Alert>
         ) : null}
@@ -78,17 +96,33 @@ export default function AccountStatusSection({
         ) : null}
 
         {accountStatus.compliance_actions.length > 0 ? (
-          <Alert variant="info">
+          <Alert variant="warning">
             <strong>Action needed</strong>
             <ul className="mt-1 list-disc pl-4">
               {accountStatus.compliance_actions.map((action, i) => (
-                <li key={i}>{action}</li>
+                <li key={i}>
+                  {action === "Complete pending verification requirements via Stripe" ? (
+                    <a href="/settings/payments/remediation" className="underline">
+                      {action}
+                    </a>
+                  ) : (
+                    action
+                  )}
+                </li>
               ))}
             </ul>
           </Alert>
         ) : null}
 
-        {accountStatus.gumroad_status ? <Alert variant="info">{accountStatus.gumroad_status}</Alert> : null}
+        {accountStatus.gumroad_status ? (
+          <Alert variant="warning">
+            {accountStatus.gumroad_status} If you have questions,{" "}
+            <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
+              contact support
+            </a>
+            .
+          </Alert>
+        ) : null}
       </div>
     </FormSection>
   );

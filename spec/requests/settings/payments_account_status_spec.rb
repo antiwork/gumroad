@@ -40,8 +40,8 @@ describe "Settings::Payments account_status", type: :request do
   end
 
   it "shows section for suspended user (TOS violation)" do
-    seller.flag_for_tos_violation!(author_name: "test")
-    seller.suspend_for_tos_violation!(author_name: "test")
+    seller.flag_for_tos_violation!(author_name: "test", bulk: true)
+    seller.suspend_for_tos_violation!(author_name: "test", bulk: true)
 
     status = account_status
     expect(status["show_section"]).to be true

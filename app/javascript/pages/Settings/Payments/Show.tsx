@@ -14,7 +14,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { Button } from "$app/components/Button";
 import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
 import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
-import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { PriceInput } from "$app/components/PriceInput";
 import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
 import { Layout } from "$app/components/Settings/Layout";
@@ -39,8 +38,6 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
-
-import logo from "$assets/images/logo-g.svg";
 
 const KANA_NAME_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\-.]*$/u;
 const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=Latin}\d\s\-.]*$/u;
@@ -884,56 +881,13 @@ export default function PaymentsPage() {
         />
       ) : null}
       <form ref={formRef}>
-        {props.payouts_paused_by !== null ? (
-          <Alert className="m-4 md:m-8" role="status" variant="warning">
-            {props.payouts_paused_by === "stripe" ? (
-              <strong>
-                Your payouts are currently paused by our payment processor. Please check for any pending verification
-                requirements below.
-              </strong>
-            ) : props.payouts_paused_by === "admin" ? (
-              <strong>
-                Your payouts have been paused by Gumroad admin.
-                {props.payouts_paused_for_reason ? ` Reason for pause: ${props.payouts_paused_for_reason}` : null}
-              </strong>
-            ) : props.payouts_paused_by === "system" ? (
-              <strong>
-                Your payouts have been automatically paused for a security review and will be resumed once the review
-                completes.
-              </strong>
-            ) : (
-              <strong>You have paused your payouts.</strong>
-            )}
-          </Alert>
-        ) : null}
-
-        <FormSection header={<h2>Verification</h2>}>
-          {props.show_verification_section ? (
-            <StripeConnectEmbeddedNotificationBanner />
-          ) : (
-            <div className="flex flex-col">
-              <Alert role="status" variant="success">
-                Your identity has been verified!
-              </Alert>
-              <div className="mt-4 flex items-center">
-                <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />
-                <span className="text-sm text-muted">
-                  Creator since{" "}
-                  {new Date(props.user.joined_at).toLocaleDateString(userAgentInfo.locale, {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </span>
-              </div>
-            </div>
-          )}
-        </FormSection>
-
         <AccountStatusSection
           accountStatus={props.account_status}
           payoutsPausedBy={props.payouts_paused_by}
           payoutsPausedForReason={props.payouts_paused_for_reason}
+          showVerificationSection={props.show_verification_section}
+          userJoinedAt={props.user.joined_at}
+          locale={userAgentInfo.locale}
         />
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
