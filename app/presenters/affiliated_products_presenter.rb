@@ -30,7 +30,7 @@ class AffiliatedProductsPresenter
     attr_reader :user, :query, :page, :sort
 
     def affiliated_products_data
-      pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE)
+      pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE, overflow: :last_page)
       records = records.map do |product|
         revenue = product.revenue || 0
         {
