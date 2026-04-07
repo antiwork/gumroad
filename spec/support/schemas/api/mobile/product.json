@@ -30,6 +30,7 @@
     "updated_at",
     "creator_name",
     "preview_url",
+    "thumbnail_url",
     "preview_oembed_url",
     "preview_height",
     "preview_width",
