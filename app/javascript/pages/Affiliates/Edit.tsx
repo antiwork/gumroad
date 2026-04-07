@@ -178,12 +178,8 @@ export default function AffiliatesEdit() {
           }}
           onUpdateDestinationUrl={(value) => setData("affiliate.destination_url", value)}
           onUpdateProduct={(productId, updates) => {
-            const updatedProducts = data.affiliate.products.map((p) =>
-              p.id === productId ? { ...p, ...updates } : p,
-            );
-            const allEnabled = updatedProducts.every(
-              (p) => p.enabled && p.fee_percent === data.affiliate.fee_percent,
-            );
+            const updatedProducts = data.affiliate.products.map((p) => (p.id === productId ? { ...p, ...updates } : p));
+            const allEnabled = updatedProducts.every((p) => p.enabled && p.fee_percent === data.affiliate.fee_percent);
             setData("affiliate", {
               ...data.affiliate,
               products: updatedProducts,
