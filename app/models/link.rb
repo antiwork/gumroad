@@ -223,6 +223,12 @@ class Link < ApplicationRecord
 
   enum subscription_duration: %i[monthly yearly quarterly biannually every_two_years]
   enum purchase_type: %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
+
+  def purchase_type=(value)
+    super(value)
+  rescue ArgumentError
+    super(:buy_only)
+  end
   enum free_trial_duration_unit: %i[week month]
 
   attr_json_data_accessor :excluded_sales_tax_regions, default: -> { [] }
