@@ -26,6 +26,10 @@ describe Impersonate, type: :controller do
       expect(controller.impersonating_user).to eq(nil)
       expect(controller.impersonated_user).to eq(nil)
     end
+
+    it "handles reset_impersonated_user without raising" do
+      expect { controller.stop_impersonating_user }.not_to raise_error
+    end
   end
 
   let(:user) { create(:named_user) }

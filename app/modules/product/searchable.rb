@@ -8,6 +8,7 @@ module Product::Searchable
   RECOMMENDED_PRODUCTS_PER_PAGE = 9
   MAX_NUMBER_OF_FILETYPES = 8
   MAX_OFFER_CODES_IN_INDEX = 300
+  MAX_PRICE_FILTER_CENTS = 10_000_000_000 # $100,000,000 — upper bound for ES long-typed price range filters
 
   ATTRIBUTE_TO_SEARCH_FIELDS_MAP = {
     "name" => ["name", "rated_as_adult"],
@@ -231,10 +232,12 @@ module Product::Searchable
             end
 
             if params[:min_price].present? || params[:max_price].present?
+              min_cents = (params[:min_price].to_f * 100).to_i.clamp(0, MAX_PRICE_FILTER_CENTS) if params[:min_price].present?
+              max_cents = (params[:max_price].to_f * 100).to_i.clamp(0, MAX_PRICE_FILTER_CENTS) if params[:max_price].present?
               filter do
                 range :available_price_cents do
-                  gte params[:min_price].to_f * 100 if params[:min_price].present?
-                  lte params[:max_price].to_f * 100 if params[:max_price].present?
+                  gte min_cents if min_cents
+                  lte max_cents if max_cents
                 end
               end
             end

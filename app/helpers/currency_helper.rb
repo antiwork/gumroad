@@ -10,11 +10,13 @@ module CurrencyHelper
   end
 
   def symbol_for(type = :usd)
-    CURRENCY_CHOICES[type.to_sym][:symbol]
+    currency = CURRENCY_CHOICES[type.to_sym] || CURRENCY_CHOICES[:usd]
+    currency[:symbol]
   end
 
   def min_price_for(type = :usd)
-    CURRENCY_CHOICES[type.to_sym][:min_price]
+    currency = CURRENCY_CHOICES[type.to_sym] || CURRENCY_CHOICES[:usd]
+    currency[:min_price]
   end
 
   def currency_choices
@@ -22,7 +24,12 @@ module CurrencyHelper
   end
 
   def string_to_price_cents(currency_type, price_string)
-    (BigDecimal(price_string.to_s.delete(",").presence || 0) * (is_currency_type_single_unit?(currency_type) ? 1 : 100)).round
+    sanitized = price_string.to_s.delete(",")
+    if sanitized.count(".") > 1
+      first_dot = sanitized.index(".")
+      sanitized = sanitized[0..first_dot] + sanitized[(first_dot + 1)..].delete(".")
+    end
+    (BigDecimal(sanitized.presence || 0) * (is_currency_type_single_unit?(currency_type) ? 1 : 100)).round
   end
 
   def query_rate(currency_type)

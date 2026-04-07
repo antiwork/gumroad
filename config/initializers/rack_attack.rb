@@ -51,13 +51,7 @@ class Rack::Attack
   def self.throttle_with_exponential_backoff(name:, requests:, period:, max_level: 5, &block_proc)
     block = Proc.new do |req|
       block_proc.call(req)
-    rescue Rack::QueryParser::InvalidParameterError
-      # Looks like this request contains invalid params. We already have an
-      # "invalid_params" throttle rule defined below, therefore, we don't need
-      # to throttle it here again.
-      # Also, this request will be passed down the middleware hierarchy. Thus
-      # to prevent this exception from polluting our error reporting tool
-      # we will gracefully handle it in the CatchBadRequestErrors middleware.
+    rescue Rack::QueryParser::InvalidParameterError, TypeError
       nil
     end
 

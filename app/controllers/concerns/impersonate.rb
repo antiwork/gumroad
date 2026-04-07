@@ -57,7 +57,10 @@ module Impersonate
     def can_impersonate? = current_user_from_api_or_web&.is_team_member?
 
     def reset_impersonated_user
-      $redis.del(RedisKey.impersonated_user(current_user_from_api_or_web.id))
+      user = current_user_from_api_or_web
+      return if user.nil?
+
+      $redis.del(RedisKey.impersonated_user(user.id))
       remove_instance_variable(:@_impersonated_user) if defined?(@_impersonated_user)
     end
 end

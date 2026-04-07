@@ -983,14 +983,14 @@ describe ProductPresenter do
 
     it "passes compute_description parameter to the card presenter" do
       expect(ProductPresenter::Card).to receive(:new).with(product:).and_call_original
-      expect_any_instance_of(ProductPresenter::Card).to receive(:for_web).with(request:, recommended_by: "discover", recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: false)
+      expect_any_instance_of(ProductPresenter::Card).to receive(:for_web).with(request:, recommended_by: "discover", recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: false, compute_inventory: true)
 
       described_class.card_for_web(product:, request:, recommended_by: "discover", compute_description: false)
     end
 
     it "defaults compute_description to true when not provided" do
       expect(ProductPresenter::Card).to receive(:new).with(product:).and_call_original
-      expect_any_instance_of(ProductPresenter::Card).to receive(:for_web).with(request:, recommended_by: "discover", recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true)
+      expect_any_instance_of(ProductPresenter::Card).to receive(:for_web).with(request:, recommended_by: "discover", recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true, compute_inventory: true)
 
       described_class.card_for_web(product:, request:, recommended_by: "discover")
     end

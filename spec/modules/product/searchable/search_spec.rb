@@ -114,6 +114,24 @@ describe "Product::Searchable - Search scenarios" do
         assert_equal expected, records.map(&:id)
       end
 
+      it "clamps extremely large price filter values to prevent Elasticsearch long overflow" do
+        # Values like 2_344_444_444_444.44 would produce floats exceeding ES long max (~9.22E18)
+        params = { min_price: "0", max_price: "2344444444444444" }
+        search_options = Link.search_options(params)
+
+        # Should not raise Elasticsearch::Transport::Transport::Errors::BadRequest
+        records = Link.search(search_options).records
+        expect(records).to be_an(Elasticsearch::Model::Response::Records)
+      end
+
+      it "clamps negative price filter values to zero" do
+        params = { min_price: "-100", max_price: "1" }
+        search_options = Link.search_options(params)
+
+        records = Link.search(search_options).records
+        expect(records).to be_an(Elasticsearch::Model::Response::Records)
+      end
+
       describe "is_alive_on_profile" do
         let(:seller) { create(:user) }
         let!(:product) { create(:product, user: seller) }

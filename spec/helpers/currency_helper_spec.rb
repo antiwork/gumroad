@@ -29,6 +29,10 @@ describe CurrencyHelper do
       expect(symbol_for(:usd)).to eq "$"
       expect(symbol_for(:gbp)).to eq "£"
     end
+
+    it "falls back to USD for unknown currency types" do
+      expect(symbol_for(:xyz)).to eq "$"
+    end
   end
 
   describe "#min_price_for" do
@@ -36,12 +40,28 @@ describe CurrencyHelper do
       expect(min_price_for(:usd)).to eq 99
       expect(min_price_for(:gbp)).to eq 59
     end
+
+    it "falls back to USD for unknown currency types" do
+      expect(min_price_for(:xyz)).to eq 99
+    end
   end
 
   describe "#string_to_price_cents" do
     it "ignores the comma" do
       expect(string_to_price_cents(:usd, "1,200")).to eq 120_000
       expect(string_to_price_cents(:usd, "1,200.99")).to eq 120_099
+    end
+
+    it "handles multiple decimal points by keeping only the first" do
+      expect(string_to_price_cents(:usd, "50.00.000")).to eq 5000
+      expect(string_to_price_cents(:usd, "1.000.00")).to eq 100
+      expect(string_to_price_cents(:usd, "1.2.3.4")).to eq 123
+    end
+
+    it "handles normal prices with a single decimal point" do
+      expect(string_to_price_cents(:usd, "9.99")).to eq 999
+      expect(string_to_price_cents(:usd, "100.00")).to eq 10_000
+      expect(string_to_price_cents(:usd, "0.50")).to eq 50
     end
   end
 

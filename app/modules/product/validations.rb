@@ -82,6 +82,7 @@ module Product::Validations
     def calls_must_have_at_least_one_duration
       return unless native_type == Link::NATIVE_TYPE_CALL
       return if deleted_at.present?
+      return if archived?
       return if variant_categories.alive.first&.alive_variants&.exists?
 
       errors.add(:base, "Calls must have at least one duration")

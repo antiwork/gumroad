@@ -428,6 +428,9 @@ class User < ApplicationRecord
   def resized_avatar_url(size:)
     return ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png") unless avatar.attached?
     cdn_url_for(avatar.variant(resize_to_limit: [size, size]).processed.url)
+  rescue ActiveStorage::FileNotFoundError => e
+    Rails.logger.warn("User#resized_avatar_url error (#{id}): #{e.class} => #{e.message}")
+    ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")
   end
 
   def avatar_url
@@ -532,7 +535,9 @@ class User < ApplicationRecord
     products.purchasing_power_parity_disabled.or(products.by_external_ids(external_ids)).each do |product|
       should_disable = external_ids.include?(product.external_id)
 
-      product.update!(purchasing_power_parity_disabled: should_disable) unless should_disable && product.purchasing_power_parity_disabled?
+      next if should_disable && product.purchasing_power_parity_disabled?
+      product.purchasing_power_parity_disabled = should_disable
+      product.save!(validate: false)
     end
   end
 
