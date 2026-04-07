@@ -236,6 +236,9 @@ class ProductDuplicatorService
         variant_category.variants.each do |variant|
           new_variant = variant.dup
           new_variant.variant_category = new_variant_category
+          new_variant.apply_price_changes_to_existing_memberships = false
+          new_variant.subscription_price_change_effective_date = nil
+          new_variant.subscription_price_change_message = nil
           duplicate_variant_product_files(original_variant: variant, duplicate_variant: new_variant)
           variant.skus.each do |sku|
             new_sku = duplicated_product.skus.where(name: sku.name).first
@@ -252,6 +255,9 @@ class ProductDuplicatorService
       product.skus.each do |sku|
         new_sku = sku.dup
         new_sku.link = duplicated_product
+        new_sku.apply_price_changes_to_existing_memberships = false
+        new_sku.subscription_price_change_effective_date = nil
+        new_sku.subscription_price_change_message = nil
         duplicate_variant_product_files(original_variant: sku, duplicate_variant: new_sku)
         new_sku.save!
       end

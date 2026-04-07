@@ -199,6 +199,23 @@ describe ProductDuplicatorService do
     end
   end
 
+  it "duplicates a product whose variant has a membership price change effective date in the past" do
+    variant_category = create(:variant_category, title: "Tier", link: product)
+    variant = create(:variant, variant_category:, name: "Premium")
+    variant.apply_price_changes_to_existing_memberships = true
+    variant.subscription_price_change_effective_date = 3.days.ago.to_date
+    variant.subscription_price_change_message = "Price is going up"
+    variant.save!(validate: false)
+
+    duplicate_product = ProductDuplicatorService.new(product.id).duplicate
+
+    duplicated_variant = duplicate_product.variant_categories.alive.first.variants.first
+    expect(duplicated_variant.name).to eq("Premium")
+    expect(duplicated_variant.apply_price_changes_to_existing_memberships).to eq(false)
+    expect(duplicated_variant.subscription_price_change_effective_date).to be_nil
+    expect(duplicated_variant.subscription_price_change_message).to be_nil
+  end
+
   describe "prices" do
     it "handles products with rental prices" do
       product.is_recurring_billing = false
