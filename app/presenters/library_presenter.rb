@@ -20,6 +20,7 @@ class LibraryPresenter
         :variant_attributes,
         :bundle_purchase,
         link: {
+          alive_third_party_analytics: [],
           display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
           thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
           user: { avatar_attachment: :blob }
@@ -27,6 +28,11 @@ class LibraryPresenter
       )
       .find_each(batch_size: 3000, order: :desc) # required to avoid full table scans. See https://github.com/gumroad/web/pull/25970
       .to_a
+
+    user_ids = purchases.map { |p| p.link.user_id }.uniq
+    users_with_universal_analytics = ThirdPartyAnalytic.where(user_id: user_ids, link_id: nil)
+      .alive.where(location: ["receipt", "all"]).distinct.pluck(:user_id).to_set
+
     creators_infos = purchases.flat_map { |purchase| purchase.link.user }.uniq.group_by(&:id).transform_values(&:first)
     creators = creators_infos.values.map do |creator|
       { id: creator.external_id, name: creator.name || creator.username || creator.external_id }
@@ -54,7 +60,8 @@ class LibraryPresenter
           native_type: product.native_type,
           updated_at: product.content_updated_at || product.created_at,
           permalink: product.unique_permalink,
-          has_third_party_analytics: product.has_third_party_analytics?("receipt"),
+          has_third_party_analytics: product.alive_third_party_analytics.any? { |a| a.location == "receipt" || a.location == "all" } ||
+            users_with_universal_analytics.include?(product.user_id),
         },
         purchase: {
           id: purchase.external_id,

@@ -541,7 +541,7 @@ class Purchase < ApplicationRecord
     .not_chargedback_or_chargedback_reversed
     .not_is_archived_original_subscription_purchase
     .not_rental_expired
-    .order(:id)
+    .order(id: :desc)
     .includes(:preorder, :purchaser, :seller, :subscription, url_redirect: { purchase: { link: [:user, :thumbnail] } })
   }
   scope :for_library, lambda {
