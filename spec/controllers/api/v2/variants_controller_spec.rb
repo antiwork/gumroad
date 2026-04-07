@@ -372,6 +372,7 @@ describe Api::V2::VariantsController do
 
         it "wires up variant.product_files from file embeds" do
           product_file = create(:product_file, link: @product)
+          Aws::S3::Resource.new.bucket(S3_BUCKET).object(product_file.s3_key).put(body: "test content")
           put @action, params: @params.merge(
             rich_content: [
               {
