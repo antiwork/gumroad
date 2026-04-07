@@ -144,16 +144,4 @@ class Api::V2::VariantsController < Api::V2::BaseController
       removed.each(&:mark_deleted!)
     end
 
-    def retire_upsells_from_rich_contents!(rich_contents)
-      upsell_ids = rich_contents.flat_map do |rc|
-        rc.description.filter_map { |node| node["type"] == "upsellCard" ? node.dig("attrs", "id") : nil }
-      end
-      upsell_ids.each do |upsell_id|
-        upsell = current_resource_owner.upsells.find_by_external_id(upsell_id)
-        if upsell
-          upsell.offer_code&.mark_deleted!
-          upsell.mark_deleted!
-        end
-      end
-    end
 end

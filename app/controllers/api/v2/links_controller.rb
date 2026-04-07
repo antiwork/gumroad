@@ -217,7 +217,7 @@ class Api::V2::LinksController < Api::V2::BaseController
         attrs[:taxonomy_id] = params[:taxonomy_id] if params.key?(:taxonomy_id)
         attrs[:custom_receipt] = params[:custom_receipt] if params.key?(:custom_receipt)
 
-        @rich_content_flag_was = @product.has_same_rich_content_for_all_variants?
+        rich_content_flag_was = @product.has_same_rich_content_for_all_variants?
 
         if params.key?(:has_same_rich_content_for_all_variants)
           attrs[:has_same_rich_content_for_all_variants] = ActiveModel::Type::Boolean.new.cast(params[:has_same_rich_content_for_all_variants])
@@ -233,7 +233,7 @@ class Api::V2::LinksController < Api::V2::BaseController
           @product.json_data["custom_summary"] = params[:custom_summary]
         end
 
-        flag_changed = @product.has_same_rich_content_for_all_variants? != @rich_content_flag_was
+        flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
 
         unless @normalized_files.nil?
           validate_file_embed_conflicts!(skip_variant_embeds: flag_changed && @product.has_same_rich_content_for_all_variants? && !@normalized_rich_content.nil?)
@@ -384,23 +384,6 @@ class Api::V2::LinksController < Api::V2::BaseController
       (existing_rich_contents - rich_contents_to_keep).each(&:mark_deleted!)
     end
 
-    def normalize_params_recursively(obj)
-      case obj
-      when ActionController::Parameters
-        normalize_params_recursively(obj.to_unsafe_h)
-      when Hash
-        if obj.keys.all? { |k| k.to_s.match?(/\A\d+\z/) }
-          obj.sort_by { |k, _| k.to_i }.map { |_, v| normalize_params_recursively(v) }
-        else
-          obj.transform_values { |v| normalize_params_recursively(v) }.with_indifferent_access
-        end
-      when Array
-        obj.map { |v| normalize_params_recursively(v) }
-      else
-        obj
-      end
-    end
-
     def validate_file_embed_conflicts!(skip_variant_embeds: false)
       existing_file_ids = @product.alive_product_files.map(&:external_id)
       incoming_file_ids = (@normalized_files || []).filter_map { |f| f[:id] }
@@ -425,15 +408,6 @@ class Api::V2::LinksController < Api::V2::BaseController
 
       raise Link::LinkInvalid, "Cannot remove files still referenced in rich content: #{conflicting.join(", ")}. Remove the file embeds from rich content first, or send both changes together."
     end
-
-    def unwrap_description_content(description)
-      if description.respond_to?(:key?) && description.key?(:content)
-        description[:content] || []
-      else
-        Array(description)
-      end
-    end
-
 
     def extract_file_embed_ids_from_params(rich_content_pages)
       return [] if rich_content_pages.blank?
@@ -480,7 +454,9 @@ class Api::V2::LinksController < Api::V2::BaseController
         rich_contents_to_keep << record
       end
 
-      (existing_rich_contents - rich_contents_to_keep).each(&:mark_deleted!)
+      removed = existing_rich_contents - rich_contents_to_keep
+      retire_upsells_from_rich_contents!(removed)
+      removed.each(&:mark_deleted!)
     end
 
     def migrate_rich_content_for_flag_change!
@@ -566,19 +542,6 @@ class Api::V2::LinksController < Api::V2::BaseController
 
       retire_upsells_from_rich_contents!(product_pages)
       product_pages.each(&:mark_deleted!)
-    end
-
-    def retire_upsells_from_rich_contents!(rich_contents)
-      upsell_ids = rich_contents.flat_map do |rc|
-        rc.description.filter_map { |node| node["type"] == "upsellCard" ? node.dig("attrs", "id") : nil }
-      end
-      upsell_ids.each do |upsell_id|
-        upsell = @product.user.upsells.find_by_external_id(upsell_id)
-        if upsell
-          upsell.offer_code&.mark_deleted!
-          upsell.mark_deleted!
-        end
-      end
     end
 
     def canonicalize_rich_contents(entity)
