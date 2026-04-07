@@ -94,6 +94,23 @@ describe Integrations::DiscordController do
       expect(response.status).to eq(200)
       expect(response.parsed_body).to eq({ "success" => false })
     end
+
+    it "fails if Discord returns a non-JSON response" do
+      WebMock.stub_request(:post, DISCORD_OAUTH_TOKEN_URL).
+        with(body: oauth_request_body, headers: oauth_request_header).
+        to_return(status: 200,
+                  body: { access_token: "test_access_token", guild: { id: "0", name: "Gaming" } }.to_json,
+                  headers: { content_type: "application/json" })
+
+      WebMock.stub_request(:get, "#{Discordrb::API.api_base}/users/@me").
+        with(headers: { "Authorization" => "Bearer test_access_token" }).
+        to_return(status: 200, body: "<html>upstream connect error</html>", headers: { content_type: "text/html" })
+
+      get :server_info, format: :json, params: { code: "test_code" }
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq({ "success" => false })
+    end
   end
 
   describe "GET oauth_redirect" do
@@ -297,6 +314,25 @@ describe Integrations::DiscordController do
       expect do
         get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id }
       end.to change { PurchaseIntegration.count }.by(0)
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq({ "success" => false })
+    end
+
+    it "fails if Discord returns a non-JSON response" do
+      WebMock.stub_request(:post, DISCORD_OAUTH_TOKEN_URL).
+        with(body: oauth_request_body, headers: oauth_request_header).
+        to_return(status: 200,
+                  body: { access_token: "test_access_token" }.to_json,
+                  headers: { content_type: "application/json" })
+
+      WebMock.stub_request(:get, "#{Discordrb::API.api_base}/users/@me").
+        with(headers: { "Authorization" => "Bearer test_access_token" }).
+        to_return(status: 200, body: "<html>upstream connect error</html>", headers: { content_type: "text/html" })
+
+      expect do
+        get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id }
+      end.not_to change { PurchaseIntegration.count }
 
       expect(response.status).to eq(200)
       expect(response.parsed_body).to eq({ "success" => false })

@@ -966,6 +966,25 @@ describe OrdersController, :vcr do
           end.to change(Purchase.successful, :count).by(2)
         end
 
+        it "does not attempt to verify reCAPTCHA when line_items are submitted as hash-like params" do
+          allow_any_instance_of(Link).to receive(:require_captcha?).and_return(false)
+
+          product_1.update!(price_cents: 0)
+          product_2.update!(price_cents: 0)
+
+          hash_params = multiple_purchase_params.dup
+          hash_params[:line_items] = {
+            "0" => { uid: "unique-id-0", permalink: product_1.unique_permalink, perceived_price_cents: "0", quantity: 1 },
+            "1" => { uid: "unique-id-1", permalink: product_2.unique_permalink, perceived_price_cents: "0", quantity: 1 }
+          }
+
+          expect_any_instance_of(OrdersController).to_not receive(:valid_recaptcha_response_and_hostname?)
+
+          expect do
+            post :create, params: hash_params
+          end.to change(Purchase.successful, :count).by(2)
+        end
+
         it "verifies reCAPTCHA if any of the purchases require it" do
           allow_any_instance_of(Link).to receive(:require_captcha?).and_return(true)
 

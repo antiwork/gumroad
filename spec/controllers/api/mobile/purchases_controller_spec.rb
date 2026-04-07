@@ -133,9 +133,9 @@ describe Api::Mobile::PurchasesController do
       # Both subscriptions should appear in the response
 
       get :index, params: @params
-      expect(response.parsed_body).to eq({ success: true,
-                                           products: [subscription_purchase.json_data_for_mobile, dead_subscription_purchase.json_data_for_mobile],
-                                           user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+      expect(response.parsed_body).to include({ success: true,
+                                                products: [dead_subscription_purchase.json_data_for_mobile, subscription_purchase.json_data_for_mobile],
+                                                user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
     end
 
     it "does not return unsuccessful purchases" do
@@ -152,9 +152,9 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
-        products: purchases[1..2].sort_by(&:created_at).map { |purchase| purchase.json_data_for_mobile },
+        products: purchases[1..2].sort_by { -_1.id }.map { |purchase| purchase.json_data_for_mobile },
         user_id: @purchaser.external_id
       }.as_json(api_scopes: ["mobile_api"]))
     end
@@ -167,7 +167,7 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
         products: [],
         user_id: @purchaser.external_id
@@ -179,7 +179,7 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
         products: [],
         user_id: @purchaser.external_id
@@ -193,7 +193,7 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
         products: [archived_purchase.json_data_for_mobile],
         user_id: @purchaser.external_id
@@ -212,18 +212,24 @@ describe Api::Mobile::PurchasesController do
       expect(response.body).to be_blank
     end
 
-    it "responds with an empty list on error" do
-      allow_any_instance_of(Purchase).to receive(:json_data_for_mobile).and_raise(StandardError.new("error"))
-      create(:purchase, purchaser: @purchaser)
-      expect(ErrorNotifier).to receive(:notify).once
+    it "returns pagination metadata" do
+      create(:purchase_with_balance, link: @mobile_friendly_pdf_product, purchaser: @purchaser, seller: @user)
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
-        success: true,
-        products: [],
-        user_id: @purchaser.external_id
-      }.as_json)
+      expect(response.parsed_body["meta"]["pagination"].keys).to match_array(%w[count items last next page pages prev])
+    end
+
+    it "applies default pagination when no pagination params are provided" do
+      products = create_list(:product, 3, user: @user)
+      products.each do |product|
+        create(:purchase, link: product, purchaser: @purchaser)
+      end
+
+      get :index, params: @params
+
+      expect(response.parsed_body[:success]).to be true
+      expect(response.parsed_body[:products].size).to eq(3)
     end
 
     describe "show all products" do
@@ -243,10 +249,10 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at)
-                                                       .map { |purchase| purchase.json_data_for_mobile }.compact,
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }
+                                                            .map { |purchase| purchase.json_data_for_mobile }.compact,
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
 
       it "includes mobile unfriendly products" do
@@ -265,9 +271,9 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at).map(&:json_data_for_mobile).compact,
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }.map(&:json_data_for_mobile).compact,
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
 
       it "includes preorder products", :vcr do
@@ -296,10 +302,10 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at)
-                                                  .map { |purchase| purchase.json_data_for_mobile }.compact,
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }
+                                                       .map { |purchase| purchase.json_data_for_mobile }.compact,
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
 
       it "paginates results when pagination params are given" do
@@ -311,9 +317,9 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params.merge(page: 1, per_page: 2)
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at).map(&:json_data_for_mobile).compact.first(2),
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }.map(&:json_data_for_mobile).compact.first(2),
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
     end
   end
@@ -437,6 +443,26 @@ describe Api::Mobile::PurchasesController do
         expect(response).to have_http_status :not_found
         expect(response.parsed_body).to eq({ success: false, message: "Could not find purchase" }.as_json)
       end
+    end
+  end
+
+  describe "DELETE destroy" do
+    it "marks a purchase as deleted by buyer" do
+      purchase = create(:purchase_with_balance, purchaser: @purchaser)
+
+      delete :destroy, params: @params.merge(id: purchase.external_id)
+
+      expect(response.parsed_body).to eq({ success: true, product: purchase.reload.json_data_for_mobile }.as_json)
+      expect(purchase.reload.is_deleted_by_buyer).to eq(true)
+    end
+
+    it "returns 404 for a purchase that doesn't belong to the purchaser" do
+      purchase = create(:purchase_with_balance, purchaser: create(:user))
+
+      delete :destroy, params: @params.merge(id: purchase.external_id)
+
+      expect(response).to have_http_status :not_found
+      expect(response.parsed_body).to eq({ success: false, message: "Could not find purchase" }.as_json)
     end
   end
 

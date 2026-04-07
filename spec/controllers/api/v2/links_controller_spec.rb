@@ -480,9 +480,12 @@ describe Api::V2::LinksController do
       end
 
       it "creates a product with files" do
+        s3_key = "attachments/#{@user.external_id}/test/original/course.pdf"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key).put(body: "test content")
+
         files = [
           {
-            url: "#{S3_BASE_URL}attachments/#{@user.external_id}/test/original/course.pdf",
+            url: "#{S3_BASE_URL}#{s3_key}",
             display_name: "Course PDF"
           }
         ]
@@ -499,7 +502,10 @@ describe Api::V2::LinksController do
 
       it "creates a product with files and rich content referencing those files" do
         temp_id = "temp-file-1"
-        file_url = "#{S3_BASE_URL}attachments/#{@user.external_id}/test/original/doc.pdf"
+        s3_key = "attachments/#{@user.external_id}/test/original/doc.pdf"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key).put(body: "test content")
+
+        file_url = "#{S3_BASE_URL}#{s3_key}"
         files = [{ id: temp_id, url: file_url, display_name: "Doc" }]
         rich_content = [
           {
