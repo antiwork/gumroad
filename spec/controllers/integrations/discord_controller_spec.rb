@@ -104,7 +104,7 @@ describe Integrations::DiscordController do
 
       WebMock.stub_request(:get, "#{Discordrb::API.api_base}/users/@me").
         with(headers: { "Authorization" => "Bearer test_access_token" }).
-        to_return(status: 502, body: "<html>upstream connect error</html>")
+        to_return(status: 200, body: "<html>upstream connect error</html>", headers: { content_type: "text/html" })
 
       get :server_info, format: :json, params: { code: "test_code" }
 
@@ -328,7 +328,7 @@ describe Integrations::DiscordController do
 
       WebMock.stub_request(:get, "#{Discordrb::API.api_base}/users/@me").
         with(headers: { "Authorization" => "Bearer test_access_token" }).
-        to_return(status: 502, body: "<html>upstream connect error</html>")
+        to_return(status: 200, body: "<html>upstream connect error</html>", headers: { content_type: "text/html" })
 
       expect do
         get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id }
