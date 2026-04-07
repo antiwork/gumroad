@@ -1148,6 +1148,7 @@ describe Api::V2::LinksController do
         it "rebinds variant.product_files from migrated file embeds when switching to per-variant" do
           variant1
           product_file = create(:product_file, link: @product)
+          Aws::S3::Resource.new.bucket(S3_BUCKET).object(product_file.s3_key).put(body: "test content")
           @product.update!(has_same_rich_content_for_all_variants: true)
           create(:rich_content, entity: @product, title: "Page with file", description: [
                    { "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }
