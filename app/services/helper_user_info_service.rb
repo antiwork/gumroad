@@ -15,7 +15,7 @@ class HelperUserInfoService
     {
       **user_details,
       comments: structured_comments,
-      can_add_comment: commentable_user.present?,
+      can_add_comment: primary_email_user.present?,
       metadata: {
         **user_metadata,
         **sales_info,
@@ -25,14 +25,14 @@ class HelperUserInfoService
   end
 
   private
-    def commentable_user
-      return @_commentable_user if defined?(@_commentable_user)
-      @_commentable_user = (user if user&.email == @email && !user&.deleted?)
+    def primary_email_user
+      return @_primary_email_user if defined?(@_primary_email_user)
+      @_primary_email_user = (user if user&.email == @email && !user&.deleted?)
     end
 
     def structured_comments
-      return [] unless commentable_user
-      commentable_user.comments.includes(:author).order(created_at: :desc).limit(STRUCTURED_COMMENTS_LIMIT).map do |comment|
+      return [] unless primary_email_user
+      primary_email_user.comments.includes(:author).order(created_at: :desc).limit(STRUCTURED_COMMENTS_LIMIT).map do |comment|
         {
           id: comment.external_id,
           author_name: comment.author_name || comment.author&.name || FALLBACK_AUTHOR_NAME,
