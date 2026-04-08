@@ -1339,6 +1339,23 @@ describe LinksController, :vcr, inertia: true do
           expect(embed_ids).to eq(["placeholder_b", "real_b"])
         end
 
+        it "handles nil nodes in rich content without crashing" do
+          rich_content_node = {
+            "type" => "doc",
+            "content" => [
+              { "type" => "fileEmbed", "attrs" => { "id" => "placeholder_a" } },
+              nil,
+              { "type" => "paragraph", "content" => nil },
+              { "type" => "paragraph", "content" => [nil, { "type" => "text", "text" => "hello" }] },
+              { "type" => "fileEmbed", "attrs" => nil },
+            ]
+          }
+          mappings = { "placeholder_a" => "real_a" }
+
+          expect { @product.send(:apply_rich_content_id_mappings, rich_content_node, mappings) }.not_to raise_error
+          expect(rich_content_node["content"][0]["attrs"]["id"]).to eq("real_a")
+        end
+
         it "saves variant-level rich content containing file embeds with the persisted IDs" do
           external_id1 = "ext1"
           external_id2 = "ext2"
