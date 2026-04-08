@@ -3736,6 +3736,7 @@ class Purchase < ApplicationRecord
         license_key: selected_license.serial,
         license_id: selected_license.external_id,
         license_disabled: selected_license.disabled?,
+        license_uses: selected_license.uses,
         is_multiseat_license: is_multiseat_license?
       }
     end

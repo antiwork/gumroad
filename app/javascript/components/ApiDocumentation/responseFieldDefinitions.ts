@@ -162,6 +162,7 @@ export const SALE_FIELDS: FieldDefinition[] = [
   { name: "license_key", type: "string", description: "License key for the purchase" },
   { name: "license_id", type: "string", description: "Unique identifier of the license" },
   { name: "license_disabled", type: "boolean", description: "Whether the license has been disabled" },
+  { name: "license_uses", type: "number", description: "Number of times the license key has been activated/verified" },
   {
     name: "affiliate",
     type: "object | null",
