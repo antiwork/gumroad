@@ -397,7 +397,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
               type: "object",
               properties: {
                 success: { const: false },
-                error: { type: "string" }
+                error_message: { type: "string" }
               }
             }
           }
@@ -435,13 +435,13 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
   }.freeze
   def create_comment
     if params[:email].blank?
-      return render json: { success: false, error: "'email' parameter is required" }, status: :bad_request
+      return render json: { success: false, error_message: "'email' parameter is required" }, status: :bad_request
     end
     if params[:content].blank?
-      return render json: { success: false, error: "'content' parameter is required" }, status: :bad_request
+      return render json: { success: false, error_message: "'content' parameter is required" }, status: :bad_request
     end
     if params[:idempotency_key].blank?
-      return render json: { success: false, error: "'idempotency_key' parameter is required" }, status: :bad_request
+      return render json: { success: false, error_message: "'idempotency_key' parameter is required" }, status: :bad_request
     end
 
     user = User.alive.by_email(params[:email]).first
@@ -449,7 +449,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
     end
 
-    normalized_content = Comment.new(content: params[:content]).tap { |c| c.send(:trim_extra_newlines) }.content
+    normalized_content = Comment.normalize_content(params[:content])
 
     existing = user.comments.find_by(idempotency_key: params[:idempotency_key])
     if existing

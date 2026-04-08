@@ -398,7 +398,7 @@ describe Api::Internal::Helper::UsersController do
 
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error"]).to eq("'email' parameter is required")
+        expect(response.parsed_body["error_message"]).to eq("'email' parameter is required")
       end
     end
 
@@ -408,7 +408,7 @@ describe Api::Internal::Helper::UsersController do
 
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error"]).to eq("'content' parameter is required")
+        expect(response.parsed_body["error_message"]).to eq("'content' parameter is required")
       end
     end
 
@@ -418,7 +418,7 @@ describe Api::Internal::Helper::UsersController do
 
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error"]).to eq("'idempotency_key' parameter is required")
+        expect(response.parsed_body["error_message"]).to eq("'idempotency_key' parameter is required")
       end
     end
 
@@ -503,6 +503,37 @@ describe Api::Internal::Helper::UsersController do
         post :create_comment, params: { email: user.email, content: "Different note", idempotency_key: idempotency_key }
         expect(response).to have_http_status(:conflict)
         expect(response.parsed_body["error_message"]).to eq("Idempotency key already used with different content")
+      end
+
+      it "returns existing comment when content differs only by extra newlines" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "Hello\n\nWorld", idempotency_key: idempotency_key }
+        first_response = response.parsed_body
+        expect(response).to have_http_status(:success)
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Hello\n\n\n\nWorld", idempotency_key: idempotency_key }
+        end.not_to change { user.comments.count }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to eq(first_response["comment"]["id"])
+      end
+
+      it "handles concurrent inserts via RecordNotUnique" do
+        idempotency_key = SecureRandom.uuid
+        content = "Concurrent note"
+
+        allow_any_instance_of(Comment).to receive(:save).and_wrap_original do |method, *args|
+          method.call(*args)
+          raise ActiveRecord::RecordNotUnique
+        end
+
+        post :create_comment, params: { email: user.email, content: content, idempotency_key: idempotency_key }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to be_present
+        expect(response.parsed_body["comment"]["content"]).to eq(content)
       end
     end
   end
