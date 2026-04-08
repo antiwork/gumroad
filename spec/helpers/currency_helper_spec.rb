@@ -63,6 +63,13 @@ describe CurrencyHelper do
       expect(string_to_price_cents(:usd, "100.00")).to eq 10_000
       expect(string_to_price_cents(:usd, "0.50")).to eq 50
     end
+
+    it "treats strings without digits as zero" do
+      expect(string_to_price_cents(:usd, ".")).to eq 0
+      expect(string_to_price_cents(:usd, "..")).to eq 0
+      expect(string_to_price_cents(:usd, "")).to eq 0
+      expect(string_to_price_cents(:usd, "abc")).to eq 0
+    end
   end
 
   describe "#unit_scaling_factor" do
