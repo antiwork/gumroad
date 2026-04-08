@@ -35,7 +35,7 @@ export default function AccountStatusSection({
   const payoutPausedReason =
     payoutsPausedBy === "stripe" ? (
       <>
-        Payouts paused by payment processor.{" "}
+        Your payouts have been paused by the payment processor.{" "}
         <a href="/settings/payments/remediation" className="underline">
           Complete pending verification requirements
         </a>{" "}
@@ -43,8 +43,8 @@ export default function AccountStatusSection({
       </>
     ) : payoutsPausedBy === "admin" ? (
       <>
-        {`Payouts paused by Gumroad.${payoutsPausedForReason ? ` Reason: ${payoutsPausedForReason}` : ""}`} If you have
-        questions,{" "}
+        {`Your payouts have been paused by Gumroad.${payoutsPausedForReason ? ` ${payoutsPausedForReason}` : ""}`} If you
+        have questions,{" "}
         <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
           contact support
         </a>
@@ -52,7 +52,7 @@ export default function AccountStatusSection({
       </>
     ) : payoutsPausedBy === "system" ? (
       <>
-        Payouts paused for a security review. If you have questions,{" "}
+        Your payouts have been paused for a security review. If you have questions,{" "}
         <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
           contact support
         </a>
@@ -65,7 +65,7 @@ export default function AccountStatusSection({
       <div className="flex flex-col gap-4">
         {showVerificationSection ? (
           <StripeConnectEmbeddedNotificationBanner />
-        ) : (
+        ) : !accountStatus.is_suspended ? (
           <div className="flex flex-col">
             <Alert role="status" variant="success">
               Your identity has been verified!
@@ -82,17 +82,21 @@ export default function AccountStatusSection({
               </span>
             </div>
           </div>
-        )}
+        ) : null}
 
         {accountStatus.is_suspended && accountStatus.suspension_reason ? (
-          <Alert variant="danger">{accountStatus.suspension_reason}</Alert>
+          <Alert variant="danger">
+            {accountStatus.suspension_reason}{" "}
+            If you have questions,{" "}
+            <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
+              contact support
+            </a>
+            .
+          </Alert>
         ) : null}
 
         {payoutPausedReason ? (
-          <Alert variant="warning">
-            <strong>Payout status: Paused</strong>
-            <p>{payoutPausedReason}</p>
-          </Alert>
+          <Alert variant="warning">{payoutPausedReason}</Alert>
         ) : null}
 
         {accountStatus.compliance_actions.length > 0 ? (

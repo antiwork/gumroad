@@ -271,7 +271,7 @@ class SettingsPresenter
       end
 
       gumroad_status = if is_under_review && !is_suspended
-        "Your account is under review. Payouts may be held until the review is complete."
+        "Your account is under review and payouts are on hold until it's resolved."
       end
 
       {
