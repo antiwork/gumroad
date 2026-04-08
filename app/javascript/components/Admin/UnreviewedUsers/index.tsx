@@ -88,12 +88,12 @@ const UnreviewedUsersPage = () => {
               <TableCell>
                 <div className="flex flex-wrap gap-1">
                   {user.user_risk_state === "not_reviewed" ? (
-                    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                    <span className="inline-flex items-center rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
                       unreviewed
                     </span>
                   ) : null}
                   {user.high_balance ? (
-                    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                    <span className="inline-flex items-center rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-200">
                       high balance
                     </span>
                   ) : null}
