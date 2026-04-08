@@ -202,6 +202,33 @@ jobs:
         env:
           WEB_REPO: quay.io/gumroad/web
 
+      - name: Verify Shakapacker manifest
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --entrypoint="" \
+            $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+            bash -c '
+              MANIFEST=/app/public/packs-test/manifest.json
+              if [ ! -f "$MANIFEST" ]; then
+                echo "ERROR: Shakapacker manifest not found at $MANIFEST"
+                echo "Attempting to compile assets..."
+                cd /app && RAILS_ENV=test NODE_ENV=test bin/shakapacker
+                if [ ! -f "$MANIFEST" ]; then
+                  echo "FATAL: Asset compilation failed. manifest.json still missing."
+                  exit 1
+                fi
+              fi
+              for entry in design email; do
+                if ! grep -q "$entry" "$MANIFEST"; then
+                  echo "WARNING: $entry not found in manifest, recompiling..."
+                  cd /app && RAILS_ENV=test NODE_ENV=test bin/shakapacker
+                  break
+                fi
+              done
+              echo "Shakapacker manifest OK"
+            '
+
       - name: Run tests
         env:
           WEB_REPO: quay.io/gumroad/web
@@ -374,6 +401,33 @@ jobs:
               bundle exec rake db:prepare
         env:
           WEB_REPO: quay.io/gumroad/web
+
+      - name: Verify Shakapacker manifest
+        env:
+          WEB_REPO: quay.io/gumroad/web
+        run: |
+          docker run --rm --entrypoint="" \
+            $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+            bash -c '
+              MANIFEST=/app/public/packs-test/manifest.json
+              if [ ! -f "$MANIFEST" ]; then
+                echo "ERROR: Shakapacker manifest not found at $MANIFEST"
+                echo "Attempting to compile assets..."
+                cd /app && RAILS_ENV=test NODE_ENV=test bin/shakapacker
+                if [ ! -f "$MANIFEST" ]; then
+                  echo "FATAL: Asset compilation failed. manifest.json still missing."
+                  exit 1
+                fi
+              fi
+              for entry in design email; do
+                if ! grep -q "$entry" "$MANIFEST"; then
+                  echo "WARNING: $entry not found in manifest, recompiling..."
+                  cd /app && RAILS_ENV=test NODE_ENV=test bin/shakapacker
+                  break
+                fi
+              done
+              echo "Shakapacker manifest OK"
+            '
 
       - name: Run tests
         env:
