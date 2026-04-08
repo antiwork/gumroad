@@ -43,8 +43,8 @@ export default function AccountStatusSection({
       </>
     ) : payoutsPausedBy === "admin" ? (
       <>
-        {`Your payouts have been paused by Gumroad.${payoutsPausedForReason ? ` ${payoutsPausedForReason}` : ""}`} If you
-        have questions,{" "}
+        {`Your payouts have been paused by Gumroad.${payoutsPausedForReason ? ` ${payoutsPausedForReason}` : ""}`} If
+        you have questions,{" "}
         <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
           contact support
         </a>
@@ -86,8 +86,7 @@ export default function AccountStatusSection({
 
         {accountStatus.is_suspended && accountStatus.suspension_reason ? (
           <Alert variant="danger">
-            {accountStatus.suspension_reason}{" "}
-            If you have questions,{" "}
+            {accountStatus.suspension_reason} If you have questions,{" "}
             <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
               contact support
             </a>
@@ -95,9 +94,7 @@ export default function AccountStatusSection({
           </Alert>
         ) : null}
 
-        {payoutPausedReason ? (
-          <Alert variant="warning">{payoutPausedReason}</Alert>
-        ) : null}
+        {payoutPausedReason ? <Alert variant="warning">{payoutPausedReason}</Alert> : null}
 
         {accountStatus.compliance_actions.length > 0 ? (
           <Alert variant="warning">
