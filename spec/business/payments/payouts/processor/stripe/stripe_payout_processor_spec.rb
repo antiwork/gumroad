@@ -317,9 +317,9 @@ describe StripePayoutProcessor, :vcr do
     end
 
     it "raises an error and marks the payment as failed" do
-      expect {
+      expect do
         described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
-      }.to raise_error(RuntimeError, /Balance transaction not yet available/)
+      end.to raise_error(RuntimeError, /Balance transaction not yet available/)
       payment.reload
       expect(payment.state).to eq("failed")
     end
