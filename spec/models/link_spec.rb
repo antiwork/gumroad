@@ -2824,6 +2824,15 @@ describe Link, :vcr do
       expect(public_file2.scheduled_for_deletion_at).to be_within(5.seconds).of(10.minutes.from_now)
       expect(_another_product_public_file.reload.scheduled_for_deletion_at).to be_nil
     end
+
+    it "deletes a tiered membership even when tier categories are in an inconsistent state" do
+      product = create(:membership_product_with_preset_tiered_pricing)
+      product.tier_category.mark_deleted!
+      product.reload
+
+      expect { product.delete! }.not_to raise_error
+      expect(product.reload.deleted?).to be(true)
+    end
   end
 
   describe "#ordered_by_ids" do

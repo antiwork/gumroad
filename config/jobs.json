@@ -1,46 +1,66 @@
 {
   "jobs": [
     {
-      "slug": "senior-fullstack-engineer",
-      "title": "Senior Software Engineer",
+      "slug": "design-engineer",
+      "title": "Design Engineer",
       "salary": "$189k-$210k",
       "type": "Full-time",
-      "location": "New York",
-      "category": "Engineering",
-      "intro": "Gumroad is a profitable, independent, and venture-debt-free tool for creators. We've paid out over $1 billion. Now, we're growing a high-density team in New York to reclaim our spot as the #1 creator economy tool. To get there, our core engine the path from a customer's \"Buy\" button to a creator's bank account must be the most reliable and frictionless infrastructure on the internet.",
-      "role_summary": "You will own the integrity of the Gumroad economy. We process millions of dollars a week across every time zone. Your job is to ensure that code is fast, math is perfect, and money moves without fail.",
+      "location": "Remote (NYC visits 2-4x/year)",
+      "category": "Product",
+      "intro": "Gumroad is a profitable, independent tool for creators. We've paid out over $1 billion. We're growing a small, high-density team to build the #1 creator economy tool. **We're open to remote, but you must visit New York City and our office 2-4 times a year, or join us for team offsites in places like Bali, Hokkaido, Mexico, and more.** We don't separate engineering from design. We need people who can do both, and use AI to move faster than teams ten times our size.",
+      "role_summary": "You will own features end-to-end. From talking to creators, to designing the solution, to shipping production code, to measuring the impact. There is no handoff. You are the designer, the engineer, the PM, and the QA. You use AI tools (Claude Code, Cursor, Codex, etc.) to ship faster than anyone thought possible.",
       "responsibilities": [
         {
-          "title": "Full Stack development",
-          "description": "Build and maintain features across our entire stack, from database to user interface."
+          "title": "Talk to creators",
+          "description": "Understand what creators need by reading support tickets, talking to users, and studying how they use the product. The best features come from real problems."
         },
         {
-          "title": "Product ownership",
-          "description": "Take ownership of significant features and see them through from concept to production."
+          "title": "Design and ship",
+          "description": "Go from idea to production. Design the UI, write the code, deploy it, and iterate based on feedback. No wireframe handoffs, no waiting for someone else."
         },
         {
-          "title": "Code quality",
-          "description": "Write clean, maintainable code and contribute to our engineering best practices."
+          "title": "Use AI to move fast",
+          "description": "Use AI coding tools to handle the tedious parts so you can focus on the creative parts. We ship features in hours, not weeks."
         },
         {
-          "title": "Collaboration",
-          "description": "Work closely with designers, product managers, open source contributors, and other engineers to ship great products. Review code and provide thoughtful feedback."
+          "title": "Own the outcome",
+          "description": "You're not done when the PR merges. You're done when creators are using it and it's working. Monitor, iterate, and improve."
+        },
+        {
+          "title": "Work across the stack",
+          "description": "Ruby on Rails backend, React/TypeScript frontend, Tailwind CSS. You don't need to be an expert in all of it, but you need to be willing to work anywhere the problem takes you."
         }
       ],
       "stack": [
-        { "name": "Backend", "tech": "Ruby on Rails." },
-        { "name": "Frontend", "tech": "React, TypeScript, Inertia.js, Tailwind CSS." },
-        { "name": "Data", "tech": "MySQL, Elasticsearch, MongoDB, Redis." },
-        { "name": "Infrastructure", "tech": "AWS, Hetzner, Docker, GitHub." }
+        {
+          "name": "Backend",
+          "tech": "Ruby on Rails."
+        },
+        {
+          "name": "Frontend",
+          "tech": "React, TypeScript, Inertia.js, Tailwind CSS."
+        },
+        {
+          "name": "Data",
+          "tech": "MySQL, Elasticsearch, MongoDB, Redis."
+        },
+        {
+          "name": "AI tools",
+          "tech": "Claude Code, Cursor, Codex, and whatever else makes you faster."
+        },
+        {
+          "name": "Infrastructure",
+          "tech": "AWS, Docker, GitHub."
+        }
       ],
       "how_to_apply": [
         {
           "step": "Email us.",
-          "description": "Send a few sentences about your background and why you want to join Gumroad to jobs@antiwork.com."
+          "description": "Send a few sentences about what you've built and why you want to join Gumroad to gumclaw@gumroad.com."
         },
         {
           "step": "Show your work.",
-          "description": "Include a list of things you've built (with URLs). To skip the line, find an open issue in our GitHub repo, fix it, and get the PR merged."
+          "description": "Share things you've shipped end-to-end (with URLs). Bonus: find an open issue in our GitHub repo, fix it, and get the PR merged."
         },
         {
           "step": "Initial conversation.",
@@ -48,58 +68,7 @@
         },
         {
           "step": "Paid trial.",
-          "description": "4–6 week paid work trial where you ship real work for real creators. If it's a fit, you join the team."
-        }
-      ]
-    },
-    {
-      "slug": "senior-designer",
-      "title": "Senior Designer",
-      "salary": "$189k-$210k",
-      "type": "Full-time",
-      "location": "New York",
-      "category": "Design",
-      "intro": "Gumroad is a profitable, independent, and venture-debt-free tool for creators. We've paid out over $1 billion. Now, we're growing a high-density team in New York to reclaim our spot as the #1 creator economy tool. To get there, we need world-class design that makes every creator interaction intuitive, delightful, and effortless.",
-      "role_summary": "You will own the look, feel, and usability of Gumroad. Every screen a creator touches, every flow a buyer completes — that's your canvas. Your job is to ensure the experience is clear, beautiful, and gets out of the way.",
-      "responsibilities": [
-        {
-          "title": "End-to-end product design",
-          "description": "Own the design of creator-facing features from concept to launch, ensuring every pixel serves our creators."
-        },
-        {
-          "title": "Design systems and consistency",
-          "description": "Build and maintain design systems that scale across web and mobile experiences."
-        },
-        {
-          "title": "User research and iteration",
-          "description": "Talk to creators, understand their needs, and rapidly iterate on designs based on real feedback."
-        },
-        {
-          "title": "Collaboration",
-          "description": "Work closely with engineers, open source contributors, and other designers to ship polished products."
-        }
-      ],
-      "stack": [
-        { "name": "Design tools", "tech": "Figma, prototyping." },
-        { "name": "Frontend basics", "tech": "HTML, CSS, understanding of React and Tailwind." },
-        { "name": "Design systems", "tech": "Component libraries, tokens, documentation." }
-      ],
-      "how_to_apply": [
-        {
-          "step": "Email us.",
-          "description": "Send a few sentences about your background and why you want to join Gumroad to jobs@antiwork.com."
-        },
-        {
-          "step": "Show your work.",
-          "description": "Share your portfolio with case studies showing your design process and shipped work. Include links to live products you've designed."
-        },
-        {
-          "step": "Initial conversation.",
-          "description": "If your work stands out, we'll have a conversation to see if we're a mutual fit."
-        },
-        {
-          "step": "Paid trial.",
-          "description": "4–6 week paid work trial where you ship real work for real creators. If it's a fit, you join the team."
+          "description": "4\u20136 week paid work trial where you ship real features for real creators. If it's a fit, you join the team."
         }
       ]
     },
@@ -110,6 +79,7 @@
       "type": "Full-time",
       "location": "New York",
       "category": "Support",
+      "status": "filled",
       "intro": "Gumroad is a profitable, independent, and venture-debt-free tool for creators. We've paid out over $1 billion. Now, we're growing a high-density team in New York to reclaim our spot as the #1 creator economy tool. To get there, we need creators to feel supported, heard, and empowered to succeed on our platform.",
       "role_summary": "You will be the voice of Gumroad to our creators. We serve thousands of creators across every time zone. Your job is to ensure that every creator gets the help they need, when they need it, so they can focus on what they do best.",
       "responsibilities": [
@@ -134,7 +104,7 @@
       "how_to_apply": [
         {
           "step": "Email us.",
-          "description": "Send a few sentences about your background and why you want to join Gumroad to jobs@antiwork.com."
+          "description": "Send a few sentences about your background and why you want to join Gumroad to gumclaw@gumroad.com."
         },
         {
           "step": "Show your work.",
@@ -146,7 +116,7 @@
         },
         {
           "step": "Paid trial.",
-          "description": "4–6 week paid work trial where you support real creators. If it's a fit, you join the team."
+          "description": "4\u20136 week paid work trial where you support real creators. If it's a fit, you join the team."
         }
       ]
     }

@@ -19,30 +19,6 @@ describe Checkout::Upsells::ProductsController do
       expect(response.parsed_body.map(&:deep_symbolize_keys)).to eq(
         [
           {
-            id: product1.external_id,
-            name: "Product 1",
-            permalink: product1.unique_permalink,
-            price_cents: 1000,
-            currency_code: "usd",
-            review_count: 1,
-            average_rating: 5.0,
-            native_type: "digital",
-            thumbnail_url: nil,
-            options: []
-          },
-          {
-            id: product2.external_id,
-            name: "Product 2",
-            permalink: product2.unique_permalink,
-            price_cents: 2000,
-            currency_code: "eur",
-            review_count: 0,
-            average_rating: 0.0,
-            native_type: "physical",
-            thumbnail_url: nil,
-            options: []
-          },
-          {
             id: versioned_product.external_id,
             name: "Versioned Product",
             permalink: versioned_product.unique_permalink,
@@ -74,9 +50,43 @@ describe Checkout::Upsells::ProductsController do
                 duration_in_minutes: nil
               }
             ]
+          },
+          {
+            id: product2.external_id,
+            name: "Product 2",
+            permalink: product2.unique_permalink,
+            price_cents: 2000,
+            currency_code: "eur",
+            review_count: 0,
+            average_rating: 0.0,
+            native_type: "physical",
+            thumbnail_url: nil,
+            options: []
+          },
+          {
+            id: product1.external_id,
+            name: "Product 1",
+            permalink: product1.unique_permalink,
+            price_cents: 1000,
+            currency_code: "usd",
+            review_count: 1,
+            average_rating: 5.0,
+            native_type: "digital",
+            thumbnail_url: nil,
+            options: []
           }
         ]
       )
+    end
+
+    it "limits results to MAX_PRODUCTS" do
+      sign_in seller
+
+      stub_const("Checkout::Upsells::ProductsController::MAX_PRODUCTS", 2)
+      get :index
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.length).to eq(2)
     end
 
     context "with custom domain" do
@@ -92,33 +102,9 @@ describe Checkout::Upsells::ProductsController do
         expect(response.parsed_body.map(&:deep_symbolize_keys)).to eq(
           [
             {
-              id: product1.external_id,
-              name: "Product 1",
-              permalink: product1.unique_permalink,
-              price_cents: 1000,
-              currency_code: "usd",
-              review_count: 1,
-              average_rating: 5.0,
-              native_type: "digital",
-              thumbnail_url: nil,
-              options: []
-            },
-            {
-              id: product2.external_id,
-              name: "Product 2",
-              permalink: product2.unique_permalink,
-              price_cents: 2000,
-              currency_code: "eur",
-              review_count: 0,
-              average_rating: 0.0,
-              native_type: "physical",
-              thumbnail_url: nil,
-              options: []
-            },
-            {
               id: versioned_product.external_id,
-              permalink: versioned_product.unique_permalink,
               name: "Versioned Product",
+              permalink: versioned_product.unique_permalink,
               price_cents: 3000,
               currency_code: "usd",
               review_count: 0,
@@ -147,6 +133,30 @@ describe Checkout::Upsells::ProductsController do
                   duration_in_minutes: nil
                 }
               ]
+            },
+            {
+              id: product2.external_id,
+              name: "Product 2",
+              permalink: product2.unique_permalink,
+              price_cents: 2000,
+              currency_code: "eur",
+              review_count: 0,
+              average_rating: 0.0,
+              native_type: "physical",
+              thumbnail_url: nil,
+              options: []
+            },
+            {
+              id: product1.external_id,
+              name: "Product 1",
+              permalink: product1.unique_permalink,
+              price_cents: 1000,
+              currency_code: "usd",
+              review_count: 1,
+              average_rating: 5.0,
+              native_type: "digital",
+              thumbnail_url: nil,
+              options: []
             }
           ]
         )
