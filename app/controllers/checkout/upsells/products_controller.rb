@@ -13,7 +13,7 @@ class Checkout::Upsells::ProductsController < ApplicationController
         thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
         display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } }
       )
-      .order(created_at: :desc)
+      .order(created_at: :desc, id: :desc)
       .limit(MAX_PRODUCTS)
     render json: products.map { |product| Checkout::Upsells::ProductPresenter.new(product).product_props }
   end
