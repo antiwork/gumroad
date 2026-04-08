@@ -9,7 +9,11 @@ class Checkout::Upsells::ProductsController < ApplicationController
     seller = user_by_domain(request.host) || current_seller
     products = seller.products
       .eligible_for_content_upsells
-      .includes(thumbnail_alive: { file_attachment: :blob }, display_asset_previews: { file_attachment: :blob })
+      .includes(
+        thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
+        display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } }
+      )
+      .order(created_at: :desc)
       .limit(MAX_PRODUCTS)
     render json: products.map { |product| Checkout::Upsells::ProductPresenter.new(product).product_props }
   end
