@@ -272,6 +272,14 @@ describe AssetPreview, :vcr do
         expect(asset_preview.display_height).to eq(210)
       end
 
+      describe "#retina_variant" do
+        it "falls back to original file URL when image processing times out" do
+          allow(asset_preview.file).to receive(:variant).and_raise(Timeout::Error)
+
+          expect(asset_preview.url_from_file(style: :retina)).to eq(asset_preview.file.url)
+        end
+      end
+
       describe "#url" do
         it "returns retina variant" do
           expect(asset_preview.url).to match(asset_preview.retina_variant.key)

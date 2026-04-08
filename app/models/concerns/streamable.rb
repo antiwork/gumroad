@@ -45,7 +45,11 @@ module Streamable
     hls_key_prefix = "#{File.dirname(playlist_key)}/" # Extract path without the filename
 
     playlist_s3_object = Aws::S3::Resource.new.bucket(S3_BUCKET).object(playlist_key)
-    playlist = playlist_s3_object.get.body.read
+    begin
+      playlist = playlist_s3_object.get.body.read
+    rescue Aws::S3::Errors::NoSuchKey
+      return nil
+    end
     playlist_content_with_signed_urls = ""
 
     playlist.split("\n").each do |playlist_line|

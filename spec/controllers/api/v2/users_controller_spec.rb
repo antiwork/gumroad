@@ -117,6 +117,15 @@ describe Api::V2::UsersController do
             .where("created_at <= ?", Time.zone.at(@params[:before].to_i)).order("created_at DESC").limit(50).map(&:as_json_for_ifttt)
         }.to_json))
       end
+
+      it "eager loads associations for multiple sales" do
+        create_list(:purchase, 3, link: @product, seller: @user)
+
+        get @action, params: @params
+
+        expect(response).to be_successful
+        expect(response.parsed_body["data"].length).to eq(4)
+      end
     end
   end
 end

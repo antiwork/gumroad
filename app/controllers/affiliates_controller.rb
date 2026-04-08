@@ -206,9 +206,11 @@ class AffiliatesController < Sellers::BaseController
       else
         true
       end
-      affiliate.save
-
-      return { success: false, message: affiliate.errors.full_messages.first } if affiliate.errors.present?
+      unless affiliate.save
+        message = affiliate.errors.full_messages.first
+        message ||= affiliate.product_affiliates.flat_map { _1.errors.full_messages }.first
+        return { success: false, message: message || "Failed to save affiliate" }
+      end
 
       if is_editing_products
         AffiliateMailer.notify_direct_affiliate_of_updated_products(affiliate.id).deliver_later

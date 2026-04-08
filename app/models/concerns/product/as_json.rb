@@ -188,7 +188,7 @@ module Product::AsJson
         creator_profile_picture_url: user.avatar_url,
         creator_profile_url: user.profile_url,
         preview_url: preview_oembed_thumbnail_url || preview_url || "",
-        thumbnail_url: thumbnail&.alive&.url.presence,
+        thumbnail_url: thumbnail_or_cover_url,
         preview_oembed_url: mobile_oembed_url,
         preview_height: preview_height_for_mobile,
         preview_width: preview_width_for_mobile,

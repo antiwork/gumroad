@@ -44,7 +44,19 @@ RSpec.describe StripeAccountSessionsController do
         )
       end
 
-      it "handles stripe errors" do
+      it "handles 'No such account' error without notifying Sentry" do
+        expect(Stripe::AccountSession).to receive(:create).and_raise(Stripe::InvalidRequestError.new("No such account: acct_123", "account"))
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        post :create
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq(
+          "success" => false,
+          "error_message" => "Your Stripe account is no longer active. Please reconnect your Stripe account."
+        )
+      end
+
+      it "handles unexpected Stripe errors" do
         expect(Stripe::AccountSession).to receive(:create).and_raise(StandardError.new("Stripe error"))
         expect(ErrorNotifier).to receive(:notify).with("Failed to create stripe account session for user #{seller.id}: Stripe error")
 

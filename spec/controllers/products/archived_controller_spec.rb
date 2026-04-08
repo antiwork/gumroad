@@ -84,6 +84,39 @@ describe Products::ArchivedController, inertia: true do
       expect(membership.purchase_disabled_at).to be_present
     end
 
+    context "when archiving a call product without durations" do
+      let(:call_product) do
+        seller.update_column(:created_at, User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+        create(:call_product, user: seller)
+      end
+
+      before do
+        call_product.variant_categories.first.variants.destroy_all
+      end
+
+      it "archives successfully" do
+        post :create, params: { id: call_product.unique_permalink }, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(call_product.reload.archived?).to be(true)
+      end
+    end
+
+    context "when archiving a product with empty variant categories" do
+      let(:product_with_versions) { create(:product, user: seller) }
+
+      before do
+        create(:variant_category, link: product_with_versions)
+      end
+
+      it "archives successfully" do
+        post :create, params: { id: product_with_versions.unique_permalink }, as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(product_with_versions.reload.archived?).to be(true)
+      end
+    end
+
     it "does not change purchase_disabled_at on an already unpublished product" do
       original_disabled_at = 1.week.ago.floor
       membership.update!(purchase_disabled_at: original_disabled_at)

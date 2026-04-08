@@ -119,6 +119,7 @@ export const GetSales = () => (
       "license_key": "83DB262A-C19D3B06-A5235A6B-8C079166",
       "license_id": "bEtKQ3Zu9SgNopem0-ZywA==",
       "license_disabled": false,
+      "license_uses": 3,
       "affiliate": {
         "email": "affiliate@example.com",
         "amount": "$2.50"
@@ -203,6 +204,7 @@ export const GetSale = () => (
     "license_key": "83DB262A-C19D3B06-A5235A6B-8C079166",
     "license_id": "bEtKQ3Zu9SgNopem0-ZywA==",
     "license_disabled": false,
+    "license_uses": 3,
     "affiliate": {
       "email": "affiliate@example.com",
       "amount": "$2.50"
@@ -298,6 +300,7 @@ export const MarkSaleAsShipped = () => (
     "license_key": "740A36FE-80134D88-9998290C-1B30910C",
     "license_id": "mN7CdHiwHaR9FlxKvF-n-g==",
     "license_disabled": false,
+    "license_uses": 3,
     "sku_id": "6Oo2MGSSagZU5naeWaDaNQ==",
     "sku_external_id": "6Oo2MGSS1gaU5a5eWaDaNQ==",
     "affiliate": {

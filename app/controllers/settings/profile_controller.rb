@@ -16,7 +16,11 @@ class Settings::ProfileController < Settings::BaseController
 
     if permitted_params[:profile_picture_blob_id].present?
       return respond_error("The logo is already removed. Please refresh the page and try again.") if ActiveStorage::Blob.find_signed(permitted_params[:profile_picture_blob_id]) .nil?
-      current_seller.avatar.attach permitted_params[:profile_picture_blob_id]
+      begin
+        current_seller.avatar.attach permitted_params[:profile_picture_blob_id]
+      rescue ActiveRecord::RecordNotUnique
+        current_seller.avatar.reload
+      end
     elsif permitted_params.has_key?(:profile_picture_blob_id) && current_seller.avatar.attached?
       current_seller.avatar.purge
     end

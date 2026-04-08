@@ -272,6 +272,14 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "includes license_uses in the response for a purchase with a license key" do
+        purchase_with_license = create(:purchase, :with_license, purchaser: @purchaser, link: @product)
+        purchase_with_license.license.update!(uses: 5)
+
+        get :show, params: @params.merge(id: purchase_with_license.external_id)
+        expect(response.parsed_body["sale"]["license_uses"]).to eq 5
+      end
+
       it "does not return a sale that does not belong to the seller" do
         @params.merge!(id: @purchase_by_seller.external_id)
         get :show, params: @params

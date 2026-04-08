@@ -490,6 +490,18 @@ describe ProductFile do
       expect(file.hls_playlist).to include("attachments/0000134abcdefghhijkl354sfdg/chapter+2/hls/hls_480p_.m3u8")
     end
 
+    it "returns nil when the S3 playlist object does not exist" do
+      s3_object = double("s3_object")
+      allow(s3_object).to receive(:get).and_raise(Aws::S3::Errors::NoSuchKey.new(nil, "The specified key does not exist."))
+      s3_bucket = double("s3_bucket")
+      allow(s3_bucket).to receive(:object).and_return(s3_object)
+      s3_resource = double("s3_resource")
+      allow(s3_resource).to receive(:bucket).and_return(s3_bucket)
+      allow(Aws::S3::Resource).to receive(:new).and_return(s3_resource)
+
+      expect(@file_1.hls_playlist).to be_nil
+    end
+
     it "escapes the newlines in the filename" do
       file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/12345/abcd12345/original/YouTube + Marketing Is Powerful\n.mp4", is_transcoded_for_hls: true)
       @multifile_product.product_files << file

@@ -65,12 +65,12 @@ describe("Product panel on creator profile", type: :system, js: true) do
     expect(page).to_not have_product_card(@hideme)
   end
 
-  it "shows sold out banner on product card when max_purchase_count has been reached" do
+  it "does not show inventory count on profile page product cards" do
     @a.max_purchase_count = 3
     @a.save!
     3.times { create(:purchase, link: @a) }
     login_as(create(:user))
     visit("/#{@creator.username}")
-    expect(find_product_card(@a)).to have_text("0 left")
+    expect(find_product_card(@a)).not_to have_text("0 left")
   end
 end

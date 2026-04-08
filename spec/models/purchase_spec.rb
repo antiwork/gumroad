@@ -3255,6 +3255,7 @@ describe Purchase, :vcr do
           license_key: license.serial,
           license_id: license.external_id,
           license_disabled: false,
+          license_uses: 0,
           is_multiseat_license: false,
         })
       end
@@ -3268,6 +3269,7 @@ describe Purchase, :vcr do
             license_key: license.serial,
             license_id: license.external_id,
             license_disabled: false,
+            license_uses: 0,
             is_multiseat_license: false
           })
         end
@@ -3283,6 +3285,7 @@ describe Purchase, :vcr do
             license_key: license.serial,
             license_id: license.external_id,
             license_disabled: false,
+            license_uses: 0,
             is_multiseat_license: true
           })
         end

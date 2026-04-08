@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 class AnalyticsController < Sellers::BaseController
+  MAX_BY_STATE_DATE_RANGE_DAYS = 365
+
   before_action :set_time_range, only: %i[data_by_date data_by_state data_by_referral]
+  before_action :clamp_date_range_for_by_state, only: :data_by_state
 
   after_action :set_dashboard_preference_to_sales, only: :index
   before_action :check_payment_details, only: :index
@@ -62,6 +65,12 @@ class AnalyticsController < Sellers::BaseController
       end
       @start_date = start_date
       @end_date = end_time.to_date
+    end
+
+    def clamp_date_range_for_by_state
+      if (@end_date - @start_date).to_i > MAX_BY_STATE_DATE_RANGE_DAYS
+        @start_date = @end_date - MAX_BY_STATE_DATE_RANGE_DAYS.days
+      end
     end
 
     def creator_analytics_web

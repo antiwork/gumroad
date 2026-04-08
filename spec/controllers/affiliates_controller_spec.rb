@@ -105,6 +105,22 @@ describe AffiliatesController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(new_affiliate_path)
       end
+
+      it "surfaces save failures when save returns false" do
+        allow_any_instance_of(DirectAffiliate).to receive(:save).and_return(false)
+
+        post :create, params: {
+          affiliate: {
+            email: affiliate_user.email,
+            fee_percent: 10,
+            apply_to_all_products: true,
+            products: [{ id: product.external_id_numeric, enabled: true }]
+          }
+        }
+
+        expect(response).to redirect_to(new_affiliate_path)
+        expect(seller.direct_affiliates.count).to eq(0)
+      end
     end
 
     describe "PATCH update" do
@@ -120,6 +136,45 @@ describe AffiliatesController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(affiliates_path)
         expect(flash[:notice]).to eq("Affiliate updated successfully")
+      end
+
+      it "updates per-product commissions when apply_to_all_products is false" do
+        second_product = create(:product, user: seller)
+
+        patch :update, params: {
+          id: affiliate.external_id,
+          affiliate: {
+            email: affiliate_user.email,
+            fee_percent: 10,
+            apply_to_all_products: false,
+            products: [
+              { id: product.external_id_numeric, enabled: true, fee_percent: 20 },
+              { id: second_product.external_id_numeric, enabled: true, fee_percent: 30 },
+            ]
+          }
+        }, as: :json
+
+        expect(response).to redirect_to(affiliates_path)
+        affiliate.reload
+        expect(affiliate.apply_to_all_products).to be false
+        product_affiliates = affiliate.product_affiliates.order(:link_id)
+        expect(product_affiliates.map(&:affiliate_basis_points)).to contain_exactly(2000, 3000)
+      end
+
+      it "surfaces save failures when save returns false" do
+        allow_any_instance_of(DirectAffiliate).to receive(:save).and_return(false)
+
+        patch :update, params: {
+          id: affiliate.external_id,
+          affiliate: {
+            email: affiliate_user.email,
+            fee_percent: 15,
+            apply_to_all_products: true,
+            products: [{ id: product.external_id_numeric, enabled: true }]
+          }
+        }
+
+        expect(response).to redirect_to(edit_affiliate_path(affiliate))
       end
 
       it "returns 404 for non-existent affiliate" do

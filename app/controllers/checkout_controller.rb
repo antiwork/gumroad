@@ -99,6 +99,8 @@ class CheckoutController < ApplicationController
       true
     end
 
+    RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS = 10
+
     def recommended_products
       args = {
         purchaser: logged_in_user,
@@ -108,16 +110,21 @@ class CheckoutController < ApplicationController
         recommendation_type: params[:recommendation_type],
       }
 
-      RecommendedProducts::CheckoutService.fetch_for_cart(**args).map do |product_info|
-        ProductPresenter.card_for_web(
-          product: product_info.product,
-          request:,
-          recommended_by: product_info.recommended_by,
-          target: product_info.target,
-          recommender_model_name: product_info.recommender_model_name,
-          affiliate_id: product_info.affiliate_id,
-        )
+      Timeout.timeout(RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS) do
+        RecommendedProducts::CheckoutService.fetch_for_cart(**args).map do |product_info|
+          ProductPresenter.card_for_web(
+            product: product_info.product,
+            request:,
+            recommended_by: product_info.recommended_by,
+            target: product_info.target,
+            recommender_model_name: product_info.recommender_model_name,
+            affiliate_id: product_info.affiliate_id,
+          )
+        end
       end
+    rescue Timeout::Error
+      Rails.logger.warn("[CheckoutController] Recommended products timed out after #{RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS}s")
+      []
     end
 
     def update_permitted_params

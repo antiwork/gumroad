@@ -71,7 +71,7 @@ DENYLIST = %w[ a about account activate add admin administrator api app apps
 INTERNET_EXCEPTIONS = [SocketError, Errno::ECONNREFUSED, Errno::ECONNRESET, Errno::ENETUNREACH, Errno::EHOSTUNREACH,
                        Errno::EADDRNOTAVAIL, EOFError, URI::InvalidURIError, Addressable::URI::InvalidURIError,
                        Timeout::Error, Net::HTTPBadResponse, Net::OpenTimeout, Net::ReadTimeout, OpenURI::HTTPError,
-                       OpenSSL::SSL::SSLError, Faraday::ConnectionFailed].freeze
+                       OpenSSL::SSL::SSLError, Faraday::ConnectionFailed, SsrfFilter::Error].freeze
 
 FILE_REGEX = {
   archive: /rar|zip|tar/i,

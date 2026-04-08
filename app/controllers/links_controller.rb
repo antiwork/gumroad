@@ -11,7 +11,7 @@ class LinksController < ApplicationController
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
-  skip_before_action :check_suspended, only: %i[index show edit destroy increment_views track_user_action]
+
 
   PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
@@ -177,8 +177,9 @@ class LinksController < ApplicationController
   end
 
   def cart_items_count
+    cart = Cart.fetch_by(user: logged_in_user, browser_guid: cookies[:_gumroad_guid])
     render inertia: "Products/CartItemsCount", props: {
-      cart: CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid]).cart_props
+      cart_items_count: cart&.cart_products&.alive&.count || 0
     }
   end
 

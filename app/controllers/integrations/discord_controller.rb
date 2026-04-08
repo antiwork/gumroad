@@ -15,7 +15,7 @@ class Integrations::DiscordController < ApplicationController
 
       user = JSON.parse(user_response)
       render json: { success: true, server_id: server["id"], server_name: server["name"], username: user["username"] }
-    rescue Discordrb::Errors::CodeError
+    rescue Discordrb::Errors::CodeError, JSON::ParserError
       render json: { success: false }
     end
   end
@@ -46,7 +46,7 @@ class Integrations::DiscordController < ApplicationController
       else
         render json: { success: false }
       end
-    rescue Discordrb::Errors::CodeError, Discordrb::Errors::NoPermission
+    rescue Discordrb::Errors::CodeError, Discordrb::Errors::NoPermission, JSON::ParserError
       render json: { success: false }
     end
   end

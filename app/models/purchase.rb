@@ -541,8 +541,8 @@ class Purchase < ApplicationRecord
     .not_chargedback_or_chargedback_reversed
     .not_is_archived_original_subscription_purchase
     .not_rental_expired
-    .order(:id)
-    .includes(:preorder, :purchaser, :seller, :subscription, url_redirect: { purchase: { link: [:user, :thumbnail] } })
+    .order(id: :desc)
+    .includes(:preorder, :purchaser, :seller, :subscription, url_redirect: { purchase: { link: [:user, :thumbnail_alive, { display_asset_previews: [:file_attachment, :file_blob] }] } })
   }
   scope :for_library, lambda {
     all_success_states
@@ -3736,6 +3736,7 @@ class Purchase < ApplicationRecord
         license_key: selected_license.serial,
         license_id: selected_license.external_id,
         license_disabled: selected_license.disabled?,
+        license_uses: selected_license.uses,
         is_multiseat_license: is_multiseat_license?
       }
     end

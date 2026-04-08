@@ -223,6 +223,12 @@ class Link < ApplicationRecord
 
   enum subscription_duration: %i[monthly yearly quarterly biannually every_two_years]
   enum purchase_type: %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
+
+  def purchase_type=(value)
+    super(value)
+  rescue ArgumentError
+    super(:buy_only)
+  end
   enum free_trial_duration_unit: %i[week month]
 
   attr_json_data_accessor :excluded_sales_tax_regions, default: -> { [] }
@@ -1041,7 +1047,7 @@ class Link < ApplicationRecord
     attrs[:options] = options
     attrs[:option] = attrs[:options].find { |o| o[:id] == params[:option] } || (native_type != NATIVE_TYPE_COFFEE ? attrs[:options].find { |o| o[:quantity_left] != 0 } : nil)
     variant = attrs[:option] ? Variant.find_by_external_id(attrs[:option][:id]) : nil
-    prices = (is_tiered_membership ? variant : self).prices.is_buy.alive
+    prices = (is_tiered_membership && variant ? variant : self).prices.is_buy.alive
     recurrence = is_recurring_billing ? prices.find { |price| price.recurrence == params[:recurrence] } || prices.find { |price| price.recurrence == default_price_recurrence.recurrence } : nil
     attrs[:recurrence] = recurrence&.recurrence
     attrs[:pay_in_installments] = !!params[:pay_in_installments] && allow_installment_plan?
@@ -1245,6 +1251,7 @@ class Link < ApplicationRecord
 
     def default_offer_code_must_be_valid
       return unless default_offer_code.present?
+      return if being_marked_as_deleted?
 
       if !user.offer_codes.alive.where(id: default_offer_code.id).exists?
         errors.add(:default_offer_code, "must belong to your offer codes")
@@ -1316,6 +1323,7 @@ class Link < ApplicationRecord
 
     def alive_category_variants_presence
       return if deleted_at.present?
+      return if archived?
 
       has_alive_categories_without_variants = variant_categories.alive.left_joins(:alive_variants).where(base_variants: { id: nil }).exists?
 
@@ -1325,6 +1333,8 @@ class Link < ApplicationRecord
     end
 
     def valid_tier_version_structure
+      return if archived?
+
       if variant_categories.alive.size != 1
         errors.add(:base, "Memberships should only have one Tier version category.")
         raise LinkInvalid, "Memberships should only have one Tier version category."

@@ -78,6 +78,7 @@ class CreatorAnalytics::ProductPageViews
       {
         query: @query,
         size: 0,
+        timeout: "60s",
         aggs: { composite_agg: { composite: { size: ES_MAX_BUCKET_SIZE, sources: } } }
       }
     end

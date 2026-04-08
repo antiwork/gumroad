@@ -55,10 +55,6 @@ export default function AffiliatesEdit() {
   });
   const { data, setData, patch, processing, errors } = form;
 
-  const applyToAllProducts = data.affiliate.products.every(
-    (p) => p.enabled && p.fee_percent === data.affiliate.fee_percent,
-  );
-
   const uid = React.useId();
 
   const toggleAllProducts = (checked: boolean) => {
@@ -86,7 +82,7 @@ export default function AffiliatesEdit() {
     form.clearErrors();
 
     if (
-      applyToAllProducts &&
+      data.affiliate.apply_to_all_products &&
       (!data.affiliate.fee_percent || data.affiliate.fee_percent < 1 || data.affiliate.fee_percent > 75)
     ) {
       form.setError("affiliate.fee_percent", "Commission must be between 1% and 75%");
@@ -94,14 +90,14 @@ export default function AffiliatesEdit() {
       return;
     }
 
-    if (!applyToAllProducts && data.affiliate.products.every((p) => !p.enabled)) {
+    if (!data.affiliate.apply_to_all_products && data.affiliate.products.every((p) => !p.enabled)) {
       form.setError("affiliate.products", "Please enable at least one product");
       showAlert("Please enable at least one product", "error");
       return;
     }
 
     if (
-      !applyToAllProducts &&
+      !data.affiliate.apply_to_all_products &&
       data.affiliate.products.some((p) => p.enabled && (!p.fee_percent || p.fee_percent < 1 || p.fee_percent > 75))
     ) {
       form.setError("affiliate.products", "All enabled products must have commission between 1% and 75%");
@@ -157,7 +153,7 @@ export default function AffiliatesEdit() {
           data={data.affiliate}
           errors={errors}
           processing={processing}
-          applyToAllProducts={applyToAllProducts}
+          applyToAllProducts={data.affiliate.apply_to_all_products}
           uid={uid}
           headerText="The process of editing is almost identical to adding them. You can change their affiliate fee, the products they are assigned. Their affiliate link will not change."
           emailField={
@@ -170,18 +166,23 @@ export default function AffiliatesEdit() {
           }
           onToggleAllProducts={toggleAllProducts}
           onUpdateFeePercent={(value) => {
+            const updatedProducts = data.affiliate.products.map((p) => ({ ...p, fee_percent: value }));
             setData("affiliate", {
               ...data.affiliate,
               fee_percent: value,
-              products: data.affiliate.products.map((p) => ({ ...p, fee_percent: value })),
+              products: updatedProducts,
+              apply_to_all_products: updatedProducts.every((p) => p.enabled && p.fee_percent === value),
             });
           }}
           onUpdateDestinationUrl={(value) => setData("affiliate.destination_url", value)}
           onUpdateProduct={(productId, updates) => {
-            setData(
-              "affiliate.products",
-              data.affiliate.products.map((p) => (p.id === productId ? { ...p, ...updates } : p)),
-            );
+            const updatedProducts = data.affiliate.products.map((p) => (p.id === productId ? { ...p, ...updates } : p));
+            const allEnabled = updatedProducts.every((p) => p.enabled && p.fee_percent === data.affiliate.fee_percent);
+            setData("affiliate", {
+              ...data.affiliate,
+              products: updatedProducts,
+              apply_to_all_products: allEnabled,
+            });
           }}
         />
       </form>

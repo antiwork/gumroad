@@ -474,6 +474,29 @@ describe Link, :vcr do
     end
 
 
+    describe "#purchase_type=" do
+      it "accepts valid purchase_type values" do
+        link.purchase_type = :buy_only
+        expect(link.purchase_type).to eq("buy_only")
+
+        link.purchase_type = :rent_only
+        expect(link.purchase_type).to eq("rent_only")
+
+        link.purchase_type = :buy_and_rent
+        expect(link.purchase_type).to eq("buy_and_rent")
+      end
+
+      it "defaults to buy_only when given an invalid value" do
+        link.purchase_type = "buy"
+        expect(link.purchase_type).to eq("buy_only")
+      end
+
+      it "does not raise ArgumentError for invalid values" do
+        expect { link.purchase_type = "invalid" }.not_to raise_error
+        expect(link.purchase_type).to eq("buy_only")
+      end
+    end
+
     describe "delete_unused_prices" do
       let!(:product) { create(:product, purchase_type: :buy_and_rent, price_cents: 500, rental_price_cents: 100) }
       let(:buy_price) { product.prices.is_buy.first }
@@ -4797,6 +4820,24 @@ describe Link, :vcr do
             product.toggle_community_chat!(false)
           end.not_to change { product.reload.community_chat_enabled }
         end.not_to change { product.communities.count }
+      end
+    end
+  end
+
+  describe "#cart_item" do
+    context "when product is a tiered membership and the variant record is missing" do
+      let(:product) { create(:membership_product) }
+
+      before do
+        product.tier_category.variants.each { |v| v.update!(deleted_at: Time.current) }
+      end
+
+      it "falls back to the product prices instead of raising NoMethodError" do
+        result = product.cart_item({})
+
+        expect(result).to be_a(Hash)
+        expect(result).to have_key(:option)
+        expect(result).to have_key(:price)
       end
     end
   end
