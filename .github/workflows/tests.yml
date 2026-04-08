@@ -209,24 +209,23 @@ jobs:
           docker run --rm --entrypoint="" \
             $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
             bash -c '
+              set -euo pipefail
               MANIFEST=/app/public/packs-test/manifest.json
               if [ ! -f "$MANIFEST" ]; then
-                echo "ERROR: Shakapacker manifest not found at $MANIFEST"
-                echo "Attempting to compile assets..."
-                cd /app && RAILS_ENV=test NODE_ENV=test bin/shakapacker
-                if [ ! -f "$MANIFEST" ]; then
-                  echo "FATAL: Asset compilation failed. manifest.json still missing."
-                  exit 1
-                fi
+                echo "::error::Shakapacker manifest not found at $MANIFEST. The test Docker image may need rebuilding."
+                exit 1
               fi
-              for entry in design email; do
-                if ! grep -q "$entry" "$MANIFEST"; then
-                  echo "WARNING: $entry not found in manifest, recompiling..."
-                  cd /app && RAILS_ENV=test NODE_ENV=test bin/shakapacker
-                  break
+              MISSING=()
+              for key in "email.css" "design.css"; do
+                if ! jq -e ".\"$key\"" "$MANIFEST" > /dev/null 2>&1; then
+                  MISSING+=("$key")
                 fi
               done
-              echo "Shakapacker manifest OK"
+              if [ ${#MISSING[@]} -gt 0 ]; then
+                echo "::error::Shakapacker manifest is missing entries: ${MISSING[*]}. The test Docker image cache is likely stale — rebuild with make build_test."
+                exit 1
+              fi
+              echo "Shakapacker manifest OK — all expected entries present"
             '
 
       - name: Run tests
@@ -409,24 +408,23 @@ jobs:
           docker run --rm --entrypoint="" \
             $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
             bash -c '
+              set -euo pipefail
               MANIFEST=/app/public/packs-test/manifest.json
               if [ ! -f "$MANIFEST" ]; then
-                echo "ERROR: Shakapacker manifest not found at $MANIFEST"
-                echo "Attempting to compile assets..."
-                cd /app && RAILS_ENV=test NODE_ENV=test bin/shakapacker
-                if [ ! -f "$MANIFEST" ]; then
-                  echo "FATAL: Asset compilation failed. manifest.json still missing."
-                  exit 1
-                fi
+                echo "::error::Shakapacker manifest not found at $MANIFEST. The test Docker image may need rebuilding."
+                exit 1
               fi
-              for entry in design email; do
-                if ! grep -q "$entry" "$MANIFEST"; then
-                  echo "WARNING: $entry not found in manifest, recompiling..."
-                  cd /app && RAILS_ENV=test NODE_ENV=test bin/shakapacker
-                  break
+              MISSING=()
+              for key in "email.css" "design.css"; do
+                if ! jq -e ".\"$key\"" "$MANIFEST" > /dev/null 2>&1; then
+                  MISSING+=("$key")
                 fi
               done
-              echo "Shakapacker manifest OK"
+              if [ ${#MISSING[@]} -gt 0 ]; then
+                echo "::error::Shakapacker manifest is missing entries: ${MISSING[*]}. The test Docker image cache is likely stale — rebuild with make build_test."
+                exit 1
+              fi
+              echo "Shakapacker manifest OK — all expected entries present"
             '
 
       - name: Run tests
