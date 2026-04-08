@@ -1,0 +1,13 @@
+<p><strong><%= @sender %></strong></p>
+
+<p><%= simple_format(@message_text) %></p>
+
+<% @attachments_data.each do |attachment| %>
+  <hr>
+  <% if attachment["fallback"].present? %>
+    <p><%= simple_format(attachment["fallback"]) %></p>
+  <% end %>
+  <% if attachment["text"].present? && attachment["text"] != attachment["fallback"] %>
+    <p><%= simple_format(attachment["text"]) %></p>
+  <% end %>
+<% end %>

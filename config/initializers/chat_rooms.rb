@@ -1,14 +1,16 @@
 # frozen_string_literal: true
 
+INTERNAL_NOTIFICATION_EMAIL = ENV.fetch("INTERNAL_NOTIFICATION_EMAIL", "hi@gumroad.com")
+
 CHAT_ROOMS = {
-  accounting: { slack: { channel: "accounting" } },
-  announcements: { slack: { channel: "gumroad-" } },
-  awards: { slack: { channel: "gumroad-awards" } },
-  internals_log: { slack: { channel: "gumroad-" } },
-  migrations: { slack: { channel: "gumroad-" } },
-  payouts: { slack: { channel: "gumroad-" } },
-  payments: { slack: { channel: "accounting" } },
-  risk: { slack: { channel: "gumroad-" } },
-  test: { slack: { channel: "test" } },
-  iffy_log: { slack: { channel: "gumroad-iffy-log" } },
+  accounting: { email: INTERNAL_NOTIFICATION_EMAIL },
+  announcements: { email: INTERNAL_NOTIFICATION_EMAIL },
+  awards: { email: INTERNAL_NOTIFICATION_EMAIL },
+  internals_log: { email: INTERNAL_NOTIFICATION_EMAIL },
+  migrations: { email: INTERNAL_NOTIFICATION_EMAIL },
+  payouts: { email: INTERNAL_NOTIFICATION_EMAIL },
+  payments: { email: INTERNAL_NOTIFICATION_EMAIL },
+  risk: { email: INTERNAL_NOTIFICATION_EMAIL },
+  test: { email: INTERNAL_NOTIFICATION_EMAIL },
+  iffy_log: { email: INTERNAL_NOTIFICATION_EMAIL },
 }.freeze
