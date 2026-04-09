@@ -233,13 +233,12 @@ const CustomerDetailPage = ({
   return (
     <div className="h-full">
       <PageHeader
-        title={
-          <div className="flex flex-wrap items-center gap-2">
-            {customer.product.name}
-            {statusPills}
-          </div>
-        }
-      />
+        title={customer.product.name}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {statusPills}
+        </div>
+      </PageHeader>
 
       {isLoading ? (
         <div className="flex flex-col gap-4 p-4 md:p-8 lg:columns-3 lg:block lg:space-y-8 lg:[column-gap:2rem]">
@@ -962,7 +961,7 @@ const AddressSection = ({
   };
 
   return (
-    <div className="grow">
+    <section className="grow">
       <div className="mb-4 flex items-center gap-2">
         <h3 className="grow">Shipping address</h3>
         {!isEditing ? (
@@ -1072,7 +1071,7 @@ const AddressSection = ({
           <p className="mt-2 text-sm text-muted">Shipping charged: {price}</p>
         </div>
       )}
-    </div>
+    </section>
   );
 };
 
@@ -1093,7 +1092,7 @@ const TrackingSection = ({
   };
 
   return (
-    <div className="grow">
+    <section className="grow">
       <h3 className="mb-4">Tracking information</h3>
       {tracking.shipped ? (
         tracking.url ? (
@@ -1118,7 +1117,7 @@ const TrackingSection = ({
           </Button>
         </Fieldset>
       )}
-    </div>
+    </section>
   );
 };
 

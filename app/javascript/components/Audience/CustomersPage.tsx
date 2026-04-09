@@ -456,6 +456,11 @@ const CustomersPage = ({
                             ) : null}
                           </>
                         )}
+                        {customer.utm_link ? (
+                          <Pill size="small" className="ml-2">
+                            UTM
+                          </Pill>
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         {createdAt.toLocaleDateString(userAgentInfo.locale, {
