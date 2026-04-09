@@ -311,17 +311,31 @@ class User < ApplicationRecord
 
   # risk state machine
   #
-  #  not_reviewed  → → → → → → → → → → → → → → compliant  ↔  ↔  ↔  ↔ ↕︎
-  #  ↓                                         ↓     ↑               ↕︎
-  #  ↓ ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ←     ↑               ↕︎
-  #  ↓                                               ↑               ↕︎
-  #  ↓            →  →  →  →  →  →  →  →  →  →  →  → ↑ →  →  →  →  → ↕
-  #  ↓           ↑                                   ↑               ↕︎
-  #  ↓→  flagged_for_fraud  → suspended_for_fraud  ↔ ↑ ↔  ↔  ↔  ↔ on_probation
-  #  ↓      ↓↑                                       ↑               ↕︎
-  #  ↓→   flagged_for_tos   →  suspended_for_tos   ↔ ↑ ↔ ↔ ↔ ↔ ↔ ↔ ↔ ↔
-  #  ↓          ↓                                    ↓               ↑
-  #  ↓ →  →  →  →  →  →  →  →  →  →  →  → →  →  →  → ↑ →  →  →  →  → →
+  # Events:
+  #   mark_compliant:          all → compliant
+  #   mark_not_reviewed:       on_probation → not_reviewed
+  #   flag_for_tos_violation:  not_reviewed, compliant, flagged_for_fraud → flagged_for_tos_violation
+  #   flag_for_fraud:          not_reviewed, compliant, flagged_for_tos_violation → flagged_for_fraud
+  #   suspend_for_fraud:       not_reviewed, compliant, on_probation, flagged_for_fraud, flagged_for_tos_violation → suspended_for_fraud
+  #   suspend_for_tos_violation: not_reviewed, compliant, on_probation, flagged_for_tos_violation, flagged_for_fraud → suspended_for_tos_violation
+  #   put_on_probation:        all → on_probation
+  #
+  #                        ┌─────────────────────────────────────────────────────────────────────┐
+  #                        │                     mark_compliant (from all)                       │
+  #                        ▼                                                                     │
+  #   not_reviewed ──────► compliant ◄──────────────────────────────────────────────── on_probation
+  #     │ │ │                │ │ │                                                     ▲ │ │ │
+  #     │ │ │                │ │ │          put_on_probation (from all) ──────────────►   │ │ │
+  #     │ │ │                │ │ │                                                       │ │ │
+  #     │ │ └── flag ───►  flagged_for_fraud  ◄──►  flagged_for_tos  ◄── flag ───────┘ │ │ │
+  #     │ │                  │ │                      │ │                                 │ │
+  #     │ └── suspend ──────►│ └── suspend ──────────►│ └── suspend ──► suspended_for_fraud │
+  #     │                    │                        │                       ▲              │
+  #     └──── suspend ──────►└──── suspend ──────────►└──── suspend ──► suspended_for_tos ◄──┘
+  #
+  #   Note: Both suspended states can transition back to compliant or on_probation.
+  #         flagged_for_fraud ↔ flagged_for_tos_violation (cross-flagging via flag events).
+  #         Any non-suspended state can be directly suspended (no flagging required).
   #
   state_machine(:user_risk_state, initial: :not_reviewed) do
     before_transition any => %i[flagged_for_fraud flagged_for_tos_violation suspended_for_fraud suspended_for_tos_violation],
