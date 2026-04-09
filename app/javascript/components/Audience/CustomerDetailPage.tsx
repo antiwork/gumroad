@@ -163,7 +163,7 @@ const CustomerDetailPage = ({
     try {
       await (type === "receipt" ? resendReceipt(id) : resendPost(customer.id, id));
       sentEmailIds.current.add(id);
-      showAlert(type === "receipt" ? "Receipt resent" : "Email sent", "success");
+      showAlert(type === "receipt" ? "Receipt resent" : "Email Sent", "success");
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
@@ -260,7 +260,7 @@ const CustomerDetailPage = ({
         {customer.is_additional_contribution ? (
           <div className="break-inside-avoid">
             <Alert role="status" variant="info">
-              This is an additional contribution, added to a previous purchase of this product.
+              <strong>Additional amount: </strong>This is an additional contribution, added to a previous purchase of this product.
             </Alert>
           </div>
         ) : null}
@@ -282,14 +282,14 @@ const CustomerDetailPage = ({
         {customer.is_preorder ? (
           <div className="break-inside-avoid">
             <Alert role="status" variant="info">
-              This is a pre-order authorization. The customer's card has not been charged yet.
+              <strong>Pre-order: </strong>This is a pre-order authorization. The customer's card has not been charged yet.
             </Alert>
           </div>
         ) : null}
         {customer.affiliate && customer.affiliate.type !== "Collaborator" ? (
           <div className="break-inside-avoid">
             <Alert role="status" variant="info">
-              An affiliate ({customer.affiliate.email}) helped you make this sale and received{" "}
+              <strong>Affiliate: </strong>An affiliate ({customer.affiliate.email}) helped you make this sale and received{" "}
               {customer.affiliate.amount}.
             </Alert>
           </div>
@@ -1094,7 +1094,7 @@ const TrackingSection = ({
 
   return (
     <div className="grow">
-      <h3 className="mb-4">Tracking</h3>
+      <h3 className="mb-4">Tracking information</h3>
       {tracking.shipped ? (
         tracking.url ? (
           <NavigationButton color="primary" href={tracking.url} target="_blank" className="w-full">
@@ -1347,31 +1347,41 @@ const ReviewSection = ({
   <Card asChild>
     <section>
       <CardContent asChild>
-        <header>
-          <h3 className="grow">Review</h3>
-        </header>
+        <h3>Review</h3>
       </CardContent>
-      <CardContent>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <div aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
-              <RatingStars rating={review.rating} />
-            </div>
-            {review.message ? <span className="text-muted">{review.message}</span> : null}
+      <CardContent asChild>
+        <section>
+          <h5 className="grow font-bold">Rating</h5>
+          <div aria-label={`${review.rating} ${review.rating === 1 ? "star" : "stars"}`}>
+            <RatingStars rating={review.rating} />
           </div>
-          <ReviewVideosSubsections review={review} onChange={onChange} />
-          {review.response ? (
-            <div>
-              <h5 className="font-bold">Your response</h5>
-              <p className="text-muted">{review.response.message}</p>
-            </div>
-          ) : null}
-          <ReviewResponseForm
-            message={review.response?.message}
-            purchaseId={purchaseId}
-            onChange={(response) => onChange({ ...review, response })}
-          />
-        </div>
+        </section>
+      </CardContent>
+      {review.message ? (
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">Message</h5>
+            {review.message}
+          </section>
+        </CardContent>
+      ) : null}
+      <CardContent asChild>
+        <ReviewVideosSubsections review={review} onChange={onChange} className="grow" />
+      </CardContent>
+      {review.response ? (
+        <CardContent asChild>
+          <section>
+            <h5 className="grow font-bold">Response</h5>
+            {review.response.message}
+          </section>
+        </CardContent>
+      ) : null}
+      <CardContent asChild>
+        <ReviewResponseForm
+          message={review.response?.message}
+          purchaseId={purchaseId}
+          onChange={(response) => onChange({ ...review, response })}
+        />
       </CardContent>
     </section>
   </Card>
@@ -1841,7 +1851,7 @@ const ChargeRow = ({
           {canPing ? <PingButton purchaseId={purchase.id} /> : null}
           {!purchase.refunded && !purchase.chargedback && purchase.amount_refundable > 0 ? (
             <button className="cursor-pointer text-sm underline all-unset" onClick={() => setIsRefunding((prev) => !prev)}>
-              Refund
+              Refund Options
             </button>
           ) : null}
         </div>
@@ -2125,7 +2135,7 @@ const CommissionSection = ({
       <section>
         <CardContent asChild>
           <header>
-            <h3 className="grow">Commission files</h3>
+            <h3 className="grow">Files</h3>
           </header>
         </CardContent>
         {commission.files.length ? (
