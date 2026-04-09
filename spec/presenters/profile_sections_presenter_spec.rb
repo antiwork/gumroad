@@ -155,6 +155,24 @@ describe ProfileSectionsPresenter do
 
       expect(product_names).to include(in_stock_product.name)
     end
+
+    it "preserves correct total count when sold-out products are filtered across paginated results" do
+      extra_products = 10.times.map { |i| create(:product, user: seller, tags:, name: "Extra Product #{i}") }
+      all_shown = (products + [sold_out_product, in_stock_product] + extra_products).map(&:id)
+      products_section.update!(shown_products: all_shown)
+      Link.import(force: true, refresh: true)
+
+      result = subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
+      product_section = result[:sections].find { _1[:type] == "SellerProfileProductsSection" }
+      product_names = product_section[:search_results][:products].map { _1[:name] }
+      total = product_section[:search_results][:total]
+
+      # Page size is 9, so only 9 products are loaded per page
+      # Total must NOT be replaced with page size (the bug this fixes)
+      expect(total).to be > 9
+      # Sold-out product on current page should be filtered from total
+      expect(product_names).not_to include("Sold Out Product")
+    end
   end
 
   describe "compute_description parameter" do
