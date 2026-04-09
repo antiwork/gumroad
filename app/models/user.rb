@@ -366,11 +366,11 @@ class User < ApplicationRecord
     end
 
     event :suspend_for_fraud do
-      transition %i[on_probation flagged_for_fraud] => :suspended_for_fraud
+      transition %i[not_reviewed compliant on_probation flagged_for_fraud flagged_for_tos_violation] => :suspended_for_fraud
     end
 
     event :suspend_for_tos_violation do
-      transition %i[on_probation flagged_for_tos_violation] => :suspended_for_tos_violation
+      transition %i[not_reviewed compliant on_probation flagged_for_tos_violation flagged_for_fraud] => :suspended_for_tos_violation
     end
 
     event :put_on_probation do

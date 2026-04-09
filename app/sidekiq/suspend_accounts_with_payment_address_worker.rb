@@ -19,7 +19,7 @@ class SuspendAccountsWithPaymentAddressWorker
         .where(payment_address: suspended_user.payment_address)
         .where.not(id: suspended_user.id)
         .find_each do |user|
-          flag_and_suspend_user(user, suspended_user, "payment address", suspended_user.payment_address)
+          suspend_user(user, suspended_user, "payment address", suspended_user.payment_address)
         end
     end
 
@@ -35,15 +35,11 @@ class SuspendAccountsWithPaymentAddressWorker
 
       User.not_suspended.where(id: user_ids_with_same_fingerprint).find_each do |user|
         matching_fingerprint = (fingerprints & user.alive_bank_accounts.pluck(:stripe_fingerprint)).first
-        flag_and_suspend_user(user, suspended_user, "bank account fingerprint", matching_fingerprint)
+        suspend_user(user, suspended_user, "bank account fingerprint", matching_fingerprint)
       end
     end
 
-    def flag_and_suspend_user(user, suspended_user, identifier_type, identifier_value)
-      user.flag_for_fraud(
-        author_name: "suspend_sellers_other_accounts",
-        content: "Flagged for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of #{identifier_type} #{identifier_value} (from User##{suspended_user.id})"
-      )
+    def suspend_user(user, suspended_user, identifier_type, identifier_value)
       user.suspend_for_fraud(
         author_name: "suspend_sellers_other_accounts",
         content: "Suspended for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of #{identifier_type} #{identifier_value} (from User##{suspended_user.id})",

@@ -1734,6 +1734,30 @@ describe User, :vcr do
       expect(@user.suspend_for_fraud!(author_id: @admin_user.id)).to be(true)
     end
 
+    it "suspends the user directly from not_reviewed state" do
+      expect(@user.user_risk_state).to eq("not_reviewed")
+      expect(@user.suspend_for_fraud!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_fraud?).to be(true)
+    end
+
+    it "suspends the user directly from compliant state" do
+      @user.update!(user_risk_state: "compliant")
+      expect(@user.suspend_for_tos_violation!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_tos_violation?).to be(true)
+    end
+
+    it "suspends for fraud from flagged_for_tos_violation state" do
+      @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)
+      expect(@user.suspend_for_fraud!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_fraud?).to be(true)
+    end
+
+    it "suspends for tos_violation from flagged_for_fraud state" do
+      @user.flag_for_fraud!(author_id: @admin_user.id)
+      expect(@user.suspend_for_tos_violation!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_tos_violation?).to be(true)
+    end
+
     it "is expected to call invalidate_active_sessions! if user is suspended_for_fraud" do
       expect(@user).to receive(:invalidate_active_sessions!)
 
@@ -1886,8 +1910,8 @@ describe User, :vcr do
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(user_3.reload.suspended?).to be(true)
         expect(@user_2.reload.suspended?).to be(true)
-        expect(user_3.comments.count).to eq(2)
-        expect(@user_2.comments.count).to eq(2)
+        expect(user_3.comments.count).to eq(1)
+        expect(@user_2.comments.count).to eq(1)
         expect(@user.reload.comments.count).to eq(2)
       end
 

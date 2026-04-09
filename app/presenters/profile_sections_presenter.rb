@@ -92,7 +92,12 @@ class ProfileSectionsPresenter
           )
         end
         cached_props[:search_results] = section_search_results(section, params:) if params.present?
-        cached_props[:search_results][:products] = Link.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).find(cached_props[:search_results][:products]).map do |product|
+        products = Link.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).includes(bundle_products: { product: :tiers, variant: [] }).find(cached_props[:search_results][:products])
+        if !is_owner
+          products = products.reject { |product| product.hide_sold_out_variants? && product.remaining_for_sale_count == 0 }
+          cached_props[:search_results][:total] = products.size
+        end
+        cached_props[:search_results][:products] = products.map do |product|
           ProductPresenter.card_for_web(product:, request:, recommended_by: params[:recommended_by], target: Product::Layout::PROFILE, show_seller: false, compute_description: false, compute_inventory: false)
         end
       when "SellerProfilePostsSection"
