@@ -122,6 +122,41 @@ describe ProfileSectionsPresenter do
     end
   end
 
+  describe "sold-out product filtering" do
+    let!(:sold_out_product) { create(:product, user: seller, tags:, name: "Sold Out Product", hide_sold_out_variants: true, max_purchase_count: 0) }
+    let!(:in_stock_product) { create(:product, user: seller, tags:, name: "In Stock Product", hide_sold_out_variants: true, max_purchase_count: 5) }
+    let(:products_section) { create(:seller_profile_products_section, seller:, header: "Section!", shown_products: (products + [sold_out_product, in_stock_product]).map(&:id)) }
+
+    before { Link.import(force: true, refresh: true) }
+
+    it "excludes sold-out products with hide_sold_out_variants enabled from non-owner view" do
+      result = subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
+      product_section = result[:sections].find { _1[:type] == "SellerProfileProductsSection" }
+      product_names = product_section[:search_results][:products].map { _1[:name] }
+
+      expect(product_names).to include(in_stock_product.name)
+      expect(product_names).not_to include(sold_out_product.name)
+      expect(product_section[:search_results][:total]).to eq(product_names.size)
+    end
+
+    it "includes sold-out products for the owner view" do
+      result = subject.props(request:, pundit_user: pundit_user_seller, seller_custom_domain_url: nil)
+      product_section = result[:sections].find { _1[:type] == "SellerProfileProductsSection" }
+      product_names = product_section[:search_results][:products].map { _1[:name] }
+
+      expect(product_names).to include(sold_out_product.name)
+      expect(product_names).to include(in_stock_product.name)
+    end
+
+    it "does not exclude products with hide_sold_out_variants enabled that still have stock" do
+      result = subject.props(request:, pundit_user:, seller_custom_domain_url: nil)
+      product_section = result[:sections].find { _1[:type] == "SellerProfileProductsSection" }
+      product_names = product_section[:search_results][:products].map { _1[:name] }
+
+      expect(product_names).to include(in_stock_product.name)
+    end
+  end
+
   describe "compute_description parameter" do
     it "passes compute_description: false to ProductPresenter.card_for_web for search results" do
       request.query_parameters[:sort] = "recent"

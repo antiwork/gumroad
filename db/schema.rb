@@ -498,10 +498,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011938) do
     t.bigint "purchase_id"
     t.string "ancestry"
     t.integer "ancestry_depth", default: 0, null: false
-    t.index ["ancestry"], name: "index_comments_on_ancestry"
     t.string "idempotency_key"
+    t.index ["ancestry"], name: "index_comments_on_ancestry"
     t.index ["commentable_id", "commentable_type"], name: "index_comments_on_commentable_id_and_commentable_type"
-    t.index ["commentable_type", "commentable_id", "idempotency_key"], name: "index_comments_on_commentable_and_idempotency_key", unique: true, where: "(idempotency_key IS NOT NULL)"
+    t.index ["commentable_type", "commentable_id", "idempotency_key"], name: "index_comments_on_commentable_and_idempotency_key", unique: true
     t.index ["purchase_id"], name: "index_comments_on_purchase_id"
   end
 

@@ -273,6 +273,7 @@ describe Api::V2::SalesController do
       end
 
       it "includes license_uses in the response for a purchase with a license key" do
+        @product.update!(is_licensed: true)
         purchase_with_license = create(:purchase, :with_license, purchaser: @purchaser, link: @product)
         purchase_with_license.license.update!(uses: 5)
 

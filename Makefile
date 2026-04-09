@@ -97,7 +97,7 @@ build_test:
 		--name worker_$(COMPOSE_PROJECT_NAME) \
 		-v $${PWD}:/mnt/host \
 		$(NEW_WEB_REPO):test-$(NEW_WEB_TAG) \
-		bash -c "su -c \"[[ -e /mnt/host/$$CACHE_TAR_FILE ]] && tar -xf /mnt/host/$$CACHE_TAR_FILE -C . || true; npm ci && npm run setup && bundle exec rake db:setup assets:precompile --trace\" app; exit_status=$$?; [[ $$BRANCH_CACHE_UPLOAD_ENABLED == 'true' ]] && tar -cf /mnt/host/$$CACHE_TAR_FILE node_modules public/assets public/packs-test tmp/cache/assets tmp/shakapacker || true; [[ $$BRANCH_CACHE_RESTORE_ENABLED == 'true' ]] && rm -rf node_modules public/{assets,packs-test} tmp/cache/assets tmp/shakapacker || true; exit $$exit_status"
+		bash -c "su -c \"[[ -e /mnt/host/$$CACHE_TAR_FILE ]] && tar -xf /mnt/host/$$CACHE_TAR_FILE -C . || true; npm ci && npm run setup && bundle exec rake db:setup assets:precompile --trace\" app; exit_status=$$?; [[ $$BRANCH_CACHE_UPLOAD_ENABLED == 'true' ]] && tar -cf /mnt/host/$$CACHE_TAR_FILE node_modules public/assets public/packs-test tmp/cache/assets tmp/shakapacker || true; [[ $$BRANCH_CACHE_RESTORE_ENABLED == 'true' ]] && rm -rf node_modules public/assets tmp/cache/assets tmp/shakapacker || true; exit $$exit_status"
 	$(DOCKER_CMD) ps -lq --filter='label=routes_compiled=true' --filter='exited=0' --filter='name=worker_$(COMPOSE_PROJECT_NAME)' | xargs -I{} $(DOCKER_CMD) commit {} $(NEW_WEB_REPO):test-$(NEW_WEB_TAG)
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
 		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml down
