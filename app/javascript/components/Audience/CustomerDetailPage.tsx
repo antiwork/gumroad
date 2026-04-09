@@ -241,10 +241,13 @@ const CustomerDetailPage = ({
               ←
             </Link>
             {customer.product.name}
-            {statusPills}
           </div>
         }
-      />
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {statusPills}
+        </div>
+      </PageHeader>
 
       {isLoading ? (
         <div className="flex flex-col gap-4 p-4 md:columns-2 md:block md:space-y-8 md:[column-gap:2rem] md:p-8 lg:columns-3">
