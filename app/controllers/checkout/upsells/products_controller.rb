@@ -13,6 +13,7 @@ class Checkout::Upsells::ProductsController < ApplicationController
         :skus_alive_not_default,
         :variant_categories_alive,
         :alive_variants,
+        :product_review_stat,
         thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
         display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } }
       )
