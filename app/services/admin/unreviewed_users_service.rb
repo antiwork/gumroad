@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Admin::UnreviewedUsersService
-  MINIMUM_BALANCE_CENTS = 1000
+  MINIMUM_BALANCE_CENTS = 10_000
   DEFAULT_CUTOFF_DATE = "2024-01-01"
   MAX_CACHED_USERS = 1000
 
