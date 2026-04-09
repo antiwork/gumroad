@@ -17,7 +17,7 @@ describe InternalNotificationMailer do
     end
 
     it "sets the subject with room name and sender" do
-      expect(mail.subject).to eq("[payments] VAT Reporting")
+      expect(mail.subject).to eq("[test] [payments] VAT Reporting")
     end
 
     it "includes the sender and message in the body" do
