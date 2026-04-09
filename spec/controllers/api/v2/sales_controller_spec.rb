@@ -192,7 +192,7 @@ describe Api::V2::SalesController do
       end
 
       it "returns empty result set when filtered by non-existing purchase ID" do
-        get :index, params: @params.merge(order_id: ObfuscateIds.decrypt_numeric(0))
+        get :index, params: @params.merge(order_id: 0)
 
         expect(response.parsed_body).to eq({
           success: true,
