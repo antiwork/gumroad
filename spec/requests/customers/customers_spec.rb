@@ -419,15 +419,9 @@ describe "Sales page", type: :system, js: true do
       end
 
       within_section "Review" do
-        within_section "Rating" do
-          expect(page).to have_selector("[aria-label='1 star']")
-        end
-        within_section "Message" do
-          expect(page).to have_text("Amazing!")
-        end
-        within_section "Response" do
-          expect(page).to have_text("Thank you!")
-        end
+        expect(page).to have_selector("[aria-label='1 star']")
+        expect(page).to have_text("Amazing!")
+        expect(page).to have_text("Thank you!")
       end
 
       visit customer_sale_path(purchase2.external_id)
@@ -502,7 +496,7 @@ describe "Sales page", type: :system, js: true do
             expect(page).to have_button("Sending...", disabled: true)
           end
         end
-        expect(page).to have_alert(text: "Email Sent")
+        expect(page).to have_alert(text: "Email sent")
         within_section("Post 10") { expect(page).to have_button("Sent", disabled: true) }
         expect(EmailInfo.last.installment).to eq(post)
 
@@ -565,7 +559,7 @@ describe "Sales page", type: :system, js: true do
 
       it "includes an additional contribution status" do
         visit customer_sale_path(purchase1.external_id)
-        expect(page).to have_selector("[role='status']", text: "Additional amount: This is an additional contribution, added to a previous purchase of this product.")
+        expect(page).to have_selector("[role='status']", text: "This is an additional contribution, added to a previous purchase of this product.")
       end
     end
 
@@ -603,15 +597,9 @@ describe "Sales page", type: :system, js: true do
         visit customer_sale_path(purchase2.external_id)
 
         within_section "Review" do
-          within_section "Rating" do
-            expect(page).to have_selector("[aria-label='1 star']")
-          end
-          within_section "Message" do
-            expect(page).to have_text("Giftee review")
-          end
-          within_section "Response" do
-            expect(page).to have_text("Giftee review response")
-          end
+          expect(page).to have_selector("[aria-label='1 star']")
+          expect(page).to have_text("Giftee review")
+          expect(page).to have_text("Giftee review response")
         end
       end
     end
@@ -623,7 +611,7 @@ describe "Sales page", type: :system, js: true do
 
       it "includes a preorder status" do
         visit customer_sale_path(purchase1.external_id)
-        expect(page).to have_selector("[role='status']", text: "Pre-order: This is a pre-order authorization. The customer's card has not been charged yet.")
+        expect(page).to have_selector("[role='status']", text: "This is a pre-order authorization. The customer's card has not been charged yet.")
       end
     end
 
@@ -632,14 +620,14 @@ describe "Sales page", type: :system, js: true do
         purchase1.update!(affiliate: create(:direct_affiliate))
 
         visit customer_sale_path(purchase1.external_id)
-        expect(page).to have_selector("[role='status']", text: "Affiliate: An affiliate (#{purchase1.affiliate.affiliate_user.form_email}) helped you make this sale and received $0.")
+        expect(page).to have_selector("[role='status']", text: "An affiliate (#{purchase1.affiliate.affiliate_user.form_email}) helped you make this sale and received $0.")
       end
 
       it "does not include affiliate status if the affiliate is a collaborator" do
         purchase1.update!(affiliate: create(:collaborator))
 
         visit customer_sale_path(purchase1.external_id)
-        expect(page).not_to have_selector("[role='status']", text: "Affiliate: An affiliate (#{purchase1.affiliate.affiliate_user.form_email}) helped you make this sale and received $0.")
+        expect(page).not_to have_selector("[role='status']", text: "An affiliate (#{purchase1.affiliate.affiliate_user.form_email}) helped you make this sale and received $0.")
       end
     end
 
@@ -750,30 +738,22 @@ describe "Sales page", type: :system, js: true do
           end
         end
 
-        expect(page).to have_modal "Bundle Product 1"
+        expect(page).to have_text("Bundle Product 1")
+        expect(page).to_not have_section("Content")
+
+        bundle_product_2_purchase = purchase1.product_purchases.second
+        visit customer_sale_path(bundle_product_2_purchase.external_id)
+
+        expect(page).to have_text("Bundle Product 2")
         expect(page).to_not have_section("Emails received")
-
-        click_on "Return to bundle"
-
-        within_section "Content", section_element: :section do
-          within_section "Bundle Product 2" do
-            click_on "Manage"
-          end
-        end
-
-        within_modal "Bundle Product 2" do
-          expect(page).to_not have_section("Emails received")
+        within_section "Email", section_element: :section do
           click_on "Edit"
           fill_in "Email", with: "stoleyourbundle@gumroad.com"
           click_on "Save"
-          wait_for_ajax
-          expect(page).to_not have_text("buyer@gumroad.com")
-          expect(purchase1.product_purchases.second.email).to eq("stoleyourbundle@gumroad.com")
         end
-
-        click_on "Close"
-
-        expect(page).to_not have_modal
+        wait_for_ajax
+        expect(page).to_not have_text("buyer@gumroad.com")
+        expect(purchase1.product_purchases.second.email).to eq("stoleyourbundle@gumroad.com")
       end
 
       it "updates the email for all bundle purchases" do
@@ -788,28 +768,16 @@ describe "Sales page", type: :system, js: true do
         end
         expect(page).to have_alert(text: "Email updated successfully.")
 
-        visit customer_sale_path(purchase1.external_id)
-        within_section "Content", section_element: :section do
-          within_section "Bundle Product 1" do
-            click_on "Manage"
-          end
-        end
-        within_modal "Bundle Product 1" do
-          within_section "Email", section_element: :section do
-            expect(page).to have_text("customer2@gumroad.com")
-          end
+        bundle_product_1_purchase = purchase1.product_purchases.first
+        visit customer_sale_path(bundle_product_1_purchase.external_id)
+        within_section "Email", section_element: :section do
+          expect(page).to have_text("customer2@gumroad.com")
         end
 
-        click_on "Return to bundle"
-        within_section "Content", section_element: :section do
-          within_section "Bundle Product 2" do
-            click_on "Manage"
-          end
-        end
-        within_modal "Bundle Product 2" do
-          within_section "Email", section_element: :section do
-            expect(page).to have_text("customer2@gumroad.com")
-          end
+        bundle_product_2_purchase = purchase1.product_purchases.second
+        visit customer_sale_path(bundle_product_2_purchase.external_id)
+        within_section "Email", section_element: :section do
+          expect(page).to have_text("customer2@gumroad.com")
         end
 
         expect(purchase1.reload.email).to eq("customer2@gumroad.com")
@@ -903,7 +871,7 @@ describe "Sales page", type: :system, js: true do
           expect(page).to have_text("United States Minor Outlying Islands")
         end
 
-        within_section "Tracking information", section_element: :section do
+        within_section "Tracking", section_element: :section do
           fill_in "Tracking URL (optional)", with: "https://www.google.com"
           click_on "Mark as shipped"
         end
@@ -913,7 +881,7 @@ describe "Sales page", type: :system, js: true do
         expect(shipment.shipped?).to eq(true)
         expect(shipment.tracking_url).to eq("https://www.google.com")
 
-        within_section "Tracking information", section_element: :section do
+        within_section "Tracking", section_element: :section do
           expect(page).to have_link("Track shipment", href: "https://www.google.com", target: "_blank")
         end
       end
@@ -925,7 +893,7 @@ describe "Sales page", type: :system, js: true do
 
         it "displays a status" do
           visit customer_sale_path(purchase1.external_id)
-          within_section "Tracking information", section_element: :section do
+          within_section "Tracking", section_element: :section do
             expect(page).to have_selector("[role='status']", text: "Shipped")
           end
         end
@@ -1037,10 +1005,10 @@ describe "Sales page", type: :system, js: true do
           expect(page).to have_selector("[role='status']", text: "1 charge remaining")
           expect(page).to have_text("$4 on 1/1/2022")
           expect(page).to have_link("Transaction", href: receipt_purchase_path(purchase2.external_id, email: purchase2.email), target: "_blank")
-          click_on "Refund Options"
+          click_on "Refund"
           click_on "Cancel"
           expect(page).to_not have_field("4")
-          click_on "Refund Options"
+          click_on "Refund"
           fill_in "4", with: "2"
           click_on "Issue partial refund"
 
@@ -1062,7 +1030,7 @@ describe "Sales page", type: :system, js: true do
         expect(purchase2.stripe_refunded?).to eq(false)
 
         within_section "Charges", section_element: :section do
-          click_on "Refund Options"
+          click_on "Refund"
           expect(page).to have_selector("[role='status']", text: "Going forward, Gumroad does not return any fees when a payment is refunded. Learn more")
           find_field("2", with: "2").fill_in with: "3"
           click_on "Refund fully"
@@ -1110,7 +1078,7 @@ describe "Sales page", type: :system, js: true do
         within_section "Charges", section_element: :section do
           expect(page).to have_text("Chargedback")
           expect(page).to have_link("Transaction", href: "https://www.google.com", target: "_blank")
-          expect(page).to_not have_button("Refund Options")
+          expect(page).to_not have_link("Refund")
         end
       end
 
@@ -1122,7 +1090,7 @@ describe "Sales page", type: :system, js: true do
         it "disables the refund button and displays a tooltip" do
           visit customer_sale_path(purchase2.external_id)
           within_section "Charges", section_element: :section do
-            click_on "Refund Options"
+            click_on "Refund"
             refund_button = find_button("Refund fully", disabled: true)
             refund_button.hover
             expect(refund_button).to have_tooltip(text: "PayPal refunds aren't available after 6 months.")
@@ -1144,8 +1112,8 @@ describe "Sales page", type: :system, js: true do
       it "allows updating commission files" do
         visit customer_sale_path(commission.deposit_purchase.external_id)
 
-        within_section "Files", section_element: :section do
-          expect(page).to have_text("Files")
+        within_section "Commission files", section_element: :section do
+          expect(page).to have_text("Commission files")
           expect(page).not_to have_selector("[role='tree']")
 
           attach_file("Upload files", [file_fixture("smilie.png"), file_fixture("test.pdf")], visible: false)
@@ -1155,7 +1123,7 @@ describe "Sales page", type: :system, js: true do
         expect(commission.files.first.filename).to eq("smilie.png")
         expect(commission.files.last.filename).to eq("test.pdf")
 
-        within_section "Files", section_element: :section do
+        within_section "Commission files", section_element: :section do
           within "[role='list']" do
             expect(page).to have_selector("[role='listitem']", count: 2)
 
@@ -1182,7 +1150,7 @@ describe "Sales page", type: :system, js: true do
         expect(commission.files.count).to eq(1)
         expect(commission.files.first.filename).to eq("test.pdf")
 
-        within_section "Files", section_element: :section do
+        within_section "Commission files", section_element: :section do
           within "[role='list']" do
             expect(page).to have_selector("[role='listitem']", count: 1)
             expect(page).to have_selector("[role='listitem']", text: "test")
@@ -1221,7 +1189,7 @@ describe "Sales page", type: :system, js: true do
           visit customer_sale_path(commission.deposit_purchase.external_id)
           within_section "Charges", section_element: :section do
             within_section "$1", match: :first do
-              click_on "Refund Options"
+              click_on "Refund"
             end
             expect(page).to have_field("1", with: "1")
             click_on "Refund fully"
@@ -1237,7 +1205,7 @@ describe "Sales page", type: :system, js: true do
 
           within_section "Charges", section_element: :section do
             within_section "$1", match: :first do
-              click_on "Refund Options"
+              click_on "Refund"
             end
             fill_in "1", with: "0.5"
             click_on "Issue partial refund"
