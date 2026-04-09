@@ -1354,7 +1354,7 @@ describe "Sales page", type: :system, js: true do
           click_on "Confirm refund"
         end
         expect(page).to have_alert(text: "Purchase successfully refunded.")
-        expect(page).to_not have_section("Refund")
+        expect(page).to_not have_section("Refund", section_element: :section)
 
         visit customers_path
         within find(:table_row, { "Name" => "Customer 3" }) do
@@ -1374,10 +1374,10 @@ describe "Sales page", type: :system, js: true do
         end
 
         visit customer_sale_path(purchase1.external_id)
-        expect(page).to_not have_section("Refund")
+        expect(page).to_not have_section("Refund", section_element: :section)
 
         visit customer_sale_path(purchase2.external_id)
-        expect(page).to_not have_section("Refund")
+        expect(page).to_not have_section("Refund", section_element: :section)
       end
 
       context "for non-USD purchases" do
