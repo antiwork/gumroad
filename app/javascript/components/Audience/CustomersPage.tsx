@@ -1,24 +1,12 @@
-import {
-  ArrowInDownSquareHalf,
-  MenuFilter,
-  Truck,
-} from "@boxicons/react";
+import { ArrowInDownSquareHalf, MenuFilter, Truck } from "@boxicons/react";
 import { router } from "@inertiajs/react";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
 import * as React from "react";
 
-import {
-  Customer,
-  Query,
-  SortKey,
-  getPagedCustomers,
-} from "$app/data/customers";
-import {
-  CurrencyCode,
-  formatPriceCentsWithCurrencySymbol,
-} from "$app/utils/currency";
+import { Customer, Query, SortKey, getPagedCustomers } from "$app/data/customers";
+import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { RecurrenceId, recurrenceLabels } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
