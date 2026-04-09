@@ -661,12 +661,12 @@ describe Api::V2::SalesController do
       context "when request for a full refund" do
         it "refunds a sale fully" do
           expect(@purchase.price_cents).to eq 100_00
-          expect(@purchase.refunded?).to be_falsey
+          expect(@purchase.refunded?).to be false
 
           put :refund, params: @params
 
           @purchase.reload
-          expect(@purchase.refunded?).to be_truthy
+          expect(@purchase.refunded?).to be true
           expect(@purchase.refunds.last.refunding_user_id).to eq @product.user.id
 
 
