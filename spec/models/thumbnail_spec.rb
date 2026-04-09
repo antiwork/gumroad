@@ -101,5 +101,27 @@ describe Thumbnail do
       thumbnail = Thumbnail.new(product: @product)
       expect(thumbnail.url).to eq(nil)
     end
+
+    it "falls back to original file URL when MiniMagick::Error is raised" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      thumbnail.save!
+
+      allow(thumbnail).to receive(:thumbnail_variant).and_raise(MiniMagick::Error, "corrupt image")
+      expect(thumbnail.url).to match(PUBLIC_STORAGE_S3_BUCKET)
+    end
+
+    it "falls back to original file URL when ActiveStorage::Error is raised" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      thumbnail.save!
+
+      allow(thumbnail).to receive(:thumbnail_variant).and_raise(ActiveStorage::Error, "processing failed")
+      expect(thumbnail.url).to match(PUBLIC_STORAGE_S3_BUCKET)
+    end
   end
 end
