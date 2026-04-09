@@ -740,7 +740,6 @@ const CustomerDetailPage = ({
                   <h3 className="grow">Emails received</h3>
                 </header>
               </CardContent>
-              {emails ? (
                 <>
                   {emails.slice(0, shownEmails).map((email) => (
                     <CardContent asChild key={email.id}>
@@ -798,15 +797,6 @@ const CustomerDetailPage = ({
                     </CardContent>
                   ) : null}
                 </>
-              ) : (
-                <CardContent>
-                  <section>
-                    <div className="grow text-center">
-                      <LoadingSpinner className="size-8" />
-                    </div>
-                  </section>
-                </CardContent>
-              )}
             </section>
           </Card>
         ) : null}
@@ -818,7 +808,6 @@ const CustomerDetailPage = ({
                   <h3 className="grow">Send missed posts</h3>
                 </header>
               </CardContent>
-              {missedPosts ? (
                 <>
                   {missedPosts.slice(0, shownMissedPosts).map((post) => (
                     <CardContent asChild key={post.id}>
@@ -858,15 +847,6 @@ const CustomerDetailPage = ({
                     </CardContent>
                   ) : null}
                 </>
-              ) : (
-                <CardContent asChild>
-                  <section>
-                    <div className="grow text-center">
-                      <LoadingSpinner className="size-8" />
-                    </div>
-                  </section>
-                </CardContent>
-              )}
             </section>
           </Card>
         ) : null}
