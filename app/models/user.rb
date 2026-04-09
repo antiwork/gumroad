@@ -309,20 +309,6 @@ class User < ApplicationRecord
   after_commit :generate_subscribe_preview, on: [:create, :update], if: :should_subscribe_preview_be_regenerated?
   after_create :insert_null_chargeback_state
 
-  # risk state machine
-  #
-  #  not_reviewed  → → → → → → → → → → → → → → compliant  ↔  ↔  ↔  ↔ ↕︎
-  #  ↓                                         ↓     ↑               ↕︎
-  #  ↓ ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ←     ↑               ↕︎
-  #  ↓                                               ↑               ↕︎
-  #  ↓            →  →  →  →  →  →  →  →  →  →  →  → ↑ →  →  →  →  → ↕
-  #  ↓           ↑                                   ↑               ↕︎
-  #  ↓→  flagged_for_fraud  → suspended_for_fraud  ↔ ↑ ↔  ↔  ↔  ↔ on_probation
-  #  ↓      ↓↑                                       ↑               ↕︎
-  #  ↓→   flagged_for_tos   →  suspended_for_tos   ↔ ↑ ↔ ↔ ↔ ↔ ↔ ↔ ↔ ↔
-  #  ↓          ↓                                    ↓               ↑
-  #  ↓ →  →  →  →  →  →  →  →  →  →  →  → →  →  →  → ↑ →  →  →  →  → →
-  #
   state_machine(:user_risk_state, initial: :not_reviewed) do
     before_transition any => %i[flagged_for_fraud flagged_for_tos_violation suspended_for_fraud suspended_for_tos_violation],
                       :do => :not_verified?
