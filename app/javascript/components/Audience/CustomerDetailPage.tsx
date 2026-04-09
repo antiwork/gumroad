@@ -601,8 +601,7 @@ const CustomerDetailPage = ({
           </div>
         ) : null}
         {shipping ? (
-          <Card asChild>
-            <section className="break-inside-avoid">
+          <Card className="break-inside-avoid">
               <CardContent>
                 <TrackingSection
                   tracking={shipping.tracking}
@@ -639,7 +638,6 @@ const CustomerDetailPage = ({
                   countries={countries}
                 />
               </CardContent>
-            </section>
           </Card>
         ) : null}
         {customer.call ? (
@@ -899,9 +897,18 @@ const UtmLinkCard = ({ link }: { link: Customer["utm_link"] }) => {
     <Card asChild>
       <section>
         <CardContent asChild>
-          <header>
+          <section>
             <h3 className="grow">UTM link</h3>
-          </header>
+          </section>
+        </CardContent>
+        <CardContent>
+          <Alert className="grow text-sm" role="status" variant="info">
+            This sale was driven by a{" "}
+            <a href={link.utm_url} target="_blank" rel="noreferrer">
+              UTM link
+            </a>
+            .
+          </Alert>
         </CardContent>
         <CardContent>
           <DefinitionList>
@@ -1068,7 +1075,7 @@ const AddressSection = ({
             <br />
             {currentAddress.country}
           </p>
-          <p className="mt-2 text-sm text-muted">Shipping charged: {price}</p>
+          <p className="mt-2 text-sm text-muted">Shipping charged {price}</p>
         </div>
       )}
     </section>
