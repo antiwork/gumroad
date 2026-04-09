@@ -4,6 +4,7 @@ import {
   Paperclip,
   Trash,
 } from "@boxicons/react";
+import { Link } from "@inertiajs/react";
 import { Blob, DirectUpload } from "@rails/activestorage";
 import * as React from "react";
 
@@ -233,29 +234,27 @@ const CustomerDetailPage = ({
   return (
     <div className="h-full">
       <PageHeader
-        title={customer.product.name}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          {statusPills}
-        </div>
-      </PageHeader>
+        showTitleOnMobile
+        title={
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/customers" aria-label="Back to customers" className="mr-4 hidden no-underline sm:inline">
+              ←
+            </Link>
+            {customer.product.name}
+            {statusPills}
+          </div>
+        }
+      />
 
       {isLoading ? (
-        <div className="flex flex-col gap-4 p-4 md:p-8 lg:columns-3 lg:block lg:space-y-8 lg:[column-gap:2rem]">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="break-inside-avoid animate-pulse rounded-lg border border-border">
-              <div className="p-4">
-                <div className="mb-3 h-5 w-1/3 rounded bg-primary/10" />
-                <div className="space-y-2">
-                  <div className="h-4 w-full rounded bg-primary/10" />
-                  <div className="h-4 w-2/3 rounded bg-primary/10" />
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="flex flex-col gap-4 p-4 md:columns-2 md:block md:space-y-8 md:[column-gap:2rem] md:p-8 lg:columns-3">
+          <div className="h-[25vh] break-inside-avoid animate-pulse rounded-lg bg-foreground/10" />
+          <div className="h-[25vh] break-inside-avoid animate-pulse rounded-lg bg-foreground/10" />
+          <div className="h-[50vh] break-inside-avoid animate-pulse rounded-lg bg-foreground/10" />
+          <div className="h-[50vh] break-inside-avoid animate-pulse rounded-lg bg-foreground/10" />
         </div>
       ) : (
-      <div className="flex flex-col gap-4 p-4 md:p-8 lg:columns-3 lg:block lg:space-y-8 lg:[column-gap:2rem]">
+      <div className="flex flex-col gap-4 p-4 md:columns-2 md:block md:space-y-8 md:[column-gap:2rem] md:p-8 lg:columns-3">
         {customer.is_additional_contribution ? (
           <div className="break-inside-avoid">
             <Alert role="status" variant="info">
@@ -733,66 +732,6 @@ const CustomerDetailPage = ({
             <CommissionSection commission={commission} onChange={(commission) => updateCustomer({ commission })} />
           </div>
         ) : null}
-        {missedPosts?.length !== 0 ? (
-          <Card asChild>
-            <section className="break-inside-avoid">
-              <CardContent asChild>
-                <header>
-                  <h3 className="grow">Send missed posts</h3>
-                </header>
-              </CardContent>
-              {missedPosts ? (
-                <>
-                  {missedPosts.slice(0, shownMissedPosts).map((post) => (
-                    <CardContent asChild key={post.id}>
-                      <section>
-                        <div className="grow">
-                          <h5 className="font-bold">
-                            <a href={post.url} target="_blank" rel="noreferrer">
-                              {post.name}
-                            </a>
-                          </h5>
-                          <small className="block text-muted">{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
-                        </div>
-                        <Button
-                          color="primary"
-                          disabled={!!loadingId || sentEmailIds.current.has(post.id)}
-                          onClick={() => void onSend(post.id, "post")}
-                        >
-                          {sentEmailIds.current.has(post.id)
-                            ? "Sent"
-                            : loadingId === post.id
-                              ? "Sending..."
-                              : "Send"}
-                        </Button>
-                      </section>
-                    </CardContent>
-                  ))}
-                  {shownMissedPosts < missedPosts.length ? (
-                    <CardContent asChild>
-                      <section>
-                        <Button
-                          onClick={() => setShownMissedPosts((prev) => prev + PAGE_SIZE)}
-                          className="grow basis-0"
-                        >
-                          Show more
-                        </Button>
-                      </section>
-                    </CardContent>
-                  ) : null}
-                </>
-              ) : (
-                <CardContent asChild>
-                  <section>
-                    <div className="grow text-center">
-                      <LoadingSpinner className="size-8" />
-                    </div>
-                  </section>
-                </CardContent>
-              )}
-            </section>
-          </Card>
-        ) : null}
         {emails?.length !== 0 ? (
           <Card asChild>
             <section className="break-inside-avoid">
@@ -861,6 +800,66 @@ const CustomerDetailPage = ({
                 </>
               ) : (
                 <CardContent>
+                  <section>
+                    <div className="grow text-center">
+                      <LoadingSpinner className="size-8" />
+                    </div>
+                  </section>
+                </CardContent>
+              )}
+            </section>
+          </Card>
+        ) : null}
+        {missedPosts?.length !== 0 ? (
+          <Card asChild>
+            <section className="break-inside-avoid">
+              <CardContent asChild>
+                <header>
+                  <h3 className="grow">Send missed posts</h3>
+                </header>
+              </CardContent>
+              {missedPosts ? (
+                <>
+                  {missedPosts.slice(0, shownMissedPosts).map((post) => (
+                    <CardContent asChild key={post.id}>
+                      <section>
+                        <div className="grow">
+                          <h5 className="font-bold">
+                            <a href={post.url} target="_blank" rel="noreferrer">
+                              {post.name}
+                            </a>
+                          </h5>
+                          <small className="block text-muted">{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
+                        </div>
+                        <Button
+                          color="primary"
+                          disabled={!!loadingId || sentEmailIds.current.has(post.id)}
+                          onClick={() => void onSend(post.id, "post")}
+                        >
+                          {sentEmailIds.current.has(post.id)
+                            ? "Sent"
+                            : loadingId === post.id
+                              ? "Sending..."
+                              : "Send"}
+                        </Button>
+                      </section>
+                    </CardContent>
+                  ))}
+                  {shownMissedPosts < missedPosts.length ? (
+                    <CardContent asChild>
+                      <section>
+                        <Button
+                          onClick={() => setShownMissedPosts((prev) => prev + PAGE_SIZE)}
+                          className="grow basis-0"
+                        >
+                          Show more
+                        </Button>
+                      </section>
+                    </CardContent>
+                  ) : null}
+                </>
+              ) : (
+                <CardContent asChild>
                   <section>
                     <div className="grow text-center">
                       <LoadingSpinner className="size-8" />
