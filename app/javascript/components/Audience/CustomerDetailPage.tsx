@@ -1705,7 +1705,12 @@ const RefundForm = ({
   };
 
   const refundButton = (
-    <Button color="primary" onClick={() => setIsModalShowing(true)} disabled={isLoading || paypalRefundExpired} className="w-full">
+    <Button
+      color="primary"
+      onClick={() => setIsModalShowing(true)}
+      disabled={isLoading || paypalRefundExpired}
+      className="w-full"
+    >
       {isLoading ? "Refunding..." : isPartialRefund ? "Issue partial refund" : "Refund fully"}
     </Button>
   );
@@ -2192,7 +2197,7 @@ const ColumnLayout = ({ children, className }: { children: React.ReactNode; clas
 
     let totalHeight = 0;
     for (const child of childElements) {
-      totalHeight += (child instanceof HTMLElement ? child.offsetHeight : 0);
+      totalHeight += child instanceof HTMLElement ? child.offsetHeight : 0;
     }
     const targetPerColumn = totalHeight / actualColumns;
 
@@ -2231,7 +2236,10 @@ const ColumnLayout = ({ children, className }: { children: React.ReactNode; clas
   });
 
   return (
-    <div className={className} style={{ display: "grid", gridTemplateColumns: `repeat(${actualColumns}, 1fr)`, gap: "2rem" }}>
+    <div
+      className={className}
+      style={{ display: "grid", gridTemplateColumns: `repeat(${actualColumns}, 1fr)`, gap: "2rem" }}
+    >
       {columns.map((col, i) => (
         <div key={i} className="flex flex-col gap-8">
           {col}
