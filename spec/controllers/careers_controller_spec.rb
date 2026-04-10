@@ -33,12 +33,12 @@ describe CareersController do
       before { Feature.activate(:career_pages) }
 
       it "renders successfully for a valid job slug" do
-        get :show, params: { slug: "senior-fullstack-engineer" }
+        get :show, params: { slug: "design-engineer" }
 
         expect(response).to be_successful
-        expect(assigns(:job)[:slug]).to eq("senior-fullstack-engineer")
-        expect(assigns(:job)[:title]).to eq("Senior Software Engineer")
-        expect(assigns(:title)).to eq("Senior Software Engineer - Gumroad Careers")
+        expect(assigns(:job)[:slug]).to eq("design-engineer")
+        expect(assigns(:job)[:title]).to eq("Design Engineer")
+        expect(assigns(:title)).to eq("Design Engineer - Gumroad Careers")
         expect(assigns(:hide_layouts)).to be(true)
       end
 
@@ -52,7 +52,7 @@ describe CareersController do
       before { Feature.deactivate(:career_pages) }
 
       it "returns 404" do
-        expect { get :show, params: { slug: "senior-fullstack-engineer" } }
+        expect { get :show, params: { slug: "design-engineer" } }
           .to raise_error(ActionController::RoutingError, "Not Found")
       end
     end

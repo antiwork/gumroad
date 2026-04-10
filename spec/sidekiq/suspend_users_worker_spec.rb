@@ -20,11 +20,9 @@ describe SuspendUsersWorker do
       expect(user_not_to_suspend.reload.suspended?).to be(false)
 
       comments = not_reviewed_user.comments
-      expect(comments.count).to eq(2)
-      expect(comments.first.content).to eq("Flagged for a policy violation by #{admin_user.name_or_username} on #{Time.current.to_fs(:formatted_date_full_month)}")
+      expect(comments.count).to eq(1)
+      expect(comments.first.content).to eq("Suspended for a policy violation by #{admin_user.name_or_username} on #{Time.current.to_fs(:formatted_date_full_month)} as part of mass suspension. Reason: #{reason}.\nAdditional notes: #{additional_notes}")
       expect(comments.first.author_id).to eq(admin_user.id)
-      expect(comments.last.content).to eq("Suspended for a policy violation by #{admin_user.name_or_username} on #{Time.current.to_fs(:formatted_date_full_month)} as part of mass suspension. Reason: #{reason}.\nAdditional notes: #{additional_notes}")
-      expect(comments.last.author_id).to eq(admin_user.id)
     end
 
     it "suspends the users appropriately with external IDs" do

@@ -76,11 +76,11 @@ export const ReviewResponseForm = ({
             autoFocus
           />
           <div className="flex w-full gap-3">
-            <Button {...buttonProps} disabled={isLoading} type="submit" className="flex-1">
-              {originalMessage ? (isLoading ? "Updating..." : "Update") : isLoading ? "Submitting..." : "Submit"}
-            </Button>
             <Button {...buttonProps} onClick={() => setIsEditing(false)} className="flex-1">
               Cancel
+            </Button>
+            <Button {...buttonProps} color="primary" disabled={isLoading} type="submit" className="flex-1">
+              {originalMessage ? (isLoading ? "Updating..." : "Update") : isLoading ? "Submitting..." : "Submit"}
             </Button>
           </div>
         </form>

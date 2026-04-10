@@ -134,6 +134,7 @@ module Charge::Disputable
       purchase.mark_product_purchases_as_chargedback!
 
       purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+      purchase.block_buyer_based_on_chargeback_count!
     end
 
     dispute_evidence = create_dispute_evidence_if_needed!
