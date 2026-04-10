@@ -13,12 +13,11 @@ describe SuspendAccountsWithPaymentAddressWorker do
         described_class.new.perform(@user.id)
 
         expect(@user_2.reload.suspended?).to be(true)
-        expect(@user_2.comments.first.content).to eq("Flagged for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of payment address #{@user.payment_address} (from User##{@user.id})")
-        expect(@user_2.comments.last.content).to eq("Suspended for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of payment address #{@user.payment_address} (from User##{@user.id})")
+        expect(@user_2.comments.count).to eq(1)
+        expect(@user_2.comments.first.content).to eq("Suspended for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of payment address #{@user.payment_address} (from User##{@user.id})")
       end
 
       it "does not suspend already suspended users with same payment address" do
-        @user_2.flag_for_fraud!(author_name: "test")
         @user_2.suspend_for_fraud!(author_name: "test")
         initial_comment_count = @user_2.comments.count
 
@@ -46,11 +45,11 @@ describe SuspendAccountsWithPaymentAddressWorker do
         expect(@user_3.reload.suspended?).to be(false)
       end
 
-      it "creates both flagged and suspended comments with fingerprint details" do
+      it "creates a suspended comment with fingerprint details" do
         described_class.new.perform(@user.id)
 
-        expect(@user_2.reload.comments.first.content).to eq("Flagged for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of bank account fingerprint same_fingerprint_123 (from User##{@user.id})")
-        expect(@user_2.comments.last.content).to eq("Suspended for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of bank account fingerprint same_fingerprint_123 (from User##{@user.id})")
+        expect(@user_2.reload.comments.count).to eq(1)
+        expect(@user_2.comments.first.content).to eq("Suspended for fraud automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of usage of bank account fingerprint same_fingerprint_123 (from User##{@user.id})")
       end
 
       it "does not suspend if fingerprint is blank" do
@@ -70,7 +69,6 @@ describe SuspendAccountsWithPaymentAddressWorker do
       end
 
       it "does not suspend already suspended users" do
-        @user_2.flag_for_fraud!(author_name: "test")
         @user_2.suspend_for_fraud!(author_name: "test")
         initial_comment_count = @user_2.comments.count
 
