@@ -1354,11 +1354,12 @@ const ReviewSection = ({
           </section>
         </CardContent>
       ) : null}
-      <CardContent asChild>
+      <CardContent>
         <ReviewResponseForm
           message={review.response?.message}
           purchaseId={purchaseId}
           onChange={(response) => onChange({ ...review, response })}
+          className="w-full"
         />
       </CardContent>
     </section>
@@ -2174,18 +2175,61 @@ const ColumnLayout = ({ children, className }: { children: React.ReactNode; clas
   }, []);
 
   const items = React.Children.toArray(children).filter(Boolean);
+  const measureRef = React.useRef<HTMLDivElement>(null);
+  const [columnAssignments, setColumnAssignments] = React.useState<number[] | null>(null);
+
+  React.useLayoutEffect(() => {
+    if (columnCount <= 1 || !measureRef.current) {
+      setColumnAssignments(null);
+      return;
+    }
+
+    const actualColumns = Math.min(columnCount, items.length);
+    const assignments: number[] = [];
+    const childElements = measureRef.current.children;
+
+    let totalHeight = 0;
+    for (let i = 0; i < childElements.length; i++) {
+      totalHeight += (childElements[i] as HTMLElement).offsetHeight;
+    }
+    const targetPerColumn = totalHeight / actualColumns;
+
+    let currentColumn = 0;
+    let currentHeight = 0;
+    for (let i = 0; i < childElements.length; i++) {
+      const itemHeight = (childElements[i] as HTMLElement).offsetHeight;
+      if (currentColumn < actualColumns - 1 && currentHeight > 0 && currentHeight + itemHeight / 2 > targetPerColumn) {
+        currentColumn++;
+        currentHeight = 0;
+      }
+      assignments.push(currentColumn);
+      currentHeight += itemHeight;
+    }
+
+    setColumnAssignments(assignments);
+  }, [columnCount, items.length]);
 
   if (columnCount === 1) {
     return <div className={className}>{items}</div>;
   }
 
-  const perColumn = Math.ceil(items.length / columnCount);
-  const columns: React.ReactNode[][] = Array.from({ length: columnCount }, (_, i) =>
-    items.slice(i * perColumn, (i + 1) * perColumn),
-  );
+  if (columnAssignments === null) {
+    return (
+      <div ref={measureRef} className={className}>
+        {items}
+      </div>
+    );
+  }
+
+  const actualColumns = Math.min(columnCount, items.length);
+  const columns: React.ReactNode[][] = Array.from({ length: actualColumns }, () => []);
+  items.forEach((item, i) => {
+    const col = columnAssignments[i] ?? 0;
+    columns[col]!.push(item);
+  });
 
   return (
-    <div className={className} style={{ display: "grid", gridTemplateColumns: `repeat(${columnCount}, 1fr)`, gap: "2rem" }}>
+    <div className={className} style={{ display: "grid", gridTemplateColumns: `repeat(${actualColumns}, 1fr)`, gap: "2rem" }}>
       {columns.map((col, i) => (
         <div key={i} className="flex flex-col gap-8">
           {col}
