@@ -51,7 +51,7 @@ describe Api::V2::LinksController do
       end
 
       it "paginates results and returns page_key when there are more products" do
-        products = (1..11).map { |i| create(:product, user: @user, created_at: Time.current + i.hours) }
+        (1..11).map { |i| create(:product, user: @user, created_at: Time.current + i.hours) }
 
         get @action, params: @params
 
@@ -63,7 +63,7 @@ describe Api::V2::LinksController do
       end
 
       it "returns the next page of results when page_key is provided" do
-        products = (1..12).map { |i| create(:product, user: @user, created_at: Time.current + i.hours) }
+        (1..12).map { |i| create(:product, user: @user, created_at: Time.current + i.hours) }
 
         get @action, params: @params
         first_page = response.parsed_body
