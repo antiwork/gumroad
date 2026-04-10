@@ -52,6 +52,9 @@ class Thumbnail < ApplicationRecord
     else
       cdn_url_for(file.url)
     end
+  rescue MiniMagick::Error, ActiveStorage::Error => e
+    Rails.logger.warn("Thumbnail#url error (#{id}): #{e.class} => #{e.message}")
+    cdn_url_for(file.url)
   end
 
   def thumbnail_variant

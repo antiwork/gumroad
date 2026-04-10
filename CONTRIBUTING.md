@@ -89,7 +89,6 @@ End with an AI disclosure after a `---` separator. Name the specific model (e.g.
 
 ### Feature development
 
-- Use feature flags for new features
 - Do not perform "backfilling" type of operations via ActiveRecord callbacks, whether you're enqueuing a job or not to create missing values. Use a Onetime task instead.
   - This is because we have a lot of users, products, and data.
   - Example: If you enqueue a backfilling job for each user upon them being updated, it's likely going to result in enqueuing millions of jobs in an uncontrollable way, potentially crashing Sidekiq (redis would be out of memory), and/or clogging the queues because each of these jobs takes "a few seconds" (= way too slow) and/or create massive uncontrollable replica lag, etc.

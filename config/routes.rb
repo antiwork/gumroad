@@ -575,6 +575,7 @@ Rails.application.routes.draw do
     get "/customers/sales", controller: "customers", action: "customers_paged", format: "json", as: :sales_paged
     get "/customers", controller: "customers", action: "index", format: "html", as: :customers
     get "/customers/paged", controller: "customers", action: "paged", format: "json"
+    get "/customers/sale/:purchase_id", controller: "customers", action: "show", format: "html", as: :customer_sale
     get "/customers/:link_id", controller: "customers", action: "index", format: "html", as: :customers_link_id
     post "/customers/import", to: "customers#customers_import", as: :customers_import
     post "/customers/import_manually_entered_emails", to: "customers#customers_import_manually_entered_emails", as: :customers_import_manually_entered_emails

@@ -354,6 +354,31 @@ describe PostResendApi, :freeze_time do
     end
   end
 
+  describe "Resend API routing" do
+    before do
+      allow(Rails.application.config.action_mailer).to receive(:perform_deliveries).and_return(true)
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
+      allow(GlobalConfig).to receive(:get).and_call_original
+      allow(GlobalConfig).to receive(:get).with("RESEND_CREATORS_API_KEY").and_return("test_key")
+    end
+
+    it "uses Resend::Emails.send for a single recipient" do
+      response = double(success?: true)
+      expect(Resend::Emails).to receive(:send).with(a_hash_including(to: ["c1@example.com"])).and_return(response)
+      expect(Resend::Batch).not_to receive(:send)
+
+      send_emails(recipients: [{ email: "c1@example.com" }])
+    end
+
+    it "uses Resend::Batch.send for multiple recipients" do
+      response = double(success?: true)
+      expect(Resend::Batch).to receive(:send).with(an_instance_of(Array)).and_return(response)
+      expect(Resend::Emails).not_to receive(:send)
+
+      send_emails(recipients: [{ email: "c1@example.com" }, { email: "c2@example.com" }])
+    end
+  end
+
   it "includes a link to Gumroad" do
     send_default_email
     node = html_doc(sent_email_content).at_xpath(%(//div[contains(@class, 'footer')]/a[@href="#{root_url}"]))

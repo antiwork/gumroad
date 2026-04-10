@@ -33,6 +33,8 @@ module SearchProducts
       if params[:size].is_a?(String)
         params[:size] = params[:size].to_i
       end
+
+      params.delete(:search) unless params[:search].is_a?(Hash)
     end
 
     def offer_codes_search_feature_active?(params)
