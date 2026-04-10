@@ -68,7 +68,7 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
         end
 
         before do
-          create(:balance, user: unreviewed_user, amount_cents: 5000)
+          create(:balance, user: unreviewed_user, amount_cents: 15_000)
           Admin::UnreviewedUsersService.cache_users_data!
         end
 
@@ -89,7 +89,7 @@ describe Admin::UnreviewedUsersController, type: :controller, inertia: true do
         end
 
         before do
-          create(:balance, user:, amount_cents: 5000)
+          create(:balance, user:, amount_cents: 15_000)
           Admin::UnreviewedUsersService.cache_users_data!
           user.update!(user_risk_state: "compliant")
         end

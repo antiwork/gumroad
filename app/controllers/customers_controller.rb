@@ -9,7 +9,7 @@ class CustomersController < Sellers::BaseController
 
   CUSTOMERS_PER_PAGE = 20
 
-  layout "inertia", only: [:index]
+  layout "inertia", only: [:index, :show]
 
   def index
     product = Link.fetch(params[:link_id]) if params[:link_id].present?
@@ -25,6 +25,19 @@ class CustomersController < Sellers::BaseController
 
     render inertia: "Customers/Index",
            props: { customers_presenter: customers_presenter.customers_props }
+  end
+
+  def show
+    purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
+    customer_data = CustomerPresenter.new(purchase:).customer(pundit_user:)
+
+    render inertia: "Customers/Show",
+           props: {
+             customer: customer_data,
+             countries: Compliance::Countries.for_select.map(&:last),
+             can_ping: current_seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0,
+             show_refund_fee_notice: current_seller.show_refund_fee_notice?,
+           }
   end
 
   def paged
