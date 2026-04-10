@@ -4,8 +4,6 @@ import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutP
 import { Alert } from "$app/components/ui/Alert";
 import { FormSection } from "$app/components/ui/FormSection";
 
-import logo from "$assets/images/logo-g.svg";
-
 export type AccountStatus = {
   show_section: boolean;
   is_suspended: boolean;
@@ -20,27 +18,17 @@ export default function AccountStatusSection({
   payoutsPausedBy,
   payoutsPausedForReason,
   showVerificationSection,
-  userJoinedAt,
-  locale,
 }: {
   accountStatus: AccountStatus;
   payoutsPausedBy: "stripe" | "admin" | "system" | "user" | null;
   payoutsPausedForReason: string | null;
   showVerificationSection: boolean;
-  userJoinedAt: string;
-  locale: string;
 }) {
   if (!accountStatus.show_section) return null;
 
   const payoutPausedReason =
     payoutsPausedBy === "stripe" ? (
-      <>
-        Your payouts have been paused by the payment processor.{" "}
-        <a href="/settings/payments/remediation" className="underline">
-          Complete pending verification requirements
-        </a>{" "}
-        to resolve this.
-      </>
+      <>Your payouts have been paused by the payment processor. Complete pending verification requirements to resolve this.</>
     ) : payoutsPausedBy === "admin" ? (
       <>
         {`Your payouts have been paused by Gumroad.${payoutsPausedForReason ? ` ${payoutsPausedForReason}` : ""}`} If
@@ -67,26 +55,6 @@ export default function AccountStatusSection({
       <div className="flex flex-col gap-4">
         {!accountStatus.is_suspended && showVerificationSection ? (
           <StripeConnectEmbeddedNotificationBanner />
-        ) : !accountStatus.is_suspended &&
-          !accountStatus.is_under_review &&
-          !payoutPausedReason &&
-          accountStatus.compliance_actions.length === 0 ? (
-          <div className="flex flex-col">
-            <Alert role="status" variant="success">
-              Your identity has been verified!
-            </Alert>
-            <div className="mt-4 flex items-center">
-              <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />
-              <span className="text-sm text-muted">
-                Creator since{" "}
-                {new Date(userJoinedAt).toLocaleDateString(locale, {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </span>
-            </div>
-          </div>
         ) : null}
 
         {accountStatus.is_suspended && accountStatus.suspension_reason ? (

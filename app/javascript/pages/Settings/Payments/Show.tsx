@@ -886,8 +886,6 @@ export default function PaymentsPage() {
           payoutsPausedBy={props.payouts_paused_by}
           payoutsPausedForReason={props.payouts_paused_for_reason}
           showVerificationSection={props.show_verification_section}
-          userJoinedAt={props.user.joined_at}
-          locale={userAgentInfo.locale}
         />
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
