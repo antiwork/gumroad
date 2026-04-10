@@ -36,7 +36,6 @@ import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
-import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const KANA_NAME_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\-.]*$/u;
@@ -114,7 +113,6 @@ export default function PaymentsPage() {
   const props = cast<PaymentsPageProps>(page.props);
   const errors = cast<{ base?: string[] } | undefined>(page.props.errors);
 
-  const userAgentInfo = useUserAgentInfo();
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
   const [errorFieldNames, setErrorFieldNames] = React.useState(() => new Set<FormFieldName>());
