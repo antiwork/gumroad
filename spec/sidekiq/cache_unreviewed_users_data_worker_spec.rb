@@ -6,7 +6,7 @@ describe CacheUnreviewedUsersDataWorker do
   describe "#perform" do
     it "caches unreviewed users data via the service" do
       user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-      create(:balance, user:, amount_cents: 5000)
+      create(:balance, user:, amount_cents: 15_000)
 
       described_class.new.perform
 

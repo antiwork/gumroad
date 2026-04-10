@@ -25,7 +25,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
     context "when cached data exists" do
       let!(:user_with_balance) do
         user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago, name: "Test Creator")
-        create(:balance, user:, amount_cents: 5000)
+        create(:balance, user:, amount_cents: 15_000)
         user
       end
 
@@ -62,7 +62,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
 
     context "with revenue source badges" do
       let(:user) { create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago) }
-      let!(:balance) { create(:balance, user:, amount_cents: 5000) }
+      let!(:balance) { create(:balance, user:, amount_cents: 15_000) }
 
       it "shows sales badge when user has sales" do
         product = create(:product, user:)
@@ -106,7 +106,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
       end
 
       before do
-        create(:balance, user:, amount_cents: 5000)
+        create(:balance, user:, amount_cents: 15_000)
         Admin::UnreviewedUsersService.cache_users_data!
         user.update!(user_risk_state: "compliant")
       end
