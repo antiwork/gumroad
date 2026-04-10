@@ -250,14 +250,16 @@ const CustomerDetailPage = ({
       />
 
       {isLoading ? (
-        <div className="flex flex-col gap-4 p-4 md:block md:columns-2 md:space-y-8 md:[column-gap:2rem] md:p-8 lg:columns-3">
-          <div className="h-[25vh] animate-pulse break-inside-avoid rounded-lg bg-foreground/10" />
-          <div className="h-[25vh] animate-pulse break-inside-avoid rounded-lg bg-foreground/10" />
-          <div className="h-[50vh] animate-pulse break-inside-avoid rounded-lg bg-foreground/10" />
-          <div className="h-[50vh] animate-pulse break-inside-avoid rounded-lg bg-foreground/10" />
+        <div className="grid grid-cols-1 gap-8 p-4 md:grid-cols-2 md:p-8 lg:grid-cols-3">
+          <div className="flex flex-col gap-8">
+            <div className="h-[25vh] animate-pulse rounded-lg bg-foreground/10" />
+            <div className="h-[25vh] animate-pulse rounded-lg bg-foreground/10" />
+          </div>
+          <div className="h-full animate-pulse rounded-lg bg-foreground/10" />
+          <div className="h-full animate-pulse rounded-lg bg-foreground/10" />
         </div>
       ) : (
-        <div className="flex flex-col gap-4 p-4 md:block md:columns-2 md:space-y-8 md:[column-gap:2rem] md:p-8 lg:columns-3">
+        <ColumnLayout className="flex flex-col gap-8 p-4 md:p-8">
           {customer.is_additional_contribution ? (
             <div className="break-inside-avoid">
               <Alert role="status" variant="info">
@@ -841,7 +843,7 @@ const CustomerDetailPage = ({
               </section>
             </Card>
           ) : null}
-        </div>
+        </ColumnLayout>
       )}
     </div>
   );
@@ -1424,43 +1426,37 @@ const OptionSection = ({
         </CardContent>
         <CardContent asChild>
           <section>
-            {options.length > 0 ? (
-              isEditing ? (
-                <Fieldset state={selectedOptionId.error ? "danger" : undefined} className="grow basis-0">
-                  <FormSelect
-                    value={selectedOptionId.value ?? "None selected"}
-                    name={title}
-                    onChange={(evt) => setSelectedOptionId({ value: evt.target.value })}
-                    aria-invalid={selectedOptionId.error}
-                  >
-                    {!selectedOptionId.value ? <option>None selected</option> : null}
-                    {options.map((option) => (
-                      <option value={option.id} key={option.id}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </FormSelect>
-                  <div className="flex w-full gap-2">
-                    <Button onClick={() => setIsEditing(false)} disabled={isLoading}>
-                      Cancel
-                    </Button>
-                    <Button color="primary" onClick={() => void handleSave()} disabled={isLoading}>
-                      Save
-                    </Button>
-                  </div>
-                </Fieldset>
-              ) : (
-                <>
-                  <h5>{option?.name ?? "None selected"}</h5>
-                  <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
-                    Edit
-                  </button>
-                </>
-              )
+            {isEditing && options.length > 0 ? (
+              <Fieldset state={selectedOptionId.error ? "danger" : undefined} className="grow basis-0">
+                <FormSelect
+                  value={selectedOptionId.value ?? "None selected"}
+                  name={title}
+                  onChange={(evt) => setSelectedOptionId({ value: evt.target.value })}
+                  aria-invalid={selectedOptionId.error}
+                >
+                  {!selectedOptionId.value ? <option>None selected</option> : null}
+                  {options.map((option) => (
+                    <option value={option.id} key={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </FormSelect>
+                <div className="flex w-full gap-2">
+                  <Button onClick={() => setIsEditing(false)} disabled={isLoading} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button color="primary" onClick={() => void handleSave()} disabled={isLoading} className="flex-1">
+                    Save
+                  </Button>
+                </div>
+              </Fieldset>
             ) : (
-              <div className="grow text-center">
-                <LoadingSpinner className="size-8" />
-              </div>
+              <>
+                <h5>{option?.name ?? "None selected"}</h5>
+                <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
+                  Edit
+                </button>
+              </>
             )}
           </section>
         </CardContent>
@@ -1708,7 +1704,7 @@ const RefundForm = ({
   };
 
   const refundButton = (
-    <Button color="primary" onClick={() => setIsModalShowing(true)} disabled={isLoading || paypalRefundExpired}>
+    <Button color="primary" onClick={() => setIsModalShowing(true)} disabled={isLoading || paypalRefundExpired} className="w-full">
       {isLoading ? "Refunding..." : isPartialRefund ? "Issue partial refund" : "Refund fully"}
     </Button>
   );
@@ -1725,17 +1721,19 @@ const RefundForm = ({
         />
         <div className="flex w-full gap-2">
           {onClose ? (
-            <Button onClick={onClose} disabled={isLoading}>
+            <Button onClick={onClose} disabled={isLoading} className="flex-1">
               Cancel
             </Button>
           ) : null}
-          {paypalRefundExpired ? (
-            <WithTooltip tip="PayPal refunds aren't available after 6 months." position="top">
-              {refundButton}
-            </WithTooltip>
-          ) : (
-            refundButton
-          )}
+          <div className="flex-1">
+            {paypalRefundExpired ? (
+              <WithTooltip tip="PayPal refunds aren't available after 6 months." position="top">
+                {refundButton}
+              </WithTooltip>
+            ) : (
+              refundButton
+            )}
+          </div>
         </div>
         {showRefundFeeNotice ? (
           <Alert role="status" variant="info">
@@ -1836,7 +1834,7 @@ const ChargeRow = ({
         </div>
       </div>
       {isRefunding ? (
-        <div className="mt-3 max-w-md">
+        <div className="mt-3">
           <RefundForm
             purchaseId={purchase.id}
             currencyType={purchase.currency_type}
@@ -2151,6 +2149,49 @@ const CommissionSection = ({
         </CardContent>
       </section>
     </Card>
+  );
+};
+
+const BREAKPOINT_MD = 768;
+const BREAKPOINT_LG = 1024;
+
+const ColumnLayout = ({ children, className }: { children: React.ReactNode; className?: string }) => {
+  const [columnCount, setColumnCount] = React.useState(() => {
+    if (typeof window === "undefined") return 1;
+    if (window.innerWidth >= BREAKPOINT_LG) return 3;
+    if (window.innerWidth >= BREAKPOINT_MD) return 2;
+    return 1;
+  });
+
+  React.useEffect(() => {
+    const updateColumns = () => {
+      if (window.innerWidth >= BREAKPOINT_LG) setColumnCount(3);
+      else if (window.innerWidth >= BREAKPOINT_MD) setColumnCount(2);
+      else setColumnCount(1);
+    };
+    window.addEventListener("resize", updateColumns);
+    return () => window.removeEventListener("resize", updateColumns);
+  }, []);
+
+  const items = React.Children.toArray(children).filter(Boolean);
+
+  if (columnCount === 1) {
+    return <div className={className}>{items}</div>;
+  }
+
+  const perColumn = Math.ceil(items.length / columnCount);
+  const columns: React.ReactNode[][] = Array.from({ length: columnCount }, (_, i) =>
+    items.slice(i * perColumn, (i + 1) * perColumn),
+  );
+
+  return (
+    <div className={className} style={{ display: "grid", gridTemplateColumns: `repeat(${columnCount}, 1fr)`, gap: "2rem" }}>
+      {columns.map((col, i) => (
+        <div key={i} className="flex flex-col gap-8">
+          {col}
+        </div>
+      ))}
+    </div>
   );
 };
 
