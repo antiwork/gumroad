@@ -2189,15 +2189,15 @@ const ColumnLayout = ({ children, className }: { children: React.ReactNode; clas
     const childElements = measureRef.current.children;
 
     let totalHeight = 0;
-    for (let i = 0; i < childElements.length; i++) {
-      totalHeight += (childElements[i] as HTMLElement).offsetHeight;
+    for (const child of childElements) {
+      totalHeight += (child instanceof HTMLElement ? child.offsetHeight : 0);
     }
     const targetPerColumn = totalHeight / actualColumns;
 
     let currentColumn = 0;
     let currentHeight = 0;
-    for (let i = 0; i < childElements.length; i++) {
-      const itemHeight = (childElements[i] as HTMLElement).offsetHeight;
+    for (const child of childElements) {
+      const itemHeight = child instanceof HTMLElement ? child.offsetHeight : 0;
       if (currentColumn < actualColumns - 1 && currentHeight > 0 && currentHeight + itemHeight / 2 > targetPerColumn) {
         currentColumn++;
         currentHeight = 0;
@@ -2225,7 +2225,7 @@ const ColumnLayout = ({ children, className }: { children: React.ReactNode; clas
   const columns: React.ReactNode[][] = Array.from({ length: actualColumns }, () => []);
   items.forEach((item, i) => {
     const col = columnAssignments[i] ?? 0;
-    columns[col]!.push(item);
+    columns[col]?.push(item);
   });
 
   return (
