@@ -44,7 +44,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
 
         expect(page).to have_text(user_with_balance.external_id)
         expect(page).to have_text(user_with_balance.email)
-        expect(page).to have_text("$50")
+        expect(page).to have_text("$150")
       end
 
       it "links to the user's admin page" do
