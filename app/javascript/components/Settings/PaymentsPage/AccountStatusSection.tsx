@@ -67,7 +67,10 @@ export default function AccountStatusSection({
       <div className="flex flex-col gap-4">
         {!accountStatus.is_suspended && showVerificationSection ? (
           <StripeConnectEmbeddedNotificationBanner />
-        ) : !accountStatus.is_suspended && !accountStatus.is_under_review && !payoutPausedReason && accountStatus.compliance_actions.length === 0 ? (
+        ) : !accountStatus.is_suspended &&
+          !accountStatus.is_under_review &&
+          !payoutPausedReason &&
+          accountStatus.compliance_actions.length === 0 ? (
           <div className="flex flex-col">
             <Alert role="status" variant="success">
               Your identity has been verified!
