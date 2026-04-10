@@ -67,7 +67,7 @@ export default function AccountStatusSection({
           </Alert>
         ) : null}
 
-        {!accountStatus.is_suspended && payoutPausedReason ? (
+        {!accountStatus.is_suspended && !showVerificationSection && payoutPausedReason ? (
           <Alert role="status" variant="warning">
             {payoutPausedReason}
           </Alert>
