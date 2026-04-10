@@ -5,8 +5,8 @@ class SuspendUsersWorker
   sidekiq_options retry: 5, queue: :default
 
   def perform(author_id, user_ids, reason, additional_notes)
+    author_name = User.find(author_id).name_or_username
     User.where(id: user_ids).or(User.where(external_id: user_ids)).find_each(batch_size: 100) do |user|
-      author_name = User.find(author_id).name_or_username
       content = "Suspended for a policy violation by #{author_name} on #{Time.current.to_fs(:formatted_date_full_month)} as part of mass suspension. Reason: #{reason}."
       content += "\nAdditional notes: #{additional_notes}" if additional_notes.present?
       user.suspend_for_tos_violation(author_id:, content:)
