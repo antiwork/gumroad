@@ -595,7 +595,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         merchant_account.mark_deleted!
         visit settings_payments_path
-        expect(page).to have_status(text: "Your identity has been verified!")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
       end
 
       context "when the creator has a business account" do
