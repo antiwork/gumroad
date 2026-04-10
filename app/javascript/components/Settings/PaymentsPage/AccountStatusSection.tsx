@@ -51,9 +51,9 @@ export default function AccountStatusSection({
         </a>
         .
       </>
-    ) : payoutsPausedBy === "user"
-      ? "You have paused your payouts. Use the pause payouts toggle below to resume."
-      : null;
+    ) : payoutsPausedBy === "user" ? (
+      "You have paused your payouts. Use the pause payouts toggle below to resume."
+    ) : null;
 
   return (
     <FormSection header={<h2>Account status</h2>}>
