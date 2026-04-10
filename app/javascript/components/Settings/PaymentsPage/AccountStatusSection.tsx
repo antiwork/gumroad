@@ -98,7 +98,11 @@ export default function AccountStatusSection({
           </Alert>
         ) : null}
 
-        {payoutPausedReason ? <Alert variant="warning">{payoutPausedReason}</Alert> : null}
+        {payoutPausedReason ? (
+          <Alert role="status" variant="warning">
+            {payoutPausedReason}
+          </Alert>
+        ) : null}
 
         {!accountStatus.is_suspended && accountStatus.compliance_actions.length > 0 ? (
           <Alert variant="warning">
@@ -119,7 +123,10 @@ export default function AccountStatusSection({
           </Alert>
         ) : null}
 
-        {accountStatus.gumroad_status ? (
+        {accountStatus.gumroad_status &&
+        payoutsPausedBy !== "stripe" &&
+        payoutsPausedBy !== "admin" &&
+        payoutsPausedBy !== "system" ? (
           <Alert variant="warning">
             {accountStatus.gumroad_status} If you have questions,{" "}
             <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
