@@ -981,11 +981,11 @@ export default function PaymentsPage() {
               <WithTooltip
                 tip={
                   props.payouts_paused_by === "stripe"
-                    ? "Your payouts are currently paused by our payment processor. Please check for any pending verification requirements above."
+                    ? "Your payouts have been paused by the payment processor. Complete pending verification requirements to resolve this."
                     : props.payouts_paused_by === "admin"
-                      ? `Your payouts have been paused by Gumroad admin.${props.payouts_paused_for_reason && ` Reason for pause: ${props.payouts_paused_for_reason}`}`
+                      ? `Your payouts have been paused by Gumroad.${props.payouts_paused_for_reason ? ` ${props.payouts_paused_for_reason}` : ""}`
                       : props.payouts_paused_by === "system"
-                        ? "Your payouts have been automatically paused for a security review and will be resumed once the review completes."
+                        ? "Your payouts have been paused for a security review."
                         : null
                 }
               >

@@ -6336,7 +6336,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         user.update!(payouts_paused_internally: true)
         visit settings_payments_path
 
-        expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin.")
+        expect(page).to have_status(text: "Your payouts have been paused by Gumroad.")
       end
 
       it "shows the warning notice when payouts are paused internally by admin with a reason" do
@@ -6349,21 +6349,21 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         visit settings_payments_path
 
-        expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin. Reason for pause: Chargeback rate is too high.")
+        expect(page).to have_status(text: "Your payouts have been paused by Gumroad. Chargeback rate is too high.")
       end
 
       it "shows the warning notice when payouts are paused internally by Stripe" do
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         visit settings_payments_path
 
-        expect(page).to have_status(text: "Your payouts are currently paused by our payment processor. Please check for any pending verification requirements below.")
+        expect(page).to have_status(text: "Your payouts have been paused by the payment processor. Complete pending verification requirements to resolve this.")
       end
 
       it "shows the warning notice when payouts are paused internally by the system" do
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
         visit settings_payments_path
 
-        expect(page).to have_status(text: "Your payouts have been automatically paused for a security review and will be resumed once the review completes.")
+        expect(page).to have_status(text: "Your payouts have been paused for a security review.")
       end
 
       it "shows the warning notice when payouts are paused by the user" do
@@ -6404,7 +6404,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         within_section "Payout schedule", section_element: :section do
           toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad admin.")
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad.")
         end
       end
 
@@ -6421,7 +6421,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         within_section "Payout schedule", section_element: :section do
           toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad admin. Reason for pause: Chargeback rate is too high.")
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad. Chargeback rate is too high.")
         end
       end
 
@@ -6432,7 +6432,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         within_section "Payout schedule", section_element: :section do
           toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Your payouts are currently paused by our payment processor. Please check for any pending verification requirements above.")
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by the payment processor. Complete pending verification requirements to resolve this.")
         end
       end
 
@@ -6443,7 +6443,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         within_section "Payout schedule", section_element: :section do
           toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Your payouts have been automatically paused for a security review and will be resumed once the review completes.")
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused for a security review.")
         end
       end
     end
