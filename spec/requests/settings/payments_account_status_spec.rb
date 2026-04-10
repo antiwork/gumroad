@@ -72,7 +72,6 @@ describe "Settings::Payments account_status", type: :request do
 
     status = account_status
     expect(status["show_section"]).to be true
-    expect(status["pending_compliance"]).to be true
     expect(status["compliance_actions"]).to include("Please provide your tax ID")
   end
 end

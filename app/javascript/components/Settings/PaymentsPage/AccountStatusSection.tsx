@@ -11,7 +11,6 @@ export type AccountStatus = {
   is_suspended: boolean;
   is_under_review: boolean;
   suspension_reason: string | null;
-  pending_compliance: boolean;
   compliance_actions: string[];
   gumroad_status: string | null;
 };
@@ -68,7 +67,7 @@ export default function AccountStatusSection({
       <div className="flex flex-col gap-4">
         {!accountStatus.is_suspended && showVerificationSection ? (
           <StripeConnectEmbeddedNotificationBanner />
-        ) : !accountStatus.is_suspended ? (
+        ) : !accountStatus.is_suspended && accountStatus.compliance_actions.length === 0 ? (
           <div className="flex flex-col">
             <Alert role="status" variant="success">
               Your identity has been verified!
@@ -125,7 +124,7 @@ export default function AccountStatusSection({
           </Alert>
         ) : null}
 
-        {accountStatus.gumroad_status && !payoutPausedReason ? (
+        {accountStatus.gumroad_status && (!payoutPausedReason || payoutsPausedBy === "user") ? (
           <Alert variant="warning">
             {accountStatus.gumroad_status} If you have questions,{" "}
             <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">

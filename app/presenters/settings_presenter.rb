@@ -253,7 +253,6 @@ class SettingsPresenter
       payouts_paused_not_by_user = seller.payouts_paused_internally?
 
       payouts_paused_by_user = seller.payouts_paused_by_user?
-      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || payouts_paused_by_user || pending_compliance
 
       suspension_reason = if seller.suspended_for_fraud?
         "Your account has been suspended due to fraudulent activity."
@@ -276,12 +275,13 @@ class SettingsPresenter
         "Your account is under review and payouts are on hold until it's resolved."
       end
 
+      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || payouts_paused_by_user || compliance_actions.any?
+
       {
         show_section:,
         is_suspended:,
         is_under_review:,
         suspension_reason:,
-        pending_compliance: pending_compliance,
         compliance_actions:,
         gumroad_status:,
       }
