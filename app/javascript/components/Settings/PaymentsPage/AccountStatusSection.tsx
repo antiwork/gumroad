@@ -80,14 +80,7 @@ export default function AccountStatusSection({
             <ul className="mt-1 list-disc pl-4">
               {accountStatus.compliance_actions.map((action, i) => (
                 <li key={i}>
-                  <a
-                    href={
-                      action === "Complete pending verification requirements via Stripe"
-                        ? "/settings/payments/remediation"
-                        : "https://customers.gumroad.com/article/800-contact-support"
-                    }
-                    className="underline"
-                  >
+                  <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
                     {action}
                   </a>
                 </li>
