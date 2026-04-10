@@ -32,6 +32,8 @@ export default function AccountStatusSection({
   userJoinedAt: string;
   locale: string;
 }) {
+  if (!accountStatus.show_section) return null;
+
   const payoutPausedReason =
     payoutsPausedBy === "stripe" ? (
       <>
@@ -58,6 +60,8 @@ export default function AccountStatusSection({
         </a>
         .
       </>
+    ) : payoutsPausedBy === "user" ? (
+      <strong>You have paused your payouts.</strong>
     ) : null;
 
   return (
@@ -96,7 +100,7 @@ export default function AccountStatusSection({
 
         {payoutPausedReason ? <Alert variant="warning">{payoutPausedReason}</Alert> : null}
 
-        {accountStatus.compliance_actions.length > 0 ? (
+        {!accountStatus.is_suspended && accountStatus.compliance_actions.length > 0 ? (
           <Alert variant="warning">
             <strong>Action needed</strong>
             <ul className="mt-1 list-disc pl-4">

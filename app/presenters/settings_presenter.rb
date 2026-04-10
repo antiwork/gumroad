@@ -251,7 +251,8 @@ class SettingsPresenter
       is_under_review = seller.on_probation? || seller.flagged?
       payouts_paused_not_by_user = seller.payouts_paused_internally?
 
-      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || pending_compliance
+      payouts_paused_by_user = seller.payouts_paused_by_user?
+      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || payouts_paused_by_user || pending_compliance
 
       suspension_reason = if seller.suspended_for_fraud?
         "Your account has been suspended due to fraudulent activity."
