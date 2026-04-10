@@ -28,7 +28,10 @@ export default function AccountStatusSection({
 
   const payoutPausedReason =
     payoutsPausedBy === "stripe" ? (
-      <>Your payouts have been paused by the payment processor. Complete pending verification requirements to resolve this.</>
+      <>
+        Your payouts have been paused by the payment processor. Complete pending verification requirements to resolve
+        this.
+      </>
     ) : payoutsPausedBy === "admin" ? (
       <>
         {`Your payouts have been paused by Gumroad.${payoutsPausedForReason ? ` ${payoutsPausedForReason}` : ""}`} If
@@ -53,9 +56,7 @@ export default function AccountStatusSection({
   return (
     <FormSection header={<h2>Account status</h2>}>
       <div className="flex flex-col gap-4">
-        {!accountStatus.is_suspended && showVerificationSection ? (
-          <StripeConnectEmbeddedNotificationBanner />
-        ) : null}
+        {!accountStatus.is_suspended && showVerificationSection ? <StripeConnectEmbeddedNotificationBanner /> : null}
 
         {accountStatus.is_suspended && accountStatus.suspension_reason ? (
           <Alert variant="danger">
