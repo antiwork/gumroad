@@ -2166,9 +2166,11 @@ const ColumnLayout = ({ children, className }: { children: React.ReactNode; clas
 
   React.useEffect(() => {
     const updateColumns = () => {
-      if (window.innerWidth >= BREAKPOINT_LG) setColumnCount(3);
-      else if (window.innerWidth >= BREAKPOINT_MD) setColumnCount(2);
-      else setColumnCount(1);
+      const newCount = window.innerWidth >= BREAKPOINT_LG ? 3 : window.innerWidth >= BREAKPOINT_MD ? 2 : 1;
+      setColumnCount((prev) => {
+        if (prev !== newCount) setColumnAssignments(null);
+        return newCount;
+      });
     };
     window.addEventListener("resize", updateColumns);
     return () => window.removeEventListener("resize", updateColumns);
