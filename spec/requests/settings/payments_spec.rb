@@ -554,11 +554,11 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_section("Verification")
+        expect(page).to have_section("Account status")
         expect(page).not_to have_status(text: "Your identity has been verified!")
       end
 
-      it "always shows the verification section with success message when verification is not needed" do
+      it "hides the account status section when verification is not needed" do
         user = create(:user, username: nil, payment_address: nil)
         create(:user_compliance_info, user:, birthday: Date.new(1901, 1, 2))
         create(:ach_account_stripe_succeed, user:)
@@ -571,9 +571,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         login_as user
         visit settings_payments_path
 
-        expect(page).to have_section("Verification")
+        expect(page).not_to have_section("Account status")
 
-        expect(page).to have_status(text: "Your identity has been verified!")
+        expect(page).not_to have_status(text: "Your identity has been verified!")
       end
 
       it "does not show the verification section if Stripe account is not active" do
@@ -590,7 +590,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_section("Verification")
+        expect(page).to have_section("Account status")
         expect(page).not_to have_status(text: "Your identity has been verified!")
 
         merchant_account.mark_deleted!
@@ -859,7 +859,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::Business::COMPANY_REGISTRATION_VERIFICATION)
 
         visit settings_payments_path
-        expect(page).to have_section("Verification")
+        expect(page).to have_section("Account status")
         expect(page).not_to have_status(text: "Your identity has been verified!")
       end
     end
@@ -1869,7 +1869,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         login_as user
         visit settings_payments_path
-        expect(page).to have_section("Verification")
+        expect(page).to have_section("Account status")
         expect(page).not_to have_status(text: "Your identity has been verified!")
       end
 

@@ -8,7 +8,6 @@ import logo from "$assets/images/logo-g.svg";
 
 export type AccountStatus = {
   show_section: boolean;
-  account_state: string;
   is_suspended: boolean;
   is_under_review: boolean;
   suspension_reason: string | null;
@@ -67,7 +66,7 @@ export default function AccountStatusSection({
   return (
     <FormSection header={<h2>Account status</h2>}>
       <div className="flex flex-col gap-4">
-        {showVerificationSection ? (
+        {!accountStatus.is_suspended && showVerificationSection ? (
           <StripeConnectEmbeddedNotificationBanner />
         ) : !accountStatus.is_suspended ? (
           <div className="flex flex-col">
@@ -110,23 +109,23 @@ export default function AccountStatusSection({
             <ul className="mt-1 list-disc pl-4">
               {accountStatus.compliance_actions.map((action, i) => (
                 <li key={i}>
-                  {action === "Complete pending verification requirements via Stripe" ? (
-                    <a href="/settings/payments/remediation" className="underline">
-                      {action}
-                    </a>
-                  ) : (
-                    action
-                  )}
+                  <a
+                    href={
+                      action === "Complete pending verification requirements via Stripe"
+                        ? "/settings/payments/remediation"
+                        : "https://customers.gumroad.com/article/800-contact-support"
+                    }
+                    className="underline"
+                  >
+                    {action}
+                  </a>
                 </li>
               ))}
             </ul>
           </Alert>
         ) : null}
 
-        {accountStatus.gumroad_status &&
-        payoutsPausedBy !== "stripe" &&
-        payoutsPausedBy !== "admin" &&
-        payoutsPausedBy !== "system" ? (
+        {accountStatus.gumroad_status && !payoutPausedReason ? (
           <Alert variant="warning">
             {accountStatus.gumroad_status} If you have questions,{" "}
             <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">

@@ -60,7 +60,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(account_status[:show_section]).to be false
         expect(account_status[:is_suspended]).to be false
         expect(account_status[:is_under_review]).to be false
-        expect(account_status[:account_state]).to eq("compliant")
       end
 
       it "shows section for user on probation" do
@@ -85,7 +84,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(account_status[:show_section]).to be true
         expect(account_status[:is_suspended]).to be true
         expect(account_status[:suspension_reason]).to include("policy violation")
-        expect(account_status[:account_state]).to eq("suspended_for_tos_violation")
       end
 
       it "shows section for user with fraud suspension" do
@@ -98,7 +96,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(account_status[:show_section]).to be true
         expect(account_status[:is_suspended]).to be true
         expect(account_status[:suspension_reason]).to include("fraudulent activity")
-        expect(account_status[:account_state]).to eq("suspended_for_fraud")
       end
 
       it "shows section when payouts are paused internally" do

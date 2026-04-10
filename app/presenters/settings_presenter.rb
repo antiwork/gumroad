@@ -192,18 +192,19 @@ class SettingsPresenter
 
   def payments_props(remote_ip: nil)
     user_compliance_info = seller.fetch_or_build_user_compliance_info
+    payments_policy = Pundit.policy!(pundit_user, [:settings, :payments, seller])
     {
       settings_pages: pages,
-      is_form_disabled: !Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?,
+      is_form_disabled: !payments_policy.update?,
       should_show_country_modal: !seller.fetch_or_build_user_compliance_info.country.present? &&
-        Pundit.policy!(pundit_user, [:settings, :payments, seller]).set_country?,
+        payments_policy.set_country?,
       aus_backtax_details: aus_backtax_details(user_compliance_info),
       stripe_connect:,
       countries: Compliance::Countries.for_select.to_h,
       ip_country_code: GeoIp.lookup(remote_ip)&.country_code,
       bank_account_details:,
       paypal_address: seller.payment_address,
-      show_verification_section: seller.user_compliance_info_requests.requested.present? && seller.stripe_account.present? && Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?,
+      show_verification_section: seller.user_compliance_info_requests.requested.present? && seller.stripe_account.present? && payments_policy.update?,
       paypal_connect:,
       fee_info: fee_info(user_compliance_info),
       user: user_details(user_compliance_info),
@@ -219,7 +220,7 @@ class SettingsPresenter
       payouts_paused_internally: seller.payouts_paused_internally?,
       payouts_paused_by: seller.payouts_paused_by_source,
       payouts_paused_for_reason: seller.payouts_paused_for_reason,
-      account_status: account_status_details,
+      account_status: account_status_details(payments_policy),
       payouts_paused_by_user: seller.payouts_paused_by_user?,
       payout_threshold_cents: seller.payout_threshold_cents,
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
@@ -245,7 +246,7 @@ class SettingsPresenter
   end
 
   private
-    def account_status_details
+    def account_status_details(payments_policy)
       pending_compliance = seller.user_compliance_info_requests.requested.exists?
       is_suspended = seller.suspended?
       is_under_review = seller.on_probation? || seller.flagged?
@@ -261,7 +262,7 @@ class SettingsPresenter
       end
 
       compliance_actions = []
-      if pending_compliance && seller.stripe_account.present?
+      if pending_compliance && seller.stripe_account.present? && payments_policy.update?
         compliance_actions << "Complete pending verification requirements via Stripe"
       end
       if pending_compliance && seller.stripe_account.blank?
@@ -277,7 +278,6 @@ class SettingsPresenter
 
       {
         show_section:,
-        account_state: seller.user_risk_state,
         is_suspended:,
         is_under_review:,
         suspension_reason:,
