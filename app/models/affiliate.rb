@@ -123,6 +123,7 @@ class Affiliate < ApplicationRecord
     end
 
     def eligible_for_stripe_payments
+      return if being_marked_as_deleted?
       errors.add(:base, "This user cannot be added as #{collaborator? ? "a collaborator" : "an affiliate"} because they use a Brazilian Stripe account.") if affiliate_user&.has_brazilian_stripe_connect_account?
     end
 end
