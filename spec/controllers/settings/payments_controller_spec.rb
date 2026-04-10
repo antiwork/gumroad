@@ -83,7 +83,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         account_status = inertia.props[:account_status]
         expect(account_status[:show_section]).to be true
         expect(account_status[:is_suspended]).to be true
-        expect(account_status[:suspension_reason]).to include("policy violation")
       end
 
       it "shows section for user with fraud suspension" do
@@ -95,7 +94,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         account_status = inertia.props[:account_status]
         expect(account_status[:show_section]).to be true
         expect(account_status[:is_suspended]).to be true
-        expect(account_status[:suspension_reason]).to include("fraudulent activity")
       end
 
       it "shows section when payouts are paused internally" do

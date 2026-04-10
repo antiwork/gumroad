@@ -571,7 +571,6 @@ describe SettingsPresenter do
           show_section: false,
           is_suspended: false,
           is_under_review: false,
-          suspension_reason: nil,
           compliance_actions: [],
           gumroad_status: nil,
         },

@@ -45,7 +45,6 @@ describe "Settings::Payments account_status", type: :request do
     status = account_status
     expect(status["show_section"]).to be true
     expect(status["is_suspended"]).to be true
-    expect(status["suspension_reason"]).to include("policy violation")
   end
 
   it "shows section for suspended user (fraud)" do
@@ -55,7 +54,6 @@ describe "Settings::Payments account_status", type: :request do
     status = account_status
     expect(status["show_section"]).to be true
     expect(status["is_suspended"]).to be true
-    expect(status["suspension_reason"]).to include("fraudulent activity")
   end
 
   it "shows section when payouts are paused internally" do

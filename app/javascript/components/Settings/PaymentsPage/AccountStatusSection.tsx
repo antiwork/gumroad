@@ -8,7 +8,6 @@ export type AccountStatus = {
   show_section: boolean;
   is_suspended: boolean;
   is_under_review: boolean;
-  suspension_reason: string | null;
   compliance_actions: string[];
   gumroad_status: string | null;
 };
@@ -29,8 +28,11 @@ export default function AccountStatusSection({
   const payoutPausedReason =
     payoutsPausedBy === "stripe" ? (
       <>
-        Your payouts have been paused by the payment processor. Complete pending verification requirements to resolve
-        this.
+        Your payouts have been paused by the payment processor. If you have questions,{" "}
+        <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
+          contact support
+        </a>
+        .
       </>
     ) : payoutsPausedBy === "admin" ? (
       <>
@@ -50,23 +52,13 @@ export default function AccountStatusSection({
         .
       </>
     ) : payoutsPausedBy === "user" ? (
-      <strong>You have paused your payouts.</strong>
+      <>You have paused your payouts. Use the pause payouts toggle below to resume.</>
     ) : null;
 
   return (
     <FormSection header={<h2>Account status</h2>}>
       <div className="flex flex-col gap-4">
         {!accountStatus.is_suspended && showVerificationSection ? <StripeConnectEmbeddedNotificationBanner /> : null}
-
-        {accountStatus.is_suspended && accountStatus.suspension_reason ? (
-          <Alert variant="danger">
-            {accountStatus.suspension_reason} If you have questions,{" "}
-            <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
-              contact support
-            </a>
-            .
-          </Alert>
-        ) : null}
 
         {!accountStatus.is_suspended && !showVerificationSection && payoutPausedReason ? (
           <Alert role="status" variant="warning">

@@ -6356,7 +6356,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         visit settings_payments_path
 
-        expect(page).to have_status(text: "Your payouts have been paused by the payment processor. Complete pending verification requirements to resolve this.")
+        expect(page).to have_status(text: "Your payouts have been paused by the payment processor.")
       end
 
       it "shows the warning notice when payouts are paused internally by the system" do
@@ -6432,7 +6432,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         within_section "Payout schedule", section_element: :section do
           toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Your payouts have been paused by the payment processor. Complete pending verification requirements to resolve this.")
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by the payment processor.")
         end
       end
 
