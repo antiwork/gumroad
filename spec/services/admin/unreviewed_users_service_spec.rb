@@ -7,15 +7,15 @@ describe Admin::UnreviewedUsersService do
     it "returns the total count of unreviewed users with unpaid balance" do
       2.times do
         user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-        create(:balance, user:, amount_cents: 5000)
+        create(:balance, user:, amount_cents: 15_000)
       end
 
       expect(described_class.new.count).to eq(2)
     end
 
-    it "excludes users with balance <= $10" do
+    it "excludes users with balance <= $100" do
       user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-      create(:balance, user:, amount_cents: 500)
+      create(:balance, user:, amount_cents: 5_000)
 
       expect(described_class.new.count).to eq(0)
     end
@@ -24,10 +24,10 @@ describe Admin::UnreviewedUsersService do
   describe "#users_with_unpaid_balance" do
     it "returns users ordered by total balance descending" do
       low_balance_user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-      create(:balance, user: low_balance_user, amount_cents: 2000)
+      create(:balance, user: low_balance_user, amount_cents: 15_000)
 
       high_balance_user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-      create(:balance, user: high_balance_user, amount_cents: 10000)
+      create(:balance, user: high_balance_user, amount_cents: 50_000)
 
       users = described_class.new.users_with_unpaid_balance
 
@@ -37,37 +37,37 @@ describe Admin::UnreviewedUsersService do
 
     it "includes total_balance_cents attribute" do
       user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-      create(:balance, user:, amount_cents: 5000)
+      create(:balance, user:, amount_cents: 15_000)
 
       result = described_class.new.users_with_unpaid_balance.first
 
-      expect(result.total_balance_cents).to eq(5000)
+      expect(result.total_balance_cents).to eq(15_000)
     end
 
-    it "excludes users with balance <= $10" do
+    it "excludes users with balance <= $100" do
       user_with_low_balance = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-      create(:balance, user: user_with_low_balance, amount_cents: 500)
+      create(:balance, user: user_with_low_balance, amount_cents: 5_000)
 
       expect(described_class.new.users_with_unpaid_balance).to be_empty
     end
 
     it "excludes compliant users" do
       compliant_user = create(:user, user_risk_state: "compliant", created_at: 1.year.ago)
-      create(:balance, user: compliant_user, amount_cents: 5000)
+      create(:balance, user: compliant_user, amount_cents: 15_000)
 
       expect(described_class.new.users_with_unpaid_balance).to be_empty
     end
 
     it "excludes users created before cutoff date" do
       old_user = create(:user, user_risk_state: "not_reviewed", created_at: 3.years.ago)
-      create(:balance, user: old_user, amount_cents: 5000)
+      create(:balance, user: old_user, amount_cents: 15_000)
 
       expect(described_class.new.users_with_unpaid_balance).to be_empty
     end
 
     it "includes old users when cutoff_date is set in Redis" do
       old_user = create(:user, user_risk_state: "not_reviewed", created_at: Date.new(2023, 6, 1))
-      create(:balance, user: old_user, amount_cents: 5000)
+      create(:balance, user: old_user, amount_cents: 15_000)
 
       $redis.set(RedisKey.unreviewed_users_cutoff_date, "2023-01-01")
       users = described_class.new.users_with_unpaid_balance
@@ -78,7 +78,7 @@ describe Admin::UnreviewedUsersService do
     it "respects the limit parameter" do
       3.times do
         user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-        create(:balance, user:, amount_cents: 5000)
+        create(:balance, user:, amount_cents: 15_000)
       end
 
       users = described_class.new.users_with_unpaid_balance(limit: 2)
@@ -113,7 +113,7 @@ describe Admin::UnreviewedUsersService do
   describe ".cache_users_data!" do
     it "caches user data in Redis" do
       user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-      create(:balance, user:, amount_cents: 5000)
+      create(:balance, user:, amount_cents: 15_000)
 
       result = described_class.cache_users_data!
 
@@ -126,7 +126,7 @@ describe Admin::UnreviewedUsersService do
 
     it "stores data in Redis" do
       user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-      create(:balance, user:, amount_cents: 5000)
+      create(:balance, user:, amount_cents: 15_000)
 
       described_class.cache_users_data!
 
@@ -139,7 +139,7 @@ describe Admin::UnreviewedUsersService do
 
       3.times do |i|
         user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago)
-        create(:balance, user:, amount_cents: 5000 + (i * 1000))
+        create(:balance, user:, amount_cents: 15_000 + (i * 5_000))
       end
 
       result = described_class.cache_users_data!

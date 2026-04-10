@@ -89,9 +89,9 @@ class PaypalMerchantAccountManager
         return "There was an error connecting your PayPal account with Gumroad." unless merchant_account.save
       end
 
-      oauth_integration = parsed_response["oauth_integrations"][0]
+      oauth_integration = parsed_response.dig("oauth_integrations", 0)
 
-      if parsed_response["primary_email_confirmed"] && parsed_response["payments_receivable"] &&
+      if oauth_integration && parsed_response["primary_email_confirmed"] && parsed_response["payments_receivable"] &&
           oauth_integration["integration_type"] == "OAUTH_THIRD_PARTY" &&
           oauth_integration["integration_method"] == "PAYPAL"
         oauth_integration["oauth_third_party"][0]["partner_client_id"] == PAYPAL_PARTNER_CLIENT_ID

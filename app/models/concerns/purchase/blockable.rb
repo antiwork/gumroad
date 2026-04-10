@@ -42,6 +42,8 @@ module Purchase::Blockable
                          PurchaseErrorCode::BLOCKED_CUSTOMER_CHARGE_PROCESSOR_FINGERPRINT]
   private_constant :IGNORED_ERROR_CODES
 
+  MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
+
   MAX_PURCHASER_AGE_FOR_SUSPENSION = 6.hours
   private_constant :MAX_PURCHASER_AGE_FOR_SUSPENSION
 
@@ -87,6 +89,30 @@ module Purchase::Blockable
 
   def charge_processor_fingerprint
     stripe_charge_processor? ? stripe_fingerprint : card_visual
+  end
+
+  def block_buyer_based_on_chargeback_count!
+    email_cb_count = Purchase.where(email: email)
+                             .where.not(chargeback_date: nil)
+                             .count
+
+    purchaser_cb_count = if purchaser_id.present?
+      Purchase.where(purchaser_id: purchaser_id)
+              .where.not(chargeback_date: nil)
+              .count
+    else
+      0
+    end
+
+    chargeback_count = [email_cb_count, purchaser_cb_count].max
+
+    return if chargeback_count < MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK
+    return if buyer_blocked?
+
+    block_buyer!(
+      blocking_user_id: GUMROAD_ADMIN_ID,
+      comment_content: "Auto-blocked: buyer has #{chargeback_count} chargebacks (#{email_cb_count} by email, #{purchaser_cb_count} by account)"
+    )
   end
 
   def pause_payouts_for_seller_based_on_chargeback_rate!

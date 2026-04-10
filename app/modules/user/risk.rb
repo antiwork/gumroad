@@ -87,7 +87,6 @@ module User::Risk
   def suspend_due_to_stripe_risk
     transaction do
       update!(tos_violation_reason: "Stripe reported high risk")
-      flag_for_tos_violation!(author_name: "stripe_risk", bulk: true) unless flagged_for_tos_violation? || on_probation? || suspended?
       suspend_for_tos_violation!(author_name: "stripe_risk", bulk: true) unless suspended?
       links.alive.find_each do |product|
         product.unpublish!(is_unpublished_by_admin: true)
