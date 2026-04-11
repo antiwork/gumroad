@@ -71,7 +71,7 @@ export default function AccountStatusSection({
         ) : null}
 
         {!accountStatus.is_suspended && !showVerificationSection && accountStatus.compliance_actions.length > 0 ? (
-          <Alert variant="warning">
+          <Alert role="status" variant="warning">
             <strong>Action needed</strong>
             <ul className="mt-1 list-disc pl-4">
               {accountStatus.compliance_actions.map((action, i) => (
