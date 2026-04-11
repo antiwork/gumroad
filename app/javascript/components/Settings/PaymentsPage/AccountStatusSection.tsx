@@ -83,7 +83,7 @@ export default function AccountStatusSection({
           </Alert>
         ) : null}
 
-        {accountStatus.gumroad_status && (!payoutPausedReason || payoutsPausedBy === "user") ? (
+        {accountStatus.gumroad_status && !showVerificationSection && (!payoutPausedReason || payoutsPausedBy === "user") ? (
           <Alert variant="warning">
             {accountStatus.gumroad_status} If you have questions,{" "}
             <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
