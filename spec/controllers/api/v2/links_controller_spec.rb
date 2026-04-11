@@ -49,6 +49,56 @@ describe Api::V2::LinksController do
         expect(product).not_to have_key("files")
         expect(product["variants"].first["options"].first).not_to have_key("rich_content")
       end
+
+      it "paginates results and returns page_key when there are more products" do
+        (1..11).map { |i| create(:product, user: @user, created_at: Time.current + i.hours) }
+
+        get @action, params: @params
+
+        body = response.parsed_body
+        expect(body["success"]).to be true
+        expect(body["products"].size).to eq(10)
+        expect(body["next_page_key"]).to be_present
+        expect(body["next_page_url"]).to be_present
+      end
+
+      it "returns the next page of results when page_key is provided" do
+        (1..12).map { |i| create(:product, user: @user, created_at: Time.current + i.hours) }
+
+        get @action, params: @params
+        first_page = response.parsed_body
+        expect(first_page["products"].size).to eq(10)
+        page_key = first_page["next_page_key"]
+
+        get @action, params: @params.merge(page_key: page_key)
+        second_page = response.parsed_body
+        expect(second_page["success"]).to be true
+        # 12 + 2 original products = 14 total; first page = 10, second page = 4
+        expect(second_page["products"].size).to eq(4)
+        expect(second_page).not_to have_key("next_page_key")
+
+        first_page_ids = first_page["products"].map { |p| p["id"] }
+        second_page_ids = second_page["products"].map { |p| p["id"] }
+        expect(first_page_ids & second_page_ids).to be_empty
+      end
+
+      it "does not include pagination keys when all results fit on one page" do
+        get @action, params: @params
+
+        body = response.parsed_body
+        expect(body["success"]).to be true
+        expect(body["products"].size).to eq(2)
+        expect(body).not_to have_key("next_page_key")
+        expect(body).not_to have_key("next_page_url")
+      end
+
+      it "returns an error for an invalid page_key" do
+        get @action, params: @params.merge(page_key: "invalid")
+
+        expect(response).to have_http_status(:bad_request)
+        body = response.parsed_body
+        expect(body["error"]).to eq("Invalid page_key.")
+      end
     end
 
     describe "when logged in with sales scope" do

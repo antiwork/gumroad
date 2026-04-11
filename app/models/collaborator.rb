@@ -60,6 +60,7 @@ class Collaborator < Affiliate
     end
 
     def eligible_for_stripe_payments
+      return if being_marked_as_deleted?
       super
       return unless seller.present? && seller.has_brazilian_stripe_connect_account?
       errors.add(:base, "You cannot add a collaborator because you are using a Brazilian Stripe account.")

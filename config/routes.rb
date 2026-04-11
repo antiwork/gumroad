@@ -257,6 +257,7 @@ Rails.application.routes.draw do
             collection do
               get :user_info
               post :create_appeal
+              post :create_comment
               post :user_suspension_info
               post :send_reset_password_instructions
               post :update_email

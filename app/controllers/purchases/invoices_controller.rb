@@ -20,6 +20,8 @@ class Purchases::InvoicesController < ApplicationController
     return redirect_to new_purchase_invoice_path(@purchase.external_id, email: invoice_params[:email]), alert: "Your purchase has not been completed by PayPal yet. Please try again soon." if invoice_params["vat_id"].present? && !@purchase.successful?
 
     address_fields = invoice_params[:address_fields]
+    return redirect_to new_purchase_invoice_path(@purchase.external_id, email: invoice_params[:email]), alert: "Address information is required to generate an invoice." if address_fields.blank?
+
     address_fields[:country] = ISO3166::Country[invoice_params[:address_fields][:country_code]]&.common_name
     business_vat_id = invoice_params[:vat_id] if is_vat_id_valid?(invoice_params[:vat_id])
     invoice_presenter = InvoicePresenter.new(@chargeable, address_fields:, additional_notes: invoice_params[:additional_notes]&.strip, business_vat_id:)

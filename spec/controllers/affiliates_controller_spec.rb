@@ -201,6 +201,16 @@ describe AffiliatesController, type: :controller, inertia: true do
       it "returns 404 for non-existent affiliate" do
         expect { delete :destroy, params: { id: "nonexistent" } }.to raise_error(ActionController::RoutingError)
       end
+
+      it "deletes the affiliate even when the affiliate user has a Brazilian Stripe account" do
+        allow(affiliate.affiliate_user).to receive(:has_brazilian_stripe_connect_account?).and_return(true)
+
+        delete :destroy, params: { id: affiliate.external_id }
+
+        expect(response).to redirect_to(affiliates_path)
+        expect(flash[:notice]).to eq("Affiliate deleted successfully")
+        expect(affiliate.reload).to be_deleted
+      end
     end
 
     describe "GET export" do
