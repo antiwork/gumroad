@@ -1335,7 +1335,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Address", with: "address_full_match")
         fill_in("City", with: "barnabasville")
         fill_in("Phone number", with: "5022541982")
-        fill_in("Postal code", with: "12345")
+        fill_in("Postal code", with: "1234")
 
         select("1", from: "Day")
         select("January", from: "Month")
