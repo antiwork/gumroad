@@ -60,7 +60,7 @@ export default function AccountStatusSection({
       <div className="flex flex-col gap-4">
         {!accountStatus.is_suspended && showVerificationSection ? <StripeConnectEmbeddedNotificationBanner /> : null}
 
-        {!accountStatus.is_suspended && !showVerificationSection && payoutPausedReason ? (
+        {!accountStatus.is_suspended && (!showVerificationSection || payoutsPausedBy === "user") && payoutPausedReason ? (
           <Alert role="status" variant="warning">
             {payoutPausedReason}
           </Alert>

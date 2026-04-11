@@ -765,6 +765,10 @@ describe SettingsPresenter do
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
                                                                        user: @base_us_props[:user].merge({ need_full_ssn: true }),
                                                                        show_verification_section: true,
+                                                                       account_status: @base_us_props[:account_status].merge(
+                                                                         show_section: true,
+                                                                         compliance_actions: ["Complete pending verification requirements via Stripe"],
+                                                                       ),
                                                                      }))
       end
     end
