@@ -66,6 +66,10 @@ class Comment < ApplicationRecord
     end
   end
 
+  def self.normalize_content(text)
+    text.strip.gsub(/(\R){3,}/, '\1\1')
+  end
+
   private
     def commentable_object_exists
       obj_exists = case commentable_type
@@ -90,7 +94,7 @@ class Comment < ApplicationRecord
     end
 
     def trim_extra_newlines
-      self.content = content.strip.gsub(/(\R){3,}/, '\1\1')
+      self.content = self.class.normalize_content(content)
     end
 
     def notify_seller_of_new_comment
