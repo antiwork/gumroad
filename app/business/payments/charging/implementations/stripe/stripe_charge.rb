@@ -61,8 +61,8 @@ class StripeCharge < BaseProcessorCharge
 
     def build_flow_of_funds(stripe_charge, stripe_charge_balance_transaction, stripe_application_fee_balance_transaction,
                             stripe_destination_payment_balance_transaction, stripe_destination_transfer)
-      return if stripe_charge[:destination] && stripe_application_fee_balance_transaction.nil? &&
-        stripe_destination_transfer.nil?
+      return if stripe_charge[:destination] && (stripe_destination_payment_balance_transaction.nil? ||
+        (stripe_application_fee_balance_transaction.nil? && stripe_destination_transfer.nil?))
 
       issued_amount = FlowOfFunds::Amount.new(currency: stripe_charge[:currency],
                                               cents: stripe_charge[:amount])

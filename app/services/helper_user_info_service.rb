@@ -11,6 +11,16 @@ class HelperUserInfoService
   STRUCTURED_COMMENTS_LIMIT = 50
   FALLBACK_AUTHOR_NAME = "System"
 
+  def self.serialize_comment(comment)
+    {
+      id: comment.external_id,
+      author_name: comment.author_name.presence || comment.author&.name || FALLBACK_AUTHOR_NAME,
+      content: comment.content,
+      comment_type: comment.comment_type,
+      created_at: comment.created_at.iso8601
+    }
+  end
+
   def customer_info
     {
       **user_details,
@@ -33,13 +43,7 @@ class HelperUserInfoService
     def structured_comments
       return [] unless primary_email_user
       primary_email_user.comments.includes(:author).order(created_at: :desc).limit(STRUCTURED_COMMENTS_LIMIT).map do |comment|
-        {
-          id: comment.external_id,
-          author_name: comment.author_name || comment.author&.name || FALLBACK_AUTHOR_NAME,
-          content: comment.content,
-          comment_type: comment.comment_type,
-          created_at: comment.created_at.iso8601
-        }
+        self.class.serialize_comment(comment)
       end
     end
 
