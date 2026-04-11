@@ -7,7 +7,6 @@ import { FormSection } from "$app/components/ui/FormSection";
 export type AccountStatus = {
   show_section: boolean;
   is_suspended: boolean;
-  is_under_review: boolean;
   compliance_actions: string[];
   gumroad_status: string | null;
 };
@@ -24,6 +23,8 @@ export default function AccountStatusSection({
   showVerificationSection: boolean;
 }) {
   if (!accountStatus.show_section) return null;
+
+  const showStripeVerificationBanner = !accountStatus.is_suspended && showVerificationSection;
 
   const payoutPausedReason =
     payoutsPausedBy === "stripe" ? (
@@ -55,14 +56,15 @@ export default function AccountStatusSection({
       "You have paused your payouts. Use the pause payouts toggle below to resume."
     ) : null;
 
+  const showPayoutPausedAlert =
+    !accountStatus.is_suspended && payoutPausedReason && (!showVerificationSection || payoutsPausedBy !== "stripe");
+
   return (
     <FormSection header={<h2>Account status</h2>}>
       <div className="flex flex-col gap-4">
-        {!accountStatus.is_suspended && showVerificationSection ? <StripeConnectEmbeddedNotificationBanner /> : null}
+        {showStripeVerificationBanner ? <StripeConnectEmbeddedNotificationBanner /> : null}
 
-        {!accountStatus.is_suspended &&
-        (!showVerificationSection || payoutsPausedBy === "user") &&
-        payoutPausedReason ? (
+        {showPayoutPausedAlert ? (
           <Alert role="status" variant="warning">
             {payoutPausedReason}
           </Alert>
@@ -83,10 +85,8 @@ export default function AccountStatusSection({
           </Alert>
         ) : null}
 
-        {accountStatus.gumroad_status &&
-        !showVerificationSection &&
-        (!payoutPausedReason || payoutsPausedBy === "user") ? (
-          <Alert variant="warning">
+        {accountStatus.gumroad_status ? (
+          <Alert role="status" variant="warning">
             {accountStatus.gumroad_status} If you have questions,{" "}
             <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
               contact support

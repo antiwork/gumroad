@@ -59,7 +59,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         account_status = inertia.props[:account_status]
         expect(account_status[:show_section]).to be false
         expect(account_status[:is_suspended]).to be false
-        expect(account_status[:is_under_review]).to be false
+        expect(account_status).not_to have_key(:is_under_review)
       end
 
       it "shows section for user on probation" do
@@ -69,9 +69,9 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
         account_status = inertia.props[:account_status]
         expect(account_status[:show_section]).to be true
-        expect(account_status[:is_under_review]).to be true
         expect(account_status[:is_suspended]).to be false
         expect(account_status[:gumroad_status]).to include("under review")
+        expect(account_status).not_to have_key(:is_under_review)
       end
 
       it "shows section for suspended user with reason" do

@@ -570,7 +570,6 @@ describe SettingsPresenter do
         account_status: {
           show_section: false,
           is_suspended: false,
-          is_under_review: false,
           compliance_actions: [],
           gumroad_status: nil,
         },
@@ -768,6 +767,55 @@ describe SettingsPresenter do
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: ["Complete pending verification requirements via Stripe"],
+                                                                       ),
+                                                                     }))
+      end
+
+      it "keeps the under review status alongside Stripe verification requirements" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+        seller.put_on_probation!(author_name: "test")
+
+        expect(presenter.payments_props).to eq(@base_us_props.merge!({
+                                                                       show_verification_section: true,
+                                                                       account_status: @base_us_props[:account_status].merge(
+                                                                         show_section: true,
+                                                                         compliance_actions: ["Complete pending verification requirements via Stripe"],
+                                                                         gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
+                                                                       ),
+                                                                     }))
+      end
+
+      it "keeps the admin pause source alongside Stripe verification requirements" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+        seller.update!(payouts_paused_internally: true)
+
+        expect(presenter.payments_props).to eq(@base_us_props.merge!({
+                                                                       show_verification_section: true,
+                                                                       payouts_paused_internally: true,
+                                                                       payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN,
+                                                                       account_status: @base_us_props[:account_status].merge(
+                                                                         show_section: true,
+                                                                         compliance_actions: ["Complete pending verification requirements via Stripe"],
+                                                                       ),
+                                                                     }))
+      end
+
+      it "keeps both the under review status and admin pause source when Stripe verification is also required" do
+        create(:merchant_account, user: seller)
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+        seller.put_on_probation!(author_name: "test")
+        seller.update!(payouts_paused_internally: true)
+
+        expect(presenter.payments_props).to eq(@base_us_props.merge!({
+                                                                       show_verification_section: true,
+                                                                       payouts_paused_internally: true,
+                                                                       payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN,
+                                                                       account_status: @base_us_props[:account_status].merge(
+                                                                         show_section: true,
+                                                                         compliance_actions: ["Complete pending verification requirements via Stripe"],
+                                                                         gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
                                                                        ),
                                                                      }))
       end

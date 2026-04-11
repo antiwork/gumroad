@@ -25,7 +25,7 @@ describe "Settings::Payments account_status", type: :request do
     status = account_status
     expect(status["show_section"]).to be false
     expect(status["is_suspended"]).to be false
-    expect(status["is_under_review"]).to be false
+    expect(status).not_to have_key("is_under_review")
   end
 
   it "shows section for user on probation" do
@@ -33,9 +33,9 @@ describe "Settings::Payments account_status", type: :request do
 
     status = account_status
     expect(status["show_section"]).to be true
-    expect(status["is_under_review"]).to be true
     expect(status["is_suspended"]).to be false
     expect(status["gumroad_status"]).to include("under review")
+    expect(status).not_to have_key("is_under_review")
   end
 
   it "shows section for suspended user (TOS violation)" do

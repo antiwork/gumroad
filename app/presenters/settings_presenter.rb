@@ -274,7 +274,6 @@ class SettingsPresenter
       {
         show_section:,
         is_suspended:,
-        is_under_review:,
         compliance_actions:,
         gumroad_status:,
       }
