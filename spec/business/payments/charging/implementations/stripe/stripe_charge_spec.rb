@@ -129,6 +129,45 @@ describe StripeCharge, :vcr do
     # zip_check_result will never be false since we do not create Charge object when an error is raised.
     # If the Stripe configuration changes in the future then a test should be added for this scenario.
 
+    describe "with a destination charge but nil destination payment balance transaction" do
+      let(:stripe_charge_hash) do
+        {
+          id: "ch_test_123",
+          status: "succeeded",
+          refunded: false,
+          dispute: nil,
+          currency: Currency::USD,
+          amount: 1_00,
+          destination: "acct_test_456",
+          payment_method_details: { card: { fingerprint: "fp_test", last4: "4242", brand: "visa", exp_month: 12, exp_year: 2030, country: "US", checks: { address_postal_code_check: nil } } },
+          billing_details: { address: { postal_code: nil } },
+          payment_method: "pm_test",
+          outcome: { risk_level: "normal" },
+        }
+      end
+
+      let(:stripe_charge_balance_transaction) do
+        {
+          currency: Currency::USD,
+          amount: 1_00,
+          fee_details: [{ type: "stripe_fee", currency: Currency::USD, amount: 30 }],
+        }
+      end
+
+      let(:stripe_destination_transfer) { { amount: 50 } }
+
+      it "returns nil flow_of_funds instead of raising NoMethodError" do
+        charge = described_class.new(
+          stripe_charge_hash,
+          stripe_charge_balance_transaction,
+          nil,
+          nil,
+          stripe_destination_transfer
+        )
+        expect(charge.flow_of_funds).to be_nil
+      end
+    end
+
     describe "with a stripe charge destined for a managed account" do
       let(:application_fee) { 50 }
 

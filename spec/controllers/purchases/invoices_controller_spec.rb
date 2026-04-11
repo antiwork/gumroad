@@ -354,6 +354,15 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(flash[:warning]).to eq("Please enter the purchase's email address to generate the invoice.")
           end
         end
+
+        context "when address_fields is missing" do
+          it "redirects with an error alert" do
+            post :create, params: payload.except(:address_fields)
+
+            expect(response).to redirect_to(new_purchase_invoice_path(purchase.external_id, email: purchase.email))
+            expect(flash[:alert]).to eq("Address information is required to generate an invoice.")
+          end
+        end
       end
 
       describe "for Charge" do

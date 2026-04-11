@@ -389,6 +389,155 @@ describe Api::Internal::Helper::UsersController do
     end
   end
 
+  describe "POST create_comment" do
+    include_examples "helper api authorization required", :post, :create_comment
+
+    context "when email parameter is missing" do
+      it "returns a bad request error" do
+        post :create_comment, params: { content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'email' parameter is required")
+      end
+    end
+
+    context "when content parameter is missing" do
+      it "returns a bad request error" do
+        post :create_comment, params: { email: user.email, idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'content' parameter is required")
+      end
+    end
+
+    context "when idempotency_key parameter is missing" do
+      it "returns a bad request error" do
+        post :create_comment, params: { email: user.email, content: "Test" }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'idempotency_key' parameter is required")
+      end
+    end
+
+    context "when user is not found" do
+      it "returns an error message" do
+        post :create_comment, params: { email: "nonexistent@example.com", content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email.")
+      end
+    end
+
+    context "when user is soft-deleted" do
+      it "returns an error message" do
+        user.mark_deleted!
+
+        post :create_comment, params: { email: user.email, content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+      end
+    end
+
+    context "when all parameters are valid" do
+      it "creates a comment and returns it" do
+        idempotency_key = SecureRandom.uuid
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
+        end.to change { user.comments.count }.by(1)
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to be true
+
+        comment_data = response.parsed_body["comment"]
+        expect(comment_data["id"]).to be_present
+        expect(comment_data["content"]).to eq("Test note")
+        expect(comment_data["comment_type"]).to eq(Comment::COMMENT_TYPE_NOTE)
+        expect(comment_data["author_name"]).to be_present
+        expect(comment_data["created_at"]).to be_present
+      end
+
+      it "uses GUMROAD_ADMIN_ID as author" do
+        post :create_comment, params: { email: user.email, content: "Test", idempotency_key: SecureRandom.uuid }
+
+        comment = user.comments.last
+        expect(comment.author_id).to eq(GUMROAD_ADMIN_ID)
+      end
+    end
+
+    context "when content exceeds maximum length" do
+      it "returns a validation error" do
+        post :create_comment, params: { email: user.email, content: "x" * 10_001, idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+      end
+    end
+
+    context "idempotency" do
+      it "returns existing comment when same key and content are sent" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
+        first_response = response.parsed_body
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
+        end.not_to change { user.comments.count }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to eq(first_response["comment"]["id"])
+      end
+
+      it "returns conflict when same key is used with different content" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "First note", idempotency_key: idempotency_key }
+        expect(response).to have_http_status(:success)
+
+        post :create_comment, params: { email: user.email, content: "Different note", idempotency_key: idempotency_key }
+        expect(response).to have_http_status(:conflict)
+        expect(response.parsed_body["error_message"]).to eq("Idempotency key already used with different content")
+      end
+
+      it "returns existing comment when content differs only by extra newlines" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "Hello\n\nWorld", idempotency_key: idempotency_key }
+        first_response = response.parsed_body
+        expect(response).to have_http_status(:success)
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Hello\n\n\n\nWorld", idempotency_key: idempotency_key }
+        end.not_to change { user.comments.count }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to eq(first_response["comment"]["id"])
+      end
+
+      it "handles concurrent inserts via RecordNotUnique" do
+        idempotency_key = SecureRandom.uuid
+        content = "Concurrent note"
+
+        allow_any_instance_of(Comment).to receive(:save).and_wrap_original do |method, *args|
+          method.call(*args)
+          raise ActiveRecord::RecordNotUnique
+        end
+
+        post :create_comment, params: { email: user.email, content: content, idempotency_key: idempotency_key }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to be_present
+        expect(response.parsed_body["comment"]["content"]).to eq(content)
+      end
+    end
+  end
+
   describe "POST send_reset_password_instructions" do
     include_examples "helper api authorization required", :post, :send_reset_password_instructions
 
