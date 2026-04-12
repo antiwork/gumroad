@@ -94,6 +94,18 @@ class SignupController < Devise::RegistrationsController
     def attach_current_purchase_to_user(chargeable, card_data_handling_mode)
       purchase = Purchase.find_by_external_id(params[:user][:purchase_id]) if params[:user][:purchase_id].present?
       purchase&.attach_to_user_and_card(@user, chargeable, card_data_handling_mode)
+
+      if purchase.nil? && chargeable.present? && @user.credit_card.nil?
+        save_credit_card_to_user(chargeable, card_data_handling_mode)
+      end
+    end
+
+    def save_credit_card_to_user(chargeable, card_data_handling_mode)
+      card = CreditCard.create(chargeable, card_data_handling_mode, @user)
+      if card.errors.empty?
+        card.users << @user
+        @user.reload
+      end
     end
 
     def permitted_params
