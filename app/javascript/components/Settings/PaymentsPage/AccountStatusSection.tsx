@@ -69,7 +69,9 @@ export default function AccountStatusSection({
 
   return (
     <section aria-labelledby="account-status-heading" className="flex flex-col gap-4 p-4 md:p-8">
-      <h2 id="account-status-heading" className="sr-only">Account status</h2>
+      <h2 id="account-status-heading" className="sr-only">
+        Account status
+      </h2>
       {showStripeVerificationBanner ? <StripeConnectEmbeddedNotificationBanner /> : null}
 
       {accountStatus.is_suspended && accountStatus.suspension_reason ? (
