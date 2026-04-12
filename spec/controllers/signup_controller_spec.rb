@@ -377,13 +377,17 @@ describe SignupController, type: :controller, inertia: true do
       expect(last_user.credit_card).to be(nil)
     end
 
-    it "links past purchases by email if they're not linked to purchasers already" do
+    it "enqueues a background job to link past purchases by email" do
       user = build(:user, password: "password")
       purchase = create(:purchase, email: user.email)
       create(:purchase, email: user.email, purchaser: create(:user))
-      expect(user.purchases).to be_empty
 
       post "create", params: { user: { email: user.email, password: "password" } }
+
+      expect(AttachPastPurchasesToUserWorker.jobs.size).to eq 1
+
+      AttachPastPurchasesToUserWorker.drain
+
       last_user = User.last
       expect(last_user.email).to eq user.email
       expect(last_user.purchases.count).to eq 1
@@ -479,6 +483,8 @@ describe SignupController, type: :controller, inertia: true do
 
         post :save_to_library, params: { user: { email: @purchase.email, password: "blah123", purchase_id: @purchase.external_id } }
         expect(response).to be_successful
+
+        AttachPastPurchasesToUserWorker.drain
 
         user = User.last
         [@purchase, purchase1, purchase2].each do |purchase|
