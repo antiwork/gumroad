@@ -38,7 +38,7 @@ export default function AccountStatusSection({
   if (!accountStatus.show_section) return null;
 
   const showStripeVerificationBanner = !accountStatus.is_suspended && showVerificationSection;
-  const normalizedPauseReason = payoutsPausedForReason?.trim().replace(/[.!?]+$/, "") || null;
+  const normalizedPauseReason = payoutsPausedForReason?.trim().replace(/[.!?]+$/u, "") || null;
 
   const payoutPausedReason =
     payoutsPausedBy === "stripe" ? (
