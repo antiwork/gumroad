@@ -101,7 +101,7 @@ export default function AccountStatusSection({
         </Alert>
       ) : null}
 
-      {accountStatus.gumroad_status ? (
+      {accountStatus.gumroad_status && (!showPayoutPausedAlert || payoutsPausedBy === "user") ? (
         <Alert role="status" variant="warning">
           {accountStatus.gumroad_status}
           <SupportLink />

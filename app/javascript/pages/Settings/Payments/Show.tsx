@@ -835,6 +835,8 @@ export default function PaymentsPage() {
     }
   };
 
+  const normalizedPauseReason = props.payouts_paused_for_reason?.trim().replace(/[.!?]+$/u, "") || null;
+
   const payoutsPausedToggle = (
     <Fieldset>
       <Switch
@@ -979,7 +981,7 @@ export default function PaymentsPage() {
                   props.payouts_paused_by === "stripe"
                     ? "Your payouts have been paused by the payment processor."
                     : props.payouts_paused_by === "admin"
-                      ? `Your payouts have been paused by Gumroad.${props.payouts_paused_for_reason ? ` ${props.payouts_paused_for_reason}` : ""}`
+                      ? `Your payouts have been paused by Gumroad.${normalizedPauseReason ? ` ${normalizedPauseReason}.` : ""}`
                       : props.payouts_paused_by === "system"
                         ? "Your payouts have been paused for a security review."
                         : null
