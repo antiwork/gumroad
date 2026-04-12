@@ -6372,6 +6372,39 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         expect(page).to have_status(text: "You have paused your payouts.")
       end
+
+      it "does not suggest the pause toggle will resume payouts while the account is under review" do
+        user.put_on_probation!(author_name: "test")
+        user.update!(payouts_paused_by_user: true)
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "You have paused your payouts.")
+        expect(page).to have_status(text: "Your account is under review and payouts are on hold until it's resolved.")
+        expect(page).not_to have_text("Use the pause payouts toggle below to resume.")
+      end
+    end
+
+    describe "account status" do
+      it "shows the suspension reason for suspended users" do
+        user.flag_for_tos_violation!(author_name: "test", bulk: true)
+        user.suspend_for_tos_violation!(author_name: "test", bulk: true)
+        visit settings_payments_path
+
+        expect(page).to have_section("Account status")
+        expect(page).to have_status(text: "Your account has been suspended for a policy violation.")
+      end
+
+      it "renders compliance actions as direct linked instructions" do
+        request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+        request.verification_error = { "message" => "Please provide your tax ID" }
+        request.save!
+        visit settings_payments_path
+
+        within_section "Account status", section_element: :section do
+          expect(page).to have_link("Please provide your tax ID", href: "https://customers.gumroad.com/article/800-contact-support")
+          expect(page).not_to have_text("Action needed")
+        end
+      end
     end
 
     describe "pausing payouts" do

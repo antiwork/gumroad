@@ -59,6 +59,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         account_status = inertia.props[:account_status]
         expect(account_status[:show_section]).to be false
         expect(account_status[:is_suspended]).to be false
+        expect(account_status[:suspension_reason]).to be_nil
         expect(account_status).not_to have_key(:is_under_review)
       end
 
@@ -70,6 +71,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         account_status = inertia.props[:account_status]
         expect(account_status[:show_section]).to be true
         expect(account_status[:is_suspended]).to be false
+        expect(account_status[:suspension_reason]).to be_nil
         expect(account_status[:gumroad_status]).to include("under review")
         expect(account_status).not_to have_key(:is_under_review)
       end
@@ -83,6 +85,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         account_status = inertia.props[:account_status]
         expect(account_status[:show_section]).to be true
         expect(account_status[:is_suspended]).to be true
+        expect(account_status[:suspension_reason]).to eq("Your account has been suspended for a policy violation.")
       end
 
       it "shows section for user with fraud suspension" do
@@ -94,6 +97,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         account_status = inertia.props[:account_status]
         expect(account_status[:show_section]).to be true
         expect(account_status[:is_suspended]).to be true
+        expect(account_status[:suspension_reason]).to eq("Your account has been suspended due to fraudulent activity.")
       end
 
       it "shows section when payouts are paused internally" do

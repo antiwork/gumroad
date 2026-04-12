@@ -25,6 +25,7 @@ describe "Settings::Payments account_status", type: :request do
     status = account_status
     expect(status["show_section"]).to be false
     expect(status["is_suspended"]).to be false
+    expect(status["suspension_reason"]).to be_nil
     expect(status).not_to have_key("is_under_review")
   end
 
@@ -34,6 +35,7 @@ describe "Settings::Payments account_status", type: :request do
     status = account_status
     expect(status["show_section"]).to be true
     expect(status["is_suspended"]).to be false
+    expect(status["suspension_reason"]).to be_nil
     expect(status["gumroad_status"]).to include("under review")
     expect(status).not_to have_key("is_under_review")
   end
@@ -45,6 +47,7 @@ describe "Settings::Payments account_status", type: :request do
     status = account_status
     expect(status["show_section"]).to be true
     expect(status["is_suspended"]).to be true
+    expect(status["suspension_reason"]).to eq("Your account has been suspended for a policy violation.")
   end
 
   it "shows section for suspended user (fraud)" do
@@ -54,6 +57,7 @@ describe "Settings::Payments account_status", type: :request do
     status = account_status
     expect(status["show_section"]).to be true
     expect(status["is_suspended"]).to be true
+    expect(status["suspension_reason"]).to eq("Your account has been suspended due to fraudulent activity.")
   end
 
   it "shows section when payouts are paused internally" do

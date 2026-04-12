@@ -253,6 +253,11 @@ class SettingsPresenter
       payouts_paused_not_by_user = seller.payouts_paused_internally?
 
       payouts_paused_by_user = seller.payouts_paused_by_user?
+      suspension_reason = if seller.suspended_for_fraud?
+        "Your account has been suspended due to fraudulent activity."
+      elsif seller.suspended_for_tos_violation?
+        "Your account has been suspended for a policy violation."
+      end
 
       compliance_actions = []
       if pending_compliance && seller.stripe_account.present? && payments_policy.update?
@@ -274,6 +279,7 @@ class SettingsPresenter
       {
         show_section:,
         is_suspended:,
+        suspension_reason:,
         compliance_actions:,
         gumroad_status:,
       }

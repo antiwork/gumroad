@@ -570,6 +570,7 @@ describe SettingsPresenter do
         account_status: {
           show_section: false,
           is_suspended: false,
+          suspension_reason: nil,
           compliance_actions: [],
           gumroad_status: nil,
         },
@@ -683,6 +684,32 @@ describe SettingsPresenter do
 
       it "returns correct props when seller does not have a payout method" do
         expect(presenter.payments_props).to eq(@base_us_props)
+      end
+
+      it "includes the suspension reason when the seller is suspended for a policy violation" do
+        seller.flag_for_tos_violation!(author_name: "test", bulk: true)
+        seller.suspend_for_tos_violation!(author_name: "test", bulk: true)
+
+        expect(presenter.payments_props).to eq(@base_us_props.merge!({
+                                                                       account_status: @base_us_props[:account_status].merge(
+                                                                         show_section: true,
+                                                                         is_suspended: true,
+                                                                         suspension_reason: "Your account has been suspended for a policy violation.",
+                                                                       ),
+                                                                     }))
+      end
+
+      it "includes the suspension reason when the seller is suspended for fraud" do
+        seller.flag_for_fraud!(author_name: "test")
+        seller.suspend_for_fraud!(author_name: "test")
+
+        expect(presenter.payments_props).to eq(@base_us_props.merge!({
+                                                                       account_status: @base_us_props[:account_status].merge(
+                                                                         show_section: true,
+                                                                         is_suspended: true,
+                                                                         suspension_reason: "Your account has been suspended due to fraudulent activity.",
+                                                                       ),
+                                                                     }))
       end
 
       it "returns correct props when seller is eligible for PayPal Connect" do

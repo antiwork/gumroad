@@ -7,6 +7,7 @@ import { FormSection } from "$app/components/ui/FormSection";
 export type AccountStatus = {
   show_section: boolean;
   is_suspended: boolean;
+  suspension_reason: string | null;
   compliance_actions: string[];
   gumroad_status: string | null;
 };
@@ -24,6 +25,7 @@ export default function AccountStatusSection({
 }) {
   if (!accountStatus.show_section) return null;
 
+  const isUnderReview = !!accountStatus.gumroad_status;
   const showStripeVerificationBanner = !accountStatus.is_suspended && showVerificationSection;
 
   const payoutPausedReason =
@@ -53,7 +55,11 @@ export default function AccountStatusSection({
         .
       </>
     ) : payoutsPausedBy === "user" ? (
-      "You have paused your payouts. Use the pause payouts toggle below to resume."
+      isUnderReview ? (
+        "You have paused your payouts."
+      ) : (
+        "You have paused your payouts. Use the pause payouts toggle below to resume."
+      )
     ) : null;
 
   const showPayoutPausedAlert =
@@ -64,6 +70,16 @@ export default function AccountStatusSection({
       <div className="flex flex-col gap-4">
         {showStripeVerificationBanner ? <StripeConnectEmbeddedNotificationBanner /> : null}
 
+        {accountStatus.is_suspended && accountStatus.suspension_reason ? (
+          <Alert role="status" variant="danger">
+            {accountStatus.suspension_reason} If you have questions,{" "}
+            <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
+              contact support
+            </a>
+            .
+          </Alert>
+        ) : null}
+
         {showPayoutPausedAlert ? (
           <Alert role="status" variant="warning">
             {payoutPausedReason}
@@ -72,8 +88,7 @@ export default function AccountStatusSection({
 
         {!accountStatus.is_suspended && !showVerificationSection && accountStatus.compliance_actions.length > 0 ? (
           <Alert role="status" variant="warning">
-            <strong>Action needed</strong>
-            <ul className="mt-1 list-disc pl-4">
+            <ul className="list-disc pl-4">
               {accountStatus.compliance_actions.map((action, i) => (
                 <li key={i}>
                   <a href="https://customers.gumroad.com/article/800-contact-support" className="underline">
