@@ -41,24 +41,22 @@ describe "Settings::Payments account_status", type: :request do
     expect(status).not_to have_key("is_under_review")
   end
 
-  it "shows section for suspended user (TOS violation)" do
+  it "redirects to login after TOS suspension invalidates the session" do
     seller.flag_for_tos_violation!(author_name: "test", bulk: true)
     seller.suspend_for_tos_violation!(author_name: "test", bulk: true)
 
-    status = account_status
-    expect(status["show_section"]).to be true
-    expect(status["is_suspended"]).to be true
-    expect(status["suspension_reason"]).to eq("Your account has been suspended for a policy violation.")
+    get settings_payments_path, headers: { "X-Inertia" => "true" }
+
+    expect(response).to redirect_to(login_path)
   end
 
-  it "shows section for suspended user (fraud)" do
+  it "redirects to login after fraud suspension invalidates the session" do
     seller.flag_for_fraud!(author_name: "test")
     seller.suspend_for_fraud!(author_name: "test")
 
-    status = account_status
-    expect(status["show_section"]).to be true
-    expect(status["is_suspended"]).to be true
-    expect(status["suspension_reason"]).to eq("Your account has been suspended due to fraudulent activity.")
+    get settings_payments_path, headers: { "X-Inertia" => "true" }
+
+    expect(response).to redirect_to(login_path)
   end
 
   it "shows section when payouts are paused internally" do
