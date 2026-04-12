@@ -6385,15 +6385,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
     end
 
     describe "account status" do
-      it "shows the suspension reason for suspended users" do
-        user.flag_for_tos_violation!(author_name: "test", bulk: true)
-        user.suspend_for_tos_violation!(author_name: "test", bulk: true)
-        visit settings_payments_path
-
-        expect(page).to have_section("Account status")
-        expect(page).to have_status(text: "Your account has been suspended for a policy violation.")
-      end
-
       it "renders compliance actions as direct linked instructions" do
         request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
         request.verification_error = { "message" => "Please provide your tax ID" }

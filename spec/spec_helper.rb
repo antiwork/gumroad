@@ -299,7 +299,7 @@ RSpec.configure do |config|
     ].each do |feature|
       Feature.activate(feature)
     end
-    @request&.host = DOMAIN # @request only valid for controller specs.
+    @request.host = DOMAIN if @request.respond_to?(:host=) # @request only valid for controller specs.
     PostSendgridApi.mails.clear
   end
 

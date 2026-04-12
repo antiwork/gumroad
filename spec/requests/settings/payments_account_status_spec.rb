@@ -10,6 +10,7 @@ describe "Settings::Payments account_status", type: :request do
   before do
     create(:user_compliance_info, country: "United States", user: seller)
     allow_any_instance_of(User).to receive(:external_id).and_return("6")
+    host! DOMAIN
     sign_in seller
   end
 
