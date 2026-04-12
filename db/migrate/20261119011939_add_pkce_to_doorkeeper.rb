@@ -2,7 +2,9 @@
 
 class AddPkceToDoorkeeper < ActiveRecord::Migration[7.1]
   def change
-    add_column :oauth_access_grants, :code_challenge, :string, null: true
-    add_column :oauth_access_grants, :code_challenge_method, :string, null: true
+    change_table :oauth_access_grants, bulk: true do |t|
+      t.string :code_challenge
+      t.string :code_challenge_method
+    end
   end
 end
