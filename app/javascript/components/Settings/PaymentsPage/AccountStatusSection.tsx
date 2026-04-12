@@ -68,10 +68,8 @@ export default function AccountStatusSection({
     !accountStatus.is_suspended && payoutPausedReason && (!showVerificationSection || payoutsPausedBy !== "stripe");
 
   return (
-    <div role="region" aria-labelledby="account-notices-heading" className="flex flex-col gap-4 p-4 md:p-8">
-      <h2 id="account-notices-heading" className="sr-only">
-        Account notices
-      </h2>
+    <section aria-labelledby="account-status-heading" className="flex flex-col gap-4 p-4 md:p-8">
+      <h2 id="account-status-heading" className="sr-only">Account status</h2>
       {showStripeVerificationBanner ? <StripeConnectEmbeddedNotificationBanner /> : null}
 
       {accountStatus.is_suspended && accountStatus.suspension_reason ? (
@@ -107,6 +105,6 @@ export default function AccountStatusSection({
           <SupportLink />
         </Alert>
       ) : null}
-    </div>
+    </section>
   );
 }
