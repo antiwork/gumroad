@@ -90,6 +90,28 @@ describe User::SocialGoogle do
 
       expect(result).to be_nil
     end
+
+    it "passes open_timeout and read_timeout to URI.open" do
+      expect(URI).to receive(:open).with(anything, hash_including(open_timeout: 5, read_timeout: 5)).and_yield(double(content_type: "image/jpeg", read: "image data"))
+
+      @user.google_picture_url(@data)
+    end
+
+    it "returns nil when the remote server times out" do
+      allow(URI).to receive(:open).and_raise(Net::OpenTimeout)
+
+      result = @user.google_picture_url(@data)
+
+      expect(result).to be_nil
+    end
+
+    it "returns nil when reading from the remote server times out" do
+      allow(URI).to receive(:open).and_raise(Net::ReadTimeout)
+
+      result = @user.google_picture_url(@data)
+
+      expect(result).to be_nil
+    end
   end
 
   describe ".query_google" do
