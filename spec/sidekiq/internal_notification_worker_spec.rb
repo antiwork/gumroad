@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe SlackMessageWorker do
+describe InternalNotificationWorker do
   describe "#perform" do
     it "sends an email via InternalNotificationMailer" do
       mailer = double("mailer")

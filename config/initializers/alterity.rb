@@ -34,7 +34,7 @@ Alterity.configure do |config|
   config.before_command = lambda do |command|
     next unless send_slack_message
     command_clean = command.gsub(/.* (D=.*)/, "\\1").gsub("\\`", "")
-    SlackMessageWorker.new.perform("migrations", "Web", "*[#{Rails.env}] Will execute migration:* #{command_clean}")
+    InternalNotificationWorker.new.perform("migrations", "Web", "*[#{Rails.env}] Will execute migration:* #{command_clean}")
   rescue => _
   end
 
@@ -51,14 +51,14 @@ Alterity.configure do |config|
                          "swap_tables, 10, 1",
                          "update_foreign_keys, 10, 1",
                        ])
-    SlackMessageWorker.new.perform("migrations", "Web", output)
+    InternalNotificationWorker.new.perform("migrations", "Web", output)
   rescue => _
   end
 
   config.after_command = lambda do |exit_status|
     next unless send_slack_message
     color = exit_status == 0 ? "green" : "red"
-    SlackMessageWorker.new.perform("migrations", "Web", "Command exited with status #{exit_status}", color)
+    InternalNotificationWorker.new.perform("migrations", "Web", "Command exited with status #{exit_status}", color)
   rescue => _
   end
 end

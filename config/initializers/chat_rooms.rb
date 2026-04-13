@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-INTERNAL_NOTIFICATION_EMAIL = ENV.fetch("INTERNAL_NOTIFICATION_EMAIL", "hi@gumroad.com")
+INTERNAL_NOTIFICATION_EMAIL = GlobalConfig.get("INTERNAL_NOTIFICATION_EMAIL", "hi@gumroad.com")
 
 CHAT_ROOMS = {
   accounting: { email: INTERNAL_NOTIFICATION_EMAIL },
