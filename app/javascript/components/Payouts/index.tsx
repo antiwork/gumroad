@@ -263,7 +263,6 @@ export type PayoutsProps = {
   processing_payout_periods_data: PayoutPeriodData[];
   payouts_status: "paused" | "payable";
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
-  payouts_paused_for_reason: string | null;
   past_payout_period_data: PayoutPeriodData[];
   instant_payout: {
     payable_amount_cents: number;
@@ -657,7 +656,6 @@ const Payouts = ({
   processing_payout_periods_data,
   payouts_status,
   payouts_paused_by,
-  payouts_paused_for_reason,
   past_payout_period_data,
   instant_payout,
   show_instant_payouts_notice,
@@ -879,14 +877,11 @@ const Payouts = ({
           <Alert role="status" variant="warning">
             {payouts_paused_by === "stripe" ? (
               <strong>
-                Your payouts are currently paused by our payment processor. Please check your{" "}
+                Your payouts are currently paused by Stripe. Please check your{" "}
                 <a href="/settings/payments">Payment Settings</a> for any verification requirements.
               </strong>
             ) : payouts_paused_by === "admin" ? (
-              <strong>
-                Your payouts have been paused by Gumroad admin.
-                {payouts_paused_for_reason ? ` Reason for pause: ${payouts_paused_for_reason}` : null}
-              </strong>
+              <strong>Your payouts have been paused by Gumroad.</strong>
             ) : payouts_paused_by === "system" ? (
               <strong>
                 Your payouts have been automatically paused for a security review and will be resumed once the review

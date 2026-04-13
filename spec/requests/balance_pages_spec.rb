@@ -397,13 +397,13 @@ describe "Balance Pages Scenario", js: true, type: :system do
             travel_to(Date.parse("2013-08-14")) do
               visit balance_path
 
-              expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin.")
+              expect(page).to have_status(text: "Your payouts have been paused by Gumroad.")
               expect(page).to have_section("Next payout: paused")
               expect(page).not_to have_text("Payout on November 7, 2024 was skipped because a bank account wasn't added at the time.")
             end
           end
 
-          it "includes the reason provided by admin in the notice" do
+          it "does not expose the admin pause reason" do
             seller.comments.create!(
               author_id: User.last.id,
               content: "Chargeback rate is too high.",
@@ -413,9 +413,8 @@ describe "Balance Pages Scenario", js: true, type: :system do
             travel_to(Date.parse("2013-08-14")) do
               visit balance_path
 
-              expect(page).to have_status(text: "Your payouts have been paused by Gumroad admin. Reason for pause: Chargeback rate is too high.")
-              expect(page).to have_section("Next payout: paused")
-              expect(page).not_to have_text("Payout on November 7, 2024 was skipped because a bank account wasn't added at the time.")
+              expect(page).to have_status(text: "Your payouts have been paused by Gumroad.")
+              expect(page).not_to have_text("Chargeback rate is too high")
             end
           end
         end
@@ -445,7 +444,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             travel_to(Date.parse("2013-08-14")) do
               visit balance_path
 
-              expect(page).to have_status(text: "Your payouts are currently paused by our payment processor. Please check your Payment Settings for any verification requirements.")
+              expect(page).to have_status(text: "Your payouts are currently paused by Stripe. Please check your Payment Settings for any verification requirements.")
               expect(page).to have_section("Next payout: paused")
               expect(page).not_to have_text("Payout on November 7, 2024 was skipped because a bank account wasn't added at the time.")
             end

@@ -35,7 +35,7 @@ const AdminPausePayoutsForm = ({
               name="pause_payouts[reason]"
               rows={2}
               className="flex-1"
-              placeholder="Add a reason for pausing payouts. It'll be displayed to the user on their dashboard."
+              placeholder="Add a reason for pausing payouts. Internal only — not shown to the user."
               value={reason}
               onChange={onReasonChange}
             />

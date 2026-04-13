@@ -90,7 +90,6 @@ type PaymentsPageProps = {
   formatted_balance_to_forfeit_on_payout_method_change: string | null;
   payouts_paused_internally: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
-  payouts_paused_for_reason: string | null;
   account_status: AccountStatus;
   payouts_paused_by_user: boolean;
   payout_threshold_cents: number;
@@ -835,8 +834,6 @@ export default function PaymentsPage() {
     }
   };
 
-  const normalizedPauseReason = props.payouts_paused_for_reason?.trim().replace(/[.!?]+$/u, "") || null;
-
   const payoutsPausedToggle = (
     <Fieldset>
       <Switch
@@ -884,7 +881,6 @@ export default function PaymentsPage() {
         <AccountStatusSection
           accountStatus={props.account_status}
           payoutsPausedBy={props.payouts_paused_by}
-          payoutsPausedForReason={props.payouts_paused_for_reason}
           showVerificationSection={props.show_verification_section}
         />
 
@@ -979,9 +975,9 @@ export default function PaymentsPage() {
               <WithTooltip
                 tip={
                   props.payouts_paused_by === "stripe"
-                    ? "Your payouts have been paused by the payment processor."
+                    ? "Your payouts have been paused by Stripe."
                     : props.payouts_paused_by === "admin"
-                      ? `Your payouts have been paused by Gumroad.${normalizedPauseReason ? ` ${normalizedPauseReason}.` : ""}`
+                      ? "Your payouts have been paused by Gumroad."
                       : props.payouts_paused_by === "system"
                         ? "Your payouts have been paused for a security review."
                         : null

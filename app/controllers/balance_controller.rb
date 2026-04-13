@@ -17,7 +17,6 @@ class BalanceController < Sellers::BaseController
              processing_payout_periods_data: -> { payouts_presenter.processing_payout_periods_data },
              payouts_status: -> { current_seller.payouts_status },
              payouts_paused_by: -> { current_seller.payouts_paused_by_source },
-             payouts_paused_for_reason: -> { current_seller.payouts_paused_for_reason },
              instant_payout: -> { payouts_presenter.instant_payout_data },
              show_instant_payouts_notice: -> { current_seller.eligible_for_instant_payouts? && !current_seller.active_bank_account&.supports_instant_payouts? },
              tax_center_enabled: -> { current_seller.tax_center_enabled? },

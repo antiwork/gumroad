@@ -6339,7 +6339,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).to have_status(text: "Your payouts have been paused by Gumroad.")
       end
 
-      it "shows the warning notice when payouts are paused internally by admin with a reason" do
+      it "does not expose the admin pause reason in the warning notice" do
         user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
         user.comments.create!(
           author_id: User.last.id,
@@ -6349,14 +6349,15 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         visit settings_payments_path
 
-        expect(page).to have_status(text: "Your payouts have been paused by Gumroad. Chargeback rate is too high.")
+        expect(page).to have_status(text: "Your payouts have been paused by Gumroad.")
+        expect(page).not_to have_text("Chargeback rate is too high")
       end
 
       it "shows the warning notice when payouts are paused internally by Stripe" do
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         visit settings_payments_path
 
-        expect(page).to have_status(text: "Your payouts have been paused by the payment processor.")
+        expect(page).to have_status(text: "Your payouts have been paused by Stripe.")
       end
 
       it "shows the warning notice when payouts are paused internally by the system" do
@@ -6433,7 +6434,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         end
       end
 
-      it "disables the toggle when payouts are paused internally by admin with a reason" do
+      it "does not expose the admin pause reason in the toggle tooltip" do
         user.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
         user.comments.create!(
           author_id: User.last.id,
@@ -6446,7 +6447,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         within_section "Payout schedule", section_element: :section do
           toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad. Chargeback rate is too high.")
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Gumroad.")
+          expect(toggle).not_to have_tooltip(text: "Chargeback rate is too high")
         end
       end
 
@@ -6457,7 +6459,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         within_section "Payout schedule", section_element: :section do
           toggle = find_field("Pause payouts", disabled: true, checked: true)
           toggle.hover
-          expect(toggle).to have_tooltip(text: "Your payouts have been paused by the payment processor.")
+          expect(toggle).to have_tooltip(text: "Your payouts have been paused by Stripe.")
         end
       end
 

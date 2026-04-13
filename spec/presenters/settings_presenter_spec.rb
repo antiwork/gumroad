@@ -576,7 +576,6 @@ describe SettingsPresenter do
         },
         payouts_paused_internally: false,
         payouts_paused_by: nil,
-        payouts_paused_for_reason: nil,
         payouts_paused_by_user: false,
         payout_threshold_cents: Payouts::MIN_AMOUNT_CENTS,
         minimum_payout_threshold_cents: Payouts::MIN_AMOUNT_CENTS,
@@ -977,47 +976,31 @@ describe SettingsPresenter do
     end
 
     context "when seller's payouts are paused" do
-      it "returns the payout pause source and reason if present" do
+      it "returns the payout pause source" do
         seller.update!(payouts_paused_internally: true)
         expect(presenter.payments_props[:payouts_paused_internally]).to be(true)
         expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
         expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
-        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
-
-        seller.update!(payouts_paused_internally: true, payouts_paused_by: User.last.id)
-        seller.comments.create!(
-          author_id: User.last.id,
-          content: "Chargeback rate too high.",
-          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED
-        )
-        expect(presenter.payments_props[:payouts_paused_internally]).to be(true)
-        expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
-        expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
-        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq("Chargeback rate too high.")
 
         seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         expect(presenter.payments_props[:payouts_paused_internally]).to be(true)
         expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
         expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
-        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
 
         seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
         expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
         expect(presenter.payments_props[:payouts_paused_internally]).to be(true)
         expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
-        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
 
         seller.update!(payouts_paused_internally: false, payouts_paused_by_user: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_USER)
         expect(presenter.payments_props[:payouts_paused_by]).to eq(User::PAYOUT_PAUSE_SOURCE_USER)
         expect(presenter.payments_props[:payouts_paused_internally]).to be(false)
         expect(presenter.payments_props[:payouts_paused_by_user]).to be(true)
-        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
 
         seller.update!(payouts_paused_internally: false, payouts_paused_by_user: false, payouts_paused_by: nil)
         expect(presenter.payments_props[:payouts_paused_internally]).to be(false)
         expect(presenter.payments_props[:payouts_paused_by_user]).to be(false)
         expect(presenter.payments_props[:payouts_paused_by]).to eq(nil)
-        expect(presenter.payments_props[:payouts_paused_for_reason]).to eq(nil)
       end
     end
   end

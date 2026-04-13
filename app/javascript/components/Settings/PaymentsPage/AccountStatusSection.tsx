@@ -38,28 +38,25 @@ export type AccountStatus = {
 export default function AccountStatusSection({
   accountStatus,
   payoutsPausedBy,
-  payoutsPausedForReason,
   showVerificationSection,
 }: {
   accountStatus: AccountStatus;
   payoutsPausedBy: "stripe" | "admin" | "system" | "user" | null;
-  payoutsPausedForReason: string | null;
   showVerificationSection: boolean;
 }) {
   if (!accountStatus.show_section) return null;
 
   const showStripeVerificationBanner = !accountStatus.is_suspended && showVerificationSection;
-  const normalizedPauseReason = payoutsPausedForReason?.trim().replace(/[.!?]+$/u, "") || null;
 
   const payoutPausedReason =
     payoutsPausedBy === "stripe" ? (
       <>
-        Your payouts have been paused by the payment processor.
+        Your payouts have been paused by Stripe.
         <SupportLink />
       </>
     ) : payoutsPausedBy === "admin" ? (
       <>
-        {`Your payouts have been paused by Gumroad.${normalizedPauseReason ? ` ${normalizedPauseReason}.` : ""}`}
+        Your payouts have been paused by Gumroad.
         <SupportLink />
       </>
     ) : payoutsPausedBy === "system" ? (
@@ -114,7 +111,7 @@ export default function AccountStatusSection({
         </Alert>
       ) : null}
 
-      {accountStatus.gumroad_status && (!showPayoutPausedAlert || payoutsPausedBy === "user") ? (
+      {accountStatus.gumroad_status && (!showPayoutPausedAlert || payoutsPausedBy !== "system") ? (
         <Alert role="status" variant="warning">
           {accountStatus.gumroad_status}
           <SupportLink />

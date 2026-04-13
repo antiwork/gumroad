@@ -220,7 +220,6 @@ class SettingsPresenter
       formatted_balance_to_forfeit_on_payout_method_change: seller.formatted_balance_to_forfeit(:payout_method_change),
       payouts_paused_internally: seller.payouts_paused_internally?,
       payouts_paused_by: seller.payouts_paused_by_source,
-      payouts_paused_for_reason: seller.payouts_paused_for_reason,
       account_status: account_status_details(payments_policy),
       payouts_paused_by_user: seller.payouts_paused_by_user?,
       payout_threshold_cents: seller.payout_threshold_cents,
