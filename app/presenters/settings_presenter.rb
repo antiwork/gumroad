@@ -287,7 +287,7 @@ class SettingsPresenter
           end
         end
         if missing_fields.any?
-          compliance_actions << { message: "Please provide the following below: #{missing_fields.uniq.to_sentence}.", href: nil }
+          compliance_actions << { message: "Please provide: #{missing_fields.uniq.to_sentence}.", href: nil }
         end
       end
 

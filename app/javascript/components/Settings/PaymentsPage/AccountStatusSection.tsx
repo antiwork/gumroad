@@ -100,16 +100,17 @@ export default function AccountStatusSection({
 
       {!accountStatus.is_suspended && !showVerificationSection && accountStatus.compliance_actions.length > 0 ? (
         <Alert role="status" variant="warning">
-          {accountStatus.compliance_actions.length === 1 && accountStatus.compliance_actions[0] ? (
-            <ComplianceActionItem action={accountStatus.compliance_actions[0]} />
-          ) : (
-            <div className="flex flex-col gap-1">
-              {accountStatus.compliance_actions.map((action, i) => (
-                <ComplianceActionItem key={i} action={action} />
-              ))}
-            </div>
-          )}
-          {accountStatus.compliance_actions.some((a) => !a.href) ? <SupportLink /> : null}
+          <div className="flex flex-col gap-1">
+            {accountStatus.compliance_actions.map((action, i) => (
+              <ComplianceActionItem key={i} action={action} />
+            ))}
+            {accountStatus.compliance_actions.some((a) => !a.href) ? (
+              <p>
+                Please update your information below.
+                <SupportLink />
+              </p>
+            ) : null}
+          </div>
         </Alert>
       ) : null}
 
