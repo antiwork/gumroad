@@ -115,7 +115,7 @@ class UrlRedirect < ApplicationRecord
         end.uniq
         ProductFile.where(id: file_ids).in_order
       else
-        referenced_link.product_files.alive.in_order
+        referenced_link&.product_files&.alive&.in_order || ProductFile.none
       end
 
     @cached_alive_product_files
