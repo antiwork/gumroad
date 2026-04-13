@@ -100,17 +100,11 @@ export default function AccountStatusSection({
 
       {!accountStatus.is_suspended && !showVerificationSection && accountStatus.compliance_actions.length > 0 ? (
         <Alert role="status" variant="warning">
-          {accountStatus.compliance_actions.length === 1 && accountStatus.compliance_actions[0] ? (
-            <ComplianceActionItem action={accountStatus.compliance_actions[0]} />
-          ) : (
-            <ul className="list-disc pl-4">
-              {accountStatus.compliance_actions.map((action, i) => (
-                <li key={i}>
-                  <ComplianceActionItem action={action} />
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="flex flex-col gap-1">
+            {accountStatus.compliance_actions.map((action, i) => (
+              <ComplianceActionItem key={i} action={action} />
+            ))}
+          </div>
           {accountStatus.compliance_actions.some((a) => !a.href) ? <SupportLink /> : null}
         </Alert>
       ) : null}

@@ -277,14 +277,17 @@ class SettingsPresenter
       end
       if pending_compliance && seller.stripe_account.blank?
         user_compliance_info = seller.fetch_or_build_user_compliance_info
+        missing_fields = []
         seller.user_compliance_info_requests.requested.each do |request|
-          message = if request.verification_error_message.present?
-            "#{request.verification_error_message.strip.sub(/[.!?]+\z/, "")}."
+          if request.verification_error_message.present?
+            compliance_actions << { message: "#{request.verification_error_message.strip.sub(/[.!?]+\z/, "")}.", href: nil }
           else
             country_code = country_code_for_compliance_field(request.field_needed, user_compliance_info)
-            "Please provide your #{UserComplianceInfoFieldProperty.name_tag_for_field(request.field_needed, country: country_code)}."
+            missing_fields << UserComplianceInfoFieldProperty.name_tag_for_field(request.field_needed, country: country_code)
           end
-          compliance_actions << { message:, href: nil }
+        end
+        if missing_fields.any?
+          compliance_actions << { message: "Please provide: #{missing_fields.uniq.to_sentence}.", href: nil }
         end
       end
 

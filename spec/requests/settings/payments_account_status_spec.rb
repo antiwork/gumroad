@@ -76,13 +76,12 @@ describe "Settings::Payments account_status", type: :request do
     expect(status["compliance_actions"]).to include({ "message" => "Please provide your tax ID.", "href" => nil })
   end
 
-  it "uses country-aware field labels for pending requests without a verification error message" do
+  it "combines country-aware field labels into one sentence for pending requests without a verification error message" do
     create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
     create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::DATE_OF_BIRTH)
 
     status = account_status
     expect(status["show_section"]).to be true
-    expect(status["compliance_actions"]).to include({ "message" => "Please provide your Social Security Number (SSN).", "href" => nil })
-    expect(status["compliance_actions"]).to include({ "message" => "Please provide your Date of birth.", "href" => nil })
+    expect(status["compliance_actions"]).to include({ "message" => "Please provide: Social Security Number (SSN) and Date of birth.", "href" => nil })
   end
 end
