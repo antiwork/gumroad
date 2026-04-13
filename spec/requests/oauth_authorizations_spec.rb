@@ -51,4 +51,17 @@ describe Oauth::AuthorizationsController, type: :system do
     visit "/oauth/authorize?response_type=code&client_id=#{@app.uid + 'invalid'}&redirect_uri=#{Addressable::URI.escape(@app.redirect_uri)}&scope=mobile_api"
     expect(page).to have_content("Client authentication failed due to unknown client")
   end
+
+  it "preserves PKCE params through the consent form" do
+    stub_const("OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID", @internal_app.uid)
+    code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest("test-verifier"), padding: false)
+
+    visit "/oauth/authorize?response_type=code&client_id=#{@app.uid}&redirect_uri=#{Addressable::URI.escape(@app.redirect_uri)}&scope=edit_products&code_challenge=#{code_challenge}&code_challenge_method=S256"
+    expect(page).to have_content("Authorize")
+    click_button "Authorize"
+
+    grant = @app.access_grants.last
+    expect(grant.code_challenge).to eq(code_challenge)
+    expect(grant.code_challenge_method).to eq("S256")
+  end
 end
