@@ -968,6 +968,8 @@ Rails.application.routes.draw do
     get "/paypal_charge_data", to: "public#paypal_charge_data", as: :paypal_charge_data
     get "/CHARGE" => redirect("/charge")
 
+    get "/install-cli.sh", to: redirect("https://raw.githubusercontent.com/antiwork/gumroad-cli/refs/heads/main/script/install.sh")
+
     # discover
     get "/blackfriday", to: redirect("/discover?offer_code=BLACKFRIDAY2025"), as: :blackfriday
     get "/discover", to: "discover#index"
