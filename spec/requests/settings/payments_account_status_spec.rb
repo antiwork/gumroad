@@ -82,6 +82,6 @@ describe "Settings::Payments account_status", type: :request do
 
     status = account_status
     expect(status["show_section"]).to be true
-    expect(status["compliance_actions"]).to include({ "message" => "Please provide: Social Security Number (SSN) and Date of birth.", "href" => nil })
+    expect(status["compliance_actions"]).to include({ "message" => "Please provide the following below: Social Security Number (SSN) and Date of birth.", "href" => nil })
   end
 end

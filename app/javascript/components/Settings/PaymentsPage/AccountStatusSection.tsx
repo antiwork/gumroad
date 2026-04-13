@@ -24,7 +24,7 @@ const ComplianceActionItem = ({ action }: { action: ComplianceAction }) =>
       {action.message}
     </a>
   ) : (
-    <>{action.message}</>
+    action.message
   );
 
 export type AccountStatus = {
