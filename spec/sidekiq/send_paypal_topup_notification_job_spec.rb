@@ -21,7 +21,7 @@ describe SendPaypalTopupNotificationJob do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
       expect($redis.get(RedisKey.paypal_topup_needed)).to eq("true")
     end
 
@@ -35,7 +35,7 @@ describe SendPaypalTopupNotificationJob do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
     end
 
     it "sends no more topup required green notification and sets redis key to false if there's sufficient amount in PayPal" do
@@ -48,7 +48,7 @@ describe SendPaypalTopupNotificationJob do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "green")
       expect($redis.get(RedisKey.paypal_topup_needed)).to eq("false")
     end
 
@@ -62,7 +62,7 @@ describe SendPaypalTopupNotificationJob do
 
         described_class.new.perform(true)
 
-        expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
+        expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "PayPal Top-up", notification_msg, "red")
       end
 
       it "does not send notification when topup is not needed and sets redis key to false" do
@@ -70,7 +70,7 @@ describe SendPaypalTopupNotificationJob do
 
         described_class.new.perform(true)
 
-        expect(SlackMessageWorker.jobs.size).to eq(0)
+        expect(InternalNotificationWorker.jobs.size).to eq(0)
         expect($redis.get(RedisKey.paypal_topup_needed)).to eq("false")
       end
     end

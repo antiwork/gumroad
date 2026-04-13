@@ -15,12 +15,12 @@ class UpdateTaxRatesJob
       zip_tax_rate = ZipTaxRate.not_is_epublication_rate.alive.where(country: country_code).first
       if zip_tax_rate
         if zip_tax_rate.combined_rate != summary_rate.average_rate.rate
-          SlackMessageWorker.perform_async("payments", "VAT Rate Updater", "VAT rate has changed for #{country_code} from #{zip_tax_rate.combined_rate} to #{summary_rate.average_rate.rate}", "green")
+          InternalNotificationWorker.perform_async("payments", "VAT Rate Updater", "VAT rate has changed for #{country_code} from #{zip_tax_rate.combined_rate} to #{summary_rate.average_rate.rate}", "green")
           zip_tax_rate.combined_rate = summary_rate.average_rate.rate
           zip_tax_rate.save!
         end
       else
-        SlackMessageWorker.perform_async("payments", "VAT Rate Updater", "Creating missing tax rate for #{country_code} with rate of #{summary_rate.average_rate.rate}", "green")
+        InternalNotificationWorker.perform_async("payments", "VAT Rate Updater", "Creating missing tax rate for #{country_code} with rate of #{summary_rate.average_rate.rate}", "green")
         zip_tax_rate = ZipTaxRate.not_is_epublication_rate.find_or_create_by(country: country_code)
         zip_tax_rate.update(combined_rate: summary_rate.average_rate.rate)
         # Make sure the tax rate was not in deleted state instead
@@ -42,13 +42,13 @@ class UpdateTaxRatesJob
 
       if zip_tax_rate
         if zip_tax_rate.combined_rate != summary_rate.average_rate.rate || is_seller_responsible != zip_tax_rate.is_seller_responsible
-          SlackMessageWorker.perform_async("payments", "VAT Rate Updater", "US Sales Tax rate for state #{state} has changed. Rate was #{zip_tax_rate.combined_rate}, now it's #{summary_rate.average_rate.rate}. is_seller_responsible was #{zip_tax_rate.is_seller_responsible}, now it's #{is_seller_responsible}", "green")
+          InternalNotificationWorker.perform_async("payments", "VAT Rate Updater", "US Sales Tax rate for state #{state} has changed. Rate was #{zip_tax_rate.combined_rate}, now it's #{summary_rate.average_rate.rate}. is_seller_responsible was #{zip_tax_rate.is_seller_responsible}, now it's #{is_seller_responsible}", "green")
           zip_tax_rate.combined_rate = summary_rate.average_rate.rate
           zip_tax_rate.is_seller_responsible = is_seller_responsible
           zip_tax_rate.save!
         end
       else
-        SlackMessageWorker.perform_async("payments", "VAT Rate Updater", "Creating US Sales Tax rate for state #{state} with rate of #{summary_rate.average_rate.rate} and is_seller_responsible #{is_seller_responsible}", "green")
+        InternalNotificationWorker.perform_async("payments", "VAT Rate Updater", "Creating US Sales Tax rate for state #{state} with rate of #{summary_rate.average_rate.rate} and is_seller_responsible #{is_seller_responsible}", "green")
         ZipTaxRate.create!(
           country: "US",
           state:,
@@ -70,12 +70,12 @@ class UpdateTaxRatesJob
 
       if zip_tax_rate
         if zip_tax_rate.combined_rate != summary_rate.average_rate.rate
-          SlackMessageWorker.perform_async("payments", "VAT Rate Updater", "Canada Sales Tax rate for province #{province} has changed. Rate was #{zip_tax_rate.combined_rate}, now it's #{summary_rate.average_rate.rate}.", "green")
+          InternalNotificationWorker.perform_async("payments", "VAT Rate Updater", "Canada Sales Tax rate for province #{province} has changed. Rate was #{zip_tax_rate.combined_rate}, now it's #{summary_rate.average_rate.rate}.", "green")
           zip_tax_rate.combined_rate = summary_rate.average_rate.rate
           zip_tax_rate.save!
         end
       else
-        SlackMessageWorker.perform_async("payments", "VAT Rate Updater", "Creating Canada Sales Tax rate for province #{province} with rate of #{summary_rate.average_rate.rate}", "green")
+        InternalNotificationWorker.perform_async("payments", "VAT Rate Updater", "Creating Canada Sales Tax rate for province #{province} with rate of #{summary_rate.average_rate.rate}", "green")
         ZipTaxRate.create!(
           country: "CA",
           state: province,

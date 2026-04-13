@@ -103,7 +103,6 @@ def configure_vcr
     config.filter_sensitive_data("<IOS_CREATOR_APP_APPLE_LOGIN_IDENTIFIER>") { GlobalConfig.get("IOS_CREATOR_APP_APPLE_LOGIN_IDENTIFIER") }
     config.filter_sensitive_data("<GOOGLE_CLIENT_ID>") { GlobalConfig.get("GOOGLE_CLIENT_ID") }
     config.filter_sensitive_data("<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>") { GlobalConfig.get("RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID") }
-    config.filter_sensitive_data("<SLACK_WEBHOOK_URL>") { GlobalConfig.get("SLACK_WEBHOOK_URL") }
     config.filter_sensitive_data("<CLOUDFRONT_KEYPAIR_ID>") { GlobalConfig.get("CLOUDFRONT_KEYPAIR_ID") }
 
     # Filter EasyPost API key (Base64-encoded for Basic Auth headers)

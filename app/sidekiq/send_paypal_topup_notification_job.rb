@@ -25,9 +25,9 @@ class SendPaypalTopupNotificationJob
       "No more top-up required."
     end
 
-    SlackMessageWorker.perform_async("payments",
-                                     "PayPal Top-up",
-                                     notification_msg,
-                                     balance_check.topup_needed? ? "red" : "green")
+    InternalNotificationWorker.perform_async("payments",
+                                             "PayPal Top-up",
+                                             notification_msg,
+                                             balance_check.topup_needed? ? "red" : "green")
   end
 end

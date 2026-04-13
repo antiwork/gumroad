@@ -6,7 +6,7 @@ class Api::Internal::Installments::AudienceCountsController < Api::Internal::Bas
 
   def show
     installment = current_seller.installments.alive.find_by_external_id(params[:id])
-    return e404_json unless installment
+    return (skip_authorization and e404_json) unless installment
     authorize installment, :updated_audience_count?
 
     render json: { count: installment.audience_members_count }

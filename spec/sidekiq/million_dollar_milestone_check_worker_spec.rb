@@ -18,7 +18,7 @@ describe MillionDollarMilestoneCheckWorker do
                 "• Name: #{seller.name}\n" \
                 "• Username: #{seller.username}\n" \
                 "• Email: #{seller.email}\n"
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("awards", "Gumroad Awards", message, "hotpink")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("awards", "Gumroad Awards", message, "hotpink")
     end
 
     it "sends Slack notification if million dollar milestone is reached with compliance info" do
@@ -49,7 +49,7 @@ describe MillionDollarMilestoneCheckWorker do
                 "• State: CA\n" \
                 "• ZIP code: 94105\n" \
                 "• Country: USA"
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("awards", "Gumroad Awards", message, "hotpink")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("awards", "Gumroad Awards", message, "hotpink")
     end
 
     it "does not send Slack notification if million dollar milestone is not reached" do
@@ -58,7 +58,7 @@ describe MillionDollarMilestoneCheckWorker do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
+      expect(InternalNotificationWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
     end
 
     it "does not send Slack notification if million dollar milestone is reached but announcement has already been " \
@@ -69,7 +69,7 @@ describe MillionDollarMilestoneCheckWorker do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
+      expect(InternalNotificationWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
     end
 
     it "does not include users who have not made a sale in the last 3 weeks" do
@@ -78,7 +78,7 @@ describe MillionDollarMilestoneCheckWorker do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
+      expect(InternalNotificationWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
     end
 
     it "does not include users whose purchases are within the last 2 weeks" do
@@ -87,7 +87,7 @@ describe MillionDollarMilestoneCheckWorker do
 
       described_class.new.perform
 
-      expect(SlackMessageWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
+      expect(InternalNotificationWorker).not_to have_enqueued_sidekiq_job("awards", "Gumroad Awards", anything, "hotpink")
     end
 
     it "marks seller as announcement sent" do

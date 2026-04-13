@@ -165,6 +165,15 @@ export function isTippingEnabled(state: State) {
   );
 }
 
+const LARGE_TIP_THRESHOLD_CENTS = 10000;
+
+export function isTipSuspiciouslyLarge(state: State): boolean {
+  const tipCents = computeTip(state);
+  if (tipCents === 0) return false;
+  const productTotal = getTotalPriceFromProducts(state);
+  return tipCents > LARGE_TIP_THRESHOLD_CENTS && tipCents > productTotal;
+}
+
 export function computeTip(state: State) {
   if (!isTippingEnabled(state)) return 0;
   if (state.tip.type === "fixed") {
