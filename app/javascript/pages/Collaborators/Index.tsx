@@ -1,4 +1,4 @@
-import { Pencil, Shield, Trash } from "@boxicons/react";
+import { AlertShield, Pencil, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -99,7 +99,7 @@ const CollaboratorsPage = () => {
                         </div>
                         {collaborator.setup_incomplete ? (
                           <WithTooltip tip="Not receiving payouts" position="top">
-                            <Shield
+                            <AlertShield
                               pack="filled"
                               style={{ color: "rgb(var(--warning))" }}
                               aria-label="Not receiving payouts"

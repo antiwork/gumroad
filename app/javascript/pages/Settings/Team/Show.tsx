@@ -1,4 +1,4 @@
-import { Shield } from "@boxicons/react";
+import { AlertShield } from "@boxicons/react";
 import { usePage, router } from "@inertiajs/react";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -321,7 +321,7 @@ const TeamMembersSection = ({
                         tip="Invitation has expired. You can resend the invitation from the member's menu options."
                         position="top"
                       >
-                        <Shield
+                        <AlertShield
                           pack="filled"
                           style={{ color: "rgb(var(--warning))" }}
                           aria-label="Invitation has expired. You can resend the invitation from the member's menu options."
