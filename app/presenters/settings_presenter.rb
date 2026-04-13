@@ -247,6 +247,17 @@ class SettingsPresenter
   end
 
   private
+    def country_code_for_compliance_field(field, user_compliance_info)
+      case field
+      when UserComplianceInfoFields::Business::TAX_ID, UserComplianceInfoFields::Business::VAT_NUMBER
+        user_compliance_info.business_country_code
+      when UserComplianceInfoFields::Individual::TAX_ID
+        user_compliance_info.country_code
+      else
+        user_compliance_info.legal_entity_country_code
+      end
+    end
+
     def account_status_details(payments_policy)
       pending_compliance = seller.user_compliance_info_requests.requested.exists?
       is_suspended = seller.suspended?
@@ -265,9 +276,14 @@ class SettingsPresenter
         compliance_actions << { message: "Complete pending verification requirements via Stripe", href: remediation_settings_payments_path }
       end
       if pending_compliance && seller.stripe_account.blank?
+        user_compliance_info = seller.fetch_or_build_user_compliance_info
         seller.user_compliance_info_requests.requested.each do |request|
-          raw_message = request.verification_error_message || "Provide required information: #{request.field_needed.humanize}"
-          message = "#{raw_message.strip.sub(/[.!?]+\z/, "")}."
+          message = if request.verification_error_message.present?
+            "#{request.verification_error_message.strip.sub(/[.!?]+\z/, "")}."
+          else
+            country_code = country_code_for_compliance_field(request.field_needed, user_compliance_info)
+            "Please provide your #{UserComplianceInfoFieldProperty.name_tag_for_field(request.field_needed, country: country_code)}."
+          end
           compliance_actions << { message:, href: nil }
         end
       end
