@@ -28,7 +28,7 @@ describe InternalNotificationMailer do
     context "with attachments" do
       subject(:mail) do
         described_class.notify(
-          room_name: "accounting",
+          room_name: "announcements",
           sender: "Report Bot",
           message_text: "Monthly report",
           attachments_data: [{ "fallback" => "Summary data", "text" => "Details here" }]
