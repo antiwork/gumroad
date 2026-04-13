@@ -1,4 +1,4 @@
-import { Shield } from "@boxicons/react";
+import { AlertShield } from "@boxicons/react";
 import React from "react";
 
 import { formatDate } from "$app/utils/date";
@@ -34,7 +34,7 @@ const BlockedUserTooltip = ({ user, position = "bottom" }: Props) => {
 
   return (
     <WithTooltip tip={content()} position={position}>
-      <Shield pack="filled" className="size-5 text-warning" aria-label="Blocked User" />
+      <AlertShield pack="filled" className="size-5 text-warning" aria-label="Blocked User" />
     </WithTooltip>
   );
 };

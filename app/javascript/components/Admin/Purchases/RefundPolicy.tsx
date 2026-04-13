@@ -1,4 +1,4 @@
-import { Shield } from "@boxicons/react";
+import { AlertShield } from "@boxicons/react";
 import React from "react";
 
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -13,7 +13,7 @@ export const RefundPolicyTitle = ({ refundPolicy }: { refundPolicy: RefundPolicy
     Refund policy: {refundPolicy.title}{" "}
     {refundPolicy.current_refund_policy ? (
       <WithTooltip tip={`Current refund policy: ${refundPolicy.current_refund_policy}`}>
-        <Shield pack="filled" className="size-5 text-warning" />
+        <AlertShield pack="filled" className="size-5 text-warning" />
       </WithTooltip>
     ) : null}
   </>
