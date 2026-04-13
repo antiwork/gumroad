@@ -30,6 +30,11 @@ describe Api::Internal::Installments::AudienceCountsController do
       let(:request_params) { { id: record.external_id } }
     end
 
+    it "returns 404 when installment is not found" do
+      get :show, params: { id: "nonexistent" }
+      expect(response).to have_http_status(:not_found)
+    end
+
     it "returns audience count" do
       get :show, params: { id: create(:audience_post, seller:).external_id }
       expect(response).to be_successful
