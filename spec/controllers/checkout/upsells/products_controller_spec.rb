@@ -89,6 +89,15 @@ describe Checkout::Upsells::ProductsController do
       expect(response.parsed_body.length).to eq(2)
     end
 
+    context "when no seller is found" do
+      it "returns an empty array" do
+        get :index
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq([])
+      end
+    end
+
     context "with custom domain" do
       before do
         @request.host = "example.com"

@@ -16,6 +16,8 @@ class Checkout::Upsells::ProductsController < ApplicationController
 
   def index
     seller = user_by_domain(request.host) || current_seller
+    return render json: [] unless seller
+
     products = seller.products
       .eligible_for_content_upsells
       .includes(*PRODUCT_INCLUDES)
