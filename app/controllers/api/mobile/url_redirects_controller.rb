@@ -11,8 +11,6 @@ class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
   before_action :fetch_product_file, only: %i[stream hls_playlist download]
 
   def url_redirect_attributes
-    return e404 if @url_redirect.referenced_link.nil?
-
     purchase_valid = @url_redirect.purchase ? @url_redirect.purchase.successful_and_valid? : true
     render json: { success: true, product: @url_redirect.product_json_data, purchase_valid: }
   end

@@ -70,10 +70,12 @@ describe Api::Mobile::UrlRedirectsController do
       expect(response.parsed_body).to eq({ success: true, product: @url_redirect.product_json_data, purchase_valid: false }.as_json)
     end
 
-    it "returns 404 when the url redirect has no associated product" do
-      url_redirect = create(:url_redirect, link: nil, purchase: nil)
+    it "returns success when the url redirect has no associated product" do
+      url_redirect = create(:installment_url_redirect, installment: create(:installment, link: nil, seller: create(:named_user)))
       get :url_redirect_attributes, params: { id: url_redirect.external_id, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
-      assert_response 404
+      assert_response 200
+      expect(response.parsed_body[:success]).to be true
+      expect(response.parsed_body[:product][:url_redirect_external_id]).to eq(url_redirect.external_id)
     end
 
     it "does not return purchase link and file data redirect external id is invalid" do
