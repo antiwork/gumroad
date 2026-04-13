@@ -13,6 +13,7 @@ import { Button, buttonVariants } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
+import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -301,10 +302,10 @@ const TiptapButton = Node.create({
   submenu: {
     menu: "insert",
     item: (_editor, onOpen) => (
-      <div role="menuitem" onClick={onOpen}>
+      <MenuListItem onClick={onOpen}>
         <CursorClick className="size-5" />
         <span>Button</span>
-      </div>
+      </MenuListItem>
     ),
   },
 });

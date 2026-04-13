@@ -11,6 +11,7 @@ import { sanitizeHtml } from "$app/utils/sanitize";
 
 import { Button } from "$app/components/Button";
 import { MenuItem } from "$app/components/RichTextEditor";
+import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 import { showAlert } from "$app/components/server-components/Alert";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -84,10 +85,10 @@ export const Raw = TiptapNode.create({
   submenu: {
     menu: "insert",
     item: (_editor, onOpen) => (
-      <div role="menuitem" onClick={onOpen}>
+      <MenuListItem onClick={onOpen}>
         <TwitterX pack="brands" className="size-5" />
         <span>X post</span>
-      </div>
+      </MenuListItem>
     ),
   },
   addCommands() {
