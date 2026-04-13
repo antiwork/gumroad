@@ -4,6 +4,10 @@ class Api::Mobile::AnalyticsController < Api::Mobile::BaseController
   before_action -> { doorkeeper_authorize! :creator_api }
   before_action :set_date_range, only: [:by_date, :by_state, :by_referral]
 
+  rescue_from Faraday::TimeoutError do
+    render json: { success: false, message: "Analytics request timed out" }, status: :gateway_timeout
+  end
+
   def data_by_date
     data = SellerMobileAnalyticsService.new(current_resource_owner, range: params[:range], fields: [:sales_count, :purchases], query: params[:query]).process
     render json: data
