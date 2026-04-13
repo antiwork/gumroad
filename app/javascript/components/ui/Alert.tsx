@@ -1,4 +1,4 @@
-import { CheckCircle, InfoCircle, Shield, XCircle, type BoxIconProps } from "@boxicons/react";
+import { AlertShield, CheckCircle, InfoCircle, XCircle, type BoxIconProps } from "@boxicons/react";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
@@ -21,7 +21,7 @@ type AlertVariant = NonNullable<VariantProps<typeof alertVariants>["variant"]>;
 const alertIcons = {
   success: CheckCircle,
   danger: XCircle,
-  warning: Shield,
+  warning: AlertShield,
   info: InfoCircle,
 } satisfies Record<Exclude<AlertVariant, "accent">, React.ComponentType<BoxIconProps>>;
 
