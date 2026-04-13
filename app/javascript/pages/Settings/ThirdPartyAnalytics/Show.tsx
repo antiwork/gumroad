@@ -114,7 +114,7 @@ export default function ThirdPartyAnalyticsPage() {
               <Fieldset>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}googleAnalyticsId`}>Google Analytics Property ID</Label>
-                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                  <a href="/help/article/174-third-party-analytics#Google-Analytics-Ib1dB" target="_blank" rel="noreferrer">
                     Learn more
                   </a>
                 </FieldsetTitle>
@@ -129,7 +129,7 @@ export default function ThirdPartyAnalyticsPage() {
               <Fieldset>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}facebookPixel`}>Facebook Pixel</Label>
-                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                  <a href="/help/article/174-third-party-analytics#Meta-Pixel-Yisi6" target="_blank" rel="noreferrer">
                     Learn more
                   </a>
                 </FieldsetTitle>
@@ -144,7 +144,7 @@ export default function ThirdPartyAnalyticsPage() {
               <Fieldset>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}tiktokPixel`}>TikTok Pixel</Label>
-                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                  <a href="/help/article/174-third-party-analytics#TikTok-Pixel-zK9mP" target="_blank" rel="noreferrer">
                     Learn more
                   </a>
                 </FieldsetTitle>
@@ -203,7 +203,7 @@ export default function ThirdPartyAnalyticsPage() {
             <>
               <h2>Snippets</h2>
               <div>Add custom JavaScript to pages in the checkout flow.</div>
-              <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+              <a href="/help/article/174-third-party-analytics#Snippets-j1elc" target="_blank" rel="noreferrer">
                 Learn more
               </a>
             </>
