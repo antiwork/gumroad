@@ -36,12 +36,12 @@ Alterity.configure do |config|
     output.strip!
     next if output.blank?
     next if output.in?(["Operation, tries, wait:",
-                         "analyze_table, 10, 1",
-                         "copy_rows, 10, 0.25",
-                         "create_triggers, 10, 1",
-                         "drop_triggers, 10, 1",
-                         "swap_tables, 10, 1",
-                         "update_foreign_keys, 10, 1"])
+                        "analyze_table, 10, 1",
+                        "copy_rows, 10, 0.25",
+                        "create_triggers, 10, 1",
+                        "drop_triggers, 10, 1",
+                        "swap_tables, 10, 1",
+                        "update_foreign_keys, 10, 1"])
     Rails.logger.info("[Alterity] #{output}")
   end
 

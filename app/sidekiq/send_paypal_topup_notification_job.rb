@@ -26,8 +26,8 @@ class SendPaypalTopupNotificationJob
     end
 
     InternalNotificationWorker.perform_async("payments",
-                                     "PayPal Top-up",
-                                     notification_msg,
-                                     balance_check.topup_needed? ? "red" : "green")
+                                             "PayPal Top-up",
+                                             notification_msg,
+                                             balance_check.topup_needed? ? "red" : "green")
   end
 end
