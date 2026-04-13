@@ -118,7 +118,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
         account_status = inertia.props[:account_status]
         expect(account_status[:show_section]).to be true
-        expect(account_status[:compliance_actions]).to include("Please provide your tax ID")
+        expect(account_status[:compliance_actions]).to include(message: "Please provide your tax ID.", href: nil)
       end
     end
   end

@@ -3,24 +3,35 @@ import * as React from "react";
 import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { Alert } from "$app/components/ui/Alert";
 
-const CONTACT_SUPPORT_URL = "https://customers.gumroad.com/article/800-contact-support";
+const HELP_URL = "https://help.gumroad.com";
 
 const SupportLink = () => (
   <>
     {" "}
     If you have questions,{" "}
-    <a href={CONTACT_SUPPORT_URL} className="underline">
+    <a href={HELP_URL} className="underline">
       contact support
     </a>
     .
   </>
 );
 
+export type ComplianceAction = { message: string; href: string | null };
+
+const ComplianceActionItem = ({ action }: { action: ComplianceAction }) =>
+  action.href ? (
+    <a href={action.href} className="underline">
+      {action.message}
+    </a>
+  ) : (
+    <>{action.message}</>
+  );
+
 export type AccountStatus = {
   show_section: boolean;
   is_suspended: boolean;
   suspension_reason: string | null;
-  compliance_actions: string[];
+  compliance_actions: ComplianceAction[];
   gumroad_status: string | null;
 };
 
@@ -89,15 +100,18 @@ export default function AccountStatusSection({
 
       {!accountStatus.is_suspended && !showVerificationSection && accountStatus.compliance_actions.length > 0 ? (
         <Alert role="status" variant="warning">
-          <ul className="list-disc pl-4">
-            {accountStatus.compliance_actions.map((action, i) => (
-              <li key={i}>
-                <a href={CONTACT_SUPPORT_URL} className="underline">
-                  {action}
-                </a>
-              </li>
-            ))}
-          </ul>
+          {accountStatus.compliance_actions.length === 1 && accountStatus.compliance_actions[0] ? (
+            <ComplianceActionItem action={accountStatus.compliance_actions[0]} />
+          ) : (
+            <ul className="list-disc pl-4">
+              {accountStatus.compliance_actions.map((action, i) => (
+                <li key={i}>
+                  <ComplianceActionItem action={action} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {accountStatus.compliance_actions.some((a) => !a.href) ? <SupportLink /> : null}
         </Alert>
       ) : null}
 

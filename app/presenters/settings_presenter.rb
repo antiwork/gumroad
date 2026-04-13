@@ -3,6 +3,7 @@
 class SettingsPresenter
   include CurrencyHelper
   include ActiveSupport::NumberHelper
+  include Rails.application.routes.url_helpers
 
   attr_reader :pundit_user, :seller
 
@@ -261,12 +262,13 @@ class SettingsPresenter
 
       compliance_actions = []
       if pending_compliance && seller.stripe_account.present? && payments_policy.update?
-        compliance_actions << "Complete pending verification requirements via Stripe"
+        compliance_actions << { message: "Complete pending verification requirements via Stripe", href: remediation_settings_payments_path }
       end
       if pending_compliance && seller.stripe_account.blank?
         seller.user_compliance_info_requests.requested.each do |request|
-          message = request.verification_error_message || "Provide required information: #{request.field_needed.humanize}"
-          compliance_actions << message
+          raw_message = request.verification_error_message || "Provide required information: #{request.field_needed.humanize}"
+          message = "#{raw_message.strip.sub(/[.!?]+\z/, "")}."
+          compliance_actions << { message:, href: nil }
         end
       end
 

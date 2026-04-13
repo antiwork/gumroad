@@ -793,7 +793,7 @@ describe SettingsPresenter do
                                                                        show_verification_section: true,
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
-                                                                         compliance_actions: ["Complete pending verification requirements via Stripe"],
+                                                                         compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
                                                                        ),
                                                                      }))
       end
@@ -807,7 +807,7 @@ describe SettingsPresenter do
                                                                        show_verification_section: true,
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
-                                                                         compliance_actions: ["Complete pending verification requirements via Stripe"],
+                                                                         compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
                                                                          gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
                                                                        ),
                                                                      }))
@@ -824,7 +824,7 @@ describe SettingsPresenter do
                                                                        payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN,
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
-                                                                         compliance_actions: ["Complete pending verification requirements via Stripe"],
+                                                                         compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
                                                                        ),
                                                                      }))
       end
@@ -841,7 +841,7 @@ describe SettingsPresenter do
                                                                        payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN,
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
-                                                                         compliance_actions: ["Complete pending verification requirements via Stripe"],
+                                                                         compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
                                                                          gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
                                                                        ),
                                                                      }))
