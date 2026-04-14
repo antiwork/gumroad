@@ -37,7 +37,6 @@ class UserBalanceStatsService
 
   private
     def generate
-      balances_by_product_service = BalancesByProductService.new(user)
       result = {
         generated_at: Time.current,
         next_payout_period_data:,
@@ -45,7 +44,6 @@ class UserBalanceStatsService
         overview: {
           last_payout_period_data: payout_period_data(user, user.payments.completed.last),
           balance: user.unpaid_balance_cents,
-          balances_by_product: balances_by_product_service.process,
           last_seven_days_sales_total: user.sales_cents_total(after: 7.days.ago),
           last_28_days_sales_total: user.sales_cents_total(after: 28.days.ago),
           sales_cents_total: user.sales_cents_total,
