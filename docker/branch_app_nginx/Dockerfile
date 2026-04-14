@@ -1,7 +1,5 @@
 FROM openresty/openresty:alpine-fat
 
-# Expire Docker images after 1 week in Quay
-LABEL quay.expires-after=1w
 
 RUN luarocks install luasocket
 RUN luarocks install lua_json
