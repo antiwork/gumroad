@@ -22,6 +22,7 @@ import {
   cancelSubscription,
   changeCanContact,
   completeCommission,
+  getCharges,
   getOptions,
   markShipped,
   refund,
@@ -692,7 +693,12 @@ const CustomerDetailPage = ({
         ) : null}
         {commission ? (
           <div className="break-inside-avoid">
-            <CommissionSection commission={commission} onChange={(commission) => updateCustomer({ commission })} />
+            <CommissionSection commission={commission} onChange={(commission) => {
+              updateCustomer({ commission });
+              if (commission.status === "completed") {
+                void getCharges(customer.id, customer.email).then(setCharges);
+              }
+            }} />
           </div>
         ) : null}
         {emails.length !== 0 ? (

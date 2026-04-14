@@ -184,8 +184,15 @@ class CustomersController < Sellers::BaseController
         }
       end
 
-      posts = original_purchase.installments.alive.where(seller_id: original_purchase.seller_id).map do |post|
-        email_info = CreatorContactingCustomersEmailInfo.where(purchase: original_purchase, installment: post).last
+      installments = original_purchase.installments.alive.where(seller_id: original_purchase.seller_id).to_a
+      email_infos_by_installment = CreatorContactingCustomersEmailInfo
+        .where(purchase: original_purchase, installment_id: installments.map(&:id))
+        .order(:id)
+        .group_by(&:installment_id)
+        .transform_values(&:last)
+
+      posts = installments.map do |post|
+        email_info = email_infos_by_installment[post.id]
         {
           type: "post",
           name: post.name,
