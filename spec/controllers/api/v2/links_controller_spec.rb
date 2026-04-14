@@ -1279,6 +1279,54 @@ describe Api::V2::LinksController do
           expect(@product.reload.alive_rich_contents.count).to eq 1
         end
       end
+
+      it "rejects non-array tags" do
+        put @action, params: @params.merge(tags: "oops")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("tags must be an array")
+      end
+
+      it "rejects tags with non-string elements" do
+        put @action, params: @params.merge(tags: ["valid", { nested: "hash" }])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("tags must be an array of strings")
+      end
+
+      it "rejects non-array rich_content" do
+        put @action, params: @params.merge(rich_content: "oops")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("rich_content must be an array")
+      end
+
+      it "rejects rich_content with non-object elements" do
+        put @action, params: @params.merge(rich_content: ["not_an_object"])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("rich_content must be an array of content page objects")
+      end
+
+      it "rejects non-array files" do
+        put @action, params: @params.merge(files: "oops")
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("files must be an array")
+      end
+
+      it "rejects files with non-object elements" do
+        put @action, params: @params.merge(files: ["not_an_object"])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("files must be an array of file objects")
+      end
     end
   end
 
