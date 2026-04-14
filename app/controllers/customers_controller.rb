@@ -39,7 +39,7 @@ class CustomersController < Sellers::BaseController
              can_ping: current_seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0,
              show_refund_fee_notice: current_seller.show_refund_fee_notice?,
              emails: build_customer_emails(purchase),
-             missed_posts: presenter.missed_posts,
+             missed_posts: InertiaRails.defer { presenter.missed_posts },
              charges: build_charges(purchase),
              product_purchases: purchase.is_bundle_purchase ? purchase.product_purchases.map { CustomerPresenter.new(purchase: _1).customer(pundit_user:) } : [],
            }
