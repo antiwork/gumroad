@@ -83,6 +83,28 @@ describe Api::V2::CustomFieldsController do
           custom_field: @product.reload.custom_fields.last.as_json.stringify_keys!
         }.as_json(api_scopes: ["edit_products"]))
       end
+
+      it "creates a custom field on an unpublished API-created product" do
+        api_product = create(:product, :unpublished, user: @user)
+        post @action, params: @params.merge(link_id: api_product.external_id, name: "Company", type: "text", required: "true")
+        expect(response.parsed_body["success"]).to be(true)
+        created_field = api_product.custom_fields.reload.last
+        expect(created_field.name).to eq("Company")
+        expect(created_field.field_type).to eq("text")
+        expect(created_field.required).to be(true)
+      end
+
+      it "returns validation errors when save fails" do
+        post @action, params: @params.merge(type: "invalid_type")
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("Field type is not included in the list")
+      end
+
+      it "returns validation errors for terms field with invalid URL" do
+        post @action, params: @params.merge(name: "not-a-url", type: "terms")
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("Please provide a valid URL for custom field of Terms type")
+      end
     end
   end
 

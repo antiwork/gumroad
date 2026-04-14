@@ -11,7 +11,7 @@ class GlobalAffiliates::ProductEligibilityController < Sellers::BaseController
 
     product_data = fetch_and_parse_product_data
     render json: { success: true, product: product_data }
-  rescue InvalidUrl
+  rescue InvalidUrl, URI::InvalidURIError, Addressable::URI::InvalidURIError
     render json: { success: false, error: "Please provide a valid Gumroad product URL" }
   end
 
