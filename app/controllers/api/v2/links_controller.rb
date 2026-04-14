@@ -258,6 +258,14 @@ class Api::V2::LinksController < Api::V2::BaseController
     @normalized_files = normalize_params_recursively(params[:files]) if params.key?(:files)
     @normalized_rich_content = normalize_params_recursively(params[:rich_content]) if params.key?(:rich_content)
 
+    if @normalized_files.present? && @normalized_files.any? { |f| !f.respond_to?(:key?) }
+      return render_response(false, message: "files must be an array of file objects.")
+    end
+
+    if @normalized_rich_content.present? && @normalized_rich_content.any? { |p| !p.respond_to?(:key?) }
+      return render_response(false, message: "rich_content must be an array of content page objects.")
+    end
+
     begin
       ActiveRecord::Base.transaction do
         attrs = {}

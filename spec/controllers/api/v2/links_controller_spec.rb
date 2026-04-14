@@ -947,6 +947,24 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to include("files must be an array of file objects")
       end
 
+      it "rejects files containing uploaded file objects" do
+        upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
+        put @action, params: @params.merge(files: [upload])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("files must be an array of file objects")
+      end
+
+      it "rejects rich_content containing uploaded file objects" do
+        upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
+        put @action, params: @params.merge(rich_content: [upload])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("rich_content must be an array of content page objects")
+      end
+
       it "rejects non-array cover_ids" do
         put @action, params: @params.merge(cover_ids: "not-an-array")
 
