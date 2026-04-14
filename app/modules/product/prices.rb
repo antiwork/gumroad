@@ -44,7 +44,7 @@ module Product::Prices
   def price_cents=(price_cents)
     return super(price_cents) if !persisted? || is_tiered_membership
 
-    create_or_update_new_price!(price_cents:, recurrence: subscription_duration.try(:to_s), is_rental: false)
+    create_or_update_new_price!(price_cents:, recurrence: subscription_duration.try(:to_s), is_rental: rent_only?)
   end
 
   def rental_price_cents=(rental_price_cents)

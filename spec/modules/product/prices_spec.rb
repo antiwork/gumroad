@@ -77,6 +77,18 @@ describe Product::Prices do
       end.to change { second_price.reload.price_cents }.from(100).to(200)
     end
 
+    it "updates the rental price for a rent_only product" do
+      product = create(:product, price_cents: 100, rental_price_cents: 500, purchase_type: :rent_only)
+
+      expect(product.default_price).to be_is_rental
+      expect(product.default_price_cents).to eq(500)
+
+      product.price_cents = 750
+
+      expect(product.default_price_cents).to eq(750)
+      expect(product.default_price).to be_is_rental
+    end
+
     it "updates the price for the corresponding currency" do
       product = create(:product, price_currency_type: "usd", price_cents: 100)
 
