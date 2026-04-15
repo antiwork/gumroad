@@ -82,7 +82,7 @@ describe BalanceController, type: :controller, inertia: true do
 
         it "returns the most recent scheduled payout" do
           create(:scheduled_payout, user: seller, action: "refund", status: "pending")
-          sp = create(:scheduled_payout, user: seller, action: "payout", status: "pending", payout_amount_cents: 75_000)
+          create(:scheduled_payout, user: seller, action: "payout", status: "pending", payout_amount_cents: 75_000)
 
           get :index
 
