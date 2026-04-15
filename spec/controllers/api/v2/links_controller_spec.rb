@@ -973,6 +973,35 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to include("cover_ids must be an array")
       end
 
+      it "rejects cover_ids containing uploaded file objects" do
+        upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
+        put @action, params: @params.merge(cover_ids: [upload])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("cover_ids must be an array of strings")
+      end
+
+      it "rejects files when numeric-keyed params normalize into non-hash elements" do
+        upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
+        numeric_keyed = ActionController::Parameters.new("0" => upload)
+        put @action, params: @params.merge(files: [numeric_keyed])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("files must be an array of file objects")
+      end
+
+      it "rejects rich_content when numeric-keyed params normalize into non-hash elements" do
+        upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
+        numeric_keyed = ActionController::Parameters.new("0" => upload)
+        put @action, params: @params.merge(rich_content: [numeric_keyed])
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("rich_content must be an array of content page objects")
+      end
+
       it "does not change native_type" do
         original_type = @product.native_type
         put @action, params: @params.merge(native_type: "membership")

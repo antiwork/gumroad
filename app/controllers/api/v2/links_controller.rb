@@ -250,8 +250,8 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     if params.key?(:cover_ids)
-      if !params[:cover_ids].is_a?(Array)
-        return render_response(false, message: "cover_ids must be an array.")
+      if !params[:cover_ids].is_a?(Array) || params[:cover_ids].any? { |id| !id.respond_to?(:to_str) }
+        return render_response(false, message: "cover_ids must be an array of strings.")
       end
     end
 
