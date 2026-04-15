@@ -44,7 +44,7 @@ module User::Taxation
   }
 
   def eligible_for_1099_k?(year)
-    return false unless is_a_non_suspended_creator_from_usa?
+    return false unless from_us?
     return false unless eligible_for_1099_k_federal_filing?(year) || eligible_for_1099_k_state_filing?(year)
 
     true
@@ -67,7 +67,7 @@ module User::Taxation
   end
 
   def eligible_for_1099_misc?(year)
-    return false unless is_a_non_suspended_creator_from_usa?
+    return false unless from_us?
     return false unless eligible_for_1099_misc_federal_filing?(year) || eligible_for_1099_misc_state_filing?(year)
 
     true
@@ -86,16 +86,9 @@ module User::Taxation
   end
 
   def eligible_for_1099?(year)
-    return false unless is_a_non_suspended_creator_from_usa?
-
-    eligible_for_1099_k?(year) || eligible_for_1099_misc?(year)
-  end
-
-  def is_a_non_suspended_creator_from_usa?
-    return false if suspended?
     return false unless from_us?
 
-    true
+    eligible_for_1099_k?(year) || eligible_for_1099_misc?(year)
   end
 
   def from_us?

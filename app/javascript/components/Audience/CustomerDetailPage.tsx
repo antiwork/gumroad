@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUpRightSquare, Paperclip, Trash } from "@boxicons/react";
-import { Link } from "@inertiajs/react";
+import { Deferred, Link } from "@inertiajs/react";
 import { Blob, DirectUpload } from "@rails/activestorage";
 import * as React from "react";
 
@@ -86,7 +86,7 @@ export type CustomerDetailPageProps = {
   can_ping: boolean;
   show_refund_fee_notice: boolean;
   emails: CustomerEmail[];
-  missed_posts: MissedPost[];
+  missed_posts?: MissedPost[];
   charges: Charge[];
   product_purchases: Customer[];
 };
@@ -142,7 +142,7 @@ const CustomerDetailPage = ({
   const updateCustomer = (update: Partial<Customer>) => setCustomer((prev) => ({ ...prev, ...update }));
 
   const [loadingId, setLoadingId] = React.useState<string | null>(null);
-  const missedPosts = initialMissedPosts;
+  const missedPosts = initialMissedPosts ?? [];
   const [shownMissedPosts, setShownMissedPosts] = React.useState(PAGE_SIZE);
   const emails = initialEmails;
   const [shownEmails, setShownEmails] = React.useState(PAGE_SIZE);
@@ -764,47 +764,64 @@ const CustomerDetailPage = ({
             </section>
           </Card>
         ) : null}
-        {missedPosts.length !== 0 ? (
-          <Card asChild>
-            <section className="break-inside-avoid">
-              <CardContent asChild>
-                <header>
-                  <h3 className="grow">Send missed posts</h3>
-                </header>
-              </CardContent>
-              {missedPosts.slice(0, shownMissedPosts).map((post) => (
-                <CardContent asChild key={post.id}>
-                  <section>
-                    <div className="grow">
-                      <h5 className="font-bold">
-                        <a href={post.url} target="_blank" rel="noreferrer">
-                          {post.name}
-                        </a>
-                      </h5>
-                      <small className="block text-muted">{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
-                    </div>
-                    <Button
-                      color="primary"
-                      disabled={!!loadingId || sentEmailIds.current.has(post.id)}
-                      onClick={() => void onSend(post.id, "post")}
-                    >
-                      {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending..." : "Send"}
-                    </Button>
-                  </section>
-                </CardContent>
-              ))}
-              {shownMissedPosts < missedPosts.length ? (
+        <div className="break-inside-avoid">
+          <Deferred data={["missed_posts"]} fallback={
+            <Card asChild>
+              <section>
                 <CardContent asChild>
-                  <section>
-                    <Button onClick={() => setShownMissedPosts((prev) => prev + PAGE_SIZE)} className="grow basis-0">
-                      Show more
-                    </Button>
-                  </section>
+                  <header>
+                    <h3 className="grow">Send missed posts</h3>
+                  </header>
                 </CardContent>
-              ) : null}
-            </section>
-          </Card>
-        ) : null}
+                <CardContent>
+                  <LoadingSpinner className="mx-auto size-8" />
+                </CardContent>
+              </section>
+            </Card>
+          }>
+            {missedPosts.length !== 0 ? (
+              <Card asChild>
+                <section>
+                  <CardContent asChild>
+                    <header>
+                      <h3 className="grow">Send missed posts</h3>
+                    </header>
+                  </CardContent>
+                  {missedPosts.slice(0, shownMissedPosts).map((post) => (
+                    <CardContent asChild key={post.id}>
+                      <section>
+                        <div className="grow">
+                          <h5 className="font-bold">
+                            <a href={post.url} target="_blank" rel="noreferrer">
+                              {post.name}
+                            </a>
+                          </h5>
+                          <small className="block text-muted">{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
+                        </div>
+                        <Button
+                          color="primary"
+                          disabled={!!loadingId || sentEmailIds.current.has(post.id)}
+                          onClick={() => void onSend(post.id, "post")}
+                        >
+                          {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending..." : "Send"}
+                        </Button>
+                      </section>
+                    </CardContent>
+                  ))}
+                  {shownMissedPosts < missedPosts.length ? (
+                    <CardContent asChild>
+                      <section>
+                        <Button onClick={() => setShownMissedPosts((prev) => prev + PAGE_SIZE)} className="grow basis-0">
+                          Show more
+                        </Button>
+                      </section>
+                    </CardContent>
+                  ) : null}
+                </section>
+              </Card>
+            ) : null}
+          </Deferred>
+        </div>
       </ColumnLayout>
     </div>
   );
