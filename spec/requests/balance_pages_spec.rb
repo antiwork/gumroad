@@ -906,29 +906,31 @@ describe "Balance Pages Scenario", js: true, type: :system do
     describe "scheduled payout banner" do
       context "when seller is suspended with a pending payout" do
         let(:seller) { create(:named_seller, user_risk_state: "suspended_for_fraud") }
+        let(:scheduled_date) { 21.days.from_now }
+        let(:formatted_date) { scheduled_date.strftime("%-m/%-d/%Y") }
 
         it "displays payout scheduled message" do
-          create(:scheduled_payout, user: seller, action: "payout", status: "pending", payout_amount_cents: 50_000, scheduled_at: 21.days.from_now)
+          create(:scheduled_payout, user: seller, action: "payout", status: "pending", payout_amount_cents: 50_000, scheduled_at: scheduled_date)
 
           visit balance_path
 
-          expect(page).to have_status(text: /Your balance of \$500\.00 is scheduled for payout on/)
+          expect(page).to have_status(text: "Your balance of $500.00 is scheduled for payout on #{formatted_date}.")
         end
 
         it "displays flagged payout message" do
-          create(:scheduled_payout, user: seller, action: "payout", status: "flagged", payout_amount_cents: 50_000, scheduled_at: 21.days.from_now)
+          create(:scheduled_payout, user: seller, action: "payout", status: "flagged", payout_amount_cents: 50_000, scheduled_at: scheduled_date)
 
           visit balance_path
 
-          expect(page).to have_status(text: /Your payout is under review/)
+          expect(page).to have_status(text: "Your balance of $500.00 is scheduled for payout on #{formatted_date}. Your payout is under review. Please contact support for details.")
         end
 
         it "displays refund scheduled message" do
-          create(:scheduled_payout, user: seller, action: "refund", status: "pending", payout_amount_cents: 50_000, scheduled_at: 21.days.from_now)
+          create(:scheduled_payout, user: seller, action: "refund", status: "pending", payout_amount_cents: 50_000, scheduled_at: scheduled_date)
 
           visit balance_path
 
-          expect(page).to have_status(text: /Your balance will not be paid out. Unpaid sales are scheduled to be refunded to buyers on/)
+          expect(page).to have_status(text: "Your balance will not be paid out. Unpaid sales are scheduled to be refunded to buyers on #{formatted_date}.")
         end
 
         it "displays hold message" do
@@ -944,7 +946,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
 
           visit balance_path
 
-          expect(page).to have_status(text: /Your balance of \$500\.00 has been paid out\./)
+          expect(page).to have_status(text: "Your balance of $500.00 has been paid out.")
         end
 
         it "displays executed refund message" do
