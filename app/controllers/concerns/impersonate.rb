@@ -34,8 +34,7 @@ module Impersonate
     impersonated_user_id = $redis.get(RedisKey.impersonated_user(current_user_from_api_or_web.id))
     return if impersonated_user_id.nil?
 
-    user = User.alive.find(impersonated_user_id)
-    user if user.account_active?
+    User.alive.find(impersonated_user_id)
   rescue ActiveRecord::RecordNotFound
     nil
   end
