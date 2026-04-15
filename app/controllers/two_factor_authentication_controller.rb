@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class TwoFactorAuthenticationController < ApplicationController
+  skip_before_action :check_suspended
   before_action :redirect_to_signed_in_path, if: -> { user_signed_in? && skip_two_factor_authentication?(logged_in_user) }
   before_action :fetch_user
   before_action :check_presence_of_user, except: :verify
