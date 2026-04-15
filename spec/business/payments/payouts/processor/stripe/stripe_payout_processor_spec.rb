@@ -302,10 +302,23 @@ describe StripePayoutProcessor, :vcr do
       transfer
     end
 
-    let(:destination_payment) do
+    let(:destination_payment_nil_bt) do
       dest = double
       allow(dest).to receive(:id).and_return("py_1234")
       allow(dest).to receive(:balance_transaction).and_return(nil)
+      dest
+    end
+
+    let(:balance_transaction) do
+      bt = double
+      allow(bt).to receive(:amount).and_return(10_00)
+      bt
+    end
+
+    let(:destination_payment_with_bt) do
+      dest = double
+      allow(dest).to receive(:id).and_return("py_1234")
+      allow(dest).to receive(:balance_transaction).and_return(balance_transaction)
       dest
     end
 
@@ -313,15 +326,31 @@ describe StripePayoutProcessor, :vcr do
       merchant_account
       user.reload
       allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_return(internal_transfer)
-      allow(Stripe::Charge).to receive(:retrieve).and_return(destination_payment)
+      allow(described_class).to receive(:sleep)
     end
 
-    it "raises an error and marks the payment as failed" do
+    it "raises an error after retries and marks the payment as failed" do
+      allow(Stripe::Charge).to receive(:retrieve).and_return(destination_payment_nil_bt)
+
       expect do
         described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
       end.to raise_error(RuntimeError, /Balance transaction not yet available/)
+
+      expect(Stripe::Charge).to have_received(:retrieve).exactly(3).times
+      expect(described_class).to have_received(:sleep).with(2).twice
       payment.reload
       expect(payment.state).to eq("failed")
+    end
+
+    it "succeeds when balance_transaction becomes available on retry" do
+      allow(Stripe::Charge).to receive(:retrieve).and_return(destination_payment_nil_bt, destination_payment_with_bt)
+
+      errors = described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
+
+      expect(errors).to eq([])
+      expect(Stripe::Charge).to have_received(:retrieve).twice
+      expect(described_class).to have_received(:sleep).with(2).once
+      expect(payment.amount_cents).to eq(10_00)
     end
   end
 

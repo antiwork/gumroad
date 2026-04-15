@@ -162,14 +162,19 @@ class StripePayoutProcessor
                                                          # 1 key (`payment`) already added above so allow max - 1 more keys
                                                          max_key_length: StripeMetadata::STRIPE_METADATA_MAX_KEYS_LENGTH - 1))
       )
-      destination_payment = Stripe::Charge.retrieve(
-        {
-          id: internal_transfer.destination_payment,
-          expand: %w[balance_transaction]
-        },
-        { stripe_account: payment.stripe_connect_account_id }
-      )
-      raise "Balance transaction not yet available for destination payment #{destination_payment.id}" if destination_payment.balance_transaction.nil?
+      destination_payment = nil
+      3.times do |attempt|
+        destination_payment = Stripe::Charge.retrieve(
+          {
+            id: internal_transfer.destination_payment,
+            expand: %w[balance_transaction]
+          },
+          { stripe_account: payment.stripe_connect_account_id }
+        )
+        break if destination_payment.balance_transaction.present?
+        raise "Balance transaction not yet available for destination payment #{destination_payment.id}" if attempt == 2
+        sleep(2)
+      end
       payment.amount_cents += destination_payment.balance_transaction.amount
       payment.stripe_internal_transfer_id = internal_transfer.id
     end
