@@ -115,13 +115,8 @@ class Api::V2::LinksController < Api::V2::BaseController
       if !params[:files].is_a?(Array) || params[:files].any? { |f| !f.respond_to?(:key?) }
         return render_response(false, message: "files must be an array of file objects.")
       end
-      if params[:files].any? { |f| !f[:url].respond_to?(:to_str) || f[:url].blank? }
-        return render_response(false, message: "Each file must include a url string.")
-      end
-      seller_s3_prefix = "#{S3_BASE_URL}attachments/#{current_resource_owner.external_id}/"
-      if params[:files].any? { |f| !f[:url].start_with?(seller_s3_prefix) || f[:url].include?("..") || f[:url].include?("%2F") || f[:url].include?("%2f") }
-        return render_response(false, message: "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first.")
-      end
+      error = validate_file_urls(params[:files])
+      return render_response(false, message: error) if error
     end
 
     if params[:taxonomy_id].present?
@@ -223,16 +218,62 @@ class Api::V2::LinksController < Api::V2::BaseController
       if !params[:rich_content].is_a?(Array) || params[:rich_content].any? { |p| !p.respond_to?(:key?) }
         return render_response(false, message: "rich_content must be an array of content page objects.")
       end
+      params[:rich_content].each do |p|
+        desc = p[:description]
+        next if desc.blank?
+        if !desc.respond_to?(:key?) && !desc.is_a?(Array)
+          return render_response(false, message: "Each rich_content page description must be a JSON object or array.")
+        end
+        content_nodes = if desc.respond_to?(:key?)
+          if desc[:content].present? && !desc[:content].is_a?(Array)
+            return render_response(false, message: "rich_content description content must be an array.")
+          end
+          desc[:content]
+        else
+          desc
+        end
+        if content_nodes.is_a?(Array) && content_nodes.any? { |n| !n.respond_to?(:key?) }
+          return render_response(false, message: "Each rich_content content node must be a JSON object.")
+        end
+      end
     end
 
     if params.key?(:files)
       if !params[:files].is_a?(Array) || params[:files].any? { |f| !f.respond_to?(:key?) }
         return render_response(false, message: "files must be an array of file objects.")
       end
+      existing_files_by_id = @product.alive_product_files.index_by(&:external_id)
+      new_files = []
+      params[:files].each do |f|
+        existing = f[:id].present? ? existing_files_by_id[f[:id]] : nil
+        if existing
+          if f[:url].present? && f[:url] != existing.url
+            return render_response(false, message: "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first.")
+          end
+        else
+          new_files << f
+        end
+      end
+      error = validate_file_urls(new_files)
+      return render_response(false, message: error) if error
+    end
+
+    if params.key?(:cover_ids)
+      if !params[:cover_ids].is_a?(Array) || params[:cover_ids].any? { |id| !id.respond_to?(:to_str) }
+        return render_response(false, message: "cover_ids must be an array of strings.")
+      end
     end
 
     @normalized_files = normalize_params_recursively(params[:files]) if params.key?(:files)
     @normalized_rich_content = normalize_params_recursively(params[:rich_content]) if params.key?(:rich_content)
+
+    if @normalized_files.present? && @normalized_files.any? { |f| !f.respond_to?(:key?) }
+      return render_response(false, message: "files must be an array of file objects.")
+    end
+
+    if @normalized_rich_content.present? && @normalized_rich_content.any? { |p| !p.respond_to?(:key?) }
+      return render_response(false, message: "rich_content must be an array of content page objects.")
+    end
 
     begin
       ActiveRecord::Base.transaction do
@@ -373,6 +414,17 @@ class Api::V2::LinksController < Api::V2::BaseController
 
       render_response(false, message: "You entered the name of the file to be uploaded incorrectly. Please refer to " \
                                       "https://gumroad.com/api#methods for the correct syntax.")
+    end
+
+    def validate_file_urls(files)
+      if files.any? { |f| !f[:url].respond_to?(:to_str) || f[:url].blank? }
+        return "Each file must include a url string."
+      end
+      seller_s3_prefix = "#{S3_BASE_URL}attachments/#{current_resource_owner.external_id}/"
+      if files.any? { |f| !f[:url].start_with?(seller_s3_prefix) || f[:url].include?("..") || f[:url].include?("%2F") || f[:url].include?("%2f") }
+        return "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first."
+      end
+      nil
     end
 
     def set_link_id_to_id
