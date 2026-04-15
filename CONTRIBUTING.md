@@ -67,8 +67,9 @@ End with an AI disclosure after a `---` separator. Name the specific model (e.g.
 
 ### UI components
 
-- Use the shared UI components in `$app/components/ui/` for all standard UI elements (inputs, buttons, selects, tables, cards, etc.)
-- Import them with the `$app` alias: `import { Input } from "$app/components/ui/Input"`
+- Use the shared UI components in `$app/components/ui/` for all standard UI elements. Do not use native HTML elements like `<table>`, `<input>`, `<select>` when a UI component exists.
+- Import them with the `$app` alias: `import { Table } from "$app/components/ui/Table"` (not `<table>`)
+- Available components include: `Alert`, `Avatar`, `Calendar`, `Card`, `Checkbox`, `CodeSnippet`, `ColorPicker`, `DefinitionList`, `Details`, `Fieldset`, `FormSection`, `InlineList`, `Input`, `InputGroup`, `Label`, `Menu`, `PageHeader`, `Pill`, `Placeholder`, `ProductCard`, `ProductCardGrid`, `Radio`, `Range`, `Rows`, `Select`, `Sheet`, `StretchedLink`, `Switch`, `Table`, `Tabs`, `Textarea`
 - Check what already exists in `app/javascript/components/ui/` before creating new components
 - Do not recreate or inline components that already exist in the UI library
 
