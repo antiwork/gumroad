@@ -1,117 +1,63 @@
-# Common Production Debugging Queries
+# Common production debugging queries
 
-## User Lookup
+Gumroad-specific scopes, associations, and helpers. Generic ActiveRecord patterns (basic finders, JSON output) are assumed.
+
+## User
 
 ```ruby
-# By ID
-user = User.find(123)
-puts user.attributes.to_json
-
-# By email
-user = User.find_by(email: "user@example.com")
-puts [user.id, user.name, user.email, user.created_at].inspect
-
-# By custom domain
-cd = CustomDomain.find_by(domain: "example.com")
-puts cd&.user_id
+user = User.find_by(email: "buyer@example.com")
+user.unpaid_balance_cents    # balance available for payout
+user.currency_type           # e.g. "usd"
+user.products.alive          # products not deleted
+user.payments.order(created_at: :desc).limit(5).pluck(:id, :amount_cents, :state, :created_at)
 ```
 
-## Purchase Investigation
+## Purchase
 
 ```ruby
-# By ID
-p = Purchase.find(123)
-puts p.attributes.to_json
+Purchase.find_by_external_id(ext_id)
+Link.find(123).purchases.successful.order(created_at: :desc).limit(10).pluck(:id, :email, :price_cents, :created_at)
 
-# Recent purchases for a product
-Product.find(123).purchases.successful.order(created_at: :desc).limit(10).pluck(:id, :email, :price_cents, :created_at)
-
-# Purchase with charge details
 p = Purchase.find(123)
 puts({ purchase: p.attributes, charge: p.charge&.attributes }.to_json)
 ```
 
-## Product Queries
+## Product (`Link`)
 
 ```ruby
-# By permalink
-product = Link.find_by(unique_permalink: "abcde")
-puts product.attributes.to_json
-
-# Products for a user
-User.find(123).products.alive.pluck(:id, :name, :price_cents, :created_at)
+Link.find_by(unique_permalink: "abcde")
+Link.where(user_id: 123).alive
 ```
 
-## Financial / Balance
+## Subscription (`Installment`)
 
 ```ruby
-# User balance
-user = User.find(123)
-puts({ balance_cents: user.unpaid_balance_cents, currency: user.currency_type }.to_json)
-
-# Recent payouts
-User.find(123).payments.order(created_at: :desc).limit(5).pluck(:id, :amount_cents, :state, :created_at)
-```
-
-## Subscription / Installment
-
-```ruby
-# Active subscriptions for a product
 Installment.where(link_id: 123, alive: true).limit(10).pluck(:id, :email, :status, :created_at)
-
-# Subscription details
-sub = Installment.find(123)
-puts sub.attributes.to_json
 ```
 
-## Dispute / Chargeback
+## Custom domain
 
 ```ruby
-Dispute.where(purchase_id: 123).pluck(:id, :reason, :status, :created_at)
+CustomDomain.find_by(domain: "example.com")&.user
 ```
 
-## Feature Flags (Flipper)
+## Sidekiq
 
 ```ruby
-# Check if feature is enabled for user
-puts Flipper.enabled?(:feature_name, User.find(123))
+Sidekiq::Queue.all.map { |q| [q.name, q.size] }
+Sidekiq::RetrySet.new.size
+```
 
-# List enabled features for user
+## Flipper
+
+```ruby
+Flipper.enabled?(:feature_name, User.find(123))
 user = User.find(123)
 Flipper.features.select { |f| f.enabled?(user) }.map(&:name)
 ```
 
-## Sidekiq Jobs
+## Slow queries
 
 ```ruby
-# Check queue sizes
-Sidekiq::Queue.all.map { |q| [q.name, q.size] }
-
-# Check retries
-puts Sidekiq::RetrySet.new.size
-```
-
-## DevTools Utilities
-
-Available in `lib/utilities/dev_tools.rb`:
-
-```ruby
-DevTools.reindex_all_for_user(user_id)           # Reindex ES data for user
-DevTools.reimport_follower_events_for_user!(user) # Reimport follower analytics
-```
-
-## Safety Patterns
-
-```ruby
-# Always limit result sets
-Model.where(...).limit(20)
-
-# Use pluck for lightweight queries (avoids instantiating AR objects)
-Model.where(...).pluck(:id, :name, :created_at)
-
-# Wrap slow queries with timeout
-WithMaxExecutionTime.timeout_queries(seconds: 30) { <query> }
-
-# Use .explain to check query plans before running heavy queries
-puts Model.where(...).explain
+WithMaxExecutionTime.timeout_queries(seconds: 30) { ... }
 ```
