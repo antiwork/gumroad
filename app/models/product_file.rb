@@ -167,6 +167,8 @@ class ProductFile < ApplicationRecord
     return url if external_link?
 
     signed_download_url_for_s3_key_and_filename(s3_key, s3_filename, is_video: streamable?)
+  rescue Aws::S3::Errors::NotFound
+    nil
   end
 
   def readable?

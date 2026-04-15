@@ -1034,4 +1034,20 @@ describe ProductFile do
       end
     end
   end
+
+  describe "#signed_url" do
+    let(:product_file) { create(:product_file) }
+
+    it "returns nil when the S3 object does not exist" do
+      allow_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename)
+        .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+      expect(product_file.signed_url).to be_nil
+    end
+
+    it "returns the url for external links" do
+      product_file.update!(filetype: "link", url: "https://example.com/file.zip")
+      expect(product_file.signed_url).to eq("https://example.com/file.zip")
+    end
+  end
 end
