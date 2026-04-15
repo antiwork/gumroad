@@ -37,15 +37,13 @@ class UserBalanceStatsService
 
   private
     def generate
-      balances_by_product_service = BalancesByProductService.new(user)
       result = {
         generated_at: Time.current,
         next_payout_period_data:,
         processing_payout_periods_data: user.payments.processing.order("created_at DESC").map { payout_period_data(user, _1) },
         overview: {
           last_payout_period_data: payout_period_data(user, user.payments.completed.last),
-          balance: user.unpaid_balance_cents(via: :elasticsearch),
-          balances_by_product: balances_by_product_service.process,
+          balance: user.unpaid_balance_cents,
           last_seven_days_sales_total: user.sales_cents_total(after: 7.days.ago),
           last_28_days_sales_total: user.sales_cents_total(after: 28.days.ago),
           sales_cents_total: user.sales_cents_total,

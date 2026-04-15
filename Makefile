@@ -30,7 +30,7 @@ build_base:
 			--cache-from $(NEW_BASE_REPO):latest \
 			--compress . \
 		&& ./generate_tag_for_web_base.sh | xargs -I{} $(DOCKER_CMD) tag $(NEW_BASE_REPO):latest $(NEW_BASE_REPO):{} \
-		&& rm -f Gemfile* .ruby-version Dockerfile
+		&& rm -f Gemfile* .ruby-version
 
 build_base_test:
 	rm -f docker/base/Gemfile* docker/base/.ruby-version
