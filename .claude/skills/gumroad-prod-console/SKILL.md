@@ -75,7 +75,7 @@ For Gumroad-specific scopes and associations (`alive`, `successful`, `unpaid_bal
 ## Requirements
 
 - An AWS profile with `ec2:DescribeInstances` on the prod account. The script defaults to the profile `gumroad-prod` (created by `scripts/setup.sh`). Override by exporting `AWS_PROFILE` or setting `PROD_AWS_PROFILE` in your config file.
-- SSH access to `bastion-production.gumroad.net`
+- SSH access to your production bastion (defaults to `bastion-production.gumroad.net`)
 
 ### Gumroad team one-time setup
 
