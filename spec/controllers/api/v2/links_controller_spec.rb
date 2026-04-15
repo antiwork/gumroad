@@ -984,8 +984,7 @@ describe Api::V2::LinksController do
 
       it "rejects files when numeric-keyed params normalize into non-hash elements" do
         upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
-        numeric_keyed = ActionController::Parameters.new("0" => upload)
-        put @action, params: @params.merge(files: [numeric_keyed])
+        put @action, params: @params.merge(files: [{ "0" => upload }])
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be false
@@ -994,8 +993,7 @@ describe Api::V2::LinksController do
 
       it "rejects rich_content when numeric-keyed params normalize into non-hash elements" do
         upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
-        numeric_keyed = ActionController::Parameters.new("0" => upload)
-        put @action, params: @params.merge(rich_content: [numeric_keyed])
+        put @action, params: @params.merge(rich_content: [{ "0" => upload }])
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be false
