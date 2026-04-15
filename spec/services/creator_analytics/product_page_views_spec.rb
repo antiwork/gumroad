@@ -159,6 +159,24 @@ describe CreatorAnalytics::ProductPageViews do
     end
   end
 
+  context "when the product_page_views Elasticsearch index does not exist" do
+    before do
+      allow(ProductPageView).to receive(:search).and_raise(Elasticsearch::Transport::Transport::Errors::NotFound)
+    end
+
+    it "by_product_and_date returns an empty hash" do
+      expect(@service.by_product_and_date).to eq({})
+    end
+
+    it "by_product_and_country_and_state returns an empty hash" do
+      expect(@service.by_product_and_country_and_state).to eq({})
+    end
+
+    it "by_product_and_referrer_and_date returns an empty hash" do
+      expect(@service.by_product_and_referrer_and_date).to eq({})
+    end
+  end
+
   describe "DST handling" do
     context "when page view occurs near midnight during DST" do
       let(:user_timezone) { "Pacific Time (US & Canada)" }
