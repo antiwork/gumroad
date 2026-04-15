@@ -20,8 +20,11 @@ class Settings::Team::InvitationsController < Sellers::BaseController
   def update
     authorize [:settings, :team, @team_invitation]
 
-    @team_invitation.update!(update_params)
-    render json: { success: true }
+    if @team_invitation.update(update_params)
+      render json: { success: true }
+    else
+      render json: { success: false, error_message: @team_invitation.errors.full_messages.to_sentence }
+    end
   end
 
   def destroy

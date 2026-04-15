@@ -1,9 +1,8 @@
 import React from "react";
 
-import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { DesignContextProvider, DesignSettings } from "$app/components/DesignSettings";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
-import { LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
+import { FeatureFlags, FeatureFlagsProvider } from "$app/components/FeatureFlags";
 import { SSRLocationProvider } from "$app/components/useOriginalLocation";
 import { UserAgentProvider } from "$app/components/UserAgent";
 
@@ -21,38 +20,9 @@ type GlobalProps = {
   user_agent_info: {
     is_mobile: boolean;
   };
-  logged_in_user: {
-    id: number;
-    email: string;
-    name: string;
-    avatar_url: string;
-    confirmed: boolean;
-    team_memberships: {
-      id: string;
-      seller_name: string;
-      seller_avatar_url: string | null;
-      has_some_read_only_access: boolean;
-      is_selected: boolean;
-    }[];
-    policies: Record<string, Record<string, boolean>>;
-    is_gumroad_admin: boolean;
-    is_impersonating: boolean;
-  };
-  current_seller: {
-    id: number;
-    email: string;
-    name: string;
-    avatar_url: string;
-    has_published_products: boolean;
-    subdomain: string;
-    is_buyer: boolean;
-    time_zone: {
-      name: string;
-      offset: number;
-    };
-  };
   href: string;
   locale: string;
+  feature_flags: FeatureFlags;
 };
 
 export default function AppWrapper({ children, global }: { children: React.ReactNode; global: GlobalProps }) {
@@ -75,11 +45,9 @@ export default function AppWrapper({ children, global }: { children: React.React
             locale: global.locale,
           }}
         >
-          <LoggedInUserProvider value={parseLoggedInUser(global.logged_in_user)}>
-            <CurrentSellerProvider value={parseCurrentSeller(global.current_seller)}>
-              <SSRLocationProvider value={global.href}>{children}</SSRLocationProvider>
-            </CurrentSellerProvider>
-          </LoggedInUserProvider>
+          <FeatureFlagsProvider value={global.feature_flags}>
+            <SSRLocationProvider value={global.href}>{children}</SSRLocationProvider>
+          </FeatureFlagsProvider>
         </UserAgentProvider>
       </DomainSettingsProvider>
     </DesignContextProvider>

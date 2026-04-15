@@ -3,6 +3,9 @@ import * as React from "react";
 import { NumberInput } from "$app/components/NumberInput";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const DurationEditor = () => {
@@ -19,10 +22,10 @@ export const DurationEditor = () => {
       }}
       label="Automatically end memberships after a number of months"
       dropdown={
-        <fieldset>
-          <legend>
-            <label htmlFor={uid}>Number of months</label>
-          </legend>
+        <Fieldset>
+          <FieldsetTitle>
+            <Label htmlFor={uid}>Number of months</Label>
+          </FieldsetTitle>
           <WithTooltip
             tip="Any change in the length of your membership will only affect new members."
             position="bottom"
@@ -31,10 +34,10 @@ export const DurationEditor = () => {
               value={product.duration_in_months}
               onChange={(duration_in_months) => updateProduct({ duration_in_months })}
             >
-              {(props) => <input id={uid} placeholder="∞" {...props} />}
+              {(props) => <Input id={uid} placeholder="∞" {...props} />}
             </NumberInput>
           </WithTooltip>
-        </fieldset>
+        </Fieldset>
       }
     />
   );

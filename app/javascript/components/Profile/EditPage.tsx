@@ -1,6 +1,7 @@
+import { Pencil, Trash } from "@boxicons/react";
 import CharacterCount from "@tiptap/extension-character-count";
 import { EditorContent, useEditor } from "@tiptap/react";
-import isEqual from "lodash/isEqual";
+import { isEqual } from "lodash-es";
 import * as React from "react";
 import { ReactSortable as Sortable } from "react-sortablejs";
 
@@ -11,28 +12,28 @@ import { assertResponseError } from "$app/utils/request";
 import AutoLink from "$app/components/AutoLink";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
+import { ProfileProps, TabWithId, useTabs } from "$app/components/Profile";
 import { SectionLayout } from "$app/components/Profile/Sections";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { ProfileProps, TabWithId, useTabs } from "$app/components/server-components/Profile";
 import PlainTextStarterKit from "$app/components/TiptapExtensions/PlainTextStarterKit";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Row, RowActions, RowContent, RowDragHandle, Rows } from "$app/components/ui/Rows";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import {
+  Action,
   AddSectionButton,
   EditorMenu,
   EditorSubmenu,
-  PageProps as SectionsProps,
-  ReducerContext as SectionReducerContext,
-  Action,
   EditSection,
-  useSectionImageUploadSettings,
+  ReducerContext as SectionReducerContext,
+  PageProps as SectionsProps,
   SectionToolbar,
+  useSectionImageUploadSettings,
 } from "./EditSections";
 import { FollowFormBlock } from "./FollowForm";
 
@@ -66,18 +67,18 @@ const EditTab = ({
     if (focus) editor?.commands.focus("end");
   }, [editor]);
   return (
-    <div role="listitem" className="row">
-      <div className="content">
-        <div aria-grabbed={dragging} />
+    <Row role="listitem">
+      <RowContent>
+        <RowDragHandle aria-grabbed={dragging} />
         <h4 style={{ flex: 1 }}>
           <EditorContent editor={editor} />
         </h4>
-      </div>
-      <div className="actions">
-        <Button small color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
-          <Icon name="trash2" />
+      </RowContent>
+      <RowActions>
+        <Button size="icon" color="danger" outline aria-label="Remove page" onClick={() => setConfirmingDelete(true)}>
+          <Trash className="size-5" />
         </Button>
-      </div>
+      </RowActions>
       {confirmingDelete ? (
         <Modal
           open
@@ -95,15 +96,15 @@ const EditTab = ({
           Are you sure you want to delete the page "{tab.name}"? <strong>This action cannot be undone.</strong>
         </Modal>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
 // TODO: Use a better library than react-sortablejs that can solve this more cleanly
 const TabList = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(({ children }, ref) => (
-  <div className="rows" role="list" ref={ref} aria-label="Pages">
+  <Rows role="list" ref={ref} aria-label="Pages">
     {children}
-  </div>
+  </Rows>
 ));
 TabList.displayName = "TabList";
 
@@ -196,7 +197,7 @@ export const EditProfile = (props: Props) => {
 
   return (
     <SectionReducerContext.Provider value={reducer}>
-      <header className="relative grid grid-cols-1 gap-4 border-b border-border px-4 py-8">
+      <header className="relative grid gap-4 border-b border-border px-4 py-8">
         {/* Work around position:absolute being affected by header's grid */}
         <SectionToolbar>
           <EditorMenu label="Page settings" onClose={() => void saveTabs(tabs)}>
@@ -226,37 +227,40 @@ export const EditProfile = (props: Props) => {
             </EditorSubmenu>
           </EditorMenu>
         </SectionToolbar>
-        {props.bio ? (
-          <h1 style={{ whiteSpace: "pre-line" }}>
-            <AutoLink text={props.bio} />
-          </h1>
-        ) : null}
-        <Tabs aria-label="Profile Tabs">
-          {tabs.map((tab) => (
-            <Tab
-              key={tab.id}
-              isSelected={tab === selectedTab}
-              onClick={() => {
-                if (imageUploadSettings.isUploading) {
-                  showAlert("Please wait for all images to finish uploading before switching tabs.", "warning");
-                  return;
-                }
-                setSelectedTab(tab);
-              }}
-            >
-              {tab.name}
-            </Tab>
-          ))}
-        </Tabs>
+        <div className="mx-auto grid w-full max-w-6xl gap-4">
+          {props.bio ? (
+            <h1 className="whitespace-pre-line">
+              <AutoLink text={props.bio} />
+            </h1>
+          ) : null}
+          <Tabs aria-label="Profile Tabs">
+            {tabs.map((tab) => (
+              <Tab
+                key={tab.id}
+                isSelected={tab === selectedTab}
+                onClick={() => {
+                  if (imageUploadSettings.isUploading) {
+                    showAlert("Please wait for all images to finish uploading before switching tabs.", "warning");
+                    return;
+                  }
+                  setSelectedTab(tab);
+                }}
+              >
+                {tab.name}
+              </Tab>
+            ))}
+          </Tabs>
+        </div>
       </header>
       <div className="fixed! top-5 right-3 z-30 p-0! lg:top-3 lg:right-auto lg:left-3">
         <WithTooltip tip="Edit profile" position={isDesktop ? "right" : "left"}>
           <NavigationButton
             color="filled"
+            size="icon"
             href={Routes.settings_profile_url({ host: appDomain })}
             aria-label="Edit profile"
           >
-            <Icon name="pencil" />
+            <Pencil className="size-5" />
           </NavigationButton>
         </WithTooltip>
       </div>
@@ -271,14 +275,14 @@ export const EditProfile = (props: Props) => {
             <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
               <EditSection section={section} />
             </ImageUploadSettingsContext.Provider>
-            {i === visibleSections.length - 1 ? <AddSectionButton index={i + 1} position="top" /> : null}
+            {i === visibleSections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
           </SectionLayout>
         ))
       ) : (
         <SectionLayout className="grid flex-1">
           <AddSectionButton index={0} />
           <FollowFormBlock creatorProfile={props.creator_profile} />
-          <AddSectionButton index={0} position="top" />
+          <AddSectionButton index={0} side="top" />
         </SectionLayout>
       )}
     </SectionReducerContext.Provider>

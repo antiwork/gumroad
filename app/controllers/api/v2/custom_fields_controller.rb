@@ -25,7 +25,7 @@ class Api::V2::CustomFieldsController < Api::V2::BaseController
     if field.save
       success_with_custom_field(field)
     else
-      error_with_creating_object(:custom_field)
+      error_with_creating_object(:custom_field, field)
     end
   end
 

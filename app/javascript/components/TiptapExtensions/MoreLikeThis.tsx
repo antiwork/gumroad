@@ -1,17 +1,20 @@
+import { Archive, Cog } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import { getRecommendedProducts, RecommendationType } from "$app/data/recommended_products";
 import { CardProduct } from "$app/parsers/product";
 
-import { Icon } from "$app/components/Icons";
 import { Card } from "$app/components/Product/Card";
-import { NodeActionsMenu } from "$app/components/TiptapExtensions/NodeActionsMenu";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Skeleton } from "$app/components/Skeleton";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
+import { Label } from "$app/components/ui/Label";
+import { MenuItem } from "$app/components/ui/Menu";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Radio } from "$app/components/ui/Radio";
 
 export const MoreLikeThis = TiptapNode.create<{ productId: string }>({
   name: "moreLikeThis",
@@ -71,7 +74,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
 
   return (
     <NodeViewWrapper>
-      <div className={cx({ selected })}>
+      <NodeActionsWrapper selected={selected} isEditable={editor.isEditable}>
         {editor.isEditable ? (
           <NodeActionsMenu
             editor={editor}
@@ -79,40 +82,37 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
               {
                 item: () => (
                   <>
-                    <Icon name="gear" />
+                    <Cog className="size-5" />
                     <span>Settings</span>
                   </>
                 ),
                 menu: (close) => (
                   <>
-                    <div role="menuitem" style={{ pointerEvents: "none", backgroundColor: "transparent" }}>
+                    <MenuItem style={{ pointerEvents: "none", backgroundColor: "transparent" }}>
                       <b>More like this recommendations:</b>
-                    </div>
+                    </MenuItem>
                     <div onChange={close}>
-                      <div role="menuitem">
-                        <label>
-                          <input
-                            type="radio"
+                      <MenuItem>
+                        <Label>
+                          <Radio
                             checked={node.attrs.recommendationType === "own_products"}
                             onChange={() => handleRecommendationTypeChange("own_products")}
                           />
                           Only my products
-                        </label>
-                      </div>
-                      <div role="menuitem">
-                        <label>
-                          <input
-                            type="radio"
+                        </Label>
+                      </MenuItem>
+                      <MenuItem>
+                        <Label>
+                          <Radio
                             checked={node.attrs.recommendationType === "directly_affiliated_products"}
                             onChange={() => handleRecommendationTypeChange("directly_affiliated_products")}
                           />
                           My products and affiliated
-                        </label>
-                      </div>
-                      <div role="menuitem">
-                        <label>
-                          <input
-                            type="radio"
+                        </Label>
+                      </MenuItem>
+                      <MenuItem>
+                        <Label>
+                          <Radio
                             checked={node.attrs.recommendationType === "gumroad_affiliates_products"}
                             onChange={() => handleRecommendationTypeChange("gumroad_affiliates_products")}
                           />
@@ -120,8 +120,8 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
                           <a href="/help/article/249-affiliate-faq" target="_blank" rel="noreferrer">
                             Gumroad Affiliates
                           </a>
-                        </label>
-                      </div>
+                        </Label>
+                      </MenuItem>
                     </div>
                   </>
                 ),
@@ -134,11 +134,11 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
         {isLoading ? (
           <ProductCardGrid narrow>
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="dummy h-128" />
+              <Skeleton key={index} className="h-128" />
             ))}
           </ProductCardGrid>
         ) : recommendedProducts && recommendedProducts.length > 0 ? (
-          <ProductCardGrid narrow inert={editor.isEditable}>
+          <ProductCardGrid narrow inert={editor.isEditable} className={editor.isEditable ? "opacity-30" : undefined}>
             {recommendedProducts.map((product) => (
               <div key={product.id}>
                 <Card product={product} />
@@ -147,11 +147,11 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
           </ProductCardGrid>
         ) : (
           <Placeholder>
-            <Icon name="archive-fill" />
+            <Archive pack="filled" className="size-5" />
             <p>No products found</p>
           </Placeholder>
         )}
-      </div>
+      </NodeActionsWrapper>
     </NodeViewWrapper>
   );
 };

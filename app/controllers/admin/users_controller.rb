@@ -9,7 +9,7 @@ class Admin::UsersController < Admin::BaseController
   before_action :fetch_user, except: %i[block_ip_address]
 
   def show
-    @title = "#{@user.display_name} on Gumroad"
+    set_meta_tag(title: "#{@user.display_name} on Gumroad")
 
     respond_to do |format|
       format.html do
@@ -29,10 +29,20 @@ class Admin::UsersController < Admin::BaseController
 
   def verify
     @user.verified = !@user.verified
-    @user.save!
+    begin
+      @user.save!
+    rescue => e
+      return render json: { success: false, message: e.message }
+    end
+    if @user.verified
+      begin
+        CreatorMailer.top_creator_announcement(user_id: @user.id).deliver_later
+      rescue => e
+        ErrorNotifier.notify(e)
+        Rails.logger.error("Failed to enqueue top_creator_announcement for user #{@user.id}: #{e.message}")
+      end
+    end
     render json: { success: true }
-  rescue => e
-    render json: { success: false, message: e.message }
   end
 
   def enable
@@ -46,6 +56,8 @@ class Admin::UsersController < Admin::BaseController
     @user.email = params[:update_email][:email_address]
     @user.save!
     render json: { success: true }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { message: e.message }, status: :unprocessable_entity
   end
 
   def reset_password
@@ -74,8 +86,8 @@ class Admin::UsersController < Admin::BaseController
                                                                    from_admin: true)
     render json: {
       success: true,
-      message: "Merchant Account created, ID: #{merchant_account.id} Stripe Account ID: #{merchant_account.charge_processor_merchant_id}",
-      merchant_account_id: merchant_account.id,
+      message: "Merchant Account created, External ID: #{merchant_account.external_id} Stripe Account ID: #{merchant_account.charge_processor_merchant_id}",
+      merchant_account_external_id: merchant_account.external_id,
       charge_processor_merchant_id: merchant_account.charge_processor_merchant_id
     }
   rescue MerchantRegistrationUserAlreadyHasAccountError

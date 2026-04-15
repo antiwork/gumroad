@@ -2,10 +2,9 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Wishlists::FollowingController do
-  render_views
-
+describe Wishlists::FollowingController, type: :controller, inertia: true do
   let(:user) { create(:user) }
 
   describe "GET index" do
@@ -17,7 +16,7 @@ describe Wishlists::FollowingController do
       let(:record) { Wishlist }
     end
 
-    it "renders wishlists the seller is currently following" do
+    it "renders Wishlists/Following/Index with Inertia and wishlists the seller is currently following" do
       create(:wishlist, user: user)
 
       following_wishlist = create(:wishlist)
@@ -29,7 +28,8 @@ describe Wishlists::FollowingController do
       get :index
 
       expect(response).to be_successful
-      expect(assigns(:wishlists_props)).to contain_exactly(a_hash_including(id: following_wishlist.external_id))
+      expect(inertia.component).to eq("Wishlists/Following/Index")
+      expect(inertia.props[:wishlists]).to contain_exactly(a_hash_including(id: following_wishlist.external_id))
     end
 
     context "when the feature flag is off" do

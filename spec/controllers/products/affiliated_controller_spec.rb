@@ -53,7 +53,7 @@ describe Products::AffiliatedController, inertia: true do
       get :index
 
       expect(response).to have_http_status(:ok)
-      expect(assigns[:title]).to eq("Products")
+      expect(controller.send(:page_title)).to eq("Products")
 
       expect(inertia).to render_component("Products/Affiliated/Index")
 

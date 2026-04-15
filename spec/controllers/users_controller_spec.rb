@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
 describe UsersController do
   render_views
@@ -162,8 +163,9 @@ describe UsersController do
           expect(assigns(:user)).to eq(@user)
         end
 
-        it "renders the show template" do
-          expect(response).to render_template(:show)
+        it "renders the Inertia Users/Show page", inertia: true do
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Users/Show")
         end
       end
 
@@ -197,8 +199,9 @@ describe UsersController do
         end
 
 
-        it "renders the show template" do
-          expect(response).to render_template(:show)
+        it "renders the Inertia Users/Show page", inertia: true do
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Users/Show")
         end
 
         describe "when the host is another subdomain that is www with the same apex domain" do
@@ -211,8 +214,9 @@ describe UsersController do
             expect(assigns(:user)).to eq(@user)
           end
 
-          it "renders the show template" do
-            expect(response).to render_template(:show)
+          it "renders the Inertia Users/Show page", inertia: true do
+            expect(response).to be_successful
+            expect(inertia.component).to eq("Users/Show")
           end
         end
 
@@ -238,20 +242,7 @@ describe UsersController do
       end
     end
 
-    it "sets paypal_merchant_currency as merchant account's currency if native paypal payments are enabled else as usd" do
-      creator = create(:named_user)
-      create(:product, user: creator)
-
-      @request.host = "#{creator.username}.test.gumroad.com"
-      get :show, params: { username: creator.username }
-      expect(assigns[:paypal_merchant_currency]).to eq "USD"
-
-      create(:merchant_account_paypal, user: creator, currency: "GBP")
-      get :show, params: { username: creator.username }
-      expect(assigns[:paypal_merchant_currency]).to eq "GBP"
-    end
-
-    context "with user signed in as admin for seller" do
+    context "with user signed in as admin for seller", inertia: true do
       let(:seller) { create(:named_seller) }
       let(:creator) { create(:user, username: "creator") }
 
@@ -260,11 +251,11 @@ describe UsersController do
       it "assigns the correct instance variables" do
         expect(ProfilePresenter).to receive(:new).with(seller: creator, pundit_user: controller.pundit_user).at_least(:once).and_call_original
 
+        stub_const("ROOT_DOMAIN", "test.gumroad.com")
         @request.host = "#{creator.username}.test.gumroad.com"
         get :show, params: { username: creator.username }
 
-        profile_props = assigns[:profile_props]
-        expect(profile_props[:creator_profile][:external_id]).to eq(creator.external_id)
+        expect(inertia.props[:creator_profile][:external_id]).to eq(creator.external_id)
       end
     end
 
@@ -298,18 +289,36 @@ describe UsersController do
     end
   end
 
-  describe "GET coffee" do
+  describe "GET coffee", inertia: true do
     let(:seller) { create(:user, :eligible_for_service_products) }
-    render_views
 
     context "user has coffee product" do
       let!(:product) { create(:product, name: "Buy me a coffee", user: seller, native_type: Link::NATIVE_TYPE_COFFEE, purchase_disabled_at: Time.current) }
 
-      it "responds successfully and sets the title" do
+      it "renders the Inertia Users/Coffee component with correct props" do
         get :coffee, params: { username: seller.username }
 
         expect(response).to be_successful
-        expect(response.body).to have_selector("title:contains('Buy me a coffee')", visible: false)
+        expect(inertia.component).to eq("Users/Coffee")
+        expect(inertia.props[:product][:name]).to eq("Buy me a coffee")
+        expect(inertia.props[:creator_profile]).to be_present
+      end
+
+      it "redirects and sets the flash message when purchase_email is present" do
+        get :coffee, params: { username: seller.username, purchase_email: "buyer@example.com" }
+
+        expect(response).to redirect_to("/coffee")
+        expect(flash[:notice]).to eq("Your purchase was successful! We sent a receipt to buyer@example.com.")
+      end
+
+      it "sets custom styles in page meta when user has custom_styles" do
+        get :coffee, params: { username: seller.username }
+
+        html = Nokogiri::HTML.parse(response.body)
+        style_tag = html.at_css('style[inertia="custom_styles"]')
+        expect(style_tag).to be_present
+        decoded_content = CGI.unescapeHTML(style_tag.text)
+        expect(decoded_content).to include(seller.seller_profile.custom_styles.to_s)
       end
     end
 
@@ -667,76 +676,70 @@ describe UsersController do
     end
   end
 
-  describe "GET subscribe" do
+  describe "GET subscribe", inertia: true do
+    before do
+      stub_const("ROOT_DOMAIN", "test.gumroad.com")
+      @request.host = "#{creator.username}.test.gumroad.com"
+    end
+
+    it "renders the Inertia Users/Subscribe component with creator_profile only" do
+      get :subscribe
+
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Users/Subscribe")
+      expect(inertia.props[:creator_profile]).to be_present
+      expect(inertia.props).not_to have_key(:custom_styles)
+    end
+
+    it "sets custom styles in page meta when user has custom_styles" do
+      get :subscribe
+
+      html = Nokogiri::HTML.parse(response.body)
+      style_tag = html.at_css('style[inertia="custom_styles"]')
+      expect(style_tag).to be_present
+      decoded_content = CGI.unescapeHTML(style_tag.text)
+      expect(decoded_content).to include(creator.seller_profile.custom_styles.to_s)
+    end
+
+    it "does not set custom_styles meta when user has no custom_styles" do
+      allow_any_instance_of(SellerProfile).to receive(:custom_styles).and_return("")
+
+      get :subscribe
+
+      html = Nokogiri::HTML.parse(response.body)
+      style_tag = html.at_css('style[inertia="custom_styles"]')
+      expect(style_tag).to be_nil
+    end
+
     context "with user signed in as admin for seller" do
       include_context "with user signed in as admin for seller"
 
-      it "assigns the correct instance variables" do
-        @request.host = "#{creator.username}.test.gumroad.com"
+      it "assigns the correct page title and renders creator profile" do
         get :subscribe
 
-        expect(assigns[:title]).to eq("Subscribe to creator")
-        profile_presenter = assigns[:profile_presenter]
-        expect(profile_presenter.seller).to eq(creator)
-        expect(profile_presenter.pundit_user).to eq(controller.pundit_user)
+        expect(controller.send(:page_title)).to eq("Subscribe to creator")
+        expect(inertia.props[:creator_profile][:external_id]).to eq(creator.external_id)
       end
     end
   end
 
-  describe "GET subscribe_preview" do
+  describe "GET subscribe_preview", inertia: true do
     it "assigns subscribe preview props for the react component" do
       get :subscribe_preview, params: { username: creator.username }
       expect(response).to be_successful
-      expect(assigns[:subscribe_preview_props][:title]).to eq(creator.name_or_username)
-      expect(assigns[:subscribe_preview_props][:avatar_url]).to end_with(".png")
-    end
-  end
-
-  describe "GET unsubscribe_review_reminders" do
-    before do
-      @user = create(:user)
+      expect(inertia.component).to eq("Users/SubscribePreview")
+      expect(inertia.props[:title]).to eq(creator.name_or_username)
+      expect(inertia.props[:avatar_url]).to end_with(".png")
     end
 
-    context "when user is logged in" do
-      it "sets opted_out_of_review_reminders flag successfully" do
-        sign_in(@user)
-        expect do
-          get :unsubscribe_review_reminders
-        end.to change { @user.reload.opted_out_of_review_reminders? }.from(false).to(true)
-        expect(response).to be_successful
-      end
-    end
+    it "sets custom styles in page meta when user has custom_styles" do
+      get :subscribe_preview, params: { username: creator.username }
 
-    context "when user is not logged in" do
-      it "redirects to login page" do
-        sign_out(@user)
-        get :unsubscribe_review_reminders
-        expect(response).to redirect_to(login_url(next: user_unsubscribe_review_reminders_path))
-      end
-    end
-  end
-
-  describe "GET subscribe_review_reminders" do
-    before do
-      @user = create(:user, opted_out_of_review_reminders: true)
-    end
-
-    context "when user is logged in" do
-      it "sets opted_out_of_review_reminders flag successfully" do
-        sign_in(@user)
-        expect do
-          get :subscribe_review_reminders
-        end.to change { @user.reload.opted_out_of_review_reminders? }.from(true).to(false)
-        expect(response).to be_successful
-      end
-    end
-
-    context "when user is not logged in" do
-      it "redirects to login page" do
-        sign_out(@user)
-        get :subscribe_review_reminders
-        expect(response).to redirect_to(login_url(next: user_subscribe_review_reminders_path))
-      end
+      html = Nokogiri::HTML.parse(response.body)
+      style_tag = html.at_css('style[inertia="custom_styles"]')
+      expect(style_tag).to be_present
+      decoded_content = CGI.unescapeHTML(style_tag.text)
+      expect(decoded_content).to include(creator.seller_profile.custom_styles.to_s)
     end
   end
 end

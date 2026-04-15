@@ -34,10 +34,40 @@ describe TwoFactorAuthentication do
   end
 
   describe "#send_authentication_token!" do
+    before do
+      EmailRouterFallbackService.clear(user: @user)
+    end
+
     it "enqueues authentication token email" do
       expect do
         @user.send_authentication_token!
-      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id)
+      end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
+    end
+
+    context "when feature flag is active and email was recently sent" do
+      before do
+        Feature.activate(:resend_fallback_for_auth_emails)
+        EmailRouterFallbackService.record_email_sent(user: @user)
+      end
+
+      it "enqueues authentication token email with Resend provider" do
+        expect do
+          @user.send_authentication_token!
+        end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: MailerInfo::EMAIL_PROVIDER_RESEND)
+      end
+    end
+
+    context "when feature flag is inactive" do
+      before do
+        Feature.deactivate(:resend_fallback_for_auth_emails)
+        EmailRouterFallbackService.record_email_sent(user: @user)
+      end
+
+      it "enqueues authentication token email with nil provider" do
+        expect do
+          @user.send_authentication_token!
+        end.to have_enqueued_mail(TwoFactorAuthenticationMailer, :authentication_token).with(@user.id, email_provider: nil)
+      end
     end
   end
 
@@ -113,6 +143,30 @@ describe TwoFactorAuthentication do
     context "when the user has not logged in from the IP" do
       it "returns false" do
         expect(@user.has_logged_in_from_ip_before?("127.0.0.3")).to eq false
+      end
+    end
+  end
+
+  describe "#totp_enabled?" do
+    context "when user has no totp credential" do
+      it "returns false" do
+        expect(@user.totp_enabled?).to be false
+      end
+    end
+
+    context "when user has an unconfirmed totp credential" do
+      before { create(:totp_credential, user: @user) }
+
+      it "returns false" do
+        expect(@user.totp_enabled?).to be false
+      end
+    end
+
+    context "when user has a confirmed totp credential" do
+      before { create(:totp_credential, :confirmed, user: @user) }
+
+      it "returns true" do
+        expect(@user.totp_enabled?).to be true
       end
     end
   end

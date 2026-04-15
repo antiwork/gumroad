@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "csv"
-
 class Exports::AudienceExportService
   FIELDS = ["Subscriber Email", "Subscribed Time"].freeze
 
@@ -19,7 +17,7 @@ class Exports::AudienceExportService
   def perform
     @tempfile = Tempfile.new(["Subscribers", ".csv"], encoding: "UTF-8")
 
-    CSV.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
+    CsvSafe.open(@tempfile, "wb", headers: FIELDS, write_headers: true) do |csv|
       query = @user.audience_members.select(:id, :email, :min_created_at)
 
       conditions = []

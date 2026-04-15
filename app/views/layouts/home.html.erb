@@ -2,17 +2,6 @@
   <%= render "home/shared/scripts" %>
 <% end %>
 
-<% content_for :meta do %>
-  <% if page_data = @meta_data[action_name] %>
-    <link rel="canonical" href="<%= send(page_data[:url]) %>">
-    <meta name="description" content="<%= page_data[:description] %>">
-    <meta property="og:title" content="<%= page_data[:title] %>">
-    <meta property="og:description" content="<%= page_data[:description] %>">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="<%= send(page_data[:url]) %>">
-  <% end %>
-<% end %>
-
 <% content_for :content do %>
   <div class="block bg-white text-black font-['ABC_Favorit'] text-base font-normal leading-relaxed tracking-tight">
     <%= render "home/shared/nav" %>

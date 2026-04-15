@@ -90,5 +90,19 @@ describe "SafeRedirectPathService" do
         expect(service.process).to eq "?query=param"
       end
     end
+
+    context "when path is nil" do
+      it "raises TypeError" do
+        @path = nil
+        expect { service.process }.to raise_error(TypeError)
+      end
+    end
+
+    context "when path is an empty string" do
+      it "raises an error" do
+        @path = ""
+        expect { service.process }.to raise_error(URI::InvalidURIError)
+      end
+    end
   end
 end

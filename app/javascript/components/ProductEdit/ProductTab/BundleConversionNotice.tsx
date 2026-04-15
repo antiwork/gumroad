@@ -3,6 +3,7 @@ import * as React from "react";
 import { Button, NavigationButton } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { Alert } from "$app/components/ui/Alert";
 
 const BUNDLE_WORDS = ["bundle", "pack"];
 
@@ -17,7 +18,7 @@ export const BundleConversionNotice = () => {
 
   return (
     <>
-      <div role="status" className="info">
+      <Alert role="status" variant="info">
         <div className="flex flex-col gap-4">
           <p>
             <strong>Looks like this product could be a great bundle!</strong> With bundles, your customers can get
@@ -25,12 +26,12 @@ export const BundleConversionNotice = () => {
             workflows.
           </p>
           <div>
-            <Button color="primary" small onClick={() => setIsModalOpen(true)}>
+            <Button color="primary" size="sm" onClick={() => setIsModalOpen(true)}>
               Switch to bundle
             </Button>
           </div>
         </div>
-      </div>
+      </Alert>
       <Modal
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -38,7 +39,8 @@ export const BundleConversionNotice = () => {
         footer={
           <>
             <Button onClick={() => setIsModalOpen(false)}>No, cancel</Button>
-            <NavigationButton href={`${Routes.bundle_path(id)}/content`}>
+            {/* TODO: Change to NavigationButtonInertia once ProductEdit page is migrated to Inertia */}
+            <NavigationButton href={Routes.edit_bundle_content_path(id)}>
               Yes, let's select the products
             </NavigationButton>
           </>

@@ -46,7 +46,6 @@ type Policies = {
     show: boolean;
   };
   settings_profile: {
-    manage_social_connections: boolean;
     update: boolean;
     update_username: boolean;
   };
@@ -64,6 +63,9 @@ type Policies = {
   };
   community: {
     index: boolean;
+  };
+  churn: {
+    show: boolean;
   };
 };
 

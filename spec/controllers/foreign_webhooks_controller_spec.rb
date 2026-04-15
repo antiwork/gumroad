@@ -69,22 +69,102 @@ describe ForeignWebhooksController do
   end
 
   describe "#paypal" do
-    it "responds successfully" do
-      expect(PaypalEventHandler).to receive(:new).with(@query.as_json).and_call_original
-      expect_any_instance_of(PaypalEventHandler).to receive(:schedule_paypal_event_processing)
+    let(:modern_webhook_payload) { { event_type: "PAYMENT.CAPTURE.COMPLETED", id: "WH-123" } }
 
-      post :paypal, params: @query
-
-      expect(response).to be_successful
+    before do
+      request.headers.merge!(
+        "HTTP_PAYPAL_TRANSMISSION_ID" => "abc",
+        "HTTP_PAYPAL_TRANSMISSION_SIG" => "sig",
+        "HTTP_PAYPAL_CERT_URL" => "https://api.paypal.com/certs/123",
+        "HTTP_PAYPAL_AUTH_ALGO" => "SHA256",
+        "HTTP_PAYPAL_TRANSMISSION_TIME" => Time.current.httpdate
+      )
+      stub_const("PAYPAL_WEBHOOK_ID", "TEST_WEBHOOK_ID")
     end
 
-    # The test ensures we're converting the request params to be Sidekiq-compliant which is a little hard to assert in
-    # the spec above.
-    it "enqueues a HandlePaypalEventWorker job with the correct arguments" do
-      post :paypal, params: @query
+    context "with valid webhook signature" do
+      let(:verifier) { instance_double(PaypalWebhookVerifier, valid?: true) }
 
-      expect(response).to be_successful
-      expect(HandlePaypalEventWorker).to have_enqueued_sidekiq_job(@query)
+      before do
+        allow(PaypalWebhookVerifier).to receive(:new).and_return(verifier)
+      end
+
+      it "responds successfully" do
+        expect(PaypalEventHandler).to receive(:new).with(modern_webhook_payload.as_json).and_call_original
+        expect_any_instance_of(PaypalEventHandler).to receive(:schedule_paypal_event_processing)
+
+        post :paypal, params: modern_webhook_payload, as: :json
+
+        expect(response).to be_successful
+      end
+
+      it "enqueues a HandlePaypalEventWorker job with the correct arguments" do
+        post :paypal, params: modern_webhook_payload, as: :json
+
+        expect(response).to be_successful
+        expect(HandlePaypalEventWorker).to have_enqueued_sidekiq_job(modern_webhook_payload.as_json)
+      end
+    end
+
+    context "with invalid webhook signature" do
+      before do
+        verifier = instance_double(PaypalWebhookVerifier, valid?: false)
+        allow(PaypalWebhookVerifier).to receive(:new).and_return(verifier)
+      end
+
+      it "returns bad request and does not process the event" do
+        post :paypal, params: modern_webhook_payload, as: :json
+
+        expect(response).to be_a_bad_request
+        expect(HandlePaypalEventWorker.jobs.size).to eq(0)
+      end
+    end
+
+    context "with missing required headers" do
+      before do
+        request.headers["HTTP_PAYPAL_TRANSMISSION_ID"] = nil
+      end
+
+      it "returns bad request and does not process the event" do
+        post :paypal, params: modern_webhook_payload, as: :json
+
+        expect(response).to be_a_bad_request
+        expect(HandlePaypalEventWorker.jobs.size).to eq(0)
+      end
+    end
+
+    context "with legacy IPN payload (no event_type)" do
+      let(:legacy_payload) { { "txn_type" => "masspay", "txn_id" => "123" } }
+
+      it "skips verification and processes the event" do
+        expect(PaypalWebhookVerifier).not_to receive(:new)
+        expect(PaypalEventHandler).to receive(:new).with(legacy_payload.as_json).and_call_original
+        expect_any_instance_of(PaypalEventHandler).to receive(:schedule_paypal_event_processing)
+
+        post :paypal, params: legacy_payload, as: :json
+
+        expect(response).to be_successful
+      end
+
+      it "enqueues a HandlePaypalEventWorker job for legacy payloads" do
+        post :paypal, params: legacy_payload, as: :json
+
+        expect(response).to be_successful
+        expect(HandlePaypalEventWorker).to have_enqueued_sidekiq_job(legacy_payload.as_json)
+      end
+    end
+
+    context "when verifier initialization happens" do
+      it "passes correct parameters to PaypalWebhookVerifier" do
+        verifier = instance_double(PaypalWebhookVerifier, valid?: true)
+        expect(PaypalWebhookVerifier).to receive(:new).with(
+          headers: anything,
+          raw_body: anything,
+          fallback_payload: hash_including("event_type" => "PAYMENT.CAPTURE.COMPLETED")
+        ).and_return(verifier)
+
+        post :paypal, params: modern_webhook_payload, as: :json
+      end
     end
   end
 
@@ -132,7 +212,7 @@ describe ForeignWebhooksController do
     context "with missing headers" do
       it "returns bad request when signature is missing" do
         request.headers["svix-signature"] = nil
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Missing signature")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Missing signature")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -141,7 +221,7 @@ describe ForeignWebhooksController do
 
       it "returns bad request when timestamp is missing" do
         request.headers["svix-timestamp"] = nil
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Missing timestamp")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Missing timestamp")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -150,7 +230,7 @@ describe ForeignWebhooksController do
 
       it "returns bad request when message ID is missing" do
         request.headers["svix-id"] = nil
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Missing message ID")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Missing message ID")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -161,7 +241,7 @@ describe ForeignWebhooksController do
     context "with invalid signature" do
       it "returns bad request when signature format is invalid" do
         request.headers["svix-signature"] = "invalid"
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Invalid signature format")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Invalid signature format")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -170,7 +250,7 @@ describe ForeignWebhooksController do
 
       it "returns bad request when signature is incorrect" do
         request.headers["svix-signature"] = "v1,invalid"
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Invalid signature")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Invalid signature")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)
@@ -181,7 +261,7 @@ describe ForeignWebhooksController do
     context "with old timestamp" do
       it "returns bad request when timestamp is too old" do
         request.headers["svix-timestamp"] = (6.minutes.ago.to_i).to_s
-        expect(Bugsnag).to receive(:notify).with("Error verifying Resend webhook: Timestamp too old")
+        expect(ErrorNotifier).to receive(:notify).with("Error verifying Resend webhook: Timestamp too old")
         post :resend, params: payload, as: :json
         expect(response).to be_a_bad_request
         expect(HandleResendEventJob.jobs.size).to eq(0)

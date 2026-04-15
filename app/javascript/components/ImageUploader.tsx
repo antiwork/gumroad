@@ -1,12 +1,13 @@
+import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
 
-import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
+import { Button, buttonVariants } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 export const ImageUploader = ({
   id,
@@ -43,9 +44,10 @@ export const ImageUploader = ({
         </Placeholder>
       ) : imageUrl == null ? (
         <Placeholder className="aspect-square items-center" style={{ background }}>
-          <label className="button primary">
+          <label className={classNames(buttonVariants({ size: "default", color: "primary" }), "relative")}>
             <input
               type="file"
+              className="sr-only"
               id={id}
               accept={allowedExtensions.map((ext) => `.${ext}`).join(",")}
               onChange={(evt) => {
@@ -59,7 +61,7 @@ export const ImageUploader = ({
               }}
               disabled={disabled}
             />
-            <Icon name="upload-fill" />
+            <Plus pack="filled" className="size-5" />
             Upload
           </label>
         </Placeholder>
@@ -68,13 +70,13 @@ export const ImageUploader = ({
           <img alt={imageAlt} src={imageUrl} className="h-full w-full rounded-sm border border-border bg-background" />
           <Button
             color="primary"
-            small
+            size="icon"
             className="absolute top-2 right-2"
             aria-label="Remove"
             onClick={onRemove}
             disabled={disabled}
           >
-            <Icon name="trash2" />
+            <Trash className="size-5" />
           </Button>
         </figure>
       )}

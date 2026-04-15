@@ -1,3 +1,4 @@
+import { Discord } from "@boxicons/react";
 import * as React from "react";
 
 import { joinServer, leaveServer } from "$app/data/discord_integration";
@@ -74,7 +75,8 @@ export const DiscordButton = ({
       <LoadingSpinner className="size-8" />
     </div>
   ) : (
-    <Button className="button-discord" onClick={discordConnected ? leaveDiscord : openJoinDiscordPopup}>
+    <Button color="discord" onClick={discordConnected ? leaveDiscord : openJoinDiscordPopup}>
+      <Discord pack="brands" className="size-5" />
       {discordConnected ? "Leave Discord" : "Join Discord"}
     </Button>
   );

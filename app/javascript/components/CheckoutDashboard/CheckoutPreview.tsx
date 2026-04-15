@@ -37,7 +37,7 @@ export const CheckoutPreview = ({
         usStates: ["AA"],
         caProvinces: ["AA"],
         countries: { US: "United States" },
-        tipOptions: [0, 10, 20],
+        tipOptions: [0, 15, 20, 25],
         savedCreditCard: null,
         availablePaymentMethods: [],
         tip: { type: "percentage", percentage: 0 },
@@ -84,6 +84,7 @@ export const CheckoutPreview = ({
               items: [cartItem],
               discountCodes: [],
             }}
+            updateCart={() => {}}
             recommendedProducts={recommendedProduct ? [recommendedProduct] : []}
           />
           {children}

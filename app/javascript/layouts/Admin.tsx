@@ -1,46 +1,39 @@
-import { Head, usePage } from "@inertiajs/react";
+import { usePage } from "@inertiajs/react";
 import React from "react";
 
-import { classNames } from "$app/utils/classNames";
+import MetaTags, { type MetaTag } from "$app/layouts/components/MetaTags";
 
 import AdminNav from "$app/components/Admin/Nav";
+import AdminNewSalesReportPopover from "$app/components/Admin/SalesReports/NewSalesReportPopover";
 import AdminSearchPopover from "$app/components/Admin/SearchPopover";
-import LoadingSkeleton from "$app/components/LoadingSkeleton";
-import Alert, { showAlert, type AlertPayload } from "$app/components/server-components/Alert";
-import useRouteLoading from "$app/components/useRouteLoading";
+import Alert, { type AlertPayload } from "$app/components/server-components/Alert";
+import { useFlashMessage } from "$app/components/useFlashMessage";
 
 type PageProps = {
+  _inertia_meta?: MetaTag[];
   title: string;
   flash?: AlertPayload;
 };
 
-const Admin = ({ children }: { children: React.ReactNode }) => {
+export default function Admin({ children }: { children: React.ReactNode }) {
   const { title, flash } = usePage<PageProps>().props;
-  const isRouteLoading = useRouteLoading();
-
-  React.useEffect(() => {
-    if (flash?.message) {
-      showAlert(flash.message, flash.status === "danger" ? "error" : flash.status);
-    }
-  }, [flash]);
+  useFlashMessage(flash);
 
   return (
     <div id="inertia-shell" className="flex h-screen flex-col lg:flex-row">
-      <Head title={title} />
+      <MetaTags />
       <Alert initial={null} />
       <AdminNav />
-      <main className="flex h-screen flex-1 flex-col overflow-y-auto">
+      <main scroll-region="" className="flex h-screen flex-1 flex-col overflow-y-auto">
         <header className="flex items-center justify-between border-b border-border p-4 md:p-8">
           <h1>{title}</h1>
-          <div className="actions">
+          <div className="actions grid shrink-0 grid-cols-2 gap-2 has-[>*:only-child]:grid-cols-1 sm:flex md:-my-2">
             <AdminSearchPopover />
+            {window.location.pathname === Routes.admin_sales_reports_path() ? <AdminNewSalesReportPopover /> : null}
           </div>
         </header>
-        {isRouteLoading ? <LoadingSkeleton /> : null}
-        <div className={classNames("p-4 md:p-8", { hidden: isRouteLoading })}>{children}</div>
+        <div className="p-4 md:p-8">{children}</div>
       </main>
     </div>
   );
-};
-
-export default Admin;
+}

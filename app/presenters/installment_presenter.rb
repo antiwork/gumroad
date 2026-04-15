@@ -5,11 +5,12 @@ class InstallmentPresenter
   include ActionView::Helpers::TextHelper
   include ApplicationHelper
 
-  attr_reader :installment, :seller
+  attr_reader :installment, :seller, :from_tab
 
-  def initialize(seller:, installment: nil)
+  def initialize(seller:, installment: nil, from_tab: nil)
     @seller = seller
     @installment = installment
+    @from_tab = from_tab
   end
 
   def props
@@ -35,7 +36,7 @@ class InstallmentPresenter
       paid_more_than_cents: installment.paid_more_than_cents,
       paid_less_than_cents: installment.paid_less_than_cents,
       allow_comments: installment.allow_comments?,
-
+      display_type: installment.display_type,
     }
 
     attrs.merge!(installment.json_filters)
@@ -136,6 +137,7 @@ class InstallmentPresenter
         s3_url: s3_bucket_url,
         user_id: seller.external_id,
         allow_comments_by_default: allow_comments_by_default.nil? || allow_comments_by_default,
+        from_tab:
       }
     end
 end

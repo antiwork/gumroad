@@ -11,9 +11,9 @@ describe "Two-Factor Authentication endpoint", type: :request do
   end
 
   it "is successful with correct params" do
-    post "/two-factor.json?user_id=#{user.encrypted_external_id}", params: { token: user.otp_code }.to_json, headers: { "CONTENT_TYPE" => "application/json" }
+    post "/two-factor?user_id=#{user.encrypted_external_id}", params: { token: user.otp_code }
 
-    expect(response).to have_http_status(:ok)
+    expect(response).to redirect_to(controller.send(:login_path_for, user))
   end
 
   # This is important to make sure rate limiting works as expected. We send the user_id in the query string
@@ -21,7 +21,7 @@ describe "Two-Factor Authentication endpoint", type: :request do
   # If Rails ever starts prioritising body params over query string params, users would be able to brute force OTP codes by
   # sending a random user_id (for rate limiting) in the query and the correct one (for the controller to parse) in the body.
   it "prioritises user_id in the query string over POST body" do
-    post "/two-factor.json?user_id=invalid-id", params: { token: user.otp_code, user_id: user.encrypted_external_id }.to_json, headers: { "CONTENT_TYPE" => "application/json" }
+    post "/two-factor?user_id=invalid-id", params: { token: user.otp_code, user_id: user.encrypted_external_id }
 
     expect(response).to have_http_status(:not_found)
   end

@@ -7,11 +7,12 @@ import { formatDate } from "$app/utils/date";
 
 import { AdminActionButton } from "$app/components/Admin/ActionButton";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
+import { DefinitionList } from "$app/components/ui/DefinitionList";
 
 export type Payout = {
-  id: number;
+  external_id: string;
   displayed_amount: string;
-  user: { id: number; name: string };
+  user: { external_id: string; name: string };
   processor: string;
   payout_period_end_date: string;
   processor_fee_cents: number;
@@ -50,7 +51,7 @@ const Payout = ({ payout }: Props) => (
     <div>
       <h3>
         <span>{payout.displayed_amount} to&nbsp;</span>
-        <Link href={Routes.admin_user_path(payout.user.id)} title={payout.user.id.toString()}>
+        <Link href={Routes.admin_user_path(payout.user.external_id)} title={payout.user.external_id}>
           {payout.user.name}
         </Link>
       </h3>
@@ -60,11 +61,11 @@ const Payout = ({ payout }: Props) => (
 
     <hr />
 
-    <dl>
-      <dt>ID</dt>
+    <DefinitionList>
+      <dt>External ID</dt>
       <dd>
-        <Link href={Routes.admin_payout_path(payout.id)} title={payout.id.toString()}>
-          {payout.id}
+        <Link href={Routes.admin_payout_path(payout.external_id)} title={payout.external_id}>
+          {payout.external_id}
         </Link>
       </dd>
 
@@ -153,14 +154,14 @@ const Payout = ({ payout }: Props) => (
           ) : null}
         </>
       )}
-    </dl>
+    </DefinitionList>
 
     <hr />
 
     <div className="flex gap-2">
       {payout.cancelled || payout.failed || payout.returned ? (
         <AdminActionButton
-          url={Routes.retry_admin_payout_path(payout.id)}
+          url={Routes.retry_admin_payout_path(payout.external_id)}
           label="Retry"
           confirm_message="Are you sure you want to retry this payment?"
           loading="Retrying..."
@@ -168,7 +169,7 @@ const Payout = ({ payout }: Props) => (
         />
       ) : payout.processing && new Date(payout.created_at) <= subDays(new Date(), 2) ? (
         <AdminActionButton
-          url={Routes.fail_admin_payout_path(payout.id)}
+          url={Routes.fail_admin_payout_path(payout.external_id)}
           label="Mark failed"
           confirm_message="Are you sure you want to mark this payment as failed?"
           loading="Marking failed..."
@@ -176,7 +177,7 @@ const Payout = ({ payout }: Props) => (
         />
       ) : payout.unclaimed ? (
         <AdminActionButton
-          url={Routes.cancel_admin_payout_path(payout.id)}
+          url={Routes.cancel_admin_payout_path(payout.external_id)}
           label="Mark cancelled"
           confirm_message="Are you sure you want to mark this payment as cancelled?"
           loading="Cancelling..."
@@ -186,7 +187,7 @@ const Payout = ({ payout }: Props) => (
 
       {payout.is_paypal_processor && payout.non_terminal_state ? (
         <AdminActionButton
-          url={Routes.sync_admin_payout_path(payout.id)}
+          url={Routes.sync_admin_payout_path(payout.external_id)}
           label="Sync with PayPal"
           confirm_message="Are you sure you want to try and sync this payment with PayPal?"
           loading="Syncing..."

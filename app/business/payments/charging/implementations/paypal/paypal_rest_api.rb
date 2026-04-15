@@ -202,7 +202,7 @@ class PaypalRestApi
     end
 
     def execute_request
-      Rails.logger.info "Making Paypal request:: #{@request.inspect}"
+      Rails.logger.info "Making Paypal request:: #{LogRedactor.redact(@request)}"
       @paypal_client.execute(@request)
     rescue PayPalHttp::HttpError => e
       Rails.logger.error "Paypal request failed:: Status code: #{e.status_code}, Result: #{e.result.inspect}"

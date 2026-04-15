@@ -8,7 +8,13 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import { Toggle } from "$app/components/Toggle";
+import { Alert } from "$app/components/ui/Alert";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Select } from "$app/components/ui/Select";
+import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 export type CircleIntegration = {
@@ -112,15 +118,15 @@ export const CircleIntegrationEditor = ({
         <div className="flex flex-col gap-4">
           People who purchase your product will be automatically invited to your Circle community. To get your API
           token, visit your-community.circle.so/settings/API.
-          <fieldset>
-            <label htmlFor={`${uid}-api-key`}>API Token</label>
-            <input
+          <Fieldset>
+            <Label htmlFor={`${uid}-api-key`}>API Token</Label>
+            <Input
               id={`${uid}-api-key`}
               value={apiKey}
               onChange={(evt) => setApiKey(evt.target.value)}
               placeholder="Type or paste your API token"
             />
-          </fieldset>
+          </Fieldset>
           <Button
             color="primary"
             onClick={() => {
@@ -139,15 +145,13 @@ export const CircleIntegrationEditor = ({
                 <LoadingSpinner />
               </div>
             ) : communities.status === "error" ? (
-              <div role="alert" className="danger">
-                Could not retrieve communities from Circle. Please check your API key.
-              </div>
+              <Alert variant="danger">Could not retrieve communities from Circle. Please check your API key.</Alert>
             ) : (
-              <fieldset>
-                <legend>
-                  <label htmlFor={`${uid}-community`}>Select a community</label>
-                </legend>
-                <select
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-community`}>Select a community</Label>
+                </FieldsetTitle>
+                <Select
                   id={`${uid}-community`}
                   value={selectedCommunityId ?? "select-community"}
                   onChange={(ev) => setSelectedCommunityId(parseInt(ev.target.value, 10))}
@@ -160,8 +164,8 @@ export const CircleIntegrationEditor = ({
                       {community.name}
                     </option>
                   ))}
-                </select>
-              </fieldset>
+                </Select>
+              </Fieldset>
             )
           ) : null}
           {spaceGroups ? (
@@ -170,16 +174,14 @@ export const CircleIntegrationEditor = ({
                 <LoadingSpinner />
               </div>
             ) : spaceGroups.status === "error" ? (
-              <div role="alert" className="danger">
-                Could not retrieve space groups from Circle. Please try again.
-              </div>
+              <Alert variant="danger">Could not retrieve space groups from Circle. Please try again.</Alert>
             ) : (
               <>
-                <fieldset>
-                  <legend>
-                    <label htmlFor={`${uid}-space-group`}>Select a space group</label>
-                  </legend>
-                  <select
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-space-group`}>Select a space group</Label>
+                  </FieldsetTitle>
+                  <Select
                     id={`${uid}-space-group`}
                     value={selectedSpaceGroupId ?? "select-space-group"}
                     onChange={(ev) => {
@@ -195,35 +197,33 @@ export const CircleIntegrationEditor = ({
                         {spaceGroup.name}
                       </option>
                     ))}
-                  </select>
-                </fieldset>
+                  </Select>
+                </Fieldset>
                 {product.native_type === "membership" && integration ? (
-                  <label>
-                    <input
-                      type="checkbox"
+                  <Label>
+                    <Checkbox
                       checked={integration.keep_inactive_members}
                       onChange={() =>
                         onChange({ ...integration, keep_inactive_members: !integration.keep_inactive_members })
                       }
                     />
                     Do not remove Circle access when membership ends
-                  </label>
+                  </Label>
                 ) : null}
                 {product.variants.length > 0 ? (
                   <>
                     {product.variants.every(({ integrations }) => !integrations.circle) ? (
-                      <div role="status" className="warning">
+                      <Alert role="status" variant="warning">
                         {product.native_type === "membership"
                           ? "Your integration is not assigned to any tier. Check your tiers' settings."
                           : "Your integration is not assigned to any version. Check your versions' settings."}
-                      </div>
+                      </Alert>
                     ) : null}
-                    <Toggle
-                      value={product.variants.every(({ integrations }) => integrations.circle)}
-                      onChange={setEnabledForOptions}
-                    >
-                      {product.native_type === "membership" ? "Enable for all tiers" : "Enable for all versions"}
-                    </Toggle>
+                    <Switch
+                      checked={product.variants.every(({ integrations }) => integrations.circle)}
+                      onChange={(e) => setEnabledForOptions(e.target.checked)}
+                      label={product.native_type === "membership" ? "Enable for all tiers" : "Enable for all versions"}
+                    />
                   </>
                 ) : null}
               </>

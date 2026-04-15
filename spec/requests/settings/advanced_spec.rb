@@ -123,7 +123,7 @@ describe("Advanced Settings Scenario", type: :system, js: true) do
 
       expect(CustomDomainVerificationService)
       .to receive(:new)
-      .twice
+      .thrice
       .with(domain: invalid_domain)
       .and_return(double(process: false))
 
@@ -138,7 +138,7 @@ describe("Advanced Settings Scenario", type: :system, js: true) do
       # Save it
       expect do
         click_on "Update settings", match: :first
-        wait_for_ajax
+        expect(page).to have_alert(text: "Your account has been updated!")
       end.to change { user.reload.custom_domain&.domain }.from(nil).to(invalid_domain)
       expect(user.reload.custom_domain.failed_verification_attempts_count).to eq(0)
       expect(user.custom_domain.verified?).to eq(false)
@@ -157,14 +157,12 @@ describe("Advanced Settings Scenario", type: :system, js: true) do
       fill_in "Domain", with: valid_domain
       # Test the domain configuration
       click_on "Verify"
-      wait_for_ajax
       within_section("Custom domain", section_element: :section) do
         expect(page).to have_text("valid-domain.com domain is correctly configured!")
       end
       # Save it
       expect do
         click_on "Update settings", match: :first
-        wait_for_ajax
         expect(page).to have_alert(text: "Your account has been updated!")
         expect(page).to have_button("Update settings")
       end.to change { user.reload.custom_domain.domain }.from(invalid_domain).to(valid_domain)
@@ -189,7 +187,6 @@ describe("Advanced Settings Scenario", type: :system, js: true) do
       # Unblocks the missing email and blocks all provided emails
       fill_in "Block emails from purchasing", with: "customer.2@example.com,,JOhN +1   @exAMPLE.com\n\n\ncustomer   2@ EXAMPLE.com,\nbob@  example.com"
       click_on "Update settings", match: :first
-      wait_for_ajax
       expect(page).to have_alert(text: "Your account has been updated!")
       expect(page).to have_field("Block emails from purchasing", with: "customer2@example.com\njohn@example.com\nbob@example.com")
       expect(seller.blocked_customer_objects.active.email.pluck(:object_value)).to match_array(["customer2@example.com", "john@example.com", "bob@example.com"])
@@ -197,15 +194,13 @@ describe("Advanced Settings Scenario", type: :system, js: true) do
       # Does not allow saving invalid emails
       fill_in "Block emails from purchasing", with: "JOHN @example.com\ninvalid-email@example,john+test1@EXAMPLE.com\njane.doe@example.com\nbob..rocks@example.com\nfoo+thespammer@example.com"
       click_on "Update settings", match: :first
-      wait_for_ajax
       expect(page).to have_alert(text: "The email invalid-email@example cannot be blocked as it is invalid.")
       expect(page).to have_field("Block emails from purchasing", with: "john@example.com\ninvalid-email@example\njanedoe@example.com\nbob..rocks@example.com\nfoo@example.com")
       expect(seller.blocked_customer_objects.active.email.pluck(:object_value)).to match_array(["customer2@example.com", "john@example.com", "bob@example.com"])
 
       # Unblocks all the previously blocked emails if saved with a blank value
-      fill_in "Block emails from purchasing", with: ""
+      fill_in "Block emails from purchasing", with: "", fill_options: { clear: :backspace }
       click_on "Update settings", match: :first
-      wait_for_ajax
       expect(page).to have_alert(text: "Your account has been updated!")
       expect(page).to have_field("Block emails from purchasing", with: "")
       expect(seller.blocked_customer_objects.active.email.count).to eq(0)

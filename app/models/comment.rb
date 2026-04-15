@@ -10,6 +10,7 @@ class Comment < ApplicationRecord
   COMMENT_TYPE_PAYOUT_NOTE = "payout_note"
   COMMENT_TYPE_COMPLIANT = "compliant"
   COMMENT_TYPE_ON_PROBATION = "on"
+  COMMENT_TYPE_NOT_REVIEWED = "not_reviewed"
   COMMENT_TYPE_FLAGGED = "flagged"
   COMMENT_TYPE_FLAG_NOTE = "flag_note"
   COMMENT_TYPE_SUSPENDED = "suspended"
@@ -18,7 +19,7 @@ class Comment < ApplicationRecord
   COMMENT_TYPE_COUNTRY_CHANGED = "country_changed"
   COMMENT_TYPE_PAYOUTS_PAUSED = "payouts_paused"
   COMMENT_TYPE_PAYOUTS_RESUMED = "payouts_resumed"
-  RISK_STATE_COMMENT_TYPES = [COMMENT_TYPE_COMPLIANT, COMMENT_TYPE_ON_PROBATION, COMMENT_TYPE_FLAGGED, COMMENT_TYPE_SUSPENDED]
+  RISK_STATE_COMMENT_TYPES = [COMMENT_TYPE_COMPLIANT, COMMENT_TYPE_NOT_REVIEWED, COMMENT_TYPE_ON_PROBATION, COMMENT_TYPE_FLAGGED, COMMENT_TYPE_SUSPENDED]
   MAX_ALLOWED_DEPTH = 4 # Depth of a root comment starts with 0.
 
   attr_json_data_accessor :was_alive_before_marking_subtree_deleted
@@ -65,6 +66,10 @@ class Comment < ApplicationRecord
     end
   end
 
+  def self.normalize_content(text)
+    text.strip.gsub(/(\R){3,}/, '\1\1')
+  end
+
   private
     def commentable_object_exists
       obj_exists = case commentable_type
@@ -89,7 +94,7 @@ class Comment < ApplicationRecord
     end
 
     def trim_extra_newlines
-      self.content = content.strip.gsub(/(\R){3,}/, '\1\1')
+      self.content = self.class.normalize_content(content)
     end
 
     def notify_seller_of_new_comment

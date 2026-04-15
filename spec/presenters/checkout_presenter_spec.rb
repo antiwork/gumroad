@@ -34,16 +34,11 @@ describe CheckoutPresenter do
         saved_credit_card: { expiration_date: "12/23", number: "**** **** **** 4242", type: "visa", requires_mandate: false },
         recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
         paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
-        cart: nil,
         max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
+        cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
         tip_options: [5, 15, 25],
         default_tip_option: 15,
       )
-    end
-
-    it "returns cart props" do
-      create(:cart, user: @user)
-      expect(@instance.checkout_props(params: {}, browser_guid:)).to include(cart: { email: nil, returnUrl: "", rejectPppDiscount: false, discountCodes: [], items: [] })
     end
 
     it "does not show paused upsells" do
@@ -194,12 +189,13 @@ describe CheckoutPresenter do
           recommender_model_name: nil,
           call_start_time: nil,
           accepted_offer: nil,
-          pay_in_installments: false
+          pay_in_installments: false,
+          force_new_subscription: false
         }],
         max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
+        cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
         tip_options: [5, 15, 25],
         default_tip_option: 15,
-        cart: nil,
       )
     end
 
@@ -233,7 +229,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           },
           {
             product: a_hash_including(id: rental_product.external_id),
@@ -247,7 +244,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           },
           {
             product: a_hash_including(id: subscription_product.external_id),
@@ -261,7 +259,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           },
           {
             product: a_hash_including(id: versioned_product.external_id),
@@ -275,7 +274,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           }
         ]
       )
@@ -322,7 +322,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           }]
         )
       end
@@ -369,7 +370,8 @@ describe CheckoutPresenter do
             recommender_model_name: nil,
             call_start_time: nil,
             accepted_offer: nil,
-            pay_in_installments: false
+            pay_in_installments: false,
+            force_new_subscription: false
           }
         ]
       )
@@ -500,6 +502,7 @@ describe CheckoutPresenter do
               native_type: "digital",
               quantity: 1,
               thumbnail_url: nil,
+              url: bundle.bundle_products.second.product.long_url,
               variant: { id: bundle.bundle_products.second.variant.external_id, name: "Untitled 2" },
               custom_fields: [],
             },
@@ -509,6 +512,7 @@ describe CheckoutPresenter do
               native_type: "digital",
               quantity: 2,
               thumbnail_url: nil,
+              url: bundle.bundle_products.first.product.long_url,
               variant: nil,
               custom_fields: [
                 {
@@ -537,6 +541,35 @@ describe CheckoutPresenter do
           ]
         )
       end
+    end
+  end
+
+  describe "#checkout_product" do
+    it "eager loads purchases to avoid N+1 queries" do
+      seller = create(:named_user)
+      product = create(:product, user: seller)
+      other_products = create_list(:product, 3, user: seller)
+
+      buyer = create(:user)
+      other_products.each do |other_product|
+        variant = create(:variant, variant_category: create(:variant_category, link: other_product))
+        create(:purchase, link: other_product, purchaser: buyer, variant_attributes: [variant])
+      end
+
+      instance = described_class.new(logged_in_user: buyer, ip: "127.0.0.1")
+      cart_item = product.cart_item({})
+
+      queries = []
+      callback = lambda { |_name, _start, _finish, _id, payload|
+        queries << payload[:sql] if payload[:sql] && !payload[:name]&.match?(/SCHEMA|TRANSACTION/)
+      }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        instance.checkout_product(product, cart_item, {})
+      end
+
+      purchase_queries = queries.select { |sql| sql.match?(/purchases/i) }
+      expect(purchase_queries.size).to be <= 2
     end
   end
 
@@ -712,6 +745,22 @@ describe CheckoutPresenter do
         it "uses the IP country" do
           result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
           expect(result[:contact_info][:country]).to eq "BR"
+        end
+      end
+
+      context "when the subscription is deactivated" do
+        before do
+          @subscription.update!(cancelled_at: 1.day.ago, deactivated_at: 1.day.ago, cancelled_by_buyer: true)
+        end
+
+        it "displays the current price for the tier" do
+          new_price = @original_price_cents + 500
+          @tier_price.update!(price_cents: new_price)
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
+
+          displayed_tier_price = result[:product][:options][0][:recurrence_price_values]["monthly"][:price_cents]
+          expect(displayed_tier_price).to eq new_price
         end
       end
     end

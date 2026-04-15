@@ -7,7 +7,7 @@ class User
         begin
           Balance.amount_cents_sum_for(self)
         rescue => e
-          Bugsnag.notify(e)
+          ErrorNotifier.notify(e)
           unpaid_balance_cents(via: :sql)
         end
       else
@@ -21,6 +21,13 @@ class User
 
     def unpaid_balance_cents_up_to_date_held_by_gumroad(date)
       balances.unpaid.where("date <= ?", date).where(merchant_account_id: gumroad_merchant_account_ids).sum(:amount_cents)
+    end
+
+    def unpaid_balance_cents_up_to_date_held_by_stripe(date)
+      creator_stripe_account = stripe_account
+      return 0 if creator_stripe_account.blank?
+
+      balances.unpaid.where("date <= ?", date).where(merchant_account_id: creator_stripe_account.id).sum(:amount_cents)
     end
 
     def unpaid_balance_holding_cents_up_to_date_held_by_stripe(date)

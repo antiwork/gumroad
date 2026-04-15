@@ -3,6 +3,7 @@
 class SettingsPresenter
   include CurrencyHelper
   include ActiveSupport::NumberHelper
+  include Rails.application.routes.url_helpers
 
   attr_reader :pundit_user, :seller
 
@@ -39,15 +40,6 @@ class SettingsPresenter
       else
         raise StandardError, "Unsupported page `#{page}`"
       end
-    end
-  end
-
-  def page_title(page)
-    case page
-    when "main" then "Settings"
-    when "authorized_applications" then "Applications"
-    when "third_party_analytics" then "Third-party analytics"
-    else page.humanize
     end
   end
 
@@ -145,6 +137,7 @@ class SettingsPresenter
       disable_third_party_analytics: seller.disable_third_party_analytics,
       google_analytics_id: seller.google_analytics_id || "",
       facebook_pixel_id: seller.facebook_pixel_id || "",
+      tiktok_pixel_id: seller.tiktok_pixel_id || "",
       skip_free_sale_analytics: seller.skip_free_sale_analytics,
       facebook_meta_tag: seller.facebook_meta_tag || "",
       enable_verify_domain_third_party_services: seller.enable_verify_domain_third_party_services,
@@ -164,6 +157,8 @@ class SettingsPresenter
     {
       require_old_password: seller.provider.blank?,
       settings_pages: pages,
+      show_authenticator_app_settings: Feature.active?(:authenticator_2fa, seller),
+      authenticator_app_enabled: seller.totp_enabled?,
     }
   end
 
@@ -198,18 +193,19 @@ class SettingsPresenter
 
   def payments_props(remote_ip: nil)
     user_compliance_info = seller.fetch_or_build_user_compliance_info
+    payments_policy = Pundit.policy!(pundit_user, [:settings, :payments, seller])
     {
       settings_pages: pages,
-      is_form_disabled: !Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?,
+      is_form_disabled: !payments_policy.update?,
       should_show_country_modal: !seller.fetch_or_build_user_compliance_info.country.present? &&
-        Pundit.policy!(pundit_user, [:settings, :payments, seller]).set_country?,
+        payments_policy.set_country?,
       aus_backtax_details: aus_backtax_details(user_compliance_info),
       stripe_connect:,
       countries: Compliance::Countries.for_select.to_h,
       ip_country_code: GeoIp.lookup(remote_ip)&.country_code,
       bank_account_details:,
       paypal_address: seller.payment_address,
-      show_verification_section: seller.user_compliance_info_requests.requested.present? && seller.stripe_account.present? && Pundit.policy!(pundit_user, [:settings, :payments, seller]).update?,
+      show_verification_section: seller.user_compliance_info_requests.requested.present? && seller.stripe_account.present? && payments_policy.update?,
       paypal_connect:,
       fee_info: fee_info(user_compliance_info),
       user: user_details(user_compliance_info),
@@ -224,10 +220,11 @@ class SettingsPresenter
       formatted_balance_to_forfeit_on_payout_method_change: seller.formatted_balance_to_forfeit(:payout_method_change),
       payouts_paused_internally: seller.payouts_paused_internally?,
       payouts_paused_by: seller.payouts_paused_by_source,
-      payouts_paused_for_reason: seller.payouts_paused_for_reason,
+      account_status: account_status_details(payments_policy),
       payouts_paused_by_user: seller.payouts_paused_by_user?,
-      payout_threshold_cents: seller.minimum_payout_amount_cents,
+      payout_threshold_cents: seller.payout_threshold_cents,
       minimum_payout_threshold_cents: seller.minimum_payout_threshold_cents,
+      payout_country_name: Compliance::Countries.for_select.to_h[seller.alive_user_compliance_info&.legal_entity_country_code],
       payout_frequency: seller.payout_frequency,
       payout_frequency_daily_supported: seller.instant_payouts_supported?,
     }
@@ -249,13 +246,72 @@ class SettingsPresenter
   end
 
   private
+    def country_code_for_compliance_field(field, user_compliance_info)
+      case field
+      when UserComplianceInfoFields::Business::TAX_ID, UserComplianceInfoFields::Business::VAT_NUMBER
+        user_compliance_info.business_country_code
+      when UserComplianceInfoFields::Individual::TAX_ID
+        user_compliance_info.country_code
+      else
+        user_compliance_info.legal_entity_country_code
+      end
+    end
+
+    def account_status_details(payments_policy)
+      pending_compliance = seller.user_compliance_info_requests.requested.exists?
+      is_suspended = seller.suspended?
+      is_under_review = seller.on_probation? || seller.flagged?
+      payouts_paused_not_by_user = seller.payouts_paused_internally?
+
+      payouts_paused_by_user = seller.payouts_paused_by_user?
+      suspension_reason = if seller.suspended_for_fraud?
+        "Your account has been suspended due to fraudulent activity."
+      elsif seller.suspended_for_tos_violation?
+        "Your account has been suspended for a policy violation."
+      end
+
+      compliance_actions = []
+      if pending_compliance && seller.stripe_account.present? && payments_policy.update?
+        compliance_actions << { message: "Complete pending verification requirements via Stripe", href: remediation_settings_payments_path }
+      end
+      if pending_compliance && seller.stripe_account.blank?
+        user_compliance_info = seller.fetch_or_build_user_compliance_info
+        missing_fields = []
+        seller.user_compliance_info_requests.requested.each do |request|
+          if request.verification_error_message.present?
+            compliance_actions << { message: "#{request.verification_error_message.strip.sub(/[.!?]+\z/, "")}.", href: nil }
+          else
+            country_code = country_code_for_compliance_field(request.field_needed, user_compliance_info)
+            missing_fields << UserComplianceInfoFieldProperty.name_tag_for_field(request.field_needed, country: country_code)
+          end
+        end
+        if missing_fields.any?
+          compliance_actions << { message: "Please provide: #{missing_fields.uniq.to_sentence}.", href: nil }
+        end
+      end
+
+      gumroad_status = if is_under_review && !is_suspended
+        "Your account is under review and payouts are on hold until it's resolved."
+      end
+
+      show_section = is_suspended || is_under_review || payouts_paused_not_by_user || payouts_paused_by_user || compliance_actions.any?
+
+      {
+        show_section:,
+        is_suspended:,
+        suspension_reason:,
+        compliance_actions:,
+        gumroad_status:,
+      }
+    end
+
     def user_details(user_compliance_info)
       {
         country_supports_native_payouts: seller.native_payouts_supported?,
         country_supports_iban: seller.country_supports_iban?,
         need_full_ssn: seller.has_ever_been_requested_for_user_compliance_info_field?(UserComplianceInfoFields::Individual::TAX_ID),
         country_code: user_compliance_info.legal_entity_country_code,
-        payout_currency: Country.new(user_compliance_info.country_code).payout_currency,
+        payout_currency: Country.new(user_compliance_info.legal_entity_country_code).payout_currency,
         is_from_europe: seller.signed_up_from_europe?,
         individual_tax_id_needed_countries: [Compliance::Countries::USA.alpha2,
                                              Compliance::Countries::CAN.alpha2,
@@ -295,6 +351,7 @@ class SettingsPresenter
         business_type: user_compliance_info.business_type,
         business_street_address: user_compliance_info.business_street_address,
         business_building_number: user_compliance_info.business_building_number,
+        business_building_number_kana: user_compliance_info.business_building_number_kana,
         business_street_address_kanji: user_compliance_info.business_street_address_kanji,
         business_street_address_kana: user_compliance_info.business_street_address_kana,
         business_city: user_compliance_info.business_city,
@@ -311,6 +368,7 @@ class SettingsPresenter
         last_name_kana: user_compliance_info.last_name_kana,
         street_address: user_compliance_info.street_address,
         building_number: user_compliance_info.building_number,
+        building_number_kana: user_compliance_info.building_number_kana,
         street_address_kanji: user_compliance_info.street_address_kanji,
         street_address_kana: user_compliance_info.street_address_kana,
         city: user_compliance_info.city,
@@ -329,8 +387,8 @@ class SettingsPresenter
       bank_account = seller.active_bank_account
 
       {
-        show_bank_account: bank_account.present? || seller.native_payouts_supported? || seller.signed_up_from_united_arab_emirates?,
-        show_paypal: seller.payment_address.present? || !seller.native_payouts_supported? || seller.signed_up_from_united_arab_emirates?,
+        show_bank_account: seller.can_setup_bank_payouts?,
+        show_paypal: seller.can_setup_paypal_payouts?,
         card_data_handling_mode: CardDataHandlingMode.get_card_data_handling_mode(seller),
         is_a_card: bank_account.is_a?(CardBankAccount),
         card: bank_account.is_a?(CardBankAccount) ? {
@@ -402,6 +460,7 @@ class SettingsPresenter
         ae: Compliance::Countries.subdivisions_for_select(Compliance::Countries::ARE.alpha2).map { |code, name| { code:, name: } },
         ir: Compliance::Countries.subdivisions_for_select(Compliance::Countries::IRL.alpha2).map { |code, name| { code:, name: } },
         br: Compliance::Countries.subdivisions_for_select(Compliance::Countries::BRA.alpha2).map { |code, name| { code:, name: } },
+        jp: Compliance::Countries.japan_prefectures_for_select,
       }
     end
 

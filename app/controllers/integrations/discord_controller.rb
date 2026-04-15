@@ -15,7 +15,7 @@ class Integrations::DiscordController < ApplicationController
 
       user = JSON.parse(user_response)
       render json: { success: true, server_id: server["id"], server_name: server["name"], username: user["username"] }
-    rescue Discordrb::Errors::CodeError
+    rescue Discordrb::Errors::CodeError, JSON::ParserError
       render json: { success: false }
     end
   end
@@ -46,7 +46,7 @@ class Integrations::DiscordController < ApplicationController
       else
         render json: { success: false }
       end
-    rescue Discordrb::Errors::CodeError, Discordrb::Errors::NoPermission
+    rescue Discordrb::Errors::CodeError, Discordrb::Errors::NoPermission, JSON::ParserError
       render json: { success: false }
     end
   end
@@ -80,7 +80,7 @@ class Integrations::DiscordController < ApplicationController
       encrypted_product_id = state.dig("product_id")
       if is_admin && !encrypted_product_id.nil?
         decrypted_product_id = ObfuscateIds.decrypt(CGI.unescape(encrypted_product_id))
-        redirect_to join_discord_admin_link_path(decrypted_product_id, code: params[:code])
+        redirect_to join_discord_admin_product_path(decrypted_product_id, code: params[:code])
         return
       end
 

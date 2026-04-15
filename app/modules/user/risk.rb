@@ -6,6 +6,7 @@ module User::Risk
   IFFY_ENDPOINT = "http://internal-production-iffy-live-internal-1668548970.us-east-1.elb.amazonaws.com"
 
   PAYMENT_REMINDER_RISK_STATES = %w[flagged_for_tos_violation not_reviewed compliant].freeze
+  SUSPENDED_STATES = %w[suspended_for_tos_violation suspended_for_fraud].freeze
   INCREMENTAL_ENQUEUE_BALANCE = 100_00
   COUNTRIES_THAT_DO_NOT_HAVE_ZIPCODES = [
     # Country Codes: http://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
@@ -13,7 +14,7 @@ module User::Risk
   ].freeze
   PROBATION_WITH_REMINDER_DAYS = 30
   PROBATION_REVIEW_DAYS = 2
-  MAX_REFUND_QUEUE_SIZE = 10000
+  MAX_REFUND_QUEUE_SIZE = 100000
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
 
   def self.contact_iffy_risk_analysis(iffy_request_parameters)
@@ -86,7 +87,6 @@ module User::Risk
   def suspend_due_to_stripe_risk
     transaction do
       update!(tos_violation_reason: "Stripe reported high risk")
-      flag_for_tos_violation!(author_name: "stripe_risk", bulk: true) unless flagged_for_tos_violation? || on_probation? || suspended?
       suspend_for_tos_violation!(author_name: "stripe_risk", bulk: true) unless suspended?
       links.alive.find_each do |product|
         product.unpublish!(is_unpublished_by_admin: true)
@@ -120,7 +120,9 @@ module User::Risk
     end
   end
 
-  def suspend_sellers_other_accounts
+  def suspend_sellers_other_accounts(transition)
+    return if transition.args.first&.dig(:skip_transition_callback) == __method__
+
     SuspendAccountsWithPaymentAddressWorker.perform_in(5.seconds, id)
   end
 
@@ -128,11 +130,34 @@ module User::Risk
     BlockSuspendedAccountIpWorker.perform_in(5.seconds, id)
   end
 
-  def enable_sellers_other_accounts
+  def enable_sellers_other_accounts(transition)
+    return if transition.args.first&.dig(:skip_transition_callback) == __method__
+
+    enable_accounts_with_same_payment_address
+    enable_accounts_with_same_stripe_fingerprint
+  end
+
+  def enable_accounts_with_same_payment_address
     return if payment_address.blank?
 
     User.where(payment_address:).where.not(id:).each do |user|
-      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked")
+      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
+    end
+  end
+
+  def enable_accounts_with_same_stripe_fingerprint
+    fingerprints = bank_accounts.where.not(stripe_fingerprint: [nil, ""]).distinct.pluck(:stripe_fingerprint)
+    return if fingerprints.empty?
+
+    user_ids_with_same_fingerprint = BankAccount.alive
+      .where(stripe_fingerprint: fingerprints)
+      .where.not(user_id: id)
+      .distinct
+      .pluck(:user_id)
+
+    User.where(id: user_ids_with_same_fingerprint).each do |user|
+      matching_fingerprint = (fingerprints & user.alive_bank_accounts.pluck(:stripe_fingerprint)).first
+      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as bank account fingerprint #{matching_fingerprint} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
     end
   end
 
@@ -156,6 +181,17 @@ module User::Risk
     flagged_for_tos_violation? || flagged_for_fraud?
   end
 
+  def suspended_by_admin?
+    return false unless suspended?
+
+    last_suspension_comment = comments
+      .where(comment_type: Comment::COMMENT_TYPE_SUSPENDED)
+      .order(:created_at)
+      .last
+
+    last_suspension_comment&.author_id.present?
+  end
+
   def add_user_comment(transition)
     params = transition.args.first
     raise ArgumentError, "first transition argument must include an author_id or author_name" if !params || (!params[:author_id] && !params[:author_name])
@@ -165,6 +201,8 @@ module User::Risk
     content = case transition.to_name
               when :compliant
                 "Marked compliant by #{author_name} on #{date}"
+              when :not_reviewed
+                "Marked \"Not Reviewed\" by #{author_name} on #{date}"
               when :on_probation
                 "Probated (payouts suspended) by #{author_name} on #{date}"
               when :flagged_for_tos_violation
@@ -183,6 +221,8 @@ module User::Risk
     comment_type = case transition.to_name
                    when :compliant
                      Comment::COMMENT_TYPE_COMPLIANT
+                   when :not_reviewed
+                     Comment::COMMENT_TYPE_NOT_REVIEWED
                    when :on_probation
                      Comment::COMMENT_TYPE_ON_PROBATION
                    when :flagged_for_fraud, :flagged_for_tos_violation
@@ -236,7 +276,7 @@ module User::Risk
   end
 
   class_methods do
-    def refund_queue(from_date = 7.days.ago)
+    def refund_queue(from_date = 30.days.ago)
       user_ids = MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME]
         .find(suspended_at: { "$gte": from_date.utc.to_s })
         .limit(MAX_REFUND_QUEUE_SIZE)

@@ -1,17 +1,22 @@
+import { ArrowUpRightSquare, Copy } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import AdminActionButton from "$app/components/Admin/ActionButton";
-import Comments from "$app/components/Admin/Commentable";
+import AdminCommentableComments from "$app/components/Admin/Commentable";
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import { Form } from "$app/components/Admin/Form";
 import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
 import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceiptForm";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { DefinitionList } from "$app/components/ui/DefinitionList";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { InlineList } from "$app/components/ui/InlineList";
+import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
 import { type PurchaseStatesInfo, PurchaseStates } from "./States";
@@ -23,20 +28,19 @@ type UrlRedirect = {
 
 type Gift = {
   is_sender_purchase: boolean;
-  other_purchase_id: number;
+  other_purchase_external_id: string;
   other_email: string;
-  note: string;
+  note: string | null;
 };
 
 export type Purchase = PurchaseStatesInfo & {
-  id: number;
   external_id: string;
   seller: {
     support_email: string | null;
     email: string;
   };
   merchant_account: {
-    id: number;
+    external_id: string;
     charge_processor_id: string;
     holder_of_funds: string;
   } | null;
@@ -50,7 +54,7 @@ export type Purchase = PurchaseStatesInfo & {
   formatted_affiliate_credit_amount: string | null;
   gumroad_responsible_for_tax: boolean;
   product: {
-    id: number;
+    external_id: string;
     name: string;
     long_url: string;
   };
@@ -66,14 +70,14 @@ export type Purchase = PurchaseStatesInfo & {
   external_id_numeric: number;
   quantity: number;
   refunds: {
-    user: { id: number; name: string | null } | null;
+    user: { external_id: string; name: string | null } | null;
     status: string;
     created_at: string;
   }[];
   card: {
     type: string;
     visual: string;
-    country: string;
+    country: string | null;
     fingerprint_search_url: string | null;
   } | null;
   ip_address: string | null;
@@ -82,8 +86,8 @@ export type Purchase = PurchaseStatesInfo & {
   subscription: {
     id: number;
     external_id: string;
-    cancelled_at: string | null;
     cancelled_by_buyer: boolean | null;
+    user_requested_cancellation_at: string | null;
     ended_at: string | null;
     failed_at: string | null;
   } | null;
@@ -94,14 +98,14 @@ export type Purchase = PurchaseStatesInfo & {
     url_redirect: UrlRedirect | null;
   }[];
   url_redirect: UrlRedirect | null;
-  offer_code: { code: string; displayed_amount_off: string } | null;
+  offer_code: { code: string | null; displayed_amount_off: string } | null;
   street_address: string | null;
   full_name: string | null;
   city: string | null;
   state: string | null;
   zip_code: string | null;
   country: string | null;
-  custom_fields: { name: string; value: string }[];
+  custom_fields: { name: string; value: string | boolean }[];
   license: { serial: string } | null;
   affiliate_email: string | null;
   refund_policy:
@@ -125,37 +129,38 @@ export type Purchase = PurchaseStatesInfo & {
 const Header = ({ purchase }: { purchase: Purchase }) => (
   <div className="grid gap-2">
     <h2>
-      <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.formatted_display_price}</Link>
+      <Link href={Routes.admin_purchase_path(purchase.external_id)}>{purchase.formatted_display_price}</Link>
       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null} for{" "}
-      <Link href={Routes.admin_link_path(purchase.product.id)} title={purchase.product.id.toString()}>
+      <Link href={Routes.admin_product_path(purchase.product.external_id)} title={purchase.product.external_id}>
         {purchase.product.name}
       </Link>{" "}
       {purchase.variants_list}{" "}
       <Link href={purchase.product.long_url}>
-        <Icon name="arrow-up-right-square" />
+        <ArrowUpRightSquare className="size-5" />
       </Link>
     </h2>
-    <ul className="inline">
+    <InlineList>
       <li>
         <DateTimeWithRelativeTooltip date={purchase.created_at} />
       </li>
       <li>
         <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>
       </li>
-    </ul>
+    </InlineList>
   </div>
 );
 
 const Info = ({ purchase }: { purchase: Purchase }) => (
   <div className="flex flex-col gap-4">
     <h3>Info</h3>
-    <dl>
+    <DefinitionList>
       {purchase.seller.support_email ? (
         <>
           <dt>Seller support email</dt>
           <dd>
+            {purchase.seller.support_email}{" "}
             <CopyToClipboard text={purchase.seller.support_email}>
-              <Icon name="outline-duplicate" />
+              <Copy className="size-5" />
             </CopyToClipboard>
           </dd>
         </>
@@ -165,7 +170,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {purchase.seller.email}{" "}
         <CopyToClipboard text={purchase.seller.email}>
-          <Icon name="outline-duplicate" />
+          <Copy className="size-5" />
         </CopyToClipboard>
       </dd>
 
@@ -173,8 +178,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Merchant account</dt>
           <dd>
-            <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.id)}>
-              {purchase.merchant_account.id} – {purchase.merchant_account.charge_processor_id}
+            <Link href={Routes.admin_merchant_account_path(purchase.merchant_account.external_id)}>
+              {purchase.merchant_account.external_id} – {purchase.merchant_account.charge_processor_id}
             </Link>
           </dd>
           <dt>Funds held by</dt>
@@ -237,15 +242,15 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {purchase.stripe_transaction ? (
           purchase.stripe_transaction.search_url ? (
-            <Link href={purchase.stripe_transaction.search_url} target="_blank">
+            <a href={purchase.stripe_transaction.search_url} target="_blank" rel="noreferrer noopener">
               {purchase.stripe_transaction.id}
-            </Link>
+            </a>
           ) : (
             purchase.stripe_transaction.id
           )
         ) : null}
         {" | "}
-        <Link href={Routes.admin_purchase_path(purchase.id)}>{purchase.id}</Link>
+        <Link href={Routes.admin_purchase_path(purchase.external_id)}>{purchase.external_id}</Link>
       </dd>
 
       <dt>Order number</dt>
@@ -273,8 +278,8 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
                   <li>
                     Refunder:
                     {refund.user ? (
-                      <Link href={Routes.admin_user_path(refund.user.id)}>
-                        {refund.user.name || `User ${refund.user.id}`}
+                      <Link href={Routes.admin_user_path(refund.user.external_id)}>
+                        {refund.user.name || `User ${refund.user.external_id}`}
                       </Link>
                     ) : (
                       "(unknown)"
@@ -306,9 +311,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
             {purchase.card.fingerprint_search_url ? (
               <>
                 {" | "}
-                <Link href={purchase.card.fingerprint_search_url} target="_blank">
+                <a href={purchase.card.fingerprint_search_url} target="_blank" rel="noreferrer noopener">
                   {purchase.stripe_fingerprint}
-                </Link>
+                </a>
               </>
             ) : null}
           </dd>
@@ -348,18 +353,24 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Manage Membership URL</dt>
           <dd>
-            <Link href={Routes.manage_subscription_url(purchase.subscription.external_id)} target="_blank">
+            <a
+              href={Routes.manage_subscription_url(purchase.subscription.external_id)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               {Routes.manage_subscription_url(purchase.subscription.external_id)}
-            </Link>
+            </a>
           </dd>
         </>
       ) : null}
 
       {purchase.offer_code && !purchase.gift?.is_sender_purchase ? (
         <>
-          <dt>Discount code</dt>
+          <dt>{purchase.offer_code.code ? "Discount code" : "Discount"}</dt>
           <dd>
-            {purchase.offer_code.code} for {purchase.offer_code.displayed_amount_off} off
+            {purchase.offer_code.code
+              ? `${purchase.offer_code.code} for ${purchase.offer_code.displayed_amount_off} off`
+              : `${purchase.offer_code.displayed_amount_off} off`}
           </dd>
         </>
       ) : null}
@@ -374,11 +385,11 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         </>
       ) : null}
 
-      {purchase.custom_fields.map((field) => (
-        <>
+      {purchase.custom_fields.map((field, index) => (
+        <React.Fragment key={index}>
           <dt>{field.name}</dt>
-          <dd>{field.value} (custom field)</dd>
-        </>
+          <dd>{field.value.toString()} (custom field)</dd>
+        </React.Fragment>
       ))}
 
       {purchase.purchase_state === "preorder_authorization_successful" ? (
@@ -396,9 +407,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Cancelled</dt>
           <dd>
-            <BooleanIcon value={!!purchase.subscription.cancelled_at} />
-            {purchase.subscription.cancelled_at
-              ? ` (on ${purchase.subscription.cancelled_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
+            <BooleanIcon value={!!purchase.subscription.user_requested_cancellation_at} />
+            {purchase.subscription.user_requested_cancellation_at
+              ? ` (on ${purchase.subscription.user_requested_cancellation_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
               : null}
           </dd>
 
@@ -461,70 +472,73 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd aria-label="Can email">
         <BooleanIcon value={purchase.can_contact} />
       </dd>
-    </dl>
+    </DefinitionList>
   </div>
 );
 
-const GiftInfo = ({ purchaseId, gift }: { purchaseId: number; gift: Gift }) =>
+const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gift: Gift }) =>
   gift.is_sender_purchase ? (
     <>
-      <details>
-        <summary>
+      <Details>
+        <DetailsToggle>
           <h3>Gift Sender Info</h3>
-        </summary>
-        <dl>
+        </DetailsToggle>
+        <DefinitionList>
           <dt>For</dt>
           <dd>{gift.other_email}</dd>
 
           <dt>Note</dt>
           <dd>{gift.note}</dd>
 
-          <dt>Receiver purchase id</dt>
+          <dt>Receiver purchase external id</dt>
           <dd>
-            <Link href={Routes.admin_purchase_path(gift.other_purchase_id)}>{gift.other_purchase_id}</Link>
+            <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
+              {gift.other_purchase_external_id}
+            </Link>
           </dd>
-        </dl>
-      </details>
-
+        </DefinitionList>
+      </Details>
       <hr />
-      <details>
-        <summary>
+      <Details>
+        <DetailsToggle>
           <h3>Edit giftee email</h3>
-        </summary>
+        </DetailsToggle>
         <Form
-          url={Routes.update_giftee_email_admin_purchase_path(purchaseId)}
+          url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
           method="POST"
           onSuccess={() => showAlert("Successfully updated the giftee email.", "success")}
         >
           {(isLoading) => (
             <div className="flex gap-2">
-              <input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
-              <button type="submit" className="button" disabled={isLoading}>
+              <Input type="text" className="flex-1" name="giftee_email" placeholder="Enter new giftee email" required />
+              <Button type="submit" disabled={isLoading}>
                 {isLoading ? "Updating..." : "Update"}
-              </button>
+              </Button>
             </div>
           )}
         </Form>
-      </details>
+      </Details>
     </>
   ) : (
-    <details>
-      <summary>
+    <Details>
+      <DetailsToggle>
         <h3>Gift Receiver Info</h3>
-      </summary>
-      <dl>
+      </DetailsToggle>
+      <DefinitionList>
         <dt>From</dt>
         <dd>{gift.other_email}</dd>
 
         <dt>Note</dt>
         <dd>{gift.note}</dd>
 
-        <dt>Sender purchase id</dt>
+        <dt>Sender purchase external id</dt>
         <dd>
-          <Link href={Routes.admin_purchase_path(gift.other_purchase_id)}>{gift.other_purchase_id}</Link>
+          <Link href={Routes.admin_purchase_path(gift.other_purchase_external_id)}>
+            {gift.other_purchase_external_id}
+          </Link>
         </dd>
-      </dl>
-    </details>
+      </DefinitionList>
+    </Details>
   );
 
 const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
@@ -532,7 +546,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     {purchase.can_force_update || purchase.failed ? (
       <AdminActionButton
         label="Sync with Stripe/PayPal"
-        url={Routes.sync_status_with_charge_processor_admin_purchase_path(purchase)}
+        url={Routes.sync_status_with_charge_processor_admin_purchase_path(purchase.external_id)}
         loading="syncing..."
         done="synced!"
         confirm_message="Are you sure you want to sync this purchase's state with Stripe/PayPal?"
@@ -543,7 +557,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       <>
         <AdminActionButton
           label="Refund"
-          url={Routes.refund_admin_purchase_path(purchase)}
+          url={Routes.refund_admin_purchase_path(purchase.external_id)}
           loading="Refunding..."
           done="Refunded!"
           confirm_message="Are you sure you want to refund this purchase?"
@@ -551,7 +565,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
         <AdminActionButton
           label="Refund for Fraud"
-          url={Routes.refund_for_fraud_admin_purchase_path(purchase)}
+          url={Routes.refund_for_fraud_admin_purchase_path(purchase.external_id)}
           loading="Refunding..."
           done="Refunded!"
           confirm_message="Are you sure you want to refund this purchase for fraud?"
@@ -559,7 +573,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
         <AdminActionButton
           label="Refund taxes only"
-          url={Routes.refund_taxes_only_admin_purchase_path(purchase)}
+          url={Routes.refund_taxes_only_admin_purchase_path(purchase.external_id)}
           loading="Refunding taxes..."
           done="Taxes refunded!"
           confirm_message="Are you sure you want to refund only the taxes for this purchase?"
@@ -575,14 +589,11 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
       </>
     ) : null}
-    {purchase.subscription &&
-    !purchase.subscription.cancelled_at &&
-    !purchase.subscription.ended_at &&
-    !purchase.subscription.failed_at ? (
+    {purchase.subscription && !purchase.subscription.ended_at && !purchase.subscription.failed_at ? (
       <>
         <AdminActionButton
           label="Cancel subscription for buyer"
-          url={Routes.cancel_subscription_admin_purchase_path(purchase, { by_seller: false })}
+          url={Routes.cancel_subscription_admin_purchase_path(purchase.external_id, { by_seller: false })}
           loading="Canceling..."
           done="Canceled!"
           confirm_message="Are you sure you want to cancel this subscription on behalf of the buyer?"
@@ -590,7 +601,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
         <AdminActionButton
           label="Cancel subscription for seller"
-          url={Routes.cancel_subscription_admin_purchase_path(purchase, { by_seller: true })}
+          url={Routes.cancel_subscription_admin_purchase_path(purchase.external_id, { by_seller: true })}
           loading="Canceling..."
           done="Canceled!"
           confirm_message="Are you sure you want to cancel this subscription on behalf of the seller?"
@@ -601,7 +612,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     {purchase.buyer_blocked ? (
       <AdminActionButton
         label="Unblock buyer"
-        url={Routes.unblock_buyer_admin_purchase_path(purchase)}
+        url={Routes.unblock_buyer_admin_purchase_path(purchase.external_id)}
         loading="Unblocking buyer..."
         done="Buyer unblocked!"
         success_message="Buyer unblocked!"
@@ -609,7 +620,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     ) : (
       <AdminActionButton
         label="Block buyer"
-        url={Routes.block_buyer_admin_purchase_path(purchase)}
+        url={Routes.block_buyer_admin_purchase_path(purchase.external_id)}
         loading="Blocking buyer..."
         done="Buyer blocked!"
         confirm_message="This will fully block this buyer's emails, GUID, and IP addresses. Proceed?"
@@ -619,7 +630,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
     {purchase.is_deleted_by_buyer ? (
       <AdminActionButton
         label="Undelete"
-        url={Routes.undelete_admin_purchase_path(purchase)}
+        url={Routes.undelete_admin_purchase_path(purchase.external_id)}
         loading="Undeleting..."
         done="Undeleted!"
         confirm_message="Are you sure you want to undelete this purchase?"
@@ -627,9 +638,11 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       />
     ) : null}
     {purchase.successful ? (
-      <Link href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" className="button small">
-        Go to Receipt
-      </Link>
+      <Button asChild size="sm">
+        <a href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" rel="noopener noreferrer">
+          Go to Receipt
+        </a>
+      </Button>
     ) : null}
   </div>
 );
@@ -644,9 +657,9 @@ const PurchaseUrlRedirect = ({
   <>
     <dt>{label}</dt>
     <dd>
-      <Link href={url_redirect.download_page_url} target="_blank">
+      <a href={url_redirect.download_page_url} target="_blank" rel="noreferrer noopener">
         {url_redirect.download_page_url}
-      </Link>{" "}
+      </a>{" "}
       ({url_redirect.uses} uses)
     </dd>
   </>
@@ -660,7 +673,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     {purchase.gift ? (
       <>
         <hr />
-        <GiftInfo purchaseId={purchase.id} gift={purchase.gift} />
+        <GiftInfo purchaseExternalId={purchase.external_id} gift={purchase.gift} />
       </>
     ) : null}
     {purchase.successful ||
@@ -668,23 +681,23 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     purchase.is_free_trial_purchase ? (
       <>
         <hr />
-        <details>
-          <summary>
+        <Details>
+          <DetailsToggle>
             <h3>Resend receipt</h3>
-          </summary>
-          <AdminResendReceiptForm purchase_id={purchase.id} email={purchase.email} />
-        </details>
+          </DetailsToggle>
+          <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
+        </Details>
       </>
     ) : null}
     <hr />
     <ActionButtons purchase={purchase} />
-    <Comments
+    <AdminCommentableComments
       count={purchase.comments_count}
-      endpoint={Routes.admin_purchase_comments_path(purchase.id)}
+      endpoint={Routes.admin_purchase_comments_path(purchase.external_id)}
       commentableType="purchase"
     />
     <hr />
-    <dl>
+    <DefinitionList>
       <dt>Updated</dt>
       <dd>
         <DateTimeWithRelativeTooltip date={purchase.updated_at} />
@@ -693,7 +706,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         <DateTimeWithRelativeTooltip date={purchase.deleted_at} placeholder={<NoIcon />} />
       </dd>
-    </dl>
+    </DefinitionList>
   </div>
 );
 

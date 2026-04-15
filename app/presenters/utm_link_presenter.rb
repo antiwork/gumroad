@@ -44,6 +44,10 @@ class UtmLinkPresenter
     }
   end
 
+  def new_additional_metadata_props
+    { new_permalink: UtmLink.generate_permalink }
+  end
+
   private
     attr_reader :seller, :utm_link
 

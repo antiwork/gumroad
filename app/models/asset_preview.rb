@@ -79,9 +79,13 @@ class AssetPreview < ApplicationRecord
     oembed && oembed["info"]["height"].to_i
   end
 
+  IMAGE_PROCESSING_TIMEOUT_SECONDS = 30
+
   def retina_variant
     return unless file.attached?
-    file.variant(resize_to_limit: [retina_width, nil]).processed
+    Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
+      file.variant(resize_to_limit: [retina_width, nil]).processed
+    end
   end
 
   def display_type
@@ -176,6 +180,7 @@ class AssetPreview < ApplicationRecord
     new_url = Addressable::URI.escape(new_url) unless URI::ABS_URI.match?(new_url)
     new_uri = URI.parse(new_url)
     raise URI::InvalidURIError.new("URL '#{new_url}' is not a web url") unless new_uri.scheme.in?(["http", "https"])
+    raise URI::InvalidURIError.new("URL must include a valid host") if new_uri.host.blank?
     new_url = new_uri.to_s
     embeddable = OEmbedFinder.embeddable_from_url(new_url)
 
@@ -185,16 +190,15 @@ class AssetPreview < ApplicationRecord
     else
       self.oembed = nil
 
-      URI.open(new_url) do |remote_file|
-        tempfile = Tempfile.new(binmode: true)
-        tempfile.write(remote_file.read)
-        tempfile.rewind
-        blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
-                                                      filename: File.basename(new_url),
-                                                      content_type: remote_file.content_type)
-        self.file.attach(blob.signed_id)
-        self.file.analyze
-      end
+      response = SsrfFilter.get(new_url)
+      tempfile = Tempfile.new(binmode: true)
+      tempfile.write(response.body)
+      tempfile.rewind
+      blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
+                                                    filename: File.basename(new_url),
+                                                    content_type: response.content_type)
+      self.file.attach(blob.signed_id)
+      self.file.analyze
     end
   end
 

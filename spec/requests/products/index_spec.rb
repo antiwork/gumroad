@@ -28,7 +28,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
       visit(products_path)
       within find_product_row product do
-        find_and_click("[data-label='Sales'] a")
+        find(:table_cell, "Sales").find("a").click
       end
 
       expect(page).to have_section("Sales")
@@ -61,8 +61,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Cancel"
       end
+      click_on "Cancel"
 
       expect(page).not_to have_alert(text: "Product deleted!")
 
@@ -70,8 +70,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
 
       expect(page).to have_alert(text: "Product deleted!")
     end
@@ -85,8 +85,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Cancel"
       end
+      click_on "Cancel"
 
       expect(page).not_to have_alert(text: "Product deleted!")
 
@@ -94,8 +94,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
 
       expect(page).to have_alert(text: "Product deleted!")
     end
@@ -337,7 +337,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
   describe "pagination" do
     before do
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
     end
 
     it "paginates memberships" do
@@ -483,14 +483,13 @@ describe "Products Page Scenario", type: :system, js: true do
       per_page.times do
         create(:product, user: seller, name: "Pig")
       end
-      stub_const("LinksController::PER_PAGE", per_page)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", per_page)
     end
 
     it "shows the search results" do
       product = create(:product, user: seller, name: "Chicken", unique_permalink: "chicken")
       visit(products_path)
 
-      expect(page).to have_field("Search products", visible: false)
       table = find(:table, "Products").find("tbody")
       expect(table).to have_selector(:table_row, count: 2)
       expect(page).to have_selector("[aria-label='Pagination']")
@@ -506,7 +505,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
     it "duplicates a product" do
       product = create(:product, user: seller, name: "Test product")
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
       visit(products_path)
 
       select_disclosure "Toggle Search" do
@@ -524,7 +523,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
     it "duplicates a membership" do
       membership = create(:subscription_product, user: seller, name: "Test membership")
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
       visit(products_path)
 
       select_disclosure "Toggle Search" do
@@ -542,7 +541,7 @@ describe "Products Page Scenario", type: :system, js: true do
 
     it "deletes a product" do
       product = create(:product, user: seller, name: "Test product")
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
       visit(products_path)
 
       select_disclosure "Toggle Search" do
@@ -554,14 +553,14 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
       expect(page).to have_alert(text: "Product deleted!")
     end
 
     it "deletes a membership" do
       membership = create(:subscription_product, user: seller, name: "Test membership")
-      stub_const("LinksController::PER_PAGE", 1)
+      stub_const("DashboardProductsPagePresenter::PER_PAGE", 1)
       visit(products_path)
 
       select_disclosure "Toggle Search" do
@@ -573,8 +572,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
       expect(page).to have_alert(text: "Product deleted!")
     end
   end
@@ -649,7 +648,6 @@ describe "Products Page Scenario", type: :system, js: true do
           click_on "Archive"
         end
       end
-      wait_for_ajax
 
       expect(page).to have_tab_button("Archived")
       expect(page).not_to have_content(membership.name)
@@ -659,8 +657,9 @@ describe "Products Page Scenario", type: :system, js: true do
       expect(page).to have_content(membership.name)
     end
 
-    it "archives a product" do
+    it "archives and unpublishes a published product" do
       product = create(:product, user: seller)
+      expect(product.purchase_disabled_at).to be_nil
 
       visit(products_path)
 
@@ -671,14 +670,36 @@ describe "Products Page Scenario", type: :system, js: true do
           click_on "Archive"
         end
       end
-      wait_for_ajax
 
+      expect(page).to have_alert(text: "Product was archived and unpublished successfully")
       expect(page).to have_tab_button("Archived")
       expect(page).not_to have_content(product.name)
 
+      product.reload
+      expect(product.archived?).to be(true)
+      expect(product.purchase_disabled_at).to be_present
+
       find(:tab_button, "Archived").click
 
-      expect(page).to have_content(product.name)
+      within find_product_row product do
+        expect(page).to have_content(product.name)
+        expect(page).to have_text("Unpublished")
+      end
+    end
+
+    it "archives an unpublished product" do
+      product = create(:product, :unpublished, user: seller)
+
+      visit(products_path)
+
+      within find_product_row product do
+        select_disclosure "Open product action menu" do
+          click_on "Archive"
+        end
+      end
+
+      expect(page).to have_alert(text: "Product was archived successfully")
+      expect(product.reload.archived?).to be(true)
     end
   end
 end

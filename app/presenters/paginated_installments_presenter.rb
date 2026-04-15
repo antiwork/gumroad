@@ -41,9 +41,11 @@ class PaginatedInstallmentsPresenter
       pagiation_metadata = { count: es_search.results.total, next: can_paginate_further ? page + 1 : nil }
     end
 
+    current_seller = seller
     {
       installments: installments.map { InstallmentPresenter.new(seller:, installment: _1).props },
       pagination: pagiation_metadata,
+      has_posts: current_seller.installments.alive.not_workflow_installment.public_send(type).exists?,
     }
   end
 

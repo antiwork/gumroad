@@ -62,6 +62,10 @@ class CreatorMailerPreview < ActionMailer::Preview
     )
   end
 
+  def top_creator_announcement
+    CreatorMailer.top_creator_announcement(user_id: seller&.id)
+  end
+
   private
     def seller
       @_seller ||= User.first
@@ -72,6 +76,8 @@ class CreatorMailerPreview < ActionMailer::Preview
     end
 
     def analytics_data
+      gpt_buy_list = SendYearInReviewEmailJob.get_buy_list_from_total(total_amount_cents: 4000, currency: seller.currency_type)
+
       {
         total_views_count: 144,
         total_sales_count: 12,
@@ -88,6 +94,7 @@ class CreatorMailerPreview < ActionMailer::Preview
         end,
         total_products_sold_count: 5,
         total_amount_cents: 4000,
+        creator_rank: 2,
         by_country: ["🇪🇸 Spain", "🇷🇴 Romania", "🇦🇪 United Arab Emirates", "🇺🇸 United States", "🌎 Elsewhere"].index_with do
           [
             rand(1000..5000),
@@ -96,7 +103,8 @@ class CreatorMailerPreview < ActionMailer::Preview
           ]
         end.sort_by { |_, (_, _, total)| -total },
         total_countries_with_sales_count: 4,
-        total_unique_customers_count: 8
+        total_unique_customers_count: 8,
+        gpt_buy_list: gpt_buy_list,
       }
     end
 end

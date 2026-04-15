@@ -199,6 +199,23 @@ describe ProductDuplicatorService do
     end
   end
 
+  it "duplicates a product whose variant has a membership price change effective date in the past" do
+    variant_category = create(:variant_category, title: "Tier", link: product)
+    variant = create(:variant, variant_category:, name: "Premium")
+    variant.apply_price_changes_to_existing_memberships = true
+    variant.subscription_price_change_effective_date = 3.days.ago.to_date
+    variant.subscription_price_change_message = "Price is going up"
+    variant.save!(validate: false)
+
+    duplicate_product = ProductDuplicatorService.new(product.id).duplicate
+
+    duplicated_variant = duplicate_product.variant_categories.alive.first.variants.first
+    expect(duplicated_variant.name).to eq("Premium")
+    expect(duplicated_variant.apply_price_changes_to_existing_memberships).to eq(false)
+    expect(duplicated_variant.subscription_price_change_effective_date).to be_nil
+    expect(duplicated_variant.subscription_price_change_message).to be_nil
+  end
+
   describe "prices" do
     it "handles products with rental prices" do
       product.is_recurring_billing = false
@@ -251,6 +268,33 @@ describe ProductDuplicatorService do
       duplicate_product = ProductDuplicatorService.new(asset_preview.link.id).duplicate
 
       expect(duplicate_product.asset_previews.count).to eq(0)
+    end
+
+    it "preserves the cover order when duplicating" do
+      product = create(:product)
+      asset_preview1 = AssetPreview.new(link: product)
+      asset_preview1.file.attach(fixture_file_upload("test-small.jpg", "image/jpeg"))
+      asset_preview1.save!
+      asset_preview1.file.analyze
+
+      asset_preview2 = AssetPreview.new(link: product)
+      asset_preview2.file.attach(fixture_file_upload("smilie.png", "image/png"))
+      asset_preview2.save!
+      asset_preview2.file.analyze
+
+      asset_preview3 = AssetPreview.new(link: product)
+      asset_preview3.file.attach(fixture_file_upload("thing.mov", "video/quicktime"))
+      asset_preview3.save!
+      asset_preview3.file.analyze
+
+      product.reorder_previews({ asset_preview1.guid => 2, asset_preview2.guid => 0, asset_preview3.guid => 1 })
+
+      duplicate_product = ProductDuplicatorService.new(product.id).duplicate
+
+      expect(duplicate_product.asset_previews.count).to eq(3)
+      expect(duplicate_product.display_asset_previews.first.file.filename.to_s).to eq("smilie.png")
+      expect(duplicate_product.display_asset_previews.second.file.filename.to_s).to eq("thing.mov")
+      expect(duplicate_product.display_asset_previews.third.file.filename.to_s).to eq("test-small.jpg")
     end
   end
 
@@ -328,6 +372,16 @@ describe ProductDuplicatorService do
             ] }
         ]
       )
+    end
+  end
+
+  describe "error handling" do
+    it "stores the error message on failure and re-raises" do
+      service = ProductDuplicatorService.new(product.id)
+      allow(service).to receive(:post_process_attachments).and_raise(StandardError, "Something broke")
+
+      expect { service.duplicate }.to raise_error(StandardError, "Something broke")
+      expect(ProductDuplicatorService.new(product.id).recently_failed_error_message).to eq("Something broke")
     end
   end
 

@@ -18,7 +18,7 @@ describe Admin::UserPresenter::Card do
 
     describe "fields" do
       it "returns the correct values" do
-        expect(props[:id]).to eq(user.id)
+        expect(props[:external_id]).to eq(user.external_id)
         expect(props[:name]).to eq(user.name)
         expect(props[:bio]).to eq(user.bio)
         expect(props[:avatar_url]).to eq(user.avatar_url)
@@ -139,7 +139,7 @@ describe Admin::UserPresenter::Card do
           membership_data = props[:admin_manageable_user_memberships].first
 
           expect(membership_data[:seller]).to eq(
-            id: seller.id,
+            external_id: seller.external_id,
             avatar_url: seller.avatar_url,
             display_name_or_email: seller.display_name_or_email
           )

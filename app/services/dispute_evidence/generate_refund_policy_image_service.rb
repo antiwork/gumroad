@@ -17,7 +17,7 @@ class DisputeEvidence::GenerateRefundPolicyImageService
   def perform
     binary_data = generate_screenshot
     unless binary_data
-      Bugsnag.notify("DisputeEvidence::GenerateRefundPolicyImageService: Could not generate screenshot for url #{url}")
+      ErrorNotifier.notify("DisputeEvidence::GenerateRefundPolicyImageService: Could not generate screenshot for url #{url}")
       return
     end
 
@@ -74,7 +74,7 @@ class DisputeEvidence::GenerateRefundPolicyImageService
         [modal_height, document_height].max
       else
         # We need to calculate the height of the content, plus the padding added by the parent element
-        content_height = driver.execute_script(%{ return document.querySelector("article.product").parentElement.scrollHeight; })
+        content_height = driver.execute_script(%{ return document.querySelector("article").parentElement.scrollHeight; })
         [content_height, document_height].max
       end
     end

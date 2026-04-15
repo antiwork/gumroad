@@ -33,10 +33,14 @@ class OfferCode < ApplicationRecord
   validate :price_validation
   validate :validate_cancellation_discount_uniqueness
   validate :validate_cancellation_discount_product_type
+  validate :validate_not_used_as_default_discount
 
   before_save :to_mongo
 
   after_save :invalidate_product_cache
+  after_save :reindex_associated_products
+  before_destroy :capture_associated_product_ids
+  after_destroy :reindex_captured_products
 
   validates_uniqueness_of :code, scope: %i[user_id deleted_at], if: :universal?, unless: :deleted?, message: "must be unique."
   validate :code_validation, unless: lambda { |offer_code| offer_code.deleted? || offer_code.universal? || offer_code.upsell.present? }
@@ -45,6 +49,14 @@ class OfferCode < ApplicationRecord
   # Fixed-amount-off offer codes only show up on products that match their currency. That's why this scope takes a currency_type.
   # nil currency_type is a percentage offer code
   scope :universal_with_matching_currency, ->(currency_type) { where("universal = 1 and (currency_type = ? or currency_type is null)", currency_type) }
+
+  # Public: Search offer codes by name
+  scope :search_by_name, ->(query, limit: 20, reverse: false) {
+    query = query.to_s.strip.downcase
+    return none if query.blank?
+    relation = where("LOWER(name) LIKE ?", "%#{query}%").limit(limit)
+    reverse ? relation.order(created_at: :desc) : relation.order(created_at: :asc)
+  }
   scope :universal, -> { where(universal: true) }
 
   def is_valid_for_purchase?(purchase_quantity: 1)
@@ -246,7 +258,7 @@ class OfferCode < ApplicationRecord
 
     def code_validation
       applicable_products.each do |product|
-        if product.product_and_universal_offer_codes.reject { |other| other.id == id }.any? { |other| code == other.code }
+        if product.product_and_universal_offer_codes.any? { |other| code == other.code && id != other.id }
           errors.add(:base, "Discount code must be unique.")
           return
         end
@@ -282,6 +294,29 @@ class OfferCode < ApplicationRecord
       product = products.first
       unless product.is_tiered_membership?
         errors.add(:base, "Cancellation discounts can only be added to memberships")
+      end
+    end
+
+    def reindex_associated_products(products_to_reindex: applicable_products)
+      products_to_reindex.each do |product|
+        product.enqueue_index_update_for(["offer_codes"])
+      end
+    end
+
+    def capture_associated_product_ids
+      @product_ids_to_reindex = applicable_products.ids
+    end
+
+    def reindex_captured_products
+      reindex_associated_products(products_to_reindex: Link.where(id: @product_ids_to_reindex)) if @product_ids_to_reindex.present?
+    end
+
+    def validate_not_used_as_default_discount
+      return unless deleted_at_changed? && deleted_at.present?
+      return unless persisted? # Skip validation for new records (id is nil)
+
+      if Link.visible.where(default_offer_code_id: id).exists?
+        errors.add(:base, "This discount code is currently set as the default discount for one or more active or archived products. Please remove it from all products before deleting.")
       end
     end
 end

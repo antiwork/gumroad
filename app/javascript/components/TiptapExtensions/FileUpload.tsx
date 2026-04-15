@@ -1,3 +1,4 @@
+import { ArrowUp } from "@boxicons/react";
 import { NodeViewProps, Node as TiptapNode } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -5,9 +6,9 @@ import { cast } from "ts-safe-cast";
 
 import { Button } from "$app/components/Button";
 import { FileInput } from "$app/components/Download/CustomField/FileInput";
-import { Icon } from "$app/components/Icons";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -19,7 +20,7 @@ declare module "@tiptap/core" {
 
 export const FileUpload = TiptapNode.create({
   name: "fileUpload",
-  selectable: false,
+  selectable: true,
   draggable: true,
   atom: true,
   group: "block",
@@ -36,17 +37,26 @@ export const FileUpload = TiptapNode.create({
   },
 });
 
-const FileUploadNodeView = ({ editor, node }: NodeViewProps) => (
-  <NodeViewWrapper data-drag-handle={editor.isEditable ? true : undefined}>
-    {editor.isEditable ? (
-      <Placeholder>
-        <Button color="primary">
-          <Icon name="upload-fill" />
-          Upload files
-        </Button>
-      </Placeholder>
-    ) : (
-      <FileInput customFieldId={cast<string>(node.attrs.id)} />
-    )}
-  </NodeViewWrapper>
-);
+const FileUploadNodeView = ({ editor, node }: NodeViewProps) => {
+  if (!editor.isEditable) {
+    return (
+      <NodeViewWrapper>
+        <FileInput customFieldId={cast<string>(node.attrs.id)} />
+      </NodeViewWrapper>
+    );
+  }
+
+  return (
+    <NodeActionsWrapper asChild>
+      <NodeViewWrapper contentEditable={false} data-input-embed>
+        <NodeActionsMenu editor={editor} />
+        <Placeholder>
+          <Button color="primary">
+            <ArrowUp pack="filled" className="size-5" />
+            Upload files
+          </Button>
+        </Placeholder>
+      </NodeViewWrapper>
+    </NodeActionsWrapper>
+  );
+};

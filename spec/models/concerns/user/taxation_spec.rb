@@ -27,6 +27,7 @@ describe User::Taxation do
 
       # To simulate eligibility
       stub_const("#{described_class}::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 100_00)
+      stub_const("#{described_class}::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 5)
     end
 
     context "when user is not from the US" do
@@ -56,6 +57,48 @@ describe User::Taxation do
       end
     end
 
+    context "when user doesn't meet the minimum sales count" do
+      it "returns false" do
+        stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 100)
+        expect(@user.eligible_for_1099_k?(year)).to eq(false)
+      end
+    end
+
+    context "for an year with different sales threshold than default" do
+      context "when user doesn't meet the minimum sales amount" do
+        it "returns false" do
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 10_00)
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 1)
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 1000_00 })
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 1 })
+
+          expect(@user.eligible_for_1099_k?(year)).to eq(false)
+        end
+      end
+
+      context "when user doesn't meet the minimum sales count" do
+        it "returns false" do
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 10_00)
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 1)
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 10_00 })
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 100 })
+
+          expect(@user.eligible_for_1099_k?(year)).to eq(false)
+        end
+      end
+
+      context "when user meets the minimum sales amount and count" do
+        it "returns true" do
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 1000_00)
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 100)
+          stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 10_00 })
+          stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR", { year => 1 })
+
+          expect(@user.eligible_for_1099_k?(year)).to eq(true)
+        end
+      end
+    end
+
     context "when user is suspended" do
       before do
         create(:user_compliance_info, user: @user)
@@ -63,8 +106,8 @@ describe User::Taxation do
         @user.save!
       end
 
-      it "returns false" do
-        expect(@user.eligible_for_1099_k?(year)).to eq(false)
+      it "returns true" do
+        expect(@user.eligible_for_1099_k?(year)).to eq(true)
       end
     end
 
@@ -179,12 +222,13 @@ describe User::Taxation do
 
     context "when user is suspended" do
       before do
+        create(:user_compliance_info, user: @user)
         @user.user_risk_state = "suspended_for_fraud"
         @user.save!
       end
 
-      it "returns false" do
-        expect(@user.eligible_for_1099_misc?(year)).to eq(false)
+      it "returns true" do
+        expect(@user.eligible_for_1099_misc?(year)).to eq(true)
       end
     end
 
@@ -238,7 +282,7 @@ describe User::Taxation do
   describe "#eligible_for_1099?", :vcr do
     let(:year) { Date.current.year }
     before do
-      allow_any_instance_of(User).to receive(:is_a_non_suspended_creator_from_usa?).and_return(true)
+      allow_any_instance_of(User).to receive(:from_us?).and_return(true)
     end
 
     it "returns true if eligible for 1099-K and not 1099-MISC" do
@@ -267,40 +311,6 @@ describe User::Taxation do
       allow_any_instance_of(User).to receive(:eligible_for_1099_misc?).and_return(true)
 
       expect(create(:user).eligible_for_1099?(year)).to be true
-    end
-  end
-
-  describe "#is_a_non_suspended_creator_from_usa?", :vcr do
-    let(:year) { Date.current.year }
-
-    context "when user is not from the US" do
-      before do
-        create(:user_compliance_info_singapore, user: @user)
-      end
-
-      it "returns false" do
-        expect(@user.is_a_non_suspended_creator_from_usa?).to eq(false)
-      end
-    end
-
-    context "when user is from an invalid compliance country" do
-      before do
-        create(:user_compliance_info, user: @user, country: "Aland Islands")
-      end
-
-      it "returns false" do
-        expect(@user.is_a_non_suspended_creator_from_usa?).to eq(false)
-      end
-    end
-
-    context "when user is compliant and from US" do
-      before do
-        create(:user_compliance_info, user: @user)
-      end
-
-      it "returns true" do
-        expect(@user.is_a_non_suspended_creator_from_usa?).to eq(true)
-      end
     end
   end
 

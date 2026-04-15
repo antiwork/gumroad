@@ -30,8 +30,8 @@ describe("Offer-code usage from product page", type: :system, js: true) do
     expect(page).to have_selector("[itemprop='price']", text: "$3.50 $0", visible: false)
 
     expect(page).to have_selector("[role='status']", text: "$3.50 off will be applied at checkout (Code #{offer_code.code.upcase})")
-    expect(page).to have_radio_button("Base", text: "$3.50 $0")
-    expect(page).to have_radio_button("Premium", text: "$4.50 $1")
+    expect(page).to have_radio_button("Base", text: /\$3\.50\s+\$0/)
+    expect(page).to have_radio_button("Premium", text: /\$4\.50\s+\$1/)
 
     add_to_cart(product, offer_code:, option: "Base")
     check_out(product, is_free: true)
@@ -187,7 +187,8 @@ describe("Offer-code usage from product page", type: :system, js: true) do
       add_to_cart(product, offer_code:)
       offer_code.update!(amount_cents: 200)
       check_out(product, error: "The price just changed! Refresh the page for the updated price.")
-      visit checkout_index_path
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(email: "test@gumroad.com").exists? }
+      visit checkout_path
       check_out(product)
     end
   end
@@ -201,7 +202,8 @@ describe("Offer-code usage from product page", type: :system, js: true) do
       add_to_cart(product, offer_code:)
       offer_code.mark_deleted!
       check_out(product, error: "Sorry, the discount code you wish to use is invalid.")
-      visit checkout_index_path
+      wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(email: "test@gumroad.com").exists? }
+      visit checkout_path
       expect(page).to_not have_selector("[aria-label='Discount code']", text: offer_code.code)
       expect(page).to have_text("Total US$10", normalize_ws: true)
       check_out(product)
@@ -342,7 +344,27 @@ describe("Offer-code usage from product page", type: :system, js: true) do
       end
     end
 
-    context "when the product is not a tiered membership" do
+    context "when the product is a legacy subscription" do
+      let(:product) { create(:subscription_product, price_cents: 200) }
+      let(:offer_code) { create(:offer_code, products: [product], duration_in_billing_cycles: 1) }
+
+      it "displays the duration notice and the purchase succeeds" do
+        visit "#{product.long_url}/#{offer_code.code}"
+        expect(page).to have_selector("[role='status']", exact_text: "$1 off will be applied at checkout (Code SXSW) This discount will only apply to the first payment of your subscription.", normalize_ws: true)
+        add_to_cart(product, offer_code:)
+        check_out(product)
+
+        purchase = Purchase.last
+        expect(purchase.price_cents).to eq(100)
+        expect(purchase.offer_code).to eq(offer_code)
+        purchase_offer_code_discount = purchase.purchase_offer_code_discount
+        expect(purchase_offer_code_discount.offer_code_amount).to eq(100)
+        expect(purchase_offer_code_discount.duration_in_billing_cycles).to eq(1)
+        expect(purchase_offer_code_discount.offer_code_is_percent).to eq(false)
+      end
+    end
+
+    context "when the product is not a subscription" do
       let(:product) { create(:product, price_cents: 200) }
       let(:offer_code) { create(:offer_code, products: [product], duration_in_billing_cycles: 1) }
 

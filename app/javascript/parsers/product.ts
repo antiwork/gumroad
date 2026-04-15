@@ -37,9 +37,10 @@ export type CardProduct = {
   id: string;
   permalink: string;
   name: string;
-  seller: { id: string; name: string; profile_url: string; avatar_url: string | null } | null;
+  seller: { id: string; name: string; profile_url: string; avatar_url: string | null; is_verified: boolean } | null;
   ratings: Ratings | null;
   price_cents: number;
+  original_price_cents?: number;
   currency_code: CurrencyCode;
   thumbnail_url: string | null;
   native_type: ProductNativeType;
@@ -55,6 +56,7 @@ export type CardProduct = {
 export type AnalyticsData = {
   google_analytics_id: string | null;
   facebook_pixel_id: string | null;
+  tiktok_pixel_id: string | null;
   free_sales: boolean;
 };
 

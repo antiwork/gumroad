@@ -198,4 +198,28 @@ describe "Checkout offer codes", :js, type: :system do
       end
     end
   end
+
+  describe "100% discount with tipping" do
+    let(:seller) { create(:user, display_offer_code_field: true, tipping_enabled: true) }
+    let!(:product) { create(:product, user: seller, name: "Free with code", price_cents: 1000) }
+    let!(:offer_code) { create(:percentage_offer_code, user: seller, products: [product], amount_percentage: 100, code: "FREE100") }
+
+    it "does not show tip selector and allows checkout without tip when price is $0" do
+      visit product.long_url
+      add_to_cart(product)
+
+      fill_in "Discount code", with: "FREE100"
+      click_on "Apply"
+      expect(page).to have_selector("[aria-label='Discount code']", text: "FREE100")
+
+      expect(page).not_to have_text("Add a tip")
+
+      check_out(product, is_free: true)
+
+      purchase = Purchase.last
+      expect(purchase.offer_code).to eq(offer_code)
+      expect(purchase.price_cents).to eq(0)
+      expect(purchase.tip).to be_nil
+    end
+  end
 end

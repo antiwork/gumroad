@@ -47,4 +47,36 @@ describe DropboxFile do
       end
     end
   end
+
+  describe "#validate_dropbox_url!" do
+    it "allows valid Dropbox URLs" do
+      valid_urls = [
+        "https://dl.dropboxusercontent.com/file.pdf",
+        "https://ucb7c756cf63e5782670af26c1c4.dl.dropboxusercontent.com/file.pdf",
+        "https://www.dropbox.com/file.pdf",
+        "https://dropbox.com/file.pdf"
+      ]
+
+      valid_urls.each do |url|
+        dropbox_file = build(:dropbox_file, dropbox_url: url)
+        expect { dropbox_file.send(:validate_dropbox_url!) }.not_to raise_error
+      end
+    end
+
+    it "rejects non-Dropbox URLs" do
+      invalid_urls = [
+        "https://evil.com/dropbox.com/file.pdf",
+        "https://dropbox.com.evil.com/file.pdf",
+        "https://evil-dropboxusercontent.com/file.pdf",
+        "https://127.0.0.1/file.pdf",
+        "https://169.254.169.254/latest/meta-data/",
+        "http://dl.dropboxusercontent.com/file.pdf"
+      ]
+
+      invalid_urls.each do |url|
+        dropbox_file = build(:dropbox_file, dropbox_url: url)
+        expect { dropbox_file.send(:validate_dropbox_url!) }.to raise_error(ArgumentError, "Invalid Dropbox URL")
+      end
+    end
+  end
 end

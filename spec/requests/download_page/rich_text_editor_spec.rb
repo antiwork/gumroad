@@ -160,6 +160,152 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
       expect(page.evaluate_script("window._messages.length")).to eq(6)
     end
 
+    it "triggers app bridge messages for file embeds in React Native" do
+      visit("/d/#{@url_redirect.token}?display=mobile_app")
+
+      page.execute_script <<~JS
+        window._messages = [];
+        window.ReactNativeWebView = {
+          postMessage: (message) => {
+            window._messages.push(JSON.parse(message));
+          }
+        };
+      JS
+
+      within(find_embed(name: "Video file")) do
+        click_on "Download"
+        expect(page.evaluate_script("window._messages")).to eq(
+          [
+            {
+              type: "click",
+              payload: { resourceId: @video_file.external_id, isDownload: true, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "MOV" }
+            }.as_json
+          ]
+        )
+        click_on "Watch"
+        expect(page.evaluate_script("window._messages[1]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @video_file.external_id, isDownload: false, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "MOV" }
+          }.as_json
+        )
+        expect(page).not_to have_selector("[aria-label='Video Player']")
+      end
+
+      within(find_embed(name: "Audio file")) do
+        click_on "Download"
+        expect(page.evaluate_script("window._messages[2]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @audio_file.external_id, isDownload: true, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "MP3" }
+          }.as_json
+        )
+        click_on "Play"
+        expect(page.evaluate_script("window._messages[3]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @audio_file.external_id, isDownload: false, isPost: false, type: "audio", isPlaying: "false", resumeAt: "0", contentLength: "46", extension: "MP3" }
+          }.as_json
+        )
+        expect(page).not_to have_button("Close")
+      end
+
+      within(find_embed(name: "PDF file")) do
+        click_on "Download"
+        expect(page.evaluate_script("window._messages[4]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @pdf_file.external_id, isDownload: true, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "PDF" }
+          }.as_json
+        )
+        click_on "Read"
+        expect(page.evaluate_script("window._messages[5]")).to eq(
+          {
+            type: "click",
+            payload: { resourceId: @pdf_file.external_id, isDownload: false, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "PDF" }
+          }.as_json
+        )
+      end
+
+      expect(page.evaluate_script("window._messages.length")).to eq(6)
+    end
+
+    it "sends tocData messages and handles mobileAppPageChange in React Native" do
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(title: "Page 1", position: 0, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Page 1 content" }] }])
+      page_2 = create(:rich_content, entity: @product, title: "Page 2", position: 1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Page 2 content" }] }])
+
+      cdp_id = page.driver.browser.execute_cdp(
+        "Page.addScriptToEvaluateOnNewDocument",
+        source: <<~JS
+          window._messages = [];
+          window.ReactNativeWebView = {
+            postMessage: (message) => {
+              window._messages.push(JSON.parse(message));
+            }
+          };
+        JS
+      ).fetch("identifier")
+
+      visit("/d/#{@url_redirect.token}?display=mobile_app")
+      expect(page).to have_text("Page 1 content")
+
+      toc_messages = page.evaluate_script("window._messages.filter(m => m.type === 'tocData')")
+      expect(toc_messages).to eq([
+                                   {
+                                     type: "tocData",
+                                     payload: {
+                                       activePageIndex: 0,
+                                       pages: [
+                                         { page_id: product_rich_content.external_id, title: "Page 1", icon: "text-only" },
+                                         { page_id: page_2.external_id, title: "Page 2", icon: "text-only" },
+                                       ],
+                                     },
+                                   }.as_json,
+                                 ])
+
+      page.execute_script <<~JS
+        window.postMessage(JSON.stringify({ type: "mobileAppPageChange", payload: { pageIndex: 1 } }), "*");
+      JS
+
+      expect(page).to have_text("Page 2 content")
+
+      toc_messages = page.evaluate_script("window._messages.filter(m => m.type === 'tocData')")
+      expect(toc_messages.last).to eq({
+        type: "tocData",
+        payload: {
+          activePageIndex: 1,
+          pages: [
+            { page_id: product_rich_content.external_id, title: "Page 1", icon: "text-only" },
+            { page_id: page_2.external_id, title: "Page 2", icon: "text-only" },
+          ]
+        }
+      }.as_json)
+
+      page.execute_script <<~JS
+        window.postMessage(JSON.stringify({ type: "mobileAppPageChange", payload: { pageIndex: 0 } }), "*");
+      JS
+
+      expect(page).to have_text("Page 1 content")
+      toc_messages = page.evaluate_script("window._messages.filter(m => m.type === 'tocData')")
+      expect(toc_messages.last).to eq({
+        type: "tocData",
+        payload: {
+          activePageIndex: 0,
+          pages: [
+            { page_id: product_rich_content.external_id, title: "Page 1", icon: "text-only" },
+            { page_id: page_2.external_id, title: "Page 2", icon: "text-only" },
+          ]
+        }
+      }.as_json)
+
+      # Web navigation buttons should be hidden when native navigation is available
+      expect(page).to_not have_button("Next")
+      expect(page).to_not have_button("Previous")
+
+      page.driver.browser.execute_cdp("Page.removeScriptToEvaluateOnNewDocument", identifier: cdp_id)
+    end
+
     it "renders the customized download page for the purpose of embedding inside webview in the mobile apps" do
       visit("/d/#{@url_redirect.token}?display=mobile_app")
 
@@ -629,6 +775,128 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
       expect(find_link("Link 2 with custom query parameters", href: "https://example.com/?test=123&#{sale_info_query_params}", target: "_blank")[:rel]).to eq("noopener noreferrer nofollow")
       expect(find_link("Link 3", href: "https://example.com/?test=123&#{sale_info_query_params}", target: "_blank")[:rel]).to eq("noopener noreferrer nofollow")
       expect(find_link("Button with custom query parameters", href: "https://example.com/?test=123&#{sale_info_query_params}", target: "_blank")[:rel]).to eq("noopener noreferrer nofollow")
+    end
+
+    it "appends purchase_id to Gumroad post URLs in links and buttons" do
+      post_url = "#{PROTOCOL}://#{@user.username}.#{ROOT_DOMAIN}/p/test-post"
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(description: [
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "text" => "Post link",
+                                           "type" => "text",
+                                           "marks" => [
+                                             {
+                                               "type" => "link",
+                                               "attrs" => {
+                                                 "rel" => "noopener noreferrer nofollow",
+                                                 "href" => post_url,
+                                                 "class" => nil,
+                                                 "target" => "_blank",
+                                               },
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "type" => "tiptap-link",
+                                           "attrs" => {
+                                             "href" => post_url,
+                                           },
+                                           "content" => [
+                                             {
+                                               "text" => "Tiptap post link",
+                                               "type" => "text",
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                     {
+                                       "type" => "button",
+                                       "attrs" => {
+                                         "href" => post_url,
+                                       },
+                                       "content" => [
+                                         {
+                                           "text" => "Post button",
+                                           "type" => "text",
+                                         },
+                                       ],
+                                     },
+                                   ])
+
+      visit("/d/#{@url_redirect.token}")
+      expected_url = "#{post_url}?purchase_id=#{CGI.escape(@purchase.external_id)}"
+      expect(page).to have_link("Post link", href: expected_url)
+      expect(page).to have_link("Tiptap post link", href: expected_url)
+      expect(page).to have_link("Post button", href: expected_url)
+    end
+
+    it "does not append purchase_id to non-Gumroad URLs with /p/ paths" do
+      external_url = "https://example.com/p/some-post"
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(description: [
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "text" => "External link",
+                                           "type" => "text",
+                                           "marks" => [
+                                             {
+                                               "type" => "link",
+                                               "attrs" => {
+                                                 "rel" => "noopener noreferrer nofollow",
+                                                 "href" => external_url,
+                                                 "class" => nil,
+                                                 "target" => "_blank",
+                                               },
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                   ])
+
+      visit("/d/#{@url_redirect.token}")
+      expect(page).to have_link("External link", href: external_url)
+    end
+
+    it "does not append purchase_id to Gumroad URLs without /p/ paths" do
+      gumroad_product_url = "#{PROTOCOL}://#{@user.username}.#{ROOT_DOMAIN}/l/test-product"
+      product_rich_content = @product.alive_rich_contents.first
+      product_rich_content.update!(description: [
+                                     {
+                                       "type" => "paragraph",
+                                       "content" => [
+                                         {
+                                           "text" => "Product link",
+                                           "type" => "text",
+                                           "marks" => [
+                                             {
+                                               "type" => "link",
+                                               "attrs" => {
+                                                 "rel" => "noopener noreferrer nofollow",
+                                                 "href" => gumroad_product_url,
+                                                 "class" => nil,
+                                                 "target" => "_blank",
+                                               },
+                                             },
+                                           ],
+                                         },
+                                       ],
+                                     },
+                                   ])
+
+      visit("/d/#{@url_redirect.token}")
+      expect(page).to have_link("Product link", href: gumroad_product_url)
     end
 
     it "shows license key within the content and not outside of the content" do

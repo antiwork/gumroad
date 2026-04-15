@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 module CustomDomainConfig
+  extend ActiveSupport::Concern
+
+  include PageMeta::Base
+
   def user_by_domain(host)
     user_by_subdomain(host) || user_by_custom_domain(host)
   end
@@ -11,26 +15,15 @@ module CustomDomainConfig
     else
       set_user_by_domain
 
-      @facebook_sdk_disabled = true
-      @title = @user.try(:name_or_username)
+      set_meta_tag(title: @user.try(:name_or_username))
+      set_meta_tag(property: "gr:facebook_sdk:enabled", value: "false")
+      if @user.enable_verify_domain_third_party_services? && @user.facebook_meta_tag.present?
+        _, content = @user.facebook_meta_tag.match(/content="([^"]+)"/)
+        set_meta_tag(name: "facebook-domain-verification", content:)
+      end
+
       @body_class = "custom-domain"
     end
-  end
-
-  def product_by_custom_domain
-    @_product_by_custom_domain ||= begin
-      product = CustomDomain.find_by_host(request.host)&.product
-      general_permalink = product&.general_permalink
-      if general_permalink.blank?
-        nil
-      else
-        Link.fetch_leniently(general_permalink, user: product.user)
-      end
-    end
-  end
-
-  def set_frontend_performance_sensitive
-    @is_css_performance_sensitive = (logged_in_user != @user)
   end
 
   private

@@ -787,37 +787,37 @@ describe("Checkout discounts page", type: :system, js: true) do
     it "sorts the offer codes" do
       visit checkout_discounts_path
       find(:columnheader, "Discount").click
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ column: "name", page: 1, sort: "asc" }))
       find(:columnheader, "Discount").click
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT5Discount 5 $1 off of all products")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT4Discount 4 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT5 Discount 5 $1 off of all products")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT4 Discount 4 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "name", page: 1, sort: "desc" }))
       find(:columnheader, "Revenue").click
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT3Discount 3 $1 off of all products")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT4Discount 4 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT3 Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT4 Discount 4 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, sort: "asc" }))
       find(:columnheader, "Revenue").click
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, sort: "desc" }))
 
       find(:columnheader, "Uses").click
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT3Discount 3 $1 off of all products")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT4Discount 4 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT3 Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT4 Discount 4 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "uses", page: 1, sort: "asc" }))
       find(:columnheader, "Uses").click
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ column: "uses", page: 1, sort: "desc" }))
       find(:columnheader, "Term").click
-      expect(page).to have_nth_table_row_record(1, "CODE3Discount 3 50% off of all products")
-      expect(page).to have_nth_table_row_record(2, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(1, "CODE3 Discount 3 50% off of all products")
+      expect(page).to have_nth_table_row_record(2, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
       expect(page).to have_current_path(checkout_discounts_path({ column: "term", page: 1, sort: "asc" }))
       find(:columnheader, "Term").click
-      expect(page).to have_nth_table_row_record(1, "CODE2Discount 2 $2 off of Product 2")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT3Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "CODE2 Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT3 Discount 3 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "term", page: 1, sort: "desc" }))
     end
 
@@ -843,8 +843,8 @@ describe("Checkout discounts page", type: :system, js: true) do
 
     it "sorts based on query parameters on initial page load" do
       visit checkout_discounts_path({ column: "revenue", sort: "desc", page: 1, query: "Discount 3" })
-      expect(page).to have_nth_table_row_record(1, "CODE3Discount 3 50% off of all products")
-      expect(page).to have_nth_table_row_record(2, "DISCOUNT3Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "CODE3 Discount 3 50% off of all products")
+      expect(page).to have_nth_table_row_record(2, "DISCOUNT3 Discount 3 $1 off of all products")
     end
 
     it "handles browser events for going to the previous/next page" do
@@ -854,11 +854,11 @@ describe("Checkout discounts page", type: :system, js: true) do
       page.go_back
       wait_for_ajax
       expect(page).to have_current_path(checkout_discounts_path)
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT3Discount 3 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT3 Discount 3 $1 off of all products")
       page.go_forward
       wait_for_ajax
       expect(page).to have_current_path(checkout_discounts_path({ column: "name", sort: "asc", page: 1 }))
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
 
       within find("[aria-label='Pagination']") do
         expect(find_button("1")["aria-current"]).to eq("page")
@@ -889,25 +889,90 @@ describe("Checkout discounts page", type: :system, js: true) do
     it "searches the offer codes" do
       visit checkout_discounts_path
 
-      select_disclosure "Search" do
+      select_disclosure "Toggle Search" do
         fill_in "Search", with: "code"
       end
       wait_for_ajax
-      expect(page).to have_nth_table_row_record(1, "CODE1Discount 1 50% off of Product 1, Product 2, and 1 other")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE1 Discount 1 50% off of Product 1, Product 2, and 1 other")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ page: 1, query: "code" }))
 
       find(:columnheader, "Revenue").click
-      expect(page).to have_nth_table_row_record(1, "CODE3Discount 3 50% off of all products")
-      expect(page).to have_nth_table_row_record(2, "CODE2Discount 2 $2 off of Product 2")
+      expect(page).to have_nth_table_row_record(1, "CODE3 Discount 3 50% off of all products")
+      expect(page).to have_nth_table_row_record(2, "CODE2 Discount 2 $2 off of Product 2")
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, query: "code", sort: "asc" }))
 
-      select_disclosure "Search" do
+      select_disclosure "Toggle Search" do
         fill_in "Search", with: "Discount 4"
       end
       wait_for_ajax
-      expect(page).to have_nth_table_row_record(1, "DISCOUNT4Discount 4 $1 off of all products")
+      expect(page).to have_nth_table_row_record(1, "DISCOUNT4 Discount 4 $1 off of all products")
       expect(page).to have_current_path(checkout_discounts_path({ column: "revenue", page: 1, query: "Discount 4", sort: "asc" }))
+    end
+  end
+
+  describe "Black Friday banner" do
+    before do
+      Feature.activate(:black_friday_seller_banner)
+    end
+
+    after do
+      Feature.deactivate(:black_friday_seller_banner)
+    end
+
+    it "shows the Black Friday banner when feature is enabled and seller has no BLACKFRIDAY2025 code" do
+      visit checkout_discounts_path
+
+      expect(page).to have_text("Black Friday is here!")
+      expect(page).to have_text("Be part of it on Discover. Join Black Friday Deals to create your discount and get featured.")
+      expect(page).to have_button("Join Black Friday Deals")
+    end
+
+    it "hides the Black Friday banner when seller already has a BLACKFRIDAY2025 code" do
+      create(:offer_code, user: seller, code: "BLACKFRIDAY2025", name: "Black Friday", universal: true, amount_percentage: 25)
+
+      visit checkout_discounts_path
+
+      expect(page).not_to have_text("Black Friday is here!")
+      expect(page).not_to have_button("Join Black Friday Deals")
+    end
+
+    it "hides the Black Friday banner when feature is disabled" do
+      Feature.deactivate(:black_friday_seller_banner)
+
+      visit checkout_discounts_path
+
+      expect(page).not_to have_text("Black Friday is here!")
+      expect(page).not_to have_button("Join Black Friday Deals")
+    end
+
+    it "creates a Black Friday discount with BLACKFRIDAY2025 code when clicking the banner button" do
+      visit checkout_discounts_path
+
+      click_on "Join Black Friday Deals"
+
+      expect(page).to have_section("Create discount")
+      expect(page).to have_field("Discount code", with: "BLACKFRIDAY2025", readonly: true)
+      expect(page).to have_text("By using this discount, your product will be featured in Black Friday Deals on Discover.")
+
+      check "All products"
+      fill_in "Percentage", with: "25"
+
+      click_on "Add discount"
+
+      expect(page).to have_alert(text: "Successfully created discount!")
+      within find(:table_row, { "Discount" => "Black Friday 2025" }) do
+        expect(page).to have_text("25% off of all products")
+        expect(page).to have_selector("[aria-label='Offer code']", text: "BLACKFRIDAY2025")
+      end
+
+      expect(page).not_to have_text("Black Friday is here!")
+
+      offer_code = OfferCode.last
+      expect(offer_code.name).to eq("Black Friday 2025")
+      expect(offer_code.code).to eq("BLACKFRIDAY2025")
+      expect(offer_code.amount_percentage).to eq(25)
+      expect(offer_code.universal).to eq(true)
     end
   end
 end

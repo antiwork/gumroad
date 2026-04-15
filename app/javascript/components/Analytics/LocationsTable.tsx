@@ -3,6 +3,9 @@ import * as React from "react";
 import { AnalyticsDataByState, LocationDataValue } from "$app/data/analytics";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Select } from "$app/components/ui/Select";
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useClientSortingTableDriver } from "$app/components/useSortingTableDriver";
 
 type TableEntry = {
@@ -79,38 +82,38 @@ export const AnalyticsCountriesTable = ({
   });
 
   return (
-    <table>
-      <caption>{caption}</caption>
-      <thead>
-        <tr>
-          <th {...thProps("name")}>Country</th>
-          <th {...thProps("views")}>Views</th>
-          <th {...thProps("sales")}>Sales</th>
-          <th {...thProps("totals")}>Total</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableCaption>{caption}</TableCaption>
+      <TableHeader>
+        <TableRow>
+          <TableHead {...thProps("name")}>Country</TableHead>
+          <TableHead {...thProps("views")}>Views</TableHead>
+          <TableHead {...thProps("sales")}>Sales</TableHead>
+          <TableHead {...thProps("totals")}>Total</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {items.length ? (
           items.map(({ name, totals, sales, views }) => (
-            <tr key={name}>
-              <td data-label="Country">
+            <TableRow key={name}>
+              <TableCell>
                 <CountryFlag countryCode={countries[name] || ""} />
                 {name}
-              </td>
-              <td data-label="Views">{views}</td>
-              <td data-label="Sales">{sales}</td>
-              <td data-label="Total">
+              </TableCell>
+              <TableCell>{views}</TableCell>
+              <TableCell>{sales}</TableCell>
+              <TableCell>
                 {formatPriceCentsWithCurrencySymbol("usd", totals, { symbolFormat: "short", noCentsIfWhole: true })}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))
         ) : (
-          <tr>
-            <td colSpan={4}>Nothing yet</td>
-          </tr>
+          <TableRow>
+            <TableCell colSpan={4}>Nothing yet</TableCell>
+          </TableRow>
         )}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 };
 
@@ -150,31 +153,31 @@ export const AnalyticsStatesTable = ({ locationData, selectedProducts, locations
 
   return (
     <>
-      <table>
-        <caption>{caption}</caption>
-        <thead>
-          <tr>
-            <th {...thProps("name")}>State</th>
-            <th {...thProps("views")}>Views</th>
-            <th {...thProps("sales")}>Sales</th>
-            <th {...thProps("totals")}>Total</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableCaption>{caption}</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead {...thProps("name")}>State</TableHead>
+            <TableHead {...thProps("views")}>Views</TableHead>
+            <TableHead {...thProps("sales")}>Sales</TableHead>
+            <TableHead {...thProps("totals")}>Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {items.map(({ name, totals, sales, views }) => (
-            <tr key={name}>
-              <td data-label="State">{name}</td>
-              <td data-label="Views">{views}</td>
-              <td data-label="Sales">{sales}</td>
-              <td data-label="Total">
+            <TableRow key={name}>
+              <TableCell>{name}</TableCell>
+              <TableCell>{views}</TableCell>
+              <TableCell>{sales}</TableCell>
+              <TableCell>
                 {formatPriceCentsWithCurrencySymbol("usd", totals, { symbolFormat: "short", noCentsIfWhole: true })}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
 
-      {!items.length ? <div className="input mt-4 lg:mt-0">Nothing yet </div> : null}
+      {!items.length ? <InputGroup className="mt-4 lg:mt-0">Nothing yet </InputGroup> : null}
     </>
   );
 };
@@ -195,10 +198,15 @@ export const LocationsTable = ({
   const caption = (
     <div className="flex justify-between">
       Locations
-      <select aria-label="Locations" className="w-fit" value={selected} onChange={(ev) => setSelected(ev.target.value)}>
+      <Select
+        aria-label="Locations"
+        wrapperClassName="w-fit"
+        value={selected}
+        onChange={(ev) => setSelected(ev.target.value)}
+      >
         <option value="world">World</option>
         <option value="us">United States</option>
-      </select>
+      </Select>
     </div>
   );
 

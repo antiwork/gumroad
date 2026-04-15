@@ -22,336 +22,29 @@ describe LinksController, :vcr, inertia: true do
     include_context "with user signed in as admin for seller"
 
     describe "GET index" do
-      before do
-        @membership1 = create(:subscription_product, user: seller)
-        @membership2 = create(:subscription_product, user: seller)
-        @unpublished_membership = create(:subscription_product, user: seller, purchase_disabled_at: Time.current)
-        @other_membership = create(:subscription_product)
-
-        @product1 = create(:product, user: seller)
-        @product2 = create(:product, user: seller)
-        @unpublished_product = create(:product, user: seller, purchase_disabled_at: Time.current)
-        @other_product = create(:product)
-      end
-
       it_behaves_like "authorize called for action", :get, :index do
         let(:record) { Link }
       end
 
-      it "returns seller's products" do
+      it "renders the Products/Index component with correct props" do
         get :index
 
-        memberships = assigns(:memberships)
-        expect(memberships).to include(@membership1)
-        expect(memberships).to include(@membership2)
-        expect(memberships).to include(@unpublished_membership)
-        expect(memberships).to_not include(@other_membership)
+        expect(response).to be_successful
+        expect(inertia).to render_component("Products/Index")
+        expect(inertia.props).to include(
+          :has_products,
+          :archived_products_count,
+          :can_create_product
+        )
+        expect(inertia.props).not_to include(:products_data, :memberships_data)
 
-        products = assigns(:products)
-        expect(products).to include(@product1)
-        expect(products).to include(@product2)
-        expect(products).to include(@unpublished_product)
-        expect(products).to_not include(@other_product)
-      end
-
-      it "does not return the deleted products" do
-        @membership2.update!(deleted_at: Time.current)
-        @product2.update!(deleted_at: Time.current)
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Data"] = "products_data,memberships_data"
+        request.headers["X-Inertia-Partial-Component"] = "Products/Index"
         get :index
 
-        expect(assigns(:memberships)).to_not include(@membership2)
-        expect(assigns(:products)).to_not include(@product2)
-      end
-
-      it "does not return archived products" do
-        @membership2.update!(archived: true)
-        @product2.update!(archived: true)
-
-        get :index
-
-        expect(assigns(:memberships)).to_not include(@membership2)
-        expect(assigns(:products)).to_not include(@product2)
-      end
-
-      describe "shows the correct number of sales" do
-        def expect_sales_count_in_inertia_response(expected_count)
-          products = inertia.props[:react_products_page_props][:products]
-          expect(products).to be_present, "Expected products in Inertia.js response"
-          expect(products.first[:successful_sales_count]).to eq(expected_count)
-        end
-
-        it "with a single sale" do
-          allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1)
-
-          get(:index)
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          expect_sales_count_in_inertia_response(1)
-        end
-
-        it "with over a thousand sales, comma-delimited" do
-          allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(3_030)
-          get(:index)
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          expect_sales_count_in_inertia_response(3_030)
-        end
-
-        it "shows comma-delimited pre-orders count" do
-          @product1.update_attribute(:is_in_preorder_state, true)
-          allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(424_242)
-          get(:index)
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          expect_sales_count_in_inertia_response(424_242)
-        end
-
-        it "shows comma-delimited subscribers count" do
-          create(:subscription_product, user: seller)
-          allow_any_instance_of(Link).to receive(:successful_sales_count).and_return(1_111)
-          get(:index)
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          expect_sales_count_in_inertia_response(1_111)
-        end
-      end
-
-      describe "visible product URLs" do
-        it "shows product URL without the protocol part" do
-          get :index
-
-          expect(response).to be_successful
-
-          expect(inertia).to render_component("Products/Index")
-
-          products = inertia.props[:react_products_page_props][:products]
-          expect(products).to be_present
-          expect(products.first[:url_without_protocol]).to be_present
-        end
-      end
-    end
-
-    describe "GET memberships_paged" do
-      before do
-        @memberships_per_page = 2
-        stub_const("LinksController::PER_PAGE", @memberships_per_page)
-      end
-
-      it_behaves_like "authorize called for action", :get, :memberships_paged do
-        let(:record) { Link }
-        let(:policy_method) { :index? }
-      end
-
-      describe "membership sorting + pagination", :elasticsearch_wait_for_refresh do
-        include_context "with products and memberships"
-
-        it_behaves_like "an API for sorting and pagination", :memberships_paged do
-          let!(:default_order) { [membership2, membership3, membership4, membership1] }
-          let!(:columns) do
-            {
-              "name" => [membership1, membership2, membership3, membership4],
-              "successful_sales_count" => [membership4, membership1, membership3, membership2],
-              "revenue" => [membership4, membership1, membership3, membership2],
-              "display_price_cents" => [membership4, membership3, membership2, membership1]
-            }
-          end
-          let!(:boolean_columns) { { "status" => [membership3, membership4, membership2, membership1] } }
-        end
-      end
-
-      describe "more than 2n visible memberships" do
-        before do
-          @memberships_count = 2 * @memberships_per_page + 1
-          @memberships_count.times { create(:subscription_product, user: seller) }
-        end
-
-        it "returns success on page 1" do
-          get :memberships_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @memberships_per_page
-        end
-
-        it "returns success on page 2" do
-          get :memberships_paged, params: { page: 2 }
-          expect(response.parsed_body["entries"].length).to eq @memberships_per_page
-        end
-
-        it "returns success on page 3" do
-          get :memberships_paged, params: { page: 3 }
-          expect(response.parsed_body["entries"].length).to eq 1
-        end
-      end
-
-      describe "between n and 2n visible memberships" do
-        before do
-          @memberships_count = @memberships_per_page + 1
-          @memberships_count.times { create(:subscription_product, user: seller) }
-        end
-
-        it "returns correctly on page 1" do
-          get :memberships_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @memberships_per_page
-        end
-
-        it "returns correctly on page 2" do
-          get :memberships_paged, params: { page: 2 }
-          expect(response.parsed_body["entries"].length).to eq 1
-        end
-
-        it "raises on page overflow" do
-          expect { get :memberships_paged, params: { page: 3 } }.to raise_error(Pagy::OverflowError)
-        end
-
-        describe "has some deleted memberships" do
-          before do
-            3.times { create(:subscription_product, user: seller, deleted_at: Time.current) }
-          end
-
-          it "returns correctly on page 1" do
-            get :memberships_paged, params: { page: 1 }
-            expect(response.parsed_body["entries"].length).to eq @memberships_per_page
-          end
-
-          it "returns correctly on page 2" do
-            get :memberships_paged, params: { page: 2 }
-            expect(response.parsed_body["entries"].length).to eq 1
-          end
-
-          it "raises on page overflow" do
-            expect { get :memberships_paged, params: { page: 3 } }.to raise_error(Pagy::OverflowError)
-          end
-        end
-      end
-
-      describe "< n visible memberships" do
-        before do
-          @published_count = @memberships_per_page - 1
-          @published_count.times { create(:subscription_product, user: seller) }
-        end
-
-        it "returns correctly on page 1" do
-          get :memberships_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @memberships_per_page - 1
-        end
-
-        it "raises on page overflow" do
-          expect { get :memberships_paged, params: { page: 2 } }.to raise_error(Pagy::OverflowError)
-        end
-      end
-    end
-
-    describe "GET products_paged" do
-      before do
-        @products_per_page = 2
-        stub_const("LinksController::PER_PAGE", @products_per_page)
-      end
-
-      it_behaves_like "authorize called for action", :get, :products_paged do
-        let(:record) { Link }
-        let(:policy_method) { :index? }
-      end
-
-      describe "non-membership sorting + pagination", :elasticsearch_wait_for_refresh do
-        include_context "with products and memberships"
-
-        it_behaves_like "an API for sorting and pagination", :products_paged do
-          let!(:default_order) { [product1, product3, product4, product2] }
-          let!(:columns) do
-            {
-              "name" => [product1, product2, product3, product4],
-              "successful_sales_count" => [product1, product2, product3, product4],
-              "revenue" => [product3, product2, product1, product4],
-              "display_price_cents" => [product3, product4, product2, product1]
-            }
-          end
-          let!(:boolean_columns) { { "status" => [product3, product4, product1, product2] } }
-        end
-      end
-
-      describe "more than 2n visible products" do
-        before do
-          @products_count = 2 * @products_per_page + 1
-          @products_count.times { create(:product, user: seller) }
-        end
-
-        it "returns success on page 1" do
-          get :products_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @products_per_page
-        end
-
-        it "returns success on page 2" do
-          get :products_paged, params: { page: 2 }
-          expect(response.parsed_body["entries"].length).to eq @products_per_page
-        end
-
-        it "returns success on page 3" do
-          get :products_paged, params: { page: 3 }
-          expect(response.parsed_body["entries"].length).to eq 1
-        end
-      end
-
-      describe "between n and 2n visible products" do
-        before do
-          @products_count = @products_per_page + 1
-          @products_count.times { create(:product, user: seller) }
-        end
-
-        it "returns correctly on page 1" do
-          get :products_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @products_per_page
-        end
-
-        it "returns correctly on page 2" do
-          get :products_paged, params: { page: 2 }
-          expect(response.parsed_body["entries"].length).to eq 1
-        end
-
-        it "raises on page overflow" do
-          expect { get :products_paged, params: { page: 3 } }.to raise_error(Pagy::OverflowError)
-        end
-
-        describe "has some deleted products" do
-          before do
-            3.times { create(:product, user: seller, deleted_at: Time.current) }
-          end
-
-          it "returns correctly on page 1" do
-            get :products_paged, params: { page: 1 }
-            expect(response.parsed_body["entries"].length).to eq @products_per_page
-          end
-
-          it "returns correctly on page 2" do
-            get :products_paged, params: { page: 2 }
-            expect(response.parsed_body["entries"].length).to eq 1
-          end
-
-          it "raises on page overflow" do
-            expect { get :products_paged, params: { page: 3 } }.to raise_error(Pagy::OverflowError)
-          end
-        end
-      end
-
-      describe "< n visible products" do
-        before do
-          @published_count = @products_per_page - 1
-          @published_count.times { create(:product, user: seller) }
-        end
-
-        it "returns correctly on page 1" do
-          get :products_paged, params: { page: 1 }
-          expect(response.parsed_body["entries"].length).to eq @products_per_page - 1
-        end
-
-        it "raises on page overflow" do
-          expect { get :products_paged, params: { page: 2 } }.to raise_error(Pagy::OverflowError)
-        end
+        expect(inertia.props["products_data"]).to include("products", "pagination", "sort")
+        expect(inertia.props["memberships_data"]).to include("memberships", "pagination", "sort")
       end
     end
 
@@ -427,8 +120,8 @@ describe LinksController, :vcr, inertia: true do
           allow_any_instance_of(Link).to receive(:publish!).and_raise("error")
         end
 
-        it "sends a Bugsnag notification" do
-          expect(Bugsnag).to receive(:notify).once
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify).once
 
           post :publish, params: { id: @disabled_link.unique_permalink }
         end
@@ -468,6 +161,19 @@ describe LinksController, :vcr, inertia: true do
         let(:request_params) { { id: product.unique_permalink } }
       end
 
+      it "succeeds when the product has an expired default offer code" do
+        offer_code = create(:offer_code, user: seller, products: [product])
+        product.update_column(:default_offer_code_id, offer_code.id)
+        offer_code.update_column(:expires_at, 1.day.ago)
+
+        sections = create_list(:seller_profile_products_section, 2, seller:, product:)
+
+        put :update_sections, params: { id: product.unique_permalink, sections: sections.map(&:external_id), main_section_index: 0 }
+
+        expect(response).to have_http_status(:no_content)
+        expect(product.reload.sections).to eq(sections.map(&:id))
+      end
+
       it "updates the SellerProfileSections attached to the product and cleans up orphaned sections" do
         sections = create_list(:seller_profile_products_section, 2, seller:, product:)
         create(:seller_profile_posts_section, seller:, product:)
@@ -505,6 +211,17 @@ describe LinksController, :vcr, inertia: true do
           expect(@product.reload.deleted_at.present?).to be(true)
         end
       end
+
+      it "allows deletion when default_offer_code is no longer associated with the product" do
+        product = create(:product, user: seller)
+        offer_code = create(:offer_code, user: seller, products: [product])
+        product.update!(default_offer_code: offer_code)
+        offer_code.products = []
+
+        delete :destroy, params: { id: product.unique_permalink }
+
+        expect(product.reload.deleted_at).to be_present
+      end
     end
 
     describe "GET edit" do
@@ -515,13 +232,13 @@ describe LinksController, :vcr, inertia: true do
         let(:request_params) { { id: product.unique_permalink } }
       end
 
-      it "assigns the correct instance variables" do
+      it "renders the Inertia product edit page" do
         get :edit, params: { id: product.unique_permalink }
         expect(response).to be_successful
-
-        product_presenter = assigns(:presenter)
-        expect(product_presenter.product).to eq(product)
-        expect(product_presenter.pundit_user).to eq(controller.pundit_user)
+        expect(inertia).to render_component("Products/Edit")
+        expect(inertia.props[:id]).to eq(product.external_id)
+        expect(inertia.props[:unique_permalink]).to eq(product.unique_permalink)
+        expect(inertia.props[:dropbox_api_key]).to eq(DROPBOX_PICKER_API_KEY)
       end
 
       context "with other user not owning the product" do
@@ -556,7 +273,15 @@ describe LinksController, :vcr, inertia: true do
         it "redirects to the bundle edit page" do
           sign_in bundle.user
           get :edit, params: { id: bundle.unique_permalink }
-          expect(response).to redirect_to(bundle_path(bundle.external_id))
+          expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
+        end
+      end
+
+      context "with wildcard sub-path" do
+        it "renders the Inertia page for sub-routes" do
+          get :edit, params: { id: product.unique_permalink, other: "content" }
+          expect(response).to be_successful
+          expect(inertia).to render_component("Products/Edit")
         end
       end
     end
@@ -572,6 +297,8 @@ describe LinksController, :vcr, inertia: true do
           description: "New description",
           custom_button_text_option: "pay_prompt",
           custom_summary: "summary",
+          custom_view_content_button_text: "Get Your Files",
+          custom_receipt_text: "Thank you for purchasing! Feel free to contact us any time for support.",
           custom_attributes: [
             {
               name: "name",
@@ -729,6 +456,8 @@ describe LinksController, :vcr, inertia: true do
         expect(@product.reload.name).to eq "sumlink"
         expect(@product.custom_button_text_option).to eq "pay_prompt"
         expect(@product.custom_summary).to eq "summary"
+        expect(@product.custom_view_content_button_text).to eq "Get Your Files"
+        expect(@product.custom_receipt_text).to eq "Thank you for purchasing! Feel free to contact us any time for support."
         expect(@product.custom_attributes).to eq [{ "name" => "name", "value" => "value" }]
         expect(@product.removed_file_info_attributes).to eq [:Size]
         expect(@product.product_refund_policy_enabled).to be(false)
@@ -1153,6 +882,65 @@ describe LinksController, :vcr, inertia: true do
           end
         end
 
+        describe "default discount code" do
+          let(:offer_code) { create(:offer_code, user: @product.user, products: [@product]) }
+          let(:universal_offer_code) { create(:universal_offer_code, user: @product.user) }
+          let(:other_user_offer_code) { create(:offer_code) }
+
+          it "sets the default offer code when a valid product offer code is provided" do
+            @params[:default_offer_code_id] = offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to eq(offer_code)
+          end
+
+          it "sets the default offer code when a valid universal offer code is provided" do
+            @params[:default_offer_code_id] = universal_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to eq(universal_offer_code)
+          end
+
+          it "does not set the default offer code when offer code belongs to another user" do
+            @params[:default_offer_code_id] = other_user_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
+          it "does not set the default offer code when offer code is not associated with the product" do
+            unassociated_offer_code = create(:offer_code, user: @product.user)
+            @params[:default_offer_code_id] = unassociated_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
+          it "does not set the default offer code when offer code is expired" do
+            expired_offer_code = create(:offer_code, user: @product.user, products: [@product], valid_at: 2.days.ago, expires_at: 1.day.ago)
+            @params[:default_offer_code_id] = expired_offer_code.external_id
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
+          it "clears the default offer code when nil is provided" do
+            @product.update!(default_offer_code: offer_code)
+            @params[:default_offer_code_id] = nil
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+
+          it "clears the default offer code when empty string is provided" do
+            @product.update!(default_offer_code: offer_code)
+            @params[:default_offer_code_id] = ""
+            post :update, params: @params, format: :json
+
+            expect(@product.reload.default_offer_code).to be_nil
+          end
+        end
+
         context "with pay-what-you-want pricing" do
           it "sets the suggested prices" do
             @params.merge!(
@@ -1542,6 +1330,43 @@ describe LinksController, :vcr, inertia: true do
 
           new_external_id_1, new_external_id_2 = @product.product_files.alive.map(&:external_id)
           expect(@product.reload.rich_content_json).to eq([{ id: rich_content.external_id, page_id: rich_content.external_id, variant_id: nil, title: "Page title", description: { type: "doc", content: old_rich_content.dup.concat([{ "type" => "fileEmbed", "attrs" => { "id" => new_external_id_1, "uid" => "64e84875-c795-567c-d2dd-96336ab093d5" } }, { "type" => "fileEmbed", "attrs" => { "id" => new_external_id_2, "uid" => "0c042930-2df1-4583-82ef-a6317213868d" } }]) }, updated_at: rich_content.reload.updated_at }])
+        end
+
+        it "does not produce transitive ID collisions when a new file's external_id matches another file's placeholder ID" do
+          rich_content_node = {
+            "type" => "doc",
+            "content" => [
+              { "type" => "fileEmbed", "attrs" => { "id" => "placeholder_a" } },
+              { "type" => "fileEmbed", "attrs" => { "id" => "placeholder_b" } },
+            ],
+          }
+
+          mappings = {
+            "placeholder_a" => "placeholder_b",  # File A's new external_id == File B's old placeholder
+            "placeholder_b" => "real_b",          # File B's new external_id
+          }
+
+          @product.send(:apply_rich_content_id_mappings, rich_content_node, mappings)
+
+          embed_ids = rich_content_node["content"].map { |node| node["attrs"]["id"] }
+          expect(embed_ids).to eq(["placeholder_b", "real_b"])
+        end
+
+        it "handles nil nodes in rich content without crashing" do
+          rich_content_node = {
+            "type" => "doc",
+            "content" => [
+              { "type" => "fileEmbed", "attrs" => { "id" => "placeholder_a" } },
+              nil,
+              { "type" => "paragraph", "content" => nil },
+              { "type" => "paragraph", "content" => [nil, { "type" => "text", "text" => "hello" }] },
+              { "type" => "fileEmbed", "attrs" => nil },
+            ]
+          }
+          mappings = { "placeholder_a" => "real_a" }
+
+          expect { @product.send(:apply_rich_content_id_mappings, rich_content_node, mappings) }.not_to raise_error
+          expect(rich_content_node["content"][0]["attrs"]["id"]).to eq("real_a")
         end
 
         it "saves variant-level rich content containing file embeds with the persisted IDs" do
@@ -2991,7 +2816,7 @@ describe LinksController, :vcr, inertia: true do
         get :new
 
         expect(response).to be_successful
-        expect(assigns[:title]).to eq("What are you creating?")
+        expect(controller.send(:page_title)).to eq("What are you creating?")
 
         expect(inertia).to render_component("Products/New")
 
@@ -3008,7 +2833,7 @@ describe LinksController, :vcr, inertia: true do
         get :new
 
         expect(response).to be_successful
-        expect(assigns[:title]).to eq("What are you creating?")
+        expect(controller.send(:page_title)).to eq("What are you creating?")
 
         expect(inertia).to render_component("Products/New")
 
@@ -3025,7 +2850,7 @@ describe LinksController, :vcr, inertia: true do
         get :new
 
         expect(response).to be_successful
-        expect(assigns[:title]).to eq("What are you creating?")
+        expect(controller.send(:page_title)).to eq("What are you creating?")
 
         expect(inertia).to render_component("Products/New")
 
@@ -3047,38 +2872,19 @@ describe LinksController, :vcr, inertia: true do
         let(:record) { Link }
       end
 
-      it "succeeds with name and price" do
-        params = { price_cents: 100, name: "test link" }
-
-        post :create, params: { format: :json, link: params }
-
-        expect(response.parsed_body["success"]).to be(true)
-      end
-
-      it "fails if price missing" do
-        params = { name: "test link" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to_not be(true)
-      end
-
-      it "fails if name is missing" do
-        params = { price_cents: 100 }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(false)
-      end
 
       it "creates link with display_product_reviews set to true" do
         params = { price_cents: 100, name: "test link" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         link = seller.links.last
         expect(link.display_product_reviews).to be(true)
       end
 
       it "ignores is_in_preorder_state param" do
         params = { price_cents: 100, name: "preorder", is_in_preorder_state: true, release_at: 1.year.from_now.iso8601 }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         link = seller.links.last
         expect(link.name).to eq "preorder"
         expect(link.price_cents).to eq 100
@@ -3087,27 +2893,27 @@ describe LinksController, :vcr, inertia: true do
 
       it "is able to set currency type" do
         params = { price_cents: 100, name: "test link", url: @s3_url, price_currency_type: "jpy" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         expect(Link.last.price_currency_type).to eq "jpy"
       end
 
       it "creates the product if no files are provided" do
         params = { price_cents: 100, name: "test link", files: {} }
-        expect { post :create, params: { format: :json, link: params } }.to change { seller.links.count }.by(1)
+        expect { post :create, params: { link: params } }.to change { seller.links.count }.by(1)
       end
 
       it "assigns 'other' taxonomy" do
         params = { price_cents: 100, name: "test link" }
-        post :create, params: { format: :json, link: params }
-        expect(response.parsed_body["success"]).to be(true)
+        post :create, params: { link: params }
+        expect(response).to redirect_to(edit_link_path(Link.last))
         expect(Link.last.taxonomy).to eq(Taxonomy.find_by(slug: "other"))
       end
 
       context "when the product's native type is bundle" do
         it "sets is_bundle to true" do
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Bundle", native_type: "bundle" } }
-          expect(response.parsed_body["success"]).to be(true)
+          post :create, params: { link: { price_cents: 100, name: "Bundle", native_type: "bundle" } }
+          expect(response).to redirect_to(edit_link_path(Link.last))
 
           product = Link.last
           expect(product.native_type).to eq("bundle")
@@ -3119,8 +2925,8 @@ describe LinksController, :vcr, inertia: true do
         let(:seller) { create(:user, :eligible_for_service_products) }
 
         it "sets custom_button_text_option to 'donate_prompt'" do
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Coffee", native_type: "coffee" } }
-          expect(response.parsed_body["success"]).to be(true)
+          post :create, params: { link: { price_cents: 100, name: "Coffee", native_type: "coffee" } }
+          expect(response).to redirect_to(edit_link_path(Link.last))
 
           product = Link.last
           expect(product.native_type).to eq("coffee")
@@ -3185,8 +2991,8 @@ describe LinksController, :vcr, inertia: true do
           end
 
           it "allows users to create physical products" do
-            post :create, params: { format: :json, link: @params }
-            expect(response.parsed_body["success"]).to be(true)
+            post :create, params: { link: @params }
+            expect(response).to redirect_to(edit_link_path(Link.last))
             product = Link.last
             expect(product.is_physical).to be(true)
             expect(product.skus_enabled).to be(false)
@@ -3195,7 +3001,7 @@ describe LinksController, :vcr, inertia: true do
 
         context "when physical products are disabled" do
           it "returns forbidden" do
-            post :create, params: { format: :json, link: @params }
+            post :create, params: { link: @params }
             expect(response).to have_http_status(:forbidden)
           end
         end
@@ -3210,9 +3016,9 @@ describe LinksController, :vcr, inertia: true do
           it "does not enable community chat by default" do
             params = { price_cents: 100, name: "test link" }
 
-            post :create, params: { format: :json, link: params }
+            post :create, params: { link: params }
 
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(edit_link_path(Link.last))
             product = seller.links.last
             expect(product.community_chat_enabled?).to be(false)
             expect(product.active_community).to be_nil
@@ -3227,9 +3033,9 @@ describe LinksController, :vcr, inertia: true do
           it "does not enable community chat" do
             params = { price_cents: 100, name: "test link" }
 
-            post :create, params: { format: :json, link: params }
+            post :create, params: { link: params }
 
-            expect(response.parsed_body["success"]).to be(true)
+            expect(response).to redirect_to(edit_link_path(Link.last))
             product = seller.links.last
             expect(product.community_chat_enabled?).to be(false)
             expect(product.active_community).to be_nil
@@ -3268,11 +3074,11 @@ describe LinksController, :vcr, inertia: true do
           allow_any_instance_of(Link).to receive_message_chain(:asset_previews, :build).and_return(nil)
           allow_any_instance_of(Link).to receive(:build_thumbnail).and_return(nil)
 
-          post :create, params: { format: :json, link: params }
+          post :create, params: { link: params }
 
           expect(service_double).to have_received(:generate_cover_image)
           expect(service_double).to have_received(:generate_rich_content_pages)
-          expect(response.parsed_body["success"]).to eq(true)
+          expect(response).to redirect_to(edit_link_path(Link.last, ai_generated: true))
 
           link = Link.last
           expect(link.name).to eq("UX design mastery using Figma")
@@ -3294,7 +3100,7 @@ describe LinksController, :vcr, inertia: true do
           expect(service_double).not_to receive(:generate_cover_image)
           expect(service_double).not_to receive(:generate_rich_content_pages)
 
-          post :create, params: { format: :json, link: params }
+          post :create, params: { link: params }
         end
 
         it "does not call AI service when ai_prompt is blank" do
@@ -3303,7 +3109,7 @@ describe LinksController, :vcr, inertia: true do
           expect(service_double).not_to receive(:generate_cover_image)
           expect(service_double).not_to receive(:generate_rich_content_pages)
 
-          post :create, params: { format: :json, link: { price_cents: 100, name: "Regular Product" } }
+          post :create, params: { link: { price_cents: 100, name: "Regular Product" } }
         end
       end
     end
@@ -3430,6 +3236,52 @@ describe LinksController, :vcr, inertia: true do
         end
       end
 
+      describe "layout variants" do
+        it "renders Products/Show with product props for default layout" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Show")
+          expect(inertia.props[:product]).to be_present
+          expect(inertia.props[:product][:name]).to eq(link.name)
+        end
+
+        it "renders Products/Profile/Show with creator_profile for profile layout" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, layout: "profile" }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Profile/Show")
+          expect(inertia.props[:creator_profile]).to be_present
+          expect(inertia.props[:product]).to be_present
+        end
+
+        it "renders Products/Discover/Show with taxonomy props for discover layout" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, layout: "discover" }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Discover/Show")
+          expect(inertia.props).to have_key(:taxonomy_path)
+          expect(inertia.props).to have_key(:taxonomies_for_nav)
+          expect(inertia.props[:product]).to be_present
+        end
+
+        it "renders Products/Iframe/Show with product props for embed param" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, embed: "true" }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Iframe/Show")
+          expect(inertia.props[:product]).to be_present
+        end
+
+        it "renders Products/Iframe/Show with product props for overlay param" do
+          link = create(:product, user: @user)
+          get :show, params: { id: link.to_param, overlay: "true" }
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Products/Iframe/Show")
+          expect(inertia.props[:product]).to be_present
+        end
+      end
+
       describe "wanted=true parameter" do
         it "passes pay_in_installments parameter to checkout when wanted=true" do
           get :show, params: { id: product.to_param, wanted: "true", pay_in_installments: "true" }
@@ -3455,6 +3307,129 @@ describe LinksController, :vcr, inertia: true do
           expect(response).to be_successful
           expect(response).not_to be_redirect
         end
+
+        describe "discount code selection" do
+          let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 200, currency_type: product.price_currency_type) }
+          let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 300, currency_type: product.price_currency_type) }
+
+          before do
+            product.update!(default_offer_code: default_offer_code)
+          end
+
+          context "when URL code has better discount than default code" do
+            let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 400, currency_type: product.price_currency_type) }
+            let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 200, currency_type: product.price_currency_type) }
+
+            it "uses the URL code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(url_offer_code.code)
+            end
+          end
+
+          context "when default code has better discount than URL code" do
+            let(:url_offer_code) { create(:offer_code, products: [product], code: "URL10", amount_cents: 200, currency_type: product.price_currency_type) }
+            let(:default_offer_code) { create(:offer_code, products: [product], code: "DEFAULT10", amount_cents: 400, currency_type: product.price_currency_type) }
+
+            it "uses the default code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          context "when only URL code is provided" do
+            before do
+              product.update!(default_offer_code: nil)
+            end
+
+            it "uses the URL code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(url_offer_code.code)
+            end
+          end
+
+          context "when only default code is provided" do
+            it "uses the default code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true" }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          context "when URL code is invalid and default code is valid" do
+            it "uses the default code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: "INVALID" }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          context "when both codes are invalid" do
+            before do
+              product.update!(default_offer_code: nil)
+            end
+
+            it "does not include code in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", code: "INVALID" }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              expect(query_params["code"]).to be_nil
+            end
+          end
+
+          context "when discount code is passed as offer_code param (embed/legacy URLs)" do
+            it "picks up offer_code and uses the better of URL code and default in checkout redirect" do
+              get :show, params: { id: product.to_param, wanted: "true", offer_code: url_offer_code.code }
+
+              expect(response).to be_redirect
+              redirect_url = URI.parse(response.location)
+              query_params = Rack::Utils.parse_query(redirect_url.query)
+              # Default (300) is better than URL code (200), so redirect uses default
+              expect(query_params["code"]).to eq(default_offer_code.code)
+            end
+          end
+
+          it "includes code exactly once in redirect query string when code param is passed" do
+            get :show, params: { id: product.to_param, wanted: "true", code: url_offer_code.code }
+
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            query_string = redirect_url.query
+
+            code_param_count = query_string.split("&").count { |param| param.start_with?("code=") }
+            expect(code_param_count).to eq(1), "Expected code to appear exactly once in query string, got: #{query_string}"
+          end
+
+          it "includes code exactly once in redirect query string when offer_code param is passed" do
+            get :show, params: { id: product.to_param, wanted: "true", offer_code: url_offer_code.code }
+
+            expect(response).to be_redirect
+            redirect_url = URI.parse(response.location)
+            query_string = redirect_url.query
+
+            code_param_count = query_string.split("&").count { |param| param.start_with?("code=") }
+            expect(code_param_count).to eq(1), "Expected code to appear exactly once in query string, got: #{query_string}"
+          end
+        end
       end
 
       context "with user signed in" do
@@ -3469,9 +3444,8 @@ describe LinksController, :vcr, inertia: true do
           get :show, params: { id: product.to_param }
 
           expect(response).to be_successful
-          product_props = assigns(:product_props)
-          expect(product_props[:product][:id]).to eq(product.external_id)
-          expect(product_props[:purchase][:id]).to eq(purchase.external_id)
+          expect(inertia.props[:product][:id]).to eq(product.external_id)
+          expect(inertia.props[:purchase][:id]).to eq(purchase.external_id)
         end
       end
 
@@ -3516,21 +3490,12 @@ describe LinksController, :vcr, inertia: true do
           @product = create(:product_with_file_and_preview, user: @user)
         end
 
-        it "renders the preview container" do
+        it "includes asset preview data in Inertia props" do
           get(:show, params: { id: @product.to_param })
 
           expect(response).to be_successful
-          expect(response.body).to have_selector("[role=tabpanel][id='#{@product.asset_previews.first.guid}']")
-        end
-
-        it "shows preview navigation controls when there is more than one preview" do
-          get(:show, params: { id: @product.to_param })
-          expect(response.body).to_not have_button("Show next cover")
-          expect(response.body).to_not have_tablist("Select a cover")
-          create(:asset_preview, link: @product)
-          get(:show, params: { id: @product.to_param })
-          expect(response.body).to have_tablist("Select a cover")
-          expect(response.body).to have_button("Show next cover")
+          expect(inertia.component).to eq("Products/Show")
+          expect(inertia.props[:product]).to be_present
         end
       end
 
@@ -3653,97 +3618,76 @@ describe LinksController, :vcr, inertia: true do
       end
 
       describe "product information markup" do
-        it "renders schema.org item props for classic product" do
+        it "sets server-side meta tags for classic product" do
           product = create(:product, user: @user, price_currency_type: "usd", price_cents: 525)
-          purchase = create(:purchase, link: product)
-          create(:product_review, purchase:)
           create(:asset_preview, link: product, unsplash_url: "https://images.unsplash.com/example.jpeg", attach: false)
 
           get :show, params: { id: product.unique_permalink }
 
           expect(response).to be_successful
-          expect(response.body).to have_selector("[itemprop='offers'][itemtype='https://schema.org/Offer']")
-          expect(response.body).to have_selector("link[itemprop='url'][href='#{product.long_url}']")
-          expect(response.body).to have_selector("[itemprop='availability']", text: "https://schema.org/InStock", visible: false)
-          expect(response.body).to have_selector("[itemprop='reviewCount']", text: product.reviews_count, visible: false)
-          expect(response.body).to have_selector("[itemprop='ratingValue']", text: "1", visible: false)
-          expect(response.body).to have_selector("[itemprop='price']", text: product.price_formatted_without_dollar_sign, visible: false)
-          expect(response.body).to have_selector("[itemprop='seller'][itemtype='https://schema.org/Person']", visible: false)
-          expect(response.body).to have_selector("[itemprop='name']", text: @user.name, visible: false)
-          # Can't use assert_selector, it doesn't work for tags in head
           html_doc = Nokogiri::HTML(response.body)
           expect(html_doc.css("meta[content='#{product.long_url}'][property='og:url']")).to be_present
           expect(html_doc.css("meta[property='product:retailer_item_id'][content='#{product.unique_permalink}']")).to be_present
           expect(html_doc.css("meta[property='product:price:amount'][content='5.25']")).to be_present
           expect(html_doc.css("meta[property='product:price:currency'][content='USD']")).to be_present
           expect(html_doc.css("meta[content='#{product.preview_url}'][property='og:image']")).to be_present
+          expect(html_doc.css("link[rel='canonical'][href='#{product.long_url}']")).to be_present
         end
 
-        it "renders schema.org item props for product over $1000" do
+        it "sets server-side meta tags for product over $1000" do
           product = create(:product, user: @user, price_cents: 1_000_00)
-          purchase = create(:purchase, link: product)
-          create(:product_review, purchase:)
 
           get :show, params: { id: product.unique_permalink }
 
           expect(response).to be_successful
-          expect(response.body).to have_selector("[itemprop='offers'][itemtype='https://schema.org/Offer']")
-          expect(response.body).to have_selector("link[itemprop='url'][href='#{product.long_url}']")
-          expect(response.body).to have_selector("[itemprop='availability']", text: "https://schema.org/InStock", visible: false)
-          expect(response.body).to have_selector("[itemprop='reviewCount']", text: product.reviews_count, visible: false)
-          expect(response.body).to have_selector("[itemprop='ratingValue']", text: "1", visible: false)
-          expect(response.body).to have_selector("[itemprop='price'][content='1000']")
-          expect(response.body).to have_selector("[itemprop='priceCurrency']", text: product.price_currency_type, visible: false)
-          # Can't use assert_selector, it doesn't work for tags in head
           html_doc = Nokogiri::HTML(response.body)
           expect(html_doc.css("meta[property='product:retailer_item_id'][content='#{product.unique_permalink}']")).to_not be_empty
           expect(html_doc.css("meta[content='#{product.long_url}'][property='og:url']")).to_not be_empty
+          expect(html_doc.css("meta[property='product:price:amount'][content='1000.0']")).to_not be_empty
+          expect(html_doc.css("meta[property='product:price:currency'][content='USD']")).to_not be_empty
         end
 
-        it "does not render product review count and rating markup if product has no review" do
+        it "sets canonical and og:url meta tags for product without reviews" do
           product = create(:product, user: @user)
           get :show, params: { id: product.unique_permalink }
-          expect(response.body).to have_selector("link[itemprop='url'][href='#{product.long_url}']")
-          expect(response.body).to_not have_selector("div[itemprop='reviewCount']")
-          expect(response.body).to_not have_selector("div[itemprop='ratingValue']")
-          expect(response.body).to_not have_selector("div[itemprop='aggregateRating']")
+
+          expect(response).to be_successful
           html_doc = Nokogiri::HTML(response.body)
           expect(html_doc.css("meta[content='#{product.long_url}'][property='og:url']")).to_not be_empty
+          expect(html_doc.css("link[rel='canonical'][href='#{product.long_url}']")).to_not be_empty
         end
 
-        it "renders schema.org item props for single-tier membership product" do
-          recurrence_price_values = {
-            BasePrice::Recurrence::MONTHLY => { enabled: true, price: 2.5 },
-            BasePrice::Recurrence::BIANNUALLY => { enabled: true, price: 15 },
-            BasePrice::Recurrence::YEARLY => { enabled: true, price: 30 },
-          }
+        it "sets server-side meta tags for membership product" do
           product = create(:membership_product, user: @user)
-          product.default_tier.save_recurring_prices!(recurrence_price_values)
           get :show, params: { id: product.unique_permalink }
+
           expect(response).to be_successful
-          expect(response.body).to have_selector("div[itemprop='offers'][itemtype='https://schema.org/AggregateOffer']")
-          expect(response.body).to have_selector("div[itemprop='offerCount']", text: "1", visible: false)
-          expect(response.body).to have_selector("div[itemprop='lowPrice']", text: "2.50", visible: false)
-          expect(response.body).to have_selector("div[itemprop='priceCurrency']", text: product.price_currency_type, visible: false)
-          expect(response.body).to have_selector("[itemprop='offer'][itemtype='https://schema.org/Offer']", count: 1)
-          expect(response.body).to have_selector("div[itemprop='price']", text: "2.50", count: 2, visible: false)
+          html_doc = Nokogiri::HTML(response.body)
+          expect(html_doc.css("meta[property='product:retailer_item_id'][content='#{product.unique_permalink}']")).to be_present
+          expect(html_doc.css("meta[content='#{product.long_url}'][property='og:url']")).to be_present
+          expect(html_doc.css("link[rel='canonical'][href='#{product.long_url}']")).to be_present
         end
 
-        it "renders schema.org item props for multi-tier membership product" do
-          recurrence_price_values = [
-            { BasePrice::Recurrence::MONTHLY => { enabled: true, price: 2.5 } },
-            { BasePrice::Recurrence::MONTHLY => { enabled: true, price: 5 } }
-          ]
-          product = create(:membership_product_with_preset_tiered_pricing, recurrence_price_values:, user: @user)
+        it "includes product data in Inertia props" do
+          product = create(:product, user: @user, price_currency_type: "usd", price_cents: 525)
           get :show, params: { id: product.unique_permalink }
+
           expect(response).to be_successful
-          expect(response.body).to have_selector("div[itemprop='offers'][itemtype='https://schema.org/AggregateOffer']")
-          expect(response.body).to have_selector("div[itemprop='offerCount']", text: "2", visible: false)
-          expect(response.body).to have_selector("div[itemprop='lowPrice']", text: "2.50", visible: false)
-          expect(response.body).to have_selector("div[itemprop='priceCurrency']", text: product.price_currency_type, visible: false)
-          expect(response.body).to have_selector("[itemprop='offer'][itemtype='https://schema.org/Offer']", count: 2)
-          expect(response.body).to have_selector("div[itemprop='price']", exact_text: "2.50", count: 1, visible: false)
-          expect(response.body).to have_selector("div[itemprop='price']", exact_text: "5", count: 1, visible: false)
+          expect(inertia.props[:product]).to be_present
+          expect(inertia.props[:product][:name]).to eq(product.name)
+        end
+
+        it "renders seller custom_styles in the head as a style tag" do
+          @user.seller_profile.update!(highlight_color: "#00ff00", background_color: "#0000ff")
+          product = create(:product, user: @user)
+
+          get :show, params: { id: product.unique_permalink }
+
+          expect(response).to be_successful
+          html_doc = Nokogiri::HTML(response.body)
+          style_tags = html_doc.css("head style")
+          # Custom styles include CSS variables and background-color from seller profile
+          expect(style_tags.any? { |tag| tag.text.include?("--accent:") && tag.text.include?("background-color:") }).to be(true)
         end
       end
 
@@ -3794,11 +3738,11 @@ describe LinksController, :vcr, inertia: true do
         end
 
         context "when the custom domain matches a product's custom domain" do
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show
             expect(response).to be_successful
             expect(assigns[:product]).to eq(product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
 
@@ -3818,11 +3762,11 @@ describe LinksController, :vcr, inertia: true do
             create(:custom_domain, domain: "www.example1.com", user: nil, product:)
           end
 
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show
             expect(response).to be_successful
             expect(assigns[:product]).to eq(product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
 
@@ -3841,11 +3785,11 @@ describe LinksController, :vcr, inertia: true do
             custom_domain.update!(domain: "example1.com")
           end
 
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show
             expect(response).to be_successful
             expect(assigns[:product]).to eq(product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
       end
@@ -3862,11 +3806,11 @@ describe LinksController, :vcr, inertia: true do
             @product = create(:product, user: @user)
           end
 
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show, params: { id: @product.unique_permalink }
             expect(response).to be_successful
             expect(assigns[:product]).to eq(@product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
 
@@ -3886,11 +3830,11 @@ describe LinksController, :vcr, inertia: true do
             @product = create(:product, user: @user, custom_permalink: "test-link")
           end
 
-          it "assigns the product and renders the show template" do
+          it "assigns the product and renders the Inertia page" do
             get :show, params: { id: @product.custom_permalink }
             expect(response).to be_successful
             expect(assigns[:product]).to eq(@product)
-            expect(response).to render_template(:show)
+            expect(inertia.component).to eq("Products/Show")
           end
         end
 
@@ -4068,19 +4012,44 @@ describe LinksController, :vcr, inertia: true do
     end
 
     describe "GET cart_items_count" do
-      it "assigns the correct instance variables and excludes third-party analytics scripts" do
+      it "returns 0 when no cart exists" do
         get :cart_items_count
 
-        expect(assigns(:hide_layouts)).to eq(true)
-        expect(assigns(:disable_third_party_analytics)).to eq(true)
+        expect(inertia.component).to eq("Products/CartItemsCount")
+        expect(inertia.props[:cart_items_count]).to eq(0)
 
         html = Nokogiri::HTML.parse(response.body)
         [
           "gr:google_analytics:enabled",
           "gr:fb_pixel:enabled",
+          "gr:tiktok_pixel:enabled",
         ].each do |property|
           expect(html.xpath("//meta[@property='#{property}']/@content").text).to eq("false")
         end
+      end
+
+      it "returns the count of alive cart products" do
+        sign_in @user
+        product = create(:product)
+        cart = create(:cart, user: @user, email: @user.email)
+        create(:cart_product, cart:, product:)
+
+        get :cart_items_count
+
+        expect(inertia.component).to eq("Products/CartItemsCount")
+        expect(inertia.props[:cart_items_count]).to eq(1)
+      end
+
+      it "does not count deleted cart products" do
+        sign_in @user
+        product = create(:product)
+        cart = create(:cart, user: @user, email: @user.email)
+        create(:cart_product, cart:, product:)
+        create(:cart_product, cart:, product: create(:product), deleted_at: Time.current)
+
+        get :cart_items_count
+
+        expect(inertia.props[:cart_items_count]).to eq(1)
       end
     end
 

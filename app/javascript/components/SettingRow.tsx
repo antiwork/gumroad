@@ -1,7 +1,8 @@
 import * as React from "react";
 
-import { Details } from "$app/components/Details";
-import { Toggle } from "$app/components/Toggle";
+import { Dropdown } from "$app/components/Dropdown";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { Switch } from "$app/components/ui/Switch";
 
 type ToggleProps = {
   label: string;
@@ -13,21 +14,37 @@ type ToggleProps = {
 };
 export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disabled }: ToggleProps) => {
   const toggle = (
-    <Toggle value={value} onChange={onChange} disabled={Boolean(disabled)}>
-      {label}
-      {help?.url ? (
+    <Switch
+      checked={value}
+      onChange={(e) => onChange?.(e.target.checked)}
+      disabled={Boolean(disabled)}
+      label={
         <>
-          {" "}
-          <a href={help.url} target="_blank" rel="noopener noreferrer" className="learn-more" style={{ flexShrink: 0 }}>
-            {help.label}
-          </a>
+          {label}
+          {help?.url ? (
+            <>
+              {" "}
+              <a
+                href={help.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="learn-more"
+                style={{ flexShrink: 0 }}
+              >
+                {help.label}
+              </a>
+            </>
+          ) : null}
         </>
-      ) : null}
-    </Toggle>
+      }
+    />
   );
   return dropdown ? (
-    <Details summary={toggle} className="toggle" open={value}>
-      <div className="dropdown">{dropdown}</div>
+    <Details open={value}>
+      <DetailsToggle chevronPosition="none" className="mb-0">
+        {toggle}
+      </DetailsToggle>
+      <Dropdown>{dropdown}</Dropdown>
     </Details>
   ) : (
     toggle

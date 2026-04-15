@@ -57,16 +57,45 @@ describe UserPresenter do
     end
   end
 
+  describe "#as_current_seller" do
+    it "returns the correct props" do
+      time_zone = ActiveSupport::TimeZone[seller.timezone]
+
+      expect(presenter.as_current_seller).to eq(
+        id: seller.external_id,
+        email: seller.email,
+        name: seller.display_name(prefer_email_over_default_username: true),
+        subdomain: seller.subdomain,
+        avatar_url: seller.avatar_url,
+        is_buyer: seller.is_buyer?,
+        time_zone: { name: time_zone.tzinfo.name, offset: time_zone.tzinfo.utc_offset },
+        has_published_products: seller.products.alive.exists?,
+        is_name_invalid_for_email_delivery: seller.is_name_invalid_for_email_delivery?,
+        profile_background_color: seller.seller_profile.background_color,
+        profile_highlight_color: seller.seller_profile.highlight_color,
+        profile_font: seller.seller_profile.font
+      )
+    end
+  end
+
   describe "#author_byline_props" do
     it "returns the correct props" do
       expect(presenter.author_byline_props).to eq(
         id: seller.external_id,
         name: seller.name,
         avatar_url: seller.avatar_url,
-        profile_url: seller.profile_url(recommended_by: nil)
+        profile_url: seller.profile_url(recommended_by: nil),
+        is_verified: false,
       )
     end
 
+    context "when the seller is verified" do
+      before { seller.update!(verified: true) }
+
+      it "sets verified to true" do
+        expect(presenter.author_byline_props[:is_verified]).to eq(true)
+      end
+    end
     context "when given a custom domain" do
       it "uses the custom domain for the profile url" do
         expect(presenter.author_byline_props(custom_domain_url: "https://example.com")[:profile_url]).to eq("https://example.com")

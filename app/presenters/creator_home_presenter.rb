@@ -16,15 +16,22 @@ class CreatorHomePresenter
   def creator_home_props
     has_sale = seller.sales.not_is_bundle_product_purchase.successful_or_preorder_authorization_successful.exists?
 
-    getting_started_stats = {
-      "customized_profile" => seller.name.present?,
-      "first_follower" => seller.followers.exists?,
-      "first_product" => seller.links.visible.exists?,
-      "first_sale" => has_sale,
-      "first_payout" => seller.has_payout_information?,
-      "first_email" => seller.installments.not_workflow_installment.send_emails.exists?,
-      "purchased_small_bets" => seller.purchased_small_bets?,
-    }
+    first_product = seller.links.visible.exists?
+    getting_started_dismissed = seller.has_dismissed_getting_started_checklist?
+
+    getting_started_stats = if getting_started_dismissed
+      { "first_product" => first_product }
+    else
+      {
+        "customized_profile" => seller.name.present?,
+        "first_follower" => seller.followers.exists?,
+        "first_product" => first_product,
+        "first_sale" => has_sale,
+        "first_payout" => seller.has_payout_information?,
+        "first_email" => seller.installments.not_workflow_installment.send_emails.exists?,
+        "purchased_small_bets" => seller.purchased_small_bets?,
+      }
+    end
 
     today = Time.now.in_time_zone(seller.timezone).to_date
     analytics = CreatorAnalytics::CachingProxy.new(seller).data_for_dates(today - 30, today)
@@ -66,15 +73,24 @@ class CreatorHomePresenter
       end
     end
 
-    tax_forms = (Time.current.year.downto(seller.created_at.year)).each_with_object({}) do |year, hash|
-      url = seller.eligible_for_1099?(year) ? seller.tax_form_1099_download_url(year: year) : nil
-      hash[year] = url if url.present?
+    tax_center_enabled = seller.tax_center_enabled?
+    if tax_center_enabled
+      tax_forms = []
+      show_1099_download_notice = seller.user_tax_forms.for_year(Time.current.prev_year.year).exists?
+    else
+      tax_forms = (Time.current.year.downto(seller.created_at.year)).each_with_object({}) do |year, hash|
+        url = seller.eligible_for_1099?(year) ? seller.tax_form_1099_download_url(year: year) : nil
+        hash[year] = url if url.present?
+      end
+      show_1099_download_notice = tax_forms[Time.current.prev_year.year].present?
     end
+
 
     {
       name: seller.alive_user_compliance_info&.first_name || "",
       has_sale:,
       getting_started_stats:,
+      getting_started_dismissed:,
       balances: {
         balance: formatted_dollar_amount(balances.fetch(:balance), with_currency: seller.should_be_shown_currencies_always?),
         last_seven_days_sales_total: formatted_dollar_amount(balances.fetch(:last_seven_days_sales_total), with_currency: seller.should_be_shown_currencies_always?),
@@ -85,7 +101,8 @@ class CreatorHomePresenter
       activity_items:,
       stripe_verification_message:,
       tax_forms:,
-      show_1099_download_notice: tax_forms[Time.current.prev_year.year].present?
+      show_1099_download_notice:,
+      tax_center_enabled:
     }
   end
 

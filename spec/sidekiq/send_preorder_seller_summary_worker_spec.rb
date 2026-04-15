@@ -53,7 +53,7 @@ describe SendPreorderSellerSummaryWorker, :vcr do
   end
 
   context "when preorders take more than 24h to charge" do
-    it "stops waiting and notifies Bugsnag", :sidekiq_inline do
+    it "stops waiting and notifies error tracker", :sidekiq_inline do
       authorization_purchase = build(:purchase, link: @product, chargeable: @card_will_decline, purchase_state: "in_progress",
                                                 is_preorder_authorization: true)
       preorder = @preorder_product.build_preorder(authorization_purchase)
@@ -62,7 +62,7 @@ describe SendPreorderSellerSummaryWorker, :vcr do
 
       expect(ContactingCreatorMailer).not_to receive(:preorder_summary).with(@preorder_product.id)
       expect(SendPreorderSellerSummaryWorker).to receive(:perform_in).with(20.minutes, @preorder_product.id, anything).exactly(72).times.and_call_original
-      expect(Bugsnag).to receive(:notify).with("Timed out waiting for all preorders to be charged. PreorderLink: #{@preorder_product.id}.")
+      expect(ErrorNotifier).to receive(:notify).with("Timed out waiting for all preorders to be charged. PreorderLink: #{@preorder_product.id}.")
 
       expect do
         SendPreorderSellerSummaryWorker.new.perform(@preorder_product.id)

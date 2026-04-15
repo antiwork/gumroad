@@ -1,8 +1,14 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { NumberInput } from "$app/components/NumberInput";
 import { CallLimitationInfo } from "$app/components/ProductEdit/state";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
+import { Pill } from "$app/components/ui/Pill";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 
@@ -55,36 +61,40 @@ export const CallLimitationsEditor = ({
 
   return (
     <>
-      <fieldset>
-        <label htmlFor={`${uid}-notice-period`}>Notice period</label>
+      <Fieldset>
+        <Label htmlFor={`${uid}-notice-period`}>Notice period</Label>
         <NumberInput value={minimumNotice.value} onChange={(value) => setMinimumNotice({ ...minimumNotice, value })}>
           {(props) => (
-            <div className="input" ref={inputRef}>
-              <input id={`${uid}-notice-period`} placeholder="15" {...props} />
-              <label className="pill select">
-                <span>{minimumNotice.unit}</span>
-                <TypeSafeOptionSelect
-                  aria-label="Units"
-                  onChange={(unit) => setMinimumNotice({ ...minimumNotice, unit })}
-                  value={minimumNotice.unit}
-                  options={UNITS.map((unit) => ({ id: unit, label: unit }))}
-                />
-              </label>
-            </div>
+            <InputGroup ref={inputRef}>
+              <Input id={`${uid}-notice-period`} placeholder="15" {...props} />
+              <Pill asChild className="relative -mr-2 shrink-0 cursor-pointer">
+                <Label>
+                  <span>{minimumNotice.unit}</span>
+                  <TypeSafeOptionSelect
+                    aria-label="Units"
+                    onChange={(unit) => setMinimumNotice({ ...minimumNotice, unit })}
+                    value={minimumNotice.unit}
+                    options={UNITS.map((unit) => ({ id: unit, label: unit }))}
+                    className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
+                  />
+                  <ChevronDown className="ml-auto size-5" />
+                </Label>
+              </Pill>
+            </InputGroup>
           )}
         </NumberInput>
-        <small>Minimum notice time required when booking a call</small>
-      </fieldset>
-      <fieldset>
-        <label htmlFor={`${uid}-daily-limit`}>Daily limit</label>
+        <FieldsetDescription>Minimum notice time required when booking a call</FieldsetDescription>
+      </Fieldset>
+      <Fieldset>
+        <Label htmlFor={`${uid}-daily-limit`}>Daily limit</Label>
         <NumberInput
           onChange={(maximum_calls_per_day) => updateCallLimitations({ maximum_calls_per_day })}
           value={maximum_calls_per_day}
         >
-          {(props) => <input id={`${uid}-daily-limit`} placeholder="2" {...props} />}
+          {(props) => <Input id={`${uid}-daily-limit`} placeholder="2" {...props} />}
         </NumberInput>
-        <small>Maximum calls allowed per day</small>
-      </fieldset>
+        <FieldsetDescription>Maximum calls allowed per day</FieldsetDescription>
+      </Fieldset>
     </>
   );
 };

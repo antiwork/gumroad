@@ -23,7 +23,7 @@ describe "OauthApplicationsPages", type: :system, js: true do
           expect(page).to have_selector("img[src*='s3_utility/cdn_url_for_blob?key=#{ActiveStorage::Blob.last.key}']")
           click_button("Create application")
         end
-        wait_for_ajax
+        expect(page).to have_current_path(/\/oauth\/applications\/.*\/edit/)
       end.to change { OauthApplication.count }.by(1)
 
       OauthApplication.last.tap do |app|
@@ -63,7 +63,7 @@ describe "OauthApplicationsPages", type: :system, js: true do
           expect(page).to have_selector("img[src*='s3_utility/cdn_url_for_blob?key=#{ActiveStorage::Blob.last.key}']")
           click_button("Create application")
         end
-        wait_for_ajax
+        expect(page).to have_current_path(/\/oauth\/applications\/.*\/edit/)
       end.to change { OauthApplication.count }.by(1)
     end
   end
@@ -89,7 +89,7 @@ describe "OauthApplicationsPages", type: :system, js: true do
     expect(page).to have_field("Access Token", with: application.access_tokens.last.token)
     expect(application.access_grants.count).to eq 1
     expect(application.access_tokens.count).to eq 1
-    expect(application.access_tokens.last.scopes.to_a).to eq %w[edit_products view_sales mark_sales_as_shipped edit_sales revenue_share ifttt view_profile view_payouts]
+    expect(application.access_tokens.last.scopes.to_a).to eq %w[edit_products view_sales mark_sales_as_shipped edit_sales revenue_share ifttt view_profile view_payouts account]
   end
 
   it "doesn't list the application if there are no grants for it" do
@@ -126,6 +126,7 @@ describe "OauthApplicationsPages", type: :system, js: true do
       expect(page).to have_text("Are you sure you want to revoke access to #{app_names.first}?")
       click_on "Yes, revoke access"
     end
+    expect(page).to have_current_path(settings_authorized_applications_path)
     expect(page).to(have_alert(text: "Authorized application revoked"))
     expect(page).not_to(have_content(app_names.first))
     app_names.drop(1).each { |app_name| expect(page).to(have_content(app_name)) }

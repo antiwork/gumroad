@@ -204,10 +204,10 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
       visit "/subscriptions/#{@subscription_with_purchaser.external_id}/manage?token=#{@subscription_with_purchaser.token}"
 
       click_on "Cancel membership"
-      wait_for_ajax
 
-      expect(page).to have_button("Cancelled", disabled: true)
+      expect(page).to have_alert(text: "Your membership has been cancelled.")
       expect(page).to have_button("Restart membership")
+      expect(page).not_to have_button("Cancel membership")
 
       click_on "Restart membership"
       wait_for_ajax
@@ -251,6 +251,31 @@ describe "Non Tiered Membership Subscriptions", type: :system, js: true do
     end
 
     it "restarts membership with existing payment method" do
+      visit "/subscriptions/#{@subscription_with_purchaser.external_id}/manage?token=#{@subscription_with_purchaser.token}"
+
+      click_on "Restart membership"
+      wait_for_ajax
+
+      expect(page).to(have_alert(text: "Membership restarted"))
+      expect(@subscription_with_purchaser.reload.alive?(include_pending_cancellation: false)).to be(true)
+      expect(@subscription_with_purchaser.purchases.successful.count).to eq(2)
+    end
+
+    it "restarts membership when product has required custom fields" do
+      product = @subscription_with_purchaser.link
+      product.custom_fields.create!(
+        name: "Favorite Color",
+        required: true,
+        field_type: "text",
+        seller_id: product.user.id
+      )
+      product.custom_fields.create!(
+        name: "http://example.com/terms",
+        required: true,
+        field_type: "terms",
+        seller_id: product.user.id
+      )
+
       visit "/subscriptions/#{@subscription_with_purchaser.external_id}/manage?token=#{@subscription_with_purchaser.token}"
 
       click_on "Restart membership"

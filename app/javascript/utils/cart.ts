@@ -60,6 +60,7 @@ export const PLACEHOLDER_CART_ITEM: CartItem = {
     analytics: {
       google_analytics_id: null,
       facebook_pixel_id: null,
+      tiktok_pixel_id: null,
       free_sales: false,
     },
     has_tipping_enabled: true,
@@ -86,13 +87,14 @@ export const PLACEHOLDER_CART_ITEM: CartItem = {
   accepted_offer: null,
   call_start_time: null,
   pay_in_installments: false,
+  force_new_subscription: false,
 };
 
 export const PLACEHOLDER_CARD_PRODUCT: CardProduct = {
   id: "",
   permalink: "",
   name: "A Sample Product",
-  seller: { id: "", name: "Gumroadian", profile_url: "", avatar_url: "" },
+  seller: { id: "", name: "Gumroadian", profile_url: "", avatar_url: "", is_verified: false },
   ratings: null,
   price_cents: 100,
   currency_code: "usd",

@@ -23,8 +23,15 @@ class StripeAccountSessionsController < Sellers::BaseController
       )
 
       render json: { success: true, client_secret: session.client_secret }
+    rescue Stripe::InvalidRequestError => e
+      if e.message.include?("No such account")
+        render json: { success: false, error_message: "Your Stripe account is no longer active. Please reconnect your Stripe account." }
+      else
+        ErrorNotifier.notify("Failed to create stripe account session for user #{current_seller.id}: #{e.message}")
+        render json: { success: false, error_message: "Failed to create stripe account session" }
+      end
     rescue => e
-      Bugsnag.notify("Failed to create stripe account session for user #{current_seller.id}: #{e.message}")
+      ErrorNotifier.notify("Failed to create stripe account session for user #{current_seller.id}: #{e.message}")
       render json: { success: false, error_message: "Failed to create stripe account session" }
     end
   end

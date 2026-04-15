@@ -325,6 +325,11 @@ describe Charge::Disputable, :vcr do
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
       end
 
+      it "calls block_buyer_based_on_chargeback_count! for each purchase" do
+        expect_any_instance_of(Purchase).to receive(:block_buyer_based_on_chargeback_count!)
+        Purchase.handle_charge_event(event)
+      end
+
       describe "purchase involves an affiliate" do
         let(:merchant_account) { create(:merchant_account, user: seller) }
         let(:affiliate_user) { create(:affiliate_user) }
@@ -896,8 +901,8 @@ describe Charge::Disputable, :vcr do
             @p.save!
           end
 
-          it "bugsnag notifies the occurrence" do
-            expect(Bugsnag).to receive(:notify).with("Invalid charge event received for successful Purchase #{@p.external_id} - " \
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify).with("Invalid charge event received for successful Purchase #{@p.external_id} - " \
                                                      "received reversal won notification with ID #{@e.charge_event_id} but was not disputed.")
             Purchase.handle_charge_event(@e)
           end
@@ -923,6 +928,23 @@ describe Charge::Disputable, :vcr do
               expect(@p.reload.chargeback_reversed).to be(false)
             end
           end
+        end
+      end
+
+      context "when dispute won for a charge" do
+        let(:user) { create(:user) }
+        let(:product) { create(:product, user:) }
+        let(:transaction_id) { "ch_charge_123" }
+        let!(:purchase) { create(:purchase, link: product, stripe_transaction_id: transaction_id, chargeback_date: 10.days.ago) }
+        let!(:charge) { create(:charge, processor_transaction_id: transaction_id, amount_cents: 111, disputed_at: 10.days.ago, purchases: [purchase]) }
+
+        let(:event) { build(:charge_event_dispute_won, charge_id: transaction_id) }
+
+        it "persists chargeback_reversed flag on the disputed purchases" do
+          expect do
+            charge.handle_event(event)
+          end.to change { charge.reload.dispute_reversed_at }.from(nil).to(be_present)
+             .and change { purchase.reload.chargeback_reversed }.from(false).to(true)
         end
       end
 

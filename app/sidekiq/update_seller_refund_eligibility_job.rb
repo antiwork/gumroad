@@ -13,5 +13,7 @@ class UpdateSellerRefundEligibilityJob
     elsif unpaid_balance_cents < -10000 && !user.refunds_disabled?
       user.disable_refunds!
     end
+
+    user.check_for_high_balance_and_remove_low_balance_probation!
   end
 end

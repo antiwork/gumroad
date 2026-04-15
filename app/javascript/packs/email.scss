@@ -7,19 +7,8 @@ $light-body-bg: #ffffff;
 @import "../stylesheets/definitions";
 @import "../stylesheets/font";
 @import "../stylesheets/global";
-@import "../stylesheets/icon_names";
-@import "../stylesheets/icons";
 
-@import "../stylesheets/alert";
-@import "../stylesheets/button";
-@include buttons;
-@import "../stylesheets/forms";
-@import "../stylesheets/pill";
-@import "../stylesheets/product";
-@import "../stylesheets/rows";
 @import "../stylesheets/rich_text";
-@import "../stylesheets/stack";
-@import "../stylesheets/table";
 
 @import "../stylesheets/email";
 

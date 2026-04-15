@@ -21,6 +21,31 @@ describe GenerateCanadaSalesReportJob do
       s3_bucket_double
     end
 
+    # Stub TaxJar since this test is about report generation, not tax calculation
+    before do
+      taxjar_response = {
+        "amount_to_collect" => 0,
+        "rate" => 0,
+        "has_nexus" => false,
+        "freight_taxable" => false,
+        "tax_source" => nil,
+        "breakdown" => {
+          "state_tax_rate" => 0,
+          "county_tax_rate" => 0,
+          "city_tax_rate" => 0,
+          "gst_tax_rate" => 0,
+          "pst_tax_rate" => 0,
+          "qst_tax_rate" => 0
+        },
+        "jurisdictions" => {
+          "state" => nil,
+          "county" => nil,
+          "city" => nil
+        }
+      }
+      allow_any_instance_of(TaxjarApi).to receive(:calculate_tax_for_order).and_return(taxjar_response)
+    end
+
     before :context do
       @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/canada-sales-reporting-spec-#{SecureRandom.hex(18)}.zip")
     end
@@ -85,7 +110,7 @@ describe GenerateCanadaSalesReportJob do
 
       described_class.new.perform(month, year)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "Canada Sales Fees Reporting", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Canada Sales Fees Reporting", anything, "green")
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

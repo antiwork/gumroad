@@ -2,6 +2,8 @@
 
 module SslCertificates
   class LetsEncrypt < Base
+    CHALLENGE_TTL = 1.hour.to_i
+
     attr_reader :domain, :certificate_private_key
 
     def initialize(domain)
@@ -14,9 +16,6 @@ module SslCertificates
     def process
       order, http_challenge = order_certificate
       prepare_http_challenge(http_challenge)
-
-      # Wait until the nginx server syncs the validation files
-      sleep(nginx_sync_duration)
       request_validation(http_challenge)
 
       poll_validation_status(http_challenge)
@@ -69,19 +68,15 @@ module SslCertificates
           http_challenge.request_validation
         end
 
-        def http_challenge_s3_key(filename)
-          "custom-domains-ssl/#{ssl_env}/#{domain}/public/#{filename}"
-        end
-
         def prepare_http_challenge(http_challenge)
-          filename     = http_challenge.filename
+          token = http_challenge.token
           file_content = http_challenge.file_content
-          write_to_s3(http_challenge_s3_key(filename), file_content)
+          $redis.setex(RedisKey.acme_challenge(token), CHALLENGE_TTL, file_content)
         end
 
         def delete_http_challenge(http_challenge)
-          filename = http_challenge.filename
-          delete_from_s3(http_challenge_s3_key(filename))
+          token = http_challenge.token
+          $redis.del(RedisKey.acme_challenge(token))
         end
 
         def order_certificate

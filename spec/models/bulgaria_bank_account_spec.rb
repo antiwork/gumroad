@@ -16,8 +16,8 @@ describe BulgariaBankAccount do
   end
 
   describe "#currency" do
-    it "returns bgn" do
-      expect(create(:bulgaria_bank_account).currency).to eq("bgn")
+    it "returns eur" do
+      expect(create(:bulgaria_bank_account).currency).to eq("eur")
     end
   end
 

@@ -18,18 +18,22 @@ class ApplicationController < ActionController::Base
   include UtmLinkTracking
   include RackMiniProfilerAuthorization
   include InertiaRendering
+  include PageMeta::Base, PageMeta::Analytics
+
+  before_action :set_default_page_title
+  before_action :set_csrf_meta_tags
+  before_action :set_default_meta_tags
+  helper_method :erb_meta_tags, :page_title
+  before_action :set_analytics_meta_tags
+  helper_method :analytics_enabled?
 
   before_action :debug_headers
   before_action :set_is_mobile
-  before_action :set_title
   before_action :invalidate_session_if_necessary
   before_action :redirect_to_custom_subdomain
 
   before_action :set_signup_referrer, if: -> { logged_in_user.nil? }
-  before_action :check_suspended, if: -> { logged_in_user.present? && logged_in_user.suspended? }
-
-  before_bugsnag_notify :add_user_to_bugsnag
-  BUGSNAG_USER_FIELDS = %i[id email username name created_at locale]
+  before_action :check_suspended, if: -> { logged_in_user.present? && logged_in_user.suspended? && !request.get? && !request.head? }
 
   before_action :set_gumroad_guid
 
@@ -40,7 +44,11 @@ class ApplicationController < ActionController::Base
   add_flash_types :warning
 
   def redirect_to_next
-    safe_redirect_to(params[:next])
+    if params[:next].present?
+      safe_redirect_to(params[:next])
+    else
+      redirect_to root_path
+    end
   end
 
   def safe_redirect_path(path, allow_subdomain_host: true)
@@ -205,6 +213,12 @@ class ApplicationController < ActionController::Base
         return safe_final_path
       end
 
+      # Defensive: if a stale 2FA session is present for another user (e.g. from an aborted login),
+      # do not redirect the current user to the 2FA flow.
+      if session[:verify_two_factor_auth_for].present? && session[:verify_two_factor_auth_for] != user.id
+        reset_two_factor_auth_login_session
+      end
+
       if user_for_two_factor_authentication.present?
         two_factor_authentication_path(next: safe_final_path)
       else
@@ -246,13 +260,12 @@ class ApplicationController < ActionController::Base
     end
 
     def check_suspended
-      return nil if request.path.in?([balance_path, settings_main_path]) || params[:controller] == "payouts"
       return head(:ok) if !request.format.html? && !request.format.json?
 
       respond_to do |format|
         format.html do
           flash[:warning] = "You can't perform this action because your account has been suspended."
-          redirect_to root_path unless request.path == root_path
+          redirect_back fallback_location: root_path
         end
         format.json { render json: { success: false, error_message: "You can't perform this action because your account has been suspended." } }
       end
@@ -260,30 +273,6 @@ class ApplicationController < ActionController::Base
 
     def hide_layouts
       @hide_layouts = true
-    end
-
-    def add_user_to_bugsnag(event)
-      # We can't test a real execution of this method because Bugsnag won't call it in the test environment.
-      # The following line protects the app in case the internal API changes and `event.user` changes type.
-      # In this situation, the user will not be reported anymore, which the team will notice and fix.
-      return unless event.respond_to?(:user) && event.respond_to?(:user=) && event.user.is_a?(Hash)
-
-      # The "User" tab gets automatically filled by Bugsnag,
-      # however it doesn't support `current_resource_owner`, so we need to overwrite it in all cases.
-      user = logged_in_user
-      user ||= current_resource_owner if respond_to?(:current_resource_owner)
-      return unless user
-
-      event.user ||= {}
-      BUGSNAG_USER_FIELDS.each do |field|
-        event.user[field] = user.public_send(field)
-      end
-    end
-
-    def set_title
-      @title = "Gumroad"
-      @title = "Staging Gumroad" if Rails.env.staging?
-      @title = "Local Gumroad" if Rails.env.development?
     end
 
     def set_signup_referrer
@@ -304,10 +293,6 @@ class ApplicationController < ActionController::Base
 
     def set_as_modal
       @as_modal = params[:as_modal] == "true"
-    end
-
-    def set_frontend_performance_sensitive
-      @is_css_performance_sensitive = true
     end
 
     def set_gumroad_guid

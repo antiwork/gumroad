@@ -168,6 +168,33 @@ describe AssetPreview, :vcr do
         asset_preview.url = "/etc/sudoers"
       end.to raise_error(URI::InvalidURIError, /not a web url/)
     end
+
+    it "rejects URLs without a host" do
+      expect do
+        asset_preview.url = "https:///path"
+      end.to raise_error(URI::InvalidURIError, /valid host/)
+    end
+
+    it "blocks SSRF attempts to localhost", :skip_ssrf_stub do
+      expect do
+        asset_preview.url = "http://127.0.0.1:6379/"
+        asset_preview.save!
+      end.to raise_error(SsrfFilter::PrivateIPAddress)
+    end
+
+    it "blocks SSRF attempts to cloud metadata endpoint", :skip_ssrf_stub do
+      expect do
+        asset_preview.url = "http://169.254.169.254/latest/meta-data/"
+        asset_preview.save!
+      end.to raise_error(SsrfFilter::PrivateIPAddress)
+    end
+
+    it "blocks SSRF attempts to private IP ranges", :skip_ssrf_stub do
+      expect do
+        asset_preview.url = "http://192.168.1.1/"
+        asset_preview.save!
+      end.to raise_error(SsrfFilter::PrivateIPAddress)
+    end
   end
 
   it "auto-generates a GUID on creation" do
@@ -243,6 +270,14 @@ describe AssetPreview, :vcr do
       it "returns proper height" do
         expect(asset_preview.height).to eq(512)
         expect(asset_preview.display_height).to eq(210)
+      end
+
+      describe "#retina_variant" do
+        it "falls back to original file URL when image processing times out" do
+          allow(asset_preview.file).to receive(:variant).and_raise(Timeout::Error)
+
+          expect(asset_preview.url_from_file(style: :retina)).to eq(asset_preview.file.url)
+        end
       end
 
       describe "#url" do

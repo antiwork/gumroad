@@ -132,7 +132,7 @@ class PaypalPayoutProcessor
     rescue => e
       Rails.logger.error "Error processing payment #{payment.id} => #{e.class.name}: #{e.message}"
       Rails.logger.error "Error processing payment #{payment.id} => #{e.backtrace.join("\n")}"
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       next
     end
 
@@ -155,7 +155,7 @@ class PaypalPayoutProcessor
       payment_index += 1
     end
 
-    Rails.logger.info("Paypal payouts: posting #{mass_pay_params} to #{PAYPAL_ENDPOINT} for user IDs #{user_ids}")
+    Rails.logger.info("Paypal payouts: posting #{LogRedactor.redact(mass_pay_params)} to #{PAYPAL_ENDPOINT} for user IDs #{user_ids}")
     paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: mass_pay_params)
     Rails.logger.info("Paypal payouts: received #{paypal_response} from #{PAYPAL_ENDPOINT} for user IDs #{user_ids}")
 
@@ -191,7 +191,7 @@ class PaypalPayoutProcessor
       params["L_UNIQUEID0"] = split_payment_unique_id
       params["L_NOTE0"] = note_for_paypal_payment(payment)
 
-      Rails.logger.info("Paypal payouts: posting #{params} to #{PAYPAL_ENDPOINT} for user ID #{payment.user.id}")
+      Rails.logger.info("Paypal payouts: posting #{LogRedactor.redact(params)} to #{PAYPAL_ENDPOINT} for user ID #{payment.user.id}")
       paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: params)
       Rails.logger.info("Paypal payouts: received #{paypal_response} from #{PAYPAL_ENDPOINT} for user ID #{payment.user.id}")
       paid_so_far_amount_cents += split_payment_amount_cents
@@ -220,7 +220,7 @@ class PaypalPayoutProcessor
   end
 
   def self.handle_paypal_event(paypal_event)
-    Rails.logger.info("Paypal payouts: received IPN #{paypal_event}")
+    Rails.logger.info("Paypal payouts: received IPN #{LogRedactor.redact(paypal_event)}")
     # https://developer.paypal.com/docs/api-basics/notifications/ipn/IPNandPDTVariables/#payment-information-variables
 
     payments_data = []
@@ -349,7 +349,7 @@ class PaypalPayoutProcessor
       payment.mark_failed!
     elsif no_split_payments_are_processing
       # This means that no split payments are in the processing state. It also means that some of them have failed and some have succeeded.
-      Bugsnag.notify("Payment id #{payment.id} was split and some of the split payments failed and some succeeded")
+      ErrorNotifier.notify("Payment id #{payment.id} was split and some of the split payments failed and some succeeded")
     end
   end
 

@@ -22,7 +22,7 @@ describe("ProductShowScenario", type: :system, js: true) do
     expect(product.sales.successful.last.price_cents).to eq(total_price * 100)
   end
 
-  it "preselects and allows purchase of a physical product sku as specified in the variant query string parameter" do
+  it "preselects and allows purchase of a physical product sku as specified in the variant query string parameter", :mock_easypost do
     product = create(:product, is_physical: true, require_shipping: true, skus_enabled: true)
     product.shipping_destinations << ShippingDestination.new(country_code: Compliance::Countries::USA.alpha2,
                                                              one_item_rate_cents: 4_00,
@@ -62,6 +62,26 @@ describe("ProductShowScenario", type: :system, js: true) do
     visit short_link_path(product)
     fill_in "Name a fair price", with: "-1234,.439"
     expect(page).to have_field "Name a fair price", with: "1234.43"
+  end
+
+  it "shows an error alert when entered PWYW price is below the minimum for membership product" do
+    product = create(:membership_product_with_preset_tiered_pwyw_pricing, price_cents: 0)
+
+    visit short_link_path(product)
+    fill_in "Name a fair price", with: "1"
+    click_on "Subscribe"
+
+    expect(page).to have_alert(text: "Minimum price for this product is $500", visible: :all)
+  end
+
+  it "shows an error alert when entered PWYW price is below the minimum for regular PWYW product" do
+    product = create(:product, customizable_price: true, price_cents: 1000)
+
+    visit short_link_path(product)
+    fill_in "Name a fair price", with: "5"
+    click_on "I want this!"
+
+    expect(page).to have_alert(text: "Minimum price for this product is $10.", visible: :all)
   end
 
   it "discards the quantity, price, and variant query string parameters if they are not applicable to the product" do
@@ -158,7 +178,7 @@ describe("ProductShowScenario", type: :system, js: true) do
       within "[role='listitem']" do
         expect(page).to have_text(@membership.name)
         expect(page).to have_text("Tier: Second Tier")
-        expect(page).to have_text("Membership: Every 6 months")
+        expect(page).to have_text("Every 6 months")
       end
       expect(page).to have_field("Email address", with: "gumhead@gumroad.com")
       expect(page).to have_field("your nickname", with: "moneybags")
@@ -167,7 +187,7 @@ describe("ProductShowScenario", type: :system, js: true) do
 
       visit "#{@product.long_url}?wanted=true&quantity=3"
 
-      within "[role='listitem']" do
+      within("[role='listitem']", match: :first) do
         expect(page).to have_text(@membership.name)
         expect(page).to have_text("Qty: 3")
       end
@@ -212,6 +232,35 @@ describe("ProductShowScenario", type: :system, js: true) do
       it "displays a decimal price input" do
         visit @pwyw_product.long_url
         expect(find_field("Name a fair price")["inputmode"]).to eq("decimal")
+      end
+    end
+
+    context "with a product with a default offer code" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller, price_cents: 10000) }
+      let(:default_offer_code) { create(:offer_code, user: seller, products: [product], code: "AUTO10", amount_cents: 1000) }
+
+      before do
+        product.update!(default_offer_code: default_offer_code)
+      end
+
+      it "includes the default offer code in the redirect URL and applies it on checkout" do
+        visit "#{product.long_url}?wanted=true"
+
+        expect(page).to have_current_path(/^\/checkout/, wait: 10)
+        expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
+        expect(page).to have_text("Total US$90", normalize_ws: true, wait: 5)
+      end
+
+      context "when both URL and default codes are present" do
+        it "takes the maximum discount between the two codes" do
+          url_offer_code = create(:offer_code, user: seller, products: [product], code: "URL5", amount_cents: 500)
+          visit "#{product.long_url}/#{url_offer_code.code}?wanted=true"
+
+          expect(page).to have_current_path(/^\/checkout/, wait: 10)
+          expect(page).to have_selector("[aria-label='Discount code']", text: default_offer_code.code, wait: 5)
+          expect(page).to have_text("Total US$90", normalize_ws: true, wait: 5)
+        end
       end
     end
   end
@@ -506,12 +555,12 @@ describe("ProductShowScenario", type: :system, js: true) do
             add_to_cart(product, pwyw_price: 0.99)
 
             within "[role='listitem']" do
-              select_disclosure "Configure" do
+              select_disclosure "Edit" do
                 fill_in "Name a fair price", with: "0.1"
                 click_on "Save"
               end
               expect(page).to have_text("$0.99")
-              select_disclosure "Configure" do
+              select_disclosure "Edit" do
                 fill_in "Name a fair price", with: "0"
                 click_on "Save"
               end
@@ -590,15 +639,13 @@ describe("ProductShowScenario", type: :system, js: true) do
   it "includes a share menu with social links and copy functionality" do
     product = create(:product)
     visit product.long_url
-    select_disclosure "Share" do
-      expect(page).to have_link("Share on X")
-      expect(page).to have_link("Share on Facebook")
-      copy_button = find_button("Copy link")
-      copy_button.hover
-      expect(copy_button).to have_tooltip(text: "Copy product URL")
-      copy_button.click
-      expect(copy_button).to have_tooltip(text: "Copied")
-    end
+    toggle_disclosure "Share"
+    expect(page).to have_link("Share on X")
+    expect(page).to have_link("Share on Facebook")
+    find_button("Copy link").hover
+    expect(find_button("Copy link")).to have_tooltip(text: "Copy product URL")
+    find_button("Copy link").click
+    expect(find_button("Copy link")).to have_tooltip(text: "Copied")
   end
 
   describe "discover layout" do

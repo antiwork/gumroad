@@ -4,7 +4,7 @@ describe "Mobile tracking", type: :system, js: true do
   let(:product) { create(:product) }
 
   before do
-    allow_any_instance_of(UsersHelper).to receive(:is_third_party_analytics_enabled?).and_return(true)
+    allow_any_instance_of(ApplicationController).to receive(:analytics_enabled?).and_return(true)
   end
 
   it "adds global functions the apps can call to track product events" do

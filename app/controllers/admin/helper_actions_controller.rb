@@ -20,7 +20,7 @@ module Admin
 
     private
       def load_user
-        @user = User.find_by!(external_id: params[:user_id])
+        @user = User.find_by!(external_id: params[:user_external_id])
       rescue ActiveRecord::RecordNotFound
         head :not_found
       end

@@ -49,4 +49,44 @@ describe("Viewing a purchase receipt", type: :system, js: true) do
       expect(page).to have_link "Manage membership", href: manage_membership_url
     end
   end
+
+  describe "Receipt customization" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product, seller: seller, email: "customer@example.com") }
+
+    before do
+      purchase.create_url_redirect!
+    end
+
+    context "when product has receipt customization" do
+      before do
+        product.custom_view_content_button_text = "Access Your Purchase"
+        product.custom_receipt_text = "Welcome! Your purchase includes lifetime updates."
+        product.save
+      end
+
+      it "displays custom content in the receipt page" do
+        visit receipt_purchase_url(purchase.external_id, host: "#{PROTOCOL}://#{DOMAIN}")
+
+        fill_in "Email address:", with: purchase.email
+        click_button "View receipt"
+
+        expect(page).to have_text("Access Your Purchase")
+        expect(page).to have_text("Welcome! Your purchase includes lifetime updates.")
+        expect(page).not_to have_text("View content")
+      end
+    end
+
+    context "when product has no receipt customization" do
+      it "displays default content in the receipt page" do
+        visit receipt_purchase_url(purchase.external_id, host: "#{PROTOCOL}://#{DOMAIN}")
+
+        fill_in "Email address:", with: purchase.email
+        click_button "View receipt"
+
+        expect(page).to have_text("View content")
+      end
+    end
+  end
 end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "shared_examples/authorized_helper_api_method"
 
 describe Api::Internal::Helper::UsersController do
   include HelperAISpecHelper
@@ -17,6 +18,14 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "GET user_info" do
+    context "when authorization is invalid" do
+      it "returns unauthorized error" do
+        request.headers["Authorization"] = "Bearer invalid_token"
+        get :user_info, params: @params
+        expect(response).to have_http_status(:unauthorized)
+      end
+    end
+
     context "when email parameter is missing" do
       it "returns unauthorized error" do
         get :user_info, params: { timestamp: Time.current.to_i }
@@ -32,7 +41,16 @@ describe Api::Internal::Helper::UsersController do
         get :user_info, params: params
 
         expect(response).to have_http_status(:success)
-        expect(response.body).to eq({ success: true, customer: { metadata: {} } }.to_json)
+        expect(response.parsed_body).to eq(
+          {
+            "success" => true,
+            "customer" => {
+              "comments" => [],
+              "can_add_comment" => false,
+              "metadata" => {}
+            }
+          }
+        )
       end
     end
 
@@ -65,11 +83,7 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "GET user_suspension_info" do
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
-
-    before do
-      request.headers.merge!(auth_headers)
-    end
+    include_examples "helper api authorization required", :get, :user_suspension_info
 
     context "when email parameter is missing" do
       it "returns a bad request error" do
@@ -182,10 +196,10 @@ describe Api::Internal::Helper::UsersController do
     end
 
     context "when api call to iffy raises a network error" do
-      it "notifies Bugsnag and returns an error response" do
+      it "notifies error tracker and returns an error response" do
         network_error = HTTParty::Error.new("Connection failed")
         allow(HTTParty).to receive(:get).and_raise(network_error)
-        expect(Bugsnag).to receive(:notify).with(network_error)
+        expect(ErrorNotifier).to receive(:notify).with(network_error)
 
         get :user_suspension_info, params: { email: user.email }
 
@@ -197,11 +211,7 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "POST create_appeal" do
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
-
-    before do
-      request.headers.merge!(auth_headers)
-    end
+    include_examples "helper api authorization required", :post, :create_appeal
 
     context "when email parameter is missing" do
       it "returns a bad request error" do
@@ -365,10 +375,10 @@ describe Api::Internal::Helper::UsersController do
     end
 
     context "when api call to iffy raises a network error" do
-      it "notifies Bugsnag and returns an error response" do
+      it "notifies error tracker and returns an error response" do
         network_error = HTTParty::Error.new("Connection failed")
         allow(HTTParty).to receive(:get).and_raise(network_error)
-        expect(Bugsnag).to receive(:notify).with(network_error)
+        expect(ErrorNotifier).to receive(:notify).with(network_error)
 
         post :create_appeal, params: { email: user.email, reason: "test" }
 
@@ -379,12 +389,160 @@ describe Api::Internal::Helper::UsersController do
     end
   end
 
+  describe "POST create_comment" do
+    include_examples "helper api authorization required", :post, :create_comment
+
+    context "when email parameter is missing" do
+      it "returns a bad request error" do
+        post :create_comment, params: { content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'email' parameter is required")
+      end
+    end
+
+    context "when content parameter is missing" do
+      it "returns a bad request error" do
+        post :create_comment, params: { email: user.email, idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'content' parameter is required")
+      end
+    end
+
+    context "when idempotency_key parameter is missing" do
+      it "returns a bad request error" do
+        post :create_comment, params: { email: user.email, content: "Test" }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'idempotency_key' parameter is required")
+      end
+    end
+
+    context "when user is not found" do
+      it "returns an error message" do
+        post :create_comment, params: { email: "nonexistent@example.com", content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email.")
+      end
+    end
+
+    context "when user is soft-deleted" do
+      it "returns an error message" do
+        user.mark_deleted!
+
+        post :create_comment, params: { email: user.email, content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+      end
+    end
+
+    context "when all parameters are valid" do
+      it "creates a comment and returns it" do
+        idempotency_key = SecureRandom.uuid
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
+        end.to change { user.comments.count }.by(1)
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to be true
+
+        comment_data = response.parsed_body["comment"]
+        expect(comment_data["id"]).to be_present
+        expect(comment_data["content"]).to eq("Test note")
+        expect(comment_data["comment_type"]).to eq(Comment::COMMENT_TYPE_NOTE)
+        expect(comment_data["author_name"]).to be_present
+        expect(comment_data["created_at"]).to be_present
+      end
+
+      it "uses GUMROAD_ADMIN_ID as author" do
+        post :create_comment, params: { email: user.email, content: "Test", idempotency_key: SecureRandom.uuid }
+
+        comment = user.comments.last
+        expect(comment.author_id).to eq(GUMROAD_ADMIN_ID)
+      end
+    end
+
+    context "when content exceeds maximum length" do
+      it "returns a validation error" do
+        post :create_comment, params: { email: user.email, content: "x" * 10_001, idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+      end
+    end
+
+    context "idempotency" do
+      it "returns existing comment when same key and content are sent" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
+        first_response = response.parsed_body
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
+        end.not_to change { user.comments.count }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to eq(first_response["comment"]["id"])
+      end
+
+      it "returns conflict when same key is used with different content" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "First note", idempotency_key: idempotency_key }
+        expect(response).to have_http_status(:success)
+
+        post :create_comment, params: { email: user.email, content: "Different note", idempotency_key: idempotency_key }
+        expect(response).to have_http_status(:conflict)
+        expect(response.parsed_body["error_message"]).to eq("Idempotency key already used with different content")
+      end
+
+      it "returns existing comment when content differs only by extra newlines" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "Hello\n\nWorld", idempotency_key: idempotency_key }
+        first_response = response.parsed_body
+        expect(response).to have_http_status(:success)
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Hello\n\n\n\nWorld", idempotency_key: idempotency_key }
+        end.not_to change { user.comments.count }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to eq(first_response["comment"]["id"])
+      end
+
+      it "handles concurrent inserts via RecordNotUnique" do
+        idempotency_key = SecureRandom.uuid
+        content = "Concurrent note"
+
+        allow_any_instance_of(Comment).to receive(:save).and_wrap_original do |method, *args|
+          method.call(*args)
+          raise ActiveRecord::RecordNotUnique
+        end
+
+        post :create_comment, params: { email: user.email, content: content, idempotency_key: idempotency_key }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to be_present
+        expect(response.parsed_body["comment"]["content"]).to eq(content)
+      end
+    end
+  end
+
   describe "POST send_reset_password_instructions" do
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
+    include_examples "helper api authorization required", :post, :send_reset_password_instructions
 
     context "when email is valid and user exists" do
       it "sends reset password instructions and returns success message" do
-        request.headers.merge!(auth_headers)
         expect_any_instance_of(User).to receive(:send_reset_password_instructions)
 
         post :send_reset_password_instructions, params: { email: user.email }
@@ -398,7 +556,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when email is valid but user does not exist" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
         post :send_reset_password_instructions, params: { email: "nonexistent@example.com" }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -409,7 +566,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when email is invalid" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
         post :send_reset_password_instructions, params: { email: "invalid_email" }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -420,7 +576,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when email is missing" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
         post :send_reset_password_instructions, params: {}
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -431,13 +586,12 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "POST update_email" do
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
+    include_examples "helper api authorization required", :post, :update_email
+
     let(:new_email) { "new_email@example.com" }
 
     context "when email is valid and user exists" do
       it "updates user email and returns success message" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: { current_email: user.email, new_email: new_email }
 
         expect(response).to have_http_status(:success)
@@ -448,8 +602,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when current email is invalid" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: { current_email: "nonexistent@example.com", new_email: new_email }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -459,8 +611,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when new email is invalid" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: { current_email: user.email, new_email: "invalid_email" }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -472,8 +622,6 @@ describe Api::Internal::Helper::UsersController do
       let(:another_user) { create(:user) }
 
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: { current_email: user.email, new_email: another_user.email }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -483,8 +631,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when required parameters are missing" do
       it "returns an error for missing emails" do
-        request.headers.merge!(auth_headers)
-
         post :update_email, params: {}
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -494,11 +640,10 @@ describe Api::Internal::Helper::UsersController do
   end
 
   describe "POST update_two_factor_authentication_enabled" do
-    let(:auth_headers) { { "Authorization" => "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}" } }
+    include_examples "helper api authorization required", :post, :update_two_factor_authentication_enabled
 
     context "when email is valid and user exists" do
       it "enables two-factor authentication and returns success message" do
-        request.headers.merge!(auth_headers)
         user.update!(two_factor_authentication_enabled: false)
 
         post :update_two_factor_authentication_enabled, params: { email: user.email, enabled: true }
@@ -510,7 +655,6 @@ describe Api::Internal::Helper::UsersController do
       end
 
       it "disables two-factor authentication and returns success message" do
-        request.headers.merge!(auth_headers)
         user.update!(two_factor_authentication_enabled: true)
 
         post :update_two_factor_authentication_enabled, params: { email: user.email, enabled: false }
@@ -524,8 +668,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when email is invalid or user does not exist" do
       it "returns an error message" do
-        request.headers.merge!(auth_headers)
-
         post :update_two_factor_authentication_enabled, params: { email: "nonexistent@example.com", enabled: true }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -536,8 +678,6 @@ describe Api::Internal::Helper::UsersController do
 
     context "when required parameters are missing" do
       it "returns an error for missing email" do
-        request.headers.merge!(auth_headers)
-
         post :update_two_factor_authentication_enabled, params: { enabled: true }
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -546,8 +686,6 @@ describe Api::Internal::Helper::UsersController do
       end
 
       it "returns an error for missing enabled status" do
-        request.headers.merge!(auth_headers)
-
         post :update_two_factor_authentication_enabled, params: { email: user.email }
 
         expect(response).to have_http_status(:unprocessable_entity)

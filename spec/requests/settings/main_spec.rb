@@ -17,7 +17,7 @@ describe("Main Settings Scenario", type: :system, js: true) do
       expect(page).to have_tab_button "Settings"
       expect(page).to have_tab_button "Profile"
       expect(page).to have_tab_button "Payments"
-      expect(page).to have_tab_button "Password"
+      expect(page).to have_tab_button "Password and authentication"
       expect(page).to have_tab_button "Advanced"
     end
   end
@@ -30,7 +30,6 @@ describe("Main Settings Scenario", type: :system, js: true) do
         fill_in("Email", with: new_email)
       end
       click_on("Update settings")
-      wait_for_ajax
 
       expect(page).to have_alert(text: "Your account has been updated!")
       expect(user.reload.unconfirmed_email).to eq new_email
@@ -80,7 +79,6 @@ describe("Main Settings Scenario", type: :system, js: true) do
         expect(page).to have_text("This email address has not been confirmed yet. Resend confirmation?")
         click_on "Resend confirmation?"
 
-        wait_for_ajax
         expect(page).to have_alert(text: "Confirmation email resent!")
         expect(page).to_not have_link("Resend confirmation?")
       end
@@ -94,7 +92,7 @@ describe("Main Settings Scenario", type: :system, js: true) do
 
     it "disables the form" do
       visit settings_main_path
-      expect(page).not_to have_link("Password")
+      expect(page).not_to have_link("Password and authentication")
       expect(page).not_to have_button("Update settings")
       expect(page).not_to have_selector(".js-invalidate-active-sessions-trigger", text: "Sign out from all active sessions")
     end
@@ -152,7 +150,6 @@ describe("Main Settings Scenario", type: :system, js: true) do
         end
 
         click_on "Update settings"
-        wait_for_ajax
 
         expect(page).to have_alert(text: "Your account has been updated!")
         user.reload
@@ -173,7 +170,7 @@ describe("Main Settings Scenario", type: :system, js: true) do
         end
 
         click_on "Update settings"
-        wait_for_ajax
+        expect(page).to have_alert(text: "Your account has been updated!")
         user.reload
 
         expect(user.purchasing_power_parity_excluded_product_external_ids).to eq([@product_1.external_id, @product_2.external_id])
@@ -195,7 +192,7 @@ describe("Main Settings Scenario", type: :system, js: true) do
         end
 
         click_on "Update settings"
-        wait_for_ajax
+        expect(page).to have_alert(text: "Your account has been updated!")
         user.reload
 
         expect(user.purchasing_power_parity_excluded_product_external_ids).to eq([])
@@ -231,9 +228,11 @@ describe("Main Settings Scenario", type: :system, js: true) do
     expect(page).to have_alert(text: "Your account has been updated!")
     expect(user.reload.show_nsfw_products).to eq(true)
 
+    visit settings_main_path
+    expect(page).to have_checked_field("Show adult content in recommendations and search results")
+
     uncheck "Show adult content in recommendations and search results"
     click_on "Update settings"
-    wait_for_ajax
 
     expect(page).to have_alert(text: "Your account has been updated!")
     expect(user.reload.show_nsfw_products).to eq(false)
@@ -255,7 +254,6 @@ describe("Main Settings Scenario", type: :system, js: true) do
         fill_in "Fine print", with: "This is a sample fine print"
 
         click_on "Update settings"
-        wait_for_ajax
 
         expect(page).to have_alert(text: "Your account has been updated!")
 

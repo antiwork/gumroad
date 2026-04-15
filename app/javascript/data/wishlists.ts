@@ -10,11 +10,12 @@ export type Wishlist = {
   name: string;
 };
 
-export const createWishlist = async () => {
+export const createWishlist = async (name: string) => {
   const response = await request({
     method: "POST",
     url: Routes.wishlists_path(),
     accept: "json",
+    data: { wishlist: { name } },
   });
   return cast<{ wishlist: Wishlist }>(await response.json());
 };
@@ -155,22 +156,6 @@ export const fetchWishlists = async (ids: string[]) => {
   const response = await request({
     method: "GET",
     url: Routes.wishlists_path({ ids }),
-    accept: "json",
-  });
-  if (!response.ok) throw new ResponseError();
-  return cast<CardWishlist[]>(await response.json());
-};
-
-export const fetchRecommendedWishlists = async ({
-  curatedProductIds,
-  taxonomy,
-}: {
-  curatedProductIds?: string[];
-  taxonomy?: string | null;
-}) => {
-  const response = await request({
-    method: "GET",
-    url: Routes.discover_recommended_wishlists_path({ curated_product_ids: curatedProductIds, taxonomy }),
     accept: "json",
   });
   if (!response.ok) throw new ResponseError();

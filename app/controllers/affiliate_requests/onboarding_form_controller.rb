@@ -11,19 +11,36 @@ class AffiliateRequests::OnboardingFormController < Sellers::BaseController
     user_product_params = permitted_params[:products].filter { |product| user_product_external_ids.include?(product[:id].to_i) }
 
     if disabling_all_products_while_having_pending_requests?(user_product_params)
-      return render json: { success: false, error: "You need to have at least one product enabled since there are some pending affiliate requests" }
+      message = "You need to have at least one product enabled since there are some pending affiliate requests"
+      if request.inertia?
+        return redirect_to onboarding_affiliates_path, alert: message
+      else
+        return render json: { success: false, error: message }
+      end
     end
 
     SelfServiceAffiliateProduct.bulk_upsert!(user_product_params, current_seller.id)
 
     current_seller.update!(disable_global_affiliate: permitted_params[:disable_global_affiliate])
 
-    render json: { success: true }
+    if request.inertia?
+      redirect_to onboarding_affiliates_path, notice: "Changes saved!"
+    else
+      render json: { success: true }
+    end
   rescue ActiveRecord::RecordInvalid => e
-    render json: { success: false, error: e.message }
+    if request.inertia?
+      redirect_to onboarding_affiliates_path, alert: e.message
+    else
+      render json: { success: false, error: e.message }
+    end
   rescue => e
     logger.error e.full_message
-    render json: { success: false }
+    if request.inertia?
+      redirect_to onboarding_affiliates_path, alert: "Something went wrong"
+    else
+      render json: { success: false }
+    end
   end
 
   private

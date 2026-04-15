@@ -26,6 +26,10 @@ describe Impersonate, type: :controller do
       expect(controller.impersonating_user).to eq(nil)
       expect(controller.impersonated_user).to eq(nil)
     end
+
+    it "handles reset_impersonated_user without raising" do
+      expect { controller.stop_impersonating_user }.not_to raise_error
+    end
   end
 
   let(:user) { create(:named_user) }
@@ -139,9 +143,9 @@ describe Impersonate, type: :controller do
               user.suspend_for_fraud!(author_id: admin.id)
             end
 
-            it "returns nil" do
+            it "returns the user" do
               get :action
-              expect(controller.impersonated_user).to be(nil)
+              expect(controller.impersonated_user).to eq(user)
             end
           end
 
@@ -151,9 +155,9 @@ describe Impersonate, type: :controller do
               user.suspend_for_tos_violation!(author_id: admin.id)
             end
 
-            it "returns nil" do
+            it "returns the user" do
               get :action
-              expect(controller.impersonated_user).to be(nil)
+              expect(controller.impersonated_user).to eq(user)
             end
           end
         end

@@ -56,6 +56,10 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
+  def update_purchases_content?
+    update?
+  end
+
   def product_permitted_attributes
     attributes = [
       :name,
@@ -71,6 +75,8 @@ class LinkPolicy < ApplicationPolicy
       :hide_sold_out_variants,
       :custom_button_text_option,
       :custom_summary,
+      :custom_view_content_button_text,
+      :custom_receipt_text,
       :is_epublication,
       :display_product_reviews,
       :is_adult,
@@ -91,6 +97,7 @@ class LinkPolicy < ApplicationPolicy
       :require_shipping,
       :is_multiseat_license,
       :community_chat_enabled,
+      :default_offer_code_id,
       refund_policy: [
         :max_refund_period_in_days,
         :title,
@@ -171,6 +178,8 @@ class LinkPolicy < ApplicationPolicy
       :discover_fee_per_thousand,
       :custom_button_text_option,
       :custom_summary,
+      :custom_view_content_button_text,
+      :custom_receipt_text,
       :is_epublication,
       :product_refund_policy_enabled,
       :seller_refund_policy_enabled,

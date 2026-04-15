@@ -1,3 +1,4 @@
+import { Star } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -9,10 +10,12 @@ import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { OfferCode, applyOfferCodeToCents } from "$app/utils/offer-code";
 import { assertResponseError, request } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+import { Skeleton } from "$app/components/Skeleton";
 import { createInsertCommand } from "$app/components/TiptapExtensions/utils";
+import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 declare module "@tiptap/core" {
@@ -35,6 +38,7 @@ type Product = {
   review_count: number;
   average_rating: number;
   native_type: ProductNativeType;
+  thumbnail_url: string | null;
   permalink: string;
   options: ProductOption[];
 };
@@ -54,12 +58,12 @@ type UpsellCardHeaderProps = {
 };
 
 const UpsellCardHeader = ({ product, variant }: UpsellCardHeaderProps) => (
-  <header>
-    <h3>
+  <ProductCardHeader className="lg:border-b-0 lg:p-0">
+    <h3 className="truncate">
       {product.name}
-      {variant ? <span className="ml-2 text-muted">({variant.name})</span> : null}
+      {variant ? <span className="ml-2 truncate text-muted">({variant.name})</span> : null}
     </h3>
-  </header>
+  </ProductCardHeader>
 );
 
 export const UpsellCard = TiptapNode.create({
@@ -110,7 +114,7 @@ export const UpsellCard = TiptapNode.create({
 });
 
 const getUpsellUrl = (id: string, permalink: string) => {
-  const url = new URL(Routes.checkout_index_url());
+  const url = new URL(Routes.checkout_url());
   const searchParams = new URLSearchParams();
   searchParams.append("product", permalink);
   searchParams.append("accepted_offer_id", id);
@@ -170,32 +174,31 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         data-drag-handle
       >
         {isLoading ? (
-          <div className="dummy h-32"></div>
+          <Skeleton className="h-32" />
         ) : product ? (
-          <article className="product-card horizontal">
-            <figure>
-              <Thumbnail url={null} nativeType={product.native_type} />
-            </figure>
-
-            <section>
+          <ProductCard className="lg:h-32 lg:flex-row">
+            <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0">
+              <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
+            </ProductCardFigure>
+            <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">
               {isEditable ? (
                 <UpsellCardHeader product={product} variant={variant} />
               ) : (
-                <a href={getUpsellUrl(id ?? "", product.permalink)} className="stretched-link">
+                <StretchedLink href={getUpsellUrl(id ?? "", product.permalink)}>
                   <UpsellCardHeader product={product} variant={variant} />
-                </a>
+                </StretchedLink>
               )}
-              <footer className="text-base">
+              <ProductCardFooter className="lg:divide-x-0">
                 {product.review_count > 0 ? (
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Icon name="solid-star" />
+                  <div className="flex flex-[1_0_max-content] items-center gap-1 p-4 lg:p-0">
+                    <Star pack="filled" className="size-5" />
                     <span className="rating-average">{product.average_rating.toFixed(1)}</span>
                     <span>{`(${formatOrderOfMagnitude(product.review_count, 1)})`}</span>
                   </div>
                 ) : (
-                  <div>No reviews</div>
+                  <div className="flex flex-1 items-center p-4 lg:p-0">No reviews</div>
                 )}
-                <div>
+                <div className="p-4 lg:p-0">
                   <PriceTag
                     currencyCode={product.currency_code}
                     oldPrice={oldPrice}
@@ -204,9 +207,9 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
                     isSalesLimited={false}
                   />
                 </div>
-              </footer>
+              </ProductCardFooter>
             </section>
-          </article>
+          </ProductCard>
         ) : null}
       </div>
       <NodeViewContent />

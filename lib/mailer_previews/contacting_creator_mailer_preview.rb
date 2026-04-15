@@ -71,10 +71,6 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.notify(Purchase.last&.id)
   end
 
-  def negative_revenue_sale_failure
-    ContactingCreatorMailer.negative_revenue_sale_failure(Purchase.last&.id)
-  end
-
   def purchase_refunded_for_fraud
     ContactingCreatorMailer.purchase_refunded_for_fraud(Purchase.last&.id)
   end
@@ -177,11 +173,11 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   end
 
   def tax_form_1099k
-    ContactingCreatorMailer.tax_form_1099k(User.last&.id, Time.current.year.pred, "https://www.gumroad.com")
+    ContactingCreatorMailer.tax_form_1099k(User.last&.id, Time.current.year.pred)
   end
 
   def tax_form_1099misc
-    ContactingCreatorMailer.tax_form_1099misc(User.last&.id, Time.current.year.pred, "https://www.gumroad.com")
+    ContactingCreatorMailer.tax_form_1099misc(User.last&.id, Time.current.year.pred)
   end
 
   def review_submitted
@@ -219,7 +215,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   private
     def sample_csv_file
       tempfile = Tempfile.new
-      CSV.open(tempfile, "wb") { |csv| 100.times { csv << ["Some", "CSV", "Data"] } }
+      CsvSafe.open(tempfile, "wb") { |csv| 100.times { csv << ["Some", "CSV", "Data"] } }
       tempfile.rewind
       tempfile
     end

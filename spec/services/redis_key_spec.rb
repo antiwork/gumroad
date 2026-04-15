@@ -18,4 +18,13 @@ describe RedisKey do
       expect(key).to eq("ai_request_throttle:456")
     end
   end
+
+  describe ".acme_challenge" do
+    it "returns a properly formatted redis key with token" do
+      token = "abc123"
+      key = described_class.acme_challenge(token)
+
+      expect(key).to eq("acme_challenge:abc123")
+    end
+  end
 end

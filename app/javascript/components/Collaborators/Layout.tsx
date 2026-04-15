@@ -1,3 +1,4 @@
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -22,11 +23,11 @@ export const Layout = ({
     <PageHeader title={title} actions={headerActions}>
       {showTabs ? (
         <Tabs>
-          <Tab href={Routes.collaborators_path()} isSelected={selectedTab === "collaborators"}>
-            Collaborators
+          <Tab asChild isSelected={selectedTab === "collaborators"}>
+            <Link href={Routes.collaborators_path()}>Collaborators</Link>
           </Tab>
-          <Tab href={Routes.collaborators_incomings_path()} isSelected={selectedTab === "collaborations"}>
-            Collaborations
+          <Tab asChild isSelected={selectedTab === "collaborations"}>
+            <Link href={Routes.collaborators_incomings_path()}>Collaborations</Link>
           </Tab>
         </Tabs>
       ) : null}

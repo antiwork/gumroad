@@ -72,13 +72,3 @@ export const getProduct = async (id: string) => {
   if (!response.ok) throw new ResponseError();
   return cast<ProductProps>(await response.json());
 };
-
-export const unlinkTwitter = async () => {
-  const response = await request({
-    method: "POST",
-    url: Routes.unlink_twitter_settings_connections_path(),
-    accept: "json",
-  });
-  const json = cast<{ success: false; error_message: string } | { success: true }>(await response.json());
-  if (!json.success) throw new ResponseError(json.error_message);
-};

@@ -139,21 +139,6 @@ Copy the example and fill in secrets (if needed):
 cp .env.example .env
 ```
 
-### SSL Certificates with `mkcert`
-
-1. Install:
-
-```bash
-sudo apt install mkcert libnss3-tools
-```
-
-2. Install root CA and generate certs:
-
-```bash
-mkcert -install
-bin/generate_ssl_certificates
-```
-
 ---
 
 ## Running Locally
@@ -238,11 +223,13 @@ git config --local core.hooksPath .githooks
 
 ## 🧭 /etc/hosts Setup
 
-Make sure this line is in your `/etc/hosts`:
+Add this entry to your `/etc/hosts`:
 
 ```bash
 127.0.0.1 gumroad.dev
 ```
+
+Edit the file:
 
 ```bash
 sudo nano /etc/hosts

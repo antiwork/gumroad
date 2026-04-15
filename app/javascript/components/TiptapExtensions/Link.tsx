@@ -1,57 +1,47 @@
+import { Button as ButtonIcon, CursorClick, Link as LinkIcon } from "@boxicons/react";
 import { Editor, Node } from "@tiptap/core";
 import { Link as BaseLink } from "@tiptap/extension-link";
 import { NodeSelection, Selection, TextSelection } from "@tiptap/pm/state";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import cx from "classnames";
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { cast } from "ts-safe-cast";
 
-import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
-import { Modal } from "$app/components/Modal";
-import { Popover } from "$app/components/Popover";
-import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
-import { showAlert } from "$app/components/server-components/Alert";
+import { classNames } from "$app/utils/classNames";
 
-export const WithDialog = ({
+import { Button, buttonVariants } from "$app/components/Button";
+import { Modal } from "$app/components/Modal";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
+import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
+import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+
+export const LinkDialog = ({
   editor,
   type,
-  children,
+  onClose,
 }: {
   editor: Editor;
   type: "link" | "button";
-  children: React.ReactNode;
+  onClose: () => void;
 }) => {
-  const [addingLink, setAddingLink] = React.useState<{ label: string; url: string } | null>(null);
+  const [addingLink, setAddingLink] = React.useState<{ label: string; url: string }>(() => {
+    const { from, to, empty } = editor.view.state.selection;
+    const label = empty ? "" : editor.state.doc.textBetween(from, to, "");
+    return { label, url: "" };
+  });
   const labelInputRef = React.useRef<HTMLInputElement | null>(null);
   const linkInputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
-    if (addingLink !== null) {
-      setTimeout(() => labelInputRef.current?.focus(), 0);
-    }
-  }, [addingLink?.label]);
-
-  React.useEffect(() => {
-    if (type === "link" && (addingLink?.label !== "" || editor.isActive("image"))) {
-      setTimeout(() => linkInputRef.current?.focus(), 0);
-    }
-  }, [addingLink?.url]);
-
-  const onLinkMenuItemClick = () => {
-    const { from, to, empty } = editor.view.state.selection;
-    const label = empty ? "" : editor.state.doc.textBetween(from, to, "");
-    if (editor.getAttributes("image").link) {
-      editor.chain().updateAttributes("image", { link: null }).run();
-    } else {
-      setAddingLink({ label, url: "" });
-    }
-  };
+    const shouldFocusUrl = type === "link" && (addingLink.label !== "" || editor.isActive("image"));
+    const target = shouldFocusUrl ? linkInputRef : labelInputRef;
+    setTimeout(() => target.current?.focus(), 0);
+  }, []);
 
   const onAddLink = () => {
-    if (!addingLink) return;
-
     const href = validateUrl(addingLink.url);
     if (!href) {
       showAlert("Please enter a valid URL.", "error");
@@ -84,46 +74,37 @@ export const WithDialog = ({
       });
     }
     chain.run();
-    setAddingLink(null);
+    onClose();
   };
 
   return (
-    <>
-      {addingLink !== null
-        ? // TODO (maya) remove this once popovers no longer use details
-          createPortal(
-            <Modal open onClose={() => setAddingLink(null)} title={`Insert ${type === "link" ? "link" : "button"}`}>
-              {!editor.isActive("image") ? (
-                <input
-                  ref={labelInputRef}
-                  type="text"
-                  placeholder="Enter text"
-                  value={addingLink.label}
-                  onChange={(el) => setAddingLink({ label: el.target.value, url: addingLink.url || "" })}
-                  onKeyDown={(el) => {
-                    if (el.key === "Enter") onAddLink();
-                  }}
-                />
-              ) : null}
-              <input
-                ref={linkInputRef}
-                type="text"
-                placeholder="Enter URL"
-                value={addingLink.url}
-                onChange={(el) => setAddingLink({ label: addingLink.label || "", url: el.target.value })}
-                onKeyDown={(el) => {
-                  if (el.key === "Enter") onAddLink();
-                }}
-              />
-              <Button color="primary" onClick={onAddLink}>
-                {type === "link" ? "Add link" : "Add button"}
-              </Button>
-            </Modal>,
-            document.body,
-          )
-        : null}
-      <div onClick={onLinkMenuItemClick}>{children}</div>
-    </>
+    <Modal open onClose={onClose} title={`Insert ${type === "link" ? "link" : "button"}`}>
+      {!editor.isActive("image") ? (
+        <Input
+          ref={labelInputRef}
+          type="text"
+          placeholder="Enter text"
+          value={addingLink.label}
+          onChange={(el) => setAddingLink({ ...addingLink, label: el.target.value })}
+          onKeyDown={(el) => {
+            if (el.key === "Enter") onAddLink();
+          }}
+        />
+      ) : null}
+      <Input
+        ref={linkInputRef}
+        type="text"
+        placeholder="Enter URL"
+        value={addingLink.url}
+        onChange={(el) => setAddingLink({ ...addingLink, url: el.target.value })}
+        onKeyDown={(el) => {
+          if (el.key === "Enter") onAddLink();
+        }}
+      />
+      <Button color="primary" onClick={onAddLink}>
+        {type === "link" ? "Add link" : "Add button"}
+      </Button>
+    </Modal>
   );
 };
 
@@ -220,52 +201,55 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
     <NodeViewWrapper as="span" style={{ display: "inline-block" }}>
       {editor.isEditable && (isPopoverShown || isButton) ? (
         <Popover
-          trigger={
+          open={isPopoverShown}
+          onOpenChange={(open) => {
+            setLink({ label: node.textContent, url: cast(node.attrs.href) });
+            setIsPopoverShown(open);
+          }}
+        >
+          <PopoverTrigger className={classNames("invisible all-unset", { visible: isButton || isPopoverVisible })}>
             <NodeViewContent
               as="a"
               href={cast<string>(node.attrs.href)}
-              className={cx({ "button primary": isButton })}
+              className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
               target="_blank"
               rel="noopener noreferrer nofollow"
             />
-          }
-          open={isPopoverShown}
-          onToggle={() => {
-            setLink({ label: node.textContent, url: cast(node.attrs.href) });
-            setIsPopoverShown(!isPopoverShown);
-          }}
-          style={{ visibility: isButton || isPopoverVisible ? "visible" : "hidden" }}
-        >
-          <fieldset>
-            <input
-              placeholder="Enter text"
-              value={link.label}
-              onChange={(evt) => setLink({ ...link, label: evt.target.value })}
-              onKeyDown={handleKeyPress}
-            />
-            <input
-              placeholder="Enter URL"
-              value={link.url}
-              ref={linkInputRef}
-              onChange={(evt) => setLink({ ...link, url: evt.target.value })}
-              onKeyDown={handleKeyPress}
-            />
-            <div className="flex items-end gap-2">
-              {!isButton && (
-                <Button contentEditable={false} color="danger" onClick={removeLink}>
-                  Remove link
+          </PopoverTrigger>
+          <PopoverContent usePortal>
+            <Fieldset>
+              <Input
+                placeholder="Enter text"
+                value={link.label}
+                onChange={(evt) => setLink({ ...link, label: evt.target.value })}
+                onKeyDown={handleKeyPress}
+              />
+              <Input
+                placeholder="Enter URL"
+                value={link.url}
+                ref={linkInputRef}
+                onChange={(evt) => setLink({ ...link, url: evt.target.value })}
+                onKeyDown={handleKeyPress}
+              />
+              <div className="flex items-end gap-2">
+                {!isButton && (
+                  <Button contentEditable={false} color="danger" onClick={removeLink}>
+                    Remove link
+                  </Button>
+                )}
+                <Button
+                  contentEditable={false}
+                  color="primary"
+                  onClick={handleSave}
+                  disabled={
+                    (link.url === node.attrs.href && link.label === node.textContent) || link.label.trim() === ""
+                  }
+                >
+                  Save
                 </Button>
-              )}
-              <Button
-                contentEditable={false}
-                color="primary"
-                onClick={handleSave}
-                disabled={(link.url === node.attrs.href && link.label === node.textContent) || link.label.trim() === ""}
-              >
-                Save
-              </Button>
-            </div>
-          </fieldset>
+              </div>
+            </Fieldset>
+          </PopoverContent>
         </Popover>
       ) : (
         <NodeViewContent
@@ -273,7 +257,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
           as="a"
           href={cast<string>(node.attrs.href)}
           contentEditable={editor.isEditable}
-          className={cx({ "button primary": isButton })}
+          className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
           target="_blank"
           rel="noopener noreferrer nofollow"
           onClick={(event: React.MouseEvent) => {
@@ -312,30 +296,42 @@ const TiptapButton = Node.create({
   addNodeView() {
     return ReactNodeViewRenderer(LinkNodeView);
   },
-  menuItem: (editor) => (
-    <WithDialog editor={editor} type="button">
-      <MenuItem name="Insert button" icon="button" />
-    </WithDialog>
+  menuItem: (_editor, onOpen) => (
+    <MenuItem name="Insert button" icon={<ButtonIcon className="size-5" />} onClick={() => onOpen?.()} />
   ),
   submenu: {
     menu: "insert",
-    item: (editor) => (
-      <WithDialog editor={editor} type="button">
-        <div role="menuitem">
-          <Icon name="button" />
-          <span>Button</span>
-        </div>
-      </WithDialog>
+    item: (_editor, onOpen) => (
+      <MenuListItem onClick={onOpen}>
+        <CursorClick className="size-5" />
+        <span>Button</span>
+      </MenuListItem>
     ),
   },
 });
 export { TiptapButton as Button };
 
-export const LinkMenuItem = ({ editor }: { editor: Editor }) => (
-  <WithDialog editor={editor} type="link">
-    <MenuItem name="Insert link" icon="link" active={editor.isActive("link") || !!editor.getAttributes("image").link} />
-  </WithDialog>
-);
+export const LinkMenuItem = ({ editor }: { editor: Editor }) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const handleOpen = () => {
+    if (editor.getAttributes("image").link) {
+      editor.chain().updateAttributes("image", { link: null }).run();
+    } else {
+      setIsOpen(true);
+    }
+  };
+  return (
+    <>
+      <MenuItem
+        name="Insert link"
+        icon={<LinkIcon className="size-5" />}
+        active={editor.isActive("link") || !!editor.getAttributes("image").link}
+        onClick={handleOpen}
+      />
+      {isOpen ? <LinkDialog editor={editor} type="link" onClose={() => setIsOpen(false)} /> : null}
+    </>
+  );
+};
 
 export const Link = Node.create({
   name: "tiptap-link",

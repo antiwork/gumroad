@@ -30,6 +30,17 @@ describe PurchaseSearchService do
       expect(get_records(purchaser: [purchaser_1, purchaser_2.id])).to match_array([purchase_1, purchase_2, purchase_3])
     end
 
+    it "can filter by id" do
+      purchase_1 = create(:purchase)
+      purchase_2 = create(:purchase)
+      purchase_3 = create(:purchase)
+      index_model_records(Purchase)
+
+      expect(get_records(id: purchase_1.id)).to match_array([purchase_1])
+      expect(get_records(id: [purchase_1.id, purchase_2.id])).to match_array([purchase_1, purchase_2])
+      expect(get_records(id: [purchase_1.id, purchase_2.id, purchase_3.id])).to match_array([purchase_1, purchase_2, purchase_3])
+    end
+
     it "can filter by product, and exclude product" do
       product_1 = create(:product)
       purchase_1, purchase_2 = create_list(:purchase, 2, link: product_1)
@@ -372,6 +383,52 @@ describe PurchaseSearchService do
       expect(get_records).to match_array([purchase1, purchase2])
       expect(get_records(exclude_commission_completion_purchases: true)).to match_array([purchase2])
       expect(get_records(exclude_commission_completion_purchases: false)).to match_array([purchase1, purchase2])
+    end
+
+    it "can filter by is_deleted_by_buyer" do
+      purchase1 = create(:purchase, is_deleted_by_buyer: true)
+      purchase2 = create(:purchase)
+      index_model_records(Purchase)
+
+      expect(get_records).to match_array([purchase1, purchase2])
+      expect(get_records(exclude_deleted_by_buyer: true)).to match_array([purchase2])
+      expect(get_records(exclude_deleted_by_buyer: false)).to match_array([purchase1, purchase2])
+    end
+
+    it "can filter by is_additional_contribution" do
+      purchase1 = create(:purchase, is_additional_contribution: true)
+      purchase2 = create(:purchase)
+      index_model_records(Purchase)
+
+      expect(get_records).to match_array([purchase1, purchase2])
+      expect(get_records(exclude_additional_contributions: true)).to match_array([purchase2])
+      expect(get_records(exclude_additional_contributions: false)).to match_array([purchase1, purchase2])
+    end
+
+    it "can filter by is_access_revoked" do
+      purchase1 = create(:purchase, is_access_revoked: true)
+      purchase2 = create(:purchase)
+      index_model_records(Purchase)
+
+      expect(get_records).to match_array([purchase1, purchase2])
+      expect(get_records(exclude_access_revoked: true)).to match_array([purchase2])
+      expect(get_records(exclude_access_revoked: false)).to match_array([purchase1, purchase2])
+    end
+
+    it "applies all library filters with for_library option" do
+      valid_purchase = create(:purchase)
+      create(:purchase, is_additional_contribution: true)
+      create(:purchase, is_access_revoked: true)
+      create(:purchase, is_deleted_by_buyer: true)
+      create(:purchase, is_gift_sender_purchase: true)
+      create(:purchase, stripe_refunded: true)
+      create(:purchase, is_bundle_product_purchase: true)
+      create(:purchase, is_commission_completion_purchase: true)
+      deactivated_sub_purchase = create(:membership_purchase, created_at: 2.days.ago)
+      deactivated_sub_purchase.subscription.deactivate!
+      index_model_records(Purchase)
+
+      expect(get_records(for_library: true)).to match_array([valid_purchase])
     end
 
     it "can apply some native ES params" do

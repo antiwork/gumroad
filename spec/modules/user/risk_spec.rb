@@ -42,4 +42,24 @@ describe User::Risk do
       expect(result.to_a).to eq([user])
     end
   end
+
+  describe "#suspend_sellers_other_accounts" do
+    let(:transition) { double("transition", args: []) }
+
+    context "when user has PayPal as payout processor" do
+      it "calls SuspendAccountsWithPaymentAddressWorker only once for all related accounts" do
+        user = create(:user, payment_address: "test@example.com")
+        create(:user, payment_address: "test@example.com")
+
+        expect do
+          user.suspend_sellers_other_accounts(transition)
+        end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(0).to(1)
+        .and change { SuspendAccountsWithPaymentAddressWorker.jobs.last&.dig("args") }.to([user.id])
+
+        expect do
+          SuspendAccountsWithPaymentAddressWorker.perform_one
+        end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(1).to(0)
+      end
+    end
+  end
 end

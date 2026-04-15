@@ -5,6 +5,7 @@ import { request, assertResponseError } from "$app/utils/request";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
+import { InlineList } from "$app/components/ui/InlineList";
 import { useIsIntersecting } from "$app/components/useIsIntersecting";
 
 type UserStatsProps = {
@@ -21,7 +22,7 @@ type ResponseData = {
   chargeback_count: string;
 };
 
-const AdminUserStats = ({ user_id }: { user_id: number }) => {
+const AdminUserStats = ({ user_external_id }: { user_external_id: string }) => {
   const [userStats, setUserStats] = React.useState<UserStatsProps | null>(null);
 
   const elementRef = useIsIntersecting<HTMLUListElement>((isIntersecting) => {
@@ -31,7 +32,7 @@ const AdminUserStats = ({ user_id }: { user_id: number }) => {
       try {
         const response = await request({
           method: "GET",
-          url: Routes.admin_user_stats_path(user_id),
+          url: Routes.admin_user_stats_path(user_external_id),
           accept: "json",
         });
         if (!response.ok) assertResponseError(response);
@@ -47,12 +48,12 @@ const AdminUserStats = ({ user_id }: { user_id: number }) => {
   });
 
   return (
-    <ul ref={elementRef} className="inline">
+    <InlineList ref={elementRef}>
       <li>{userStats ? `${userStats.total} total` : <LoadingSpinner />}</li>
       <li>{userStats ? `${userStats.balance} balance` : <LoadingSpinner />}</li>
       <li>{userStats ? `${userStats.chargeback_volume} vol CB` : <LoadingSpinner />}</li>
       <li>{userStats ? `${userStats.chargeback_count} count CB` : <LoadingSpinner />}</li>
-    </ul>
+    </InlineList>
   );
 };
 

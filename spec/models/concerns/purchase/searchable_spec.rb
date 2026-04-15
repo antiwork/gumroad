@@ -523,6 +523,28 @@ describe Purchase::Searchable do
     end
   end
 
+  describe "purchaser_id reindexing" do
+    it "enqueues ES update when purchaser_id changes" do
+      purchase = create(:purchase, purchaser: nil)
+      ElasticsearchIndexerWorker.jobs.clear
+
+      user = create(:user)
+      purchase.update!(purchaser: user)
+
+      expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("update", hash_including("record_id" => purchase.id, "class_name" => "Purchase", "fields" => ["purchaser_id"]))
+    end
+
+    it "updates purchaser_id in Elasticsearch document", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      purchase = create(:purchase, purchaser: nil)
+      expect(get_document_attributes(purchase)["purchaser_id"]).to be_nil
+
+      user = create(:user)
+      purchase.update!(purchaser: user)
+
+      expect(get_document_attributes(purchase)["purchaser_id"]).to eq(user.id)
+    end
+  end
+
   context "updating a purchase", :sidekiq_inline, :elasticsearch_wait_for_refresh do
     it "sets the subscription id" do
       subscription = create(:subscription)

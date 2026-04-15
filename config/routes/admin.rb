@@ -9,12 +9,12 @@ namespace :admin do
   get :impersonate, to: "base#impersonate"
   delete :unimpersonate, to: "base#unimpersonate"
   get :redirect_to_stripe_dashboard, to: "base#redirect_to_stripe_dashboard", as: :redirect_to_stripe_dashboard
-  get "helper_actions/impersonate/:user_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
-  get "helper_actions/stripe_dashboard/:user_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
+  get "helper_actions/impersonate/:user_external_id", to: "helper_actions#impersonate", as: :impersonate_helper_action
+  get "helper_actions/stripe_dashboard/:user_external_id", to: "helper_actions#stripe_dashboard", as: :stripe_dashboard_helper_action
 
   get "action_call_dashboard", to: "action_call_dashboard#index"
 
-  resources :users, only: [:show, :destroy], defaults: { format: "html" } do
+  resources :users, only: [:show, :destroy], param: :external_id, defaults: { format: "html" } do
     scope module: :users do
       concerns :commentable
 
@@ -30,7 +30,7 @@ namespace :admin do
       resource :payout_info, only: :show
       resources :latest_posts, only: :index
       resources :stats, only: :index
-      resources :products, only: :index do
+      resources :products, only: :index, param: :external_id do
         scope module: :products do
           resources :tos_violation_flags, only: [:index, :create]
           resources :purchases, only: :index
@@ -38,7 +38,6 @@ namespace :admin do
       end
       resources :guids, only: [:index]
     end
-    resources :service_charges, only: :index
     member do
       post :add_credit
       post :mass_transfer_purchases
@@ -65,8 +64,8 @@ namespace :admin do
     end
   end
 
-  resources :affiliates, only: [] do
-    resources :products, only: [:index], module: :affiliates do
+  resources :affiliates, only: [], param: :external_id do
+    resources :products, only: [:index], param: :external_id, module: :affiliates do
       resources :purchases, only: :index, module: :products
     end
   end
@@ -75,29 +74,26 @@ namespace :admin do
   resource :unblock_email_domains, only: [:show, :update]
   resource :suspend_users, only: [:show, :update]
   resource :refund_queue, only: [:show]
+  resources :unreviewed_users, only: [:index]
 
-  resources :affiliates, only: [:index, :show], defaults: { format: "html" }
+  resources :affiliates, only: [:index, :show], param: :external_id, defaults: { format: "html" }
 
-  resources :links, only: [:show], defaults: { format: "html" } do
+  get "links/:id", to: redirect("/admin/products/%{id}"), as: :link
+
+  resources :products, controller: "links", only: [:show, :destroy], param: :external_id do
     member do
+      post :restore
+      post :publish
+      delete :unpublish
+      post :is_adult
+      get "/file/:product_file_id/access", to: "links#access_product_file", as: :admin_access_product_file
+      get :views_count
+      get :sales_stats
       get :access_product_file
       post :flag_seller_for_tos_violation
       get :generate_url_redirect
-      post :is_adult
-      post :publish
-      post :unpublish
       get :join_discord
       get :join_discord_redirect
-    end
-  end
-
-  resources :products, controller: "links", only: [:show, :destroy] do
-    member do
-      get "/file/:product_file_id/access", to: "links#access_product_file", as: :admin_access_product_file
-      get :legacy_purchases
-      get :views_count
-      get :sales_stats
-      post :restore
     end
     scope module: :products do
       concerns :commentable
@@ -105,13 +101,17 @@ namespace :admin do
       resource :details, controller: "details", only: [:show]
       resource :info, only: [:show]
       resource :staff_picked, controller: "staff_picked", only: [:create]
-      resources :purchases, only: [:index]
+      resources :purchases, only: [:index] do
+        collection do
+          post :mass_refund_for_fraud
+        end
+      end
     end
   end
 
   resources :comments, only: :create
 
-  resources :purchases, only: [:show] do
+  resources :purchases, only: [:show], param: :external_id do
     scope module: :purchases do
       concerns :commentable
     end
@@ -132,7 +132,7 @@ namespace :admin do
 
   resources :sales_reports, only: [:index, :create]
 
-  resources :merchant_accounts, only: [:show] do
+  resources :merchant_accounts, only: [:show], param: :external_id do
     member do
       get :live_attributes
     end
@@ -140,7 +140,7 @@ namespace :admin do
 
   # Payouts
   post "/paydays/pay_user/:id", to: "paydays#pay_user", as: :pay_user
-  resources :payouts, only: [:show] do
+  resources :payouts, only: [:show], param: :external_id do
     member do
       post :retry
       post :cancel
@@ -154,7 +154,7 @@ namespace :admin do
     resources :users, only: :index
     resources :purchases, only: :index
   end
-  get "/search_purchases", to: "search#purchases"
+  get "/search_purchases", to: "search/purchases#index", as: :legacy_search_purchases # old URL for backward compatibility
 
   # Compliance
   resources :guids, only: [:show]

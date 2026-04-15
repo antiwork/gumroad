@@ -3,8 +3,9 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Settings::ThirdPartyAnalyticsController do
+describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: true do
   let(:seller) { create(:named_seller) }
 
   include_context "with user signed in as admin for seller"
@@ -14,38 +15,48 @@ describe Settings::ThirdPartyAnalyticsController do
   end
 
   describe "GET show" do
-    it "returns http success and assigns correct instance variables" do
+    it "returns http success and renders Inertia component" do
       get :show
       expect(response).to be_successful
-      expect(assigns[:title]).to eq("Settings")
-
-      settings_presenter = assigns[:settings_presenter]
-      expect(settings_presenter.pundit_user).to eq(controller.pundit_user)
+      expect(inertia.component).to eq("Settings/ThirdPartyAnalytics/Show")
+      settings_presenter = SettingsPresenter.new(pundit_user: controller.pundit_user)
+      expected_props = {
+        third_party_analytics: settings_presenter.third_party_analytics_props,
+        products: seller.links.alive.map { |product| { permalink: product.unique_permalink, name: product.name } },
+      }
+      # Compare only the expected props from inertia.props (ignore shared props)
+      actual_props = inertia.props.slice(*expected_props.keys)
+      expect(actual_props).to eq(expected_props)
     end
   end
 
   describe "PUT update" do
     google_analytics_id = "G-1234567"
     facebook_pixel_id = "123456789"
+    tiktok_pixel_id = "CFH83AJC77UUUGLE2TJG"
     facebook_meta_tag = '<meta name="facebook-domain-verification" content="dkd8382hfdjs" />'
 
     context "when all of the fields are valid" do
       it "returns a successful response" do
-        put :update, as: :json, params: {
+        put :update, params: {
           user: {
             disable_third_party_analytics: false,
             google_analytics_id:,
             facebook_pixel_id:,
+            tiktok_pixel_id:,
             skip_free_sale_analytics: true,
             enable_verify_domain_third_party_services: true,
             facebook_meta_tag:,
           }
         }
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to redirect_to(settings_third_party_analytics_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Changes saved!")
         seller.reload
         expect(seller.disable_third_party_analytics).to eq(false)
         expect(seller.google_analytics_id).to eq(google_analytics_id)
         expect(seller.facebook_pixel_id).to eq(facebook_pixel_id)
+        expect(seller.tiktok_pixel_id).to eq(tiktok_pixel_id)
         expect(seller.skip_free_sale_analytics).to eq(true)
         expect(seller.enable_verify_domain_third_party_services).to eq(true)
         expect(seller.facebook_meta_tag).to eq(facebook_meta_tag)
@@ -54,37 +65,56 @@ describe Settings::ThirdPartyAnalyticsController do
 
     context "when a field is invalid" do
       it "returns an error response and doesn't persist changes" do
-        put :update, as: :json, params: {
+        put :update, params: {
           user: {
             disable_third_party_analytics: false,
             google_analytics_id: "bad",
             facebook_pixel_id:,
+            tiktok_pixel_id:,
             skip_free_sale_analytics: true,
             enable_verify_domain_third_party_services: true,
             facebook_meta_tag:,
           }
         }
 
-        expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["error_message"]).to eq("Please enter a valid Google Analytics ID")
+        expect(response).to redirect_to(settings_third_party_analytics_path)
+        expect(response).to have_http_status :found
+        expect(flash[:alert]).to eq("Please enter a valid Google Analytics ID")
 
         seller.reload
         expect(seller.disable_third_party_analytics).to eq(false)
         expect(seller.google_analytics_id).to be_nil
         expect(seller.facebook_pixel_id).to be_nil
+        expect(seller.tiktok_pixel_id).to be_nil
         expect(seller.skip_free_sale_analytics).to eq(false)
         expect(seller.enable_verify_domain_third_party_services).to eq(false)
         expect(seller.facebook_meta_tag).to be_nil
+      end
+
+      it "returns an error response for invalid TikTok Pixel ID" do
+        put :update, params: {
+          user: {
+            tiktok_pixel_id: "invalid-pixel!",
+          }
+        }
+
+        expect(response).to redirect_to(settings_third_party_analytics_path)
+        expect(response).to have_http_status :found
+        expect(flash[:alert]).to eq("Please enter a valid TikTok Pixel ID")
+
+        seller.reload
+        expect(seller.tiktok_pixel_id).to be_nil
       end
     end
 
     context "when updating throws an error" do
       it "returns an error response" do
         allow_any_instance_of(User).to receive(:update).and_raise(StandardError)
-        put :update, as: :json, params: {}
+        put :update, params: {}
 
-        expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["error_message"]).to eq("Something broke. We're looking into what happened. Sorry about this!")
+        expect(response).to redirect_to(settings_third_party_analytics_path)
+        expect(response).to have_http_status :found
+        expect(flash[:alert]).to eq("Something broke. We're looking into what happened. Sorry about this!")
       end
     end
   end

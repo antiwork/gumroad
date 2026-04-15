@@ -97,6 +97,8 @@ class DropboxFile < ApplicationRecord
   end
 
   def multipart_transfer_to_s3(filename, s3_guid)
+    validate_dropbox_url!
+
     extname = File.extname(dropbox_url)
     tempfile = Tempfile.new([s3_guid, extname], binmode: true)
     HTTParty.get(dropbox_url, stream_body: true, follow_redirects: true) do |fragment|
@@ -134,6 +136,11 @@ class DropboxFile < ApplicationRecord
   end
 
   private
+    def validate_dropbox_url!
+      uri = URI.parse(dropbox_url)
+      raise ArgumentError, "Invalid Dropbox URL" if !uri.is_a?(URI::HTTPS) || !uri.host&.match?(/(\A|\.)(dropbox|dropboxusercontent)\.com\z/i)
+    end
+
     def fetch_content_type
       MIME::Types.type_for(dropbox_url).first.to_s.presence
     end

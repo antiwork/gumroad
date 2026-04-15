@@ -62,10 +62,6 @@ class Subscription::UpdaterService
           original_purchase.update!(params[:contact_info])
         end
 
-        if !same_plan_and_price? || (is_resubscribing && overdue_for_charge)
-          subscription.update!(flat_fee_applicable: true) unless subscription.flat_fee_applicable?
-        end
-
         # Update card if necessary
         unless use_existing_card?
           had_saved_card = subscription.credit_card.present?
@@ -94,12 +90,26 @@ class Subscription::UpdaterService
           end
         end
 
-        unless same_plan_and_price?
-          self.new_purchase = subscription.update_current_plan!( # here we have an error
+        original_discount = subscription.original_purchase.purchase_offer_code_discount
+        discount_changed = if params[:clear_discount]
+          true
+        elsif params[:offer_code].present? && original_discount.present?
+          params[:offer_code] != original_discount.offer_code ||
+            params[:offer_code].amount != original_discount.offer_code_amount ||
+            params[:offer_code].is_percent? != original_discount.offer_code_is_percent ||
+            params[:offer_code].duration_in_billing_cycles != original_discount.duration_in_billing_cycles
+        else
+          params[:offer_code].present?
+        end
+
+        if !same_plan_and_price? || (is_resubscribing && (discount_changed || price_changed?))
+          self.new_purchase = subscription.update_current_plan!(
             new_variants: variants,
             new_price: price,
             new_quantity: params[:quantity],
             perceived_price_cents: params[:price_range],
+            offer_code: params[:offer_code],
+            clear_discount: params[:clear_discount],
           )
           subscription.reload
         end
@@ -257,12 +267,19 @@ class Subscription::UpdaterService
         )
       end
 
-      purchase_params.merge!(setup_future_charges: true) if subscription.credit_card_to_charge&.requires_mandate?
+      # When a SetupIntent already completed SCA (e.g. multi-seller cart checkout),
+      # force off_session: true so the charge references the prior authentication
+      # and Stripe doesn't prompt for SCA again.
+      setup_intent_authenticated = params[:stripe_setup_intent_id].present?
+
+      if !setup_intent_authenticated && subscription.credit_card_to_charge&.requires_mandate?
+        purchase_params.merge!(setup_future_charges: true)
+      end
 
       self.upgrade_purchase = subscription.charge!(
         override_params: purchase_params,
         from_failed_charge_email: ActiveModel::Type::Boolean.new.cast(params[:declined]),
-        off_session: !subscription.credit_card_to_charge&.requires_mandate?
+        off_session: setup_intent_authenticated || !subscription.credit_card_to_charge&.requires_mandate?
       )
 
       subscription.unsubscribe_and_fail! if is_resubscribing && !(upgrade_purchase.successful? ||
@@ -283,7 +300,7 @@ class Subscription::UpdaterService
           requires_card_action: true,
           client_secret: upgrade_purchase.charge_intent.client_secret,
           purchase: {
-            id: upgrade_purchase.external_id,
+            id: upgrade_purchase.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: upgrade_purchase.merchant_account.is_a_stripe_connect_account? ? upgrade_purchase.merchant_account.charge_processor_merchant_id : nil
           }
         }
@@ -298,7 +315,7 @@ class Subscription::UpdaterService
       return unless tiered_membership?
       return if same_plan_and_price?
       unless new_purchase.present?
-        Bugsnag.notify("SubscriptionUpdater: new_purchase missing when sending API notification")
+        ErrorNotifier.notify("SubscriptionUpdater: new_purchase missing when sending API notification")
         return
       end
 
@@ -395,6 +412,13 @@ class Subscription::UpdaterService
 
     def pwyw?
       variants.any? { |v| v.customizable_price? }
+    end
+
+    def price_changed?
+      return false if pwyw?
+      tier_price = subscription.send(:tier_price)
+      return false unless tier_price.present?
+      subscription.current_subscription_price_cents / original_purchase.quantity != tier_price.price_cents
     end
 
     def same_pwyw_price?

@@ -48,6 +48,10 @@ module Product::CreationLimit
     end
 
     def daily_creation_limit
+      user&.daily_product_creation_limit || default_daily_creation_limit
+    end
+
+    def default_daily_creation_limit
       user&.compliant? ? 100 : 10
     end
 end

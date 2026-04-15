@@ -20,7 +20,7 @@ module PdfStampingService::Stamp
       original_pdf_path = original_pdf.path
       original_pdf_path_shellescaped = Shellwords.shellescape(original_pdf_path)
 
-      watermark_pdf_path = create_watermark_pdf!(original_pdf_path:, watermark_text:)
+      watermark_pdf_path, page_count = create_watermark_pdf!(original_pdf_path:, watermark_text:)
       watermark_pdf_path_shellescaped = Shellwords.shellescape(watermark_pdf_path)
 
       stamped_pdf_file_name = build_stamped_pdf_file_name(product_file)
@@ -30,7 +30,8 @@ module PdfStampingService::Stamp
       apply_watermark!(
         original_pdf_path_shellescaped,
         watermark_pdf_path_shellescaped,
-        stamped_pdf_path_shellescaped
+        stamped_pdf_path_shellescaped,
+        page_count:
       )
 
       stamped_pdf_path
@@ -99,20 +100,39 @@ module PdfStampingService::Stamp
 
       pdf.image("#{Rails.root}/app/assets/images/pdf_stamp.png", at: [watermark_x + 305, watermark_y], width: 24)
 
-      # pdftk stamps all pages by default, repeating the last page of the stamp until the end of the original pdf.
-
       pdf.render_file(watermark_pdf_path)
-      watermark_pdf_path
+      [watermark_pdf_path, reader.page_count]
     end
 
-    def apply_watermark!(original_pdf_path_shellescaped, watermark_pdf_path_shellescaped, stamped_pdf_path_shellescaped)
-      command = "pdftk #{original_pdf_path_shellescaped} multistamp #{watermark_pdf_path_shellescaped} output #{stamped_pdf_path_shellescaped}"
+    def apply_watermark!(original_pdf_path_shellescaped, watermark_pdf_path_shellescaped, stamped_pdf_path_shellescaped, page_count:)
+      if page_count <= 1
+        run_pdftk!("pdftk #{original_pdf_path_shellescaped} multistamp #{watermark_pdf_path_shellescaped} output #{stamped_pdf_path_shellescaped}")
+        return
+      end
+
+      first_page_path = "#{Dir.tmpdir}/first_page_#{SecureRandom.hex}.pdf"
+      stamped_first_page_path = "#{Dir.tmpdir}/stamped_first_#{SecureRandom.hex}.pdf"
+      remaining_pages_path = "#{Dir.tmpdir}/remaining_#{SecureRandom.hex}.pdf"
+
+      begin
+        run_pdftk!("pdftk #{original_pdf_path_shellescaped} cat 1 output #{Shellwords.shellescape(first_page_path)}")
+        run_pdftk!("pdftk #{Shellwords.shellescape(first_page_path)} multistamp #{watermark_pdf_path_shellescaped} output #{Shellwords.shellescape(stamped_first_page_path)}")
+        run_pdftk!("pdftk #{original_pdf_path_shellescaped} cat 2-end output #{Shellwords.shellescape(remaining_pages_path)}")
+        run_pdftk!("pdftk #{Shellwords.shellescape(stamped_first_page_path)} #{Shellwords.shellescape(remaining_pages_path)} cat output #{stamped_pdf_path_shellescaped}")
+      ensure
+        [first_page_path, stamped_first_page_path, remaining_pages_path].each do |path|
+          File.unlink(path) if File.exist?(path)
+        end
+      end
+    end
+
+    def run_pdftk!(command)
       stdout, stderr, status = Open3.capture3(command)
       return if status.success?
 
-      Rails.logger.error("[#{name}.#{__method__}] Failed to execute command: #{command}")
-      Rails.logger.error("[#{name}.#{__method__}] STDOUT: #{stdout}")
-      Rails.logger.error("[#{name}.#{__method__}] STDERR: #{stderr}")
+      Rails.logger.error("[#{name}.apply_watermark!] Failed to execute command: #{command}")
+      Rails.logger.error("[#{name}.apply_watermark!] STDOUT: #{stdout}")
+      Rails.logger.error("[#{name}.apply_watermark!] STDERR: #{stderr}")
       error_message = parse_error_message(stdout, stderr)
       raise Error, "Error generating stamped PDF: #{error_message}"
     end

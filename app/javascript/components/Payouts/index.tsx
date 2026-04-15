@@ -1,28 +1,36 @@
+import { ArrowInDownSquareHalf, Calendar, CheckCircle, Clock, Cog } from "@boxicons/react";
+import { Link, router } from "@inertiajs/react";
+import classNames from "classnames";
 import * as React from "react";
-import { cast } from "ts-safe-cast";
 
 import { exportPayouts } from "$app/data/balance";
-import { createInstantPayout } from "$app/data/payout";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
-import { assertResponseError, request } from "$app/utils/request";
+import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
 import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Pill } from "$app/components/ui/Pill";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Select } from "$app/components/ui/Select";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
 
 const INSTANT_PAYOUT_FEE_PERCENTAGE = 0.03;
-const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 1000;
+const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10000;
 const MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 999900;
 
 type StripeConnectAccount = { payout_method_type: "stripe_connect"; stripe_connect_account_id: string };
@@ -166,9 +174,13 @@ export type BankAccount =
       routing_number: string;
       account_number: string;
       bank_name?: string;
-      sort_code: string;
     }
-  | { payout_method_type: "bank"; bank_account_type: "GI"; account_number: string }
+  | {
+      payout_method_type: "bank";
+      bank_account_type: "GI";
+      routing_number: string;
+      account_number: string;
+    }
   | { payout_method_type: "bank"; bank_account_type: "GA"; routing_number: string; account_number: string }
   | { payout_method_type: "bank"; bank_account_type: "MC"; account_number: string };
 
@@ -251,7 +263,6 @@ export type PayoutsProps = {
   processing_payout_periods_data: PayoutPeriodData[];
   payouts_status: "paused" | "payable";
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
-  payouts_paused_for_reason: string | null;
   past_payout_period_data: PayoutPeriodData[];
   instant_payout: {
     payable_amount_cents: number;
@@ -267,6 +278,7 @@ export type PayoutsProps = {
   } | null;
   show_instant_payouts_notice: boolean;
   pagination: PaginationProps;
+  tax_center_enabled: boolean;
 };
 
 // TODO: move BankAccount|PaypalAccount out of CurrentPayoutsDataAndPaymentMethodWithUserPayable
@@ -333,152 +345,151 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         }}
       >
         {payoutPeriodData.status === "completed" ? <span>{heading}</span> : <h2>{heading}</h2>}
-        {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? (
-          <div className="pill small">Instant</div>
-        ) : null}
+        {"type" in payoutPeriodData && payoutPeriodData.type === "instant" ? <Pill size="small">Instant</Pill> : null}
         <span style={{ marginLeft: "auto" }}>{payoutPeriodData.displayable_payout_period_range}</span>
         {payoutPeriodData.status === "completed" && payoutPeriodData.payment_external_id ? (
           <WithTooltip position="top" tip="Export">
             <Button
+              size="icon"
               color="primary"
               disabled={isCSVDownloadInProgress}
               onClick={handleRequestPayoutCSV}
               aria-label="Export"
             >
-              <Icon name="download" />
+              <ArrowInDownSquareHalf className="size-5" />
             </Button>
           </WithTooltip>
         ) : null}
       </div>
-      <div className="stack" style={{ marginTop: "var(--spacer-4)" }}>
-        <div>
-          <h4>Sales</h4>
+      <Card style={{ marginTop: "var(--spacer-4)" }}>
+        <CardContent>
+          <h4 className="grow font-bold">Sales</h4>
           <div>{formatDollarAmount(payoutPeriodData.sales_cents)}</div>
-        </div>
+        </CardContent>
         {payoutPeriodData.credits_cents > 0 ? (
-          <div>
-            <h4>Credits</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Credits</h4>
             <div>{formatDollarAmount(payoutPeriodData.credits_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.affiliate_credits_cents !== 0 ? (
-          <div>
-            <h4>Affiliate or collaborator fees received</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Affiliate or collaborator fees received</h4>
             <div>{formatDollarAmount(payoutPeriodData.affiliate_credits_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.discover_fees_cents !== 0 || payoutPeriodData.direct_fees_cents !== 0 ? (
           <>
             {payoutPeriodData.discover_fees_cents !== 0 ? (
-              <div>
-                <div>
-                  <h4>
+              <CardContent>
+                <div className="grow">
+                  <h4 className="font-bold">
                     Discover sales{" "}
                     <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                       fees
                     </a>
                   </h4>
                   {payoutPeriodData.discover_sales_count > 0 ? (
-                    <small>
+                    <small className="block text-muted">
                       on {payoutPeriodData.discover_sales_count}{" "}
                       {payoutPeriodData.discover_sales_count === 1 ? "sale" : "sales"}
                     </small>
                   ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.discover_fees_cents)}</div>
-              </div>
+              </CardContent>
             ) : null}
             {payoutPeriodData.direct_fees_cents !== 0 ? (
-              <div>
-                <div>
-                  <h4>
+              <CardContent>
+                <div className="grow">
+                  <h4 className="font-bold">
                     Direct sales{" "}
                     <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                       fees
                     </a>
                   </h4>
                   {payoutPeriodData.direct_sales_count > 0 ? (
-                    <small>
+                    <small className="block text-muted">
                       on {payoutPeriodData.direct_sales_count}{" "}
                       {payoutPeriodData.direct_sales_count === 1 ? "sale" : "sales"}
                     </small>
                   ) : null}
                 </div>
                 <div>{formatNegativeDollarAmount(payoutPeriodData.direct_fees_cents)}</div>
-              </div>
+              </CardContent>
             ) : null}
           </>
         ) : (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/66-gumroads-fees" target="_blank" rel="noreferrer">
                 Fees
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.fees_cents)}</div>
-          </div>
+          </CardContent>
         )}
         {payoutPeriodData.refunds_cents !== 0 ? (
-          <div>
-            <h4>Refunds</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Refunds</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.refunds_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.chargebacks_cents !== 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/134-how-does-gumroad-handle-chargebacks" target="_blank" rel="noreferrer">
                 Chargebacks
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.chargebacks_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.credits_cents < 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/269-balance-page" target="_blank" rel="noreferrer">
                 Credits
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.credits_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.loan_repayment_cents !== 0 ? (
-          <div>
-            <h4>Loan repayments</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Loan repayments</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.loan_repayment_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.affiliate_fees_cents !== 0 ? (
-          <div>
-            <h4>Affiliate or collaborator fees paid</h4>
+          <CardContent>
+            <h4 className="grow font-bold">Affiliate or collaborator fees paid</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.affiliate_fees_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.paypal_payout_cents !== 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/275-paypal-connect" target="_blank" rel="noreferrer">
                 PayPal payouts
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.paypal_payout_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.stripe_connect_payout_cents !== 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/330-stripe-connect" target="_blank" rel="noreferrer">
                 Stripe Connect payouts
               </a>
             </h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.stripe_connect_payout_cents)}</div>
-          </div>
+          </CardContent>
         ) : null}
         {payoutPeriodData.taxes_cents !== 0 ? (
-          <div>
-            <h4>
+          <CardContent>
+            <h4 className="grow font-bold">
               <a href="/help/article/121-sales-tax-on-gumroad" target="_blank" rel="noreferrer">
                 Taxes
               </a>
@@ -491,9 +502,9 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                 <span>{formatDollarAmount(payoutPeriodData.taxes_cents)}</span>
               </WithTooltip>
             </div>
-          </div>
+          </CardContent>
         ) : null}
-        <div>
+        <CardContent>
           {(() => {
             const isCurrentPeriod = payoutPeriodData.status === "payable";
             switch (payoutPeriodData.payout_method_type) {
@@ -519,8 +530,8 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
               {payoutPeriodData.status === "payable" && payoutPeriodData.should_be_shown_currencies_always ? "USD" : ""}
             </span>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </section>
   );
 };
@@ -528,9 +539,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
 const PeriodEmpty = ({ minimumPayoutAmountCents }: { minimumPayoutAmountCents: number }) => (
   <div className="period period-empty full column">
     <Placeholder>
-      <figure>
-        <img src={placeholder} />
-      </figure>
+      <PlaceholderImage src={placeholder} />
       <h2>Let's get you paid.</h2>
       Reach a balance of at least{" "}
       {formatPriceCentsWithCurrencySymbol("usd", minimumPayoutAmountCents, {
@@ -574,7 +583,11 @@ const PeriodBankAccount = ({
   <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacer-2)" }}>
     <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
       {bankAccount.arrival_date ? (
-        <Icon name={bankAccount.status === "completed" ? "solid-check-circle" : "outline-clock"} />
+        bankAccount.status === "completed" ? (
+          <CheckCircle pack="filled" className="size-5" />
+        ) : (
+          <Clock className="size-5" />
+        )
       ) : null}
       <h4>
         {bankAccount.arrival_date ? (
@@ -643,39 +656,24 @@ const Payouts = ({
   processing_payout_periods_data,
   payouts_status,
   payouts_paused_by,
-  payouts_paused_for_reason,
   past_payout_period_data,
   instant_payout,
   show_instant_payouts_notice,
-  pagination: initialPagination,
+  pagination,
+  tax_center_enabled,
 }: PayoutsProps) => {
   const loggedInUser = useLoggedInUser();
   const userAgentInfo = useUserAgentInfo();
 
-  const [pastPayoutPeriodData, setPastPayoutPeriodData] = React.useState(past_payout_period_data);
-  const [pagination, setPagination] = React.useState(initialPagination);
-
   const [isLoading, setIsLoading] = React.useState(false);
 
-  const loadNextPage = async () => {
-    setIsLoading(true);
-    try {
-      const response = await request({
-        method: "GET",
-        accept: "json",
-        url: Routes.payments_paged_path({ page: pagination.page + 1 }),
-      })
-        .then((res) => res.json())
-        .then((json) => cast<{ payouts: PayoutPeriodData[]; pagination: PaginationProps }>(json));
-
-      setPastPayoutPeriodData((prevData) => [...prevData, ...response.payouts]);
-      setPagination(response.pagination);
-    } catch (error) {
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    } finally {
-      setIsLoading(false);
-    }
+  const loadNextPage = () => {
+    router.reload({
+      data: { page: pagination.page + 1 },
+      only: ["pagination", "past_payout_period_data"],
+      onStart: () => setIsLoading(true),
+      onFinish: () => setIsLoading(false),
+    });
   };
 
   const [isInstantPayoutModalOpen, setIsInstantPayoutModalOpen] = React.useState(false);
@@ -688,29 +686,34 @@ const Payouts = ({
   const instantPayoutFee = instant_payout
     ? instantPayoutAmountCents - Math.floor(instantPayoutAmountCents / (1 + INSTANT_PAYOUT_FEE_PERCENTAGE))
     : 0;
-  const onRequestInstantPayout = async () => {
+  const onRequestInstantPayout = () => {
     if (!instant_payout) return;
-    setIsLoading(true);
-    try {
-      await createInstantPayout(
-        instant_payout.payable_balances.find((balance) => balance.id === instantPayoutId)?.date ??
-          new Date().toISOString(),
-      );
-      window.location.reload();
-    } catch (error) {
-      assertResponseError(error);
-      showAlert(error.message, "error");
-    } finally {
-      setIsInstantPayoutModalOpen(false);
-      setIsLoading(false);
-    }
+
+    const selectedDate =
+      instant_payout.payable_balances.find((balance) => balance.id === instantPayoutId)?.date ??
+      new Date().toISOString();
+
+    router.post(
+      Routes.instant_payouts_path(),
+      { date: selectedDate },
+      {
+        onStart: () => {
+          setIsInstantPayoutModalOpen(false);
+          setIsLoading(true);
+        },
+        onFinish: () => setIsLoading(false),
+        onError: () => {
+          showAlert("Failed to initiate instant payout. Please try again.", "error");
+        },
+      },
+    );
   };
 
   if (!loggedInUser) return null;
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Icon name="gear-fill" />
+      <Cog pack="filled" className="size-5" />
       Settings
     </NavigationButton>
   ) : null;
@@ -729,49 +732,54 @@ const Payouts = ({
             </div>
           ) : undefined
         }
-      />
+      >
+        {tax_center_enabled ? (
+          <Tabs>
+            <Tab isSelected asChild>
+              <Link href={Routes.balance_path()}>Payouts</Link>
+            </Tab>
+            <Tab isSelected={false} asChild>
+              <Link href={Routes.tax_center_path()}>Taxes</Link>
+            </Tab>
+          </Tabs>
+        ) : null}
+      </PageHeader>
       <div className="space-y-8 p-4 md:p-8">
         {!instant_payout ? (
           show_instant_payouts_notice ? (
-            <div className="info" role="status">
-              <p>
-                To enable <strong>instant</strong> payouts,{" "}
-                <a href={Routes.settings_payments_path()}>update your payout method</a> to one of the{" "}
-                <a href="https://docs.stripe.com/payouts/instant-payouts-banks">
-                  supported bank accounts or debit cards
-                </a>
-                .
-              </p>
-            </div>
+            <Alert role="status" variant="info">
+              To enable <strong>instant</strong> payouts,{" "}
+              <a href={Routes.settings_payments_path()}>update your payout method</a> to one of the{" "}
+              <a href="https://docs.stripe.com/payouts/instant-payouts-banks">supported bank accounts or debit cards</a>
+              .
+            </Alert>
           ) : null
         ) : instant_payout.payable_amount_cents >= MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
-          <div className="info" role="status">
-            <div>
-              <b>
-                You have{" "}
-                {formatPriceCentsWithCurrencySymbol("usd", instant_payout.payable_amount_cents, {
-                  symbolFormat: "short",
-                  noCentsIfWhole: false,
-                })}{" "}
-                available for instant payout:
-              </b>{" "}
-              No need to wait—get paid now!
-              <div style={{ marginTop: "var(--spacer-3)" }}>
-                {instant_payout.payable_balances.some(
-                  (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
-                ) ? (
-                  <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
-                ) : (
-                  <Button
-                    small
-                    color="primary"
-                    aria-label="Get paid now"
-                    onClick={() => setIsInstantPayoutModalOpen(true)}
-                  >
-                    Get paid!
-                  </Button>
-                )}
-              </div>
+          <Alert role="status" variant="info">
+            <b>
+              You have{" "}
+              {formatPriceCentsWithCurrencySymbol("usd", instant_payout.payable_amount_cents, {
+                symbolFormat: "short",
+                noCentsIfWhole: false,
+              })}{" "}
+              available for instant payout:
+            </b>{" "}
+            No need to wait—get paid now!
+            <div className="mt-3">
+              {instant_payout.payable_balances.some(
+                (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
+              ) ? (
+                <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
+              ) : (
+                <Button
+                  size="sm"
+                  color="primary"
+                  aria-label="Get paid now"
+                  onClick={() => setIsInstantPayoutModalOpen(true)}
+                >
+                  Get paid!
+                </Button>
+              )}
             </div>
             <Modal
               open={isInstantPayoutModalOpen}
@@ -779,7 +787,7 @@ const Payouts = ({
               footer={
                 <>
                   <Button onClick={() => setIsInstantPayoutModalOpen(false)}>Cancel</Button>
-                  <Button color="primary" disabled={isLoading} onClick={() => void onRequestInstantPayout()}>
+                  <Button color="primary" disabled={isLoading} onClick={() => onRequestInstantPayout()}>
                     Get paid!
                   </Button>
                 </>
@@ -791,11 +799,11 @@ const Payouts = ({
                 bank account within 30 minutes, though some payouts may take longer to be credited.
               </p>
 
-              <fieldset>
-                <label htmlFor="instant-payout-date">Pay out balance up to</label>
-                <div className="input cursor-pointer">
-                  <Icon name="calendar-all" />
-                  <select
+              <Fieldset>
+                <Label htmlFor="instant-payout-date">Pay out balance up to</Label>
+                <InputGroup className="cursor-pointer">
+                  <Calendar className="size-5" />
+                  <Select
                     id="instant-payout-date"
                     value={instantPayoutId}
                     onChange={(e) => setInstantPayoutId(e.target.value)}
@@ -809,16 +817,15 @@ const Payouts = ({
                         })}
                       </option>
                     ))}
-                  </select>
-                  <Icon name="outline-cheveron-down" />
-                </div>
-              </fieldset>
-              <fieldset>
-                <legend>Payout details</legend>
-                <div className="cart">
-                  <div className="cart-summary">
-                    <div>
-                      <p>Sent to</p>
+                  </Select>
+                </InputGroup>
+              </Fieldset>
+              <Fieldset>
+                <FieldsetTitle>Payout details</FieldsetTitle>
+                <div className="rounded-sm border border-border bg-background not-first:border-t">
+                  <div className="grid gap-4 p-4">
+                    <div className="grid grid-flow-col justify-between gap-4">
+                      <h4 className="inline-flex flex-wrap gap-2">Sent to</h4>
                       <div>
                         {instant_payout.bank_account_type === "CARD" ? (
                           <p>
@@ -839,88 +846,77 @@ const Payouts = ({
                         )}
                       </div>
                     </div>
-                    <div>
-                      <p>Amount</p>
-                      <div>${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}</div>
-                    </div>
-                    <div>
-                      <p>Instant payout fee ({INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)</p>
-                      <div>
-                        -$
-                        {formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}
-                      </div>
-                    </div>
+                    <PayoutLineItem
+                      title="Amount"
+                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents)}`}
+                    />
+                    <PayoutLineItem
+                      title={`Instant payout fee (${INSTANT_PAYOUT_FEE_PERCENTAGE * 100}%)`}
+                      price={`-$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutFee)}`}
+                    />
                   </div>
-                  <footer>
-                    <p>
-                      <strong>You'll receive</strong>
-                    </p>
-                    <div>
-                      ${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}
-                    </div>
+                  <footer className="grid gap-4 border-t border-border p-4">
+                    <PayoutLineItem
+                      title="You'll receive"
+                      price={`$${formatPriceCentsWithoutCurrencySymbol("usd", instantPayoutAmountCents - instantPayoutFee)}`}
+                      className="text-lg"
+                    />
                   </footer>
                 </div>
                 {instantPayoutAmountCents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS ? (
-                  <div role="status" className="info">
+                  <Alert role="status" variant="info">
                     Your balance exceeds the maximum amount for a single instant payout, so we'll automatically split
                     your balance into multiple payouts.
-                  </div>
+                  </Alert>
                 ) : null}
-              </fieldset>
+              </Fieldset>
             </Modal>
-          </div>
+          </Alert>
         ) : null}
         {payouts_status === "paused" ? (
-          <div className="warning" role="status">
-            <p>
-              {payouts_paused_by === "stripe" ? (
-                <strong>
-                  Your payouts are currently paused by our payment processor. Please check your{" "}
-                  <a href="/settings/payments">Payment Settings</a> for any verification requirements.
-                </strong>
-              ) : payouts_paused_by === "admin" ? (
-                <strong>
-                  Your payouts have been paused by Gumroad admin.
-                  {payouts_paused_for_reason ? ` Reason for pause: ${payouts_paused_for_reason}` : null}
-                </strong>
-              ) : payouts_paused_by === "system" ? (
-                <strong>
-                  Your payouts have been automatically paused for a security review and will be resumed once the review
-                  completes.
-                </strong>
-              ) : (
-                <strong>
-                  You have paused your payouts. Please go to <a href="/settings/payments">Payment Settings</a> to resume
-                  payouts.
-                </strong>
-              )}
-            </p>
-          </div>
+          <Alert role="status" variant="warning">
+            {payouts_paused_by === "stripe" ? (
+              <strong>
+                Your payouts are currently paused by Stripe. Please check your{" "}
+                <a href="/settings/payments">Payment Settings</a> for any verification requirements.
+              </strong>
+            ) : payouts_paused_by === "admin" ? (
+              <strong>Your payouts have been paused by Gumroad.</strong>
+            ) : payouts_paused_by === "system" ? (
+              <strong>
+                Your payouts have been automatically paused for a security review and will be resumed once the review
+                completes.
+              </strong>
+            ) : (
+              <strong>
+                You have paused your payouts. Please go to <a href="/settings/payments">Payment Settings</a> to resume
+                payouts.
+              </strong>
+            )}
+          </Alert>
         ) : null}
         {next_payout_period_data != null ? (
           next_payout_period_data.has_stripe_connect ? (
-            <div className="info" role="status">
-              <p>For Stripe Connect users, all future payouts will be deposited directly to your Stripe account</p>
-            </div>
+            <Alert role="status" variant="info">
+              For Stripe Connect users, all future payouts will be deposited directly to your Stripe account
+            </Alert>
           ) : (
             <section className="grid gap-4">
               {next_payout_period_data.payout_note &&
               !["processing", "paused"].includes(next_payout_period_data.status) ? (
-                <div className="info" role="status">
-                  <p>{next_payout_period_data.payout_note}</p>
-                </div>
+                <Alert role="status" variant="info">
+                  {next_payout_period_data.payout_note}
+                </Alert>
               ) : null}
               {next_payout_period_data.status === "not_payable" ? (
-                pastPayoutPeriodData.length > 0 ? (
-                  <div className="info" role="status">
-                    <p>
-                      Reach a balance of at least{" "}
-                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
-                        symbolFormat: "short",
-                      })}{" "}
-                      to be paid out for your sales.
-                    </p>
-                  </div>
+                past_payout_period_data.length > 0 ? (
+                  <Alert role="status" variant="info">
+                    Reach a balance of at least{" "}
+                    {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
+                      symbolFormat: "short",
+                    })}{" "}
+                    to be paid out for your sales.
+                  </Alert>
                 ) : (
                   <PeriodEmpty minimumPayoutAmountCents={next_payout_period_data.minimum_payout_amount_cents} />
                 )
@@ -940,18 +936,18 @@ const Payouts = ({
           </section>
         ) : null}
 
-        {pastPayoutPeriodData.length > 0 ? (
+        {past_payout_period_data.length > 0 ? (
           <>
             <section>
               <h2>Past payouts</h2>
               <section className="flex flex-col gap-4">
-                {pastPayoutPeriodData.map((payoutPeriodData, idx) => (
+                {past_payout_period_data.map((payoutPeriodData, idx) => (
                   <Period key={idx} payoutPeriodData={payoutPeriodData} />
                 ))}
               </section>
             </section>
             {pagination.page < pagination.pages ? (
-              <Button color="primary" onClick={() => void loadNextPage()} disabled={isLoading}>
+              <Button color="primary" onClick={loadNextPage} disabled={isLoading}>
                 Show older payouts
               </Button>
             ) : null}
@@ -961,5 +957,22 @@ const Payouts = ({
     </div>
   );
 };
+
+export function PayoutLineItem({
+  title,
+  price,
+  className,
+}: {
+  title: React.ReactNode;
+  price: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={classNames("grid grid-flow-col justify-between gap-4", className)}>
+      <h4 className="inline-flex flex-wrap gap-2 text-[length:inherit] leading-[inherit]">{title}</h4>
+      <div>{price}</div>
+    </div>
+  );
+}
 
 export default Payouts;

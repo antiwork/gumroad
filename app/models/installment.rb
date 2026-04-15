@@ -130,7 +130,9 @@ class Installment < ApplicationRecord
   }
 
   scope :missed_for_purchase, -> (purchase) {
-    product_installment_ids = purchase.link.installments.where(seller_id: purchase.seller_id).alive.published.pluck(:id)
+    product_installment_ids = purchase.link.installments.where(seller_id: purchase.seller_id).alive.published.filter_map do |post|
+      post.id if post.purchase_passes_filters(purchase)
+    end
     seller_installment_ids = purchase.seller.installments.alive.published.filter_map do |post|
       post.id if post.purchase_passes_filters(purchase)
     end
@@ -345,7 +347,7 @@ class Installment < ApplicationRecord
           assigns: {
             product: product,
             offer_code: upsell.offer_code,
-            upsell_url: checkout_index_url(accepted_offer_id: upsell.external_id, product: product.unique_permalink, host: DOMAIN)
+            upsell_url: checkout_url(accepted_offer_id: upsell.external_id, product: product.unique_permalink, host: DOMAIN)
           }
         )
       )
@@ -367,7 +369,7 @@ class Installment < ApplicationRecord
   def message_with_inline_abandoned_cart_products(products:, checkout_url: nil)
     return message if message.blank? || products.blank?
 
-    default_checkout_url = Rails.application.routes.url_helpers.checkout_index_url(host: UrlService.domain_with_protocol)
+    default_checkout_url = Rails.application.routes.url_helpers.checkout_url(host: UrlService.domain_with_protocol)
     checkout_url ||= default_checkout_url
 
     doc = Nokogiri::HTML.fragment(message_with_inline_syntax_highlighting_and_upsells)
@@ -392,7 +394,11 @@ class Installment < ApplicationRecord
     else
       recipient = { email: recipient_user.email }
       recipient[:url_redirect] = UrlRedirect.find_or_create_by!(installment: self, purchase: nil) if has_files?
-      PostEmailApi.process(post: self, recipients: [recipient], preview: true)
+      begin
+        PostEmailApi.process(post: self, recipients: [recipient], preview: true)
+      rescue ResendApiResponseError
+        raise PreviewEmailError, "Failed to send preview email. Please try again later."
+      end
     end
   end
 
@@ -827,6 +833,14 @@ class Installment < ApplicationRecord
     tags.map { normalize_tag(it) }.uniq
   end
 
+  def delivery_due?(purchase)
+    return true if installment_rule.blank?
+    return true if workflow.blank?
+    return true unless purchase.subscription&.resubscribed?
+
+    Time.current >= expected_delivery_time(purchase)
+  end
+
   class InstallmentInvalid < StandardError
   end
 
@@ -837,7 +851,14 @@ class Installment < ApplicationRecord
     # message, no name or file is ok
     # if name or file, then need the other
     def message_must_be_provided
-      errors.add(:base, "Please include a message as part of the update.") if message.blank?
+      errors.add(:base, "Please include a message as part of the update.") if scrubbed_message.blank?
+    end
+
+    def scrubbed_message
+      # Default empty message from TipTap editor is "<p><br></p>", so we need check the scrubbed version of the message for validation
+      scrubber = Rails::HTML::TargetScrubber.new
+      scrubber.tags = %w[br p]
+      sanitize(message, scrubber:)
     end
 
     def validate_call_to_action_url_and_text

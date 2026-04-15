@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_19_011939) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -171,6 +171,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.index ["seller_id", "min_created_at", "max_created_at"], name: "idx_audience_on_seller_and_minmax_created_at"
     t.index ["seller_id", "min_paid_cents", "max_paid_cents"], name: "idx_audience_on_seller_and_minmax_paid_cents"
     t.index ["seller_id", "min_purchase_created_at", "max_purchase_created_at"], name: "idx_audience_on_seller_and_minmax_purchase_created_at"
+    t.index ["seller_id"], name: "idx_audience_on_seller_id"
   end
 
   create_table "australia_backtax_email_infos", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -263,6 +264,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.string "stripe_connect_account_id"
     t.string "country", limit: 191
     t.integer "credit_card_id"
+    t.index ["stripe_fingerprint"], name: "index_bank_accounts_on_stripe_fingerprint"
     t.index ["user_id"], name: "index_ach_accounts_on_user_id"
   end
 
@@ -413,6 +415,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.boolean "pay_in_installments", default: false, null: false
     t.index ["cart_id", "product_id", "deleted_at"], name: "index_cart_products_on_cart_id_and_product_id_and_deleted_at", unique: true
     t.index ["cart_id"], name: "index_cart_products_on_cart_id"
+    t.index ["deleted_at", "cart_id"], name: "index_cart_products_on_deleted_at_and_cart_id"
     t.index ["product_id"], name: "index_cart_products_on_product_id"
   end
 
@@ -430,6 +433,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.string "ip_address"
     t.index ["browser_guid"], name: "index_carts_on_browser_guid"
     t.index ["created_at"], name: "index_carts_on_created_at"
+    t.index ["deleted_at", "updated_at"], name: "index_carts_on_deleted_at_and_updated_at"
     t.index ["email"], name: "index_carts_on_email"
     t.index ["order_id"], name: "index_carts_on_order_id"
     t.index ["updated_at"], name: "index_carts_on_updated_at"
@@ -494,8 +498,10 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.bigint "purchase_id"
     t.string "ancestry"
     t.integer "ancestry_depth", default: 0, null: false
+    t.string "idempotency_key"
     t.index ["ancestry"], name: "index_comments_on_ancestry"
     t.index ["commentable_id", "commentable_type"], name: "index_comments_on_commentable_id_and_commentable_type"
+    t.index ["commentable_type", "commentable_id", "idempotency_key"], name: "index_comments_on_commentable_and_idempotency_key", unique: true
     t.index ["purchase_id"], name: "index_comments_on_purchase_id"
   end
 
@@ -1121,8 +1127,10 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.string "native_type", default: "digital", null: false
     t.integer "discover_fee_per_thousand", default: 100, null: false
     t.string "support_email"
+    t.bigint "default_offer_code_id"
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
+    t.index ["default_offer_code_id"], name: "index_links_on_default_offer_code_id"
     t.index ["deleted_at"], name: "index_links_on_deleted_at"
     t.index ["showcaseable"], name: "index_links_on_showcaseable"
     t.index ["taxonomy_id"], name: "index_links_on_taxonomy_id"
@@ -1177,6 +1185,8 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.datetime "created_at", precision: nil, null: false
     t.datetime "revoked_at", precision: nil
     t.string "scopes", default: "", null: false
+    t.string "code_challenge"
+    t.string "code_challenge_method"
     t.index ["created_at"], name: "index_oauth_access_grants_on_created_at"
     t.index ["token"], name: "index_oauth_access_grants_on_token", unique: true
   end
@@ -2166,6 +2176,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.bigint "seller_id"
     t.string "token"
     t.datetime "token_expires_at"
+    t.string "business_vat_id", limit: 191
     t.index ["cancelled_at"], name: "index_subscriptions_on_cancelled_at"
     t.index ["deactivated_at"], name: "index_subscriptions_on_deactivated_at"
     t.index ["ended_at"], name: "index_subscriptions_on_ended_at"
@@ -2297,6 +2308,17 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.string "ip"
     t.datetime "created_at", precision: nil
     t.index ["user_id"], name: "index_tos_agreements_on_user_id"
+  end
+
+  create_table "totp_credentials", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "otp_secret", null: false
+    t.datetime "confirmed_at"
+    t.text "recovery_codes"
+    t.datetime "recovery_codes_generated_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_totp_credentials_on_user_id", unique: true
   end
 
   create_table "transcoded_videos", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2452,6 +2474,27 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.index ["user_id", "state"], name: "index_user_compliance_info_requests_on_user_id_and_state"
   end
 
+  create_table "user_external_authentications", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "provider", null: false
+    t.string "uid", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["provider", "uid"], name: "index_user_external_authentications_on_provider_and_uid", unique: true
+    t.index ["user_id"], name: "index_user_external_authentications_on_user_id"
+  end
+
+  create_table "user_tax_forms", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.integer "tax_year", null: false
+    t.string "tax_form_type", null: false
+    t.text "json_data"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "tax_year", "tax_form_type"], name: "index_user_tax_forms_on_user_id_and_tax_year_and_tax_form_type", unique: true
+    t.index ["user_id"], name: "index_user_tax_forms_on_user_id"
+  end
+
   create_table "users", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "email", default: ""
     t.string "encrypted_password", limit: 128, default: "", null: false
@@ -2518,6 +2561,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_11_10_144032) do
     t.string "notification_content_type", default: "application/x-www-form-urlencoded"
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
+    t.string "tiktok_pixel_id"
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"

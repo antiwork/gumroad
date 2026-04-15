@@ -1,3 +1,4 @@
+import { Paperclip, Trash } from "@boxicons/react";
 import { useCreateConversation, useCreateMessage } from "@helperai/react";
 import React from "react";
 
@@ -6,9 +7,13 @@ import FileUtils from "$app/utils/file";
 import { Button } from "$app/components/Button";
 import { useDomains } from "$app/components/DomainSettings";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { ALLOWED_ATTACHMENT_MIMETYPES } from "$app/components/support/ConversationDetail";
+import { SupportSlaMessage } from "$app/components/support/SupportSlaMessage";
+import { Input } from "$app/components/ui/Input";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export function NewTicketModal({
   open,
@@ -20,16 +25,8 @@ export function NewTicketModal({
   onCreated: (slug: string) => void;
 }) {
   const { apiDomain } = useDomains();
-  const { mutateAsync: createConversation } = useCreateConversation({
-    onError: (error) => {
-      showAlert(error.message, "error");
-    },
-  });
-  const { mutateAsync: createMessage } = useCreateMessage({
-    onError: (error) => {
-      showAlert(error.message, "error");
-    },
-  });
+  const { mutateAsync: createConversation } = useCreateConversation();
+  const { mutateAsync: createMessage } = useCreateMessage();
 
   const [subject, setSubject] = React.useState("");
   const [message, setMessage] = React.useState("");
@@ -37,6 +34,29 @@ export function NewTicketModal({
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const isFormValid = subject.trim() && message.trim();
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!isFormValid) return;
+
+    setIsSubmitting(true);
+    try {
+      const { conversationSlug } = await createConversation({ subject: subject.trim() });
+      await createMessage({
+        conversationSlug,
+        content: message.trim(),
+        attachments,
+        customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
+      });
+      onCreated(conversationSlug);
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : "Something went wrong.", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <Modal
@@ -46,45 +66,32 @@ export function NewTicketModal({
       footer={
         <>
           <Button onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-            <Icon name="paperclip" /> Attach files
+            <Paperclip className="size-5" /> Attach files
           </Button>
           <Button
             color="accent"
             onClick={() => formRef.current?.requestSubmit()}
-            disabled={isSubmitting || !subject.trim() || !message.trim()}
+            disabled={isSubmitting || !isFormValid}
           >
             {isSubmitting ? "Sending..." : "Send message"}
           </Button>
         </>
       }
     >
+      <p>
+        <SupportSlaMessage />
+      </p>
       <form
         ref={formRef}
         className="space-y-4 md:w-[700px]"
         onSubmit={(e) => {
-          e.preventDefault();
-          void (async () => {
-            if (!subject.trim() || !message.trim()) return;
-            setIsSubmitting(true);
-            try {
-              const { conversationSlug } = await createConversation({ subject: subject.trim() });
-              await createMessage({
-                conversationSlug,
-                content: message.trim(),
-                attachments,
-                customerInfoUrl: Routes.user_info_api_internal_helper_users_url({ host: apiDomain }),
-              });
-              onCreated(conversationSlug);
-            } finally {
-              setIsSubmitting(false);
-            }
-          })();
+          void handleSubmit(e);
         }}
       >
         <label className="sr-only">Subject</label>
-        <input value={subject} placeholder="Subject" onChange={(e) => setSubject(e.target.value)} />
+        <Input value={subject} placeholder="Subject" onChange={(e) => setSubject(e.target.value)} />
         <label className="sr-only">Message</label>
-        <textarea
+        <Textarea
           rows={6}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -94,6 +101,8 @@ export function NewTicketModal({
           ref={fileInputRef}
           type="file"
           multiple
+          accept={ALLOWED_ATTACHMENT_MIMETYPES}
+          className="sr-only"
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
             if (files.length === 0) return;
@@ -102,10 +111,10 @@ export function NewTicketModal({
           }}
         />
         {attachments.length > 0 ? (
-          <div role="list" className="rows" aria-label="Files">
+          <Rows role="list" aria-label="Files">
             {attachments.map((file, index) => (
-              <div role="listitem" key={`${file.name}-${index}`}>
-                <div className="content">
+              <Row role="listitem" key={`${file.name}-${index}`}>
+                <RowContent>
                   <FileRowContent
                     name={FileUtils.getFileNameWithoutExtension(file.name)}
                     extension={FileUtils.getFileExtension(file.name).toUpperCase()}
@@ -113,20 +122,20 @@ export function NewTicketModal({
                     isUploading={false}
                     details={<li>{FileUtils.getReadableFileSize(file.size)}</li>}
                   />
-                </div>
-                <div className="actions">
+                </RowContent>
+                <RowActions>
                   <Button
                     outline
                     color="danger"
                     aria-label="Remove"
                     onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
                   >
-                    <Icon name="trash2" />
+                    <Trash className="size-5" />
                   </Button>
-                </div>
-              </div>
+                </RowActions>
+              </Row>
             ))}
-          </div>
+          </Rows>
         ) : null}
       </form>
     </Modal>

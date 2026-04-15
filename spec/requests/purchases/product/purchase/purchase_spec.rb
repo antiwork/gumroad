@@ -34,7 +34,8 @@ describe("Purchases from the product page", type: :system, js: true) do
 
     it "shows custom view content text for already bought notice" do
       @product = create(:product_with_pdf_file)
-      @product.save_custom_view_content_button_text("Custom Text")
+      @product.custom_view_content_button_text = "Custom Text"
+      @product.save!
       @user = create(:user, email: "bought@gumroad.com")
       @purchase = create(:purchase, link: @product, email: "bought@gumroad.com", purchaser: @user)
       @url_redirect = create(:url_redirect, purchase: @purchase)
@@ -137,12 +138,13 @@ describe("Purchases from the product page", type: :system, js: true) do
     visit "/l/#{@product.unique_permalink}"
 
     add_to_cart(@product)
+    fill_in "Full name", with: "Gumhead Moneybags"
     check_out(@product)
 
     expect(Purchase.last.full_name).to eq "Gumhead Moneybags"
   end
 
-  it "sends customer email and name to Stripe for fraud detection" do
+  it "sends customer email to Stripe for fraud detection" do
     product = create(:product, price_cents: 2500)
 
     visit product.long_url
@@ -152,7 +154,6 @@ describe("Purchases from the product page", type: :system, js: true) do
 
     stripe_billing_details = Stripe::PaymentMethod.retrieve(Purchase.last.stripe_card_id).billing_details
     expect(stripe_billing_details.email).to eq "test+stripe@gumroad.com"
-    expect(stripe_billing_details.name).to eq "Gumhead Moneybags"
   end
 
   context "when an active account already exists for the purchase email" do
@@ -271,7 +272,8 @@ describe("Purchases from the product page", type: :system, js: true) do
   it "shows custom view content button text on receipt after successful purchase" do
     product = create(:product_with_files)
     product2 = create(:product)
-    product.save_custom_view_content_button_text("Custom Text")
+    product.custom_view_content_button_text = "Custom Text"
+    product.save!
     visit product.long_url
     add_to_cart(product)
     visit product2.long_url

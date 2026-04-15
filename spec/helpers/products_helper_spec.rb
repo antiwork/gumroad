@@ -6,7 +6,8 @@ describe ProductsHelper do
   describe "#view_content_button_text" do
     it "shows the custom button text when available" do
       product = create(:product)
-      product.save_custom_view_content_button_text("Custom Text")
+      product.custom_view_content_button_text = "Custom Text"
+      product.save!
       expect(product.custom_view_content_button_text).not_to be_nil
       expect(helper.view_content_button_text(product)).to eq "Custom Text"
     end
@@ -98,6 +99,12 @@ describe ProductsHelper do
     shared_examples "long url" do
       it "returns the long_url" do
         expect(helper.url_for_product_page(product, request: @request, recommended_by: "test")).to eq product.long_url(recommended_by: "test")
+      end
+
+      context "when offer_code is present" do
+        it "returns the long_url with the offer_code" do
+          expect(helper.url_for_product_page(product, request: @request, recommended_by: "test", offer_code: "BLACKFRIDAY2025")).to eq product.long_url(recommended_by: "test", code: "BLACKFRIDAY2025")
+        end
       end
     end
 

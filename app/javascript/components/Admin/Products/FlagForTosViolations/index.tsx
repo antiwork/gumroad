@@ -8,6 +8,7 @@ import AdminFlagForTosViolationsContent, {
 } from "$app/components/Admin/Products/FlagForTosViolations/Content";
 import AdminFlagForTosViolationsForm from "$app/components/Admin/Products/FlagForTosViolations/Form";
 import type { Product } from "$app/components/Admin/Products/Product";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 export type Compliance = {
   reasons: Record<string, string>;
@@ -29,7 +30,9 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
     fetchData: fetchTosViolationFlags,
   } = useLazyFetch<TosViolationFlags[]>([], {
     fetchUnlessLoaded: open,
-    url: Routes.admin_user_product_tos_violation_flags_path(product.user.id, product.id, { format: "json" }),
+    url: Routes.admin_user_product_tos_violation_flags_path(product.user.external_id, product.external_id, {
+      format: "json",
+    }),
     responseParser: (data) => {
       const parsed = cast<{ tos_violation_flags: TosViolationFlags[] }>(data);
       return parsed.tos_violation_flags;
@@ -46,9 +49,9 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
     fetchIfFlagged();
   }, [flaggedForTosViolation]);
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
+  const onToggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
       fetchIfFlagged();
     }
   };
@@ -61,14 +64,14 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
+      <Details open={open} onToggle={onToggle}>
+        <DetailsToggle>
           <h3>Flag for TOS violation</h3>
-        </summary>
+        </DetailsToggle>
         {shouldShowForm ? (
           <AdminFlagForTosViolationsForm
-            user_id={product.user.id}
-            product_id={product.id}
+            user_external_id={product.user.external_id}
+            product_external_id={product.external_id}
             success_message={suspendTosSuccessMessage}
             confirm_message={suspendTosConfirmMessage}
             reasons={compliance.reasons}
@@ -78,7 +81,7 @@ const FlagForTosViolations = ({ product, compliance }: FlagForTosViolationsProps
         ) : null}
 
         <AdminFlagForTosViolationsContent isLoading={isLoading} tosViolationFlags={tos_violation_flags} />
-      </details>
+      </Details>
     </>
   );
 };

@@ -3,8 +3,9 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe Settings::AuthorizedApplicationsController do
+describe Settings::AuthorizedApplicationsController, type: :controller, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:seller) { create(:named_seller) }
@@ -19,12 +20,16 @@ describe Settings::AuthorizedApplicationsController do
       let(:policy_klass) { Settings::AuthorizedApplications::OauthApplicationPolicy }
     end
 
-    it "returns http success and assigns correct instance variables" do
+    it "returns http success and renders Inertia component" do
       create("doorkeeper/access_token", resource_owner_id: seller.id, scopes: "creator_api")
       get :index
 
       expect(response).to be_successful
-      expect(assigns[:react_component_props]).to eq(SettingsPresenter.new(pundit_user:).authorized_applications_props)
+      expect(inertia.component).to eq("Settings/AuthorizedApplications/Index")
+      pundit_user = SellerContext.new(user: user_with_role_for_seller, seller:)
+      expected_props = SettingsPresenter.new(pundit_user:).authorized_applications_props
+      actual_props = inertia.props.slice(*expected_props.keys)
+      expect(actual_props).to eq(expected_props)
     end
   end
 end

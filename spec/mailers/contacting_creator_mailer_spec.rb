@@ -158,26 +158,6 @@ describe ContactingCreatorMailer do
     end
   end
 
-  describe "negative_revenue_sale_failure", :vcr do
-    before do
-      product = create(:product, price_cents: 100, user: create(:user, email: "seller@gr.co"))
-      affiliate = create(:direct_affiliate, affiliate_basis_points: 7500, products: [product])
-      allow_any_instance_of(Purchase).to receive(:determine_affiliate_balance_cents).and_return(90)
-      @purchase = create(:purchase, link: product, seller: product.user, affiliate:, save_card: false, chargeable: create(:chargeable))
-      @purchase.process!
-    end
-
-    it "sends the correct sale failure email" do
-      mail = ContactingCreatorMailer.negative_revenue_sale_failure(@purchase.id)
-
-      expect(mail.to).to eq ["seller@gr.co"]
-      expect(mail.subject).to eq "A sale failed because of negative net revenue"
-      expect(mail.body.encoded).to include "A customer (#{@purchase.email}) attempted to purchase your product (#{@purchase.link.name}) for #{@purchase.formatted_display_price}."
-      expect(mail.body.encoded).to include "But the purchase was blocked because your net revenue from it was not positive."
-      expect(mail.body.encoded).to include "You should either increase the sale price of your product, or reduce the applicable discount and/or affiliate commission."
-    end
-  end
-
   describe "preorder_release_reminder" do
     let(:preorder_link) { create(:preorder_link) }
     let(:product) { preorder_link.link }
@@ -1027,7 +1007,7 @@ describe ContactingCreatorMailer do
       expect(body).to include("Term: gumroad-day-123")
       expect(body).to include("Content: gumroad-day-56")
       expect(mail.body.encoded).to have_link("UTM link", href: utm_link.utm_url)
-      expect(mail.body.encoded).to have_link(utm_link.title, href: utm_links_dashboard_url(query: utm_link.title))
+      expect(mail.body.encoded).to have_link(utm_link.title, href: dashboard_utm_links_url(query: utm_link.title))
     end
   end
 
@@ -1645,41 +1625,70 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include @product_file.link.name
       expect(mail.body.encoded).to include "Please try re-encoding it locally on your computer and uploading it again."
     end
+
+    it "returns early without error when the associated link has been deleted" do
+      product_file = create(:product_file, link: @product)
+      product_file.update_column(:link_id, nil)
+
+      mail = ContactingCreatorMailer.video_transcode_failed(product_file.id)
+
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
   end
 
   describe "tax_form_1099k" do
-    it "has the correct subject and body with form download url included" do
-      creator = create(:user)
-      year = Date.current.year
+    describe "filed form" do
+      it "has the correct subject and body with form download url included" do
+        creator = create(:user)
+        year = Date.current.year.pred
+        create(:user_tax_form, user: creator, tax_year: year, tax_form_type: "us_1099_k", filed_at: 1.week.ago.to_i)
 
-      form_download_url = "https://www.gumroad.com"
-      mail = ContactingCreatorMailer.tax_form_1099k(creator.id, year, form_download_url)
+        mail = ContactingCreatorMailer.tax_form_1099k(creator.id, year)
 
-      expect(mail.subject).to eq "Get your 1099-K form for #{year}"
-      expect(mail.to).to eq [creator.email]
-      expect(mail.body.encoded).to include "Your 1099-K form for #{year} is ready to download"
-      expect(mail.body.encoded).to include "The 1099-K is a purely informational form that summarizes the payments that were made to your account during #{year} and is designed to help you report your taxes."
-      expect(mail.body.encoded).to include "Our payment processor, Stripe, files a copy electronically with the IRS."
-      expect(mail.body).to have_link("Download form", href: form_download_url)
-      expect(mail.body.encoded).to include "You can also download it from your <a href=\"#{dashboard_url(host: UrlService.domain_with_protocol)}\">Gumroad dashboard</a> at any time."
+        expect(mail.subject).to eq "Get your 1099-K form for #{year}"
+        expect(mail.to).to eq [creator.email]
+        expect(mail.body.encoded).to include "Your 1099-K form for #{year} is ready to download"
+        expect(mail.body.encoded).to include "The 1099-K is a purely informational form that summarizes the payments that were made to your account during #{year} and is designed to help you report your taxes."
+        expect(mail.body.encoded).to include "Our payment processor, Stripe, files a copy electronically with the IRS."
+        expect(mail.body.encoded).to include "The sales deposited directly to your connected PayPal and Stripe accounts are not included in your 1099-K. You will receive separate 1099-K forms for those sales from PayPal and Stripe."
+        expect(mail.body).to have_link("Download form", href: download_tax_form_url(form_type: "us_1099_k", year:))
+        expect(mail.body.encoded).to include "You can also download it from your <a href=\"#{tax_center_url}\">Gumroad tax center</a> at any time."
+      end
+    end
+
+    describe "informational not-filed form" do
+      it "has the correct subject and body with form download url included" do
+        creator = create(:user)
+        year = Date.current.year.pred
+        create(:user_tax_form, user: creator, tax_year: year, tax_form_type: "us_1099_k")
+
+        mail = ContactingCreatorMailer.tax_form_1099k(creator.id, year)
+
+        expect(mail.subject).to eq "Get your 1099-K form for #{year}"
+        expect(mail.to).to eq [creator.email]
+        expect(mail.body.encoded).to include "Your 1099-K form for #{year} is ready to download"
+        expect(mail.body.encoded).to include "The 1099-K is a purely informational form that summarizes the payments that were made to your account during #{year} and is designed to help you report your taxes."
+        expect(mail.body.encoded).to include "This form is for your records only and has not been filed with the IRS."
+        expect(mail.body).to have_link("Download form", href: download_tax_form_url(form_type: "us_1099_k", year:))
+        expect(mail.body.encoded).to include "You can also download it from your <a href=\"#{tax_center_url}\">Gumroad tax center</a> at any time."
+      end
     end
   end
 
   describe "tax_form_1099misc" do
     it "has the correct subject and body with form download url included" do
       creator = create(:user)
-      year = Date.current.year
+      year = Date.current.year.pred
 
-      form_download_url = "https://www.gumroad.com"
-      mail = ContactingCreatorMailer.tax_form_1099misc(creator.id, year, form_download_url)
+      mail = ContactingCreatorMailer.tax_form_1099misc(creator.id, year)
 
       expect(mail.subject).to eq "Get your 1099-MISC form for #{year}"
       expect(mail.to).to eq [creator.email]
       expect(mail.body.encoded).to include "Your 1099-MISC form for #{year} is ready to download"
       expect(mail.body.encoded).to include "The 1099-MISC is a purely informational form that summarizes the commissions you earned as an affiliate during #{year} and is designed to help you report your taxes."
       expect(mail.body.encoded).to include "Our payment processor, Stripe, files a copy electronically with the IRS."
-      expect(mail.body).to have_link("Download form", href: form_download_url)
-      expect(mail.body.encoded).to include "You can also download it from your <a href=\"#{dashboard_url(host: UrlService.domain_with_protocol)}\">Gumroad dashboard</a> at any time."
+      expect(mail.body).to have_link("Download form", href: download_tax_form_url(form_type: "us_1099_misc", year:))
+      expect(mail.body.encoded).to include "You can also download it from your <a href=\"#{tax_center_url}\">Gumroad tax center</a> at any time."
     end
   end
 

@@ -43,11 +43,11 @@ describe User::MoneyBalance do
         expect(@user.unpaid_balance_cents(via: :elasticsearch)).to eq 0
       end
 
-      it "still returns the correct balance if Elasticsearch call failed and sends error to Bugsnag" do
+      it "still returns the correct balance if Elasticsearch call failed and sends error notification" do
         create(:balance, user: @user, amount_cents: 100, state: "unpaid", date: 1.day.ago)
         create(:balance, user: @user, amount_cents: 200, state: "unpaid", date: 3.days.ago)
         expect(Balance).to receive(:amount_cents_sum_for).with(@user).and_raise(Net::OpenTimeout)
-        expect(Bugsnag).to receive(:notify).and_call_original
+        expect(ErrorNotifier).to receive(:notify).and_call_original
         expect(@user.unpaid_balance_cents(via: :elasticsearch)).to eq 300
       end
     end
@@ -120,6 +120,45 @@ describe User::MoneyBalance do
     end
   end
 
+
+  describe "#unpaid_balance_cents_up_to_date_held_by_stripe" do
+    let(:stripe_connect_merchant_account) { create(:merchant_account, user: @user, currency: "aud") }
+
+    it "returns unpaid amount cents held in stripe connect account with date up to the given date" do
+      create(:balance, user: @user, merchant_account: stripe_connect_merchant_account,
+                       holding_currency: stripe_connect_merchant_account.currency,
+                       amount_cents: 100, holding_amount_cents: 129, state: "unpaid", date: 3.days.ago)
+      create(:balance, user: @user, merchant_account: stripe_connect_merchant_account,
+                       holding_currency: stripe_connect_merchant_account.currency,
+                       amount_cents: 200, holding_amount_cents: 258, state: "unpaid", date: 5.days.ago)
+
+      expect(@user.unpaid_balance_cents_up_to_date_held_by_stripe(1.day.ago)).to eq(300)
+    end
+
+    it "does not include balance held by gumroad" do
+      create(:balance, user: @user, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+                       amount_cents: 100, state: "unpaid", date: 3.days.ago)
+
+      expect(@user.unpaid_balance_cents_up_to_date_held_by_stripe(1.day.ago)).to eq(0)
+    end
+
+    it "does not include paid balance" do
+      create(:balance, user: @user, merchant_account: stripe_connect_merchant_account,
+                       amount_cents: 100, state: "paid", date: 3.days.ago)
+      expect(@user.unpaid_balance_cents_up_to_date_held_by_stripe(1.day.ago)).to eq(0)
+    end
+
+    it "does not include balance with date after the given date" do
+      create(:balance, user: @user, merchant_account: stripe_connect_merchant_account,
+                       amount_cents: 100, state: "unpaid", date: 1.day.ago)
+      expect(@user.unpaid_balance_cents_up_to_date_held_by_stripe(3.days.ago)).to eq(0)
+    end
+
+    it "returns 0 when user has no stripe account" do
+      allow(@user).to receive(:stripe_account).and_return(nil)
+      expect(@user.unpaid_balance_cents_up_to_date_held_by_stripe(1.day.ago)).to eq(0)
+    end
+  end
 
   describe "#unpaid_balance_holding_cents_up_to_date_held_by_stripe" do
     let(:stripe_connect_merchant_account) { create(:merchant_account, user: @user, currency: "aud") }

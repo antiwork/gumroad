@@ -93,9 +93,8 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
     visit edit_link_path(product.unique_permalink) + "/content"
 
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
 
     expect(page).to have_embed(name: "Alice's Adventures in Wonderland")
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
@@ -141,11 +140,14 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_disclosure "Insert" do
       click_on "Upsell"
     end
-    select_combo_box_option search: "Sample product", from: "Product"
-    check "Add a discount to the offered product"
-    choose "Fixed amount"
-    fill_in "Fixed amount", with: "1"
-    click_on "Insert"
+
+    within_modal do
+      select_combo_box_option search: "Sample product", from: "Product"
+      check "Add a discount to the offered product"
+      choose "Fixed amount"
+      fill_in "Fixed amount", with: "1"
+      click_on "Insert"
+    end
 
     within("[aria-label='Description']") do
       within_section "Sample product", section_element: :article do
@@ -199,18 +201,20 @@ describe("Product Edit Scenario", type: :system, js: true) do
       click_on "Upsell"
     end
 
-    # The product itself should be listed but disabled, variants listed with icon
     within_modal do
       find(:combo_box, "Product").click
       product_option = find("[role='option']", text: "Sample product", exact_text: true)
-      expect(product_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(product_option["aria-disabled"]).to eq("true")
 
       variant1_option = find("[role='option']", text: "Sample product (#{variant1.name})")
-      expect(variant1_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(variant1_option["aria-disabled"]).to eq("false")
 
       variant2_option = find("[role='option']", text: "Sample product (#{variant2.name})")
-      expect(variant2_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(variant2_option["aria-disabled"]).to eq("false")
     end
+
+    discount_amount_cents = 100
+    discount_amount = discount_amount_cents / 100.0
 
     # When searching, only variants should appear, not the product itself, and no icon
     within_modal do
@@ -222,16 +226,14 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
       variant2_option = find("[role='option']", text: "Sample product (#{variant2.name})")
       expect(variant2_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
-    end
 
-    # Select the first variant
-    select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
-    check "Add a discount to the offered product"
-    choose "Fixed amount"
-    discount_amount_cents = 100
-    discount_amount = discount_amount_cents / 100.0
-    fill_in "Fixed amount", with: discount_amount
-    click_on "Insert"
+      # Select the first variant
+      select_combo_box_option search: "Sample product (#{variant1.name})", from: "Product"
+      check "Add a discount to the offered product"
+      choose "Fixed amount"
+      fill_in "Fixed amount", with: discount_amount
+      click_on "Insert"
+    end
 
     within_section "Sample product", section_element: :article do
       expect(page).to have_selector("span", text: "(#{variant1.name})")
@@ -289,11 +291,13 @@ describe("Product Edit Scenario", type: :system, js: true) do
     select_disclosure "Insert" do
       click_on "Upsell"
     end
-    select_combo_box_option search: "Sample product", from: "Product"
-    check "Add a discount to the offered product"
-    choose "Fixed amount"
-    fill_in "Fixed amount", with: "1"
-    click_on "Insert"
+    within_modal do
+      select_combo_box_option search: "Sample product", from: "Product"
+      check "Add a discount to the offered product"
+      choose "Fixed amount"
+      fill_in "Fixed amount", with: "1"
+      click_on "Insert"
+    end
 
     within_section "Sample product", section_element: :article do
       expect(page).to have_text("5.0 (1)", normalize_ws: true)
@@ -386,6 +390,21 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(product.reload.suggested_price_cents).to be_nil
   end
 
+  it "persists default discount code on save without changes" do
+    offer_code = create(:offer_code, user: seller, products: [product], code: "PERSIST10")
+    product.update!(default_offer_code: offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
+
+    save_change
+
+    expect(product.reload.default_offer_code).to eq(offer_code)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_checked_field("Automatically apply discount code")
+  end
+
   it "allows user to update name and price", :sidekiq_inline, :elasticsearch_wait_for_refresh do
     visit edit_link_path(product.unique_permalink)
     new_name = "Slot machine"
@@ -428,6 +447,32 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
     save_change
     expect(product.reload.installment_plan).to be_nil
+  end
+
+  it "allows enabling installment plans for free products with paid variants" do
+    product.installment_plan&.destroy!
+    variant_category = create(:variant_category, link: product, title: "Tier")
+    create(:variant, variant_category: variant_category, name: "Free", price_difference_cents: 0)
+    create(:variant, variant_category: variant_category, name: "Pro", price_difference_cents: 1000)
+
+    visit edit_link_path(product.unique_permalink)
+
+    within_section "Pricing" do
+      fill_in "Amount", with: 0
+    end
+
+    save_change
+    product.reload
+    expect(product.customizable_price).to be false
+
+    within_section "Pricing" do
+      expect(page).to have_unchecked_field("Allow customers to pay what they want", disabled: false)
+      check "Allow customers to pay in installments"
+      fill_in "Number of installments", with: 2
+    end
+
+    save_change
+    expect(product.reload.installment_plan.number_of_installments).to eq(2)
   end
 
   it "allows user to update custom permalink and limit product sales" do
@@ -473,7 +518,6 @@ describe("Product Edit Scenario", type: :system, js: true) do
     visit edit_link_path(product.unique_permalink) + "/content"
 
     click_on "Publish and continue"
-    wait_for_ajax
 
     within :alert, text: "To publish a product, we need you to have an email. Set an email to continue." do
       expect(page).to have_link("Set an email", href: settings_main_url(host: UrlService.domain_with_protocol))
@@ -931,7 +975,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
         end
         expect(page).to have_text("Conversion is not reversible once completed.")
 
-        expect(page).to have_link("Yes, let's select the products", href: "#{bundle_path(product.external_id)}/content")
+        expect(page).to have_link("Yes, let's select the products", href: edit_bundle_content_path(product.external_id))
         click_on "No, cancel"
       end
 
@@ -1089,7 +1133,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button(product.name)
           end
@@ -1124,7 +1168,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           expect(page).to have_field("Title", with: "New content added to #{product.name}")
           expect(page).to have_radio_button "Customers only", checked: true
           expect(page).to have_checked_field("Send email")
-          expect(page).to have_unchecked_field("Post to profile")
+          expect(page).to_not have_field("Post to profile")
           within(:fieldset, "Bought") do
             expect(page).to have_button("#{product.name} - #{product.alive_variants.first.name}")
             expect(page).not_to have_selector(:button, exact_text: product.name)
@@ -1156,5 +1200,29 @@ describe("Product Edit Scenario", type: :system, js: true) do
     product.reload
     expect(product.community_chat_enabled?).to be(false)
     expect(product.active_community).to be_nil
+  end
+
+  it "navigates between edit tabs" do
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_text(product.name)
+
+    click_on "Content"
+    expect(page).to have_current_path(%r{/edit/content})
+
+    click_on "Receipt"
+    expect(page).to have_current_path(%r{/edit/receipt})
+
+    click_on "Product"
+    expect(page).to have_current_path(%r{/edit\z})
+  end
+
+  it "loads edit sub-routes directly" do
+    visit "/products/#{product.unique_permalink}/edit/content"
+    expect(page).to have_current_path(%r{/edit/content})
+    expect(page).to have_text(product.name)
+
+    visit "/products/#{product.unique_permalink}/edit/receipt"
+    expect(page).to have_current_path(%r{/edit/receipt})
+    expect(page).to have_text(product.name)
   end
 end

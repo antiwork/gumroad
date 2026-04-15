@@ -18,10 +18,10 @@ describe InstantPayoutsController do
         allow(instant_payouts_service).to receive(:perform).and_return({ success: true })
       end
 
-      it "returns success" do
+      it "redirects to balance path with success notice" do
         post :create, params: { date: }
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq("success" => true)
+        expect(response).to redirect_to(balance_path)
+        expect(flash[:notice]).to eq("Instant payout initiated successfully")
       end
     end
 
@@ -35,13 +35,10 @@ describe InstantPayoutsController do
         )
       end
 
-      it "returns error message" do
+      it "redirects to balance path with error alert" do
         post :create, params: { date: }
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body).to eq(
-          "success" => false,
-          "error" => "Error message"
-        )
+        expect(response).to redirect_to(balance_path)
+        expect(flash[:alert]).to eq("Error message")
       end
     end
   end

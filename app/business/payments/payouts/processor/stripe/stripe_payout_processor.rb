@@ -5,7 +5,7 @@ class StripePayoutProcessor
 
   DEBIT_CARD_PAYOUT_MAX = 300_000
   INSTANT_PAYOUT_FEE_PERCENT = 3
-  MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10_00
+  MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 100_00
   MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 9_999_00
 
   # Public: Determines if it's possible for this processor to payout
@@ -41,7 +41,7 @@ class StripePayoutProcessor
 
     if payout_type == Payouts::PAYOUT_TYPE_INSTANT
       if amount_payable_usd_cents < StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
-        user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because the account balance was less than the minimum instant payout amount of $10.") if add_comment
+        user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because the account balance was less than the minimum instant payout amount of $100.") if add_comment
         return false
       end
 
@@ -134,6 +134,12 @@ class StripePayoutProcessor
   # Returns an array of errors.
   def self.prepare_payment_and_set_amount(payment, balances)
     merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(payment.user, balances)
+
+    if merchant_account.nil?
+      payment.mark_failed!
+      return ["Cannot process payout: no valid merchant account found for user."]
+    end
+
     payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
     payment.currency = merchant_account.currency
     payment.amount_cents = 0
@@ -163,6 +169,7 @@ class StripePayoutProcessor
         },
         { stripe_account: payment.stripe_connect_account_id }
       )
+      raise "Balance transaction not yet available for destination payment #{destination_payment.id}" if destination_payment.balance_transaction.nil?
       payment.amount_cents += destination_payment.balance_transaction.amount
       payment.stripe_internal_transfer_id = internal_transfer.id
     end
@@ -182,15 +189,18 @@ class StripePayoutProcessor
     []
   rescue Stripe::InvalidRequestError => e
     failed = true
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     [e.message]
   rescue Stripe::AuthenticationError, Stripe::APIConnectionError
     failed = true
     raise
   rescue Stripe::StripeError => e
     failed = true
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     [e.message]
+  rescue RuntimeError
+    failed = true
+    raise
   ensure
     payment.mark_failed! if failed
   end
@@ -260,7 +270,7 @@ class StripePayoutProcessor
     elsif e.message["Insufficient funds in Stripe account"]
       failure_reason = Payment::FailureReason::INSUFFICIENT_FUNDS
     else
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
     end
     Rails.logger.info("Payouts: Payout errors for user with id: #{payment.user_id} #{e.message}")
     [e.message]
@@ -269,7 +279,7 @@ class StripePayoutProcessor
     raise
   rescue Stripe::StripeError => e
     failed = true
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     Rails.logger.info("Payouts: Payout errors for user with id: #{payment.user_id} #{e.message}")
     [e.message]
   ensure

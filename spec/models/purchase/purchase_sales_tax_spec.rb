@@ -324,20 +324,21 @@ describe "PurchaseSalesTax", :vcr do
             @tax_country = "ES"
 
             @purchase_country = "Spain"
-            @purchase_chargeable_country = "IN"
+            @purchase_chargeable_country = "BR"
             @purchase_ip_country = "United States"
 
-            @purchase_transaction_amount = 10_00
+            @purchase_transaction_amount = 12_20
+            @amount_for_gumroad_cents = 4_29
           end
 
-          it "resets tax and proceeds with purchase" do
-            expect(@purchase.was_purchase_taxable).to be(false)
-            expect(@purchase.was_tax_excluded_from_price).to be(false)
-            expect(@purchase.zip_tax_rate).to be_nil
+          it "trusts selected country and applies VAT" do
+            expect(@purchase.was_purchase_taxable).to be(true)
+            expect(@purchase.was_tax_excluded_from_price).to be(true)
+            expect(@purchase.zip_tax_rate).to eq(@zip_tax_rate)
 
             expect(@purchase.tax_cents).to eq(0)
-            expect(@purchase.gumroad_tax_cents).to eq(0)
-            expect(@purchase.total_transaction_cents).to eq(10_00)
+            expect(@purchase.gumroad_tax_cents).to eq(2_20)
+            expect(@purchase.total_transaction_cents).to eq(12_20)
           end
         end
 

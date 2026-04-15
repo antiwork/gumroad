@@ -1,10 +1,14 @@
+import { Box, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { PriceInput } from "$app/components/PriceInput";
 import { ShippingDestination, useProductEditContext } from "$app/components/ProductEdit/state";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Placeholder } from "$app/components/ui/Placeholder";
+import { Select } from "$app/components/ui/Select";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 export const ShippingDestinationsEditor = ({
@@ -29,12 +33,12 @@ export const ShippingDestinationsEditor = ({
   };
 
   return (
-    <section className="p-4! md:p-8!">
+    <section className="grid gap-8 border-t border-border p-4 md:p-8">
       <header>
         <h2>Shipping destinations</h2>
       </header>
       {shippingDestinations.length > 0 ? (
-        <div className="stack">
+        <Card>
           {shippingDestinations.map((shippingDestination, index) => (
             <ShippingDestinationRow
               shippingDestination={shippingDestination}
@@ -49,19 +53,19 @@ export const ShippingDestinationsEditor = ({
               key={index}
             />
           ))}
-          <div>
-            <Button onClick={addShippingDestination}>
-              <Icon name="plus" />
+          <CardContent>
+            <Button onClick={addShippingDestination} className="grow basis-0">
+              <Plus className="size-5" />
               Add shipping destination
             </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       ) : (
         <Placeholder>
           <h2>Add shipping destinations</h2>
           Choose where you're able to ship your physical product to
           <Button color="primary" onClick={addShippingDestination}>
-            <Icon name="box" />
+            <Box className="size-5" />
             Add shipping destination
           </Button>
         </Placeholder>
@@ -87,13 +91,13 @@ const ShippingDestinationRow = ({
   const updateDestination = (update: Partial<ShippingDestination>) => onChange({ ...shippingDestination, ...update });
 
   return (
-    <div aria-label="Shipping destination">
-      <fieldset>
-        <legend>
-          <label htmlFor={`${uid}-country`}>Country</label>
-        </legend>
+    <CardContent aria-label="Shipping destination">
+      <Fieldset className="grow basis-0">
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-country`}>Country</Label>
+        </FieldsetTitle>
         <div className="flex gap-2">
-          <select
+          <Select
             id={`${uid}-country`}
             aria-label="Country"
             className="flex-1"
@@ -110,19 +114,19 @@ const ShippingDestinationRow = ({
                 </React.Fragment>
               );
             })}
-          </select>
+          </Select>
           <WithTooltip position="bottom" tip="Remove">
-            <Button color="danger" outline onClick={onRemove} aria-label="Remove shipping destination">
-              <Icon name="trash2" />
+            <Button color="danger" size="icon" outline onClick={onRemove} aria-label="Remove shipping destination">
+              <Trash className="size-5" />
             </Button>
           </WithTooltip>
         </div>
-      </fieldset>
+      </Fieldset>
       <div style={{ display: "grid", gridAutoFlow: "column", gap: "var(--spacer-3)", width: "100%" }}>
-        <fieldset>
-          <legend>
-            <label htmlFor={`${uid}-one-item`}>Amount alone</label>
-          </legend>
+        <Fieldset>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}-one-item`}>Amount alone</Label>
+          </FieldsetTitle>
           <PriceInput
             id={`${uid}-one-item`}
             currencyCode={currencyType}
@@ -130,11 +134,11 @@ const ShippingDestinationRow = ({
             placeholder="0"
             onChange={(one_item_rate_cents) => updateDestination({ one_item_rate_cents })}
           />
-        </fieldset>
-        <fieldset>
-          <legend>
-            <label htmlFor={`${uid}-multiple-items`}>Amount with others</label>
-          </legend>
+        </Fieldset>
+        <Fieldset>
+          <FieldsetTitle>
+            <Label htmlFor={`${uid}-multiple-items`}>Amount with others</Label>
+          </FieldsetTitle>
           <PriceInput
             id={`${uid}-multiple-items`}
             currencyCode={currencyType}
@@ -142,8 +146,8 @@ const ShippingDestinationRow = ({
             placeholder="0"
             onChange={(multiple_items_rate_cents) => updateDestination({ multiple_items_rate_cents })}
           />
-        </fieldset>
+        </Fieldset>
       </div>
-    </div>
+    </CardContent>
   );
 };

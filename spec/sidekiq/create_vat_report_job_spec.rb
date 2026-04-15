@@ -132,7 +132,7 @@ describe CreateVatReportJob do
 
       described_class.new.perform(1, 2015)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "VAT Reporting", anything, "green")
 
       report_verification_helper
     end

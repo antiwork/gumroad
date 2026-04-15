@@ -17,7 +17,7 @@ class Helper::Client
     end
 
     serialized_params = json ? json.to_json : params.to_query
-    OpenSSL::HMAC.digest(OpenSSL::Digest.new("sha256"), GlobalConfig.get("HELPER_SECRET_KEY"), serialized_params)
+    OpenSSL::HMAC.digest(OpenSSL::Digest.new("sha256"), GlobalConfig.get("HELPER_WIDGET_SECRET"), serialized_params)
   end
 
   def add_note(conversation_id:, message:)
@@ -25,7 +25,7 @@ class Helper::Client
     headers = get_auth_headers(json: params)
     response = self.class.post("/api/v1/mailboxes/#{HELPER_MAILBOX_SLUG}/conversations/#{conversation_id}/notes/", headers:, body: params.to_json)
 
-    Bugsnag.notify("Helper error: could not add note", conversation_id:, message:) unless response.success?
+    ErrorNotifier.notify("Helper error: could not add note", conversation_id:, message:) unless response.success?
 
     response.success?
   end
@@ -35,7 +35,7 @@ class Helper::Client
     headers = get_auth_headers(json: params)
     response = self.class.post("/api/v1/mailboxes/#{HELPER_MAILBOX_SLUG}/conversations/#{conversation_id}/emails/", headers:, body: params.to_json)
 
-    Bugsnag.notify("Helper error: could not send reply", conversation_id:, message:) unless response.success?
+    ErrorNotifier.notify("Helper error: could not send reply", conversation_id:, message:) unless response.success?
 
     response.success?
   end
@@ -45,7 +45,7 @@ class Helper::Client
     headers = get_auth_headers(json: params)
     response = self.class.patch("/api/v1/mailboxes/#{HELPER_MAILBOX_SLUG}/conversations/#{conversation_id}/", headers:, body: params.to_json)
 
-    Bugsnag.notify("Helper error: could not close conversation", conversation_id:) unless response.success?
+    ErrorNotifier.notify("Helper error: could not close conversation", conversation_id:) unless response.success?
 
     response.success?
   end

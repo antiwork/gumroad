@@ -3,6 +3,7 @@
 class Payouts::ExportablesController < Sellers::BaseController
   include PayoutsHelper
 
+
   before_action :load_years_with_payouts
 
   def index

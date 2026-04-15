@@ -5,7 +5,7 @@
 module ProductFileListHelpers
   def have_file_row(name:, count: nil)
     options = { text: name, exact_text: true, count: }.compact
-    have_selector("[aria-label=Files] [role=treeitem] .content h4", **options)
+    have_selector("[aria-label=Files] [role=treeitem] h4", **options)
   end
 
   def find_file_row!(name:)
@@ -15,7 +15,7 @@ module ProductFileListHelpers
 
   def have_embed(name:, count: nil)
     options = { text: name, exact_text: true, count: }.compact
-    have_selector(".embed .content h4", **options)
+    have_selector(".embed h4", **options)
   end
 
   def find_embed(name:)
@@ -24,10 +24,19 @@ module ProductFileListHelpers
   end
 
   def wait_for_file_embed_to_finish_uploading(name:)
-    row = find_embed(name:)
-    page.scroll_to row, align: :center
-    row.find("h4").hover
-    expect(row).not_to have_selector("[role='progressbar']")
+    # Use a longer timeout for uploads which may take time (especially Dropbox transfers)
+    upload_timeout = [Capybara.default_max_wait_time, 15].max
+    page.document.synchronize(upload_timeout) do
+      row = find_embed(name:)
+      begin
+        page.scroll_to row, align: :center
+        row.find("h4").hover
+      rescue Selenium::WebDriver::Error::StaleElementReferenceError
+        # React re-renders the embed during upload progress, causing stale references
+        raise Capybara::ElementNotFound, "Embed element went stale during upload, retrying"
+      end
+      raise Capybara::ElementNotFound, "Upload still in progress" if row.has_selector?("[role='progressbar']", wait: 0)
+    end
   end
 
   def rename_file_embed(from:, to:)
@@ -45,7 +54,7 @@ module ProductFileListHelpers
   end
 
   def have_subtitle_row(name:)
-    have_selector("[role=\"treeitem\"] .content h4", text: name, exact_text: true)
+    have_selector("[role=\"listitem\"] h4", text: name, exact_text: true)
   end
 
   def attach_product_file(file)
@@ -74,10 +83,12 @@ module ProductFileListHelpers
 
   def transfer_dropbox_upload(dropbox_url: nil)
     if dropbox_url
-      DropboxFile.where(dropbox_url:).last.transfer_to_s3
+      dropbox_file = DropboxFile.where(dropbox_url:).last
     else
-      DropboxFile.last.transfer_to_s3
+      dropbox_file = DropboxFile.last
     end
+    stub_dropbox_file_transfer(dropbox_file)
+    dropbox_file.transfer_to_s3
   end
 
   private
@@ -86,14 +97,27 @@ module ProductFileListHelpers
     end
 
     def generate_dropbox_file_info_with_path(path)
-      file = HTTParty.post("https://api.dropboxapi.com/2/files/get_temporary_link",
-                           headers: {
-                             "Authorization" => "Bearer #{GlobalConfig.get("DROPBOX_API_KEY")}",
-                             "Content-Type" => "application/json"
-                           },
-                           body: { path: }.to_json)
+      filename = File.basename(path)
+      {
+        bytes: 1024,
+        icon: "",
+        link: "https://dl.dropboxusercontent.com/test/#{SecureRandom.hex(8)}/#{filename}",
+        name: filename,
+        id: "id:#{SecureRandom.hex(16)}"
+      }
+    end
 
-      { bytes: file["metadata"]["size"], icon: "", link: file["link"], name: file["metadata"]["name"],
-        id: file["metadata"]["id"] }
+    def stub_dropbox_file_transfer(dropbox_file)
+      allow(HTTParty).to receive(:get)
+        .with(dropbox_file.dropbox_url, hash_including(:stream_body))
+        .and_yield("fake file content")
+
+      s3_resource = double("s3_resource")
+      s3_bucket = double("s3_bucket")
+      s3_object = double("s3_object")
+      allow(Aws::S3::Resource).to receive(:new).and_return(s3_resource)
+      allow(s3_resource).to receive(:bucket).and_return(s3_bucket)
+      allow(s3_bucket).to receive(:object).and_return(s3_object)
+      allow(s3_object).to receive(:upload_file).and_return(true)
     end
 end

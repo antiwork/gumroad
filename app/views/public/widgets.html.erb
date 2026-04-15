@@ -1,7 +1,0 @@
-<%= load_pack("widgets") %>
-<%= content_for(:script) do %>
-  <script src="/js/gumroad.js"></script>
-  <script src="/js/gumroad-embed.js"></script>
-<% end %>
-
-<%= react_component "DeveloperWidgetsPage", props: @widget_presenter.widget_props, prerender: true %>

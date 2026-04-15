@@ -1,3 +1,4 @@
+import { ArrowUp, Link as LinkIcon, Plus } from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import classNames from "classnames";
 import * as React from "react";
@@ -11,13 +12,14 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Covers } from "$app/components/Product/Covers";
 import { RemoveButton } from "$app/components/RemoveButton";
 import { showAlert } from "$app/components/server-components/Alert";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { Tab, TabIcon, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -51,7 +53,7 @@ export const CoverEditor = ({
   };
 
   return (
-    <section className="p-4! md:p-8!">
+    <section className="grid gap-8 border-t border-border p-4 md:p-8">
       <header>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2>Cover</h2>
@@ -86,20 +88,22 @@ export const CoverEditor = ({
               ))}
             </Sortable>
 
-            <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
-              <Popover
-                disabled={!canAddPreview || isUploading}
-                aria-label="Add cover"
-                trigger={
-                  <div className="button">
-                    <Icon name="plus" />
-                  </div>
-                }
-                open={isUploaderOpen}
-                onToggle={(value) => {
-                  if (canAddPreview && !isUploading) setIsUploaderOpen(value);
-                }}
-              >
+            <Popover
+              open={isUploaderOpen}
+              onOpenChange={(open) => {
+                if (canAddPreview && !isUploading) setIsUploaderOpen(open);
+              }}
+            >
+              <PopoverAnchor>
+                <WithTooltip tip={canAddPreview ? null : "Maximum number of previews uploaded"}>
+                  <PopoverTrigger disabled={!canAddPreview || isUploading} asChild>
+                    <Button aria-label="Add cover">
+                      <Plus className="size-5" />
+                    </Button>
+                  </PopoverTrigger>
+                </WithTooltip>
+              </PopoverAnchor>
+              <PopoverContent sideOffset={4}>
                 <div className="flex flex-col gap-4">
                   <CoverUploader
                     permalink={permalink}
@@ -111,8 +115,8 @@ export const CoverEditor = ({
                     setIsUploading={setIsUploading}
                   />
                 </div>
-              </Popover>
-            </WithTooltip>
+              </PopoverContent>
+            </Popover>
           </div>
           <Covers covers={covers} activeCoverId={activeCoverId} setActiveCoverId={setActiveCoverId} />
         </div>
@@ -140,14 +144,11 @@ const CoverUploader = ({
 
   const saveCover = async (coverPayload: CoverPayload) => {
     try {
-      setIsUploading(true);
       const covers = await createCover(permalink, coverPayload);
       setCovers(covers);
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
-    } finally {
-      setIsUploading(false);
     }
   };
 
@@ -161,32 +162,43 @@ const CoverUploader = ({
             <label>
               <input
                 type="file"
+                className="sr-only"
                 multiple
                 accept={ALLOWED_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
                 disabled={isUploading}
                 onChange={asyncVoid(async (event) => {
                   if (!event.target.files?.length) return;
 
-                  for (const file of event.target.files) {
+                  const validFiles = Array.from(event.target.files).filter((file) => {
                     if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) {
                       showAlert("Invalid file type.", "error");
-                      continue;
+                      return false;
                     }
+                    return true;
+                  });
+                  if (validFiles.length === 0) return;
+
+                  setIsUploading(true);
+                  for (const file of validFiles) {
                     // TODO change the relevant endpoint(s) to allow uploading multiple files at once
                     await new Promise<void>((resolve) => {
                       new DirectUpload(file, "/rails/active_storage/direct_uploads").create((error, blob) => {
                         if (error) {
                           showAlert(error.message, "error");
+                          resolve();
                         } else {
                           void saveCover({ type: "file", signedBlobId: blob.signed_id }).finally(resolve);
                         }
                       });
                     });
                   }
+                  setIsUploading(false);
                   setIsSelecting(false);
                 })}
               />
-              <TabIcon name="upload-fill" />
+              <TabIcon>
+                <ArrowUp pack="filled" className="size-5" />
+              </TabIcon>
               Computer files
             </label>
           </Tab>
@@ -198,19 +210,20 @@ const CoverUploader = ({
             isSelected={uploader?.type === "url"}
             aria-controls={`${uid}-url`}
           >
-            <TabIcon name="link" />
+            <TabIcon>
+              <LinkIcon className="size-5" />
+            </TabIcon>
             External link
           </Tab>
         </Tabs>
-        <fieldset
+        <Fieldset
           role="tabpanel"
-          className="mt-4 rounded-sm border border-border p-4"
+          className={classNames("mt-4 rounded-sm border border-border p-4", uploader?.type !== "url" && "hidden")}
           id={`${uid}-url`}
-          hidden={uploader?.type !== "url"}
         >
           {uploader?.type === "url" ? (
             <div className="flex gap-2">
-              <input
+              <Input
                 type="url"
                 placeholder="https://"
                 value={uploader.value}
@@ -219,25 +232,27 @@ const CoverUploader = ({
               <Button
                 color="primary"
                 onClick={() => {
-                  void saveCover({ type: "url", url: uploader.value }).then(() => {
+                  setIsUploading(true);
+                  void saveCover({ type: "url", url: uploader.value }).finally(() => {
+                    setIsUploading(false);
                     setIsSelecting(false);
                     setUploader(null);
                   });
                 }}
                 aria-label="Upload"
               >
-                <Icon name="upload-fill" />
+                <Plus pack="filled" className="size-5" />
               </Button>
             </div>
           ) : null}
-          <small>We support media from sites such as YouTube, Vimeo, and Soundcloud.</small>
-        </fieldset>
+          <FieldsetDescription>We support media from sites such as YouTube, Vimeo, and Soundcloud.</FieldsetDescription>
+        </Fieldset>
       </div>
     )
   ) : (
     <>
       <Button color="primary" onClick={() => setIsSelecting(true)}>
-        <Icon name="upload-fill" /> Upload images or videos
+        <Plus pack="filled" className="size-5" /> Upload images or videos
       </Button>
       Images should be horizontal, at least 1280x720px, and 72 DPI (dots per inch).
     </>

@@ -20,7 +20,8 @@ class UserBalanceStatsService
   end
 
   def write_cache
-    Rails.cache.write(cache_key, generate, expires_in: 48.hours)
+    data = generate
+    $redis.setex(cache_key, 48.hours.to_i, data.to_json)
   end
 
   def self.cacheable_users
@@ -36,15 +37,13 @@ class UserBalanceStatsService
 
   private
     def generate
-      balances_by_product_service = BalancesByProductService.new(user)
       result = {
         generated_at: Time.current,
         next_payout_period_data:,
         processing_payout_periods_data: user.payments.processing.order("created_at DESC").map { payout_period_data(user, _1) },
         overview: {
           last_payout_period_data: payout_period_data(user, user.payments.completed.last),
-          balance: user.unpaid_balance_cents(via: :elasticsearch),
-          balances_by_product: balances_by_product_service.process,
+          balance: user.unpaid_balance_cents,
           last_seven_days_sales_total: user.sales_cents_total(after: 7.days.ago),
           last_28_days_sales_total: user.sales_cents_total(after: 28.days.ago),
           sales_cents_total: user.sales_cents_total,
@@ -55,8 +54,8 @@ class UserBalanceStatsService
         .displayable
         .order("created_at DESC")
 
-      if payments.size > BalanceController::PAST_PAYMENTS_PER_PAGE
-        payments = payments.limit(BalanceController::PAST_PAYMENTS_PER_PAGE)
+      if payments.size > PayoutsPresenter::PAST_PAYMENTS_PER_PAGE
+        payments = payments.limit(PayoutsPresenter::PAST_PAYMENTS_PER_PAGE)
         result[:is_paginating] = true
       else
         result[:is_paginating] = false
@@ -71,7 +70,13 @@ class UserBalanceStatsService
     end
 
     def read_cache
-      Rails.cache.read(cache_key)
+      data = $redis.get(cache_key)
+      return nil unless data
+
+      JSON.parse(data, symbolize_names: true)
+    rescue JSON::ParserError => e
+      Rails.logger.error("Failed to parse cached balance stats for user #{user.id}: #{e.message}")
+      nil
     end
 
     def should_use_cache?

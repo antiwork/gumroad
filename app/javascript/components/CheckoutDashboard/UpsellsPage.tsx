@@ -1,3 +1,4 @@
+import { ArrowRightCircle, XSquare } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 
@@ -21,24 +22,36 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { ProductToAdd, CartItem } from "$app/components/Checkout/cartState";
+import { CartItem, ProductToAdd } from "$app/components/Checkout/cartState";
+import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
+import { UpsellModal } from "$app/components/Checkout/UpsellModal";
 import { CheckoutPreview } from "$app/components/CheckoutDashboard/CheckoutPreview";
 import { DiscountInput, InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
-import { Details } from "$app/components/Details";
-import { Icon } from "$app/components/Icons";
+import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
-import { Popover } from "$app/components/Popover";
 import { WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { applySelection } from "$app/components/Product/ConfigurationSelector";
+import { Search } from "$app/components/Search";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
-import { CrossSellModal, UpsellModal } from "$app/components/server-components/CheckoutPage";
+import { Skeleton } from "$app/components/Skeleton";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Radio } from "$app/components/ui/Radio";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Switch } from "$app/components/ui/Switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
+import { Textarea } from "$app/components/ui/Textarea";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
@@ -149,11 +162,6 @@ const UpsellsPage = (props: UpsellsPageProps) => {
   }, [upsells]);
 
   const [searchQuery, setSearchQuery] = React.useState<string | null>(null);
-  const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
-  React.useEffect(() => {
-    if (isSearchPopoverOpen) searchInputRef.current?.focus();
-  }, [isSearchPopoverOpen]);
 
   const handleCancel = () => {
     setView("list");
@@ -229,32 +237,15 @@ const UpsellsPage = (props: UpsellsPageProps) => {
       pages={props.pages}
       actions={
         <>
-          {upsells.length > 0 && (
-            <Popover
-              open={isSearchPopoverOpen}
-              onToggle={setIsSearchPopoverOpen}
-              aria-label="Search"
-              trigger={
-                <div className="button">
-                  <Icon name="solid-search" />
-                </div>
-              }
-            >
-              <div className="input">
-                <Icon name="solid-search" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search"
-                  value={searchQuery ?? ""}
-                  onChange={(evt) => {
-                    setSearchQuery(evt.target.value);
-                    debouncedLoadUpsells();
-                  }}
-                />
-              </div>
-            </Popover>
-          )}
+          {upsells.length > 0 || searchQuery ? (
+            <Search
+              onSearch={(query) => {
+                setSearchQuery(query);
+                debouncedLoadUpsells();
+              }}
+              value={searchQuery ?? ""}
+            />
+          ) : null}
           <Button color="accent" onClick={() => setView("create")} disabled={isReadOnly}>
             New upsell
           </Button>
@@ -264,57 +255,56 @@ const UpsellsPage = (props: UpsellsPageProps) => {
       <section className="p-4 md:p-8">
         {upsells.length > 0 ? (
           <section className="flex flex-col gap-4">
-            <table aria-busy={isLoading} aria-label="Upsells">
-              <thead>
-                <tr>
-                  <th {...thProps("name")}>Upsell</th>
-                  <th {...thProps("revenue")}>Revenue</th>
-                  <th {...thProps("uses")}>Uses</th>
-                  <th {...thProps("status")}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table
+              aria-live="polite"
+              className={cx(isLoading && "pointer-events-none opacity-50")}
+              aria-label="Upsells"
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead {...thProps("name")}>Upsell</TableHead>
+                  <TableHead {...thProps("revenue")}>Revenue</TableHead>
+                  <TableHead {...thProps("uses")}>Uses</TableHead>
+                  <TableHead {...thProps("status")}>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {upsells.map((upsell) => {
                   const statistics = upsellStatistics[upsell.id];
                   return (
-                    <tr
+                    <TableRow
                       key={upsell.id}
                       onClick={() => setSelectedUpsellId(upsell.id)}
-                      aria-selected={selectedUpsellId === upsell.id}
+                      selected={selectedUpsellId === upsell.id}
                     >
-                      <td>
+                      <TableCell>
                         <div>
                           <div>
                             <b>{upsell.name}</b>
                           </div>
-                          <small>{formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}</small>
+                          <FieldsetDescription>
+                            {formatOfferedProductName(upsell.product.name, upsell.product.variant?.name)}
+                          </FieldsetDescription>
                         </div>
-                      </td>
-                      {statistics ? (
-                        <>
-                          <td>
-                            {formatPriceCentsWithCurrencySymbol(
-                              upsell.product.currency_type,
-                              statistics.revenue_cents,
-                              {
-                                symbolFormat: "short",
-                              },
-                            )}
-                          </td>
-                          <td>{statistics.uses.total}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td aria-busy></td>
-                          <td aria-busy> </td>
-                        </>
-                      )}
-                      <td>{upsell.paused ? "Paused" : "Live"}</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell aria-busy={!statistics}>
+                        {statistics ? (
+                          formatPriceCentsWithCurrencySymbol(upsell.product.currency_type, statistics.revenue_cents, {
+                            symbolFormat: "short",
+                          })
+                        ) : (
+                          <Skeleton className="w-16" />
+                        )}
+                      </TableCell>
+                      <TableCell aria-busy={!statistics}>
+                        {statistics ? statistics.uses.total : <Skeleton className="w-16" />}
+                      </TableCell>
+                      <TableCell>{upsell.paused ? "Paused" : "Live"}</TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination.pages > 1 ? (
               <Pagination
                 onChangePage={(newPage) => loadUpsells({ page: newPage, query: searchQuery, sort })}
@@ -324,9 +314,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
           </section>
         ) : (
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             <h2>Offering an upsell at checkout</h2>
             Upsells allow you to suggest additional products to your customer at checkout. You can nudge them to
             purchase either an upgraded version or an extra product add-on.
@@ -397,99 +385,121 @@ const UpsellDrawer = ({
   return (
     <Sheet open onOpenChange={onClose}>
       <SheetHeader>{selectedUpsell.name}</SheetHeader>
-      <section className="stack">
-        <h3>Details</h3>
-        <div>
-          <h5>Offer text</h5>
-          {selectedUpsell.text}
-        </div>
-        {selectedUpsell.discount ? (
-          <div>
-            <h5>Discount</h5>
-            {selectedUpsell.discount.type === "percent"
-              ? `${selectedUpsell.discount.percents}%`
-              : formatPriceCentsWithCurrencySymbol(
-                  selectedUpsell.product.currency_type,
-                  selectedUpsell.discount.cents,
-                  {
-                    symbolFormat: "long",
-                  },
-                )}
-          </div>
-        ) : null}
-        {statistics ? (
-          <>
-            <div>
-              <h5>Uses</h5>
-              {statistics.uses.total}
-            </div>
-            <div>
-              <h5>Revenue</h5>
-              {formatPriceCentsWithCurrencySymbol(selectedUpsell.product.currency_type, statistics.revenue_cents, {
-                symbolFormat: "short",
-              })}
-            </div>
-          </>
-        ) : null}
-        <div>
-          <h5>Status</h5>
-          <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
-        </div>
-      </section>
+      <Card asChild>
+        <section>
+          <CardContent asChild>
+            <h3>Details</h3>
+          </CardContent>
+          <CardContent>
+            <h5 className="grow font-bold">Offer text</h5>
+            {selectedUpsell.text}
+          </CardContent>
+          {selectedUpsell.discount ? (
+            <CardContent>
+              <h5 className="grow font-bold">Discount</h5>
+              {selectedUpsell.discount.type === "percent"
+                ? `${selectedUpsell.discount.percents}%`
+                : formatPriceCentsWithCurrencySymbol(
+                    selectedUpsell.product.currency_type,
+                    selectedUpsell.discount.cents,
+                    {
+                      symbolFormat: "long",
+                    },
+                  )}
+            </CardContent>
+          ) : null}
+          {statistics ? (
+            <>
+              <CardContent>
+                <h5 className="grow font-bold">Uses</h5>
+                {statistics.uses.total}
+              </CardContent>
+              <CardContent>
+                <h5 className="grow font-bold">Revenue</h5>
+                {formatPriceCentsWithCurrencySymbol(selectedUpsell.product.currency_type, statistics.revenue_cents, {
+                  symbolFormat: "short",
+                })}
+              </CardContent>
+            </>
+          ) : null}
+          <CardContent>
+            <h5 className="grow font-bold">Status</h5>
+            <span>{selectedUpsell.paused ? "Paused" : "Live"}</span>
+          </CardContent>
+        </section>
+      </Card>
       <section className="grid auto-cols-fr grid-flow-col gap-4">
         <Button onClick={onTogglePause} disabled={isLoading || isReadOnly}>
           {selectedUpsell.paused ? "Resume upsell" : "Pause upsell"}
         </Button>
       </section>
       {selectedUpsell.cross_sell ? (
-        <section className="stack">
-          <h3>Selected products</h3>
-          {selectedUpsell.universal ? (
-            <div>
-              <h5>All products</h5>
-            </div>
-          ) : (
-            selectedUpsell.selected_products.map(({ id, name }) => (
-              <div key={id}>
-                <div>
-                  <h5>{name}</h5>
-                  {statistics
-                    ? `${statistics.uses.selected_products[id] ?? 0} ${(statistics.uses.selected_products[id] ?? 0) === 1 ? "use" : "uses"} from this product`
-                    : null}
-                </div>
-              </div>
-            ))
-          )}
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <h3>Selected products</h3>
+            </CardContent>
+            {selectedUpsell.universal ? (
+              <CardContent>
+                <h5 className="grow font-bold">All products</h5>
+              </CardContent>
+            ) : (
+              selectedUpsell.selected_products.map(({ id, name }) => (
+                <CardContent key={id}>
+                  <div className="grow">
+                    <h5 className="font-bold">{name}</h5>
+                    {statistics
+                      ? `${statistics.uses.selected_products[id] ?? 0} ${(statistics.uses.selected_products[id] ?? 0) === 1 ? "use" : "uses"} from this product`
+                      : null}
+                  </div>
+                </CardContent>
+              ))
+            )}
+          </section>
+        </Card>
       ) : (
-        <section className="stack">
-          <h3>Selected product</h3>
-          <div>
-            <h5>{selectedUpsell.product.name}</h5>
-          </div>
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <h3>Selected product</h3>
+            </CardContent>
+            <CardContent>
+              <h5 className="grow font-bold">{selectedUpsell.product.name}</h5>
+            </CardContent>
+          </section>
+        </Card>
       )}
       {selectedUpsell.cross_sell ? (
-        <section className="stack">
-          <h3>Offered product</h3>
-          <div>
-            <h5>{formatOfferedProductName(selectedUpsell.product.name, selectedUpsell.product.variant?.name)}</h5>
-          </div>
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <h3>Offered product</h3>
+            </CardContent>
+            <CardContent>
+              <h5 className="grow font-bold">
+                {formatOfferedProductName(selectedUpsell.product.name, selectedUpsell.product.variant?.name)}
+              </h5>
+            </CardContent>
+          </section>
+        </Card>
       ) : (
-        <section className="stack">
-          <h3>Offers</h3>
-          {selectedUpsell.upsell_variants.map((upsellVariant) => (
-            <div key={upsellVariant.id}>
-              <div>
-                <h5>{`${upsellVariant.selected_variant.name} → ${upsellVariant.offered_variant.name}`}</h5>
-                {statistics
-                  ? `${statistics.uses.upsell_variants[upsellVariant.id] ?? 0} ${(statistics.uses.upsell_variants[upsellVariant.id] ?? 0) === 1 ? "use" : "uses"}`
-                  : null}
-              </div>
-            </div>
-          ))}
-        </section>
+        <Card asChild>
+          <section>
+            <CardContent asChild>
+              <h3>Offers</h3>
+            </CardContent>
+            {selectedUpsell.upsell_variants.map((upsellVariant) => (
+              <CardContent key={upsellVariant.id}>
+                <div className="grow">
+                  <h5 className="font-bold">{`${upsellVariant.selected_variant.name} → ${upsellVariant.offered_variant.name}`}</h5>
+                  {statistics
+                    ? `${statistics.uses.upsell_variants[upsellVariant.id] ?? 0} ${(statistics.uses.upsell_variants[upsellVariant.id] ?? 0) === 1 ? "use" : "uses"}`
+                    : null}
+                </div>
+              </CardContent>
+            ))}
+          </section>
+        </Card>
       )}
       <section className="grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
         <Button onClick={onCreate} disabled={isLoading || isReadOnly}>
@@ -684,7 +694,7 @@ const Form = ({
         actions={
           <>
             <Button onClick={onCancel} disabled={isLoading}>
-              <Icon name="x-square" />
+              <XSquare className="size-5" />
               Cancel
             </Button>
             <Button type="submit" color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -695,18 +705,18 @@ const Form = ({
       />
       <WithPreviewSidebar className="flex-1">
         <form>
-          <section className="p-8!">
+          <section className="grid gap-8 p-4! md:p-8!">
             <p>
               When a customer clicks "Pay", offer a version upgrade or another product with or without a discount.{" "}
               <a href="/help/article/331-creating-upsells" target="_blank" rel="noreferrer">
                 Learn more
               </a>
             </p>
-            <fieldset className={cx({ danger: name.error })}>
-              <legend>
-                <label htmlFor={`${uid}name`}>Name</label>
-              </legend>
-              <input
+            <Fieldset state={name.error ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}name`}>Name</Label>
+              </FieldsetTitle>
+              <Input
                 type="text"
                 id={`${uid}name`}
                 placeholder="Complete course upsell"
@@ -714,12 +724,12 @@ const Form = ({
                 onChange={(evt) => setName({ value: evt.target.value })}
                 aria-invalid={name.error}
               />
-            </fieldset>
-            <fieldset className={cx({ danger: offerText.error })}>
-              <legend>
-                <label htmlFor={`${uid}offerText`}>Offer text</label>
-              </legend>
-              <input
+            </Fieldset>
+            <Fieldset state={offerText.error ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}offerText`}>Offer text</Label>
+              </FieldsetTitle>
+              <Input
                 type="text"
                 id={`${uid}offerText`}
                 placeholder="Enhance your learning experience"
@@ -727,69 +737,68 @@ const Form = ({
                 onChange={(evt) => setOfferText({ value: evt.target.value })}
                 aria-invalid={offerText.error}
               />
-            </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}offerDescription`}>Offer description</label>
-              </legend>
-              <textarea
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}offerDescription`}>Offer description</Label>
+              </FieldsetTitle>
+              <Textarea
                 id={`${uid}offerDescription`}
                 placeholder="You'll enjoy a range of exclusive features, including..."
                 value={offerDescription}
                 onChange={(evt) => setOfferDescription(evt.target.value)}
               />
-            </fieldset>
-            <fieldset>
-              <legend>Status</legend>
-              <label>
-                <input type="radio" name="paused" value="false" checked={!paused} onChange={handlePausedChange} />
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>Status</FieldsetTitle>
+              <Label>
+                <Radio name="paused" value="false" checked={!paused} onChange={handlePausedChange} />
                 Live
-              </label>
-              <label>
-                <input type="radio" name="paused" value="true" checked={paused} onChange={handlePausedChange} />
+              </Label>
+              <Label>
+                <Radio name="paused" value="true" checked={paused} onChange={handlePausedChange} />
                 Paused
-              </label>
-              <small>Paused upsells will not appear at checkout. You can resume anytime.</small>
-            </fieldset>
-            <fieldset>
-              <legend>Type of offer</legend>
-              <label>
-                <input
-                  type="radio"
+              </Label>
+              <FieldsetDescription>
+                Paused upsells will not appear at checkout. You can resume anytime.
+              </FieldsetDescription>
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>Type of offer</FieldsetTitle>
+              <Label>
+                <Radio
                   checked={type === "cross-sell"}
                   onChange={(evt) => {
                     if (evt.target.checked) setType("cross-sell");
                   }}
                 />
                 Add another product to the cart
-              </label>
-              <label>
-                <input
-                  type="radio"
+              </Label>
+              <Label>
+                <Radio
                   checked={type === "replacement-cross-sell"}
                   onChange={(evt) => {
                     if (evt.target.checked) setType("replacement-cross-sell");
                   }}
                 />
                 Replace the selected products with another product
-              </label>
-              <label>
-                <input
-                  type="radio"
+              </Label>
+              <Label>
+                <Radio
                   checked={type === "upsell"}
                   onChange={(evt) => {
                     if (evt.target.checked) setType("upsell");
                   }}
                 />
                 Replace the version selected with another version of the same product
-              </label>
-            </fieldset>
+              </Label>
+            </Fieldset>
             {isCrossSell ? (
               <>
-                <fieldset className={cx({ danger: selectedProductIds.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}selectedProducts`}>Apply to these products</label>
-                  </legend>
+                <Fieldset state={selectedProductIds.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}selectedProducts`}>Apply to these products</Label>
+                  </FieldsetTitle>
                   <Select
                     inputId={`${uid}selectedProducts`}
                     instanceId={`${uid}selectedProducts`}
@@ -805,15 +814,15 @@ const Form = ({
                     isClearable
                     aria-invalid={selectedProductIds.error}
                   />
-                  <label>
-                    <input type="checkbox" checked={universal} onChange={(evt) => setUniversal(evt.target.checked)} />
+                  <Label>
+                    <Checkbox checked={universal} onChange={(evt) => setUniversal(evt.target.checked)} />
                     All products
-                  </label>
-                </fieldset>
-                <fieldset className={cx({ danger: offeredProductId.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}offeredProduct`}>Product to offer</label>
-                  </legend>
+                  </Label>
+                </Fieldset>
+                <Fieldset state={offeredProductId.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}offeredProduct`}>Product to offer</Label>
+                  </FieldsetTitle>
                   <Select
                     inputId={`${uid}offeredProduct`}
                     instanceId={`${uid}offeredProduct`}
@@ -827,12 +836,12 @@ const Form = ({
                     isClearable
                     aria-invalid={offeredProductId.error}
                   />
-                </fieldset>
+                </Fieldset>
                 {offeredProduct && offeredProduct.options.length > 0 ? (
-                  <fieldset className={cx({ danger: offeredVariantId.error })}>
-                    <legend>
-                      <label htmlFor={`${uid}offeredVariant`}>Version to offer</label>
-                    </legend>
+                  <Fieldset state={offeredVariantId.error ? "danger" : undefined}>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}offeredVariant`}>Version to offer</Label>
+                    </FieldsetTitle>
                     <Select
                       inputId={`${uid}offeredVariant`}
                       instanceId={`${uid}offeredVariant`}
@@ -843,39 +852,32 @@ const Form = ({
                       isClearable
                       aria-invalid={offeredVariantId.error}
                     />
-                  </fieldset>
+                  </Fieldset>
                 ) : null}
-                <fieldset>
-                  <legend>Settings</legend>
-                  <Details
-                    className="toggle"
-                    open={!!discount}
-                    summary={
-                      <label>
-                        <input
-                          type="checkbox"
-                          role="switch"
-                          checked={!!discount}
-                          onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
-                        />
-                        Add discount to the offered product
-                      </label>
-                    }
-                  >
+                <Fieldset>
+                  <FieldsetTitle>Settings</FieldsetTitle>
+                  <Details open={!!discount}>
+                    <DetailsToggle chevronPosition="none" className="mb-0">
+                      <Switch
+                        checked={!!discount}
+                        onChange={(evt) => setDiscount(evt.target.checked ? { type: "percent", value: 0 } : null)}
+                        label="Add discount to the offered product"
+                      />
+                    </DetailsToggle>
                     {discount ? (
-                      <div className="dropdown">
+                      <Dropdown>
                         <DiscountInput discount={discount} setDiscount={setDiscount} currencyCode="usd" />
-                      </div>
+                      </Dropdown>
                     ) : null}
                   </Details>
-                </fieldset>
+                </Fieldset>
               </>
             ) : (
               <>
-                <fieldset className={cx({ danger: selectedProductId.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}selectedProduct`}>Apply to this product</label>
-                  </legend>
+                <Fieldset state={selectedProductId.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}selectedProduct`}>Apply to this product</Label>
+                  </FieldsetTitle>
                   <Select
                     inputId={`${uid}selectedProduct`}
                     instanceId={`${uid}selectedProduct`}
@@ -891,9 +893,9 @@ const Form = ({
                     isClearable
                     aria-invalid={selectedProductId.error}
                   />
-                </fieldset>
+                </Fieldset>
                 {selectedProduct ? (
-                  <div className="grid grid-cols-[1fr_auto_1fr] gap-2" aria-label="Upsell versions">
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" aria-label="Upsell versions">
                     <b>Version selected</b>
                     <div />
                     <b>Version to offer</b>
@@ -905,8 +907,8 @@ const Form = ({
                       );
                       return (
                         <React.Fragment key={option.id}>
-                          <div className="input read-only">{option.name}</div>
-                          <Icon name="arrow-right-circle" />
+                          <InputGroup>{option.name}</InputGroup>
+                          <ArrowRightCircle className="size-5" />
                           <Select
                             options={selectedProduct.options.flatMap(({ id, name: label }) =>
                               id !== option.id ? { id, label } : [],
@@ -927,7 +929,7 @@ const Form = ({
           </section>
         </form>
         <CheckoutPreview cartItem={previewCartItem}>
-          <Modal open modal={false} title={offerText.value}>
+          <Modal open modal={false} usePortal={false} title={offerText.value}>
             {isCrossSell ? (
               <CrossSellModal
                 crossSell={{

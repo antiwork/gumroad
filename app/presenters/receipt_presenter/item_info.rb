@@ -47,7 +47,7 @@ class ReceiptPresenter::ItemInfo
     end
 
     def custom_receipt_note
-      nil
+      product.custom_receipt_text.presence
     end
 
     def free_trial_purchase_note

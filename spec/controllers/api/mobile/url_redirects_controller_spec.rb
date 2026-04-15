@@ -70,6 +70,14 @@ describe Api::Mobile::UrlRedirectsController do
       expect(response.parsed_body).to eq({ success: true, product: @url_redirect.product_json_data, purchase_valid: false }.as_json)
     end
 
+    it "returns success when the url redirect has no associated product" do
+      url_redirect = create(:installment_url_redirect, installment: create(:installment, link: nil, seller: create(:named_user)))
+      get :url_redirect_attributes, params: { id: url_redirect.external_id, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+      assert_response 200
+      expect(response.parsed_body[:success]).to be true
+      expect(response.parsed_body[:product][:url_redirect_external_id]).to eq(url_redirect.external_id)
+    end
+
     it "does not return purchase link and file data redirect external id is invalid" do
       get :url_redirect_attributes, params: { id: @url_redirect.external_id + "invalid", mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
       assert_response 404
@@ -197,14 +205,8 @@ describe Api::Mobile::UrlRedirectsController do
       subtitle_file_en = create(:subtitle_file, language: "English", url: subtitle_en_url, product_file: file_1)
       subtitle_file_fr = create(:subtitle_file, language: "Français", url: subtitle_fr_url, product_file: file_1)
       allow(s3_object).to receive(:content_length).and_return(100, 105)
-      allow(s3_object).to receive(:public_url).and_return(subtitle_en_file_path, subtitle_fr_file_path)
+      allow(s3_object).to receive(:presigned_url).and_return(subtitle_en_file_path, subtitle_fr_file_path)
       travel_to Time.current # Freeze time so we can generate the expected URL(that is based on time)
-      subtitle_en_path =
-        file_1.signed_download_url_for_s3_key_and_filename(subtitle_file_en.s3_key, subtitle_file_en.s3_filename,
-                                                           is_video: true)
-      subtitle_fr_path =
-        file_1.signed_download_url_for_s3_key_and_filename(subtitle_file_fr.s3_key, subtitle_file_fr.s3_filename,
-                                                           is_video: true)
       expected_playlist_url = api_mobile_hls_playlist_url(url_redirect.token, file_1.external_id,
                                                           mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN,
                                                           host: UrlService.api_domain_with_protocol)
@@ -217,9 +219,9 @@ describe Api::Mobile::UrlRedirectsController do
       expect(response.parsed_body["playlist_url"]).to eq(expected_playlist_url)
       expect(response.parsed_body["subtitles"].size).to eq 2
       expect(response.parsed_body["subtitles"][0]["language"]).to eq subtitle_file_en.language
-      expect(response.parsed_body["subtitles"][0]["url"]).to eq(subtitle_en_path)
+      expect(response.parsed_body["subtitles"][0]["url"]).to eq(subtitle_en_file_path)
       expect(response.parsed_body["subtitles"][1]["language"]).to eq subtitle_file_fr.language
-      expect(response.parsed_body["subtitles"][1]["url"]).to eq(subtitle_fr_path)
+      expect(response.parsed_body["subtitles"][1]["url"]).to eq(subtitle_fr_file_path)
     end
 
     it "creates the proper consumption events for watching" do

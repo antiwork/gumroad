@@ -8,7 +8,7 @@ class AdminFundsCsvReportService
   end
 
   def generate
-    CSV.generate do |csv|
+    CsvSafe.generate do |csv|
       report.each do |(type, data)|
         data.each do |payment_method|
           transaction_type_key = type == "Purchases" ? "Sales" : "Charges"

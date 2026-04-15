@@ -4,8 +4,6 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-import { Icon } from "$app/components/Icons";
-
 const tabsVariants = cva("", {
   variants: {
     variant: {
@@ -39,7 +37,7 @@ const tabVariants = cva("", {
     {
       variant: "buttons",
       active: true,
-      className: "shadow -translate-1",
+      className: "shadow -translate-1 hover:-translate-2!",
     },
   ],
   defaultVariants: {
@@ -55,16 +53,16 @@ interface TabsProps extends React.HTMLProps<HTMLDivElement>, VariantProps<typeof
 }
 
 export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(({ children, className, variant, ...props }, ref) => (
-  <div role="tablist" className={classNames(tabsVariants({ variant }), className)} {...props} ref={ref}>
-    <TabVariantContext.Provider value={variant ?? "pills"}> {children} </TabVariantContext.Provider>
-  </div>
+  <TabVariantContext.Provider value={variant ?? "pills"}>
+    <div role="tablist" className={classNames(tabsVariants({ variant }), className)} {...props} ref={ref}>
+      {children}
+    </div>
+  </TabVariantContext.Provider>
 ));
 Tabs.displayName = "Tabs";
 
-export const TabIcon = ({ name }: { name: IconName }) => (
-  <div className="flex-shrink-0 text-xl">
-    <Icon name={name} />
-  </div>
+export const TabIcon = ({ children }: { children: React.ReactNode }) => (
+  <div className="flex-shrink-0 text-xl">{children}</div>
 );
 
 interface TabProps extends Omit<React.HTMLProps<HTMLAnchorElement>, "selected"> {

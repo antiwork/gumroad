@@ -30,4 +30,17 @@ shared_examples_for "discover navigation when layout is discover" do |selected_t
     visit discover_url
     expect(find("[role=menubar]")).to have_text("All Design 3D Audio Business & Money Comics & Graphic Novels More", normalize_ws: true)
   end
+
+  it "navigates to a taxonomy page when clicking a menu item" do
+    visit discover_url
+
+    within "[role=menubar]" do
+      click_on "Design"
+    end
+
+    expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Design")
+    within "[role=menubar]" do
+      expect(page).to have_selector("[aria-current=true]", text: "Design")
+    end
+  end
 end

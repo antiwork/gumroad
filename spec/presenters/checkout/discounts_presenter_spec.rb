@@ -51,6 +51,7 @@ describe Checkout::DiscountsPresenter do
                          currency_type: "eur",
                          url: product1.long_url,
                          is_tiered_membership: false,
+                         is_recurring_billing: false,
                        },
                        {
                          id: product2.external_id,
@@ -59,6 +60,7 @@ describe Checkout::DiscountsPresenter do
                          currency_type: "usd",
                          url: product2.long_url,
                          is_tiered_membership: false,
+                         is_recurring_billing: false,
                        },
                      ],
                    },
@@ -83,6 +85,7 @@ describe Checkout::DiscountsPresenter do
                          currency_type: "usd",
                          url: product2.long_url,
                          is_tiered_membership: false,
+                         is_recurring_billing: false,
                        },
                      ],
                    },
@@ -110,6 +113,7 @@ describe Checkout::DiscountsPresenter do
                      currency_type: "usd",
                      url: product3.long_url,
                      is_tiered_membership: true,
+                     is_recurring_billing: true,
                    },
                    {
                      id: product1.external_id,
@@ -118,6 +122,7 @@ describe Checkout::DiscountsPresenter do
                      currency_type: "eur",
                      url: product1.long_url,
                      is_tiered_membership: false,
+                     is_recurring_billing: false,
                    },
                    {
                      id: product2.external_id,
@@ -126,8 +131,12 @@ describe Checkout::DiscountsPresenter do
                      currency_type: "usd",
                      url: product2.long_url,
                      is_tiered_membership: false,
+                     is_recurring_billing: false,
                    },
                  ],
+                 show_black_friday_banner: false,
+                 black_friday_code: "BLACKFRIDAY2025",
+                 black_friday_code_name: "Black Friday 2025",
                })
     end
   end
@@ -161,6 +170,7 @@ describe Checkout::DiscountsPresenter do
                 currency_type: "eur",
                 url: product1.long_url,
                 is_tiered_membership: false,
+                is_recurring_billing: false,
               },
               {
                 id: product2.external_id,
@@ -169,6 +179,7 @@ describe Checkout::DiscountsPresenter do
                 currency_type: "usd",
                 url: product2.long_url,
                 is_tiered_membership: false,
+                is_recurring_billing: false,
               },
             ],
           }

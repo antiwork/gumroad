@@ -597,6 +597,31 @@ describe Purchase::Blockable do
         end
       end
 
+      context "when seller is verified" do
+        let(:verified_seller) { create(:user, verified: true) }
+        let(:verified_product) { create(:product, user: verified_seller) }
+        let!(:verified_purchase) { create(:purchase, link: verified_product, purchase_state: "in_progress") }
+
+        it "does not pause payouts for the seller" do
+          create_list(:failed_purchase, 5, link: verified_product, price_cents: 250)
+          verified_purchase.mark_failed!
+
+          expect(verified_seller.reload.payouts_paused_internally).to be(false)
+          expect(verified_seller.payouts_paused_by_source).to be_nil
+        end
+      end
+
+      context "when seller is not verified" do
+        it "pauses payouts when threshold is exceeded" do
+          expect(seller.verified?).to be(false)
+          create_list(:failed_purchase, 5, link: product, price_cents: 250)
+          purchase.mark_failed!
+
+          expect(seller.reload.payouts_paused_internally).to be(true)
+          expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        end
+      end
+
       context "when error code is ignored" do
         it "does not pause payouts for the seller" do
           create_list(:failed_purchase, 5, link: product, price_cents: 250)
@@ -831,6 +856,78 @@ describe Purchase::Blockable do
             expect(@buyer.comments.last.author_name).to eq("fraudulent_purchases_blocker")
           end.to change { @buyer.reload.suspended? }.from(false).to(true)
         end
+      end
+    end
+  end
+
+  describe "#block_buyer_based_on_chargeback_count!" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:buyer) { create(:user) }
+    let(:purchase) { create(:purchase, link: product, email: "repeat-offender@example.com", purchaser: buyer) }
+
+    def create_chargebacked_purchases_by_email(count, email)
+      count.times do
+        p = create(:purchase)
+        p.update_columns(chargeback_date: Time.current, email: email)
+      end
+    end
+
+    def create_chargebacked_purchases_by_purchaser(count, purchaser)
+      count.times do
+        p = create(:purchase, purchaser: purchaser)
+        p.update_column(:chargeback_date, Time.current)
+      end
+    end
+
+    context "when buyer has fewer than 5 chargebacks" do
+      before do
+        create_chargebacked_purchases_by_email(4, "repeat-offender@example.com")
+      end
+
+      it "does not block the buyer" do
+        expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { BlockedObject.count }
+      end
+    end
+
+    context "when buyer has 5 chargebacks by email" do
+      before do
+        create_chargebacked_purchases_by_email(5, "repeat-offender@example.com")
+      end
+
+      it "blocks the buyer" do
+        expect { purchase.block_buyer_based_on_chargeback_count! }.to change { BlockedObject.count }
+        expect(purchase.buyer_blocked?).to be true
+      end
+
+      it "creates a comment with the chargeback count" do
+        purchase.block_buyer_based_on_chargeback_count!
+
+        comment = purchase.comments.last
+        expect(comment.content).to include("Auto-blocked")
+        expect(comment.content).to include("5 by email")
+      end
+    end
+
+    context "when buyer is already blocked" do
+      before do
+        create_chargebacked_purchases_by_email(5, "repeat-offender@example.com")
+        purchase.block_buyer!
+      end
+
+      it "does not re-block the buyer" do
+        expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { BlockedObject.count }
+      end
+    end
+
+    context "when buyer has 5 chargebacks by purchaser_id with different email" do
+      before do
+        create_chargebacked_purchases_by_purchaser(5, buyer)
+      end
+
+      it "blocks the buyer" do
+        expect { purchase.block_buyer_based_on_chargeback_count! }.to change { BlockedObject.count }
+        expect(purchase.buyer_blocked?).to be true
       end
     end
   end

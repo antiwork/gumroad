@@ -62,12 +62,14 @@ export type PurchaseLineItemPayload = {
   urlParameters: string | null;
   referrer: string;
   isPppDiscounted: boolean;
+  forceNewSubscription: boolean;
   acceptedOffer: { id: string; original_product_id?: string | null; original_variant_id?: string | null } | null;
   bundleProducts: { productId: string; quantity: number; variantId: string | null; customFields: CustomFields }[];
 };
 export type StartCartPurchaseRequestPayload = {
   paymentMethod: PurchasePaymentMethod;
   email: string;
+  fullName: string;
   zipCode: string | null;
   state: string | null;
   shippingInfo: {
@@ -242,9 +244,13 @@ export const createPurchasesRequestData = (
       url_parameters: lineItem.urlParameters,
       referrer: lineItem.referrer,
       is_purchasing_power_parity_discounted: lineItem.isPppDiscounted,
+      force_new_subscription: lineItem.forceNewSubscription || false,
       custom_fields: lineItem.customFields,
     })),
   };
+  if (payload.fullName) {
+    purchase.full_name = payload.fullName;
+  }
   if (payload.shippingInfo) {
     data.save_shipping_address = payload.shippingInfo.save;
     purchase.full_name = payload.shippingInfo.fullName;
@@ -315,14 +321,9 @@ export const createPurchasesRequestData = (
         data.save_card = cardParamsResult.keepOnFile;
       }
     }
-    if (cardParamsResult.type === "cc") {
-      if (cardParamsResult.fullName && payload.shippingInfo == null) {
-        purchase.full_name = cardParamsResult.fullName;
-      }
-      if (cardParamsResult.zipCode != null) {
-        data.cc_zipcode_required = true;
-        data.cc_zipcode = cardParamsResult.zipCode;
-      }
+    if (cardParamsResult.type === "cc" && cardParamsResult.zipCode != null) {
+      data.cc_zipcode_required = true;
+      data.cc_zipcode = cardParamsResult.zipCode;
     }
   }
   return data;

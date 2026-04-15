@@ -166,3 +166,51 @@ describe CreatorAnalytics::Sales do
     end
   end
 end
+
+describe CreatorAnalytics::Sales, "DST handling" do
+  context "when sale occurs near midnight during DST" do
+    it "correctly attributes sale to the right day" do
+      user = create(:user, timezone: "Pacific Time (US & Canada)")
+      product = create(:product, user: user)
+
+      # July 15, 00:30 PDT = July 15, 07:30 UTC
+      create(:free_purchase, link: product, created_at: Time.utc(2025, 7, 15, 7, 30))
+      index_model_records(Purchase)
+
+      service = described_class.new(
+        user: user,
+        products: [product],
+        dates: [Date.new(2025, 7, 14), Date.new(2025, 7, 15)]
+      )
+
+      result = service.by_product_and_date
+
+      expect(result[[product.id, "2025-07-15"]]).to be_present
+      expect(result[[product.id, "2025-07-14"]]).to be_nil
+    end
+  end
+
+  context "when query spans DST transition" do
+    it "correctly buckets sales across DST boundary" do
+      user = create(:user, timezone: "Pacific Time (US & Canada)")
+      product = create(:product, user: user)
+
+      # March 8, 11:00 PM PST = March 9, 07:00 UTC
+      create(:free_purchase, link: product, created_at: Time.utc(2025, 3, 9, 7, 0))
+      # March 10, 01:00 AM PDT = March 10, 08:00 UTC
+      create(:free_purchase, link: product, created_at: Time.utc(2025, 3, 10, 8, 0))
+      index_model_records(Purchase)
+
+      service = described_class.new(
+        user: user,
+        products: [product],
+        dates: (Date.new(2025, 3, 8)..Date.new(2025, 3, 10)).to_a
+      )
+
+      result = service.by_product_and_date
+
+      expect(result[[product.id, "2025-03-08"]]).to be_present
+      expect(result[[product.id, "2025-03-10"]]).to be_present
+    end
+  end
+end

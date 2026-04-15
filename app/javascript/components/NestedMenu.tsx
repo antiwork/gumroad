@@ -1,14 +1,16 @@
-import cx from "classnames";
+import { ChevronDown, ChevronLeft, ChevronRight, MenuFilter, X } from "@boxicons/react";
+import * as Dialog from "@radix-ui/react-dialog";
 import * as React from "react";
 import { CSSProperties } from "react";
 
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
-import { useDropdownPosition } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Sheet } from "$app/components/ui/Sheet";
 import { useIsOnTouchDevice } from "$app/components/useIsOnTouchDevice";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useWindowDimensions } from "$app/components/useWindowDimensions";
@@ -78,7 +80,7 @@ export const NestedMenu = ({
 
   return (
     <MenuContext.Provider value={menuContent}>
-      <div className="nested-menu">
+      <div>
         {type === "menubar" ? (
           <Menubar moreLabel={moreLabel} {...extraAriaAttrs} />
         ) : (
@@ -123,12 +125,19 @@ const Menubar = ({ moreLabel, ...extraAriaAttrs }: { moreLabel?: string | undefi
   const menubarItems = itemsUnderMore?.length ? topLevelMenuItems.slice(0, -itemsUnderMore.length) : topLevelMenuItems;
   const moreMenuItem = { key: "more#key", label: "More", children: itemsUnderMore ?? [], parent: null };
   return (
-    <div ref={parentRef} role="menubar" aria-busy={itemsUnderMore === null} {...extraAriaAttrs}>
+    <div
+      ref={parentRef}
+      role="menubar"
+      className={classNames("grid auto-cols-max grid-flow-col items-center", {
+        "overflow-x-hidden": itemsUnderMore === null,
+      })}
+      {...extraAriaAttrs}
+    >
       {menubarItems.map((menuItem) => (
         <MenubarItem
           key={menuItem.key}
           menuItem={menuItem}
-          isHighlighted={highlightedMenubarItem === menuItem}
+          isHighlighted={highlightedMenubarItem?.key === menuItem.key}
           onHighlightIn={() => setHighlightedMenubarItem(menuItem)}
           onHighlightOut={resetHighlightedMenubarItem}
           showAllItem
@@ -139,7 +148,8 @@ const Menubar = ({ moreLabel, ...extraAriaAttrs }: { moreLabel?: string | undefi
           menuItem={moreMenuItem}
           isHighlighted={
             highlightedMenubarItem?.key === moreMenuItem.key ||
-            (highlightedMenubarItem !== null && !!itemsUnderMore?.includes(highlightedMenubarItem))
+            (highlightedMenubarItem !== null &&
+              !!itemsUnderMore?.some((item) => item.key === highlightedMenubarItem.key))
           }
           onHighlightIn={() => setHighlightedMenubarItem(moreMenuItem)}
           onHighlightOut={resetHighlightedMenubarItem}
@@ -209,7 +219,6 @@ const MenubarItem = ({
   }, [isHighlighted]);
   const ref = React.useRef<HTMLDivElement>(null);
   const uid = React.useId();
-  const dropdownPosition = useDropdownPosition(ref);
 
   const handleToggleMenu = (open: boolean) => {
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
@@ -228,56 +237,65 @@ const MenubarItem = ({
     closeTimeoutRef.current = setTimeout(() => handleToggleMenu(false), 400);
   };
 
-  return menuItem.children.length > 0 ? (
-    <div
-      className={cx("popover", { expanded: menuOpen })}
-      ref={ref}
-      onMouseEnter={() => handleToggleMenu(true)}
-      onMouseLeave={closeAfterDelay}
-    >
+  const hasChildren = menuItem.children.length > 0;
+
+  const menuItemAnchor = (
+    <Button asChild>
       <a
         href={menuItem.href ?? "#"}
-        className={cx("pill button", { expandable: showExpandableIcon })}
+        className={classNames(
+          "rounded-full! px-3! py-2! align-middle aria-[current]:bg-background aria-[current]:text-foreground",
+          showExpandableIcon ? "relative cursor-pointer" : "",
+          hasChildren ? "aria-[current=true]:hover:shadow!" : "hover:shadow!",
+          { "border-transparent! bg-transparent! text-inherit!": !isHighlighted },
+          { expandable: showExpandableIcon },
+        )}
         role="menuitem"
         aria-current={isHighlighted}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        aria-controls={uid}
+        aria-haspopup={hasChildren ? "menu" : undefined}
+        aria-expanded={hasChildren ? menuOpen : undefined}
+        aria-controls={hasChildren ? uid : undefined}
+        {...extraAriaAttrs}
         onClick={(e) => {
-          if (isOnTouchDevice) e.preventDefault();
-          else onSelectItem?.(menuItem, e);
+          if (hasChildren) {
+            if (isOnTouchDevice) e.preventDefault();
+            else onSelectItem?.(menuItem, e);
+          } else {
+            onHighlightIn();
+            onSelectItem?.(menuItem, e);
+          }
         }}
       >
         {menuItem.label}
+        {showExpandableIcon ? <ChevronDown className="float-right size-5" /> : null}
       </a>
-      <div className="dropdown" hidden={!menuOpen} style={dropdownPosition}>
-        <ItemsList
-          menuId={uid}
-          menuItem={menuItem}
-          showAllItemOnInitialList={showAllItem ?? false}
-          open={menuOpen}
-          onSelectItem={(newSelectedItem, e) => {
-            if (newSelectedItem === selectedItem) handleToggleMenu(false);
-            onSelectItem?.(newSelectedItem, e);
-          }}
-        />
-      </div>
+    </Button>
+  );
+
+  return hasChildren ? (
+    <div ref={ref} onMouseEnter={() => handleToggleMenu(true)} onMouseLeave={closeAfterDelay}>
+      <Popover open={menuOpen}>
+        <PopoverTrigger asChild>
+          <span className="inline-flex">{menuItemAnchor}</span>
+        </PopoverTrigger>
+        <PopoverContent className="border-0 p-0" onInteractOutside={(e) => e.preventDefault()}>
+          <ItemsList
+            key={`${uid}-${menuOpen}`}
+            menuId={uid}
+            menuItem={menuItem}
+            showAllItemOnInitialList={showAllItem ?? false}
+            onSelectItem={(newSelectedItem, e) => {
+              if (newSelectedItem === selectedItem) handleToggleMenu(false);
+              onSelectItem?.(newSelectedItem, e);
+            }}
+            className="flex h-full w-48 flex-col bg-white dark:bg-dark-gray"
+          />
+        </PopoverContent>
+      </Popover>
     </div>
   ) : (
     <div onMouseEnter={() => handleToggleMenu(true)} onMouseLeave={() => handleToggleMenu(false)}>
-      <a
-        href={menuItem.href ?? "#"}
-        className={cx("pill button", { expandable: showExpandableIcon })}
-        role="menuitem"
-        aria-current={isHighlighted}
-        {...extraAriaAttrs}
-        onClick={(e) => {
-          onHighlightIn();
-          onSelectItem?.(menuItem, e);
-        }}
-      >
-        {menuItem.label}
-      </a>
+      {menuItemAnchor}
     </div>
   );
 };
@@ -292,14 +310,15 @@ const OverlayMenu = ({
   footer?: React.ReactNode;
   menuTop?: string | undefined;
 } & React.AriaAttributes) => {
-  const { onSelectItem, selectedItem, topLevelMenuItems } = useMenuContext();
+  const { onSelectItem, topLevelMenuItems } = useMenuContext();
   const [menuOpen, setMenuOpen] = React.useState(false);
-  React.useEffect(() => setMenuOpen(false), [selectedItem]);
-
   const overlayMenuUID = React.useId();
+
   return (
     <>
       <Button
+        color="filled"
+        size="icon"
         onClick={() => setMenuOpen(true)}
         aria-controls={overlayMenuUID}
         aria-expanded={menuOpen}
@@ -307,13 +326,22 @@ const OverlayMenu = ({
         aria-label={buttonLabel ?? "Open Menu"}
         {...extraAriaAttrs}
       >
-        <Icon name="filter" />
+        <MenuFilter className="size-5" />
       </Button>
-      <div className="backdrop" hidden={!menuOpen} style={menuTop ? { top: menuTop } : undefined}>
-        <button className="close" onClick={() => setMenuOpen(false)} aria-label="Close Menu">
-          <Icon name="x" className="text-white" />
-        </button>
+      <Sheet
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        modal
+        className="w-[calc(20rem+3rem)] bg-transparent p-0 pr-12 md:left-0 md:border-l-0"
+      >
+        <Dialog.Close
+          className="absolute top-4 right-4 z-40 cursor-pointer bg-transparent all-unset"
+          aria-label="Close Menu"
+        >
+          <X className="size-6 text-white" />
+        </Dialog.Close>
         <ItemsList
+          key={`${overlayMenuUID}-${menuOpen}`}
           menuId={overlayMenuUID}
           menuItem={{
             key: "items#key",
@@ -322,13 +350,13 @@ const OverlayMenu = ({
             parent: null,
           }}
           footer={footer}
-          open={menuOpen}
           onSelectItem={(newSelectedItem, e) => {
             setMenuOpen(false);
             onSelectItem?.(newSelectedItem, e);
           }}
+          className="h-full w-80 overflow-x-hidden overflow-y-auto bg-background"
         />
-      </div>
+      </Sheet>
     </>
   );
 };
@@ -337,26 +365,29 @@ const ItemsList = ({
   menuId,
   menuItem: initialMenuItem,
   showAllItemOnInitialList,
-  open,
   onSelectItem,
   footer,
+  className,
 }: {
   menuId?: string;
   menuItem: MenuItemWithChildren;
   showAllItemOnInitialList?: boolean;
-  open: boolean;
   onSelectItem?: SelectItemHandler;
   footer?: React.ReactNode;
+  className?: string;
 }) => {
   const [displayedItem, setDisplayedItem] = React.useState(initialMenuItem);
-  React.useEffect(() => setDisplayedItem(initialMenuItem), [open]);
-
   return (
-    <div id={menuId} style={displayedItem.css} role="menu" aria-label={displayedItem.label} className="overflow-hidden">
+    <div
+      id={menuId}
+      style={displayedItem.css}
+      role="menu"
+      aria-label={displayedItem.label}
+      className={classNames("overflow-hidden border-none! p-0! shadow-none!", className)}
+    >
       {footer}
-
       {displayedItem.key !== initialMenuItem.key ? (
-        <a
+        <MenuItemLink
           key={`back${displayedItem.key}`}
           href={displayedItem.parent?.href ?? "#"}
           onClick={(e) => {
@@ -364,20 +395,18 @@ const ItemsList = ({
             setDisplayedItem(displayedItem.parent ?? initialMenuItem);
             e.preventDefault();
           }}
-          style={{ justifyContent: "normal", gap: "var(--spacer-2)" }}
-          role="menuitem"
         >
-          <Icon name="outline-cheveron-left" />
+          <ChevronLeft className="size-5" />
           <span>Back</span>
-        </a>
+        </MenuItemLink>
       ) : null}
       {displayedItem.key !== initialMenuItem.key || showAllItemOnInitialList ? (
-        <a href={displayedItem.href} onClick={(e) => onSelectItem?.(displayedItem, e)} role="menuitem">
+        <MenuItemLink href={displayedItem.href} onClick={(e) => onSelectItem?.(displayedItem, e)}>
           All {displayedItem.label}
-        </a>
+        </MenuItemLink>
       ) : null}
       {displayedItem.children.map((item) => (
-        <a
+        <MenuItemLink
           key={item.key}
           href={item.href}
           onClick={(e) => {
@@ -387,13 +416,34 @@ const ItemsList = ({
               setDisplayedItem(item);
             } else return onSelectItem?.(item, e);
           }}
-          role="menuitem"
+          className={item.children.length ? "flex! items-start! no-underline!" : undefined}
           aria-haspopup={item.children.length ? "menu" : undefined}
         >
-          {item.label}
-        </a>
+          <span className="min-w-0 flex-1 overflow-visible! break-words">{item.label}</span>
+          {item.children.length > 0 && <ChevronRight className="size-5 shrink-0" />}
+        </MenuItemLink>
       ))}
       {displayedItem.image ? <img src={displayedItem.image} className="w-full translate-x-6 translate-y-6" /> : null}
     </div>
   );
 };
+
+const MenuItemLink = ({
+  className,
+  children,
+  ...props
+}: {
+  children: React.ReactNode;
+} & React.ComponentProps<"a">) => (
+  <a
+    {...props}
+    href={props.href ?? "#"}
+    className={classNames(
+      "shrink-0 justify-between gap-2 overflow-visible! p-4! whitespace-normal! hover:bg-primary! hover:text-background!",
+      className,
+    )}
+    role="menuitem"
+  >
+    {children}
+  </a>
+);

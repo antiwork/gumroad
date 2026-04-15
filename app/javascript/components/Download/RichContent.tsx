@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight, Dropbox as DropboxIcon, Folder } from "@boxicons/react";
 import { Content, findParentNodeClosestToPos, Mark, Node as TiptapNode } from "@tiptap/core";
 import { LinkOptions as BaseLinkOptions } from "@tiptap/extension-link";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -7,18 +8,19 @@ import { cast } from "ts-safe-cast";
 
 import { RichContent } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button, buttonVariants, NavigationButton } from "$app/components/Button";
+import { useDomains } from "$app/components/DomainSettings";
 import { FileRow, shouldShowSubtitlesForFile } from "$app/components/Download/FileList";
-import { Icon } from "$app/components/Icons";
+import { License, useContentFiles } from "$app/components/DownloadPage/WithContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { titleWithFallback } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { License, useContentFiles } from "$app/components/server-components/DownloadPage/WithContent";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
 import { LicenseKey, LicenseProvider } from "$app/components/TiptapExtensions/LicenseKey";
 import { LongAnswer } from "$app/components/TiptapExtensions/LongAnswer";
@@ -26,6 +28,7 @@ import { ExternalMediaFileEmbed } from "$app/components/TiptapExtensions/MediaEm
 import { MoreLikeThis } from "$app/components/TiptapExtensions/MoreLikeThis";
 import { Posts } from "$app/components/TiptapExtensions/Posts";
 import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type SaleInfo = { sale_id: string; product_id: string | null; product_permalink: string | null };
@@ -39,15 +42,16 @@ export const RichContentView = ({
   saleInfo: SaleInfo | null;
   license: License | null;
 }) => {
+  const { rootDomain } = useDomains();
   const editor = useRichTextEditor({
     ariaLabel: "Product content",
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- to be fixed with product edit refactor
     initialValue: richContent as Content,
     editable: false,
     extensions: [
-      Link.configure({ saleInfo }),
-      TiptapLink.configure({ saleInfo }),
-      TiptapButton.configure({ saleInfo }),
+      Link.configure({ saleInfo, rootDomain }),
+      TiptapLink.configure({ saleInfo, rootDomain }),
+      TiptapButton.configure({ saleInfo, rootDomain }),
       FileEmbed,
       FileEmbedGroup,
       ExternalMediaFileEmbed,
@@ -74,25 +78,38 @@ export const RichContentView = ({
 
 const SALE_INFO_PLACEHOLDER_QUERY_PARAM = "__sale_info__";
 
-const addSaleInfoQueryParams = (href: string, saleInfo: SaleInfo | null) => {
+const isGumroadPostUrl = (url: URL, rootDomain: string) => {
+  const isGumroadDomain = url.host.endsWith(`.${rootDomain}`) || url.host === rootDomain;
+  const isPostPath = /^\/([^/]+\/)?p\/[^/]+$/u.test(url.pathname);
+  return isGumroadDomain && isPostPath;
+};
+
+const addSaleInfoQueryParams = (href: string, saleInfo: SaleInfo | null, rootDomain: string) => {
   if (!saleInfo) return href;
 
   try {
     const url = new URL(href);
-    if (!url.searchParams.has(SALE_INFO_PLACEHOLDER_QUERY_PARAM)) return href;
 
-    url.searchParams.delete(SALE_INFO_PLACEHOLDER_QUERY_PARAM);
-    url.searchParams.set("sale_id", saleInfo.sale_id);
-    url.searchParams.set("product_id", saleInfo.product_id || "");
-    url.searchParams.set("product_permalink", saleInfo.product_permalink || "");
+    if (url.searchParams.has(SALE_INFO_PLACEHOLDER_QUERY_PARAM)) {
+      url.searchParams.delete(SALE_INFO_PLACEHOLDER_QUERY_PARAM);
+      url.searchParams.set("sale_id", saleInfo.sale_id);
+      url.searchParams.set("product_id", saleInfo.product_id || "");
+      url.searchParams.set("product_permalink", saleInfo.product_permalink || "");
+      return url.href;
+    }
 
-    return url.href;
+    if (isGumroadPostUrl(url, rootDomain)) {
+      url.searchParams.set("purchase_id", saleInfo.sale_id);
+      return url.href;
+    }
+
+    return href;
   } catch {
     return href;
   }
 };
 
-const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null }>({
+const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null; rootDomain: string }>({
   name: "link",
   addAttributes: () => ({
     href: { default: null },
@@ -105,7 +122,7 @@ const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null }>({
       "a",
       {
         ...HTMLAttributes,
-        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo),
+        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo, this.options.rootDomain),
         target: "_blank",
       },
       0,
@@ -113,7 +130,7 @@ const Link = Mark.create<BaseLinkOptions & { saleInfo: SaleInfo | null }>({
   },
 });
 
-const TiptapLink = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
+const TiptapLink = TiptapNode.create<{ saleInfo: SaleInfo | null; rootDomain: string }>({
   name: "tiptap-link",
   group: "inline",
   inline: true,
@@ -126,29 +143,37 @@ const TiptapLink = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
         ...HTMLAttributes,
         target: "_blank",
         rel: "noopener noreferrer nofollow",
-        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo),
+        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo, this.options.rootDomain),
       },
       0,
     ];
   },
 });
 
-const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null }>({
+const TiptapButton = TiptapNode.create<{ saleInfo: SaleInfo | null; rootDomain: string }>({
   name: "button",
   group: "block",
   content: "inline+",
   addAttributes: () => ({ href: { default: null } }),
   renderHTML({ HTMLAttributes }) {
     return [
-      "a",
-      {
-        ...HTMLAttributes,
-        class: "button primary",
-        target: "_blank",
-        rel: "noopener noreferrer nofollow",
-        href: addSaleInfoQueryParams(cast<string>(HTMLAttributes.href), this.options.saleInfo),
-      },
-      0,
+      "div",
+      {},
+      [
+        "a",
+        {
+          ...HTMLAttributes,
+          class: buttonVariants({ size: "default", color: "primary" }),
+          target: "_blank",
+          rel: "noopener noreferrer nofollow",
+          href: addSaleInfoQueryParams(
+            cast<string>(HTMLAttributes.href),
+            this.options.saleInfo,
+            this.options.rootDomain,
+          ),
+        },
+        0,
+      ],
     ];
   },
 });
@@ -186,9 +211,9 @@ const FileEmbedNodeView = ({ node, getPos, editor }: NodeViewProps) => {
   return file ? (
     <NodeViewWrapper>
       {shouldShowSubtitlesForFile(file) ? (
-        <div role="tree" style={{ border: 0 }}>
+        <Rows role="tree" style={{ border: 0 }}>
           {fileRow}
-        </div>
+        </Rows>
       ) : (
         fileRow
       )}
@@ -277,28 +302,31 @@ const FileEmbedGroupNodeView = ({ node }: NodeViewProps) => {
 
   return (
     <NodeViewWrapper>
-      <div role="tree" ref={ref}>
-        <div role="treeitem" aria-expanded={expanded}>
-          <div className="content" onClick={() => setExpanded(!expanded)} contentEditable={false}>
-            <Icon name="solid-folder-open" className="type-icon" />
+      <Rows role="tree" ref={ref}>
+        <Row role="treeitem" aria-expanded={expanded}>
+          <RowContent onClick={() => setExpanded(!expanded)} contentEditable={false}>
+            {expanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+            <Folder pack="filled" className="type-icon size-5" />
             <div>
               <h4>{folderTitle}</h4>
             </div>
-          </div>
+          </RowContent>
           {downloadAllButtonIsVisible ? (
-            <div className="actions">
+            <RowActions>
               <FileGroupDownloadAllButton folderId={folderId} files={downloadableFilesInFolder} />
-            </div>
+            </RowActions>
           ) : null}
-          {hasStreamable ? (
-            <NodeViewContent id={uid} role="group" />
-          ) : (
-            <div role="group">
-              <NodeViewContent id={uid} className="rows" />
-            </div>
-          )}
-        </div>
-      </div>
+          <RowDetails role="group" className={classNames({ hidden: !expanded })}>
+            {hasStreamable ? (
+              <NodeViewContent id={uid} />
+            ) : (
+              <Rows>
+                <NodeViewContent id={uid} />
+              </Rows>
+            )}
+          </RowDetails>
+        </Row>
+      </Rows>
     </NodeViewWrapper>
   );
 };
@@ -364,72 +392,74 @@ const FileGroupDownloadAllButton = ({ folderId, files }: { folderId: string; fil
   const firstDownloadableFile = files[0];
 
   return (
-    <Popover
-      disabled={isDownloading}
-      trigger={
-        <div className="button" contentEditable={false}>
-          Download all
-          <Icon name="outline-cheveron-down" />
-        </div>
-      }
-    >
-      <div className="grid gap-2">
-        {isArchiving ? (
-          <Button contentEditable={false} disabled>
-            <LoadingSpinner />
-            Zipping files...
+    <Popover>
+      <PopoverAnchor>
+        <PopoverTrigger disabled={isDownloading} contentEditable={false} asChild>
+          <Button>
+            Download all
+            <ChevronDown className="size-5" />
           </Button>
-        ) : files.length === 1 && firstDownloadableFile ? (
-          <NavigationButton
-            contentEditable={false}
-            href={firstDownloadableFile.url}
-            download={firstDownloadableFile.downloadFileName}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Download file
-          </NavigationButton>
-        ) : (
+        </PopoverTrigger>
+      </PopoverAnchor>
+      <PopoverContent sideOffset={4}>
+        <div className="grid gap-2">
+          {isArchiving ? (
+            <Button contentEditable={false} disabled>
+              <LoadingSpinner />
+              Zipping files...
+            </Button>
+          ) : files.length === 1 && firstDownloadableFile ? (
+            <NavigationButton
+              contentEditable={false}
+              href={firstDownloadableFile.url}
+              download={firstDownloadableFile.downloadFileName}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Download file
+            </NavigationButton>
+          ) : (
+            <Button
+              contentEditable={false}
+              disabled={isDownloading}
+              onClick={asyncVoid(async () => {
+                setIsDownloading(true);
+                try {
+                  const archive = await downloadInfo.getFolderArchive(folderId);
+                  if (!archive.url) setIsArchiving(true);
+                  else window.location.href = archive.url;
+                } catch (e) {
+                  assertResponseError(e);
+                  showAlert(e.message, "error");
+                }
+                setIsDownloading(false);
+              })}
+            >
+              Download as ZIP
+            </Button>
+          )}
           <Button
             contentEditable={false}
             disabled={isDownloading}
             onClick={asyncVoid(async () => {
               setIsDownloading(true);
               try {
-                const archive = await downloadInfo.getFolderArchive(folderId);
-                if (!archive.url) setIsArchiving(true);
-                else window.location.href = archive.url;
+                const fileDownloadInfos = await downloadInfo.getDownloadUrlsForFiles(files.map((f) => f.id));
+                if (fileDownloadInfos.length === 0) return;
+                Dropbox.save({ files: fileDownloadInfos });
               } catch (e) {
                 assertResponseError(e);
                 showAlert(e.message, "error");
+              } finally {
+                setIsDownloading(false);
               }
-              setIsDownloading(false);
             })}
           >
-            Download as ZIP
+            <DropboxIcon pack="brands" className="size-5" />
+            Save to Dropbox
           </Button>
-        )}
-        <Button
-          contentEditable={false}
-          disabled={isDownloading}
-          onClick={asyncVoid(async () => {
-            setIsDownloading(true);
-            try {
-              const fileDownloadInfos = await downloadInfo.getDownloadUrlsForFiles(files.map((f) => f.id));
-              if (fileDownloadInfos.length === 0) return;
-              Dropbox.save({ files: fileDownloadInfos });
-            } catch (e) {
-              assertResponseError(e);
-              showAlert(e.message, "error");
-            } finally {
-              setIsDownloading(false);
-            }
-          })}
-        >
-          <Icon name="dropbox" />
-          Save to Dropbox
-        </Button>
-      </div>
+        </div>
+      </PopoverContent>
     </Popover>
   );
 };

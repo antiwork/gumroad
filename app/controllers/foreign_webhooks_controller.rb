@@ -38,7 +38,20 @@ class ForeignWebhooksController < ApplicationController
   end
 
   def paypal
-    payload = params.to_unsafe_hash.except(:controller, :action).to_hash
+    payload = params.to_unsafe_hash.except(:controller, :action, :format, :foreign_webhook).to_hash
+
+    if payload["event_type"].present?
+      verifier = PaypalWebhookVerifier.new(
+        headers: request.headers.env,
+        raw_body: request.raw_post,
+        fallback_payload: payload
+      )
+      if verifier.valid? == false
+        Rails.logger.warn("Rejected PayPal webhook because signature validation failed")
+        return render json: { success: false }, status: :bad_request
+      end
+    end
+
     PaypalEventHandler.new(payload).schedule_paypal_event_processing
 
     render json: { success: true }
@@ -143,7 +156,7 @@ class ForeignWebhooksController < ApplicationController
       # Compare signatures using secure comparison
       raise "Invalid signature" unless ActiveSupport::SecurityUtils.secure_compare(signature, expected)
     rescue => e
-      Bugsnag.notify("Error verifying Resend webhook: #{e.message}")
+      ErrorNotifier.notify("Error verifying Resend webhook: #{e.message}")
       render json: { success: false }, status: :bad_request
     end
 end

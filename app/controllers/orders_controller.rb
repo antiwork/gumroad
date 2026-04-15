@@ -3,6 +3,7 @@
 class OrdersController < ApplicationController
   include ValidateRecaptcha, Events, Order::ResponseHelpers
 
+  before_action :normalize_line_items, only: :create
   before_action :validate_order_request, only: :create
   before_action :fetch_affiliates, only: :create
 
@@ -38,7 +39,7 @@ class OrdersController < ApplicationController
   def confirm
     ActiveRecord::Base.connection.stick_to_primary!
 
-    order = Order.find_by_external_id(params[:id])
+    order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
     confirm_responses, offer_codes = Order::ConfirmService.new(order:, params:).perform
@@ -55,6 +56,12 @@ class OrdersController < ApplicationController
   end
 
   private
+    def normalize_line_items
+      if params[:line_items].is_a?(ActionController::Parameters)
+        params[:line_items] = params[:line_items].values
+      end
+    end
+
     def validate_order_request
       # Don't allow the order to go through if the buyer is a bot. Pretend that the order succeeded instead.
       return render json: { success: true } if is_bot?
@@ -113,7 +120,7 @@ class OrdersController < ApplicationController
         line_items: [:uid, :permalink, :perceived_price_cents, :price_range, :discount_code, :is_preorder, :quantity, :call_start_time,
                      :was_product_recommended, :recommended_by, :referrer, :is_rental, :is_multi_buy,
                      :was_discover_fee_charged, :price_cents, :tax_cents, :gumroad_tax_cents, :shipping_cents, :price_id, :affiliate_id, :url_parameters, :is_purchasing_power_parity_discounted,
-                     :recommender_model_name, :tip_cents, :pay_in_installments,
+                     :recommender_model_name, :tip_cents, :pay_in_installments, :force_new_subscription,
                      custom_fields: [:id, :value], variants: [], perceived_free_trial_duration: [:unit, :amount], accepted_offer: [:id, :original_variant_id, :original_product_id],
                      bundle_products: [:product_id, :variant_id, :quantity, custom_fields: [:id, :value]]])
     end

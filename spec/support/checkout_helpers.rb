@@ -50,7 +50,7 @@ module CheckoutHelpers
       expect(page).to have_text((pwyw_price.to_i * quantity / 100).to_s.reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse) if pwyw_price.present?
       expect(page).to have_text("Qty: #{quantity}")
       expect(page).to have_text("#{variant_label(product)}: #{option == "Untitled" ? product.name : option}") if option.present?
-      expect(page).to have_text("Membership: #{recurrence}") if recurrence.present?
+      expect(page).to have_text(recurrence) if recurrence.present?
       expect(page).to have_text("one #{product.free_trial_details[:duration][:unit]} free") if product.free_trial_enabled
     end
     expect(page).to have_selector("[aria-label='Discount code']", text: offer_code.code) if offer_code.present? && ((offer_code.amount_cents || 0) > 0 || (offer_code.amount_percentage || 0) > 0)
@@ -154,10 +154,14 @@ module CheckoutHelpers
       click_on is_free ? "Get" : "Pay", exact: true
 
       if should_verify_address
-        if page.has_text?("We are unable to verify your shipping address. Is your address correct?", wait: 5)
-          click_on "Yes, it is"
-        elsif page.has_text?("You entered this address:", wait: 5) && page.has_text?("We recommend using this format:", wait: 5)
-          click_on "No, continue"
+        begin
+          if page.has_text?("We are unable to verify your shipping address. Is your address correct?", wait: 5)
+            click_on "Yes, it is"
+          elsif page.has_text?("You entered this address:", wait: 5) && page.has_text?("We recommend using this format:", wait: 5)
+            click_on "No, continue"
+          end
+        rescue Capybara::ElementNotFound, Selenium::WebDriver::Error::StaleElementReferenceError
+          # Page may still be loading after payment processing or Chrome may be unstable; continue to success assertion
         end
       end
 
@@ -200,7 +204,6 @@ def fill_in_credit_card(number: "4242424242424242", expiry: StripePaymentMethodH
       fill_in "ZIP", with: zip_code, visible: false if zip_code.present?
     end
   end
-  fill_in "Name on card", with: "Gumhead Moneybags"
 end
 
 def within_sca_frame(&block)

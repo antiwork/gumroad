@@ -3,6 +3,7 @@
 class Api::Internal::Helper::BaseController < Api::Internal::BaseController
   skip_before_action :verify_authenticity_token
   before_action :verify_authorization_header!
+  before_action :authorize_helper_token!
 
   HMAC_EXPIRATION = 1.minute
 

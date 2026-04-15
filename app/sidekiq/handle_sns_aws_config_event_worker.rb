@@ -48,10 +48,10 @@ class HandleSnsAwsConfigEventWorker
     end
 
     if message
-      SlackMessageWorker.perform_async("internals_log", "AWS Config", message, "gray")
+      InternalNotificationWorker.perform_async("internals_log", "AWS Config", message, "gray")
     else
       attachment = build_default_attachment(params)
-      SlackMessageWorker.perform_async("internals_log", "AWS Config", "", "red", attachments: [attachment])
+      InternalNotificationWorker.perform_async("internals_log", "AWS Config", "", "red", attachments: [attachment])
     end
   end
 end

@@ -1,5 +1,5 @@
 import { lightFormat } from "date-fns";
-import pickBy from "lodash/pickBy";
+import { pickBy } from "lodash-es";
 import * as React from "react";
 
 import {
@@ -21,7 +21,9 @@ import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDat
 import { DateRangePicker } from "$app/components/DateRangePicker";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
-import Placeholder from "$app/components/ui/Placeholder";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Select } from "$app/components/ui/Select";
 
 import placeholder from "$assets/images/placeholders/sales.png";
 
@@ -150,16 +152,18 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
       actions={
         hasContent ? (
           <>
-            <select
+            <Select
               aria-label="Aggregate by"
               onChange={(e) => setAggregateBy(e.target.value === "daily" ? "daily" : "monthly")}
-              className="w-auto"
+              wrapperClassName="w-auto"
             >
               <option value="daily">Daily</option>
               <option value="monthly">Monthly</option>
-            </select>
+            </Select>
             <ProductsPopover products={products} setProducts={setProducts} />
-            <DateRangePicker {...dateRange} />
+            <div className="col-span-2">
+              <DateRangePicker {...dateRange} />
+            </div>
           </>
         ) : null
       }
@@ -179,14 +183,14 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
             </>
           ) : (
             <>
-              <div className="input">
+              <InputGroup>
                 <LoadingSpinner />
                 Loading charts...
-              </div>
-              <div className="input">
+              </InputGroup>
+              <InputGroup>
                 <LoadingSpinner />
                 Loading referrers...
-              </div>
+              </InputGroup>
             </>
           )}
           {data?.byState ? (
@@ -197,18 +201,16 @@ const Analytics = ({ products: initialProducts, country_codes, state_names }: An
               stateNames={state_names}
             />
           ) : (
-            <div className="input">
+            <InputGroup>
               <LoadingSpinner />
               Loading locations...
-            </div>
+            </InputGroup>
           )}
         </div>
       ) : (
         <div className="p-4 md:p-8">
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             <h2>You're just getting started.</h2>
             <p>
               You don't have any sales yet. Once you do, you'll see them here, along with powerful data that can help

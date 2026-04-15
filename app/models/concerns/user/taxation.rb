@@ -4,7 +4,11 @@ module User::Taxation
   extend ActiveSupport::Concern
   include Compliance
 
-  MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING = 5_000 * 100
+  MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING = 20_000 * 100
+  MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING = 200
+  MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR = { 2024 => 5_000 }
+  MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR = { 2024 => 0 }
+
   # Ref https://docs.stripe.com/connect/1099-K for state filing thresholds
   MIN_SALE_AMOUNTS_FOR_1099_K_STATE_FILINGS = {
     "AL" => MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING, # Alabama
@@ -40,14 +44,18 @@ module User::Taxation
   }
 
   def eligible_for_1099_k?(year)
-    return false unless is_a_non_suspended_creator_from_usa?
+    return false unless from_us?
     return false unless eligible_for_1099_k_federal_filing?(year) || eligible_for_1099_k_state_filing?(year)
 
     true
   end
 
   def eligible_for_1099_k_federal_filing?(year)
-    sales_scope_for(year).sum(:total_transaction_cents) >= MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING
+    min_sale_amount_for_1099_k_federal_filing = MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR[year] || MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING
+    min_sale_count_for_1099_k_federal_filing = MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING_FOR_YEAR[year] || MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING
+
+    sales_scope_for(year).sum(:total_transaction_cents) >= min_sale_amount_for_1099_k_federal_filing &&
+      sales_scope_for(year).count >= min_sale_count_for_1099_k_federal_filing
   end
 
   def eligible_for_1099_k_state_filing?(year)
@@ -59,7 +67,7 @@ module User::Taxation
   end
 
   def eligible_for_1099_misc?(year)
-    return false unless is_a_non_suspended_creator_from_usa?
+    return false unless from_us?
     return false unless eligible_for_1099_misc_federal_filing?(year) || eligible_for_1099_misc_state_filing?(year)
 
     true
@@ -78,16 +86,9 @@ module User::Taxation
   end
 
   def eligible_for_1099?(year)
-    return false unless is_a_non_suspended_creator_from_usa?
-
-    eligible_for_1099_k?(year) || eligible_for_1099_misc?(year)
-  end
-
-  def is_a_non_suspended_creator_from_usa?
-    return false if suspended?
     return false unless from_us?
 
-    true
+    eligible_for_1099_k?(year) || eligible_for_1099_misc?(year)
   end
 
   def from_us?

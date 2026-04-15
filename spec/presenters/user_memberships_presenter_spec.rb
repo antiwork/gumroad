@@ -67,8 +67,8 @@ describe UserMembershipsPresenter do
     end
 
     context "with other memberships present" do
-      it "notifies Bugsnag" do
-        expect(Bugsnag).to receive(:notify).exactly(:once).with("Missing owner team membership for user #{user.id}")
+      it "notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).exactly(:once).with("Missing owner team membership for user #{user.id}")
         props = UserMembershipsPresenter.new(pundit_user:).props
         expect(props).to eq([])
       end
@@ -80,7 +80,7 @@ describe UserMembershipsPresenter do
       end
 
       it "doesn't notify" do
-        expect(Bugsnag).not_to receive(:notify)
+        expect(ErrorNotifier).not_to receive(:notify)
         props = UserMembershipsPresenter.new(pundit_user:).props
         expect(props).to eq([])
       end

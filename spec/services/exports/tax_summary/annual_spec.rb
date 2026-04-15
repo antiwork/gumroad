@@ -21,6 +21,7 @@ describe Exports::TaxSummary::Annual, :vcr do
 
       # To simulate the exports
       stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 10)
+      stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 1)
     end
 
     it "does not export for non compliant users" do

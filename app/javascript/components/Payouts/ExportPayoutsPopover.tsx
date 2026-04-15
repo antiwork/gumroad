@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf } from "@boxicons/react";
 import * as React from "react";
 
 import { ExportablePayout, exportPayouts, getExportablePayouts } from "$app/data/balance";
@@ -5,13 +6,15 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Label } from "$app/components/ui/Label";
+import { Select } from "$app/components/ui/Select";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => void }) => {
+const ExportPayoutsPopoverContent = () => {
   const currentYear = new Date().getFullYear();
   const [yearsWithPayouts, setYearsWithPayouts] = React.useState<number[]>([currentYear]);
   const [selectedYear, setSelectedYear] = React.useState<number>(currentYear);
@@ -65,7 +68,6 @@ const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => voi
 
     try {
       await exportPayouts(Array.from(selectedPayouts));
-      closePopover();
       showAlert("You will receive an email in your inbox shortly with the data you've requested.", "success");
     } catch (e) {
       assertResponseError(e);
@@ -85,7 +87,7 @@ const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => voi
       </header>
 
       <section>
-        <select
+        <Select
           aria-label="Filter by year"
           value={selectedYear}
           onChange={handleYearChange}
@@ -97,7 +99,7 @@ const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => voi
               {year}
             </option>
           ))}
-        </select>
+        </Select>
       </section>
 
       <section className="relative -mx-4 max-h-[300px] max-w-none overflow-y-auto border-y p-4">
@@ -111,15 +113,14 @@ const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => voi
             <p>No payouts found for this year.</p>
           ) : (
             payouts.map((payout) => (
-              <label key={payout.id} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+              <Label key={payout.id} className="flex items-center gap-2">
+                <Checkbox
                   checked={selectedPayouts.has(payout.id)}
                   onChange={() => toggleSelectOne(payout.id)}
                   disabled={isLoading || isDownloading}
                 />
                 {payout.date_formatted}
-              </label>
+              </Label>
             ))
           )}
         </div>
@@ -133,38 +134,32 @@ const ExportPayoutsPopoverContent = ({ closePopover }: { closePopover: () => voi
         >
           {payouts.length && selectedPayouts.size === payouts.length ? "Deselect all" : "Select all"}
         </Button>
-        <Button
-          color="primary"
-          onClick={handleDownload}
-          disabled={selectedPayouts.size === 0 || isLoading || isDownloading}
-          className="flex-1"
-        >
-          {isDownloading ? <LoadingSpinner /> : "Download"}
-        </Button>
+        <PopoverClose asChild>
+          <Button
+            color="primary"
+            onClick={handleDownload}
+            disabled={selectedPayouts.size === 0 || isLoading || isDownloading}
+            className="flex-1"
+          >
+            {isDownloading ? <LoadingSpinner /> : "Download"}
+          </Button>
+        </PopoverClose>
       </footer>
     </div>
   );
 };
 
-export const ExportPayoutsPopover = () => {
-  const [isOpen, setIsOpen] = React.useState(false);
-
-  const closePopover = () => {
-    setIsOpen(false);
-  };
-
-  return (
-    <Popover
-      aria-label="Bulk export"
-      open={isOpen}
-      onToggle={setIsOpen}
-      trigger={
-        <Button aria-label="Bulk export">
-          <Icon name="download" />
+export const ExportPayoutsPopover = () => (
+  <Popover>
+    <PopoverAnchor>
+      <PopoverTrigger aria-label="Bulk export" asChild>
+        <Button size="icon">
+          <ArrowInDownSquareHalf className="size-5" />
         </Button>
-      }
-    >
-      {isOpen ? <ExportPayoutsPopoverContent closePopover={closePopover} /> : null}
-    </Popover>
-  );
-};
+      </PopoverTrigger>
+    </PopoverAnchor>
+    <PopoverContent sideOffset={4}>
+      <ExportPayoutsPopoverContent />
+    </PopoverContent>
+  </Popover>
+);

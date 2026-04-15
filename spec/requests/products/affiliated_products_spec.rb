@@ -146,7 +146,7 @@ describe "Affiliated Products", type: :system, js: true do
       visit products_affiliated_index_path
       new_product = create(:product, user: creator, name: "A very unique product name")
       create(:product_affiliate, affiliate: direct_affiliate, product: new_product, affiliate_basis_points: 25_00)
-      select_disclosure "Search" do
+      select_disclosure "Toggle Search" do
         fill_in "Search", with: new_product.name
       end
 
@@ -268,8 +268,9 @@ describe "Affiliated Products", type: :system, js: true do
     it "displays products with global affiliate sales by the user" do
       visit products_affiliated_index_path
 
-      expect(page).to have_selector("td[data-label='Type']", text: "Gumroad")
-      expect(page).to have_selector("td[data-label='Sales']", text: "1")
+      within find(:table_row, { "Product" => affiliate_one_products.first.name, "Type" => "Gumroad" }) do
+        expect(page).to have_selector(:table_cell, "Sales", text: "1")
+      end
     end
 
     it_behaves_like "accesses global affiliates page"

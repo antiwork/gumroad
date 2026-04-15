@@ -20,6 +20,10 @@
     </p>
   <% end %>
 
+  <% if item_props[:custom_receipt_note].present? %>
+    <%= simple_format(item_props[:custom_receipt_note]) %>
+  <% end %>
+
   <% if item_props[:license_key].present? %>
     <h4>License key</h4>
     <pre style="text-align: center; white-space: pre-wrap;">

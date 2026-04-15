@@ -163,7 +163,7 @@ class Country
     when Compliance::Countries::THA.alpha2
       Currency::THB
     when Compliance::Countries::BGR.alpha2
-      Currency::BGN
+      Currency::EUR
     when Compliance::Countries::DNK.alpha2
       Currency::DKK
     when Compliance::Countries::HUN.alpha2

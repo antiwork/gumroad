@@ -84,12 +84,6 @@ class ContactingCreatorMailer < ApplicationMailer
     do_not_send unless should_send_email?
   end
 
-  def negative_revenue_sale_failure(purchase_id)
-    @purchase = Purchase.find(purchase_id)
-    @seller = @purchase.seller
-    @subject = "A sale failed because of negative net revenue"
-  end
-
   def chargeback_notice(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
@@ -422,23 +416,24 @@ class ContactingCreatorMailer < ApplicationMailer
     do_not_send unless @link.present?
   end
 
-  def tax_form_1099k(user_id, year, form_download_url)
+  def tax_form_1099k(user_id, year)
     @seller = User.find(user_id)
     @year = year
-    @tax_form_download_url = form_download_url
+    @is_filed = @seller.user_tax_forms.for_year(year).where(tax_form_type: "us_1099_k").first&.filed?
     @subject = "Get your 1099-K form for #{@year}"
   end
 
-  def tax_form_1099misc(user_id, year, form_download_url)
+  def tax_form_1099misc(user_id, year)
     @seller = User.find(user_id)
     @year = year
-    @tax_form_download_url = form_download_url
     @subject = "Get your 1099-MISC form for #{@year}"
   end
 
   def video_transcode_failed(product_file_id)
     @subject = "A video failed to transcode."
     product_file = ProductFile.find(product_file_id)
+    return do_not_send if product_file.link.nil?
+
     @video_transcode_error = "We attempted to transcode a video (#{product_file.s3_filename}) from your product #{product_file.link.name}, but were unable to do so."
     @seller = product_file.user
   end

@@ -31,7 +31,7 @@ class RemoveDeletedFilesFromS3Job
         next if file.has_alive_duplicate_files?
         remove_record_files(file)
       rescue => e
-        Bugsnag.notify(e) { _1.add_tab(:file, model: file.class.name, id: file.id, url: file.try(:url)) }
+        ErrorNotifier.notify(e) { _1.add_tab(:file, model: file.class.name, id: file.id, url: file.try(:url)) }
       end
     end
 

@@ -1,3 +1,4 @@
+import { Copy, DotsHorizontalRounded, Link, Pencil, RefreshCcw, Trash } from "@boxicons/react";
 import cx from "classnames";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -11,6 +12,7 @@ import {
   getStatistics,
   updateDiscount,
 } from "$app/data/offer_code";
+import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
@@ -22,25 +24,39 @@ import { Layout, Page } from "$app/components/CheckoutDashboard/Layout";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { DateInput } from "$app/components/DateInput";
-import { Details } from "$app/components/Details";
-import { Icon } from "$app/components/Icons";
+import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NumberInput } from "$app/components/NumberInput";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
+import { Search } from "$app/components/Search";
 import { Select, Option } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Pill } from "$app/components/ui/Pill";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
+import { Switch } from "$app/components/ui/Switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriver";
 
+import blackFridayIllustration from "$assets/images/illustrations/black_friday.svg";
 import placeholder from "$assets/images/placeholders/discounts.png";
 
 type Product = {
@@ -49,6 +65,7 @@ type Product = {
   currency_type: CurrencyCode;
   url: string;
   is_tiered_membership: boolean;
+  is_recurring_billing: boolean;
   archived: boolean;
 };
 
@@ -129,9 +146,20 @@ export type DiscountsPageProps = {
   pages: Page[];
   products: Product[];
   pagination: PaginationProps;
+  show_black_friday_banner: boolean;
+  black_friday_code: string;
+  black_friday_code_name: string;
 };
 
-const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagination }: DiscountsPageProps) => {
+const DiscountsPage = ({
+  offer_codes,
+  pages,
+  products,
+  pagination: initialPagination,
+  show_black_friday_banner,
+  black_friday_code,
+  black_friday_code_name,
+}: DiscountsPageProps) => {
   const loggedInUser = useLoggedInUser();
   const [{ offerCodes, pagination }, setState] = React.useState<{
     offerCodes: OfferCode[];
@@ -161,6 +189,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
   }, [offerCodes]);
 
   const [view, setView] = React.useState<"list" | "create" | "edit">("list");
+  const [isBlackFridayMode, setIsBlackFridayMode] = React.useState(false);
 
   const [selectedOfferCodeId, setSelectedOfferCodeId] = React.useState<string | null>(null);
   const selectedOfferCode = offerCodes.find(({ id }) => id === selectedOfferCodeId);
@@ -212,8 +241,9 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
   });
 
   const [searchQuery, setSearchQuery] = React.useState<string | null>(initialQueryParams.query);
-  const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const hasSearchableContent = offerCodes.length > 0 || !!searchQuery;
+  const isSearchVisible = React.useRef(hasSearchableContent);
+  isSearchVisible.current ||= hasSearchableContent;
 
   const loadDiscounts = asyncVoid(async ({ page, query, sort, keepUrl }: QueryParams & { keepUrl?: boolean }) => {
     try {
@@ -244,10 +274,6 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
   const reloadDiscounts = () => loadDiscounts({ page: pagination.page, query: searchQuery, sort });
 
   const debouncedLoadDiscounts = useDebouncedCallback(() => loadDiscounts({ page: 1, query: searchQuery, sort }), 300);
-
-  React.useEffect(() => {
-    if (isSearchPopoverOpen) searchInputRef.current?.focus();
-  }, [isSearchPopoverOpen]);
 
   const deleteOfferCode = async (id: string) => {
     await deleteDiscount(id);
@@ -282,36 +308,19 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
       pages={pages}
       actions={
         <>
-          {offerCodes.length > 0 ? (
-            <Popover
-              open={isSearchPopoverOpen}
-              onToggle={setIsSearchPopoverOpen}
-              aria-label="Search"
-              trigger={
-                <div className="button">
-                  <Icon name="solid-search" />
-                </div>
-              }
-            >
-              <div className="input">
-                <Icon name="solid-search" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search"
-                  value={searchQuery ?? ""}
-                  onChange={(evt) => {
-                    setSearchQuery(evt.target.value);
-                    debouncedLoadDiscounts();
-                  }}
-                />
-              </div>
-            </Popover>
+          {isSearchVisible.current ? (
+            <Search
+              onSearch={(query) => {
+                setSearchQuery(query);
+                debouncedLoadDiscounts();
+              }}
+              value={searchQuery ?? ""}
+            />
           ) : null}
-
           <Button
             color="accent"
             onClick={() => {
+              setIsBlackFridayMode(false);
               setSelectedOfferCodeId(null);
               setView("create");
             }}
@@ -323,19 +332,42 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
       }
     >
       <section className="p-4 md:p-8">
+        {show_black_friday_banner && !offerCodes.some((offerCode) => offerCode.code === black_friday_code) ? (
+          <Alert className="mb-8" role="status" variant="accent">
+            <div className="flex items-center gap-4">
+              <img src={blackFridayIllustration} alt="Black Friday" className="size-12" />
+              <div className="flex-1 text-sm md:text-base">
+                <span className="font-bold">Black Friday is here!</span> Be part of it on Discover. Join Black Friday
+                Deals to create your discount and get featured.
+              </div>
+              <Button
+                color="primary"
+                className="w-max"
+                onClick={() => {
+                  setIsBlackFridayMode(true);
+                  setSelectedOfferCodeId(null);
+                  setView("create");
+                }}
+              >
+                Join Black Friday Deals
+              </Button>
+            </div>
+          </Alert>
+        ) : null}
         {offerCodes.length > 0 ? (
           <section className="flex flex-col gap-4">
-            <table aria-live="polite" aria-busy={isLoading}>
-              <thead>
-                <tr>
-                  <th {...thProps("name")}>Discount</th>
-                  <th {...thProps("revenue")}>Revenue</th>
-                  <th {...thProps("uses")}>Uses</th>
-                  <th {...thProps("term")}>Term</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead {...thProps("name")}>Discount</TableHead>
+                  <TableHead {...thProps("revenue")}>Revenue</TableHead>
+                  <TableHead {...thProps("uses")}>Uses</TableHead>
+                  <TableHead {...thProps("term")}>Term</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {offerCodes.map((offerCode) => {
                   const validAt = offerCode.valid_at ? new Date(offerCode.valid_at) : null;
                   const expiresAt = offerCode.expires_at ? new Date(offerCode.expires_at) : null;
@@ -343,39 +375,38 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                   const statistics = offerCodeStatistics[offerCode.id];
 
                   return (
-                    <tr
+                    <TableRow
                       key={offerCode.id}
-                      aria-selected={offerCode.id === selectedOfferCodeId}
+                      selected={offerCode.id === selectedOfferCodeId}
                       onClick={() => setSelectedOfferCodeId(offerCode.id)}
                     >
-                      <td>
+                      <TableCell hideLabel>
                         <div className="grid gap-2">
                           <div>
-                            <div className="pill small mr-2" aria-label="Offer code">
+                            <Pill size="small" className="mr-2" aria-label="Offer code">
                               {offerCode.code.toUpperCase()}
-                            </div>
+                            </Pill>
                             <b>{offerCode.name}</b>
                           </div>
-                          <small>
+                          <FieldsetDescription>
                             {formatAmount(offerCode)} off of {formatProducts(offerCode)}
-                          </small>
+                          </FieldsetDescription>
                         </div>
-                      </td>
-                      {statistics != null ? (
-                        <>
-                          <td className="whitespace-nowrap">{formatRevenue(statistics.revenue_cents)}</td>
-                          <td className="whitespace-nowrap">{formatUses(statistics.uses.total, offerCode.limit)}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td aria-busy />
-                          <td aria-busy />
-                        </>
-                      )}
-                      <td>{`${validAt ? `${formatDate(validAt)} - ` : ""}${
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" aria-busy={!statistics}>
+                        {statistics ? formatRevenue(statistics.revenue_cents) : <Skeleton className="w-16" />}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" aria-busy={!statistics}>
+                        {statistics ? (
+                          formatUses(statistics.uses.total, offerCode.limit)
+                        ) : (
+                          <Skeleton className="w-16" />
+                        )}
+                      </TableCell>
+                      <TableCell>{`${validAt ? `${formatDate(validAt)} - ` : ""}${
                         expiresAt ? formatDate(expiresAt) : "No end date"
-                      }`}</td>
-                      <td className="whitespace-nowrap">
+                      }`}</TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <div className="grid grid-cols-[min-content_1fr] gap-2">
                           {validAt && currentDate < validAt ? (
                             <>Scheduled</>
@@ -385,10 +416,11 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                             <>Live</>
                           )}
                         </div>
-                      </td>
-                      <td>
-                        <div className="actions">
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-3 lg:justify-end">
                           <Button
+                            size="icon"
                             aria-label="Edit"
                             disabled={!offerCode.can_update || isLoading}
                             onClick={() => {
@@ -396,60 +428,67 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
                               setView("edit");
                             }}
                           >
-                            <Icon name="pencil" />
+                            <Pencil className="size-5" />
                           </Button>
                           <Popover
                             open={popoverOfferCodeId === offerCode.id}
-                            onToggle={(open) => setPopoverOfferCodeId(open ? offerCode.id : null)}
-                            aria-label="Open discount action menu"
-                            trigger={
-                              <div className="button">
-                                <Icon name="three-dots" />
-                              </div>
-                            }
+                            onOpenChange={(open) => {
+                              setPopoverOfferCodeId(open ? offerCode.id : null);
+                            }}
                           >
-                            <div role="menu">
-                              <div
-                                role="menuitem"
-                                inert={!offerCode.can_update || isLoading}
-                                onClick={() => {
-                                  setPopoverOfferCodeId(null);
-                                  setSelectedOfferCodeId(offerCode.id);
-                                  setView("create");
-                                }}
+                            <PopoverTrigger asChild>
+                              <Button
+                                size="icon"
+                                aria-label="Open discount action menu"
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                <Icon name="outline-duplicate" />
-                                &ensp;Duplicate
-                              </div>
-                              <div
-                                role="menuitem"
-                                className="danger"
-                                inert={!offerCode.can_update || isLoading}
-                                onClick={asyncVoid(async (e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    setIsLoading(true);
+                                <DotsHorizontalRounded className="size-5" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+                              <Menu>
+                                <MenuItem
+                                  inert={!offerCode.can_update || isLoading}
+                                  className={classNames((!offerCode.can_update || isLoading) && "opacity-30")}
+                                  onClick={() => {
                                     setPopoverOfferCodeId(null);
-                                    await deleteOfferCode(offerCode.id);
-                                  } catch (e) {
-                                    assertResponseError(e);
-                                    showAlert(e.message, "error");
-                                  }
-                                  setIsLoading(false);
-                                })}
-                              >
-                                <Icon name="trash2" />
-                                &ensp;Delete
-                              </div>
-                            </div>
+                                    setSelectedOfferCodeId(offerCode.id);
+                                    setView("create");
+                                  }}
+                                >
+                                  <Copy className="size-5" />
+                                  Duplicate
+                                </MenuItem>
+                                <MenuItem
+                                  variant="danger"
+                                  inert={!offerCode.can_update || isLoading}
+                                  className={!offerCode.can_update || isLoading ? "opacity-30" : undefined}
+                                  onClick={asyncVoid(async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      setIsLoading(true);
+                                      setPopoverOfferCodeId(null);
+                                      await deleteOfferCode(offerCode.id);
+                                    } catch (e) {
+                                      assertResponseError(e);
+                                      showAlert(e.message, "error");
+                                    }
+                                    setIsLoading(false);
+                                  })}
+                                >
+                                  <Trash className="size-5" />
+                                  Delete
+                                </MenuItem>
+                              </Menu>
+                            </PopoverContent>
                           </Popover>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
             {pagination.pages > 1 ? (
               <Pagination
                 onChangePage={(newPage) => loadDiscounts({ page: newPage, query: searchQuery, sort })}
@@ -459,9 +498,7 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
           </section>
         ) : (
           <Placeholder>
-            <figure>
-              <img src={placeholder} />
-            </figure>
+            <PlaceholderImage src={placeholder} />
             <div>
               <h2>No discounts yet</h2>
               <p>Use discounts to create sweet deals for your customers</p>
@@ -476,92 +513,102 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
         {selectedOfferCode ? (
           <Sheet open onOpenChange={() => setSelectedOfferCodeId(null)}>
             <SheetHeader>{selectedOfferCode.name || selectedOfferCode.code.toUpperCase()}</SheetHeader>
-            <section className="stack">
-              <h3>Details</h3>
-              <div>
-                <h5>Code</h5>
-                <div className="pill small">{selectedOfferCode.code.toUpperCase()}</div>
-              </div>
-              <div>
-                <h5>Discount</h5>
-                {formatAmount(selectedOfferCode)}
-              </div>
-              {selectedOfferCodeStatistics != null ? (
-                <>
-                  <div>
-                    <h5>Uses</h5>
-                    {formatUses(selectedOfferCodeStatistics.uses.total, selectedOfferCode.limit)}
-                  </div>
-                  <div>
-                    <h5>Revenue</h5>
-                    {formatRevenue(selectedOfferCodeStatistics.revenue_cents)}
-                  </div>
-                </>
-              ) : null}
-              {selectedOfferCode.valid_at ? (
-                <div>
-                  <h5>Start date</h5>
-                  {formatDateTime(new Date(selectedOfferCode.valid_at))}
-                </div>
-              ) : null}
-              {selectedOfferCode.expires_at ? (
-                <div>
-                  <h5>End date</h5>
-                  {formatDateTime(new Date(selectedOfferCode.expires_at))}
-                </div>
-              ) : null}
-              {selectedOfferCode.minimum_quantity !== null ? (
-                <div>
-                  <h5>Minimum quantity</h5>
-                  {selectedOfferCode.minimum_quantity}
-                </div>
-              ) : null}
-              {(selectedOfferCode.products ?? products).some(({ is_tiered_membership }) => is_tiered_membership) ? (
-                <div>
-                  <h5>Discount duration for memberships</h5>
-                  {selectedOfferCode.duration_in_billing_cycles === 1 ? "Once (first billing period only)" : "Forever"}
-                </div>
-              ) : null}
-              {selectedOfferCode.minimum_amount_cents !== null ? (
-                <div>
-                  <h5>Minimum amount</h5>
-                  {formatPriceCentsWithCurrencySymbol(
-                    selectedOfferCode.currency_type,
-                    selectedOfferCode.minimum_amount_cents,
-                    {
-                      symbolFormat: "short",
-                    },
-                  )}
-                </div>
-              ) : null}
-            </section>
-            {selectedOfferCode.products ? (
-              <section className="stack">
-                <h3>Products</h3>
-                {selectedOfferCode.products.map((product) => {
-                  const uses =
-                    selectedOfferCodeStatistics != null
-                      ? (selectedOfferCodeStatistics.uses.products[product.id] ?? 0)
-                      : null;
-                  return (
-                    <div key={product.id} className="grid grid-cols-[1fr_auto] gap-2">
-                      <div>
-                        <h5>{product.name}</h5>
-                        {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
-                      </div>
-                      <CopyToClipboard
-                        tooltipPosition="bottom"
-                        copyTooltip="Copy link with discount"
-                        text={`${product.url}/${selectedOfferCode.code}`}
-                      >
-                        <Button aria-label="Copy link with discount">
-                          <Icon name="link" />
-                        </Button>
-                      </CopyToClipboard>
-                    </div>
-                  );
-                })}
+            <Card asChild>
+              <section>
+                <CardContent asChild>
+                  <h3>Details</h3>
+                </CardContent>
+                <CardContent>
+                  <h5 className="grow font-bold">Code</h5>
+                  <Pill size="small">{selectedOfferCode.code.toUpperCase()}</Pill>
+                </CardContent>
+                <CardContent>
+                  <h5 className="grow font-bold">Discount</h5>
+                  {formatAmount(selectedOfferCode)}
+                </CardContent>
+                {selectedOfferCodeStatistics != null ? (
+                  <>
+                    <CardContent>
+                      <h5 className="grow font-bold">Uses</h5>
+                      {formatUses(selectedOfferCodeStatistics.uses.total, selectedOfferCode.limit)}
+                    </CardContent>
+                    <CardContent>
+                      <h5 className="grow font-bold">Revenue</h5>
+                      {formatRevenue(selectedOfferCodeStatistics.revenue_cents)}
+                    </CardContent>
+                  </>
+                ) : null}
+                {selectedOfferCode.valid_at ? (
+                  <CardContent>
+                    <h5 className="grow font-bold">Start date</h5>
+                    {formatDateTime(new Date(selectedOfferCode.valid_at))}
+                  </CardContent>
+                ) : null}
+                {selectedOfferCode.expires_at ? (
+                  <CardContent>
+                    <h5 className="grow font-bold">End date</h5>
+                    {formatDateTime(new Date(selectedOfferCode.expires_at))}
+                  </CardContent>
+                ) : null}
+                {selectedOfferCode.minimum_quantity !== null ? (
+                  <CardContent>
+                    <h5 className="grow font-bold">Minimum quantity</h5>
+                    {selectedOfferCode.minimum_quantity}
+                  </CardContent>
+                ) : null}
+                {(selectedOfferCode.products ?? products).some(({ is_tiered_membership }) => is_tiered_membership) ? (
+                  <CardContent>
+                    <h5 className="grow font-bold">Discount duration for memberships</h5>
+                    {selectedOfferCode.duration_in_billing_cycles === 1
+                      ? "Once (first billing period only)"
+                      : "Forever"}
+                  </CardContent>
+                ) : null}
+                {selectedOfferCode.minimum_amount_cents !== null ? (
+                  <CardContent>
+                    <h5 className="grow font-bold">Minimum amount</h5>
+                    {formatPriceCentsWithCurrencySymbol(
+                      selectedOfferCode.currency_type,
+                      selectedOfferCode.minimum_amount_cents,
+                      {
+                        symbolFormat: "short",
+                      },
+                    )}
+                  </CardContent>
+                ) : null}
               </section>
+            </Card>
+            {selectedOfferCode.products ? (
+              <Card asChild>
+                <section>
+                  <CardContent asChild>
+                    <h3>Products</h3>
+                  </CardContent>
+                  {selectedOfferCode.products.map((product) => {
+                    const uses =
+                      selectedOfferCodeStatistics != null
+                        ? (selectedOfferCodeStatistics.uses.products[product.id] ?? 0)
+                        : null;
+                    return (
+                      <CardContent key={product.id} className="grid grid-cols-[1fr_auto] gap-2">
+                        <div className="grow">
+                          <h5 className="font-bold">{product.name}</h5>
+                          {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
+                        </div>
+                        <CopyToClipboard
+                          tooltipPosition="bottom"
+                          copyTooltip="Copy link with discount"
+                          text={`${product.url}/${selectedOfferCode.code}`}
+                        >
+                          <Button size="icon" aria-label="Copy link with discount">
+                            <Link className="size-5" />
+                          </Button>
+                        </CopyToClipboard>
+                      </CardContent>
+                    );
+                  })}
+                </section>
+              </Card>
             ) : null}
             <section className="grid auto-cols-fr grid-flow-row gap-4 sm:grid-flow-col">
               <Button onClick={() => setView("create")} disabled={!selectedOfferCode.can_update || isLoading}>
@@ -595,6 +642,8 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
     </Layout>
   ) : view === "edit" ? (
     <Form
+      black_friday_code={black_friday_code}
+      black_friday_code_name={black_friday_code_name}
       title="Edit discount"
       submitLabel={isLoading ? "Saving changes..." : "Save changes"}
       readOnlyCode
@@ -634,10 +683,16 @@ const DiscountsPage = ({ offer_codes, pages, products, pagination: initialPagina
     />
   ) : (
     <Form
+      black_friday_code={black_friday_code}
+      black_friday_code_name={black_friday_code_name}
       title="Create discount"
       submitLabel={isLoading ? "Adding discount..." : "Add discount"}
       offerCode={selectedOfferCode ? { ...selectedOfferCode, code: "" } : undefined}
-      cancel={() => setView("list")}
+      isBlackFridayMode={isBlackFridayMode}
+      cancel={() => {
+        setIsBlackFridayMode(false);
+        setView("list");
+      }}
       save={asyncVoid(async (offerCode) => {
         try {
           setIsLoading(true);
@@ -683,6 +738,9 @@ const Form = ({
   save,
   products,
   isLoading,
+  black_friday_code,
+  black_friday_code_name,
+  isBlackFridayMode = false,
 }: {
   title: string;
   offerCode?: OfferCode | undefined;
@@ -692,10 +750,15 @@ const Form = ({
   save: (offerCode: Omit<OfferCode, "id" | "can_update">) => void;
   products: Product[];
   isLoading: boolean;
+  black_friday_code: string;
+  black_friday_code_name: string;
+  isBlackFridayMode?: boolean;
 }) => {
-  const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: offerCode?.name ?? "" });
+  const [name, setName] = React.useState<{ value: string; error?: boolean }>({
+    value: isBlackFridayMode ? black_friday_code_name : (offerCode?.name ?? ""),
+  });
   const [code, setCode] = React.useState<{ value: string; error?: boolean }>({
-    value: offerCode?.code || generateCode(),
+    value: isBlackFridayMode ? black_friday_code : offerCode?.code || generateCode(),
   });
 
   const [discount, setDiscount] = React.useState<InputtedDiscount>(
@@ -744,7 +807,7 @@ const Form = ({
   );
 
   const canSetDuration = (universal ? products : selectedProducts).some(
-    ({ is_tiered_membership }) => is_tiered_membership,
+    ({ is_recurring_billing }) => is_recurring_billing,
   );
   const [durationInBillingCycles, setDurationInMonths] = React.useState(offerCode?.duration_in_billing_cycles ?? null);
 
@@ -815,7 +878,6 @@ const Form = ({
         actions={
           <>
             <Button onClick={cancel} disabled={isLoading}>
-              <Icon name="x-square" />
               Cancel
             </Button>
             <Button color="accent" onClick={handleSubmit} disabled={isLoading}>
@@ -825,8 +887,9 @@ const Form = ({
         }
       />
       <form>
-        <section className="p-8!">
-          <header>
+        <FormSection
+          className="p-8!"
+          header={
             <div className="flex flex-col gap-4">
               <div>Create a discount code so your audience can buy your products at a reduced price.</div>
               <div>
@@ -839,12 +902,13 @@ const Form = ({
                 </a>
               </div>
             </div>
-          </header>
-          <fieldset className={cx({ danger: name.error })}>
-            <legend>
-              <label htmlFor={`${uid}name`}>Name</label>
-            </legend>
-            <input
+          }
+        >
+          <Fieldset state={name.error ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}name`}>Name</Label>
+            </FieldsetTitle>
+            <Input
               type="text"
               id={`${uid}name`}
               placeholder="Black Friday"
@@ -853,34 +917,43 @@ const Form = ({
               onChange={(evt) => setName({ value: evt.target.value })}
               aria-invalid={name.error}
             />
-          </fieldset>
-          <fieldset className={cx({ danger: code.error })}>
-            <legend>
-              <label htmlFor={`${uid}code`}>Discount code</label>
-            </legend>
+          </Fieldset>
+          <Fieldset state={code.error ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}code`}>Discount code</Label>
+            </FieldsetTitle>
             <div className="grid grid-cols-[1fr_auto] gap-2">
-              <input
+              <Input
                 type="text"
                 id={`${uid}code`}
                 value={code.value}
                 ref={codeFieldRef}
-                onChange={(evt) => setCode({ value: evt.target.value })}
+                onChange={(evt) => {
+                  setCode({ value: evt.target.value });
+                }}
                 aria-invalid={code.error}
-                readOnly={readOnlyCode}
+                readOnly={readOnlyCode || isBlackFridayMode}
               />
               <Button
-                onClick={() => setCode({ value: generateCode() })}
+                onClick={() => {
+                  setCode({ value: generateCode() });
+                }}
                 aria-label="Generate new discount"
-                disabled={readOnlyCode}
+                disabled={readOnlyCode || isBlackFridayMode}
               >
-                <Icon name="outline-refresh" />
+                <RefreshCcw className="size-5" />
               </Button>
             </div>
-          </fieldset>
-          <fieldset className={cx({ danger: selectedProductIds.error })}>
-            <legend>
-              <label htmlFor={`${uid}products`}>Products</label>
-            </legend>
+            {isBlackFridayMode ? (
+              <Alert className="mt-2" variant="info">
+                By using this discount, your product will be featured in Black Friday Deals on Discover.
+              </Alert>
+            ) : null}
+          </Fieldset>
+          <Fieldset state={selectedProductIds.error ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}products`}>Products</Label>
+            </FieldsetTitle>
             <Select
               ref={selectedProductsFieldRef}
               inputId={`${uid}products`}
@@ -911,9 +984,8 @@ const Form = ({
               isDisabled={universal}
               aria-invalid={selectedProductIds.error}
             />
-            <label>
-              <input
-                type="checkbox"
+            <Label>
+              <Checkbox
                 checked={universal}
                 onChange={(evt) => {
                   setUniversal(evt.target.checked);
@@ -922,13 +994,13 @@ const Form = ({
                 aria-invalid={selectedProductIds.error}
               />
               All products
-            </label>
-          </fieldset>
+            </Label>
+          </Fieldset>
           {canSetDuration ? (
-            <fieldset>
-              <legend>
-                <label htmlFor={`${uid}duration`}>Discount duration for memberships</label>
-              </legend>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}duration`}>Discount duration for memberships</Label>
+              </FieldsetTitle>
               <TypeSafeOptionSelect
                 id={`${uid}duration`}
                 value={durationInBillingCycles === null ? "forever" : "once"}
@@ -938,10 +1010,10 @@ const Form = ({
                   { id: "once", label: "Once (first billing period only)" },
                 ]}
               />
-            </fieldset>
+            </Fieldset>
           ) : null}
-          <fieldset>
-            <legend>Type</legend>
+          <Fieldset>
+            <FieldsetTitle>Type</FieldsetTitle>
             <DiscountInput
               discount={discount}
               setDiscount={setDiscount}
@@ -960,29 +1032,22 @@ const Form = ({
                 !selectedProducts.every(({ currency_type }) => currency_type === currencyCode)
               }
             />
-          </fieldset>
-          <fieldset className="gap-4">
-            <legend>Settings</legend>
-            <Details
-              className="toggle"
-              open={limitQuantity}
-              summary={
-                <label>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={limitQuantity}
-                    onChange={(evt) => setLimitQuantity(evt.target.checked)}
-                  />
-                  Limit quantity
-                </label>
-              }
-            >
-              <div className="dropdown">
-                <fieldset className={cx({ danger: maxQuantity.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}quantity`}>Quantity</label>
-                  </legend>
+          </Fieldset>
+          <Fieldset className="gap-4">
+            <FieldsetTitle>Settings</FieldsetTitle>
+            <Details open={limitQuantity}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
+                <Switch
+                  checked={limitQuantity}
+                  onChange={(evt) => setLimitQuantity(evt.target.checked)}
+                  label="Limit quantity"
+                />
+              </DetailsToggle>
+              <Dropdown>
+                <Fieldset state={maxQuantity.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}quantity`}>Quantity</Label>
+                  </FieldsetTitle>
                   <NumberInput
                     value={maxQuantity.value}
                     onChange={(value) => {
@@ -990,39 +1055,25 @@ const Form = ({
                     }}
                   >
                     {(props) => (
-                      <input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
+                      <Input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
                     )}
                   </NumberInput>
-                </fieldset>
-              </div>
+                </Fieldset>
+              </Dropdown>
             </Details>
-            <Details
-              className="toggle"
-              open={limitValidity}
-              summary={
-                <label>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={limitValidity}
-                    onChange={(evt) => setLimitValidity(evt.target.checked)}
-                  />
-                  Limit validity period
-                </label>
-              }
-            >
-              <div
-                className="dropdown"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(var(--dynamic-grid), 1fr))",
-                  gap: "var(--spacer-4)",
-                }}
-              >
-                <fieldset>
-                  <legend>
-                    <label htmlFor={`${uid}validAt`}>Valid from</label>
-                  </legend>
+            <Details open={limitValidity}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
+                <Switch
+                  checked={limitValidity}
+                  onChange={(evt) => setLimitValidity(evt.target.checked)}
+                  label="Limit validity period"
+                />
+              </DetailsToggle>
+              <Dropdown className="gap-4 lg:grid-cols-2">
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}validAt`}>Valid from</Label>
+                  </FieldsetTitle>
                   <DateInput
                     withTime
                     id={`${uid}validAt`}
@@ -1031,19 +1082,15 @@ const Form = ({
                       if (date) setValidAt(date);
                     }}
                   />
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={hasNoEndDate}
-                      onChange={(evt) => setHasNoEndDate(evt.target.checked)}
-                    />
+                  <Label>
+                    <Checkbox checked={hasNoEndDate} onChange={(evt) => setHasNoEndDate(evt.target.checked)} />
                     No end date
-                  </label>
-                </fieldset>
-                <fieldset className={cx({ danger: expiresAt.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}expiresAt`}>Valid until</label>
-                  </legend>
+                  </Label>
+                </Fieldset>
+                <Fieldset state={expiresAt.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}expiresAt`}>Valid until</Label>
+                  </FieldsetTitle>
                   <DateInput
                     withTime
                     id={`${uid}expiresAt`}
@@ -1054,29 +1101,22 @@ const Form = ({
                     disabled={hasNoEndDate}
                     aria-invalid={expiresAt.error ?? false}
                   />
-                </fieldset>
-              </div>
+                </Fieldset>
+              </Dropdown>
             </Details>
-            <Details
-              className="toggle"
-              open={hasMinimumAmount}
-              summary={
-                <label>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={hasMinimumAmount}
-                    onChange={(evt) => setHasMinimumAmount(evt.target.checked)}
-                  />
-                  Set a minimum qualifying amount
-                </label>
-              }
-            >
-              <div className="dropdown">
-                <fieldset className={cx({ danger: minimumAmount.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}minimumAmount`}>Minimum amount</label>
-                  </legend>
+            <Details open={hasMinimumAmount}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
+                <Switch
+                  checked={hasMinimumAmount}
+                  onChange={(evt) => setHasMinimumAmount(evt.target.checked)}
+                  label="Set a minimum qualifying amount"
+                />
+              </DetailsToggle>
+              <Dropdown>
+                <Fieldset state={minimumAmount.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}minimumAmount`}>Minimum amount</Label>
+                  </FieldsetTitle>
                   <PriceInput
                     id={`${uid}minimumAmount`}
                     currencyCode={currencyCode}
@@ -1085,29 +1125,22 @@ const Form = ({
                     placeholder="0"
                     hasError={minimumAmount.error ?? false}
                   />
-                </fieldset>
-              </div>
+                </Fieldset>
+              </Dropdown>
             </Details>
-            <Details
-              className="toggle"
-              open={hasMinimumQuantity}
-              summary={
-                <label>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={hasMinimumQuantity}
-                    onChange={(evt) => setHasMinimumQuantity(evt.target.checked)}
-                  />
-                  Set a minimum quantity
-                </label>
-              }
-            >
-              <div className="dropdown">
-                <fieldset className={cx({ danger: minimumQuantity.error })}>
-                  <legend>
-                    <label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</label>
-                  </legend>
+            <Details open={hasMinimumQuantity}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
+                <Switch
+                  checked={hasMinimumQuantity}
+                  onChange={(evt) => setHasMinimumQuantity(evt.target.checked)}
+                  label="Set a minimum quantity"
+                />
+              </DetailsToggle>
+              <Dropdown>
+                <Fieldset state={minimumQuantity.error ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}minimumQuantity`}>Minimum quantity per product</Label>
+                  </FieldsetTitle>
                   <NumberInput
                     value={minimumQuantity.value}
                     onChange={(value) => {
@@ -1115,7 +1148,7 @@ const Form = ({
                     }}
                   >
                     {(props) => (
-                      <input
+                      <Input
                         id={`${uid}minimumQuantity`}
                         placeholder="0"
                         aria-invalid={minimumQuantity.error}
@@ -1123,11 +1156,11 @@ const Form = ({
                       />
                     )}
                   </NumberInput>
-                </fieldset>
-              </div>
+                </Fieldset>
+              </Dropdown>
             </Details>
-          </fieldset>
-        </section>
+          </Fieldset>
+        </FormSection>
       </form>
     </div>
   );

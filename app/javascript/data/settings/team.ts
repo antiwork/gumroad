@@ -39,20 +39,6 @@ export const createTeamInvitation = async (teamInvitation: TeamInvitation) => {
   return { success: false, error_message: "Sorry, something went wrong. Please try again." };
 };
 
-export const fetchMemberInfos = async (): Promise<
-  { success: false } | { success: true; member_infos: MemberInfo[] }
-> => {
-  const response = await request({
-    method: "GET",
-    accept: "json",
-    url: Routes.settings_team_members_path("json"),
-  });
-  if (response.ok) {
-    return cast(await response.json());
-  }
-  return { success: false };
-};
-
 export const updateMember = async (memberInfo: MemberInfo, role: Role) => {
   const requestInfo =
     memberInfo.type === "invitation"

@@ -4,6 +4,7 @@ module Product::Validations
   include ActionView::Helpers::TextHelper
 
   MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH = 26
+  MAX_CUSTOM_RECEIPT_TEXT_LENGTH = 500
 
   private
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold
@@ -81,6 +82,7 @@ module Product::Validations
     def calls_must_have_at_least_one_duration
       return unless native_type == Link::NATIVE_TYPE_CALL
       return if deleted_at.present?
+      return if archived?
       return if variant_categories.alive.first&.alive_variants&.exists?
 
       errors.add(:base, "Calls must have at least one duration")

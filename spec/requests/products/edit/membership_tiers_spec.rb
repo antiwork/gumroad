@@ -589,6 +589,41 @@ describe("Product Edit Memberships", type: :system, js: true) do
 
           save_change(expect_message: "The suggested price you entered was too low.")
         end
+
+        it "automatically enables PWYW and disables toggle when tier prices are 0" do
+          visit edit_link_path(@product.unique_permalink)
+
+          within tier_rows[0] do
+            check "Toggle recurrence option: Monthly"
+            fill_in "Amount monthly", with: 0
+
+            pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
+            expect(page).to have_content("Free tiers require a pay what they want price.")
+            expect(pwyw_toggle).to be_checked
+
+            fill_in "Amount monthly", with: 10
+
+            expect(page).not_to have_content("Free tiers require a pay what they want price.")
+            pwyw_toggle = find_field("Allow customers to pay what they want")
+            expect(pwyw_toggle).to be_checked
+            expect(pwyw_toggle).not_to be_disabled
+
+            fill_in "Amount monthly", with: 0
+            check "Toggle recurrence option: Quarterly"
+            fill_in "Amount quarterly", with: 0
+
+            expect(page).to have_content("Free tiers require a pay what they want price.")
+            pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
+            expect(pwyw_toggle).to be_checked
+
+            fill_in "Amount quarterly", with: 5
+
+            expect(page).not_to have_content("Free tiers require a pay what they want price.")
+            pwyw_toggle = find_field("Allow customers to pay what they want")
+            expect(pwyw_toggle).to be_checked
+            expect(pwyw_toggle).not_to be_disabled
+          end
+        end
       end
 
       it "allows to change default recurrence in settings" do

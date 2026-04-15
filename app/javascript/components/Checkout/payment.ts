@@ -1,5 +1,5 @@
 import { enableMapSet, produce } from "immer";
-import groupBy from "lodash/groupBy";
+import { groupBy } from "lodash-es";
 import * as React from "react";
 
 import { getSurcharges, SurchargesResponse } from "$app/data/customer_surcharge";
@@ -20,7 +20,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 enableMapSet();
 
 export type PaymentMethodType = "paypal" | "stripePaymentRequest" | "card";
-export type PaymentMethod = { type: PaymentMethodType; button: React.ReactElement };
+export type PaymentMethod = { type: PaymentMethodType; button: React.ReactElement | null };
 
 export type Product = {
   permalink: string;
@@ -160,8 +160,18 @@ export const getTotalPriceFromProducts = (state: State) => state.products.reduce
 export function isTippingEnabled(state: State) {
   return (
     state.products.every((product) => product.hasTippingEnabled) &&
-    !state.products.every((product) => product.nativeType === "coffee")
+    !state.products.every((product) => product.nativeType === "coffee") &&
+    getTotalPriceFromProducts(state) > 0
   );
+}
+
+const LARGE_TIP_THRESHOLD_CENTS = 10000;
+
+export function isTipSuspiciouslyLarge(state: State): boolean {
+  const tipCents = computeTip(state);
+  if (tipCents === 0) return false;
+  const productTotal = getTotalPriceFromProducts(state);
+  return tipCents > LARGE_TIP_THRESHOLD_CENTS && tipCents > productTotal;
 }
 
 export function computeTip(state: State) {
@@ -404,8 +414,11 @@ export function createReducer(initial: {
   const [state, dispatch] = reducer;
   useRunOnce(() => {
     const url = new URL(window.location.href);
+    if (url.pathname.startsWith(Routes.checkout_path())) return;
     const searchParams = new URLSearchParams([...url.searchParams].filter(([key]) => key === "_gl"));
     url.search = searchParams.toString();
+    // TODO (sm17p) Replace with Inertia's router.replace once subscription manager page is migrated to Inertia
+    // then remove the checkout-path early return above so this runs on checkout too.
     window.history.replaceState(window.history.state, "", url.toString());
   });
 

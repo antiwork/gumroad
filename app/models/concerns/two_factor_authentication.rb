@@ -35,7 +35,8 @@ module TwoFactorAuthentication
   end
 
   def send_authentication_token!
-    TwoFactorAuthenticationMailer.authentication_token(id).deliver_later(queue: "critical")
+    email_provider = EmailRouterFallbackService.email_provider_for_two_factor(user: self)
+    TwoFactorAuthenticationMailer.authentication_token(id, email_provider:).deliver_later(queue: "critical")
   end
 
   def add_two_factor_authenticated_ip!(remote_ip)
@@ -47,6 +48,10 @@ module TwoFactorAuthentication
 
     # Allow 000000 as valid authentication token in all non-production environments
     !Rails.env.production? && authentication_token == DEFAULT_AUTH_TOKEN
+  end
+
+  def totp_enabled?
+    totp_credential&.confirmed? == true
   end
 
   def has_logged_in_from_ip_before?(remote_ip)

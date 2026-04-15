@@ -23,7 +23,7 @@ class Iffy::EventJob
     when "user.suspended"
       Iffy::User::SuspendService.new(id).perform
     when "user.compliant"
-      Iffy::User::MarkCompliantService.new(id).perform
+      Iffy::User::MarkCompliantService.new(id).perform unless user_suspended_by_admin?(id)
     when "record.flagged"
       if entity == "Product" && !user_protected?(user)
         Iffy::Product::FlagService.new(id).perform
@@ -42,5 +42,12 @@ class Iffy::EventJob
   private
     def user_protected?(user)
       user&.dig("protected") == true
+    end
+
+    def user_suspended_by_admin?(user_external_id)
+      user = User.find_by_external_id(user_external_id)
+      return false unless user
+
+      user.suspended_by_admin?
     end
 end

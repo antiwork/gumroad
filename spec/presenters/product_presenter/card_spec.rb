@@ -23,7 +23,8 @@ describe ProductPresenter::Card do
               id: creator.external_id,
               name: "Testy",
               profile_url: creator.profile_url(recommended_by: "discover"),
-              avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")
+              avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+              is_verified: false,
             },
             description: product.plaintext_description.truncate(100),
             ratings: { count: 0, average: 0 },
@@ -40,6 +41,12 @@ describe ProductPresenter::Card do
           }
         )
       end
+
+      it "returns the URL with the offer code" do
+        data = described_class.new(product:).for_web(request:, recommended_by: "discover", offer_code: "BLACKFRIDAY2025")
+        expect(data[:url]).to include("code=BLACKFRIDAY2025")
+      end
+
 
       it "does not return the URL of a deleted thumbnail" do
         create(:thumbnail, product:)
@@ -69,6 +76,28 @@ describe ProductPresenter::Card do
 
         expect(result).not_to have_key(:description)
       end
+
+      context "when compute_inventory is false" do
+        let(:product) { create(:product, unique_permalink: "test", name: "hello", user: creator, max_purchase_count: 10) }
+
+        it "sets quantity_remaining to nil and is_sales_limited to false" do
+          result = described_class.new(product:).for_web(compute_inventory: false)
+
+          expect(result[:quantity_remaining]).to be_nil
+          expect(result[:is_sales_limited]).to eq(false)
+        end
+      end
+
+      context "when compute_inventory is true (default)" do
+        let(:product) { create(:product, unique_permalink: "test", name: "hello", user: creator, max_purchase_count: 10) }
+
+        it "computes quantity_remaining and is_sales_limited" do
+          result = described_class.new(product:).for_web(compute_inventory: true)
+
+          expect(result[:quantity_remaining]).to eq(10)
+          expect(result[:is_sales_limited]).to eq(true)
+        end
+      end
     end
 
     context "membership product" do
@@ -89,6 +118,28 @@ describe ProductPresenter::Card do
       it "includes the lowest tier price for the default subscription duration" do
         data = described_class.new(product:).for_web
         expect(data[:price_cents]).to eq 19_99
+      end
+    end
+
+    context "with default offer code" do
+      let(:product_with_offer_code) { create(:product, unique_permalink: "test_offer", name: "hello with offer", user: creator, price_cents: 10_00) }
+      let(:offer_code) { create(:offer_code, user: creator, products: [product_with_offer_code], amount_percentage: 10, amount_cents: nil) }
+
+      before do
+        product_with_offer_code.update!(default_offer_code: offer_code)
+      end
+
+      it "applies the discount to the price_cents" do
+        data = described_class.new(product: product_with_offer_code).for_web
+        expect(data[:price_cents]).to eq 9_00 # 1000 - 10% discount = 900
+        expect(data[:original_price_cents]).to eq 10_00
+      end
+
+      it "does not show original price for zero discount" do
+        offer_code.update!(amount_percentage: 0)
+        data = described_class.new(product: product_with_offer_code).for_web
+        expect(data[:price_cents]).to eq 10_00
+        expect(data).not_to have_key(:original_price_cents)
       end
     end
   end

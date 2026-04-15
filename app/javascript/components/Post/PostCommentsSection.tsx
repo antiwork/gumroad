@@ -1,26 +1,28 @@
+import { DotsHorizontalRounded } from "@boxicons/react";
 import { parseISO } from "date-fns";
 import * as React from "react";
 
 import {
   addComment as addCommentRequest,
+  Comment,
   deleteComment as deleteCommentRequest,
   fetchPaginatedComments,
-  updateComment,
-  Comment,
   PaginatedComments,
+  updateComment,
 } from "$app/data/comments";
 import { classNames } from "$app/utils/classNames";
 import { formatDate } from "$app/utils/date";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { UserAvatar } from "$app/components/Communities/UserAvatar";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
-import { UserAvatar } from "$app/components/server-components/CommunitiesPage/UserAvatar";
+import { Pill } from "$app/components/ui/Pill";
+import { Textarea } from "$app/components/ui/Textarea";
 
 import defaultUserAvatar from "$assets/images/user-avatar.png";
 
@@ -128,64 +130,66 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
   const nestedComments = React.useMemo(() => nestComments(data.comments), [data.comments]);
 
   return (
-    <section className="comments comments-section grid gap-8 border-b border-border p-4 lg:py-12">
-      <h2>
-        {data.count} {data.count === 1 ? "comment" : "comments"}
-      </h2>
-      <CommentTextarea value={draft || ""} onChange={(event) => setDraft(event.target.value)} disabled={posting}>
-        <Button
-          color="primary"
-          disabled={!(loggedInUser || purchase_id) || !draft || posting}
-          onClick={() => void addComment()}
-        >
-          {posting ? "Posting..." : "Post"}
-        </Button>
-      </CommentTextarea>
-      {nestedComments.length > 0 ? <hr /> : null}
-      <div className="grid gap-6">
-        {nestedComments.map((comment) => (
-          <CommentContainer
-            key={comment.id}
-            comment={comment}
-            upsertComment={upsertComment}
-            confirmCommentDeletion={confirmCommentDeletion}
-          />
-        ))}
-      </div>
-      {data.pagination.next !== null ? (
-        <div className="mt-6 flex justify-center">
-          <Button disabled={loadingMore} onClick={() => void loadMoreComments()}>
-            {loadingMore ? "Loading more comments..." : "Load more comments"}
+    <section className="border-b border-border">
+      <div className="mx-auto grid max-w-6xl gap-8 p-4 lg:px-0 lg:py-12">
+        <h2>
+          {data.count} {data.count === 1 ? "comment" : "comments"}
+        </h2>
+        <CommentTextarea value={draft || ""} onChange={(event) => setDraft(event.target.value)} disabled={posting}>
+          <Button
+            color="primary"
+            disabled={!(loggedInUser || purchase_id) || !draft || posting}
+            onClick={() => void addComment()}
+          >
+            {posting ? "Posting..." : "Post"}
           </Button>
+        </CommentTextarea>
+        {nestedComments.length > 0 ? <hr /> : null}
+        <div className="grid gap-6">
+          {nestedComments.map((comment) => (
+            <CommentContainer
+              key={comment.id}
+              comment={comment}
+              upsertComment={upsertComment}
+              confirmCommentDeletion={confirmCommentDeletion}
+            />
+          ))}
         </div>
-      ) : null}
+        {data.pagination.next !== null ? (
+          <div className="mt-6 flex justify-center">
+            <Button disabled={loadingMore} onClick={() => void loadMoreComments()}>
+              {loadingMore ? "Loading more comments..." : "Load more comments"}
+            </Button>
+          </div>
+        ) : null}
 
-      {commentToDelete ? (
-        <Modal
-          open
-          allowClose={commentToDelete.deleting}
-          onClose={() => setCommentToDelete(null)}
-          title="Delete comment"
-          footer={
-            <>
-              <Button disabled={commentToDelete.deleting} onClick={() => setCommentToDelete(null)}>
-                Cancel
-              </Button>
-              {commentToDelete.deleting ? (
-                <Button color="danger" disabled>
-                  Deleting...
+        {commentToDelete ? (
+          <Modal
+            open
+            allowClose={commentToDelete.deleting}
+            onClose={() => setCommentToDelete(null)}
+            title="Delete comment"
+            footer={
+              <>
+                <Button disabled={commentToDelete.deleting} onClick={() => setCommentToDelete(null)}>
+                  Cancel
                 </Button>
-              ) : (
-                <Button color="danger" onClick={() => void deleteComment()}>
-                  Confirm
-                </Button>
-              )}
-            </>
-          }
-        >
-          <h4>Are you sure?</h4>
-        </Modal>
-      ) : null}
+                {commentToDelete.deleting ? (
+                  <Button color="danger" disabled>
+                    Deleting...
+                  </Button>
+                ) : (
+                  <Button color="danger" onClick={() => void deleteComment()}>
+                    Confirm
+                  </Button>
+                )}
+              </>
+            }
+          >
+            <h4>Are you sure?</h4>
+          </Modal>
+        ) : null}
+      </div>
     </section>
   );
 };
@@ -250,22 +254,29 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
         <header className="flex flex-wrap items-center gap-3">
           <span className="text-decoration-none font-bold">{comment.author_name}</span>
           <time title={formatDate(parseISO(comment.created_at))}>{comment.created_at_humanized}</time>
-          {comment.author_id === seller_id ? <span className="pill small">Creator</span> : null}
+          {comment.author_id === seller_id ? <Pill size="small">Creator</Pill> : null}
           <div className="ml-auto">
             {comment.is_editable || comment.is_deletable ? (
-              <Popover aria-label="Open comment action menu" trigger={<Icon name="three-dots" />}>
-                {(close) => (
-                  <div className="grid gap-3" onClick={close}>
+              <Popover>
+                <PopoverTrigger aria-label="Open comment action menu">
+                  <DotsHorizontalRounded className="size-5" />
+                </PopoverTrigger>
+                <PopoverContent>
+                  <div className="grid gap-3">
                     {comment.is_editable ? (
-                      <Button onClick={() => setEditDraft(comment.content.original)}>Edit</Button>
+                      <PopoverClose asChild>
+                        <Button onClick={() => setEditDraft(comment.content.original)}>Edit</Button>
+                      </PopoverClose>
                     ) : null}
                     {comment.is_deletable ? (
-                      <Button color="danger" onClick={() => confirmCommentDeletion(comment)}>
-                        Delete
-                      </Button>
+                      <PopoverClose asChild>
+                        <Button color="danger" onClick={() => confirmCommentDeletion(comment)}>
+                          Delete
+                        </Button>
+                      </PopoverClose>
                     ) : null}
                   </div>
-                )}
+                </PopoverContent>
               </Popover>
             ) : null}
           </div>
@@ -290,7 +301,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
         )}
         {replyDraft == null && comment.depth < max_allowed_depth ? (
           <footer>
-            <button className="underline" onClick={() => setReplyDraft("")}>
+            <button className="cursor-pointer underline all-unset" onClick={() => setReplyDraft("")}>
               Reply
             </button>
           </footer>
@@ -371,7 +382,7 @@ const CommentTextarea = ({
         />
       ) : null}
       {loggedInUser || purchase_id ? (
-        <textarea ref={ref} rows={1} placeholder="Write a comment" {...props} />
+        <Textarea ref={ref} rows={1} placeholder="Write a comment" {...props} />
       ) : (
         <div>
           <a href={Routes.login_url({ host: appDomain })}>Log in</a> or{" "}

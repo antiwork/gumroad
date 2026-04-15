@@ -1,3 +1,4 @@
+import { router } from "@inertiajs/react";
 import { lightFormat, parseISO, subMonths } from "date-fns";
 import * as React from "react";
 
@@ -21,9 +22,10 @@ export const useAnalyticsDateRange = () => {
   });
 
   React.useEffect(() => {
+    const url = new URL(window.location.href);
     url.searchParams.set("from", lightFormat(from, "yyyy-MM-dd"));
     url.searchParams.set("to", lightFormat(to, "yyyy-MM-dd"));
-    history.pushState(null, "", url);
+    router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
   }, [from.getTime(), to.getTime()]);
 
   return { from, to, setFrom, setTo };

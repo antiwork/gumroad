@@ -48,7 +48,6 @@ describe "User profile settings page", type: :system, js: true do
         expect(page).to have_link(new_subdomain, href: "#{PROTOCOL}://#{new_subdomain}")
       end
       click_on("Update settings")
-      wait_for_ajax
       expect(page).to have_alert(text: "Changes saved!")
       expect(@user.reload.username).to eq normalized_username
     end
@@ -62,7 +61,7 @@ describe "User profile settings page", type: :system, js: true do
         expect(page).to have_text("Creator bio")
       end
       click_on "Update settings"
-      wait_for_ajax
+      expect(page).to have_alert(text: "Changes saved!")
       expect(@user.reload.name).to eq "Creator name"
       expect(@user.bio).to eq "Creator bio"
     end
@@ -83,7 +82,7 @@ describe "User profile settings page", type: :system, js: true do
             expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
           end
           click_on "Update settings"
-          wait_for_ajax
+          expect(page).to have_alert(text: "Changes saved!")
           expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
         end
       end
@@ -106,8 +105,8 @@ describe "User profile settings page", type: :system, js: true do
           expect(page).to have_field("Upload", visible: false)
         end
         click_on "Update settings"
-        wait_for_ajax
         expect(page).to have_alert(text: "Changes saved!")
+        sleep 0.5 # Since the previous Alerts takes time to disappear, checking avatar_url returns early before the api call is complete
         expect(@user.reload.avatar_url).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
         refresh
         expect(page).to have_selector("img[alt='Current logo'][src*='gumroad-default-avatar-5']")
@@ -124,7 +123,6 @@ describe "User profile settings page", type: :system, js: true do
             expect(page).to have_selector("img[alt='Profile Picture'][src*=cdn_url_for_blob]")
           end
           click_on "Update settings"
-          wait_for_ajax
           expect(page).to have_alert(text: "Please upload a profile picture that is at least 200x200px")
           expect(@user.reload.avatar.filename).to_not eq("smaller.png")
         end
@@ -152,41 +150,10 @@ describe "User profile settings page", type: :system, js: true do
       fill_in_color(find_field("Highlight color"), "#decade")
       choose "Roboto Mono"
       click_on "Update settings"
-      wait_for_ajax
+      expect(page).to have_alert(text: "Changes saved!")
       expect(@user.reload.seller_profile.highlight_color).to eq("#decade")
       expect(@user.seller_profile.background_color).to eq("#facade")
       expect(@user.seller_profile.font).to eq("Roboto Mono")
-    end
-
-    it "saves connected or disconnected Twitter account" do
-      visit settings_profile_path
-      expect(page).to have_button("Connect to X")
-      OmniAuth.config.test_mode = true
-      OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new JSON.parse(File.open("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json").read)
-      OmniAuth.config.before_callback_phase do |env|
-        env["omniauth.params"] = { "state" => "link_twitter_account" }
-      end
-      click_on "Connect to X"
-      expect(@user.reload.twitter_handle).not_to be_nil
-      click_on "Disconnect #{@user.twitter_handle} from X"
-      wait_for_ajax
-      expect(@user.reload.twitter_handle).to be_nil
-      expect(page).to have_button("Connect to X")
-      # Reset the before_callback_phase to avoid making other X tests flaky.
-      OmniAuth.config.before_callback_phase = nil
-    end
-
-    context "when logged user has role admin" do
-      include_context "with switching account to user as admin for seller" do
-        let(:seller) { @user }
-      end
-
-      it "does not show social links" do
-        visit settings_profile_path
-
-        expect(page).not_to have_text("Social links")
-        expect(page).not_to have_link("Connect to X", href: user_twitter_omniauth_authorize_path(state: "link_twitter_account", x_auth_access_type: "read"))
-      end
     end
   end
 end

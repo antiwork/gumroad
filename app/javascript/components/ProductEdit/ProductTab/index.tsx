@@ -1,13 +1,13 @@
+import { Sparkle } from "@boxicons/react";
 import * as React from "react";
 
 import { COFFEE_CUSTOM_BUTTON_TEXT_OPTIONS, CUSTOM_BUTTON_TEXT_OPTIONS } from "$app/parsers/product";
 import { currencyCodeList } from "$app/utils/currency";
-import { recurrenceLabels, recurrenceIds } from "$app/utils/recurringPricing";
+import { recurrenceIds, recurrenceLabels } from "$app/utils/recurringPricing";
 
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import CustomDomain from "$app/components/CustomDomain";
-import { Icon } from "$app/components/Icons";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
@@ -36,8 +36,13 @@ import { VersionsEditor } from "$app/components/ProductEdit/ProductTab/VersionsE
 import { RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import { Toggle } from "$app/components/Toggle";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 
 export const ProductTab = () => {
   const uid = React.useId();
@@ -57,18 +62,12 @@ export const ProductTab = () => {
     googleCalendarEnabled,
     seller_refund_policy_enabled,
     cancellationDiscountsEnabled,
+    aiGenerated,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
 
   const [thumbnail, setThumbnail] = React.useState(initialThumbnail);
-  const [showAiNotification, setShowAiNotification] = React.useState(false);
-
-  React.useEffect(() => {
-    if (window.location.hash === "#ai-generated") {
-      setShowAiNotification(true);
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  }, []);
+  const [showAiNotification, setShowAiNotification] = React.useState(aiGenerated);
 
   const { isUploading, setImagesUploading } = useImageUpload();
 
@@ -84,56 +83,56 @@ export const ProductTab = () => {
     <Layout preview={<ProductPreview showRefundPolicyModal={showRefundPolicyPreview} />} isLoading={isUploading}>
       <div className="squished">
         <form>
-          <section className="p-4! md:p-8!">
+          <section className="grid gap-8 p-4! md:p-8!">
             {showAiNotification ? (
-              <div
-                role="status"
-                className="grid grid-cols-[auto_1fr_auto] items-start gap-4 rounded-lg !border-pink bg-pink/20 p-6"
-              >
-                <span className="self-center text-lg">
-                  <Icon name="sparkle" />
-                </span>
-                <div>
-                  <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
-                  Tweak things and make it your own—this is your time to shine!
+              <Alert role="status" variant="accent">
+                <div className="flex items-center gap-4">
+                  <Sparkle className="size-5 text-lg" />
+                  <div className="flex-1">
+                    <strong>Your AI product is ready!</strong> Take a moment to check out the product and content tabs.
+                    Tweak things and make it your own—this is your time to shine!
+                  </div>
+                  <button
+                    className="cursor-pointer self-center underline all-unset"
+                    onClick={() => setShowAiNotification(false)}
+                  >
+                    close
+                  </button>
                 </div>
-                <button className="col-start-3! self-center underline" onClick={() => setShowAiNotification(false)}>
-                  close
-                </button>
-              </div>
+              </Alert>
             ) : null}
             <BundleConversionNotice />
-            <fieldset>
-              <label htmlFor={`${uid}-name`}>{isCoffee ? "Header" : "Name"}</label>
-              <input
+            <Fieldset>
+              <Label htmlFor={`${uid}-name`}>{isCoffee ? "Header" : "Name"}</Label>
+              <Input
                 id={`${uid}-name`}
                 type="text"
                 value={product.name}
                 onChange={(evt) => updateProduct({ name: evt.target.value })}
               />
-            </fieldset>
+            </Fieldset>
             {isCoffee ? (
               <>
-                <fieldset>
-                  <label htmlFor={`${uid}-body`}>Body</label>
-                  <textarea
+                <Fieldset>
+                  <Label htmlFor={`${uid}-body`}>Body</Label>
+                  <Textarea
                     id={`${uid}-body`}
                     value={product.description}
                     placeholder="Add a short inspiring message"
                     onChange={(evt) => updateProduct({ description: evt.target.value })}
                   />
-                </fieldset>
-                <fieldset>
-                  <legend>
-                    <label htmlFor={`${uid}-url`}>URL</label>
+                </Fieldset>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-url`}>URL</Label>
                     <CopyToClipboard text={url}>
-                      <button type="button" className="font-normal underline">
+                      <button type="button" className="cursor-pointer font-normal underline all-unset">
                         Copy URL
                       </button>
                     </CopyToClipboard>
-                  </legend>
-                  <input id={`${uid}-url`} type="text" value={url} disabled />
-                </fieldset>
+                  </FieldsetTitle>
+                  <Input id={`${uid}-url`} type="text" value={url} disabled />
+                </Fieldset>
               </>
             ) : (
               <>
@@ -157,14 +156,14 @@ export const ProductTab = () => {
           </section>
           {isCoffee ? (
             <>
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Pricing</h2>
                 <SuggestedAmountsEditor
                   versions={product.variants}
                   onChange={(variants) => updateProduct({ variants })}
                 />
               </section>
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Settings</h2>
                 <CustomButtonTextOptionInput
                   value={product.custom_button_text_option}
@@ -187,7 +186,7 @@ export const ProductTab = () => {
                 permalink={uniquePermalink}
                 nativeType={product.native_type}
               />
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Product info</h2>
                 {product.native_type !== "membership" ? (
                   <CustomButtonTextOptionInput
@@ -207,9 +206,9 @@ export const ProductTab = () => {
                   setFileAttributes={(file_attributes) => updateProduct({ file_attributes })}
                 />
               </section>
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Integrations</h2>
-                <fieldset>
+                <Fieldset>
                   {product.community_chat_enabled === null ? null : (
                     <ToggleSettingRow
                       label="Invite your customers to your Gumroad community chat"
@@ -256,22 +255,30 @@ export const ProductTab = () => {
                       }
                     />
                   ) : null}
-                </fieldset>
+                </Fieldset>
               </section>
               {product.native_type === "membership" ? (
-                <section className="p-4! md:p-8!">
+                <section className="grid gap-8 border-t border-border p-4 md:p-8">
                   <h2>Tiers</h2>
                   <TiersEditor tiers={product.variants} onChange={(variants) => updateProduct({ variants })} />
                 </section>
               ) : (
                 <>
-                  <section className="p-4! md:p-8!">
+                  <section className="grid gap-8 border-t border-border p-4 md:p-8">
                     <h2>Pricing</h2>
                     <PriceEditor
                       priceCents={product.price_cents}
                       suggestedPriceCents={product.suggested_price_cents}
                       isPWYW={product.customizable_price}
-                      setPriceCents={(priceCents) => updateProduct({ price_cents: priceCents })}
+                      setPriceCents={(priceCents) => {
+                        const hasPaidVariantPrices = product.variants.some(
+                          (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
+                        );
+                        updateProduct({
+                          price_cents: priceCents,
+                          ...(priceCents === 0 && !hasPaidVariantPrices && { customizable_price: true }),
+                        });
+                      }}
                       setSuggestedPriceCents={(suggestedPriceCents) =>
                         updateProduct({ suggested_price_cents: suggestedPriceCents })
                       }
@@ -292,6 +299,16 @@ export const ProductTab = () => {
                           installment_plan: { ...product.installment_plan, number_of_installments: value },
                         })
                       }
+                      maxEffectivePriceCents={Math.max(
+                        product.price_cents,
+                        ...product.variants.map(
+                          (v) =>
+                            product.price_cents + ("price_difference_cents" in v ? (v.price_difference_cents ?? 0) : 0),
+                        ),
+                      )}
+                      hasPaidVariants={product.variants.some(
+                        (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
+                      )}
                     />
                     {product.native_type === "commission" ? (
                       <p
@@ -307,7 +324,7 @@ export const ProductTab = () => {
                   </section>
                   {product.native_type === "call" ? (
                     <>
-                      <section className="p-4! md:p-8!">
+                      <section className="grid gap-8 border-t border-border p-4 md:p-8">
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <h2>Durations</h2>
                           <a
@@ -323,7 +340,7 @@ export const ProductTab = () => {
                           onChange={(variants) => updateProduct({ variants })}
                         />
                       </section>
-                      <section className="p-4! md:p-8!">
+                      <section className="grid gap-8 border-t border-border p-4 md:p-8">
                         <h2>Available hours</h2>
                         <AvailabilityEditor
                           availabilities={product.availabilities}
@@ -331,7 +348,7 @@ export const ProductTab = () => {
                         />
                       </section>
                       {product.call_limitation_info ? (
-                        <section className="p-4! md:p-8!">
+                        <section className="grid gap-8 border-t border-border p-4 md:p-8">
                           <h2>Call limitations</h2>
                           <CallLimitationsEditor
                             callLimitations={product.call_limitation_info}
@@ -341,7 +358,7 @@ export const ProductTab = () => {
                       ) : null}
                     </>
                   ) : (
-                    <section aria-label="Version editor" className="p-4! md:p-8!">
+                    <section aria-label="Version editor" className="grid gap-8 border-t border-border p-4 md:p-8">
                       <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <h2>{product.native_type === "physical" ? "Variants" : "Versions"}</h2>
                         <a
@@ -366,33 +383,30 @@ export const ProductTab = () => {
                   onChange={(shipping_destinations) => updateProduct({ shipping_destinations })}
                 />
               ) : null}
-              <section className="p-4! md:p-8!">
+              <section className="grid gap-8 border-t border-border p-4 md:p-8">
                 <h2>Settings</h2>
-                <fieldset>
+                <Fieldset>
                   {product.native_type === "membership" ? (
                     <>
                       <FreeTrialSelector />
                       {cancellationDiscountsEnabled ? <CancellationDiscountSelector /> : null}
-                      <Toggle
-                        value={product.should_include_last_post}
-                        onChange={(should_include_last_post) => updateProduct({ should_include_last_post })}
-                      >
-                        New members will be emailed this product's last published post
-                      </Toggle>
-                      <Toggle
-                        value={product.should_show_all_posts}
-                        onChange={(should_show_all_posts) => updateProduct({ should_show_all_posts })}
-                      >
-                        New members will get access to all posts you have published
-                      </Toggle>
-                      <Toggle
-                        value={product.block_access_after_membership_cancellation}
-                        onChange={(block_access_after_membership_cancellation) =>
-                          updateProduct({ block_access_after_membership_cancellation })
+                      <Switch
+                        checked={product.should_include_last_post}
+                        onChange={(e) => updateProduct({ should_include_last_post: e.target.checked })}
+                        label="New members will be emailed this product's last published post"
+                      />
+                      <Switch
+                        checked={product.should_show_all_posts}
+                        onChange={(e) => updateProduct({ should_show_all_posts: e.target.checked })}
+                        label="New members will get access to all posts you have published"
+                      />
+                      <Switch
+                        checked={product.block_access_after_membership_cancellation}
+                        onChange={(e) =>
+                          updateProduct({ block_access_after_membership_cancellation: e.target.checked })
                         }
-                      >
-                        Members will lose access when their memberships end
-                      </Toggle>
+                        label="Members will lose access when their memberships end"
+                      />
                       <DurationEditor />
                     </>
                   ) : null}
@@ -402,40 +416,42 @@ export const ProductTab = () => {
                         maxPurchaseCount={product.max_purchase_count}
                         setMaxPurchaseCount={(value) => updateProduct({ max_purchase_count: value })}
                       />
-                      <Toggle
-                        value={product.quantity_enabled}
-                        onChange={(newValue) => updateProduct({ quantity_enabled: newValue })}
-                      >
-                        Allow customers to choose a quantity
-                      </Toggle>
+                      <Switch
+                        checked={product.quantity_enabled}
+                        onChange={(e) => updateProduct({ quantity_enabled: e.target.checked })}
+                        label="Allow customers to choose a quantity"
+                      />
                     </>
                   ) : null}
                   {product.variants.length > 0 ? (
-                    <Toggle
-                      value={product.hide_sold_out_variants}
-                      onChange={(newValue) => updateProduct({ hide_sold_out_variants: newValue })}
-                    >
-                      Hide sold out versions
-                    </Toggle>
+                    <Switch
+                      checked={product.hide_sold_out_variants}
+                      onChange={(e) => updateProduct({ hide_sold_out_variants: e.target.checked })}
+                      label="Hide sold out versions"
+                    />
                   ) : null}
-                  <Toggle
-                    value={product.should_show_sales_count}
-                    onChange={(newValue) => updateProduct({ should_show_sales_count: newValue })}
-                  >
-                    {product.native_type === "membership"
-                      ? "Publicly show the number of members on your product page"
-                      : "Publicly show the number of sales on your product page"}
-                  </Toggle>
+                  <Switch
+                    checked={product.should_show_sales_count}
+                    onChange={(e) => updateProduct({ should_show_sales_count: e.target.checked })}
+                    label={
+                      product.native_type === "membership"
+                        ? "Publicly show the number of members on your product page"
+                        : "Publicly show the number of sales on your product page"
+                    }
+                  />
                   {product.native_type !== "physical" ? (
-                    <Toggle
-                      value={product.is_epublication}
-                      onChange={(newValue) => updateProduct({ is_epublication: newValue })}
-                    >
-                      Mark product as e-publication for VAT purposes{" "}
-                      <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
-                        Learn more
-                      </a>
-                    </Toggle>
+                    <Switch
+                      checked={product.is_epublication}
+                      onChange={(e) => updateProduct({ is_epublication: e.target.checked })}
+                      label={
+                        <>
+                          Mark product as e-publication for VAT purposes{" "}
+                          <a href="/help/article/10-dealing-with-vat" target="_blank" rel="noreferrer">
+                            Learn more
+                          </a>
+                        </>
+                      }
+                    />
                   ) : null}
                   {!seller_refund_policy_enabled ? (
                     <RefundPolicySelector
@@ -447,18 +463,17 @@ export const ProductTab = () => {
                       setShowPreview={setShowRefundPolicyPreview}
                     />
                   ) : null}
-                  <Toggle
-                    value={product.require_shipping}
-                    onChange={(newValue) => updateProduct({ require_shipping: newValue })}
-                  >
-                    Require shipping information
-                  </Toggle>
-                </fieldset>
+                  <Switch
+                    checked={product.require_shipping}
+                    onChange={(e) => updateProduct({ require_shipping: e.target.checked })}
+                    label="Require shipping information"
+                  />
+                </Fieldset>
                 {product.native_type === "membership" ? (
-                  <fieldset>
-                    <legend>
-                      <label htmlFor={`${uid}-subscription-duration`}>Default payment frequency</label>
-                    </legend>
+                  <Fieldset>
+                    <FieldsetTitle>
+                      <Label htmlFor={`${uid}-subscription-duration`}>Default payment frequency</Label>
+                    </FieldsetTitle>
                     <TypeSafeOptionSelect
                       id={`${uid}-subscription-duration`}
                       value={product.subscription_duration || "monthly"}
@@ -468,7 +483,7 @@ export const ProductTab = () => {
                         label: recurrenceLabels[recurrenceId],
                       }))}
                     />
-                  </fieldset>
+                  </Fieldset>
                 ) : null}
                 <CustomDomain
                   verificationStatus={customDomainVerificationStatus}

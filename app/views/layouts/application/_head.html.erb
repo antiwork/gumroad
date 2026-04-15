@@ -1,7 +1,3 @@
-<% og_image_url = asset_url("opengraph_image.png") %>
-<% og_image_alt = "Gumroad" %>
-<% og_title = "Gumroad" %>
-<% og_site_name = "Gumroad" %>
 <head prefix="og: http://ogp.me/ns# fb: http://ogp.me/ns/fb# <%= FACEBOOK_OG_NAMESPACE %>: http://ogp.me/ns/fb/<%= FACEBOOK_OG_NAMESPACE %>#">
   <% if Rails.application.config.asset_host %>
     <link rel="dns-prefetch" href="<%= "//#{URI.parse(Rails.application.config.asset_host).host}" %>">
@@ -12,114 +8,11 @@
   <% if PUBLIC_STORAGE_CDN_S3_PROXY_HOST %>
     <link rel="dns-prefetch" href="<%= "//#{URI.parse(PUBLIC_STORAGE_CDN_S3_PROXY_HOST).host}" %>">
   <% end %>
-  <title inertia><%= @title %></title>
   <% packs = ["design"] %>
   <% packs << @css_pack_name if @css_pack_name %>
   <%= action_cable_meta_tag %>
   <%= stylesheet_pack_tag *packs, crossorigin: "anonymous" unless @hide_styles %>
   <%= yield :style %>
-  <%= csrf_meta_tags %>
-  <meta charset="utf-8">
-  <meta content="<%= FACEBOOK_APP_ID %>" property="fb:app_id">
-  <meta content="http://www.facebook.com/gumroad" property="fb:page_id">
-  <meta property="twitter:site" value="@gumroad">
   <%= yield :smart_app_banner %>
-  <% if @product && @is_on_product_page %>
-    <% og_title = @product.name %>
-    <% product_description = @product.description.present? ? @product.plaintext_description : "Available on Gumroad" %>
-    <meta content="Gumroad" property="og:site_name">
-    <meta content="<%= Addressable::URI.escape(@product.long_url).html_safe %>" property="og:url">
-    <meta content="<%= product_description %>" property="og:description">
-    <meta content="<%= product_description %>" name="description">
-    <meta content="<%= @product.unique_permalink %>" property="product:retailer_item_id">
-    <meta content="<%= (@product.price_cents/100.0).round(2) %>" property="product:price:amount">
-    <meta content="<%= @product.price_currency_type.upcase %>" property="product:price:currency">
-    <% if @product.preview_image_path? %>
-      <% og_image_url = @product.preview_url %>
-      <% og_image_alt = "" %>
-    <% elsif @product.preview_oembed_thumbnail_url %>
-      <% og_image_url = Addressable::URI.escape(@product.preview_oembed_thumbnail_url).html_safe %>
-      <% og_image_alt = "" %>
-    <% end %>
-    <meta content="<%= FACEBOOK_OG_NAMESPACE %>:product" property="og:type">
-    <%= twitter_product_card(@product, product_description:).html_safe %>
-    <% @product.display_asset_previews.select { |asset| asset.file.image? }.each do |asset| %>
-      <link rel="preload" as="image" href="<%= asset.url %>">
-    <% end %>
-  <% elsif @on_posts_page %>
-    <% og_title = (@post&.name || "Posts") %>
-    <% if @post.present? %>
-      <meta content="<%= @post_presenter.snippet %>" property="og:description">
-      <meta content="<%= @post_presenter.snippet %>" name="description">
-      <% if @post_presenter.social_image.present? %>
-        <% og_image_url = @post_presenter.social_image.url %>
-        <% og_image_alt = @post_presenter.social_image.caption %>
-      <% end %>
-      <%= twitter_post_card(@post).html_safe %>
-    <% end %>
-  <% elsif @user && (@is_on_user_profile_page || @is_on_user_posts_page || @is_on_user_membership_page) %>
-    <meta content="Gumroad" property="og:site_name">
-    <meta content="website" property="og:type">
-    <% if @user.bio.present? %>
-      <% og_title = "Subscribe to #{@user.name_or_username} on Gumroad" %>
-      <% bio = @user.bio.squish.first(300) %>
-      <% og_description = bio %>
-      <meta content="<%= bio %>" name="description">
-    <% else %>
-      <% og_title = "Subscribe to #{@user.name_or_username}" %>
-      <% og_description = "On Gumroad" %>
-    <% end %>
-    <% if @user.subscribe_preview_url.present? %>
-      <meta property="twitter:card" content="summary_large_image">
-      <% og_image_url = @user.subscribe_preview_url %>
-      <% og_image_alt = og_title %>
-    <% else %>
-      <% if @user.name.present? %>
-        <% og_title = @user.name %>
-      <% end %>
-      <% if @user.avatar_url.present? %>
-        <% og_image_url = @user.avatar_url %>
-        <% og_image_alt = "#{@user.name_or_username}'s profile picture" %>
-      <% end %>
-    <% end %>
-    <meta content="<%= og_description %>" property="og:description">
-  <% elsif @on_discover_page %>
-    <% unless user_signed_in? %>
-      <base target="_parent">
-    <% end %>
-    <meta content="website" property="og:type">
-    <meta property="og:site_name" content="<%= og_site_name %>">
-    <% og_title = @title %>
-    <% if @discover_tag_meta_description %>
-      <meta name="description" content="<%= @discover_tag_meta_description %>">
-      <meta property="og:description" content="<%= @discover_tag_meta_description %>">
-    <% elsif @body_id == "discover-page" %>
-      <meta name="description" content="Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs.">
-      <meta property="og:description" content="Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs.">
-    <% end %>
-  <% end %>
-  <meta property="og:image" content="<%= og_image_url %>">
-  <meta property="og:image:alt" content="<%= og_image_alt %>">
-  <meta property="og:title" content="<%= og_title %>">
-  <% third_party_analytics_enabled = !@disable_third_party_analytics && is_third_party_analytics_enabled?(seller: @user, logged_in_seller: @on_checkout_page ? nil : current_seller) %>
-  <meta property="gr:google_analytics:enabled" content="<%= third_party_analytics_enabled.to_s %>">
-  <meta property="gr:fb_pixel:enabled" content="<%= third_party_analytics_enabled.to_s %>">
-  <meta property="gr:logged_in_user:id" content="<%= logged_in_user.present? ? logged_in_user.external_id : "" %>">
-  <meta property="gr:environment" value="<%= Rails.env %>">
-  <meta property="gr:page:type" content="<%= @is_on_product_page ? "product" : "" %>">
-  <meta property="gr:facebook_sdk:enabled" content="<%= (!@facebook_sdk_disabled && third_party_analytics_enabled.to_s) %>">
-  <meta content="initial-scale = 1.0, width = device-width" name="viewport">
-  <meta property="stripe:pk" value="<%= STRIPE_PUBLIC_KEY %>">
-  <meta property="stripe:api_version" value="<%= Stripe.api_version %>">
-  <link href="/opensearch.xml" rel="search" type="application/opensearchdescription+xml" title="Gumroad">
-  <%= yield :meta %>
-  <% if @user && @user.avatar_url.present? && @show_user_favicon %>
-    <link href="<%= @user.avatar_url %>" rel="shortcut icon">
-  <% else %>
-    <link href="<%= asset_url("pink-icon.png") %>" rel="shortcut icon">
-    <link href="<%= asset_url("pink-icon.png") %>" rel="apple-touch-icon">
-  <% end %>
-  <% if @body_class == "custom-domain" && @user.enable_verify_domain_third_party_services? && @user.facebook_meta_tag.present? %>
-    <%= @user.facebook_meta_tag.html_safe %>
-  <% end %>
+  <%= inertia_rendering? ? inertia_meta_tags : erb_meta_tags %>
 </head>

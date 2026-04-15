@@ -62,7 +62,7 @@ module Reports
       results = Purchase.search(es_query)
       aggregations = results.aggregations
 
-      csv_string = CSV.generate do |csv|
+      csv_string = CsvSafe.generate do |csv|
         csv << ["Country", "State", "Net Sales (USD)"]
 
         if aggregations && aggregations["sales_by_country"] && aggregations["sales_by_country"]["buckets"]

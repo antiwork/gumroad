@@ -237,6 +237,43 @@ describe WishlistPresenter do
       )
     end
 
+    context "with profile layout" do
+      it "includes creator_profile in props" do
+        props = described_class.new(wishlist:).public_props(request: nil, pundit_user: nil, layout: Product::Layout::PROFILE)
+
+        expect(props[:layout]).to eq(Product::Layout::PROFILE)
+        expect(props[:creator_profile]).to be_present
+        expect(props[:creator_profile]).to include(:name, :avatar_url)
+      end
+    end
+
+    context "with discover layout" do
+      let(:taxonomies_for_nav) { [{ name: "Test", slug: "test" }] }
+
+      it "includes taxonomies_for_nav in props" do
+        props = described_class.new(wishlist:).public_props(
+          request: nil,
+          pundit_user: nil,
+          layout: Product::Layout::DISCOVER,
+          taxonomies_for_nav:
+        )
+
+        expect(props[:layout]).to eq(Product::Layout::DISCOVER)
+        expect(props[:taxonomies_for_nav]).to eq(taxonomies_for_nav)
+      end
+
+      it "does not include taxonomies_for_nav when not provided" do
+        props = described_class.new(wishlist:).public_props(
+          request: nil,
+          pundit_user: nil,
+          layout: Product::Layout::DISCOVER
+        )
+
+        expect(props[:layout]).to eq(Product::Layout::DISCOVER)
+        expect(props).not_to have_key(:taxonomies_for_nav)
+      end
+    end
+
     context "for a pre-order product" do
       it "is not giftable" do
         wishlist.wishlist_products.first.product.update!(is_in_preorder_state: true)
@@ -352,6 +389,7 @@ describe WishlistPresenter do
           name: "Wishlister",
           avatar_url: wishlist.user.avatar_url,
           profile_url: wishlist.user.profile_url,
+          is_verified: false,
         },
         thumbnails: [
           { url: product_with_thumbnail.thumbnail_alive.url, native_type: "digital" },

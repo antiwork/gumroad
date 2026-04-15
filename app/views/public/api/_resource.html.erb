@@ -1,8 +1,0 @@
-<div class="stack" id="<%= resource[:name].gsub(" ", "-").downcase %>">
-  <div>
-    <h2><%= resource[:name] %></h2>
-  </div>
-  <% resource[:methods].each do |method| %>
-    <%= render "public/api/method", method: method %>
-  <% end %>
-</div>

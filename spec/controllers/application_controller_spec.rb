@@ -166,9 +166,9 @@ describe ApplicationController do
     end
   end
 
-  describe "#set_title" do
+  describe "#set_default_page_title" do
     controller(ApplicationController) do
-      before_action :set_title
+      before_action :set_default_page_title
 
       def index
         head :ok
@@ -178,19 +178,19 @@ describe ApplicationController do
     it "is Local Gumroad for development" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
       get :index
-      expect(assigns("title".to_sym)).to eq("Local Gumroad")
+      expect(controller.send(:page_title)).to eq("Local Gumroad")
     end
 
     it "is Staging Gumroad for staging" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("staging"))
       get :index
-      expect(assigns("title".to_sym)).to eq("Staging Gumroad")
+      expect(controller.send(:page_title)).to eq("Staging Gumroad")
     end
 
     it "is Gumroad for production" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
       get :index
-      expect(assigns("title".to_sym)).to eq("Gumroad")
+      expect(controller.send(:page_title)).to eq("Gumroad")
     end
   end
 
@@ -482,46 +482,6 @@ describe ApplicationController do
 
       get :index
       expect(session).to_not have_key(:signup_referrer)
-    end
-  end
-
-  describe "#add_user_to_bugsnag" do
-    controller do
-      # We can't test `before_bugsnag_notify` in test mode, so we're using an action as a proxy
-      def index
-        # By default, Bugsnag reports the user's id as an IP address
-        $bugsnag_event = OpenStruct.new(user: { id: "127.0.0.1" })
-
-        add_user_to_bugsnag($bugsnag_event)
-        render plain: ""
-      end
-    end
-
-    it "does not add user details when not logged in" do
-      get :index
-      expect($bugsnag_event.user).to eq(id: "127.0.0.1")
-    end
-
-
-    it "adds user info when logged in" do
-      user = create(:user, username: "joe", name: "Joe", email: "joe@example.com")
-
-      expected_hash = {
-        email: "joe@example.com",
-        locale: user.locale,
-        id: user.id,
-        name: "Joe",
-        username: "joe",
-      }
-
-      allow(controller).to receive(:current_user).and_return(user)
-      get :index
-      expect($bugsnag_event.user).to include(expected_hash)
-
-      allow(controller).to receive(:current_user).and_return(nil)
-      allow(controller).to receive(:current_resource_owner).and_return(user)
-      get :index
-      expect($bugsnag_event.user).to include(expected_hash)
     end
   end
 end

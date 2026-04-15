@@ -37,6 +37,11 @@ describe HelperWidget, type: :controller do
       expect(controller.helper_session).to be_nil
     end
 
+    it "returns nil when helper widget secret is not set" do
+      allow(GlobalConfig).to receive(:get).with("HELPER_WIDGET_SECRET").and_return(nil)
+      expect(controller.helper_session).to be_nil
+    end
+
     it "returns email, emailHash and timestamp when signed in" do
       sign_in(seller)
 

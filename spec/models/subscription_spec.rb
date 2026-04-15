@@ -676,6 +676,51 @@ describe Subscription, :vcr do
       expect(charge_purchase.gumroad_tax_cents).to eq 0
     end
 
+    it "transfers VAT ID from subscription's stored business_vat_id to recurring charge" do
+      create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
+
+      subscription = create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: @product, business_vat_id: "IE6388047V")
+      original_purchase = create(:purchase, is_original_subscription_purchase: true, link: @product,
+                                            subscription:, chargeable: build(:chargeable), purchase_state: "in_progress",
+                                            full_name: "gum stein", ip_address: "2.47.255.255", country: "Italy", created_at: 2.days.ago)
+      original_purchase.process!(off_session: false)
+      expect(original_purchase.gumroad_tax_cents).to eq 22
+
+      subscription.charge!
+      charge_purchase = subscription.reload.purchases.last
+      expect(charge_purchase.purchase_state).to eq "successful"
+      expect(charge_purchase.purchase_sales_tax_info.business_vat_id).to eq "IE6388047V"
+      expect(charge_purchase.gumroad_tax_cents).to eq 0
+    end
+
+    it "transfers VAT ID from a recurring charge's VAT refund to subsequent recurring charges" do
+      create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil, combined_rate: 0.22, is_seller_responsible: false)
+
+      subscription = create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: @product)
+      original_purchase = create(:purchase, is_original_subscription_purchase: true, link: @product,
+                                            subscription:, chargeable: build(:chargeable), purchase_state: "in_progress",
+                                            full_name: "gum stein", ip_address: "2.47.255.255", country: "Italy", created_at: 2.months.ago)
+
+      travel_to(2.months.ago) do
+        original_purchase.process!(off_session: false)
+        expect(original_purchase.gumroad_tax_cents).to eq 22
+      end
+
+      travel_to(1.month.ago) do
+        first_recurring_purchase = subscription.charge!
+        expect(first_recurring_purchase.purchase_state).to eq "successful"
+        expect(first_recurring_purchase.gumroad_tax_cents).to eq 22
+
+        first_recurring_purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "Sample Note", business_vat_id: "IE6388047V")
+        expect(subscription.reload.business_vat_id).to eq "IE6388047V"
+      end
+
+      second_recurring_purchase = subscription.charge!
+      expect(second_recurring_purchase.purchase_state).to eq "successful"
+      expect(second_recurring_purchase.purchase_sales_tax_info.business_vat_id).to eq "IE6388047V"
+      expect(second_recurring_purchase.gumroad_tax_cents).to eq 0
+    end
+
     describe "handling of unexpected errors", :vcr do
       context "when a rate limit error occurs" do
         it "does not leave the purchase in in_progress state" do
@@ -987,42 +1032,92 @@ describe Subscription, :vcr do
     end
 
     describe "discount with duration" do
-      let(:user) { create(:user) }
-      let(:product) { create(:membership_product_with_preset_tiered_pricing, user:) }
-      let(:offer_code) { create(:offer_code, products: [product]) }
-      let(:subscription) { create(:membership_purchase, link: product, offer_code:, variant_attributes: [product.alive_variants.first], price_cents: 200).subscription }
+      context "tiered membership" do
+        let(:user) { create(:user) }
+        let(:product) { create(:membership_product_with_preset_tiered_pricing, user:) }
+        let(:offer_code) { create(:offer_code, products: [product]) }
+        let(:subscription) { create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: product) }
 
-      before do
-        subscription.original_purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
-      end
-
-      context "when the discount is no longer valid" do
-        it "charges the full price" do
-          subscription.charge!
-
-          purchase = Purchase.last
-          expect(purchase.offer_code).to eq(nil)
-          expect(purchase.displayed_price_cents).to eq(300)
-          expect(purchase.price_cents).to eq(300)
-          expect(purchase.purchase_offer_code_discount).to eq(nil)
-        end
-      end
-
-      context "when the discount is still valid" do
         before do
-          subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+          purchase = create(:purchase, link: product, email: subscription.user.email, full_name: "squiddy",
+                                       price_cents: 200, is_original_subscription_purchase: true,
+                                       subscription: subscription, offer_code: offer_code,
+                                       variant_attributes: [product.alive_variants.first], created_at: 2.days.ago)
+          purchase.create_purchase_offer_code_discount!(offer_code: offer_code, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
         end
 
-        it "charges the discounted price" do
-          subscription.charge!
+        context "when the discount is no longer valid" do
+          it "charges the full price" do
+            subscription.charge!
 
-          purchase = Purchase.last
-          expect(purchase.displayed_price_cents).to eq(200)
-          expect(purchase.price_cents).to eq(200)
-          purchase_offer_code_discount = purchase.purchase_offer_code_discount
-          expect(purchase_offer_code_discount.offer_code).to eq(offer_code)
-          expect(purchase_offer_code_discount.offer_code_amount).to eq(100)
-          expect(purchase_offer_code_discount.offer_code_is_percent).to eq(false)
+            purchase = Purchase.last
+            expect(purchase.offer_code).to eq(nil)
+            expect(purchase.displayed_price_cents).to eq(300)
+            expect(purchase.price_cents).to eq(300)
+            expect(purchase.purchase_offer_code_discount).to eq(nil)
+          end
+        end
+
+        context "when the discount is still valid" do
+          before do
+            subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+          end
+
+          it "charges the discounted price" do
+            subscription.charge!
+
+            purchase = Purchase.last
+            expect(purchase.displayed_price_cents).to eq(200)
+            expect(purchase.price_cents).to eq(200)
+            purchase_offer_code_discount = purchase.purchase_offer_code_discount
+            expect(purchase_offer_code_discount.offer_code).to eq(offer_code)
+            expect(purchase_offer_code_discount.offer_code_amount).to eq(100)
+            expect(purchase_offer_code_discount.offer_code_is_percent).to eq(false)
+          end
+        end
+      end
+
+      context "legacy subscription" do
+        let(:user) { create(:user) }
+        let(:product) { create(:subscription_product, user:, price_cents: 300) }
+        let(:offer_code) { create(:offer_code, products: [product], amount_cents: 100) }
+        let(:subscription) { create(:subscription, user: create(:user, credit_card: create(:credit_card)), link: product) }
+
+        before do
+          purchase = create(:purchase, link: product, email: subscription.user.email, full_name: "squiddy",
+                                       price_cents: 200, is_original_subscription_purchase: true,
+                                       subscription: subscription, offer_code: offer_code, created_at: 2.days.ago)
+          purchase.create_purchase_offer_code_discount!(offer_code: offer_code, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 300, duration_in_billing_cycles: 1)
+        end
+
+        context "when the discount is no longer valid" do
+          it "charges the full price" do
+            subscription.charge!
+
+            purchase = Purchase.last
+            expect(purchase.offer_code).to eq(nil)
+            expect(purchase.displayed_price_cents).to eq(300)
+            expect(purchase.price_cents).to eq(300)
+            expect(purchase.purchase_offer_code_discount).to eq(nil)
+          end
+        end
+
+        context "when the discount is still valid" do
+          before do
+            subscription.original_purchase.purchase_offer_code_discount.update!(duration_in_billing_cycles: 2)
+          end
+
+          it "charges the discounted price" do
+            subscription.charge!
+
+            purchase = Purchase.last
+            expect(purchase.displayed_price_cents).to eq(200)
+            expect(purchase.price_cents).to eq(200)
+            purchase_offer_code_discount = purchase.purchase_offer_code_discount
+            expect(purchase_offer_code_discount.offer_code).to eq(offer_code)
+            expect(purchase_offer_code_discount.offer_code_amount).to eq(100)
+            expect(purchase_offer_code_discount.offer_code_is_percent).to eq(false)
+          end
         end
       end
     end
@@ -1366,7 +1461,7 @@ describe Subscription, :vcr do
 
           recurring_purchase = @subscription.purchases.last
           expect(recurring_purchase.discover_fee_per_thousand).to eq(300)
-          expect(recurring_purchase.fee_cents).to eq(264) # 599*0.09 + 599*0.3 + 30c
+          expect(recurring_purchase.fee_cents).to eq(227) # 599*0.329 + 30c
         end
       end
 
@@ -1380,7 +1475,7 @@ describe Subscription, :vcr do
 
           recurring_purchase = @subscription.purchases.last
           expect(recurring_purchase.discover_fee_per_thousand).to eq(300)
-          expect(recurring_purchase.fee_cents).to eq(264) # 599*0.09 + 599*0.3 + 30c
+          expect(recurring_purchase.fee_cents).to eq(227) # 599*0.329 + 30c
         end
       end
     end
@@ -1446,6 +1541,46 @@ describe Subscription, :vcr do
         expect do
           @subscription.unsubscribe_and_fail!
         end.not_to have_enqueued_mail(ContactingCreatorMailer, :subscription_autocancelled).with(@subscription.id)
+      end
+    end
+
+    context "when subscription has previously failed" do
+      context "within the last 7 days" do
+        it "sends email to customer but not creator on repeated recent failure" do
+          create(:purchase,
+                 link: @subscription.link,
+                 subscription: @subscription,
+                 email: @subscription.user.email,
+                 purchase_state: "failed",
+                 created_at: 2.hours.ago
+          )
+
+          expect(@subscription.seller.enable_payment_email).to eq(true)
+
+          expect do
+            @subscription.unsubscribe_and_fail!
+          end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_autocancelled).with(@subscription.id)
+             .and not_have_enqueued_mail(ContactingCreatorMailer, :subscription_autocancelled).with(@subscription.id)
+        end
+      end
+
+      context "more than 7 days ago" do
+        it "sends email to customer and creator on new failure" do
+          create(:purchase,
+                 link: @subscription.link,
+                 subscription: @subscription,
+                 email: @subscription.user.email,
+                 purchase_state: "failed",
+                 created_at: 30.days.ago
+          )
+
+          expect(@subscription.seller.enable_payment_email).to eq(true)
+
+          expect do
+            @subscription.unsubscribe_and_fail!
+          end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_autocancelled).with(@subscription.id)
+             .and have_enqueued_mail(ContactingCreatorMailer, :subscription_autocancelled).with(@subscription.id)
+        end
       end
     end
 
@@ -1850,8 +1985,8 @@ describe Subscription, :vcr do
       expect(new_purchase.quantity).to eq 2
       expect(new_purchase.price_cents).to eq 3400 # $40 - $6 offer code
       expect(new_purchase.displayed_price_cents).to eq 3400 # $40 - $6 offer code
-      expect(new_purchase.fee_cents).to eq 1326 # 30% discover fee + 9% Gumroad fee
-      expect(new_purchase.affiliate_credit_cents).to eq 41 # $34 * 200/10,000 - 2% of the $13.26 fee
+      expect(new_purchase.fee_cents).to eq 1119 # 3400*0.329, rounded
+      expect(new_purchase.affiliate_credit_cents).to eq 45 # ($34 - $11.19 fee) * 200/10,000, floored
       expect(new_purchase.total_transaction_cents).to eq 3400 # $40 - $6 offer code
 
       # copied associations
@@ -2003,11 +2138,11 @@ describe Subscription, :vcr do
         new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
         @subscription.reload
 
-        expect(new_purchase.fee_cents).to eq(780) # 180 (gumroad 9% fee) + 600 (discover 30% fee)
+        expect(new_purchase.fee_cents).to eq(658) # 2000*0.329, rounded
 
         recurring_purchase = @subscription.charge!
         expect(recurring_purchase.purchase_state).to eq "successful"
-        expect(recurring_purchase.fee_cents).to eq(810)
+        expect(recurring_purchase.fee_cents).to eq(688)
         expect(recurring_purchase.discover_fee_per_thousand).to eq(300)
       end
     end
@@ -2069,6 +2204,135 @@ describe Subscription, :vcr do
         @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
 
         expect(@subscription.reload.original_purchase.purchase_state).to eq "test_successful"
+      end
+    end
+
+    context "when the original purchase has an offer code discount with duration_in_months" do
+      before do
+        setup_subscription
+        @offer_code = create(:offer_code, amount_percentage: 25, products: [@product])
+        @original_purchase.update!(offer_code: @offer_code)
+      end
+
+      it "copies duration_in_months to the new original purchase's discount" do
+        @offer_code.update!(duration_in_months: 3)
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 3
+        )
+
+        new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code_amount).to eq(25)
+        expect(new_discount.offer_code_is_percent).to eq(true)
+        expect(new_discount.duration_in_months).to eq(3)
+      end
+
+      it "preserves nil duration_in_months for unlimited discounts" do
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: nil
+        )
+
+        new_purchase = @subscription.update_current_plan!(new_variants: [@new_tier], new_price: @yearly_product_price)
+
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.duration_in_months).to be_nil
+      end
+
+      it "uses current offer code values when offer_code is provided" do
+        @offer_code.update!(amount_percentage: 50, duration_in_months: 6)
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 1
+        )
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          offer_code: @offer_code
+        )
+
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code).to eq(@offer_code)
+        expect(new_discount.offer_code_amount).to eq(50)
+        expect(new_discount.offer_code_is_percent).to eq(true)
+        expect(new_discount.duration_in_months).to eq(6)
+        expect(new_discount.pre_discount_minimum_price_cents).to eq(new_purchase.minimum_paid_price_cents_per_unit_before_discount)
+      end
+
+      it "sets a new offer code on the new purchase when offer_code is a different code" do
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 1
+        )
+
+        new_offer_code = create(:offer_code, code: "newcode", amount_cents: 1_00, products: [@product])
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          offer_code: new_offer_code
+        )
+
+        expect(new_purchase.offer_code).to eq(new_offer_code)
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code).to eq(new_offer_code)
+        expect(new_discount.offer_code_amount).to eq(1_00)
+        expect(new_discount.offer_code_is_percent).to eq(false)
+      end
+
+      it "builds a discount for a new offer code when original had no discount" do
+        new_offer_code = create(:offer_code, code: "newcode", amount_percentage: 30, products: [@product])
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          offer_code: new_offer_code
+        )
+
+        expect(new_purchase.offer_code).to eq(new_offer_code)
+        new_discount = new_purchase.purchase_offer_code_discount
+        expect(new_discount).to be_present
+        expect(new_discount.offer_code).to eq(new_offer_code)
+        expect(new_discount.offer_code_amount).to eq(30)
+        expect(new_discount.offer_code_is_percent).to eq(true)
+      end
+
+      it "clears the offer code and discount when clear_discount is true" do
+        @original_purchase.create_purchase_offer_code_discount!(
+          offer_code: @offer_code,
+          offer_code_amount: 25,
+          offer_code_is_percent: true,
+          pre_discount_minimum_price_cents: @original_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          duration_in_months: 3
+        )
+
+        new_purchase = @subscription.update_current_plan!(
+          new_variants: [@new_tier],
+          new_price: @yearly_product_price,
+          clear_discount: true
+        )
+
+        expect(new_purchase.offer_code).to be_nil
+        expect(new_purchase.purchase_offer_code_discount).to be_nil
       end
     end
 
@@ -3431,13 +3695,6 @@ describe Subscription, :vcr do
     end
   end
 
-  describe "#enable_flat_fee" do
-    it "sets flat_fee_applicable to true by default" do
-      expect_any_instance_of(Subscription).to receive(:enable_flat_fee).and_call_original
-      expect(create(:subscription).flat_fee_applicable).to eq true
-    end
-  end
-
   describe "#discount_applies_to_next_charge?" do
     let(:user) { create(:user) }
     let(:product) { create(:membership_product_with_preset_tiered_pricing, user:) }
@@ -3670,6 +3927,240 @@ describe Subscription, :vcr do
         subscription.link.update!(block_access_after_membership_cancellation: true)
         expect(subscription.grant_access_to_product?).to be(false)
       end
+    end
+  end
+
+  describe "offer code persistence for subsequent charges" do
+    describe "installment plans" do
+      let(:seller) { create(:user) }
+      let!(:product) { create(:product, user: seller, price_cents: 3000) }
+      let!(:installment_plan) { create(:product_installment_plan, link: product, number_of_installments: 3) }
+      let!(:offer_code) { create(:offer_code, products: [product], amount_cents: 500) }
+      let(:buyer) { create(:user) }
+
+      context "when offer code is deleted after initial purchase" do
+        it "preserves the discount for subsequent installments" do
+          purchase = create(:installment_plan_purchase, link: product, offer_code: offer_code, purchaser: buyer)
+          subscription = purchase.subscription
+
+          offer_code.mark_deleted!
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.purchase_offer_code_discount).to be_present
+          expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(500)
+          expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to be false
+        end
+      end
+
+      context "when offer code expires after initial purchase" do
+        it "preserves the discount for subsequent installments" do
+          offer_code.update!(valid_at: 1.week.ago, expires_at: 1.day.from_now)
+          purchase = create(:installment_plan_purchase, link: product, offer_code: offer_code, purchaser: buyer)
+          subscription = purchase.subscription
+
+          offer_code.update!(expires_at: 1.day.ago)
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.purchase_offer_code_discount).to be_present
+          expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(500)
+        end
+      end
+
+      context "when offer code reaches max usage after initial purchase" do
+        it "preserves the discount for subsequent installments" do
+          offer_code.update!(max_purchase_count: 1)
+          purchase = create(:installment_plan_purchase, link: product, offer_code: offer_code, purchaser: buyer)
+          subscription = purchase.subscription
+
+          expect(offer_code.reload.quantity_left).to be <= 0
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.purchase_offer_code_discount).to be_present
+          expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(500)
+        end
+      end
+
+      context "when offer code amount changes after initial purchase" do
+        it "uses the original snapshotted amount" do
+          purchase = create(:installment_plan_purchase, link: product, offer_code: offer_code, purchaser: buyer)
+          subscription = purchase.subscription
+
+          offer_code.update!(amount_cents: 100)
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(500)
+        end
+      end
+
+      context "when offer code is deleted after initial purchase" do
+        it "does not count subsequent installments towards max purchases" do
+          offer_code.update!(max_purchase_count: 1)
+          purchase = create(:installment_plan_purchase, link: product, offer_code: offer_code, purchaser: buyer)
+          subscription = purchase.subscription
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.does_not_count_towards_max_purchases).to be true
+        end
+
+        it "passes offer code validation for subsequent installments" do
+          offer_code.update!(max_purchase_count: 1)
+          purchase = create(:installment_plan_purchase, link: product, offer_code: offer_code, purchaser: buyer)
+          subscription = purchase.subscription
+
+          offer_code.mark_deleted!
+
+          new_purchase = subscription.build_purchase
+          new_purchase.valid?
+          expect(new_purchase.errors[:base]).to be_empty
+        end
+      end
+
+      context "with percentage discount" do
+        let!(:percent_offer_code) { create(:offer_code, products: [product], amount_percentage: 25, code: "PERCENT25") }
+
+        it "preserves percentage discount when offer code is deleted" do
+          purchase = create(:installment_plan_purchase, link: product, offer_code: percent_offer_code, purchaser: buyer)
+          subscription = purchase.subscription
+
+          percent_offer_code.mark_deleted!
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.purchase_offer_code_discount).to be_present
+          expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(25)
+          expect(new_purchase.purchase_offer_code_discount.offer_code_is_percent).to be true
+        end
+      end
+    end
+
+    describe "memberships with duration" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:membership_product_with_preset_tiered_pricing, user: seller) }
+      let(:offer_code) { create(:offer_code, products: [product], amount_cents: 100, duration_in_months: 3) }
+      let(:buyer) { create(:user) }
+
+      context "when offer code is deleted within duration" do
+        it "preserves the discount for subsequent charges" do
+          purchase = create(:membership_purchase, link: product, offer_code: offer_code, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+          subscription = purchase.subscription
+          subscription.original_purchase.create_purchase_offer_code_discount!(
+            offer_code: offer_code,
+            offer_code_amount: 100,
+            offer_code_is_percent: false,
+            pre_discount_minimum_price_cents: 300,
+            duration_in_months: 3
+          )
+
+          offer_code.mark_deleted!
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.purchase_offer_code_discount).to be_present
+          expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(100)
+          expect(new_purchase.purchase_offer_code_discount.duration_in_months).to eq(3)
+        end
+      end
+
+      context "when offer code expires within duration" do
+        it "preserves the discount for subsequent charges" do
+          offer_code.update!(valid_at: 1.week.ago, expires_at: 1.day.from_now)
+          purchase = create(:membership_purchase, link: product, offer_code: offer_code, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+          subscription = purchase.subscription
+          subscription.original_purchase.create_purchase_offer_code_discount!(
+            offer_code: offer_code,
+            offer_code_amount: 100,
+            offer_code_is_percent: false,
+            pre_discount_minimum_price_cents: 300,
+            duration_in_months: 3
+          )
+
+          offer_code.update!(expires_at: 1.day.ago)
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.purchase_offer_code_discount).to be_present
+          expect(new_purchase.purchase_offer_code_discount.offer_code_amount).to eq(100)
+        end
+      end
+
+      context "when duration has elapsed" do
+        it "does not apply the discount" do
+          purchase = create(:membership_purchase, link: product, offer_code: offer_code, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+          subscription = purchase.subscription
+          subscription.original_purchase.create_purchase_offer_code_discount!(
+            offer_code: offer_code,
+            offer_code_amount: 100,
+            offer_code_is_percent: false,
+            pre_discount_minimum_price_cents: 300,
+            duration_in_months: 1
+          )
+
+          # Create enough purchases to exceed duration
+          create(:membership_purchase, subscription: subscription, link: product, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.purchase_offer_code_discount).to be_nil
+        end
+      end
+    end
+
+    describe "backwards compatibility" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:membership_product_with_preset_tiered_pricing, user: seller) }
+      let(:offer_code) { create(:offer_code, products: [product], amount_cents: 100) }
+      let(:buyer) { create(:user) }
+
+      context "when original purchase has no cached discount (legacy)" do
+        it "falls back to live offer code" do
+          purchase = create(:membership_purchase, link: product, offer_code: offer_code, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+          subscription = purchase.subscription
+          subscription.original_purchase.purchase_offer_code_discount&.destroy
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.offer_code).to eq(offer_code)
+          expect(new_purchase.purchase_offer_code_discount).to be_nil
+        end
+      end
+
+      context "when purchase has no offer code" do
+        it "does not create a discount" do
+          purchase = create(:membership_purchase, link: product, purchaser: buyer, variant_attributes: [product.alive_variants.first])
+          subscription = purchase.subscription
+
+          new_purchase = subscription.build_purchase
+          expect(new_purchase.offer_code).to be_nil
+          expect(new_purchase.purchase_offer_code_discount).to be_nil
+        end
+      end
+    end
+  end
+
+  describe "#update_business_vat_id!" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:subscription_product, user: seller) }
+    let(:subscription) { create(:subscription, link: product, business_vat_id: nil) }
+
+    it "updates subscription's business_vat_id when not already set" do
+      subscription.update_business_vat_id!("IE6388047V")
+
+      expect(subscription.reload.business_vat_id).to eq "IE6388047V"
+    end
+
+    it "does not update subscription's business_vat_id when already set" do
+      subscription.update!(business_vat_id: "DE123456789")
+
+      subscription.update_business_vat_id!("IE6388047V")
+
+      expect(subscription.reload.business_vat_id).to eq "DE123456789"
+    end
+
+    it "does not update subscription's business_vat_id when nil is provided" do
+      subscription.update_business_vat_id!(nil)
+
+      expect(subscription.reload.business_vat_id).to be_nil
+    end
+
+    it "does not update subscription's business_vat_id when empty string is provided" do
+      subscription.update_business_vat_id!("")
+
+      expect(subscription.reload.business_vat_id).to be_nil
     end
   end
 end

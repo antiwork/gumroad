@@ -41,6 +41,7 @@ describe ProfilePresenter do
           name: seller.name,
           twitter_handle: nil,
           subdomain: seller.subdomain,
+          is_verified: false,
         }
       )
     end

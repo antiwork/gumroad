@@ -9,118 +9,153 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
   it_behaves_like "inherits from Admin::BaseController"
 
+  let(:admin_user) { create(:admin_user) }
+  let(:product) { create(:product) }
+
   before do
-    @admin_user = create(:admin_user)
-    sign_in @admin_user
+    sign_in admin_user
     @request.env["HTTP_REFERER"] = "where_i_came_from"
   end
 
-  describe "GET legacy_purchases" do
-    def create_purchases_in_order(count, product, options = {})
-      count.times.map do |n|
-        create(:purchase, options.merge(link: product, created_at: Time.current + n.minutes))
-      end
+  describe "GET show" do
+    it "redirects numeric ID to external_id" do
+      get :show, params: { external_id: product.id }
+
+      expect(response).to redirect_to(admin_product_path(product.external_id))
     end
 
-    def purchase_admin_review_json(purchases)
-      purchases.map { |purchase| purchase.as_json(admin_review: true) }
+    it "renders the product page if looked up via external_id" do
+      get :show, params: { external_id: product.external_id }
+
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Admin/Products/Show")
+      expect(inertia.props[:title]).to eq(product.name)
+      expect(inertia.props[:product]).to eq(Admin::ProductPresenter::Card.new(product:, pundit_user: SellerContext.new(user: admin_user, seller: product.user)).props)
+      expect(inertia.props[:user]).to eq(Admin::UserPresenter::Card.new(user: product.user, pundit_user: SellerContext.new(user: admin_user, seller: product.user)).props)
     end
 
-    before do
-      @product = create(:product)
-    end
+    describe "multiple matches by permalink" do
+      context "when multiple products matched by permalink" do
+        it "lists all matches" do
+          product_1 = create(:product, unique_permalink: "a", custom_permalink: "match")
+          product_2 = create(:product, unique_permalink: "b", custom_permalink: "match")
+          create(:product, unique_permalink: "c", custom_permalink: "should-not-match")
 
-    describe "pagination" do
-      before do
-        @purchases = create_purchases_in_order(10, @product)
+          get :show, params: { external_id: product_1.custom_permalink }
+
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Admin/Products/MultipleMatches")
+          expect(inertia.props[:product_matches]).to contain_exactly(hash_including(external_id: product_1.external_id), hash_including(external_id: product_2.external_id))
+        end
       end
 
-      it "returns the purchases of the specified page" do
-        get :legacy_purchases, params: { id: @product.id, is_affiliate_user: "false", page: 2, per_page: 2, format: :json }
+      context "when only one product matched by permalink" do
+        it "renders the product page" do
+          product = create(:product, unique_permalink: "a", custom_permalink: "match")
 
-        expect(response).to be_successful
-        expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse[2..3])
-        expect(response.parsed_body["page"]).to eq 2
-      end
-    end
+          get :show, params: { external_id: product.custom_permalink }
 
-    context "when user purchases are requested" do
-      before do
-        @purchases = create_purchases_in_order(2, @product)
-      end
-
-      it "returns user purchases" do
-        get :legacy_purchases, params: { id: @product.id, is_affiliate_user: "false", format: :json }
-
-        expect(response).to be_successful
-        expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse)
-      end
-    end
-
-    context "when affiliate purchases are requested" do
-      before do
-        affiliate = create(:direct_affiliate)
-        @affiliate_user = affiliate.affiliate_user
-
-        @purchases = create_purchases_in_order(2, @product, affiliate_id: affiliate.id)
+          expect(response).to be_successful
+          expect(inertia.component).to eq("Admin/Products/Show")
+          expect(inertia.props[:title]).to eq(product.name)
+          expect(inertia.props[:product]).to eq(Admin::ProductPresenter::Card.new(product:, pundit_user: SellerContext.new(user: admin_user, seller: product.user)).props)
+          expect(inertia.props[:user]).to eq(Admin::UserPresenter::Card.new(user: product.user, pundit_user: SellerContext.new(user: admin_user, seller: product.user)).props)
+        end
       end
 
-      it "returns affiliate purchases" do
-        get :legacy_purchases, params: { id: @product.id, is_affiliate_user: "true", user_id: @affiliate_user.id, format: :json }
-
-        expect(response).to be_successful
-        expect(response.parsed_body["purchases"]).to eq purchase_admin_review_json(@purchases.reverse)
+      context "when no products matched by permalink" do
+        it "raises a 404" do
+          expect do
+            get :show, params: { external_id: "match" }
+          end.to raise_error(ActionController::RoutingError, "Not Found")
+        end
       end
     end
   end
 
-  describe "GET show" do
-    it "shows a Product page" do
-      product = create(:product)
-      installment = create(:product_installment, link: product)
-      create(:product_file, installment_id: installment.id)
-
-      get :show, params: { id: product.unique_permalink }
+  describe "DELETE destroy" do
+    it "deletes the product" do
+      delete :destroy, params: { external_id: product.external_id }
 
       expect(response).to be_successful
-      expect(inertia.component).to eq("Admin/Products/Show")
+      expect(product.reload.deleted_at).to be_present
     end
 
-    it "redirects to a unique permalink URL if looked up via ID" do
-      product = create(:product)
-
-      get :show, params: { id: product.id }
-
-      expect(response).to redirect_to(admin_product_path(product.unique_permalink))
+    it "raises a 404 if the product is not found" do
+      expect do
+        delete :destroy, params: { external_id: "invalid-id" }
+      end.to raise_error(ActionController::RoutingError, "Not Found")
     end
+  end
 
-    it "redirects to a unique permalink URL if looked up via custom permalink" do
-      product = create(:product, unique_permalink: "a", custom_permalink: "custom")
+  describe "POST restore" do
+    let(:product) { create(:product, deleted_at: 1.day.ago) }
 
-      get :show, params: { id: "custom" }
-
-      expect(response).to redirect_to(admin_product_path(product.unique_permalink))
-    end
-
-    it "does not redirect for unique_permalink == custom_permalink" do
-      product = create(:product, unique_permalink: "Cat", custom_permalink: "Cat")
-
-      get :show, params: { id: "Cat" }
-
-      expect(assigns(:product)).to eq(product)
-      expect(response).to be_successful
-    end
-
-    it "lists all matches if multiple products matched by permalink" do
-      product_1 = create(:product, unique_permalink: "a", custom_permalink: "match")
-      product_2 = create(:product, unique_permalink: "b", custom_permalink: "match")
-      create(:product, unique_permalink: "c", custom_permalink: "should-not-match")
-
-      get :show, params: { id: "match" }
+    it "restores the product" do
+      post :restore, params: { external_id: product.external_id }
 
       expect(response).to be_successful
-      expect(inertia.component).to eq("Admin/Products/MultipleMatches")
-      expect(inertia.props[:product_matches].map { _1[:id] }).to match_array([product_1.id, product_2.id])
+      expect(product.reload.deleted_at).to be_nil
+    end
+
+    it "raises a 404 if the product is not found" do
+      expect do
+        post :restore, params: { external_id: "invalid-id" }
+      end.to raise_error(ActionController::RoutingError, "Not Found")
+    end
+  end
+
+  describe "POST publish" do
+    let(:product) { create(:product, purchase_disabled_at: Time.current) }
+
+    it "publishes the product" do
+      post :publish, params: { external_id: product.external_id }
+
+      expect(response).to be_successful
+      expect(product.reload.purchase_disabled_at).to be_nil
+    end
+
+    it "raises a 404 if the product is not found" do
+      expect do
+        post :publish, params: { external_id: "invalid-id" }
+      end.to raise_error(ActionController::RoutingError, "Not Found")
+    end
+  end
+
+  describe "DELETE unpublish" do
+    let(:product) { create(:product, purchase_disabled_at: nil) }
+
+    it "unpublishes the product" do
+      delete :unpublish, params: { external_id: product.external_id }
+
+      expect(response).to be_successful
+      expect(product.reload.purchase_disabled_at).to be_present
+    end
+
+    it "raises a 404 if the product is not found" do
+      expect do
+        delete :unpublish, params: { external_id: "invalid-id" }
+      end.to raise_error(ActionController::RoutingError, "Not Found")
+    end
+  end
+
+  describe "POST is_adult" do
+    it "marks the product as adult" do
+      post :is_adult, params: { external_id: product.external_id, is_adult: true }
+
+      expect(response).to be_successful
+      expect(product.reload.is_adult).to be(true)
+
+      post :is_adult, params: { external_id: product.external_id, is_adult: false }
+
+      expect(response).to be_successful
+      expect(product.reload.is_adult).to be(false)
+    end
+
+    it "raises a 404 if the product is not found" do
+      expect do
+        post :is_adult, params: { external_id: "invalid-id", is_adult: true }
+      end.to raise_error(ActionController::RoutingError, "Not Found")
     end
   end
 end

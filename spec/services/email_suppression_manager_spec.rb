@@ -49,9 +49,9 @@ describe EmailSuppressionManager, :vcr do
     end
 
     context "when SendGrid response is not a array of hashes" do
-      it "notifies Bugsnag" do
+      it "notifies error tracker" do
         allow_any_instance_of(SendGrid::Client).to receive_message_chain(:bounces, :_, :get, :parsed_body).and_return("sample")
-        expect(Bugsnag).to receive(:notify).at_least(:once)
+        expect(ErrorNotifier).to receive(:notify).at_least(:once)
 
         described_class.new(email).reasons_for_suppression
       end

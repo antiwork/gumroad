@@ -8,18 +8,19 @@ class ProductPresenter
 
   extend PreorderHelper
 
-  attr_reader :product, :editing_page_id, :pundit_user, :request
+  attr_reader :product, :editing_page_id, :pundit_user, :request, :ai_generated
 
   delegate :user, :skus,
            :skus_enabled, :is_licensed, :is_multiseat_license, :quantity_enabled, :description,
            :is_recurring_billing, :should_include_last_post, :should_show_all_posts, :should_show_sales_count,
            :block_access_after_membership_cancellation, :duration_in_months, to: :product, allow_nil: true
 
-  def initialize(product:, editing_page_id: nil, request: nil, pundit_user: nil)
+  def initialize(product:, editing_page_id: nil, request: nil, pundit_user: nil, ai_generated: false)
     @product = product
     @editing_page_id = editing_page_id
     @request = request
     @pundit_user = pundit_user
+    @ai_generated = ai_generated
   end
 
   def self.new_page_props(current_seller:)
@@ -42,8 +43,8 @@ class ProductPresenter
   end
 
   ASSOCIATIONS_FOR_CARD = ProductPresenter::Card::ASSOCIATIONS
-  def self.card_for_web(product:, request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, compute_description: true)
-    ProductPresenter::Card.new(product:).for_web(request:, recommended_by:, recommender_model_name:, target:, show_seller:, affiliate_id:, query:, compute_description:)
+  def self.card_for_web(product:, request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true, compute_inventory: true)
+    ProductPresenter::Card.new(product:).for_web(request:, recommended_by:, recommender_model_name:, target:, show_seller:, affiliate_id:, query:, offer_code:, compute_description:, compute_inventory:)
   end
 
   def self.card_for_email(product:)
@@ -52,6 +53,20 @@ class ProductPresenter
 
   def product_props(**kwargs)
     ProductPresenter::ProductProps.new(product:).props(request:, pundit_user:, **kwargs)
+  end
+
+  def profile_product_props(**kwargs)
+    product_page_props(**kwargs).merge(
+      creator_profile: ProfilePresenter.new(pundit_user:, seller: product.user).creator_profile
+    )
+  end
+
+  def discover_product_props(discover_props:, **kwargs)
+    product_page_props(**kwargs).merge(discover_props)
+  end
+
+  def iframe_product_props(**kwargs)
+    product_props(**kwargs)
   end
 
   def product_page_props(seller_custom_domain_url:, **kwargs)
@@ -83,6 +98,7 @@ class ProductPresenter
     profile_sections = product.user.seller_profile_products_sections
     collaborator = product.collaborator_for_display
     cancellation_discount = product.cancellation_discount_offer_code
+    default_offer_code = product.default_offer_code
     {
       product: {
         name: product.name,
@@ -94,6 +110,10 @@ class ProductPresenter
         **ProductPresenter::InstallmentPlanProps.new(product:).props,
         custom_button_text_option: product.custom_button_text_option.presence,
         custom_summary: product.custom_summary,
+        custom_view_content_button_text: product.custom_view_content_button_text,
+        custom_view_content_button_text_max_length: Product::Validations::MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH,
+        custom_receipt_text: product.custom_receipt_text,
+        custom_receipt_text_max_length: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH,
         custom_attributes: product.custom_attributes,
         file_attributes: product.file_info_for_product_page.map { { name: _1.to_s, value: _2 } },
         max_purchase_count: product.max_purchase_count,
@@ -192,6 +212,13 @@ class ProductPresenter
             { type: "percent", percents: cancellation_discount.amount_percentage },
           duration_in_billing_cycles: cancellation_discount.duration_in_billing_cycles,
         } : nil,
+        default_offer_code_id: default_offer_code&.external_id,
+        default_offer_code: default_offer_code ? {
+          id: default_offer_code.external_id,
+          code: default_offer_code.code,
+          name: default_offer_code.name.presence || "",
+          discount: default_offer_code.discount,
+        } : nil,
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
         audio_previews_enabled: Feature.active?(:audio_previews, product.user),
         community_chat_enabled: Feature.active?(:communities, product.user) ? product.community_chat_enabled? : nil,
@@ -237,6 +264,8 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      dropbox_api_key: DROPBOX_PICKER_API_KEY,
+      ai_generated:,
     }
   end
 

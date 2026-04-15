@@ -30,12 +30,10 @@ describe("Password Settings Scenario", type: :system, js: true) do
         VCR.use_cassette("Add Password-with a compromised password") do
           with_real_pwned_password_check do
             click_on("Change password")
-            wait_for_ajax
+            expect(page).to have_alert(text: "New password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess.")
           end
         end
       end
-
-      expect(page).to have_alert(text: "New password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess.")
     end
 
     it "allows setting a new password with a value that was not found in the password breaches" do
@@ -51,12 +49,10 @@ describe("Password Settings Scenario", type: :system, js: true) do
         VCR.use_cassette("Add Password-with a not compromised password") do
           with_real_pwned_password_check do
             click_on("Change password")
-            wait_for_ajax
+            expect(page).to have_alert(text: "You have successfully changed your password.")
           end
         end
       end
-
-      expect(page).to have_alert(text: "You have successfully changed your password.")
     end
   end
 
@@ -111,12 +107,12 @@ describe("Password Settings Scenario", type: :system, js: true) do
         VCR.use_cassette("Add Password-with a compromised password") do
           with_real_pwned_password_check do
             click_on("Change password")
-            wait_for_ajax
+            expect(page).to have_alert(
+              text: "New password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess.",
+            )
           end
         end
       end
-
-      expect(page).to have_alert(text: "New password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. Please choose something harder to guess.")
     end
 
     it "allows changing the password with a value that was not found in the password breaches" do
@@ -132,12 +128,81 @@ describe("Password Settings Scenario", type: :system, js: true) do
         VCR.use_cassette("Add Password-with a not compromised password") do
           with_real_pwned_password_check do
             click_on("Change password")
-            wait_for_ajax
+            expect(page).to have_alert(text: "You have successfully changed your password.")
           end
         end
       end
+    end
+  end
 
-      expect(page).to have_alert(text: "You have successfully changed your password.")
+  describe "two-factor authentication section" do
+    let(:user) { create(:user) }
+
+    context "when feature flag is active" do
+      before do
+        Feature.activate(:authenticator_2fa)
+      end
+
+      it "displays authenticator app status" do
+        visit settings_password_path
+
+        expect(page).to have_text("Two-factor authentication")
+        expect(page).to have_text("Authenticator app")
+        expect(page).to have_button("Set up")
+      end
+
+      it "allows setting up and then removing the authenticator app" do
+        visit settings_password_path
+
+        click_on("Set up")
+        expect(page).to have_text("Scan this QR code")
+        expect(page).to have_selector("[data-testid='qr-code']")
+
+        credential = user.reload.totp_credential
+        expect(credential).to be_present
+        expect(credential).not_to be_confirmed
+
+        fill_in("Enter the code from your authenticator app", with: credential.otp_code)
+        click_on("Verify")
+
+        expect(page).to have_text("Save these codes")
+        expect(credential.reload).to be_confirmed
+
+        click_on("Done")
+        expect(page).to have_button("Remove")
+
+        click_on("Remove")
+        expect(page).to have_button("Set up")
+        expect(user.reload.totp_credential).to be_nil
+      end
+
+      context "when authenticator app is enabled" do
+        before do
+          create(:totp_credential, :with_recovery_codes, user:)
+        end
+
+        it "allows regenerating recovery codes" do
+          visit settings_password_path
+
+          click_on("Regenerate recovery codes")
+
+          expect(page).to have_text("Save these codes")
+          expect(page).to have_button("Copy all")
+          expect(page).to have_button("Download")
+
+          click_on("Done")
+          expect(page).not_to have_text("Save these codes")
+        end
+      end
+    end
+
+    context "when feature flag is not active" do
+      it "does not display the two-factor authentication section" do
+        visit settings_password_path
+
+        expect(page).not_to have_text("Two-factor authentication")
+        expect(page).not_to have_text("Authenticator app")
+      end
     end
   end
 end

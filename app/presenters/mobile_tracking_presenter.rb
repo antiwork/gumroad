@@ -11,7 +11,6 @@ class MobileTrackingPresenter
 
   def product_props(product:)
     {
-      enabled: is_third_party_analytics_enabled?(seller:, logged_in_seller: nil),
       seller_id: seller.external_id,
       analytics: product.analytics_data,
       has_product_third_party_analytics: product.has_third_party_analytics?("product"),

@@ -5,6 +5,9 @@ import { request } from "$app/utils/request";
 
 import type { User } from "$app/components/Admin/Users/User";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Alert } from "$app/components/ui/Alert";
+import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type LatestPostsProps = {
   user: User;
@@ -14,11 +17,12 @@ export type PostProps = {
   id: number;
   name: string;
   created_at: string;
+  className?: string;
 };
 
-const Post = ({ name, created_at }: PostProps) => (
-  <div>
-    <h5>{name}</h5>
+const Post = ({ name, created_at, className }: PostProps) => (
+  <div className={className}>
+    <h5 className="grow font-bold">{name}</h5>
     <time>{created_at}</time>
   </div>
 );
@@ -27,16 +31,18 @@ const LatestPostsContent = ({ posts, isLoading }: { posts: PostProps[]; isLoadin
   if (isLoading) return <LoadingSpinner />;
   if (posts.length > 0)
     return (
-      <div className="stack">
+      <Card>
         {posts.map(({ id, name, created_at }) => (
-          <Post key={id} id={id} name={name} created_at={created_at} />
+          <CardContent key={id}>
+            <Post id={id} name={name} created_at={created_at} />
+          </CardContent>
         ))}
-      </div>
+      </Card>
     );
   return (
-    <div className="info" role="status">
+    <Alert role="status" variant="info">
       No posts created.
-    </div>
+    </Alert>
   );
 };
 
@@ -49,16 +55,16 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
     setIsLoading(true);
     const response = await request({
       method: "GET",
-      url: Routes.admin_user_latest_posts_path(user.id),
+      url: Routes.admin_user_latest_posts_path(user.external_id),
       accept: "json",
     });
     setPosts(cast<PostProps[]>(await response.json()));
     setIsLoading(false);
   };
 
-  const onToggle = (e: React.MouseEvent<HTMLDetailsElement>) => {
-    setOpen(e.currentTarget.open);
-    if (e.currentTarget.open) {
+  const onToggle = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
       void fetchPosts();
     }
   };
@@ -66,12 +72,12 @@ const LastestPosts = ({ user }: LatestPostsProps) => {
   return (
     <>
       <hr />
-      <details open={open} onToggle={onToggle}>
-        <summary>
+      <Details open={open} onToggle={onToggle}>
+        <DetailsToggle>
           <h3>Last posts</h3>
-        </summary>
+        </DetailsToggle>
         <LatestPostsContent posts={posts} isLoading={isLoading} />
-      </details>
+      </Details>
     </>
   );
 };

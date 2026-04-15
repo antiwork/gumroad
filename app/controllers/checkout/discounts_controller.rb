@@ -12,7 +12,7 @@ class Checkout::DiscountsController < Sellers::BaseController
   def index
     authorize [:checkout, OfferCode]
 
-    @title = "Discounts"
+    set_meta_tag(title: "Discounts")
     pagination, offer_codes = fetch_offer_codes
     presenter = Checkout::DiscountsPresenter.new(pundit_user:, offer_codes:, pagination:)
 
@@ -82,10 +82,10 @@ class Checkout::DiscountsController < Sellers::BaseController
     offer_code = OfferCode.find_by_external_id!(params[:id])
     authorize [:checkout, offer_code]
 
-    if offer_code.mark_deleted(validate: false)
+    if offer_code.mark_deleted
       render json: { success: true }
     else
-      render json: { success: false, error_message: offer_code.errors.full_messages.first }
+      render json: { success: false, error_message: offer_code.errors.full_messages.first }, status: :unprocessable_entity
     end
   end
 

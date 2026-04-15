@@ -46,6 +46,29 @@ export type OfferCodeResponseData =
     }
   | { valid: true; products_data: Record<string, Discount> };
 
+export type ProductOfferCodeSuggestion = {
+  id: string;
+  code: string;
+  name: string;
+  discount: Discount;
+};
+
+export const searchProductOfferCodes = async (
+  productPermalink: string,
+  query: string,
+): Promise<ProductOfferCodeSuggestion[]> => {
+  const params = new URLSearchParams({ query });
+  const response = await request({
+    method: "GET",
+    accept: "json",
+    url: `/products/${encodeURIComponent(productPermalink)}/available_offer_codes.json?${params.toString()}`,
+  });
+
+  if (!response.ok) throw new ResponseError();
+
+  return cast<ProductOfferCodeSuggestion[]>(await response.json());
+};
+
 type DiscountPayload = {
   name: string;
   code: string;

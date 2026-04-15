@@ -30,7 +30,7 @@ class SendgridEventInfo < EmailEventInfo
     parsed_mailer_args = JSON.parse(mailer_args.gsub("=>", ":")) rescue []
 
     if parsed_mailer_args.size != 2
-      Bugsnag.notify("Abandoned cart email event has unexpected mailer_args size", mailer_args:)
+      ErrorNotifier.notify("Abandoned cart email event has unexpected mailer_args size", mailer_args:)
       return []
     end
 

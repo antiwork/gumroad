@@ -1,3 +1,4 @@
+import { ArrowUpRightSquare, Copy, Search } from "@boxicons/react";
 import { Link, useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
@@ -6,16 +7,20 @@ import EmptyState from "$app/components/Admin/EmptyState";
 import PaginatedLoader, { Pagination } from "$app/components/Admin/PaginatedLoader";
 import { type RefundPolicy, RefundPolicyTitle } from "$app/components/Admin/Purchases/RefundPolicy";
 import { PurchaseStates } from "$app/components/Admin/Purchases/States";
+import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
+import { InlineList } from "$app/components/ui/InlineList";
+import { Input } from "$app/components/ui/Input";
+import { Select } from "$app/components/ui/Select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type Purchase = {
-  id: string;
+  external_id: string;
   formatted_display_price: string;
   formatted_gumroad_tax_amount: string | null;
   gumroad_responsible_for_tax: boolean;
-  product: { id: string; name: string; long_url: string };
+  product: { external_id: string; name: string; long_url: string };
   variants_list: string;
   refund_policy: RefundPolicy | null;
   product_refund_policy: string | null;
@@ -28,7 +33,7 @@ type Purchase = {
   chargedback: boolean;
   chargeback_reversed: boolean;
   error_code: string | null;
-  last_chargebacked_purchase: number | null;
+  last_chargebacked_purchase: string | null;
 };
 
 export default function Purchases() {
@@ -52,56 +57,56 @@ export default function Purchases() {
             }}
             className="flex gap-2"
           >
-            <input
+            <Input
               name="product_title_query"
               placeholder="Filter by product title"
               type="text"
               value={data.product_title_query}
               onChange={(e) => setData("product_title_query", e.target.value)}
             />
-            <select
+            <Select
               name="purchase_status"
               value={data.purchase_status}
-              className="w-auto"
+              wrapperClassName="w-auto shrink-0"
               onChange={(e) => setData("purchase_status", e.target.value)}
             >
               <option value="">Any status</option>
               <option value="chargeback">Chargeback</option>
               <option value="refunded">Refunded</option>
               <option value="failed">Failed</option>
-            </select>
-            <button type="submit" className="button primary">
-              <Icon name="solid-search" />
-            </button>
+            </Select>
+            <Button type="submit" color="primary">
+              <Search className="size-5" />
+            </Button>
             {data.product_title_query || data.purchase_status ? (
-              <Link href={Routes.admin_search_purchases_path({ query: data.query })} className="button secondary">
-                Clear
-              </Link>
+              <Button asChild>
+                <Link href={Routes.admin_search_purchases_path({ query: data.query })}>Clear</Link>
+              </Button>
             ) : null}
           </form>
-          <table>
-            <thead>
-              <tr>
-                <th>Purchase</th>
-                <th>By</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Purchase</TableHead>
+                <TableHead>By</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {purchases.map((purchase) => (
-                <tr key={purchase.id}>
-                  <td data-label="Purchase">
-                    <Link href={Routes.admin_purchase_path(purchase.id)}>
+                <TableRow key={purchase.external_id}>
+                  <TableCell>
+                    <Link href={Routes.admin_purchase_path(purchase.external_id)}>
                       {purchase.formatted_display_price}
                       {purchase.gumroad_responsible_for_tax ? ` + ${purchase.formatted_gumroad_tax_amount} VAT` : null}
                     </Link>{" "}
-                    <Link href={Routes.admin_link_url(purchase.product.id)}>{purchase.product.name}</Link>{" "}
+                    <Link href={Routes.admin_product_url(purchase.product.external_id)}>{purchase.product.name}</Link>{" "}
                     {purchase.variants_list}{" "}
-                    <Link href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
-                      <Icon name="arrow-up-right-square" />
-                    </Link>{" "}
+                    <a href={purchase.product.long_url} target="_blank" rel="noopener noreferrer nofollow">
+                      <ArrowUpRightSquare className="size-5" />
+                    </a>{" "}
                     <PurchaseStates purchase={purchase} />
                     <div className="text-sm">
-                      <ul className="inline">
+                      <InlineList>
                         {purchase.refund_policy ? (
                           <li>
                             <RefundPolicyTitle refundPolicy={purchase.refund_policy} />
@@ -110,28 +115,28 @@ export default function Purchases() {
                         <li>
                           Seller: {purchase.seller.email}{" "}
                           <CopyToClipboard text={purchase.seller.email}>
-                            <Icon name="outline-duplicate" />
+                            <Copy className="size-5" />
                           </CopyToClipboard>
                         </li>
                         {purchase.seller.support_email ? (
                           <li>Seller support email: {purchase.seller.support_email}</li>
                         ) : null}
-                      </ul>
+                      </InlineList>
                     </div>
-                  </td>
-                  <td data-label="By">
+                  </TableCell>
+                  <TableCell>
                     <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>{" "}
                     <CopyToClipboard text={purchase.email}>
-                      <Icon name="outline-duplicate" />
+                      <Copy className="size-5" />
                     </CopyToClipboard>
-                    <small>
+                    <small className="block">
                       <DateTimeWithRelativeTooltip date={purchase.created_at} />
                     </small>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
           <PaginatedLoader itemsLength={purchases.length} pagination={pagination} only={["purchases", "pagination"]} />
         </>
       ) : (

@@ -2,16 +2,18 @@ import * as React from "react";
 
 import { ProductNativeType } from "$app/parsers/product";
 
-import { Creator } from "$app/components/Checkout/cartState";
+import type { Creator, Result } from "$app/components/Checkout/cartState";
 import { useState } from "$app/components/Checkout/payment";
 import { CreateAccountForm } from "$app/components/Checkout/Receipt";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Result } from "$app/components/server-components/CheckoutPage";
+import { CardContent, Card as UICard } from "$app/components/ui/Card";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 const formatName = (productName: string, optionName: string | null) =>
@@ -33,8 +35,8 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
       <section className="p-4 md:p-8">
         <div className="grid grid-cols-1 items-start gap-x-16 gap-y-8 lg:grid-cols-[var(--grid-cols-sidebar)]">
           {!user && canBuyerSignUp ? (
-            <div className="stack">
-              <div>
+            <UICard>
+              <CardContent>
                 <CreateAccountForm
                   createAccountData={{
                     email: state.email,
@@ -44,9 +46,10 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
                         ? null
                         : state.status.paymentMethod.cardParamsResult.cardParams,
                   }}
+                  className="grow"
                 />
-              </div>
-            </div>
+              </CardContent>
+            </UICard>
           ) : null}
           <ProductCardGrid>
             {results.flatMap(({ result, item }) =>
@@ -103,25 +106,25 @@ const Card = ({
   nativeType: ProductNativeType;
   creator: Creator | null;
 }) => (
-  <article className="product-card relative">
-    <figure>
+  <ProductCard>
+    <ProductCardFigure>
       <Thumbnail url={thumbnailUrl} nativeType={nativeType} />
-    </figure>
-    <header>
+    </ProductCardFigure>
+    <ProductCardHeader>
       {contentUrl ? (
-        <a href={contentUrl} className="stretched-link" aria-label={name}>
+        <StretchedLink href={contentUrl} aria-label={name}>
           <h3 itemProp="name">{name}</h3>
-        </a>
+        </StretchedLink>
       ) : (
         <h3 itemProp="name">{name}</h3>
       )}
-    </header>
-    <footer className="relative">
+    </ProductCardHeader>
+    <ProductCardFooter>
       {creator ? (
-        <AuthorByline name={creator.name} profileUrl={creator.profile_url} avatarUrl={creator.avatar_url} />
-      ) : (
-        <div className="user" />
-      )}
-    </footer>
-  </article>
+        <div className="p-4">
+          <AuthorByline name={creator.name} profileUrl={creator.profile_url} avatarUrl={creator.avatar_url} />
+        </div>
+      ) : null}
+    </ProductCardFooter>
+  </ProductCard>
 );

@@ -697,4 +697,125 @@ describe OfferCode do
       end
     end
   end
+
+  describe "reindexing products" do
+    let(:creator) { create(:user) }
+    let(:product1) { create(:product, user: creator) }
+    let(:product2) { create(:product, user: creator) }
+    let!(:offer_code) { create(:offer_code, user: creator, code: "BLACKFRIDAY2025", products: [product1, product2]) }
+
+    describe "after_save callback" do
+      it "reindexes associated products when offer code is updated" do
+        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+
+        offer_code.update(amount_cents: 500)
+      end
+
+      it "reindexes associated products when offer code code is changed" do
+        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+
+        offer_code.update(code: "NEWYEAR2025")
+      end
+    end
+
+    describe "after_destroy callback" do
+      let(:products_to_reindex) { [product1, product2] }
+
+      before do
+        allow(Link).to receive(:where).with(id: products_to_reindex.map(&:id)).and_return(products_to_reindex)
+      end
+
+      it "reindexes associated products when offer code is destroyed" do
+        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+
+        offer_code.destroy
+      end
+    end
+
+    describe "#reindex_associated_products" do
+      it "handles offer codes with no products" do
+        offer_code_without_products = create(:offer_code, user: creator, code: "EMPTY")
+
+        expect { offer_code_without_products.update(amount_cents: 1000) }.not_to raise_error
+      end
+
+      it "only reindexes products that exist" do
+        expect(product1).to receive(:enqueue_index_update_for).with(["offer_codes"])
+        expect(product2).to receive(:enqueue_index_update_for).with(["offer_codes"])
+
+        offer_code.send(:reindex_associated_products)
+      end
+    end
+  end
+
+  describe "search_by_name" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+
+    before do
+      @offer_code1 = create(:offer_code, user: seller, products: [product], name: "Black Friday Sale", code: "BF2025")
+      @offer_code2 = create(:offer_code, user: seller, products: [product], name: "Summer Discount", code: "SUMMER25")
+      @offer_code3 = create(:offer_code, user: seller, products: [product], name: "Holiday Special", code: "HOLIDAY")
+      @universal_code1 = create(:universal_offer_code, user: seller, name: "Universal Black Friday", code: "UNI_BF", currency_type: "usd")
+      @universal_code2 = create(:universal_offer_code, user: seller, name: "Universal Summer", code: "UNI_SUMMER", currency_type: "usd")
+    end
+
+    it "filters by name and returns matching offer codes" do
+      codes = OfferCode.search_by_name("Black Friday")
+
+      expect(codes).to include(@offer_code1, @universal_code1)
+      expect(codes).not_to include(@offer_code2, @offer_code3, @universal_code2)
+      expect(codes.size).to eq(2)
+    end
+
+    it "does not match by code, only by name" do
+      codes = OfferCode.search_by_name("BF2025")
+
+      # Should not find any codes even though "BF2025" matches the code
+      # because search is now by name only
+      expect(codes).to be_empty
+    end
+
+    it "matches case-insensitively" do
+      codes = OfferCode.search_by_name("black friday")
+
+      expect(codes).to include(@offer_code1, @universal_code1)
+      expect(codes.size).to eq(2)
+    end
+
+    it "matches partial names" do
+      codes = OfferCode.search_by_name("Summer")
+
+      expect(codes).to include(@offer_code2, @universal_code2)
+      expect(codes.size).to eq(2)
+    end
+
+    it "returns empty relation when no codes match the query" do
+      codes = OfferCode.search_by_name("No Match")
+
+      expect(codes).to be_empty
+    end
+
+    it "handles nil query" do
+      codes = OfferCode.search_by_name(nil)
+
+      expect(codes).to be_empty
+    end
+
+    it "handles empty string query" do
+      codes = OfferCode.search_by_name("")
+
+      expect(codes).to be_empty
+    end
+
+    it "strips whitespace from query" do
+      codes = OfferCode.search_by_name("  Black Friday  ")
+
+      expect(codes).to include(@offer_code1, @universal_code1)
+      expect(codes.size).to eq(2)
+    end
+  end
 end

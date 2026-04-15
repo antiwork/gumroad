@@ -1,26 +1,28 @@
 import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
+import { Button } from "$app/components/Button";
+import { Fieldset } from "$app/components/ui/Fieldset";
 
 const AdminResumePayoutsForm = ({
-  user_id,
+  user_external_id,
   payouts_paused_by,
   reason,
   onSuccess,
 }: {
-  user_id: number;
+  user_external_id: string;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   reason: string | null;
   onSuccess: () => void;
 }) => (
   <Form
-    url={Routes.resume_admin_user_payouts_path(user_id)}
+    url={Routes.resume_admin_user_payouts_path(user_external_id)}
     method="POST"
-    confirmMessage={`Are you sure you want to resume payouts for user ${user_id}?`}
+    confirmMessage={`Are you sure you want to resume payouts for user ${user_external_id}?`}
     onSuccess={onSuccess}
   >
     {(isLoading) => (
-      <fieldset>
+      <Fieldset>
         <div className="flex items-end justify-between gap-2">
           {payouts_paused_by === "admin" ? (
             <p>Payouts are currently paused by Gumroad admin. Reason: {reason}</p>
@@ -31,11 +33,11 @@ const AdminResumePayoutsForm = ({
           ) : payouts_paused_by === "user" ? (
             <p>Payouts are currently paused by the creator.</p>
           ) : null}
-          <button type="submit" className="button shrink-0" disabled={isLoading}>
+          <Button type="submit" className="shrink-0" disabled={isLoading}>
             {isLoading ? "Resuming Payouts" : "Resume Payouts"}
-          </button>
+          </Button>
         </div>
-      </fieldset>
+      </Fieldset>
     )}
   </Form>
 );

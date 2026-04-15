@@ -32,7 +32,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     select_tab "Drafts"
     wait_for_ajax
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
     expect(page).to have_text("Edit email")
 
@@ -40,9 +40,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(page).to have_radio_button "Customers only", checked: true
     expect(page).to have_text("Audience 0 / 1", normalize_ws: true)
     expect(page).to have_checked_field("Send email")
-    uncheck "Send email"
-    expect(page).to have_unchecked_field("Post to profile")
-    check "Post to profile"
+    expect(page).to_not have_field("Post to profile")
     within :fieldset, "Bought" do
       expect(page).to have_button("Sample product")
       expect(page).to have_button("Another product")
@@ -104,8 +102,8 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.not_bought_products).to eq([product2.unique_permalink])
     expect(installment.not_bought_variants).to be_nil
     expect(installment.affiliate_products).to be_nil
-    expect(installment.send_emails).to be(false)
-    expect(installment.shown_on_profile).to be(true)
+    expect(installment.send_emails).to be(true)
+    expect(installment.shown_on_profile).to be(false)
     expect(installment.paid_more_than_cents).to eq(200)
     expect(installment.paid_less_than_cents).to eq(1500)
     expect(installment.bought_from).to eq("United States")
@@ -125,12 +123,12 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     select_tab "Drafts"
     wait_for_ajax
 
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
     expect(page).to have_text("Edit email")
 
     expect(page).to have_checked_field("Send email")
-    expect(page).to have_unchecked_field("Post to profile")
+    expect(page).to_not have_field("Post to profile")
     expect(page).to have_field("Title", with: "Original email")
     fill_in "Title", with: "Updated email"
     expect(page).to_not have_field("Publish date")
@@ -150,6 +148,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.ready_to_publish?).to be(false)
 
     # Try scheduling the email with a valid date
+    choose "Everyone"
     check "Post to profile"
     expect(page).to_not have_disclosure("Send")
     select_disclosure "Publish" do
@@ -158,12 +157,11 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       fill_in "Schedule date", with: "01/01/#{Date.today.year.next}\t04:00PM"
       click_on "Schedule"
     end
-    wait_for_ajax
     expect(page).to have_alert("Email successfully scheduled!")
-
-    expect(installment.reload.ready_to_publish?).to be(true)
+    wait_until_true { installment.reload.ready_to_publish? }
+    expect(installment.ready_to_publish?).to be(true)
     expect(installment.installment_rule.to_be_published_at.to_date.to_s).to eq("#{Date.today.year.next}-01-01")
-    expect(installment.name).to eq("Updated email")
+    wait_until_true { installment.name == "Updated email" }
     expect(installment.send_emails).to be(true)
     expect(installment.shown_on_profile).to be(true)
     expect(installment.published?).to be(false)
@@ -178,12 +176,12 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     # Ensure that the "Scheduled" tab is open by default on accessing the /emails page where there's at least one scheduled email
     expect(page).to have_current_path("#{emails_path}/scheduled")
     expect(page).to have_tab_button("Scheduled", open: true)
-    find(:table_row, { name: "Scheduled email" }).click
+    find(:table_row, { "Subject" => "Scheduled email" }).click
     click_on "Edit"
 
     expect(page).to have_current_path("#{emails_path}/#{scheduled_installment.external_id}/edit")
     expect(page).to have_checked_field("Send email")
-    expect(page).to have_unchecked_field("Post to profile")
+    expect(page).to_not have_field("Post to profile")
     expect(page).to have_field("Title", with: "Scheduled email")
     fill_in "Title", with: "Updated scheduled email"
     expect(page).to_not have_field("Publish date")
@@ -207,7 +205,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # Check that the publish date is displayed
     expect(page).to have_current_path("#{emails_path}/published")
-    find(:table_row, { name: "Updated scheduled email" }).click
+    find(:table_row, { "Subject" => "Updated scheduled email" }).click
     click_on "Edit"
     expect(page).to have_checked_field("Send email", disabled: true)
     expect(page).to have_field("Publish date", with: scheduled_installment.published_at.to_date.to_s)
@@ -222,11 +220,13 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(page).to have_text("Schedule an email to be sent exactly when you want.")
 
     select_tab "Drafts"
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
 
     expect(page).to have_current_path("#{emails_path}/#{installment.external_id}/edit")
     expect(page).to have_checked_field("Send email")
+    expect(page).to_not have_field("Post to profile")
+    choose "Everyone"
     expect(page).to have_unchecked_field("Post to profile")
     check "Post to profile"
     expect(page).to have_field("Title", with: "Original email")
@@ -238,9 +238,10 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       expect(page).to have_button("Schedule")
       click_on "Publish now"
     end
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
+    wait_until_true { installment.reload.name == "Updated email" }
 
-    expect(installment.reload.name).to eq("Updated email")
+    expect(installment.name).to eq("Updated email")
     expect(installment.published?).to be(true)
     expect(installment.has_been_blasted?).to be(true)
     expect(installment.ready_to_publish?).to be(false)
@@ -250,7 +251,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # Check that the publish date is displayed
     expect(page).to have_current_path("#{emails_path}/published")
-    find(:table_row, { name: "Updated email" }).click
+    find(:table_row, { "Subject" => "Updated email" }).click
     click_on "Edit"
     expect(page).to have_checked_field("Send email", disabled: true)
     expect(page).to have_field("Publish date", with: installment.published_at.to_date.to_s)
@@ -266,31 +267,26 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
   end
 
   it "allows editing certain fields of a published email" do
-    published_installment = create(:published_installment, name: "Hello", seller: seller, published_at: "2024-01-01 12:00")
+    published_installment = create(:published_installment, name: "Hello", seller: seller, published_at: "2024-01-01 12:00", installment_type: "audience")
     original_published_at = published_installment.published_at
 
     visit emails_path
 
     # Ensure that the "Published" tab is open by default on accessing the /emails page where there are no scheduled emails
     expect(page).to have_tab_button("Published", open: true)
-    find(:table_row, { name: "Hello" }).click
+    find(:table_row, { "Subject" => "Hello" }).click
     click_on "Edit"
 
     expect(page).to have_current_path("#{emails_path}/#{published_installment.external_id}/edit")
     expect(page).to have_text("Edit email")
-    expect(page).to have_radio_button("Customers only", checked: true, disabled: true)
-    expect(page).to have_radio_button("Everyone", checked: false, disabled: true)
+    expect(page).to have_radio_button("Customers only", checked: false, disabled: true)
+    expect(page).to have_radio_button("Everyone", checked: true, disabled: true)
 
     # Until the email is blasted, the "Send email" field is NOT disabled
     expect(page).to have_checked_field("Send email", disabled: false)
     uncheck "Send email"
     expect(page).to have_unchecked_field("Post to profile", disabled: false)
     check "Post to profile"
-    expect(page).to have_field("Paid more than", with: "", disabled: true)
-    expect(page).to have_field("Paid less than", with: "", disabled: true)
-    expect(page).to have_field("After", with: "", disabled: true)
-    expect(page).to have_field("Before", with: "", disabled: true)
-    expect(page).to have_select("From", disabled: true)
     expect(page).to have_checked_field("Allow comments", disabled: false)
     uncheck "Allow comments"
     fill_in "Title", with: "Hello - edit 1"
@@ -348,7 +344,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       expect(page).to have_button("Schedule", disabled: true)
       click_on "Publish now"
     end
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
 
     published_installment.reload
     expect(published_installment.published_at).to be_within(5.second).of(DateTime.current)
@@ -358,7 +354,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # The "Send email" field is disabled after the email is blasted (which happens when the email is published)
     expect(page).to have_current_path("#{emails_path}/published")
-    find(:table_row, { name: "Hello - edit 3" }).click
+    find(:table_row, { "Subject" => "Hello - edit 3" }).click
     click_on "Edit"
     expect(page).to have_checked_field("Send email", disabled: true)
     expect(page).to have_checked_field("Post to profile", disabled: false)
@@ -372,14 +368,13 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     visit emails_path
 
     select_tab "Drafts"
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
 
     # Ensure that it saves the edited fields and sends a preview email
-    fill_in "Title", with: "Updated original email"
+    fill_in "Title", with: "Updated original email", fill_options: { clear: :backspace }
     expect(page).to have_checked_field("Send email")
-    expect(page).to have_unchecked_field("Post to profile")
-    # When only one channel (either "Send email" or "Post to profile") is checked, the "Preview" button is not disclousre
+    expect(page).to_not have_field("Post to profile")
     expect(page).to_not have_disclosure("Preview")
     click_on "Preview"
     wait_for_ajax
@@ -393,7 +388,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.ready_to_publish?).to be(false)
 
     # When both channels are unchecked, it does not allow saving and previewing
-    fill_in "Title", with: "Updated original email - edit 2"
+    fill_in "Title", with: "Updated original email - edit 2", fill_options: { clear: :backspace }
     uncheck "Send email"
     click_on "Preview"
     wait_for_ajax
@@ -403,6 +398,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Updated message")
     sleep 0.5 # Wait for the message editor to update
     expect(installment.reload.name).to eq("Updated original email")
+    choose "Everyone"
     check "Post to profile"
     new_window = window_opened_by do
       click_on "Preview"
@@ -424,12 +420,14 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.ready_to_publish?).to be(false)
 
     click_on "Cancel"
-    find(:table_row, { name: "Updated original email - edit 2" }).click
+    wait_until_true { find(:table_row, { "Subject" => "Updated original email - edit 2" }).present? }
+    find(:table_row, { "Subject" => "Updated original email - edit 2" }).click
     click_on "Edit"
-    wait_for_ajax
+
+    wait_until_true { find_field("Title").present? }
 
     # Schedule the email
-    fill_in "Title", with: "Updated original email - scheduled"
+    fill_in "Title", with: "Updated original email - scheduled", fill_options: { clear: :backspace }
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Scheduled message")
     sleep 0.5 # Wait for the title editor to update
     select_disclosure "Publish" do
@@ -443,10 +441,10 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # When both channels are checked, the "Preview" button is disclosure
     expect(page).to have_current_path("#{emails_path}/scheduled")
-    find(:table_row, { name: "Updated original email - scheduled" }).click
+    find(:table_row, { "Subject" => "Updated original email - scheduled" }).click
     click_on "Edit"
     check "Send email"
-    fill_in "Title", with: "Updated original email - scheduled - edit 2"
+    fill_in "Title", with: "Updated original email - scheduled - edit 2", fill_options: { clear: :backspace }
     select_disclosure "Preview" do
       click_on "Preview Email"
     end
@@ -456,13 +454,13 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(installment.reload.name).to eq("Updated original email - scheduled - edit 2")
 
     # Publish the email
-    fill_in "Title", with: "Updated original email - published"
+    fill_in "Title", with: "Updated original email - published", fill_options: { clear: :backspace }
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Published message")
     sleep 0.5 # Wait for the message editor to update
     select_disclosure "Publish" do
       click_on "Publish now"
     end
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
 
     expect(installment.reload.name).to eq("Updated original email - published")
     expect(installment.message).to eq("<p>Published message</p>")
@@ -474,12 +472,12 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     # Preview the published post in a new window
     expect(page).to have_current_path("#{emails_path}/published")
-    find(:table_row, { name: "Updated original email - published" }).click
+    find(:table_row, { "Subject" => "Updated original email - published" }).click
     click_on "Edit"
     expect(page).to have_checked_field("Send email", disabled: true)
     expect(page).to have_checked_field("Post to profile", disabled: false)
     expect(page).to have_field("Publish date", with: installment.published_at.to_date.to_s)
-    fill_in "Title", with: "Updated original email - published - edit 2"
+    fill_in "Title", with: "Updated original email - published - edit 2", fill_options: { clear: :backspace }
     set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Published message 2")
     sleep 0.5 # Wait for the message editor to update
     new_window = window_opened_by do
@@ -503,10 +501,9 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     visit "#{emails_path}/#{follower_installment.external_id}/edit"
 
     expect(page).to have_radio_button("Followers only", checked: true)
-    fill_in "Title", with: "Updated Follower Post"
+    fill_in "Title", with: "Updated Follower Post", fill_options: { clear: :backspace }
     click_on "Save"
-    wait_for_ajax
-
+    wait_until_true { follower_installment.reload.product_files_archives.alive.any? }
     expect(follower_installment.reload.product_files_archives.alive.sole.url.split("/").last).to eq("Updated_Follower_Post.zip")
   end
 
@@ -514,15 +511,13 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     visit "#{emails_path}/#{installment.external_id}/edit"
 
     expect(page).to have_radio_button("Customers only", checked: true)
-    expect(page).to have_unchecked_field("Post to profile")
-    expect(page).to_not have_text("You currently have no sections in your profile to display this")
-    expect(page).to_not have_text("The post will be shown in the selected profile sections once it is published.")
-
-    check "Post to profile"
+    expect(page).to_not have_field("Post to profile")
     expect(page).to_not have_text("You currently have no sections in your profile to display this")
     expect(page).to_not have_text("The post will be shown in the selected profile sections once it is published.")
 
     choose "Everyone"
+    expect(page).to have_unchecked_field("Post to profile")
+    check "Post to profile"
     expect(page).to have_text("You currently have no sections in your profile to display this, create one here")
     expect(page).to_not have_text("The post will be shown in the selected profile sections once it is published.")
 
@@ -550,12 +545,12 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
       click_on "Publish now"
     end
     wait_for_ajax
-    expect(page).to have_alert(text: "Email successfully published!")
+    expect(page).to have_alert(text: "Email successfully sent!")
 
     expect(section1.reload.shown_posts).to be_empty
     expect(section2.reload.shown_posts).to eq([installment.id])
 
-    find(:table_row, { name: "Original email" }).click
+    find(:table_row, { "Subject" => "Original email" }).click
     click_on "Edit"
     expect(page).to have_unchecked_field("Posts section 1")
     expect(page).to have_checked_field("Unnamed section")

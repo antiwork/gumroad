@@ -4,6 +4,8 @@ import { CustomButtonTextOption } from "$app/parsers/product";
 
 import { getCtaName } from "$app/components/Product/CtaButton";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
 
 export const CustomButtonTextOptionInput = <T extends CustomButtonTextOption>({
   value,
@@ -19,14 +21,14 @@ export const CustomButtonTextOptionInput = <T extends CustomButtonTextOption>({
   if (!options[0]) return null;
 
   return (
-    <fieldset>
-      <label htmlFor={uid}>Call to action</label>
+    <Fieldset>
+      <Label htmlFor={uid}>Call to action</Label>
       <TypeSafeOptionSelect
         id={uid}
         value={value ?? options[0]}
         onChange={onChange}
         options={options.map((option) => ({ id: option, label: getCtaName(option) }))}
       />
-    </fieldset>
+    </Fieldset>
   );
 };

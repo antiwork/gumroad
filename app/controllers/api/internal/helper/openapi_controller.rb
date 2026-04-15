@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseController
-  before_action :authorize_helper_token!
-
   def index
     render json: {
       openapi: "3.1.0",
@@ -28,6 +26,9 @@ class Api::Internal::Helper::OpenapiController < Api::Internal::Helper::BaseCont
       paths: {
         "/users/create_appeal": {
           post: Api::Internal::Helper::UsersController::CREATE_USER_APPEAL_OPENAPI,
+        },
+        "/users/create_comment": {
+          post: Api::Internal::Helper::UsersController::CREATE_COMMENT_OPENAPI,
         },
         "/users/send_reset_password_instructions": {
           post: Api::Internal::Helper::UsersController::SEND_RESET_PASSWORD_INSTRUCTIONS_OPENAPI,

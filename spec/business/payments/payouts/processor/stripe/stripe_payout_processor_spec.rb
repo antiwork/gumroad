@@ -103,7 +103,7 @@ describe StripePayoutProcessor, :vcr do
 
     describe "instant payouts" do
       it "returns true when the user has an eligible balance" do
-        expect(described_class.is_user_payable(@u1, 10_01, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(true)
+        expect(described_class.is_user_payable(@u1, 100_01, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(true)
       end
 
       it "returns false when the user has a balance above the maximum instant payout amount" do
@@ -111,7 +111,7 @@ describe StripePayoutProcessor, :vcr do
       end
 
       it "returns false when the user has a balance below the minimum instant payout amount" do
-        expect(described_class.is_user_payable(@u1, 9_99, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(false)
+        expect(described_class.is_user_payable(@u1, 99_99, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(false)
       end
     end
 
@@ -261,6 +261,67 @@ describe StripePayoutProcessor, :vcr do
 
     it "sets the amount as the sum of the balances" do
       expect(payment.amount_cents).to eq(30_00)
+    end
+  end
+
+  describe "prepare_payment_and_set_amount when merchant_account is nil" do
+    let(:user) { create(:user) }
+    let(:payment) { create(:payment, user:, currency: nil, amount_cents: nil) }
+    let(:balance) { create(:balance, user:, merchant_account: create(:merchant_account, user:)) }
+
+    before do
+      allow(described_class).to receive(:get_payout_details).and_return([nil, [balance], []])
+    end
+
+    it "returns an error and marks the payment as failed" do
+      errors = described_class.prepare_payment_and_set_amount(payment, [balance])
+
+      expect(errors).to eq(["Cannot process payout: no valid merchant account found for user."])
+      expect(payment.reload.state).to eq("failed")
+    end
+  end
+
+  describe "prepare_payment_and_set_amount when balance_transaction is nil" do
+    let(:user) { create(:user) }
+    let(:merchant_account) { create(:merchant_account, user:, charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+    let!(:gumroad_merchant_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    end
+    let(:balance_held_by_gumroad) { create(:balance, user:, merchant_account: gumroad_merchant_account, state: "processing", amount_cents: 10_00, holding_amount_cents: 10_00) }
+    let(:payment) do
+      payment = create(:payment, user:, currency: nil, amount_cents: nil, state: "processing")
+      payment.balances << balance_held_by_gumroad
+      payment
+    end
+
+    let(:internal_transfer) do
+      transfer = double
+      allow(transfer).to receive(:id).and_return("tr_1234")
+      allow(transfer).to receive(:destination_payment).and_return("py_1234")
+      transfer
+    end
+
+    let(:destination_payment) do
+      dest = double
+      allow(dest).to receive(:id).and_return("py_1234")
+      allow(dest).to receive(:balance_transaction).and_return(nil)
+      dest
+    end
+
+    before do
+      merchant_account
+      user.reload
+      allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).and_return(internal_transfer)
+      allow(Stripe::Charge).to receive(:retrieve).and_return(destination_payment)
+    end
+
+    it "raises an error and marks the payment as failed" do
+      expect do
+        described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
+      end.to raise_error(RuntimeError, /Balance transaction not yet available/)
+      payment.reload
+      expect(payment.state).to eq("failed")
     end
   end
 
@@ -489,8 +550,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           described_class.perform_payment(payment)
         end
@@ -540,8 +601,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Food was not tasty.", "food_bad"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           described_class.perform_payment(payment)
         end
@@ -625,8 +686,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Transfer).to receive(:create).once.and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           errors = described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           expect(errors).to be_present
         end
@@ -681,8 +742,8 @@ describe StripePayoutProcessor, :vcr do
             expect(Stripe::Payout).to(receive(:create).once.and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents")))
           end
 
-          it "notifies bugsnag" do
-            expect(Bugsnag).to receive(:notify)
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify)
             described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
             described_class.perform_payment(payment)
           end
@@ -872,8 +933,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           described_class.perform_payment(payment)
         end
@@ -923,8 +984,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Food was not tasty.", "food_bad"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           described_class.perform_payment(payment)
         end
@@ -1008,8 +1069,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Transfer).to receive(:create).once.and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           errors = described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           expect(errors).to be_present
         end
@@ -1064,8 +1125,8 @@ describe StripePayoutProcessor, :vcr do
             expect(Stripe::Payout).to(receive(:create).once.and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents")))
           end
 
-          it "notifies bugsnag" do
-            expect(Bugsnag).to receive(:notify)
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify)
             described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
             described_class.perform_payment(payment)
           end
@@ -1261,8 +1322,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           described_class.perform_payment(payment)
         end
@@ -1361,8 +1422,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Transfer).to receive(:create).once.and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           errors = described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           expect(errors).to be_present
         end
@@ -1426,8 +1487,8 @@ describe StripePayoutProcessor, :vcr do
             allow(Stripe::Charge).to(receive(:retrieve).and_call_original)
           end
 
-          it "notifies bugsnag" do
-            expect(Bugsnag).to receive(:notify)
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify)
             described_class.perform_payment(payment)
           end
 
@@ -1614,8 +1675,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           described_class.perform_payment(payment)
         end
@@ -1714,8 +1775,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Transfer).to receive(:create).once.and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           errors = described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           expect(errors).to be_present
         end
@@ -1779,8 +1840,8 @@ describe StripePayoutProcessor, :vcr do
             allow(Stripe::Charge).to(receive(:retrieve).and_call_original)
           end
 
-          it "notifies bugsnag" do
-            expect(Bugsnag).to receive(:notify)
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify)
             described_class.perform_payment(payment)
           end
 
@@ -1967,8 +2028,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           described_class.perform_payment(payment)
         end
@@ -2067,8 +2128,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Transfer).to receive(:create).once.and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           errors = described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           expect(errors).to be_present
         end
@@ -2132,8 +2193,8 @@ describe StripePayoutProcessor, :vcr do
             allow(Stripe::Charge).to(receive(:retrieve).and_call_original)
           end
 
-          it "notifies bugsnag" do
-            expect(Bugsnag).to receive(:notify)
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify)
             described_class.perform_payment(payment)
           end
 
@@ -2321,8 +2382,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Payout).to receive(:create).and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           described_class.perform_payment(payment)
         end
@@ -2421,8 +2482,8 @@ describe StripePayoutProcessor, :vcr do
           allow(Stripe::Transfer).to receive(:create).once.and_raise(Stripe::InvalidRequestError.new("Invalid request", "amount_cents"))
         end
 
-        it "notifies bugsnag" do
-          expect(Bugsnag).to receive(:notify)
+        it "notifies error tracker" do
+          expect(ErrorNotifier).to receive(:notify)
           errors = described_class.prepare_payment_and_set_amount(payment, payment.balances.to_a)
           expect(errors).to be_present
         end
@@ -2486,8 +2547,8 @@ describe StripePayoutProcessor, :vcr do
             allow(Stripe::Charge).to(receive(:retrieve).and_call_original)
           end
 
-          it "notifies bugsnag" do
-            expect(Bugsnag).to receive(:notify)
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify)
             described_class.perform_payment(payment)
           end
 
@@ -3349,7 +3410,7 @@ describe StripePayoutProcessor, :vcr do
                 payment.save!
               end
 
-              it "notifies Bugsnag that a previously successful reversal has changed state to failed" do
+              it "notifies error tracker that a previously successful reversal has changed state to failed" do
                 expect do
                   described_class.handle_stripe_event(stripe_event, stripe_connect_account_id:)
                 end.to raise_error(RuntimeError, /The case needs manual review/)

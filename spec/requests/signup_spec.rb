@@ -16,7 +16,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
     expect do
       click_on "Create account"
       expect(page).to have_selector("iframe[title*=recaptcha]", visible: false)
-      wait_for_ajax
       expect(page).to have_content("Dashboard")
     end.to change(User, :count).by(1)
   end
@@ -30,7 +29,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
 
     expect do
       click_on "Create account"
-      wait_for_ajax
       expect(page).to have_content("Dashboard")
     end.not_to change(User, :count)
   end
@@ -43,7 +41,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
     fill_in "Password", with: "someotherpassword"
     click_on "Create account"
 
-    wait_for_ajax
     expect(page).to have_alert("An account already exists with this email.")
     expect(page).to have_button("Create account")
   end
@@ -58,7 +55,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
 
     expect do
       click_on "Create account"
-      wait_for_ajax
       expect(page).to have_content("Dashboard")
     end.to change(User, :count).by(1)
 
@@ -82,8 +78,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
       fill_in "Password", with: user.password
       click_on "Create account"
 
-      wait_for_ajax
-
       expect(page).to have_content("Authorize #{@oauth_application.name} to use your account?")
     end
   end
@@ -91,18 +85,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
   describe "Social signup" do
     before do
       OmniAuth.config.test_mode = true
-    end
-
-    it "supports signing up with Facebook" do
-      OmniAuth.config.mock_auth[:facebook] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/facebook_omniauth.json")))
-
-      visit signup_path
-
-      expect do
-        click_button "Facebook"
-        click_button "Login" # 2FA
-        expect(page).to have_content("We're here to help you get paid for your work.")
-      end.to change(User, :count).by(1)
     end
 
     it "supports signing up with Google" do
@@ -114,17 +96,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
         click_button "Google"
         click_button "Login" # 2FA
         expect(page).to have_content("We're here to help you get paid for your work.")
-      end.to change(User, :count).by(1)
-    end
-
-    it "supports signing up with X" do
-      OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new(JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json")))
-
-      visit signup_path
-
-      expect do
-        click_button "X"
-        expect(page).to have_alert(text: "Please enter an email address!")
       end.to change(User, :count).by(1)
     end
 

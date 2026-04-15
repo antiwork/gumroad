@@ -9,7 +9,8 @@ type AdminProductCommentsProps = {
 
 const AdminProductComments = ({ product }: AdminProductCommentsProps) => (
   <AdminCommentableComments
-    endpoint={Routes.admin_product_comments_path(product.id, { format: "json" })}
+    count={product.comments_count}
+    endpoint={Routes.admin_product_comments_path(product.external_id, { format: "json" })}
     commentableType="product"
   />
 );

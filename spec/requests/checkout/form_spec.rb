@@ -172,11 +172,12 @@ describe("Checkout form page", type: :system, js: true) do
 
       find_field("Allow customers to add tips to their orders", checked: false).check
       in_preview do
-        expect(page).to have_text("Add a tip")
-        expect(page).to have_radio_button("0%", checked: true)
-        expect(page).to have_radio_button("10%", checked: false)
+        expect(page).to have_text("Add a tip?")
+        expect(page).to have_radio_button("No Tip", checked: true)
+        expect(page).to have_radio_button("15%", checked: false)
         expect(page).to have_radio_button("20%", checked: false)
-        expect(page).to have_radio_button("Other", checked: false)
+        expect(page).to have_radio_button("25%", checked: false)
+        expect(page).to have_field("Custom tip", placeholder: "Custom tip")
       end
       click_on "Save changes"
       expect(page).to have_alert(text: "Changes saved!")
@@ -184,11 +185,12 @@ describe("Checkout form page", type: :system, js: true) do
 
       refresh
       in_preview do
-        expect(page).to have_text("Add a tip")
-        expect(page).to have_radio_button("0%", checked: true)
-        expect(page).to have_radio_button("10%", checked: false)
+        expect(page).to have_text("Add a tip?")
+        expect(page).to have_radio_button("No Tip", checked: true)
+        expect(page).to have_radio_button("15%", checked: false)
         expect(page).to have_radio_button("20%", checked: false)
-        expect(page).to have_radio_button("Other", checked: false)
+        expect(page).to have_radio_button("25%", checked: false)
+        expect(page).to have_field("Custom tip", placeholder: "Custom tip")
       end
       find_field("Allow customers to add tips to their orders", checked: true).uncheck
       click_on "Save changes"
@@ -206,6 +208,7 @@ describe("Checkout form page", type: :system, js: true) do
         visit checkout_form_path
 
         in_preview do
+          expect(page).to have_selector("h4", text: "Product 1")
           within_cart_item "Product 1" do
             expect(page).to have_text("Seller")
             expect(page).to have_text("Qty: 1")

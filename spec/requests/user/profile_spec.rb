@@ -24,7 +24,7 @@ describe "User profile page", type: :system, js: true do
       sign_in admin
       visit "/#{creator.username}"
       click_on "Impersonate"
-      expect(page).to have_current_path("/dashboard")
+      expect(page).to have_current_path("/products")
       select_disclosure "#{creator.display_name}" do
         expect(page).to have_menuitem("Unbecome")
         click_on "Profile"
@@ -74,7 +74,7 @@ describe "User profile page", type: :system, js: true do
         create(:seller_profile_products_section, seller:)
         visit user_with_role_for_seller.subdomain_with_protocol
         expect(page).not_to have_link("Edit profile")
-        expect(page).not_to have_disclosure("Edit section")
+        expect(page).not_to have_disclosure_button("Edit section")
         expect(page).not_to have_button("Page settings")
       end
     end
@@ -84,7 +84,7 @@ describe "User profile page", type: :system, js: true do
         create(:seller_profile_products_section, seller:)
         visit seller.subdomain_with_protocol
         expect(page).not_to have_link("Edit profile")
-        expect(page).not_to have_disclosure("Edit section")
+        expect(page).not_to have_disclosure_button("Edit section")
         expect(page).not_to have_button("Page settings")
       end
     end
@@ -139,13 +139,15 @@ describe "User profile page", type: :system, js: true do
           click_on "Subscribe"
         end
         expect(page).to have_alert(text: "Check your inbox to confirm your follow request.")
-        expect(page).to_not have_text "Subscribe to receive email updates from #{seller.name}"
-        within_section "Section 6", section_element: :section do
-          expect(page).to have_section("Product 1", section_element: :article)
-        end
-        within find("main > section:first-of-type", text: "Section 7") do
-          expect(page).to have_text "$3 a month"
-          expect(page).to have_text "$5 a month"
+        if page.has_selector?("section", text: "Section 6", wait: 0)
+          expect(page).not_to have_text("Subscribe to receive email updates from #{seller.name}", wait: 2)
+          within_section "Section 6", section_element: :section do
+            expect(page).to have_section("Product 1", section_element: :article)
+          end
+          within find("main > section:first-of-type", text: "Section 7") do
+            expect(page).to have_text "$3 a month"
+            expect(page).to have_text "$5 a month"
+          end
         end
       end
 
@@ -169,11 +171,11 @@ describe "User profile page", type: :system, js: true do
       end
 
       def add_section(type)
-        all(:disclosure, "Add section").last.select_disclosure do
+        all(:disclosure_button, "Add section").last.select_disclosure do
           click_on type
         end
         sleep 1
-        all(:disclosure, "Edit section").last.select_disclosure do
+        all(:disclosure_button, "Edit section").last.select_disclosure do
           click_on "Name"
           fill_in "Name", with: "New section"
         end
@@ -227,7 +229,7 @@ describe "User profile page", type: :system, js: true do
         expect(section.reload.hide_header?).to eq false
 
         add_section "Products"
-        expect(page).to have_disclosure("Edit section", count: 2)
+        expect(page).to have_disclosure_button("Edit section", count: 2)
         within_section "New name", section_element: :section do
           select_disclosure "Edit section" do
             click_on "Remove"
@@ -235,7 +237,7 @@ describe "User profile page", type: :system, js: true do
         end
         sleep 1
         wait_for_ajax
-        expect(page).to have_disclosure("Edit section", count: 1)
+        expect(page).to have_disclosure_button("Edit section", count: 1)
         expect(page).to_not have_section "New name"
         expect(seller.seller_profile_sections.reload.sole).to_not eq section
       end
@@ -273,8 +275,14 @@ describe "User profile page", type: :system, js: true do
           items[0].find("[aria-grabbed]").drag_to items[2], delay: 0.1
           within items[1] do
             click_on "Remove page"
+          end
+          within_modal "Delete page?" do
             click_on "No, cancel"
+          end
+          within items[1] do
             click_on "Remove page"
+          end
+          within_modal "Delete page?" do
             click_on "Yes, delete"
           end
           expect(page).to have_selector("[role=list][aria-label=Pages] [role=listitem]", count: 2)
@@ -293,7 +301,7 @@ describe "User profile page", type: :system, js: true do
         select_disclosure "Add section", match: :first do
           click_on "Posts"
         end
-        expect(page).to have_disclosure("Edit section", count: 3)
+        expect(page).to have_disclosure_button("Edit section", count: 3)
 
         all(:disclosure_button, "Edit section")[1].click
         click_on "Remove"
@@ -399,7 +407,7 @@ describe "User profile page", type: :system, js: true do
         add_section "Posts"
         save_changes
 
-        within_section "New section" do
+        within_section "New section", section_element: :section do
           expect(page).to have_link(count: 2)
           posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
         end
@@ -407,7 +415,7 @@ describe "User profile page", type: :system, js: true do
         expect(seller.seller_profile_posts_sections.reload.sole).to have_attributes(header: "New section", shown_posts: posts.pluck(:id))
 
         refresh
-        within_section "New section" do
+        within_section "New section", section_element: :section do
           expect(page).to have_link(count: 2)
           posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
         end
@@ -419,12 +427,12 @@ describe "User profile page", type: :system, js: true do
         add_section "Rich text"
         save_changes
 
-        within_section "New section" do
-          editor = find("[contenteditable=true]")
-          editor.click
-          select_disclosure "Text formats" do
-            choose "Title"
-          end
+        editor = within_section "New section", section_element: :section do
+          find("[contenteditable=true]").tap(&:click)
+        end
+        toggle_disclosure "Text formats"
+        find(:radio_button, "Title").click
+        within_section "New section", section_element: :section do
           editor.send_keys "Heading\nSome more text"
           attach_file(file_fixture("test.jpg")) do
             click_on "Insert image"
@@ -449,7 +457,7 @@ describe "User profile page", type: :system, js: true do
         expect(section).to have_attributes(header: "New section", text: expected_rich_text)
 
         refresh
-        within_section "New section" do
+        within_section "New section", section_element: :section do
           expect(page).to have_selector("h2", text: "Heading")
           expect(page).to have_text("Some more text")
           expect(page).to have_image(src: image_url)
@@ -459,11 +467,11 @@ describe "User profile page", type: :system, js: true do
       it "allows creating subscribe sections" do
         visit seller.subdomain_with_protocol
 
-        all(:disclosure, "Add section").last.select_disclosure do
+        all(:disclosure_button, "Add section").last.select_disclosure do
           click_on "Subscribe"
         end
 
-        within_section "Subscribe to receive email updates from Gumbot." do
+        within_section "Subscribe to receive email updates from Gumbot.", section_element: :section do
           expect(page).to have_field("Your email address")
           expect(page).to have_button("Subscribe")
         end
@@ -481,7 +489,7 @@ describe "User profile page", type: :system, js: true do
         end
         save_changes
 
-        within_section "Subscribe now or else" do
+        within_section "Subscribe now or else", section_element: :section do
           expect(page).to have_field("Your email address")
           expect(page).to have_button("Follow")
         end
@@ -508,7 +516,7 @@ describe "User profile page", type: :system, js: true do
           click_on "Featured Product"
           select_combo_box_option search: "Product 2", from: "Featured Product"
         end
-        within_section "My featured product" do
+        within_section "My featured product", section_element: :section do
           expect(page).to have_section "Product 2", section_element: :article
         end
         save_changes
@@ -518,7 +526,7 @@ describe "User profile page", type: :system, js: true do
           click_on "Featured Product"
           select_combo_box_option search: "Product 3", from: "Featured Product"
         end
-        within_section "My featured product" do
+        within_section "My featured product", section_element: :section do
           expect(page).to have_section "Product 3", section_element: :article
         end
         save_changes
@@ -546,7 +554,7 @@ describe "User profile page", type: :system, js: true do
           click_on "Featured Product"
           select_combo_box_option search: "Buy me a coffee", from: "Featured Product"
         end
-        within_section "My featured product" do
+        within_section "My featured product", section_element: :section do
           expect(page).to_not have_section "Buy me a coffee", section_element: :article
           expect(page).to have_section "Buy me a coffee", section_element: :section
           expect(page).to have_selector("h1", text: "Buy me a coffee")

@@ -21,6 +21,7 @@ describe PaginatedInstallmentsPresenter do
 
         expect(result[:pagination]).to eq(count: 2, next: 2)
         expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment2).props)
+        expect(result[:has_posts]).to be(true)
       end
     end
 
@@ -76,6 +77,17 @@ describe PaginatedInstallmentsPresenter do
 
       it "raises an error" do
         expect { presenter.props }.to raise_error(ArgumentError, "Invalid type")
+      end
+    end
+
+    context "when seller has no installments" do
+      let(:seller_without_installments) { create(:user) }
+      let(:presenter) { described_class.new(seller: seller_without_installments, type:, page:, query:) }
+
+      it "returns has_posts as false" do
+        result = presenter.props
+
+        expect(result[:has_posts]).to be(false)
       end
     end
 

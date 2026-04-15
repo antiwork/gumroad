@@ -1,7 +1,12 @@
 import { useForm, usePage } from "@inertiajs/react";
 import React from "react";
 
+import { Button } from "$app/components/Button";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Label } from "$app/components/ui/Label";
+import { Select } from "$app/components/ui/Select";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type PageProps = {
   authenticity_token: string;
@@ -42,12 +47,15 @@ const SuspendUsers = () => {
 
   return (
     <form onSubmit={handleSubmit}>
-      <section>
+      <FormSection
+        header={
+          <>
+            To suspend users for terms of service violations, please enter IDs of those users separated by comma or
+            newline.
+          </>
+        }
+      >
         <input type="hidden" name="authenticity_token" value={form.data.authenticity_token} />
-        <header>
-          To suspend users for terms of service violations, please enter IDs of those users separated by comma or
-          newline.
-        </header>
 
         <CodeSnippet caption="Example with comma-separated items">3322133, 3738461, 4724778</CodeSnippet>
 
@@ -59,7 +67,7 @@ const SuspendUsers = () => {
           4724778
         </CodeSnippet>
 
-        <textarea
+        <Textarea
           id="identifiers"
           name="suspend_users[identifiers]"
           placeholder="Enter user IDs here"
@@ -68,8 +76,8 @@ const SuspendUsers = () => {
           onChange={setIdentifiers}
         />
 
-        <label htmlFor="reason">Reason</label>
-        <select
+        <Label htmlFor="reason">Reason</Label>
+        <Select
           id="reason"
           name="suspend_users[reason]"
           required
@@ -82,10 +90,10 @@ const SuspendUsers = () => {
               {reason}
             </option>
           ))}
-        </select>
+        </Select>
 
-        <label htmlFor="additionalNotes">Notes</label>
-        <textarea
+        <Label htmlFor="additionalNotes">Notes</Label>
+        <Textarea
           id="additionalNotes"
           name="suspend_users[additional_notes]"
           placeholder="Additional info for support team"
@@ -94,10 +102,10 @@ const SuspendUsers = () => {
           onChange={setAdditionalNotes}
         />
 
-        <button type="submit" className="button primary">
+        <Button type="submit" color="primary">
           Suspend users
-        </button>
-      </section>
+        </Button>
+      </FormSection>
     </form>
   );
 };

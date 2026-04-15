@@ -3,10 +3,9 @@
 require "spec_helper"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
+require "inertia_rails/rspec"
 
-describe LibraryController, :vcr do
-  render_views
-
+describe LibraryController, :vcr, type: :controller, inertia: true do
   it_behaves_like "inherits from Sellers::BaseController"
 
   let(:user) { create(:user) }
@@ -22,29 +21,34 @@ describe LibraryController, :vcr do
     end
 
     describe "normal products" do
-      before do
-        user.sales << create(:purchase, link: create(:product))
-      end
+      let!(:visible_purchase) { create(:purchase, purchaser: user, link: create(:product, name: "Visible Product")) }
 
-      it "renders successfully" do
+      it "renders Library/Index with Inertia" do
         get :index
         expect(response).to be_successful
+        expect(inertia.component).to eq("Library/Index")
+        expect(inertia.props[:results]).to be_an(Array)
+        expect(inertia.props[:results].map { |r| r.dig(:product, :name) }).to include("Visible Product")
       end
 
       it "doesn't show refunded purchases" do
-        purchase = create(:purchase, purchaser: user)
-        purchase.update_column(:stripe_refunded, true)
+        refunded_purchase = create(:purchase, purchaser: user, link: create(:product, name: "Refunded Product"))
+        refunded_purchase.update_column(:stripe_refunded, true)
         get :index
         expect(response).to be_successful
-        expect(response.body).to_not include purchase.link.name
+        product_names = inertia.props[:results].map { |r| r.dig(:product, :name) }
+        expect(product_names).to include("Visible Product")
+        expect(product_names).to_not include("Refunded Product")
       end
 
       it "doesn't show charged back purchases" do
-        purchase = create(:purchase, purchaser: user)
-        purchase.update_column(:chargeback_date, Time.current)
+        chargeback_purchase = create(:purchase, purchaser: user, link: create(:product, name: "Chargeback Product"))
+        chargeback_purchase.update_column(:chargeback_date, Time.current)
         get :index
         expect(response).to be_successful
-        expect(response.body).to_not include purchase.link.name
+        product_names = inertia.props[:results].map { |r| r.dig(:product, :name) }
+        expect(product_names).to include("Visible Product")
+        expect(product_names).to_not include("Chargeback Product")
       end
 
       it "doesn't show gift sender purchases" do
@@ -53,7 +57,8 @@ describe LibraryController, :vcr do
         create(:gift, gifter_email: "sahil@gumroad.com", giftee_email: "sahil2@gumroad.com", link_id: link.id, gifter_purchase_id: purchase.id)
         get :index
         expect(response).to be_successful
-        expect(response.body).to_not include link.name
+        product_names = inertia.props[:results].map { |r| r.dig(:product, :name) }
+        expect(product_names).to_not include(link.name)
       end
     end
 
@@ -65,6 +70,7 @@ describe LibraryController, :vcr do
       it "renders successfully" do
         get :index
         expect(response).to be_successful
+        expect(inertia.component).to eq("Library/Index")
       end
     end
 
@@ -158,8 +164,8 @@ describe LibraryController, :vcr do
       expect do
         patch :archive, params: { id: purchase.external_id }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to redirect_to(library_path)
+        expect(flash[:notice]).to eq("Product archived!")
       end.to change { purchase.reload.is_archived }.from(false).to(true)
     end
   end
@@ -176,8 +182,8 @@ describe LibraryController, :vcr do
       expect do
         patch :unarchive, params: { id: purchase.external_id }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to redirect_to(library_path)
+        expect(flash[:notice]).to eq("Product unarchived!")
       end.to change { purchase.reload.is_archived }.from(true).to(false)
     end
   end
@@ -194,8 +200,8 @@ describe LibraryController, :vcr do
       expect do
         patch :delete, params: { id: purchase.external_id }
 
-        expect(response).to be_successful
-        expect(response.parsed_body["success"]).to eq(true)
+        expect(response).to redirect_to(library_path)
+        expect(flash[:notice]).to eq("Product deleted!")
       end.to change { purchase.reload.is_deleted_by_buyer }.from(false).to(true)
     end
   end

@@ -3,7 +3,7 @@
 class Payouts
   extend ActionView::Helpers::NumberHelper
 
-  MIN_AMOUNT_CENTS = 10_00
+  MIN_AMOUNT_CENTS = 100_00
   PAYOUT_TYPE_STANDARD = "standard"
   PAYOUT_TYPE_INSTANT = "instant"
 
@@ -11,7 +11,8 @@ class Payouts
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
     unless user.compliant? || from_admin
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was not compliant.") if add_comment
+      reason = user.not_reviewed? ? "under review" : "not compliant"
+      user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was #{reason}.") if add_comment
       return false
     end
 
@@ -41,6 +42,11 @@ class Payouts
       end
 
       amount_payable = user.instantly_payable_unpaid_balance_cents_up_to_date(date)
+
+      if amount_payable < MIN_AMOUNT_CENTS && add_comment && user.unpaid_balance_cents_up_to_date(date) >= MIN_AMOUNT_CENTS
+        user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because funds are still settling. This should resolve within 1-2 days.")
+        return false
+      end
     end
 
     processor_types = processor_type ? [processor_type] : ::PayoutProcessorType.all

@@ -1312,6 +1312,15 @@ describe User, :vcr do
           expect(@user_with_avatar.resized_avatar_url(size: 256)).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{variant}")
         end
       end
+
+      context "when avatar is attached but file is missing from storage" do
+        it "returns URL to default avatar" do
+          allow(@user.avatar).to receive(:attached?).and_return(true)
+          allow(@user.avatar).to receive(:variant).and_raise(ActiveStorage::FileNotFoundError)
+
+          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+        end
+      end
     end
 
     describe "avatar_url" do
@@ -1725,6 +1734,30 @@ describe User, :vcr do
       expect(@user.suspend_for_fraud!(author_id: @admin_user.id)).to be(true)
     end
 
+    it "suspends the user directly from not_reviewed state" do
+      expect(@user.user_risk_state).to eq("not_reviewed")
+      expect(@user.suspend_for_fraud!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_fraud?).to be(true)
+    end
+
+    it "suspends the user directly from compliant state" do
+      @user.update!(user_risk_state: "compliant")
+      expect(@user.suspend_for_tos_violation!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_tos_violation?).to be(true)
+    end
+
+    it "suspends for fraud from flagged_for_tos_violation state" do
+      @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)
+      expect(@user.suspend_for_fraud!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_fraud?).to be(true)
+    end
+
+    it "suspends for tos_violation from flagged_for_fraud state" do
+      @user.flag_for_fraud!(author_id: @admin_user.id)
+      expect(@user.suspend_for_tos_violation!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_tos_violation?).to be(true)
+    end
+
     it "is expected to call invalidate_active_sessions! if user is suspended_for_fraud" do
       expect(@user).to receive(:invalidate_active_sessions!)
 
@@ -1870,10 +1903,16 @@ describe User, :vcr do
         expect(@product_1.reload.banned_at).to be(nil)
       end
 
-      it "suspends all the others sellers accounts if suspended for fraud" do
-        expect(@user).to receive(:suspend_sellers_other_accounts)
+      it "suspends all the others sellers accounts if suspended for fraud", :sidekiq_inline do
+        expect(@user).to receive(:suspend_sellers_other_accounts).and_call_original
+        user_3 = create(:user, payment_address: "sameuser@gmail.com")
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
+        expect(user_3.reload.suspended?).to be(true)
+        expect(@user_2.reload.suspended?).to be(true)
+        expect(user_3.comments.count).to eq(1)
+        expect(@user_2.comments.count).to eq(1)
+        expect(@user.reload.comments.count).to eq(2)
       end
 
       it "does not suspend all the others sellers accounts if suspended for tos violation" do
@@ -1883,14 +1922,22 @@ describe User, :vcr do
       end
 
       it "re-enables all the sellers related accounts if the seller is marked compliant" do
+        user_3 = create(:user, payment_address: "sameuser@gmail.com", user_risk_state: "suspended_for_fraud")
+        expect(@user).to receive(:enable_sellers_other_accounts).and_call_original
         @user_2.flag_for_fraud(author_id: @admin_user.id)
         @user_2.suspend_for_fraud(author_id: @admin_user.id)
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(@user_2.reload.suspended?).to be(true)
+        expect(@user_2.comments.count).to eq(2)
+        expect(user_3.reload.suspended?).to be(true)
 
         @user.mark_compliant(author_id: @admin_user.id)
-        expect(@user_2.reload.suspended?).to be(false)
+        expect(user_3.reload.compliant?).to be(true)
+        expect(@user_2.reload.compliant?).to be(true)
+        expect(user_3.comments.count).to eq(1)
+        expect(@user_2.comments.count).to eq(3)
+        expect(@user.comments.count).to eq(3)
       end
 
       it "re-enables all the sellers links if the seller is marked compliant" do
@@ -2528,6 +2575,23 @@ describe User, :vcr do
     end
   end
 
+  describe "#update_alive_cart_email" do
+    it "syncs the cart email to the user's new email when user email is updated" do
+      user = create(:user, email: "old@example.com")
+      cart = create(:cart, user:, email: "old@example.com")
+
+      expect(cart.reload.email).to eq("old@example.com")
+
+      user.update!(email: "new@example.com")
+
+      expect(user).to receive(:update_alive_cart_email).and_call_original
+
+      user.confirm
+
+      expect(cart.reload.email).to eq("new@example.com")
+    end
+  end
+
   describe "#make_affiliate_of_the_matching_approved_affiliate_requests" do
     let(:requester_email) { "requester@example.com" }
     let!(:approved_affiliate_request_one) { create(:affiliate_request, email: requester_email, state: :approved) }
@@ -2903,55 +2967,23 @@ describe User, :vcr do
       @user = create(:user)
     end
 
-    context "when tier pricing is enabled" do
+    context "when the seller has $100K revenue" do
       before do
-        allow_any_instance_of(User).to receive(:tier_pricing_enabled?).and_return(true)
+        @user.update!(tier_state: 100_000)
       end
 
-      context "when the seller has $100K revenue" do
-        before do
-          @user.update!(tier_state: 100_000)
-        end
-
-        it "returns true" do
-          expect(@user.auto_transcode_videos?).to eq true
-        end
-      end
-
-      context "when the seller less than $100K revenue" do
-        before do
-          @user.update!(tier_state: 1_000)
-        end
-
-        it "returns false" do
-          expect(@user.auto_transcode_videos?).to eq false
-        end
+      it "returns true" do
+        expect(@user.auto_transcode_videos?).to eq true
       end
     end
 
-    context "when tier pricing is disabled" do
+    context "when the seller less than $100K revenue" do
       before do
-        allow_any_instance_of(User).to receive(:tier_pricing_enabled?).and_return(false)
+        @user.update!(tier_state: 1_000)
       end
 
-      context "when the seller has $100K revenue" do
-        before do
-          allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_000)
-        end
-
-        it "returns true" do
-          expect(@user.auto_transcode_videos?).to eq true
-        end
-      end
-
-      context "when the seller less than $100K revenue" do
-        before do
-          allow(@user).to receive(:sales_cents_total).and_return(1_000)
-        end
-
-        it "returns false" do
-          expect(@user.auto_transcode_videos?).to eq false
-        end
+      it "returns false" do
+        expect(@user.auto_transcode_videos?).to eq false
       end
     end
   end
@@ -3112,6 +3144,16 @@ describe User, :vcr do
 
       expect(@user.reload.purchasing_power_parity_excluded_product_external_ids).to eq([@product_1.external_id])
       expect(@product_2.reload.purchasing_power_parity_disabled).to eq(false)
+    end
+
+    it "updates PPP flag on a published bundle with no bundle products" do
+      bundle = create(:product, user: @user, is_bundle: true, purchase_disabled_at: nil)
+
+      expect do
+        @user.update_purchasing_power_parity_excluded_products!([bundle.external_id])
+      end.not_to raise_error
+
+      expect(bundle.reload.purchasing_power_parity_disabled).to eq(true)
     end
   end
 
@@ -3354,8 +3396,8 @@ describe User, :vcr do
     let(:user) { create(:user) }
 
     it "returns the payout threshold" do
-      user.payout_threshold_cents = 2000
-      expect(user.minimum_payout_amount_cents).to eq(2000)
+      user.payout_threshold_cents = 20_000
+      expect(user.minimum_payout_amount_cents).to eq(20_000)
     end
 
     describe "when the user is in a cross-border payout country" do
@@ -3363,9 +3405,9 @@ describe User, :vcr do
       let!(:compliance_info) { create(:user_compliance_info_korea, user:) }
 
       it "returns the higher of payout threshold and country minimum" do
-        expect(user.minimum_payout_amount_cents).to eq(3474)
-        user.payout_threshold_cents = 4000
-        expect(user.minimum_payout_amount_cents).to eq(4000)
+        expect(user.minimum_payout_amount_cents).to eq(Payouts::MIN_AMOUNT_CENTS)
+        user.payout_threshold_cents = 20_000
+        expect(user.minimum_payout_amount_cents).to eq(20_000)
       end
     end
   end
@@ -3807,6 +3849,50 @@ describe User, :vcr do
       allow(user).to receive(:sales_cents_total).and_return(0)
 
       expect(user.eligible_for_ai_product_generation?).to eq(true)
+    end
+  end
+
+  describe ".id?" do
+    context "with valid numeric values" do
+      it "returns true for integer 1" do
+        expect(User.id?(1)).to be(true)
+      end
+
+      it "returns true for string '1'" do
+        expect(User.id?("1")).to be(true)
+      end
+
+      it "returns true for large numeric string" do
+        expect(User.id?("7269625173515")).to be(true)
+      end
+
+      it "returns true for large integer" do
+        expect(User.id?(7269625173515)).to be(true)
+      end
+    end
+
+    context "with invalid non-numeric values" do
+      it "returns false for string '1gum'" do
+        expect(User.id?("1gum")).to be(false)
+      end
+
+      it "returns false for string with special characters" do
+        expect(User.id?("1test@gumroad.com")).to be(false)
+      end
+    end
+
+    context "with blank values" do
+      it "returns false for nil" do
+        expect(User.id?(nil)).to be(false)
+      end
+
+      it "returns false for empty string" do
+        expect(User.id?("")).to be(false)
+      end
+
+      it "returns false for blank string" do
+        expect(User.id?("   ")).to be(false)
+      end
     end
   end
 end

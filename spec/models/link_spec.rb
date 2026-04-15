@@ -474,6 +474,29 @@ describe Link, :vcr do
     end
 
 
+    describe "#purchase_type=" do
+      it "accepts valid purchase_type values" do
+        link.purchase_type = :buy_only
+        expect(link.purchase_type).to eq("buy_only")
+
+        link.purchase_type = :rent_only
+        expect(link.purchase_type).to eq("rent_only")
+
+        link.purchase_type = :buy_and_rent
+        expect(link.purchase_type).to eq("buy_and_rent")
+      end
+
+      it "defaults to buy_only when given an invalid value" do
+        link.purchase_type = "buy"
+        expect(link.purchase_type).to eq("buy_only")
+      end
+
+      it "does not raise ArgumentError for invalid values" do
+        expect { link.purchase_type = "invalid" }.not_to raise_error
+        expect(link.purchase_type).to eq("buy_only")
+      end
+    end
+
     describe "delete_unused_prices" do
       let!(:product) { create(:product, purchase_type: :buy_and_rent, price_cents: 500, rental_price_cents: 100) }
       let(:buy_price) { product.prices.is_buy.first }
@@ -1747,16 +1770,17 @@ describe Link, :vcr do
     end
   end
 
-  describe "#save_custom_view_content_button_text" do
+  describe "#custom_view_content_button_text" do
     it "saves successfully" do
-      link.save_custom_view_content_button_text("Custom Name")
+      link.custom_view_content_button_text = "Custom Name"
+      link.save!
       expect(link.custom_view_content_button_text).to eq "Custom Name"
     end
 
     it "errors if text is longer than 26 characters" do
       product = create(:product)
       text = "This text is over 26 characters and it can't be saved."
-      product.save_custom_view_content_button_text(text)
+      product.custom_view_content_button_text = text
       expect do
         product.save!
       end.to raise_error(ActiveRecord::RecordInvalid)
@@ -2453,6 +2477,10 @@ describe Link, :vcr do
       expect(@product.long_url(recommended_by: "abc")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}?recommended_by=abc"
     end
 
+    it "appends the 'code' query parameter if one is present" do
+      expect(@product.long_url(code: "BLACKFRIDAY2025")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}?code=BLACKFRIDAY2025"
+    end
+
     it "does not append the 'recommended_by' query parameter if the value is blank" do
       expect(@product.long_url(recommended_by: "")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}"
       expect(@product.long_url(recommended_by: " ")).to eq "#{@product.user.subdomain_with_protocol}/l/#{@product.general_permalink}"
@@ -2795,6 +2823,15 @@ describe Link, :vcr do
       expect(public_file2).to be_alive
       expect(public_file2.scheduled_for_deletion_at).to be_within(5.seconds).of(10.minutes.from_now)
       expect(_another_product_public_file.reload.scheduled_for_deletion_at).to be_nil
+    end
+
+    it "deletes a tiered membership even when tier categories are in an inconsistent state" do
+      product = create(:membership_product_with_preset_tiered_pricing)
+      product.tier_category.mark_deleted!
+      product.reload
+
+      expect { product.delete! }.not_to raise_error
+      expect(product.reload.deleted?).to be(true)
     end
   end
 
@@ -4458,6 +4495,24 @@ describe Link, :vcr do
         expect(product.is_unpublished_by_admin).to eq true
       end
     end
+
+    context "when a tiered membership has an invalid tier structure" do
+      let(:membership) { create(:product, is_tiered_membership: true) }
+
+      before do
+        # Put the membership in an invalid state by deleting all variant categories
+        membership.variant_categories.alive.each { |vc| vc.update!(deleted_at: Time.current) }
+      end
+
+      it "allows unpublishing despite invalid tier structure" do
+        expect { membership.unpublish! }.not_to raise_error
+        expect(membership.reload.purchase_disabled_at).to be_present
+      end
+
+      it "still validates tier structure on other updates" do
+        expect { membership.update!(name: "New Name") }.to raise_error(Link::LinkInvalid, "Memberships should only have one Tier version category.")
+      end
+    end
   end
 
   describe "#alive?" do
@@ -4792,6 +4847,24 @@ describe Link, :vcr do
             product.toggle_community_chat!(false)
           end.not_to change { product.reload.community_chat_enabled }
         end.not_to change { product.communities.count }
+      end
+    end
+  end
+
+  describe "#cart_item" do
+    context "when product is a tiered membership and the variant record is missing" do
+      let(:product) { create(:membership_product) }
+
+      before do
+        product.tier_category.variants.each { |v| v.update!(deleted_at: Time.current) }
+      end
+
+      it "falls back to the product prices instead of raising NoMethodError" do
+        result = product.cart_item({})
+
+        expect(result).to be_a(Hash)
+        expect(result).to have_key(:option)
+        expect(result).to have_key(:price)
       end
     end
   end

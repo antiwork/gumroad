@@ -2,6 +2,7 @@ import * as React from "react";
 
 import FileUtils from "$app/utils/file";
 
+import { buttonVariants } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type UploadBoxProps = { onUploadFiles: (domFiles: File[]) => void };
@@ -23,9 +24,9 @@ export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
   };
 
   return (
-    <label className="button primary">
+    <label className={buttonVariants({ size: "default", color: "primary" })}>
       <input
-        className="subtitles-file"
+        className="subtitles-file sr-only"
         type="file"
         name="file"
         accept={acceptedSubtitleExtensions}

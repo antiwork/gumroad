@@ -21,10 +21,10 @@ class Exports::Payouts::Annual < Exports::Payouts::Csv
 
     tempfile = Tempfile.open(File.join(Rails.root, "tmp", "#{@user.id}_#{@year}_annual.csv"),
                              encoding: "UTF-8")
-    CSV.open(tempfile, "wb") do |csv|
+    CsvSafe.open(tempfile, "wb") do |csv|
       csv << HEADERS
       payments_scope.find_each do |payment|
-        @payment_id = payment.id
+        @payment = payment
         data = payout_data
         totals = calculate_totals(data, from_totals: totals)
 

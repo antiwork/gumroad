@@ -1,4 +1,4 @@
-import cx from "classnames";
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import {
@@ -9,6 +9,9 @@ import {
 } from "$app/utils/currency";
 
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Pill } from "$app/components/ui/Pill";
 
 export const PriceInput = React.forwardRef<
   HTMLInputElement,
@@ -59,9 +62,9 @@ export const PriceInput = React.forwardRef<
     };
 
     return (
-      <div className={cx("input", { disabled })}>
+      <InputGroup disabled={disabled}>
         {currencyCodeSelector ? (
-          <div className="pill pill-outline select">
+          <Pill className="relative -ml-2 shrink-0 cursor-pointer">
             {getLongCurrencySymbol(currencyCode)}
             <TypeSafeOptionSelect
               name="Currency"
@@ -71,12 +74,14 @@ export const PriceInput = React.forwardRef<
                 id: currencyCode,
                 label: getLongCurrencySymbol(currencyCode),
               }))}
+              className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
             />
-          </div>
+            <ChevronDown className="ml-auto size-5" />
+          </Pill>
         ) : (
-          <div className="pill">{getLongCurrencySymbol(currencyCode)}</div>
+          <Pill className="-ml-2 shrink-0">{getLongCurrencySymbol(currencyCode)}</Pill>
         )}
-        <input
+        <Input
           type="text"
           inputMode="decimal"
           id={id}
@@ -92,7 +97,7 @@ export const PriceInput = React.forwardRef<
           ref={ref}
         />
         {suffix}
-      </div>
+      </InputGroup>
     );
   },
 );

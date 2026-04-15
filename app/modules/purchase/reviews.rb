@@ -14,6 +14,7 @@ module Purchase::Reviews
       where(purchase_state: COUNTS_REVIEWS_STATES).
         exclude_not_charged_except_free_trial.
         not_fully_refunded.
+        not_partially_refunded_bundle_product_purchase.
         not_chargedback.
         not_subscription_or_original_purchase.
         not_is_gift_sender_purchase.
@@ -50,6 +51,7 @@ module Purchase::Reviews
       allowed &= !not_charged_and_not_free_trial?
       allowed &= not_is_gift_sender_purchase
       allowed &= !stripe_refunded?
+      allowed &= !stripe_partially_refunded? || !is_bundle_product_purchase?
       allowed &= chargeback_date.nil?
       allowed &= subscription_id.nil? || is_original_subscription_purchase? unless permit_recurring_charges
       allowed &= !is_access_revoked || paid?

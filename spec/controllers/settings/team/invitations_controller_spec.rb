@@ -68,6 +68,21 @@ describe Settings::Team::InvitationsController do
       expect(response.parsed_body["success"]).to eq(true)
       expect(team_invitation.reload.role_admin?).to eq(true)
     end
+
+    context "when the invitation email belongs to an existing team member" do
+      before do
+        member = create(:user, email: team_invitation.email)
+        create(:team_membership, seller:, user: member)
+      end
+
+      it "returns an error instead of raising an exception" do
+        put :update, params: { id: team_invitation.external_id, team_invitation: { role: TeamMembership::ROLE_ADMIN } }, as: :json
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["error_message"]).to eq("Email is associated with an existing team member")
+        expect(team_invitation.reload.role_marketing?).to eq(true)
+      end
+    end
   end
 
   describe "DELETE destroy" do

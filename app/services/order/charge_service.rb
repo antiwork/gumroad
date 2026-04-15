@@ -19,9 +19,13 @@ class Order::ChargeService
     # All remaining purchases need to be charged that are still in progress
     # Create a combined charge for all purchases belonging to the same seller
     # i.e. one charge per seller
-    purchases_by_seller = order.purchases.group_by(&:seller_id)
+    # Exclude purchases that already have a payment intent (e.g. subscription restarts
+    # requiring SCA — they are confirmed later via Order::ConfirmService)
+    purchases_by_seller = order.purchases.reject { _1.processor_payment_intent.present? }.group_by(&:seller_id)
 
     purchases_by_seller.each do |seller_id, seller_purchases|
+      self.charge_intent = nil
+      self.setup_intent = nil
       charge = order.charges.create!(seller_id:)
       seller_purchases.each do |purchase|
         purchase.charge = charge
@@ -75,7 +79,7 @@ class Order::ChargeService
     ensure
       # Ensure all purchases of the charge are transitioned to a terminal state
       # and each line item has a response
-      ensure_all_purchases_processed(non_free_seller_purchases)
+      ensure_all_purchases_processed(non_free_seller_purchases || seller_purchases.select(&:in_progress?))
     end
 
     charge_responses
@@ -231,6 +235,8 @@ class Order::ChargeService
   end
 
   def ensure_all_purchases_processed(purchases)
+    return if purchases.nil?
+
     purchases.each do |purchase|
       line_item_uid = params[:line_items].find do |line_item|
         purchase.link.unique_permalink == line_item[:permalink] &&
@@ -247,7 +253,10 @@ class Order::ChargeService
       # unless there's an SCA verification pending in which case all purchases
       # are expected to be in progress, and we schedule a job to check them back later.
       if purchase.in_progress?
-        if charge_intent&.requires_action? || setup_intent&.requires_action?
+        if purchase.free_purchase? || (purchase.is_test_purchase? && !purchase.is_preorder_authorization?)
+          Purchase::MarkSuccessfulService.new(purchase).perform
+          purchase.handle_recommended_purchase if purchase.was_product_recommended
+        elsif charge_intent&.requires_action? || setup_intent&.requires_action?
           # Check back later to see if the purchase has been completed. If not, transition to a failed state.
           FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
         else
@@ -263,7 +272,7 @@ class Order::ChargeService
           requires_card_action: true,
           client_secret: charge_intent.client_secret,
           order: {
-            id: order.external_id,
+            id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: order.charges.last.merchant_account.is_a_stripe_connect_account? ? order.charges.last.merchant_account.charge_processor_merchant_id : nil
           }
         }
@@ -273,7 +282,7 @@ class Order::ChargeService
           requires_card_setup: true,
           client_secret: setup_intent.client_secret,
           order: {
-            id: order.external_id,
+            id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: order.purchases.last.merchant_account.is_a_stripe_connect_account? ? order.purchases.last.merchant_account.charge_processor_merchant_id : nil
           }
         }

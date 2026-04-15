@@ -1,23 +1,22 @@
-import uniqBy from "lodash/uniqBy";
+import { Cart, Gift, Link, Pencil, Trash } from "@boxicons/react";
+import { uniqBy } from "lodash-es";
 import * as React from "react";
-import { createCast } from "ts-safe-cast";
 
 import { fetchPaginatedWishlistItems, deleteWishlistItem } from "$app/data/wishlists";
 import { CardProduct } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { RecurrenceId, recurrenceNames } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
-import { register } from "$app/utils/serverComponentUtil";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { Card } from "$app/components/Product/Card";
 import { Option } from "$app/components/Product/ConfigurationSelector";
 import { trackCtaClick } from "$app/components/Product/CtaButton";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 import { FollowButton } from "$app/components/Wishlist/FollowButton";
 import { WishlistEditor } from "$app/components/Wishlist/WishlistEditor";
@@ -51,7 +50,7 @@ export type WishlistProps = {
   discover_opted_out: boolean | null;
   checkout_enabled: boolean;
   items: WishlistItem[];
-  isDiscover?: boolean;
+  layout?: "discover" | "profile";
   pagination: {
     count: number;
     items: number;
@@ -125,9 +124,9 @@ const WishlistItemCard = ({
                   disabled={isDeleting}
                   aria-label="Remove this product"
                   onClick={() => void destroy()}
-                  className="grid p-4"
+                  className="grid cursor-pointer p-4 all-unset"
                 >
-                  <Icon name="trash2" />
+                  <Trash className="size-5" />
                 </button>
               </WithTooltip>
             </div>
@@ -137,10 +136,10 @@ const WishlistItemCard = ({
               <WithTooltip position="top" tip="Gift this product">
                 <a
                   aria-label="Gift this product"
-                  href={Routes.checkout_index_url({ params: { gift_wishlist_product: item.id } })}
+                  href={Routes.checkout_url({ params: { gift_wishlist_product: item.id } })}
                   className="grid p-4"
                 >
-                  <Icon name="gift-fill" />
+                  <Gift pack="filled" className="size-5" />
                 </a>
               </WithTooltip>
             </div>
@@ -163,7 +162,7 @@ const WishlistItemCard = ({
                   })
                 }
               >
-                <Icon name="cart3-fill" />
+                <Cart pack="filled" className="size-5" />
               </NavigationButton>
             </WithTooltip>
           </div>
@@ -185,7 +184,7 @@ export const Wishlist = ({
   discover_opted_out,
   checkout_enabled,
   items: initialItems,
-  isDiscover,
+  layout,
   pagination: initialPagination,
 }: WishlistProps) => {
   const [name, setName] = React.useState(initialName);
@@ -224,88 +223,98 @@ export const Wishlist = ({
     return () => observer.disconnect();
   }, [pagination, items]);
 
+  const headerActions = (
+    <>
+      <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
+        <Button size="icon" aria-label="Copy link">
+          <Link className="size-5" />
+        </Button>
+      </CopyToClipboard>
+      {can_edit ? (
+        <Button onClick={() => setIsEditing(true)}>
+          <Pencil className="size-5" />
+          Edit
+        </Button>
+      ) : null}
+      {can_follow ? <FollowButton wishlistId={id} wishlistName={name} initialValue={following} /> : null}
+      <WithTooltip tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}>
+        <NavigationButton
+          color="accent"
+          href={Routes.checkout_url({ params: { wishlist: id } })}
+          disabled={!checkout_enabled}
+        >
+          <Cart pack="filled" className="size-5" />
+          Buy this wishlist
+        </NavigationButton>
+      </WithTooltip>
+    </>
+  );
+
   return (
     <>
-      <PageHeader
-        className={isDiscover ? "lg:px-16" : ""}
-        title={name}
-        actions={
-          <>
-            <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={url}>
-              <Button aria-label="Copy link">
-                <Icon name="link" />
-              </Button>
-            </CopyToClipboard>
-            {can_edit ? (
-              <Button onClick={() => setIsEditing(true)}>
-                <Icon name="pencil" />
-                Edit
-              </Button>
-            ) : null}
-            {can_follow ? <FollowButton wishlistId={id} wishlistName={name} initialValue={following} /> : null}
-            <WithTooltip
-              tip={checkout_enabled ? null : "None of the products on this wishlist are available for purchase"}
-            >
-              <NavigationButton
-                color="accent"
-                href={Routes.checkout_index_url({ params: { wishlist: id } })}
-                disabled={!checkout_enabled}
-              >
-                <Icon name="cart3-fill" />
-                Buy this wishlist
-              </NavigationButton>
-            </WithTooltip>
-          </>
-        }
-      >
-        {user ? (
-          <a style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} href={user.profile_url}>
-            <img className="user-avatar" src={user.avatar_url} style={{ width: "var(--spacer-5)" }} />
-            <h4>{user.name}</h4>
-          </a>
-        ) : null}
-        {description ? <h4>{description}</h4> : null}
-      </PageHeader>
-      <section className={classNames("p-4 md:p-8", isDiscover && "lg:px-16")}>
-        <ProductCardGrid ref={gridRef}>
-          {items.map((item) => (
-            <WishlistItemCard
-              key={item.id}
-              wishlistId={id}
-              item={item}
-              canEdit={can_edit}
-              onDelete={() => {
-                setItems((prev) => prev.filter((i) => i.id !== item.id));
-                // Go back to first page to avoid empty last page
-                setPagination(initialPagination);
-              }}
+      {layout === "profile" ? (
+        <header className="border-b border-border p-4 md:p-8">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="line-clamp-2 text-2xl">{name}</h1>
+              <div className="flex gap-2">{headerActions}</div>
+            </div>
+            {description ? <p>{description}</p> : null}
+          </div>
+        </header>
+      ) : (
+        <PageHeader title={name} actions={headerActions}>
+          {user ? (
+            <a className="flex items-center gap-2" href={user.profile_url}>
+              <Avatar className="w-6" src={user.avatar_url} />
+              <h4>{user.name}</h4>
+            </a>
+          ) : null}
+          {description ? <h4>{description}</h4> : null}
+        </PageHeader>
+      )}
+      <section className={classNames("p-4 md:p-8", { "lg:px-16": layout === "discover" })}>
+        <div className={classNames({ "mx-auto w-full max-w-6xl": layout === "profile" })}>
+          <ProductCardGrid ref={gridRef}>
+            {items.map((item) => (
+              <WishlistItemCard
+                key={item.id}
+                wishlistId={id}
+                item={item}
+                canEdit={can_edit}
+                onDelete={() => {
+                  setItems((prev) => prev.filter((i) => i.id !== item.id));
+                  // Go back to first page to avoid empty last page
+                  setPagination(initialPagination);
+                }}
+              />
+            ))}
+          </ProductCardGrid>
+
+          {items.length === 0 ? (
+            <Placeholder>
+              <figure>
+                <Gift pack="filled" className="size-5" />
+              </figure>
+              {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
+            </Placeholder>
+          ) : null}
+
+          {isEditing ? (
+            <WishlistEditor
+              id={id}
+              name={name}
+              setName={setName}
+              description={description}
+              setDescription={setDescription}
+              isDiscoverable={!discover_opted_out}
+              onClose={() => setIsEditing(false)}
             />
-          ))}
-        </ProductCardGrid>
-
-        {items.length === 0 ? (
-          <Placeholder>
-            <figure>
-              <Icon name="gift-fill" />
-            </figure>
-            {can_edit ? "Products from your wishlist will be displayed here" : "This wishlist is currently empty"}
-          </Placeholder>
-        ) : null}
-
-        {isEditing ? (
-          <WishlistEditor
-            id={id}
-            name={name}
-            setName={setName}
-            description={description}
-            setDescription={setDescription}
-            isDiscoverable={!discover_opted_out}
-            onClose={() => setIsEditing(false)}
-          />
-        ) : null}
+          ) : null}
+        </div>
       </section>
     </>
   );
 };
 
-export default register({ component: Wishlist, propParser: createCast() });
+export default Wishlist;

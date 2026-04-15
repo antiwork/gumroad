@@ -159,177 +159,93 @@ describe HelperUserInfoService do
       end
     end
 
-    context "seller comments" do
+    context "structured comments" do
       let(:service) { described_class.new(email: user.email) }
 
-      context "when user has payout notes" do
-        it "includes payout notes from admin" do
-          create(:comment,
-                 commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
-                 author_id: GUMROAD_ADMIN_ID,
-                 content: "Payout delayed due to verification"
-          )
+      it "returns structured comment objects with external_id" do
+        comment = create(:comment,
+                         commentable: user,
+                         comment_type: Comment::COMMENT_TYPE_NOTE,
+                         content: "Test note",
+                         created_at: 1.hour.ago
+        )
 
-          result = service.customer_info
-          expect(result[:metadata]["Comments"]).to include("Payout Note: Payout delayed due to verification")
-        end
-
-        it "excludes payout notes not from admin" do
-          other_user = create(:user)
-          create(:comment,
-                 commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
-                 author_id: other_user.id,
-                 content: "Non-admin payout note"
-          )
-
-          result = service.customer_info
-          comments = result[:metadata]["Comments"] || []
-          expect(comments).not_to include("Payout Note: Non-admin payout note")
-        end
+        result = service.customer_info
+        expect(result[:comments]).to be_an(Array)
+        expect(result[:comments].first).to include(
+          id: comment.external_id,
+          content: "Test note",
+          comment_type: Comment::COMMENT_TYPE_NOTE
+        )
+        expect(result[:comments].first[:author_name]).to be_present
+        expect(result[:comments].first[:created_at]).to be_present
       end
 
-      context "when user has risk notes" do
-        it "includes all risk state comment types" do
-          Comment::RISK_STATE_COMMENT_TYPES.each_with_index do |comment_type, index|
-            create(:comment,
-                   commentable: user,
-                   comment_type: comment_type,
-                   content: "Risk note #{index + 1}",
-                   created_at: index.minutes.ago
-            )
-          end
+      it "returns comments in descending order" do
+        create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE, content: "Older", created_at: 2.hours.ago)
+        create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE, content: "Newer", created_at: 1.hour.ago)
 
-          result = service.customer_info
-          comments = result[:metadata]["Comments"] || []
-          Comment::RISK_STATE_COMMENT_TYPES.each_with_index do |_, index|
-            expect(comments).to include("Risk Note: Risk note #{index + 1}")
-          end
-        end
-
-        it "orders risk notes by creation time" do
-          create(:comment,
-                 commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_FLAGGED,
-                 content: "Older risk note",
-                 created_at: 2.hours.ago
-          )
-          create(:comment,
-                 commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_COUNTRY_CHANGED,
-                 content: "Newer risk note",
-                 created_at: 1.hour.ago
-          )
-
-          result = service.customer_info
-          comments = result[:metadata]["Comments"] || []
-          older_index = comments.find_index { |comment| comment.include?("Older risk note") }
-          newer_index = comments.find_index { |comment| comment.include?("Newer risk note") }
-
-          expect(older_index).to be < newer_index
-        end
+        result = service.customer_info
+        expect(result[:comments].first[:content]).to eq("Newer")
+        expect(result[:comments].last[:content]).to eq("Older")
       end
 
-      context "when user has suspension notes" do
-        context "when user is suspended" do
-          let(:user) { create(:tos_user) }
+      it "caps at STRUCTURED_COMMENTS_LIMIT" do
+        (described_class::STRUCTURED_COMMENTS_LIMIT + 1).times { |i| create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE, content: "Note #{i}", created_at: i.minutes.ago) }
 
-          it "includes suspension notes" do
-            create(:comment,
-                   commentable: user,
-                   comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
-                   content: "Account suspended for policy violation"
-            )
-
-            result = service.customer_info
-            expect(result[:metadata]["Comments"]).to include("Suspension Note: Account suspended for policy violation")
-          end
-        end
-
-        context "when user is not suspended" do
-          before { allow(user).to receive(:suspended?).and_return(false) }
-
-          it "excludes suspension notes" do
-            create(:comment,
-                   commentable: user,
-                   comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
-                   content: "Account suspended for policy violation"
-            )
-
-            result = service.customer_info
-            comments = result[:metadata]["Comments"] || []
-            expect(comments).not_to include("Suspension Note: Account suspended for policy violation")
-          end
-        end
+        result = service.customer_info
+        expect(result[:comments].length).to eq(described_class::STRUCTURED_COMMENTS_LIMIT)
       end
 
-      context "when user has other comment types" do
-        it "includes general comments" do
-          create(:comment,
-                 commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_COUNTRY_CHANGED,
-                 content: "General user comment"
-          )
+      it "returns all comment types" do
+        create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_NOTE, content: "A note")
+        create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE, content: "A payout note", author_id: GUMROAD_ADMIN_ID)
+        create(:comment, commentable: user, comment_type: Comment::COMMENT_TYPE_FLAGGED, content: "A risk note")
 
-          result = service.customer_info
-          expect(result[:metadata]["Comments"]).to include("Comment: General user comment")
-        end
-
-        it "includes custom comment types" do
-          create(:comment,
-                 commentable: user,
-                 comment_type: "custom_type",
-                 content: "Custom comment type"
-          )
-
-          result = service.customer_info
-          expect(result[:metadata]["Comments"]).to include("Comment: Custom comment type")
-        end
+        result = service.customer_info
+        types = result[:comments].map { |c| c[:comment_type] }
+        expect(types).to include(Comment::COMMENT_TYPE_NOTE, Comment::COMMENT_TYPE_PAYOUT_NOTE, Comment::COMMENT_TYPE_FLAGGED)
       end
 
-      context "when user has multiple comment types" do
-        it "includes all comments in chronological order" do
-          create(:comment,
-                 commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
-                 author_id: GUMROAD_ADMIN_ID,
-                 content: "Payout note",
-                 created_at: 3.hours.ago
-          )
-          create(:comment,
-                 commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_FLAGGED,
-                 content: "Risk note",
-                 created_at: 2.hours.ago
-          )
-          create(:comment,
-                 commentable: user,
-                 comment_type: Comment::COMMENT_TYPE_COUNTRY_CHANGED,
-                 content: "General note",
-                 created_at: 1.hour.ago
-          )
-
-          result = service.customer_info
-          comments = result[:metadata]["Comments"] || []
-          expect(comments).to include("Payout Note: Payout note")
-          expect(comments).to include("Risk Note: Risk note")
-          expect(comments).to include("Comment: General note")
-
-          payout_index = comments.find_index { |comment| comment.include?("Payout Note: Payout note") }
-          risk_index = comments.find_index { |comment| comment.include?("Risk Note: Risk note") }
-          general_index = comments.find_index { |comment| comment.include?("Comment: General note") }
-
-          expect(payout_index).to be < risk_index
-          expect(risk_index).to be < general_index
-        end
+      it "returns empty array when no user exists" do
+        result = described_class.new(email: "nobody@example.com").customer_info
+        expect(result[:comments]).to eq([])
       end
 
-      context "when user has no comments" do
-        it "does not include any comment information" do
-          result = service.customer_info
-          expect(result[:metadata]).not_to have_key("Comments")
-        end
+      it "returns empty array when user is found via support_email only" do
+        user.update!(support_email: "support@example.com")
+        result = described_class.new(email: "support@example.com").customer_info
+        expect(result[:comments]).to eq([])
+      end
+
+      it "returns empty array for soft-deleted user" do
+        user.mark_deleted!
+        result = described_class.new(email: user.email).customer_info
+        expect(result[:comments]).to eq([])
+      end
+    end
+
+    context "can_add_comment" do
+      it "is true when user exists by primary email" do
+        result = described_class.new(email: user.email).customer_info
+        expect(result[:can_add_comment]).to be true
+      end
+
+      it "is false when no user exists" do
+        result = described_class.new(email: "nobody@example.com").customer_info
+        expect(result[:can_add_comment]).to be false
+      end
+
+      it "is false when user is found via support_email only" do
+        user.update!(support_email: "support@example.com")
+        result = described_class.new(email: "support@example.com").customer_info
+        expect(result[:can_add_comment]).to be false
+      end
+
+      it "is false for soft-deleted user" do
+        user.mark_deleted!
+        result = described_class.new(email: user.email).customer_info
+        expect(result[:can_add_comment]).to be false
       end
     end
   end

@@ -57,7 +57,8 @@ describe "Purchasing power parity", type: :system, js: true do
         expect(page).to have_selector("[role='status']", text: "This product supports purchasing power parity. Because you're located in Latvia, the price has been discounted by 51% to $4.90.")
         add_to_cart(@product)
         check_out(@product, zip_code: nil, error: "In order to apply a purchasing power parity discount, you must use a card issued in the country you are in. Please try again with a local card, or remove the discount during checkout.")
-        visit checkout_index_path
+        wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(email: "test@gumroad.com").exists? }
+        visit checkout_path
         ppp_pill = find_button("Purchasing power parity discount")
         ppp_pill.hover
         expect(ppp_pill).to have_tooltip(text: "This discount is applied based on the cost of living in your country.")
@@ -177,10 +178,10 @@ describe "Purchasing power parity", type: :system, js: true do
           click_on "Manage"
         end
 
-        expect(page).to have_current_path(magic_link_subscription_path(purchase.subscription.external_id))
+        expect(page).to have_current_path(new_subscription_magic_link_path(purchase.subscription.external_id))
         expect(page).to have_text "Send magic link"
         click_on "Send magic link"
-        expect(page).to have_current_path(magic_link_subscription_path(purchase.subscription.external_id))
+        expect(page).to have_current_path(new_subscription_magic_link_path(purchase.subscription.external_id))
         expect(page).to have_text "We've sent a link to"
 
         visit manage_subscription_path(purchase.subscription.external_id, token: purchase.reload.subscription.token)
@@ -192,8 +193,8 @@ describe "Purchasing power parity", type: :system, js: true do
     it "applies the PPP discount" do
       visit @membership.long_url
       expect(page).to have_selector("[role='status']", text: "This product supports purchasing power parity. Because you're located in Latvia, the price has been discounted by 51% to $1.47.")
-      expect(page).to have_radio_button("First Tier", text: "$3 $1.47 a month")
-      expect(page).to have_radio_button("Second Tier", text: "$5 $2.45 a month")
+      expect(page).to have_radio_button("First Tier", text: /\$3\s+\$1\.47 a month/)
+      expect(page).to have_radio_button("Second Tier", text: /\$5\s+\$2\.45 a month/)
 
       add_to_cart(@membership, option: "First Tier")
       check_out(@membership, credit_card: { number: "4000004280000005" }, zip_code: nil)
@@ -207,10 +208,10 @@ describe "Purchasing power parity", type: :system, js: true do
         click_on "Manage"
       end
 
-      expect(page).to have_current_path(magic_link_subscription_path(purchase.subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(purchase.subscription.external_id))
       expect(page).to have_text "Send magic link"
       click_on "Send magic link"
-      expect(page).to have_current_path(magic_link_subscription_path(purchase.subscription.external_id))
+      expect(page).to have_current_path(new_subscription_magic_link_path(purchase.subscription.external_id))
       expect(page).to have_text "We've sent a link to"
 
       visit manage_subscription_path(purchase.subscription.external_id, token: purchase.reload.subscription.token)

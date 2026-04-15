@@ -1,3 +1,4 @@
+import { Paperclip, Pencil, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import FileUtils from "$app/utils/file";
@@ -7,14 +8,14 @@ import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 import { Button } from "$app/components/Button";
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer } from "$app/components/SortableList";
 import { SubtitleList } from "$app/components/SubtitleList";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { SubtitleUploadBox } from "$app/components/SubtitleUploadBox";
-import { Toggle } from "$app/components/Toggle";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
 import { UploadProgress } from "$app/components/useConfigureEvaporate";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -97,8 +98,8 @@ export const FileRow = ({ file }: { file: FileState }) => {
       : null;
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <FileRowContent
           name={file.file_name}
           extension={file.extension}
@@ -117,15 +118,16 @@ export const FileRow = ({ file }: { file: FileState }) => {
             </>
           }
         />
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         {file.is_streamable ? (
-          <Button onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label="Edit">
-            <Icon name="pencil" />
+          <Button size="icon" onClick={() => setIsDrawerOpen(!isDrawerOpen)} aria-label="Edit">
+            <Pencil className="size-5" />
           </Button>
         ) : null}
         <WithTooltip tip={uploadProgress === null ? "Remove" : "Cancel"} position="left">
           <Button
+            size="icon"
             outline
             color="danger"
             aria-label="Remove"
@@ -134,44 +136,46 @@ export const FileRow = ({ file }: { file: FileState }) => {
               filesDispatch({ type: "remove-file", fileId: file.id });
             }}
           >
-            <Icon name="trash2" />
+            <Trash className="size-5" />
           </Button>
         </WithTooltip>
-      </div>
+      </RowActions>
       {isDrawerOpen ? (
-        <Drawer>
-          {file.is_streamable ? (
-            <div className="grid gap-3">
-              <SubtitleList
-                subtitleFiles={file.subtitle_files}
-                onRemoveSubtitle={(subtitleUrl) =>
-                  filesDispatch({ type: "remove-subtitle", fileId: file.id, subtitleUrl })
-                }
-                onCancelSubtitleUpload={(subtitleUrl) => {
-                  uploader?.cancelUpload(uploadingSubtitleFileCancellationKey(file.id, subtitleUrl));
-                  filesDispatch({ type: "remove-subtitle", fileId: file.id, subtitleUrl });
-                }}
-                onChangeSubtitleLanguage={(subtitleUrl, language) =>
-                  filesDispatch({ type: "change-subtitle-language", fileId: file.id, subtitleUrl, language })
-                }
-              />
-              <SubtitleUploadBox
-                onUploadFiles={(subtitleFiles) => {
-                  if (uploadSubtitles) {
-                    uploadSubtitles(file.id, subtitleFiles);
-                  } else {
-                    showAlert(
-                      "Unfortunately, file uploads aren't supported in your browser. Please update to the latest version and try again.",
-                      "error",
-                    );
+        <RowDetails asChild>
+          <Drawer>
+            {file.is_streamable ? (
+              <div className="grid gap-3">
+                <SubtitleList
+                  subtitleFiles={file.subtitle_files}
+                  onRemoveSubtitle={(subtitleUrl) =>
+                    filesDispatch({ type: "remove-subtitle", fileId: file.id, subtitleUrl })
                   }
-                }}
-              />
-            </div>
-          ) : null}
-        </Drawer>
+                  onCancelSubtitleUpload={(subtitleUrl) => {
+                    uploader?.cancelUpload(uploadingSubtitleFileCancellationKey(file.id, subtitleUrl));
+                    filesDispatch({ type: "remove-subtitle", fileId: file.id, subtitleUrl });
+                  }}
+                  onChangeSubtitleLanguage={(subtitleUrl, language) =>
+                    filesDispatch({ type: "change-subtitle-language", fileId: file.id, subtitleUrl, language })
+                  }
+                />
+                <SubtitleUploadBox
+                  onUploadFiles={(subtitleFiles) => {
+                    if (uploadSubtitles) {
+                      uploadSubtitles(file.id, subtitleFiles);
+                    } else {
+                      showAlert(
+                        "Unfortunately, file uploads aren't supported in your browser. Please update to the latest version and try again.",
+                        "error",
+                      );
+                    }
+                  }}
+                />
+              </div>
+            ) : null}
+          </Drawer>
+        </RowDetails>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
@@ -203,24 +207,39 @@ export const EmailAttachments = ({
   return (
     <>
       {files.length > 0 ? (
-        <div role="list" className="rows" aria-label="Files">
+        <Rows role="list" aria-label="Files">
           {files.map((file) => (
             <FileRow key={file.id} file={file} />
           ))}
-        </div>
+        </Rows>
       ) : null}
-      <label className="button primary">
-        <input type="file" name="file" tabIndex={-1} multiple onChange={(e) => onAttachFiles(e.target)} />
-        <Icon name="paperclip" />
-        Attach files
-      </label>
+      <Button color="primary" asChild>
+        <label>
+          <input
+            type="file"
+            name="file"
+            tabIndex={-1}
+            className="sr-only"
+            multiple
+            onChange={(e) => onAttachFiles(e.target)}
+          />
+          <Paperclip className="size-5" />
+          Attach files
+        </label>
+      </Button>
       {hasStreamableFiles ? (
-        <Toggle value={isStreamOnly} onChange={setIsStreamOnly}>
-          Disable file downloads (stream only)
-          <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
-            Learn more
-          </a>
-        </Toggle>
+        <Switch
+          checked={isStreamOnly}
+          onChange={(e) => setIsStreamOnly(e.target.checked)}
+          label={
+            <>
+              Disable file downloads (stream only)
+              <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </>
+          }
+        />
       ) : null}
     </>
   );

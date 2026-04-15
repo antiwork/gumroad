@@ -113,6 +113,7 @@ class Link < ApplicationRecord
   has_many :installments
   has_many :subscriptions
   has_and_belongs_to_many :offer_codes, join_table: "offer_codes_products", foreign_key: "product_id"
+  belongs_to :default_offer_code, class_name: "OfferCode", optional: true
   has_many :transcoded_videos
   has_many :imported_customers
   has_many :licenses
@@ -197,6 +198,7 @@ class Link < ApplicationRecord
   validate :alive_category_variants_presence, on: :update
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
   validate :custom_view_content_button_text_length
+  validates :custom_receipt_text, length: { maximum: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH }
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?
@@ -205,6 +207,7 @@ class Link < ApplicationRecord
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
+  validate :default_offer_code_must_be_valid
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
@@ -220,11 +223,19 @@ class Link < ApplicationRecord
 
   enum subscription_duration: %i[monthly yearly quarterly biannually every_two_years]
   enum purchase_type: %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
+
+  def purchase_type=(value)
+    super(value)
+  rescue ArgumentError
+    super(:buy_only)
+  end
   enum free_trial_duration_unit: %i[week month]
 
   attr_json_data_accessor :excluded_sales_tax_regions, default: -> { [] }
   attr_json_data_accessor :sections, default: -> { [] }
   attr_json_data_accessor :main_section_index, default: -> { 0 }
+  attr_json_data_accessor :custom_view_content_button_text
+  attr_json_data_accessor :custom_receipt_text
 
   scope :alive,                           -> { where(purchase_disabled_at: nil, banned_at: nil, deleted_at: nil) }
   scope :visible,                         -> { where(deleted_at: nil) }
@@ -397,7 +408,6 @@ class Link < ApplicationRecord
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
-
     if auto_transcode_videos?
       transcode_videos!
     else
@@ -498,7 +508,7 @@ class Link < ApplicationRecord
     self
   end
 
-  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, autocomplete: false)
+  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, code: nil, autocomplete: false)
     host = user.subdomain_with_protocol || UrlService.domain_with_protocol
     options = { host: }
     options[:recommended_by] = recommended_by if recommended_by.present?
@@ -506,6 +516,7 @@ class Link < ApplicationRecord
     options[:layout] = layout if layout.present?
     options[:query] = query if query.present?
     options[:affiliate_id] = affiliate_id if affiliate_id.present?
+    options[:code] = code if code.present?
     options[:autocomplete] = "true" if autocomplete
 
     product_long_url = Rails.application.routes.url_helpers.short_link_url(general_permalink, options)
@@ -605,10 +616,18 @@ class Link < ApplicationRecord
   end
 
   def options
-    if skus_enabled
-      skus.not_is_default_sku.alive.map(&:to_option_for_product)
+    if skus_enabled?
+      skus_alive_not_default.map(&:to_option_for_product)
     elsif variant_categories_alive.any?
-      variants.where(variant_category: variant_categories_alive.first).in_order.alive.map(&:to_option)
+      first_category = variant_categories_alive.first
+      if alive_variants.loaded?
+        alive_variants
+          .select { |v| v.variant_category_id == first_category.id }
+          .sort_by { |v| [v.position_in_category.nil? ? 0 : 1, v.position_in_category.to_i, v.created_at] }
+          .map(&:to_option)
+      else
+        variants.where(variant_category: first_category).in_order.alive.map(&:to_option)
+      end
     else
       []
     end
@@ -815,10 +834,18 @@ class Link < ApplicationRecord
   # Public: Find all alive offer codes associated with product and user in order of created at.
   #
   # Returns list of offer codes.
-  def product_and_universal_offer_codes
-    (offer_codes.alive + user.offer_codes.universal_with_matching_currency(price_currency_type).alive).sort_by do |offer_code|
-      offer_code["created_at"]
+  def product_and_universal_offer_codes(query = nil, limit = nil, reverse = false)
+    product_codes = offer_codes.alive
+    universal_codes = user.offer_codes.universal_with_matching_currency(price_currency_type).alive
+
+    if query.present?
+      product_codes = product_codes.search_by_name(query, reverse:)
+      universal_codes = universal_codes.search_by_name(query, reverse:)
     end
+
+    combined_codes = (product_codes + universal_codes).sort_by(&:created_at)
+    combined_codes.reverse! if reverse
+    limit ? combined_codes.first(limit) : combined_codes
   end
 
   def purchase_info_for_product_page(requested_user, browser_guid)
@@ -904,7 +931,7 @@ class Link < ApplicationRecord
     end
   end
 
-  %w[custom_summary custom_button_text_option custom_view_content_button_text custom_attributes purchase_terms].each do |method_name|
+  %w[custom_summary custom_button_text_option custom_attributes purchase_terms].each do |method_name|
     define_method "save_#{method_name}" do |argument|
       self.json_data ||= {}
       self.json_data[method_name] = argument
@@ -912,7 +939,7 @@ class Link < ApplicationRecord
     end
   end
 
-  %w[custom_summary custom_button_text_option custom_view_content_button_text purchase_terms].each do |method_name|
+  %w[custom_summary custom_button_text_option purchase_terms].each do |method_name|
     define_method method_name do
       self.json_data.present? ? self.json_data[method_name] : nil
     end
@@ -1028,7 +1055,7 @@ class Link < ApplicationRecord
     attrs[:options] = options
     attrs[:option] = attrs[:options].find { |o| o[:id] == params[:option] } || (native_type != NATIVE_TYPE_COFFEE ? attrs[:options].find { |o| o[:quantity_left] != 0 } : nil)
     variant = attrs[:option] ? Variant.find_by_external_id(attrs[:option][:id]) : nil
-    prices = (is_tiered_membership ? variant : self).prices.is_buy.alive
+    prices = (is_tiered_membership && variant ? variant : self).prices.is_buy.alive
     recurrence = is_recurring_billing ? prices.find { |price| price.recurrence == params[:recurrence] } || prices.find { |price| price.recurrence == default_price_recurrence.recurrence } : nil
     attrs[:recurrence] = recurrence&.recurrence
     attrs[:pay_in_installments] = !!params[:pay_in_installments] && allow_installment_plan?
@@ -1040,6 +1067,7 @@ class Link < ApplicationRecord
     attrs[:price] = currency["min_price"] if purchasing_power_parity_enabled? && attrs[:price] != 0 && attrs[:price] < currency["min_price"]
     attrs[:quantity] = params[:quantity].to_i if params[:quantity].present?
     attrs[:call_start_time] = native_type == NATIVE_TYPE_CALL ? params[:call_start_time] : nil
+    attrs[:force_new_subscription] = !!params[:force_new_subscription] && is_recurring_billing
     attrs
   end
 
@@ -1047,6 +1075,7 @@ class Link < ApplicationRecord
     {
       google_analytics_id: user.google_analytics_id,
       facebook_pixel_id: user.facebook_pixel_id,
+      tiktok_pixel_id: user.tiktok_pixel_id,
       free_sales: !user.skip_free_sale_analytics?,
     }
   end
@@ -1228,6 +1257,20 @@ class Link < ApplicationRecord
       errors.add(:custom_permalink, :taken)
     end
 
+    def default_offer_code_must_be_valid
+      return unless default_offer_code.present?
+      return if being_marked_as_deleted?
+      return unless new_record? || default_offer_code_id_changed?
+
+      if !user.offer_codes.alive.where(id: default_offer_code.id).exists?
+        errors.add(:default_offer_code, "must belong to your offer codes")
+      elsif default_offer_code.inactive?
+        errors.add(:default_offer_code, "cannot be expired")
+      elsif !offer_codes.where(id: default_offer_code.id).exists? && !default_offer_code.universal?
+        errors.add(:default_offer_code, "must be associated with this product or be universal")
+      end
+    end
+
     def enforce_user_email_confirmation!
       return if user.confirmed?
 
@@ -1289,6 +1332,7 @@ class Link < ApplicationRecord
 
     def alive_category_variants_presence
       return if deleted_at.present?
+      return if archived?
 
       has_alive_categories_without_variants = variant_categories.alive.left_joins(:alive_variants).where(base_variants: { id: nil }).exists?
 
@@ -1298,6 +1342,10 @@ class Link < ApplicationRecord
     end
 
     def valid_tier_version_structure
+      return if deleted_at.present?
+      return if archived?
+      return if purchase_disabled_at.present? && purchase_disabled_at_changed?
+
       if variant_categories.alive.size != 1
         errors.add(:base, "Memberships should only have one Tier version category.")
         raise LinkInvalid, "Memberships should only have one Tier version category."

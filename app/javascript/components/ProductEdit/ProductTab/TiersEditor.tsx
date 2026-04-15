@@ -1,5 +1,5 @@
+import { ChevronDown, ChevronUp, LayersAlt, Plus, Trash } from "@boxicons/react";
 import { Editor } from "@tiptap/core";
-import cx from "classnames";
 import { format } from "date-fns";
 import * as React from "react";
 
@@ -8,16 +8,15 @@ import { getIsSingleUnitCurrency } from "$app/utils/currency";
 import { priceCentsToUnit } from "$app/utils/price";
 import {
   numberOfMonthsInRecurrence,
-  RecurrenceId,
   perRecurrenceLabels,
+  RecurrenceId,
   recurrenceNames,
 } from "$app/utils/recurringPricing";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { DateInput } from "$app/components/DateInput";
-import { Details } from "$app/components/Details";
-import { Icon } from "$app/components/Icons";
+import { Dropdown } from "$app/components/Dropdown";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
@@ -26,13 +25,26 @@ import { RecurrencePriceValue, Tier, useProductEditContext } from "$app/componen
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
-import { Toggle } from "$app/components/Toggle";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Alert } from "$app/components/ui/Alert";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
+import { Placeholder } from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newTierId = 0;
+
+const areAllEnabledPricesZero = (recurrencePriceValues: Record<string, RecurrencePriceValue>): boolean => {
+  const enabledPrices = Object.values(recurrencePriceValues).filter((value) => value.enabled);
+  return enabledPrices.length > 0 && enabledPrices.every((value) => !value.price_cents || value.price_cents === 0);
+};
 
 export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tiers: Tier[]) => void }) => {
   const updateVersion = (id: string, update: Partial<Tier>) => {
@@ -71,7 +83,7 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
         ]);
       }}
     >
-      <Icon name="plus" />
+      <Plus className="size-5" />
       Add tier
     </Button>
   );
@@ -140,13 +152,17 @@ const TierEditor = ({
 
   const url = useProductUrl({ option: tier.id });
 
-  const updateRecurrencePriceValue = (recurrence: RecurrenceId, update: Partial<RecurrencePriceValue>) =>
+  const updateRecurrencePriceValue = (recurrence: RecurrenceId, update: Partial<RecurrencePriceValue>) => {
+    const updatedRecurrencePriceValues = {
+      ...tier.recurrence_price_values,
+      [recurrence]: { ...tier.recurrence_price_values[recurrence], ...update },
+    };
+
     updateTier({
-      recurrence_price_values: {
-        ...tier.recurrence_price_values,
-        [recurrence]: { ...tier.recurrence_price_values[recurrence], ...update },
-      },
+      recurrence_price_values: updatedRecurrencePriceValues,
+      ...(areAllEnabledPricesZero(updatedRecurrencePriceValues) && { customizable_price: true }),
     });
+  };
 
   const defaultRecurrencePriceValue = product.subscription_duration
     ? tier.recurrence_price_values[product.subscription_duration]
@@ -175,177 +191,184 @@ const TierEditor = ({
     .filter(([_, enabled]) => enabled)
     .map(([name]) => name);
 
+  const allEnabledPricesAreZero = areAllEnabledPricesZero(tier.recurrence_price_values);
+
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <ReorderingHandle />
-        <Icon name="stack-fill" />
+        <LayersAlt pack="filled" className="size-5" />
         <div>
           <h3>{tier.name || "Untitled"}</h3>
           {tier.active_subscribers_count ? (
-            <small>
+            <small className="block">
               {tier.active_subscribers_count} {tier.active_subscribers_count === 1 ? "supporter" : "supporters"}
             </small>
           ) : null}
         </div>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
-          <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
-            <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
+          <Button size="icon" onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
+            {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
         </WithTooltip>
         <WithTooltip tip="Remove">
-          <Button onClick={onDelete} aria-label="Remove">
-            <Icon name="trash2" />
+          <Button size="icon" onClick={onDelete} aria-label="Remove">
+            <Trash className="size-5" />
           </Button>
         </WithTooltip>
-      </div>
+      </RowActions>
       {isOpen ? (
-        <Drawer className="grid gap-6">
-          <fieldset>
-            <label htmlFor={`${uid}-name`}>Name</label>
-            <div className="input">
-              <input
-                id={`${uid}-name`}
-                type="text"
-                value={tier.name}
-                onChange={(evt) => updateTier({ name: evt.target.value })}
+        <RowDetails asChild>
+          <Drawer className="grid gap-6">
+            <Fieldset>
+              <Label htmlFor={`${uid}-name`}>Name</Label>
+              <InputGroup>
+                <Input
+                  id={`${uid}-name`}
+                  type="text"
+                  value={tier.name}
+                  onChange={(evt) => updateTier({ name: evt.target.value })}
+                />
+                <a href={url} target="_blank" rel="noreferrer">
+                  Share
+                </a>
+              </InputGroup>
+            </Fieldset>
+            <Fieldset>
+              <Label htmlFor={`${uid}-description`}>Description</Label>
+              <Textarea
+                id={`${uid}-description`}
+                value={tier.description}
+                onChange={(evt) => updateTier({ description: evt.target.value })}
               />
-              <a href={url} target="_blank" rel="noreferrer">
-                Share
-              </a>
-            </div>
-          </fieldset>
-          <fieldset>
-            <label htmlFor={`${uid}-description`}>Description</label>
-            <textarea
-              id={`${uid}-description`}
-              value={tier.description}
-              onChange={(evt) => updateTier({ description: evt.target.value })}
-            />
-          </fieldset>
-          <fieldset>
-            <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of active supporters</label>
-            <NumberInput
-              onChange={(value) => updateTier({ max_purchase_count: value })}
-              value={tier.max_purchase_count}
-            >
-              {(inputProps) => <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />}
-            </NumberInput>
-          </fieldset>
-          <fieldset
-            style={{
-              display: "grid",
-              gap: "var(--spacer-3)",
-              gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
-            }}
-          >
-            <legend>Pricing</legend>
-            {Object.entries(tier.recurrence_price_values).map(([recurrence, value]) => (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "max-content 1fr",
-                  alignItems: "center",
-                  gap: "var(--spacer-2)",
-                }}
-                key={recurrence}
+            </Fieldset>
+            <Fieldset>
+              <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of active supporters</Label>
+              <NumberInput
+                onChange={(value) => updateTier({ max_purchase_count: value })}
+                value={tier.max_purchase_count}
               >
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={value.enabled}
-                  aria-label={`Toggle recurrence option: ${recurrenceNames[recurrence]}`}
-                  onChange={() => updateRecurrencePriceValue(recurrence, { enabled: !value.enabled })}
-                />
-                <PriceInput
-                  id={`${uid}-price`}
-                  currencyCode={currencyType}
-                  cents={value.price_cents ?? null}
-                  onChange={(price_cents) => updateRecurrencePriceValue(recurrence, { price_cents })}
-                  placeholder={PLACEHOLDER_VALUES[recurrence]}
-                  suffix={perRecurrenceLabels[recurrence]}
-                  disabled={!value.enabled}
-                  ariaLabel={`Amount ${perRecurrenceLabels[recurrence]}`}
-                />
-              </div>
-            ))}
-          </fieldset>
-          <Details
-            summary={
-              <Toggle
-                value={tier.customizable_price}
-                onChange={(customizable_price) => updateTier({ customizable_price })}
-              >
-                Allow customers to pay what they want
-              </Toggle>
-            }
-            className="toggle"
-            open={tier.customizable_price}
-          >
-            <div className="dropdown">
-              <div
-                style={{
-                  display: "grid",
-                  gap: "var(--spacer-3)",
-                  gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
-                }}
-              >
-                {Object.entries(tier.recurrence_price_values).flatMap(([recurrence, value]) =>
-                  value.enabled ? (
-                    <React.Fragment key={recurrence}>
-                      <fieldset>
-                        <label htmlFor={`${uid}-${recurrence}-minimum-price`}>
-                          Minimum amount {perRecurrenceLabels[recurrence]}
-                        </label>
-                        <PriceInput
-                          id={`${uid}-${recurrence}-minimum-price`}
-                          currencyCode={currencyType}
-                          cents={value.price_cents}
-                          disabled
-                        />
-                      </fieldset>
-                      <fieldset>
-                        <label htmlFor={`${uid}-${recurrence}-suggested-price`}>
-                          Suggested amount {perRecurrenceLabels[recurrence]}
-                        </label>
-                        <PriceInput
-                          id={`${uid}-${recurrence}-suggested-price`}
-                          currencyCode={currencyType}
-                          cents={value.suggested_price_cents}
-                          onChange={(suggested_price_cents) =>
-                            updateRecurrencePriceValue(recurrence, { suggested_price_cents })
-                          }
-                          placeholder={PLACEHOLDER_VALUES[recurrence]}
-                        />
-                      </fieldset>
-                    </React.Fragment>
-                  ) : (
-                    []
-                  ),
+                {(inputProps) => (
+                  <Input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
                 )}
-              </div>
-            </div>
-          </Details>
-          <PriceChangeSettings tier={tier} updateTier={updateTier} />
-          {integrations.length > 0 ? (
-            <fieldset>
-              <legend>Integrations</legend>
-              {integrations.map((integration) => (
-                <Toggle
-                  value={tier.integrations[integration]}
-                  onChange={(enabled) => updateTier({ integrations: { ...tier.integrations, [integration]: enabled } })}
-                  key={integration}
+              </NumberInput>
+            </Fieldset>
+            <Fieldset
+              style={{
+                display: "grid",
+                gap: "var(--spacer-3)",
+                gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
+              }}
+            >
+              <FieldsetTitle>Pricing</FieldsetTitle>
+              {Object.entries(tier.recurrence_price_values).map(([recurrence, value]) => (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "max-content 1fr",
+                    alignItems: "center",
+                    gap: "var(--spacer-2)",
+                  }}
+                  key={recurrence}
                 >
-                  {integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"}
-                </Toggle>
+                  <Switch
+                    checked={value.enabled}
+                    aria-label={`Toggle recurrence option: ${recurrenceNames[recurrence]}`}
+                    onChange={() => updateRecurrencePriceValue(recurrence, { enabled: !value.enabled })}
+                  />
+                  <PriceInput
+                    id={`${uid}-price`}
+                    currencyCode={currencyType}
+                    cents={value.price_cents ?? null}
+                    onChange={(price_cents) => updateRecurrencePriceValue(recurrence, { price_cents })}
+                    placeholder={PLACEHOLDER_VALUES[recurrence]}
+                    suffix={perRecurrenceLabels[recurrence]}
+                    disabled={!value.enabled}
+                    ariaLabel={`Amount ${perRecurrenceLabels[recurrence]}`}
+                  />
+                </div>
               ))}
-            </fieldset>
-          ) : null}
-        </Drawer>
+            </Fieldset>
+            {allEnabledPricesAreZero ? (
+              <Alert variant="info">Free tiers require a pay what they want price.</Alert>
+            ) : null}
+            <Details open={tier.customizable_price}>
+              <DetailsToggle chevronPosition="none" className="mb-0">
+                <Switch
+                  checked={tier.customizable_price}
+                  onChange={(e) => updateTier({ customizable_price: e.target.checked })}
+                  disabled={allEnabledPricesAreZero}
+                  label="Allow customers to pay what they want"
+                />
+              </DetailsToggle>
+              <Dropdown>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "var(--spacer-3)",
+                    gridTemplateColumns: "repeat(auto-fit, max(var(--dynamic-grid), 50% - var(--spacer-3) / 2))",
+                  }}
+                >
+                  {Object.entries(tier.recurrence_price_values).flatMap(([recurrence, value]) =>
+                    value.enabled ? (
+                      <React.Fragment key={recurrence}>
+                        <Fieldset>
+                          <Label htmlFor={`${uid}-${recurrence}-minimum-price`}>
+                            Minimum amount {perRecurrenceLabels[recurrence]}
+                          </Label>
+                          <PriceInput
+                            id={`${uid}-${recurrence}-minimum-price`}
+                            currencyCode={currencyType}
+                            cents={value.price_cents}
+                            disabled
+                          />
+                        </Fieldset>
+                        <Fieldset>
+                          <Label htmlFor={`${uid}-${recurrence}-suggested-price`}>
+                            Suggested amount {perRecurrenceLabels[recurrence]}
+                          </Label>
+                          <PriceInput
+                            id={`${uid}-${recurrence}-suggested-price`}
+                            currencyCode={currencyType}
+                            cents={value.suggested_price_cents}
+                            onChange={(suggested_price_cents) =>
+                              updateRecurrencePriceValue(recurrence, { suggested_price_cents })
+                            }
+                            placeholder={PLACEHOLDER_VALUES[recurrence]}
+                          />
+                        </Fieldset>
+                      </React.Fragment>
+                    ) : (
+                      []
+                    ),
+                  )}
+                </div>
+              </Dropdown>
+            </Details>
+            <PriceChangeSettings tier={tier} updateTier={updateTier} />
+            {integrations.length > 0 ? (
+              <Fieldset>
+                <FieldsetTitle>Integrations</FieldsetTitle>
+                {integrations.map((integration) => (
+                  <Switch
+                    checked={tier.integrations[integration]}
+                    onChange={(e) =>
+                      updateTier({ integrations: { ...tier.integrations, [integration]: e.target.checked } })
+                    }
+                    key={integration}
+                    label={
+                      integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"
+                    }
+                  />
+                ))}
+              </Fieldset>
+            ) : null}
+          </Drawer>
+        </RowDetails>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
@@ -407,29 +430,25 @@ You can modify or cancel your membership at any time.`;
   }, 500);
 
   return (
-    <Details
-      summary={
-        <Toggle
-          value={tier.apply_price_changes_to_existing_memberships}
-          onChange={(apply_price_changes_to_existing_memberships) =>
+    <Details open={tier.apply_price_changes_to_existing_memberships}>
+      <DetailsToggle chevronPosition="none" className="mb-0">
+        <Switch
+          checked={tier.apply_price_changes_to_existing_memberships}
+          onChange={(e) =>
             updateTier({
-              apply_price_changes_to_existing_memberships,
+              apply_price_changes_to_existing_memberships: e.target.checked,
               subscription_price_change_effective_date: effectiveDate.value.toISOString(),
             })
           }
-        >
-          Apply price changes to existing customers
-        </Toggle>
-      }
-      className="toggle"
-      open={tier.apply_price_changes_to_existing_memberships}
-    >
-      <div className="dropdown">
+          label="Apply price changes to existing customers"
+        />
+      </DetailsToggle>
+      <Dropdown>
         <div className="grid gap-6">
           {initialEffectiveDate ? (
-            <div role="alert" className="warning">
+            <Alert variant="warning">
               You have scheduled a pricing update for existing customers on {format(initialEffectiveDate, "MMMM d, y")}
-            </div>
+            </Alert>
           ) : null}
           <div>
             <strong>
@@ -438,7 +457,7 @@ You can modify or cancel your membership at any time.`;
             </strong>{" "}
             <button
               type="button"
-              className="underline"
+              className="cursor-pointer underline all-unset"
               onClick={() =>
                 void sendSamplePriceChangeEmail({
                   productPermalink: uniquePermalink,
@@ -460,10 +479,10 @@ You can modify or cancel your membership at any time.`;
               Get a sample
             </button>
           </div>
-          <fieldset className={cx({ danger: effectiveDate.error })}>
-            <legend>
-              <label htmlFor={`${uid}-date`}>Effective date for existing customers</label>
-            </legend>
+          <Fieldset state={effectiveDate.error ? "danger" : undefined}>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-date`}>Effective date for existing customers</Label>
+            </FieldsetTitle>
             <DateInput
               id={`${uid}-date`}
               value={effectiveDate.value}
@@ -473,16 +492,18 @@ You can modify or cancel your membership at any time.`;
               }}
             />
 
-            {effectiveDate.error ? <small>The effective date must be at least 7 days from today</small> : null}
-          </fieldset>
-          <fieldset>
-            <legend>
-              <label htmlFor={`${uid}-custom-message`}>Custom message</label>
-            </legend>
+            {effectiveDate.error ? (
+              <FieldsetDescription>The effective date must be at least 7 days from today</FieldsetDescription>
+            ) : null}
+          </Fieldset>
+          <Fieldset>
+            <FieldsetTitle>
+              <Label htmlFor={`${uid}-custom-message`}>Custom message</Label>
+            </FieldsetTitle>
             {isMounted ? (
               <RichTextEditor
                 id={`${uid}-custom-message`}
-                className="textarea"
+                className="textarea rounded border border-border px-4 py-3"
                 placeholder={placeholder}
                 ariaLabel="Custom message"
                 initialValue={editorContent}
@@ -490,18 +511,18 @@ You can modify or cancel your membership at any time.`;
                 onCreate={setEditor}
               />
             ) : null}
-          </fieldset>
+          </Fieldset>
         </div>
-      </div>
+      </Dropdown>
     </Details>
   );
 };
 
 export const SortableTierEditors = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ children }, ref) => (
-    <div ref={ref} className="rows" role="list" aria-label="Tier editor">
+    <Rows ref={ref} role="list" aria-label="Tier editor">
       {children}
-    </div>
+    </Rows>
   ),
 );
 SortableTierEditors.displayName = "SortableTierEditors";

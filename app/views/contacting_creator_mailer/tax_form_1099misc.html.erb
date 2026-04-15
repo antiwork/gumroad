@@ -2,6 +2,6 @@
   <h2>Your 1099-MISC form for <%= @year %> is ready to download</h2>
   <p>The 1099-MISC is a purely informational form that summarizes the commissions you earned as an affiliate during <%= @year %> and is designed to help you report your taxes.</p>
   <p>Our payment processor, Stripe, files a copy electronically with the IRS.</p>
-  <p><%= link_to("Download form", @tax_form_download_url, class: "button primary") %></p>
-  <p>You can also download it from your <%= link_to("Gumroad dashboard", dashboard_url) %> at any time.</p>
+  <p><%= link_to("Download form", download_tax_form_url(year: @year, form_type: "us_1099_misc"), class: "button primary") %></p>
+  <p>You can also download it from your <%= link_to("Gumroad tax center", tax_center_url) %> at any time.</p>
 </div>

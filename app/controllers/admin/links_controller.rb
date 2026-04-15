@@ -1,15 +1,38 @@
 # frozen_string_literal: true
 
 class Admin::LinksController < Admin::BaseController
-  before_action :fetch_product_by_general_permalink, except: %i[legacy_purchases
-                                                                flag_seller_for_tos_violation
-                                                                views_count sales_stats
-                                                                join_discord
-                                                                join_discord_redirect]
-  before_action :fetch_product, only: %i[views_count
-                                         sales_stats
-                                         join_discord
-                                         join_discord_redirect]
+  before_action :fetch_product!, except: :show
+
+  def show
+    if !Link.external_id?(params[:external_id]) && product = Link.find_by(id: params[:external_id])
+      return redirect_to admin_product_path(product.external_id)
+    end
+
+    product_by_external_id = Link.find_by_external_id(params[:external_id])
+    @product_matches = product_by_external_id ? [product_by_external_id] : Link.by_general_permalink(params[:external_id])
+
+    if @product_matches.many?
+      set_meta_tag(title: "Multiple products matched")
+      render inertia: "Admin/Products/MultipleMatches", props: {
+        product_matches: @product_matches.map { |product| Admin::ProductPresenter::MultipleMatches.new(product:).props }
+      }
+    elsif @product_matches.one?
+      @product = @product_matches.first
+      set_meta_tag(title: @product.name)
+      render inertia: "Admin/Products/Show", props: {
+        title: @product.name,
+        product: Admin::ProductPresenter::Card.new(product: @product, pundit_user:).props,
+        user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props
+      }
+    else
+      e404
+    end
+  end
+
+  def destroy
+    @product.delete!
+    render json: { success: true }
+  end
 
   def generate_url_redirect
     url_redirect = UrlRedirect.create!(link: @product)
@@ -19,27 +42,8 @@ class Admin::LinksController < Admin::BaseController
     redirect_to url_redirect.download_page_url
   end
 
-  def show
-    @title = @product.name
-    render inertia: "Admin/Products/Show", legacy_template: "admin/links/show", props: {
-      title: @product.name,
-      product: Admin::ProductPresenter::Card.new(product: @product, pundit_user:).props,
-      user: Admin::UserPresenter::Card.new(user: @product.user, pundit_user:).props
-    }
-  end
-
-  def access_product_file
-    url_redirect = @product.url_redirects.build
-    product_file = ProductFile.find_by_external_id(params[:product_file_id])
-
-    redirect_to url_redirect.signed_location_for_file(product_file), allow_other_host: true
-  end
-
-  def is_adult
-    @product.is_adult = params[:is_adult]
-    @product.save!
-
-    render json: { success: true }
+  def restore
+    render json: { success: @product.update_attribute(:deleted_at, nil) }
   end
 
   def publish
@@ -48,7 +52,7 @@ class Admin::LinksController < Admin::BaseController
     rescue Link::LinkInvalid, WithProductFilesInvalid
       return render json: { success: false, error_message: @product.errors.full_messages.join(", ") }
     rescue => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       return render json: { success: false, error_message: I18n.t(:error_500) }
     end
 
@@ -61,48 +65,31 @@ class Admin::LinksController < Admin::BaseController
     render json: { success: true }
   end
 
-  def destroy
-    @product.delete!
+  def is_adult
+    @product.is_adult = params[:is_adult]
+    @product.save!
 
     render json: { success: true }
   end
 
-  def restore
-    render json: { success: @product.update_attribute(:deleted_at, nil) }
-  end
+  def access_product_file
+    url_redirect = @product.url_redirects.build
+    product_file = ProductFile.find_by_external_id(params[:product_file_id])
 
-  def legacy_purchases
-    product_id = params[:id].to_i
-    product = Link.find_by(id: product_id)
-
-    if parse_boolean(params[:is_affiliate_user])
-      affiliate_user = User.find(params[:user_id])
-      sales = Purchase.where(link_id: product_id, affiliate_id: affiliate_user.direct_affiliate_accounts.select(:id))
-    else
-      sales = product.sales
-    end
-
-    @purchases = sales.where("purchase_state IN ('preorder_authorization_successful', 'preorder_concluded_unsuccessfully', 'successful', 'failed', 'not_charged')").exclude_not_charged_except_free_trial
-    @purchases = @purchases.order("created_at DESC, id DESC").page_with_kaminari(params[:page]).per(params[:per_page])
-
-    respond_to do |format|
-      purchases_json = @purchases.as_json(admin_review: true)
-      format.json { render json: { purchases: purchases_json, page: params[:page].to_i } }
-    end
+    redirect_to url_redirect.signed_location_for_file(product_file), allow_other_host: true
   end
 
   def flag_seller_for_tos_violation
-    product = Link.find_by(id: params[:id])
-    user = product.user
+    user = @product.user
     suspend_tos_reason = params.try(:[], :suspend_tos).try(:[], :reason) || params[:reason]
     raise "Invalid request" if user.nil? || !suspend_tos_reason
     raise "Cannot flag for TOS violation" if !user.can_flag_for_tos_violation?
 
     ActiveRecord::Base.transaction do
       user.update!(tos_violation_reason: suspend_tos_reason)
-      comment_content = "Flagged for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} for a product named '#{product.name}' (#{suspend_tos_reason})"
-      user.flag_for_tos_violation!(author_id: current_user.id, product_id: product.id, content: comment_content)
-      unpublish_or_delete_product!(product)
+      comment_content = "Flagged for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} for a product named '#{@product.name}' (#{suspend_tos_reason})"
+      user.flag_for_tos_violation!(author_id: current_user.id, product_id: @product.id, content: comment_content)
+      unpublish_or_delete_product!(@product)
     end
 
     render json: { success: true }
@@ -172,29 +159,8 @@ class Admin::LinksController < Admin::BaseController
   end
 
   private
-    def fetch_product_by_general_permalink
-      @product = Link.find_by(id: params[:id])
-      return redirect_to admin_product_path(@product.unique_permalink) if @product
-
-      @product_matches = Link.by_general_permalink(params["id"])
-
-      if @product_matches.size > 1
-        @title = "Multiple products matched"
-        render inertia: "Admin/Products/MultipleMatches", legacy_template: "admin/links/multiple_matches", props: {
-          product_matches: @product_matches.map { |product| Admin::ProductPresenter::MultipleMatches.new(product:).props }
-        }
-        return
-      else
-        @product = @product_matches.first || e404
-      end
-
-      if @product && @product.unique_permalink != params["id"]
-        redirect_to admin_product_path(@product.unique_permalink)
-      end
-    end
-
-    def fetch_product
-      @product = Link.where(id: params[:id]).or(Link.where(unique_permalink: params[:id])).first
+    def fetch_product!
+      @product = Link.find_by_external_id(params[:external_id])
       @product || e404
     end
 

@@ -73,7 +73,7 @@ class AccountingMailer < ApplicationMailer
       stripe: { held_by_gumroad: { active: 0, suspended: 0 }, held_by_stripe: { active: 0, suspended: 0 } },
       paypal: { active: 0, suspended: 0 }
     }
-    balances_csv = CSV.generate do |csv|
+    balances_csv = CsvSafe.generate do |csv|
       csv << ["user id", "paypal balance (in dollars)", "stripe balance (in dollars)", "is_suspended", "user_risk_state", "tos_violation_reason"]
       User.holding_non_zero_balance.each do |user|
         stat_key = user.suspended? ? :suspended : :active
@@ -97,6 +97,15 @@ class AccountingMailer < ApplicationMailer
     mail to: PAYMENTS_EMAIL,
          cc: %w[solson@earlygrowthfinancialservices.com ndelgado@earlygrowthfinancialservices.com],
          subject: "Outstanding balances"
+  end
+
+  def global_sales_tax_summary_report(month, year, s3_read_url)
+    @subject_and_title = "Global Sales Tax Summary Report for #{month}/#{year}"
+    @s3_url = s3_read_url
+
+    mail subject: @subject_and_title,
+         to: "salestax@gumroad.com",
+         cc: %w[steven.olson@gumroad.com]
   end
 
   def ytd_sales_report(csv_data, recipient_email)

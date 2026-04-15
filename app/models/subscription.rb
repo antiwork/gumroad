@@ -15,6 +15,7 @@ class Subscription < ApplicationRecord
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
+  extend Restartable
 
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
   ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE = 5.days
@@ -24,6 +25,7 @@ class Subscription < ApplicationRecord
   FREE_TRIAL_EXPIRING_REMINDER_EMAIL = 2.days
   # time to access membership manage page after requesting magic link
   TOKEN_VALIDITY = 24.hours
+  ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR = 7.days
 
   module ResubscriptionReason
     PAYMENT_ISSUE_RESOLVED = "payment_issue_resolved"
@@ -32,7 +34,7 @@ class Subscription < ApplicationRecord
   has_flags 1 => :is_test_subscription,
             2 => :cancelled_by_buyer,
             3 => :cancelled_by_admin,
-            4 => :flat_fee_applicable,
+            4 => :DEPRECATED_flat_fee_applicable,
             5 => :is_resubscription_pending_confirmation,
             6 => :mor_fee_applicable,
             7 => :is_installment_plan,
@@ -63,7 +65,6 @@ class Subscription < ApplicationRecord
   validate :must_have_payment_option
   validate :installment_plans_cannot_be_cancelled_by_buyer
 
-  before_create :enable_flat_fee
   before_create :enable_mor_fee
   after_create :update_last_payment_option
   after_save :create_interruption_event, if: -> { deactivated_at_previously_changed? }
@@ -247,7 +248,21 @@ class Subscription < ApplicationRecord
     purchase = Purchase.new(purchase_params)
     purchase.variant_attributes = original_purchase.variant_attributes
 
-    purchase.offer_code = original_purchase.offer_code if discount_applies_to_next_charge?
+    if discount_applies_to_next_charge?
+      if original_purchase.purchase_offer_code_discount.present?
+        original_discount = original_purchase.purchase_offer_code_discount
+        purchase.offer_code = original_purchase.offer_code
+        purchase.build_purchase_offer_code_discount(
+          offer_code: original_discount.offer_code,
+          offer_code_amount: original_discount.offer_code_amount,
+          offer_code_is_percent: original_discount.offer_code_is_percent,
+          pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
+          duration_in_months: original_discount.duration_in_months
+        )
+      elsif original_purchase.offer_code.present?
+        purchase.offer_code = original_purchase.offer_code
+      end
+    end
 
     purchase.purchaser = user
     purchase.link = link
@@ -262,7 +277,7 @@ class Subscription < ApplicationRecord
     end
     purchase.affiliate = original_purchase.affiliate if original_purchase.affiliate.try(:eligible_for_credit?)
     purchase.is_upgrade_purchase = is_upgrade_purchase if is_upgrade_purchase
-    get_vat_id_from_original_purchase(purchase)
+    set_vat_id_for_purchase(purchase)
     purchase
   end
 
@@ -360,10 +375,17 @@ class Subscription < ApplicationRecord
     with_lock do
       return if failed_at.present?
 
+      was_recently_failed = purchases.failed.where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago).exists?
+
       self.failed_at = Time.current
       self.deactivate!
+
       CustomerLowPriorityMailer.subscription_autocancelled(id).deliver_later(queue: "low")
-      ContactingCreatorMailer.subscription_autocancelled(id).deliver_later(queue: "critical") if seller.enable_payment_email?
+
+      if seller.enable_payment_email? && !was_recently_failed
+        ContactingCreatorMailer.subscription_autocancelled(id).deliver_later(queue: "critical")
+      end
+
       send_cancelled_notification_webhook
     end
   end
@@ -429,7 +451,7 @@ class Subscription < ApplicationRecord
 
   # creates a new original subscription purchase & archives the existing one.
   # Any changes to the subscription made here must be reverted in `Subscription::UpdaterService#restore_original_purchase`
-  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false)
+  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false)
     raise Subscription::UpdateFailed, "Installment plans cannot be updated." if is_installment_plan?
     raise Subscription::UpdateFailed, "Changing plans for fixed-length subscriptions is not currently supported." if has_fixed_length?
 
@@ -454,7 +476,7 @@ class Subscription < ApplicationRecord
       new_purchase.is_original_subscription_purchase = true
       new_purchase.perceived_price_cents = perceived_price_cents
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
-      new_purchase.business_vat_id = original_purchase.purchase_sales_tax_info&.business_vat_id
+      new_purchase.business_vat_id = business_vat_id.presence || original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
 
@@ -470,10 +492,26 @@ class Subscription < ApplicationRecord
       original_purchase.is_archived_original_subscription_purchase = true
       original_purchase.save!
 
-      if new_purchase.offer_code.present? && original_discount = original_purchase.purchase_offer_code_discount
-        new_purchase.build_purchase_offer_code_discount(offer_code: new_purchase.offer_code, offer_code_amount: original_discount.offer_code_amount,
-                                                        offer_code_is_percent: original_discount.offer_code_is_percent,
-                                                        pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount)
+      if clear_discount
+        new_purchase.offer_code = nil
+        new_purchase.purchase_offer_code_discount = nil
+      elsif offer_code.present?
+        new_purchase.offer_code = offer_code
+        new_purchase.build_purchase_offer_code_discount(
+          offer_code: offer_code,
+          pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          offer_code_amount: offer_code.amount,
+          offer_code_is_percent: offer_code.is_percent?,
+          duration_in_months: offer_code.duration_in_billing_cycles
+        )
+      elsif new_purchase.offer_code.present? && (original_discount = original_purchase.purchase_offer_code_discount)
+        new_purchase.build_purchase_offer_code_discount(
+          offer_code: new_purchase.offer_code,
+          pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          offer_code_amount: original_discount.offer_code_amount,
+          offer_code_is_percent: original_discount.offer_code_is_percent,
+          duration_in_months: original_discount.duration_in_months
+        )
       end
 
       if original_purchase.recommended_purchase_info.present?
@@ -688,6 +726,10 @@ class Subscription < ApplicationRecord
     end
   end
 
+  def update_business_vat_id!(vat_id)
+    update!(business_vat_id: vat_id) if vat_id.present? && business_vat_id.blank?
+  end
+
   def last_resubscribed_at
     if defined?(@_last_resubscribed_at)
       @_last_resubscribed_at
@@ -727,11 +769,11 @@ class Subscription < ApplicationRecord
   end
 
   def charges_completed?
-    has_fixed_length? && purchases.successful.count == charge_occurrence_count
+    has_fixed_length? && successful_purchases.count == charge_occurrence_count
   end
 
   def remaining_charges_count
-    has_fixed_length? ? charge_occurrence_count - purchases.successful.count : 0
+    has_fixed_length? ? charge_occurrence_count - successful_purchases.count : 0
   end
 
   # Certain events should transition the subscription from pending cancellation to cancelled thus not allowing the customer access to updates.
@@ -927,12 +969,8 @@ class Subscription < ApplicationRecord
       payment_options.alive.last
     end
 
-    def get_vat_id_from_original_purchase(purchase)
-      if original_purchase.purchase_sales_tax_info&.business_vat_id
-        purchase.business_vat_id = original_purchase.purchase_sales_tax_info.business_vat_id
-      elsif original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").exists?
-        purchase.business_vat_id = original_purchase.refunds.where("gumroad_tax_cents > 0").where("amount_cents = 0").first.business_vat_id
-      end
+    def set_vat_id_for_purchase(purchase)
+      purchase.business_vat_id = business_vat_id if business_vat_id.present?
     end
 
     def schedule_member_cancellation_workflow_jobs
@@ -966,10 +1004,6 @@ class Subscription < ApplicationRecord
 
     def cached_subscription_events
       @_cached_subscription_events ||= subscription_events.order(occurred_at: :asc).to_a
-    end
-
-    def enable_flat_fee
-      self.flat_fee_applicable = true
     end
 
     def enable_mor_fee

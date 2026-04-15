@@ -20,14 +20,15 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "allows to mark PDF files as stampable" do
     visit edit_link_path(@product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    fixture_file = file_fixture("Alice's Adventures in Wonderland.pdf")
+    with_throttled_network(fixture_file) do
+      select_disclosure "Upload files"
+      attach_product_file(fixture_file)
 
-    # TODO(ershad): Enable this once we have a way to slow down the upload process
-    # button = find_button("Save changes", disabled: true)
-    # button.hover
-    # expect(button).to have_tooltip(text: "Files are still uploading...")
+      button = find_button("Save changes", disabled: true)
+      button.hover
+      expect(button).to have_tooltip(text: "Files are still uploading...")
+    end
 
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     find_button("Save changes").hover
@@ -57,9 +58,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "allows to mark video files as stream-only" do
     visit edit_link_path(@product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("sample.mov"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("sample.mov"))
     wait_for_file_embed_to_finish_uploading(name: "sample")
     within find_embed(name: "sample") do
       click_on "Edit"
@@ -92,9 +92,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
   it "displays file size after save properly" do
     @product.product_files << create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
     visit edit_link_path(@product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     expect(page).to have_embed(name: "Alice's Adventures in Wonderland")
     save_change
@@ -122,7 +121,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
   end
 
   it "allows users to upload subtitles with special characters in filenames" do
-    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
+    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, presigned_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
 
     product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
     @product.product_files << product_file
@@ -147,7 +146,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   describe "with video" do
     before do
-      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/1111163137454006b85553304efaffb7/original/[]&+.mp4")))))
+      allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, presigned_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/1111163137454006b85553304efaffb7/original/[]&+.mp4")))))
 
       product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
       @product.product_files << product_file
@@ -211,7 +210,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
         allow(s3_res_double).to receive(:bucket).times.and_return(bucket_double)
         allow(bucket_double).to receive(:object).times.and_return(@s3_object_double)
         allow(@s3_object_double).to receive(:content_length).times.and_return(1)
-        allow(@s3_object_double).to receive(:public_url).times.and_return(video_uri)
+        allow(@s3_object_double).to receive(:presigned_url).times.and_return(video_uri)
 
         visit edit_link_path(@product.unique_permalink) + "/content"
         within find_embed(name: "chapter2") do
@@ -276,9 +275,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
   it "allows setting ISBN on newly uploaded PDF files" do
     product = create(:product, user: seller)
     visit edit_link_path(product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     within find_embed(name: "Alice's Adventures in Wonderland") do
       click_on "Edit"
@@ -291,9 +289,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   it "allows to rename files multiple times", :sidekiq_inline do
     visit edit_link_path(@product.unique_permalink) + "/content"
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     save_change
 
@@ -322,7 +319,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
   end
 
   it "allows to rename files even if filenames have special characters [, ], &, +" do
-    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, public_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
+    allow(Aws::S3::Resource).to receive(:new).and_return(double(bucket: double(object: double(content_length: 1024, presigned_url: Addressable::URI.encode("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")))))
 
     product_file = create(:product_file, link: @product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/0000063137454006b85553304efaffb7/original/[]&+.mp4")
     create(:rich_content, entity: @product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }])
@@ -357,9 +354,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
       expect(page).to have_text("Episode 1 description")
     end
 
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("sample.mov"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("sample.mov"))
     wait_for_file_embed_to_finish_uploading(name: "sample")
     sleep 0.5 # wait for the editor to update the content
 
@@ -393,12 +389,11 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
     select_tab "Content"
 
-    select_disclosure "Upload files" do
-      attach_product_file([
-                            file_fixture("test.mp3"),
-                            file_fixture("Alice's Adventures in Wonderland.pdf")
-                          ])
-    end
+    select_disclosure "Upload files"
+    attach_product_file([
+                          file_fixture("test.mp3"),
+                          file_fixture("Alice's Adventures in Wonderland.pdf")
+                        ])
     sleep 0.5 # wait for the editor to update the content
     send_keys :enter
     within_file_group "Untitled" do
@@ -469,9 +464,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
       select_tab "Content"
 
-      select_disclosure "Upload files" do
-        attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-      end
+      select_disclosure "Upload files"
+      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
       wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
       sleep 0.5 # wait for the editor to update the content
 
@@ -504,9 +498,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
       select_tab "Content"
 
-      select_disclosure "Upload files" do
-        attach_product_file(file_fixture("sample.mov"))
-      end
+      select_disclosure "Upload files"
+      attach_product_file(file_fixture("sample.mov"))
       wait_for_file_embed_to_finish_uploading(name: "sample")
       sleep 0.5 # wait for the editor to update the content
 
@@ -589,9 +582,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
     select_tab "Content"
 
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
     save_change
 
@@ -599,9 +591,8 @@ describe("File embeds in product content editor", type: :system, js: true) do
     select_combo_box_option("Untitled 2", from: "Select a version")
     expect(page).to_not have_embed(name: "Alice's Adventures in Wonderland")
 
-    select_disclosure "Upload files" do
-      click_on "Existing product files"
-    end
+    select_disclosure "Upload files"
+    click_on "Existing product files"
 
     within_modal "Select existing product files" do
       expect(page).to have_text("Alice's Adventures in Wonderland")

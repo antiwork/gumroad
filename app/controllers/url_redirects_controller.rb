@@ -3,29 +3,31 @@
 class UrlRedirectsController < ApplicationController
   include SignedUrlHelper
   include ProductsHelper
+  include PageMeta::Favicon
+
+  layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page, :confirm_page, :read, :stream, :download_page]
 
   before_action :fetch_url_redirect, except: %i[
-    show stream download_subtitle_file read download_archive latest_media_locations download_product_files
-    audio_durations
+    show stream download_subtitle_file read download_archive download_product_files
   ]
   before_action :redirect_to_custom_domain_if_needed, only: :download_page
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
                                              hls_playlist download_subtitle_file read
-                                             download_archive latest_media_locations download_product_files audio_durations]
+                                             download_archive download_product_files
+                                             save_last_content_page]
   before_action :hide_layouts, only: %i[
-    confirm_page membership_inactive_page expired rental_expired_page show download_page download_product_files stream smil hls_playlist download_subtitle_file read
+    show download_product_files smil hls_playlist download_subtitle_file
   ]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
   after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ) }, only: [:read]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_WATCH) }, only: [:hls_playlist, :smil]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD) }, only: [:show]
-  after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_VIEW) }, only: [:download_page]
+  after_action -> { create_download_page_view_consumption_event! }, only: [:download_page]
 
-  skip_before_action :check_suspended, only: %i[show stream confirm confirm_page download_page
-                                                download_subtitle_file download_archive download_product_files audio_durations]
+  skip_before_action :check_suspended, only: %i[confirm]
   before_action :set_noindex_header, only: %i[confirm_page download_page]
 
   rescue_from ActionController::RoutingError do |exception|
@@ -54,28 +56,38 @@ class UrlRedirectsController < ApplicationController
     e404 unless @product_file&.readable?
 
     s3_retrievable = @product_file
-    @title = @product_file.with_product_files_owner.name
-    @read_id = @product_file.external_id
-    @read_url = signed_download_url_for_s3_key_and_filename(s3_retrievable.s3_key, s3_retrievable.s3_filename, cache_group: "read")
+    title = @product_file.with_product_files_owner.name
+    set_meta_tag(title:)
+    read_url = signed_download_url_for_s3_key_and_filename(s3_retrievable.s3_key, s3_retrievable.s3_filename, cache_group: "read")
 
-    # Used for tracking page turns:
-    @url_redirect_id = @url_redirect.external_id
-    @purchase_id = @url_redirect.purchase.try(:external_id)
-    @product_file_id = @product_file.try(:external_id)
-    @latest_media_location = @product_file.latest_media_location_for(@url_redirect.purchase)
     trigger_files_lifecycle_events
+
+    render inertia: "UrlRedirects/Read", props: UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).read_page_props(
+      product_file: @product_file,
+      read_url:,
+      title:,
+    )
   rescue ArgumentError
     redirect_to(library_path)
   end
 
   def download_page
-    @hide_layouts = true
+    if download_page_polling_request?
+      props = requested_download_page_polling_props
+      return render(inertia: "UrlRedirects/DownloadPage", props:)
+    end
 
-    @body_class = "download-page responsive responsive-nav"
-    @show_user_favicon = true
-    @title = @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_with_content_props(common_props)
+    set_download_page_meta_tags
     trigger_files_lifecycle_events
+
+    presenter = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:)
+    props = presenter.download_page_with_content_props(common_props).merge(
+      audio_durations: InertiaRails.optional { audio_durations_data },
+      latest_media_locations: InertiaRails.optional { latest_media_locations_data },
+      dropbox_api_key: DROPBOX_PICKER_API_KEY,
+    )
+
+    render inertia: "UrlRedirects/DownloadPage", props:
   end
 
   def download_product_files
@@ -89,18 +101,25 @@ class UrlRedirectsController < ApplicationController
       @product_file = product_files.first
 
       if @product_file.must_be_pdf_stamped? && @url_redirect.missing_stamped_pdf?(@product_file)
-        flash[:alert] = "We are preparing the file for download. You will receive an email when it is ready."
+        flash[:warning] = "We are preparing the file for download. You will receive an email when it is ready."
 
         # Do not enqueue the job more than once in 2 hours
         Rails.cache.fetch(PdfStampingService.cache_key_for_purchase(@url_redirect.purchase_id), expires_in: 4.hours) do
           StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
         end
 
-        return redirect_to(@url_redirect.download_page_url)
+        return redirect_to(@url_redirect.download_page_url, allow_other_host: true)
       end
 
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
+    end
+  rescue Aws::S3::Errors::NotFound
+    if request.format.json?
+      render(json: { error: "The file is no longer available." }, status: :not_found)
+    else
+      flash[:warning] = "The file is no longer available. Please contact the seller."
+      redirect_to(@url_redirect.download_page_url, allow_other_host: true)
     end
   end
 
@@ -112,12 +131,19 @@ class UrlRedirectsController < ApplicationController
       render json: { url: }
     else
       e404 if archive.nil?
-      redirect_to(
-        signed_download_url_for_s3_key_and_filename(archive.s3_key, archive.s3_filename),
-        allow_other_host: true
-      )
-      event_type = params[:folder_id].present? ? ConsumptionEvent::EVENT_TYPE_FOLDER_DOWNLOAD : ConsumptionEvent::EVENT_TYPE_DOWNLOAD_ALL
-      create_consumption_event!(event_type)
+      begin
+        redirect_to(
+          signed_download_url_for_s3_key_and_filename(archive.s3_key, archive.s3_filename),
+          allow_other_host: true
+        )
+        event_type = params[:folder_id].present? ? ConsumptionEvent::EVENT_TYPE_FOLDER_DOWNLOAD : ConsumptionEvent::EVENT_TYPE_DOWNLOAD_ALL
+        create_consumption_event!(event_type)
+      rescue Aws::S3::Errors::NotFound
+        archive.mark_in_progress!
+        archive.generate_zip_archive!
+        flash[:warning] = "We are preparing the file for download. Please try again shortly."
+        redirect_to(@url_redirect.download_page_url, allow_other_host: true)
+      end
     end
   end
 
@@ -151,7 +177,7 @@ class UrlRedirectsController < ApplicationController
 
   def confirm_page
     @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]
-    @title = "#{@url_redirect.referenced_link.name} - Confirm email"
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Confirm email")
     extra_props = common_props.merge(
       confirmation_info: {
         id: @url_redirect.token,
@@ -160,22 +186,24 @@ class UrlRedirectsController < ApplicationController
         email: params[:email],
       },
     )
-    @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
+    props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
+
+    render inertia: "UrlRedirects/ConfirmPage", props: props
   end
 
   def expired
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:access_expired]
-    render_unavailable_page(title_suffix: "Access expired")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Access expired")
+    render inertia: "UrlRedirects/Expired", props: unavailable_page_props(:access_expired)
   end
 
   def rental_expired_page
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:rental_expired]
-    render_unavailable_page(title_suffix: "Your rental has expired")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your rental has expired")
+    render inertia: "UrlRedirects/RentalExpired", props: unavailable_page_props(:rental_expired)
   end
 
   def membership_inactive_page
-    @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:inactive_membership]
-    render_unavailable_page(title_suffix: "Your membership is inactive")
+    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Your membership is inactive")
+    render inertia: "UrlRedirects/MembershipInactive", props: unavailable_page_props(:inactive_membership)
   end
 
   def change_purchaser
@@ -211,59 +239,45 @@ class UrlRedirectsController < ApplicationController
   def send_to_kindle
     return render json: { success: false, error: "Please enter a valid Kindle email address" } if params[:email].blank?
 
+    purchase = @url_redirect.purchase
+    if purchase && (purchase.stripe_refunded || (purchase.chargeback_date.present? && !purchase.chargeback_reversed) || purchase.is_access_revoked)
+      return e404_json
+    end
+    return e404_json if @url_redirect.rental_expired?
+    return e404_json if purchase&.subscription && !purchase.subscription.grant_access_to_product?
+    if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
+      return e404_json
+    end
+    if purchase.present? && @url_redirect.has_been_seen && @url_redirect.imported_customer.blank?
+      identity_verified = cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
+                          (purchase.purchaser.present? && purchase.purchaser == logged_in_user) ||
+                          purchase.ip_address == request.remote_ip
+      return e404_json if !identity_verified
+    end
+
+    @product_file = @url_redirect.product_file(params[:file_external_id])
+    return render json: { success: false, error: "File not found" }, status: :not_found if @product_file.nil?
+    return render json: { success: false, error: "This file cannot be sent to Kindle" }, status: :unprocessable_entity if !@product_file.can_send_to_kindle?
+
     if logged_in_user.present?
       logged_in_user.kindle_email = params[:email]
       return render json: { success: false, error: logged_in_user.errors.full_messages.to_sentence } unless logged_in_user.save
     end
 
-    @product_file = ProductFile.find_by_external_id(params[:file_external_id])
-    begin
-      @product_file.send_to_kindle(params[:email])
-      create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ)
-      render json: { success: true }
-    rescue ArgumentError => e
-      render json: { success: false, error: e.message }
-    end
+    @product_file.send_to_kindle(params[:email])
+    create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ)
+    render json: { success: true }
+  rescue ArgumentError => e
+    render json: { success: false, error: e.message }
   end
 
   # Consumption event is created by front-end code
   def stream
-    @title = "Watch"
-    @body_id = "stream_page"
-    @body_class = "download-page responsive responsive-nav"
+    set_meta_tag(title: "Watch")
+    product_file = @url_redirect.product_file(params[:product_file_id]) || @url_redirect.alive_product_files.find(&:streamable?)
+    e404 unless product_file&.streamable?
 
-    @product_file = @url_redirect.product_file(params[:product_file_id]) || @url_redirect.alive_product_files.find(&:streamable?)
-    e404 unless @product_file&.streamable?
-
-    @videos_playlist = @url_redirect.video_files_playlist(@product_file)
-    @should_show_transcoding_notice = logged_in_user == @url_redirect.seller && !@url_redirect.with_product_files.has_been_transcoded?
-
-    @url_redirect_id = @url_redirect.external_id
-    @purchase_id = @url_redirect.purchase.try(:external_id)
-    render :video_stream
-  end
-
-  def latest_media_locations
-    e404 if @url_redirect.purchase.nil? || @url_redirect.installment.present?
-
-    product_files = @url_redirect.alive_product_files.select(:id)
-    media_locations_by_file = MediaLocation.max_consumed_at_by_file(purchase_id: @url_redirect.purchase.id).index_by(&:product_file_id)
-
-    json = product_files.each_with_object({}) do |product_file, hash|
-      hash[product_file.external_id] = media_locations_by_file[product_file.id].as_json
-    end
-
-    render json:
-  end
-
-  def audio_durations
-    return render json: {} if params[:file_ids].blank?
-
-    json = @url_redirect.alive_product_files.where(filegroup: "audio").by_external_ids(params[:file_ids]).each_with_object({}) do |product_file, hash|
-      hash[product_file.external_id] = product_file.content_length
-    end
-
-    render json:
+    render inertia: "UrlRedirects/Stream", props: UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).stream_page_props(product_file:)
   end
 
   def media_urls
@@ -277,6 +291,13 @@ class UrlRedirectsController < ApplicationController
     end
 
     render json:
+  end
+
+  def save_last_content_page
+    return render json: { success: false, error: "Purchase not found" }, status: :unprocessable_entity if @url_redirect.purchase.blank?
+
+    @url_redirect.purchase.update!(last_content_page_id: params[:page_id])
+    render json: { success: true }
   end
 
   private
@@ -313,6 +334,7 @@ class UrlRedirectsController < ApplicationController
 
     def register_that_user_has_downloaded_product
       return if @url_redirect.nil?
+      return if download_page_polling_request?
 
       @url_redirect.increment!(:uses, 1)
       @url_redirect.mark_as_seen
@@ -356,6 +378,14 @@ class UrlRedirectsController < ApplicationController
         return redirect_to url_redirect_membership_inactive_page_path(@url_redirect.token)
       end
 
+      if params[:access_token].present? && params[:mobile_token] == Api::Mobile::BaseController::MOBILE_TOKEN
+        doorkeeper_authorize! :mobile_api
+        if current_api_user.present?
+          sign_in current_api_user
+          return if purchase && purchase.purchaser && purchase.purchaser == logged_in_user
+        end
+      end
+
       if cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
          (purchase && ((purchase.purchaser && purchase.purchaser == logged_in_user) || purchase.ip_address == request.remote_ip))
         return
@@ -389,11 +419,58 @@ class UrlRedirectsController < ApplicationController
       }
     end
 
-    def render_unavailable_page(title_suffix:)
-      @title = "#{@url_redirect.referenced_link.name} - #{title_suffix}"
-      @react_component_props = UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(common_props)
+    def audio_durations_data
+      @url_redirect.alive_product_files.where(filegroup: "audio").each_with_object({}) do |product_file, hash|
+        hash[product_file.external_id] = product_file.content_length
+      end
+    end
 
-      render :unavailable
+    def latest_media_locations_data
+      return {} if @url_redirect.purchase.nil? || @url_redirect.installment.present?
+
+      product_files = @url_redirect.alive_product_files.select(:id)
+      media_locations_by_file = MediaLocation.max_consumed_at_by_file(purchase_id: @url_redirect.purchase.id).index_by(&:product_file_id)
+
+      product_files.each_with_object({}) do |product_file, hash|
+        hash[product_file.external_id] = media_locations_by_file[product_file.id].as_json
+      end
+    end
+
+    DOWNLOAD_PAGE_POLLING_PROPS = %w[audio_durations latest_media_locations].freeze
+
+    def download_page_polling_request?
+      return false unless request.headers["X-Inertia"] == "true" &&
+        request.headers["X-Inertia-Partial-Component"] == "UrlRedirects/DownloadPage" &&
+        request.headers["X-Inertia-Partial-Data"].present?
+
+      requested = request.headers["X-Inertia-Partial-Data"].split(",")
+      (requested - DOWNLOAD_PAGE_POLLING_PROPS).empty?
+    end
+
+    def requested_download_page_polling_props
+      requested = request.headers["X-Inertia-Partial-Data"].split(",")
+      props = {}
+      props[:audio_durations] = audio_durations_data if requested.include?("audio_durations")
+      props[:latest_media_locations] = latest_media_locations_data if requested.include?("latest_media_locations")
+      props
+    end
+
+    def set_download_page_meta_tags
+      set_favicon_meta_tags(@url_redirect.seller)
+      set_meta_tag(title: @url_redirect.with_product_files.name == "Untitled" ? @url_redirect.referenced_link.name : @url_redirect.with_product_files.name)
+      set_meta_tag(name: "apple-itunes-app", content: "app-id=#{IOS_APP_ID}, app-argument=#{@url_redirect.download_page_url}")
+    end
+
+    def create_download_page_view_consumption_event!
+      return if download_page_polling_request?
+
+      create_consumption_event!(ConsumptionEvent::EVENT_TYPE_VIEW)
+    end
+
+    def unavailable_page_props(reason_code)
+      content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[reason_code]
+      extra_props = common_props.merge(content_unavailability_reason_code:)
+      UrlRedirectPresenter.new(url_redirect: @url_redirect, logged_in_user:).download_page_without_content_props(extra_props)
     end
 
     def common_props

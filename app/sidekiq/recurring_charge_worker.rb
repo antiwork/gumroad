@@ -48,7 +48,6 @@ class RecurringChargeWorker
             is_applying_plan_change: true,
           )
           latest_applicable_plan_change.update!(applied: true)
-          subscription.update!(flat_fee_applicable: true) unless subscription.flat_fee_applicable?
         rescue Subscription::UpdateFailed => e
           Rails.logger.info("RecurringChargeWorker#perform(#{subscription_id}) failed: #{e.class} (#{e.message})")
           return

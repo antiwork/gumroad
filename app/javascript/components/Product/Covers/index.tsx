@@ -1,9 +1,9 @@
+import { ArrowLeft, ArrowRight } from "@boxicons/react";
 import * as React from "react";
 
 import { AssetPreview } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 
-import { Icon } from "$app/components/Icons";
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useOnChange } from "$app/components/useOnChange";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
@@ -48,7 +48,13 @@ export const Covers = ({
   );
 
   return (
-    <figure className={classNames("group relative col-[1/-1]", className)} aria-label="Product preview">
+    <figure
+      className={classNames(
+        "group relative col-span-full overflow-hidden rounded-t border-b border-border bg-(image:--product-cover-placeholder) bg-cover",
+        className,
+      )}
+      aria-label="Product preview"
+    >
       {closeButton}
       {prevCover ? <PreviewArrow direction="previous" onClick={() => setActiveCoverId(prevCover.id)} /> : null}
       {nextCover ? <PreviewArrow direction="next" onClick={() => setActiveCoverId(nextCover.id)} /> : null}
@@ -94,13 +100,12 @@ export const Covers = ({
 };
 
 const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; onClick: () => void }) => {
-  const iconName = direction === "previous" ? "arrow-left" : "arrow-right";
   const positionClass = direction === "previous" ? "left-0" : "right-0";
 
   return (
     <button
       className={classNames(
-        "absolute top-1/2 z-1 mx-3 h-8 w-8 -translate-y-1/2 items-center justify-center",
+        "absolute top-1/2 z-1 mx-3 h-8 w-8 -translate-y-1/2 items-center justify-center all-unset",
         "rounded-full border border-border bg-background",
         "hidden group-hover:flex",
         positionClass,
@@ -111,7 +116,7 @@ const PreviewArrow = ({ direction, onClick }: { direction: "previous" | "next"; 
       }}
       aria-label={direction === "previous" ? "Show previous cover" : "Show next cover"}
     >
-      <Icon name={iconName} />
+      {direction === "previous" ? <ArrowLeft className="size-5" /> : <ArrowRight className="size-5" />}
     </button>
   );
 };

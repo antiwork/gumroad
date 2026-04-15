@@ -10,7 +10,7 @@ type MarkAsStaffPickedActionProps = {
 const MarkAsStaffPickedAction = ({ product }: MarkAsStaffPickedActionProps) =>
   product.admins_can_mark_as_staff_picked && (
     <AdminActionButton
-      url={Routes.admin_product_staff_picked_path(product.id)}
+      url={Routes.admin_product_staff_picked_path(product.external_id)}
       label="Mark as staff-picked"
       loading="Marking as staff-picked..."
       done="Marked as staff-picked!"

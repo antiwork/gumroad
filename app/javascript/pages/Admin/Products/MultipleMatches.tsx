@@ -1,43 +1,45 @@
+import { ArrowUpRightSquare } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
-import { Icon } from "$app/components/Icons";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type ProductMatchProps = {
-  id: number;
+  external_id: string;
   name: string;
   price_formatted: string;
   long_url: string;
-  user: { id: number; name: string };
+  user: { external_id: string; name: string };
   created_at: string;
 };
 
 const ProductMatch = ({ product }: { product: ProductMatchProps }) => {
-  const userName = product.user.name && product.user.name.length > 0 ? product.user.name : `User ${product.user.id}`;
+  const userName =
+    product.user.name && product.user.name.length > 0 ? product.user.name : `User ${product.user.external_id}`;
 
   return (
-    <tr>
-      <td data-label="Product" className="space-x-1">
+    <TableRow>
+      <TableCell className="space-x-1">
         <span>{product.price_formatted}</span>
         <span>&bull;</span>
-        <Link href={Routes.admin_product_url(product.id)} title={product.id.toString()}>
+        <Link href={Routes.admin_product_url(product.external_id)} title={product.external_id}>
           {product.name}
         </Link>
         <a href={product.long_url} target="_blank" rel="noreferrer noopener">
-          <Icon name="arrow-up-right-square" />
+          <ArrowUpRightSquare className="size-5" />
         </a>
-      </td>
+      </TableCell>
 
-      <td data-label="By">
-        <Link href={Routes.admin_user_path(product.user.id)} title={product.user.id.toString()}>
+      <TableCell>
+        <Link href={Routes.admin_user_path(product.user.external_id)} title={product.user.external_id}>
           {userName}
         </Link>
-        <small>
+        <small className="block">
           <DateTimeWithRelativeTooltip date={product.created_at} />
         </small>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 };
 
@@ -45,19 +47,19 @@ const AdminProductsMultipleMatches = () => {
   const { product_matches } = usePage<{ product_matches: ProductMatchProps[] }>().props;
 
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Product</th>
-          <th>By</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Product</TableHead>
+          <TableHead>By</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {product_matches.map((product) => (
-          <ProductMatch key={product.id} product={product} />
+          <ProductMatch key={product.external_id} product={product} />
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 };
 

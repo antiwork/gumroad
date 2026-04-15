@@ -4,6 +4,10 @@ class Api::Mobile::AnalyticsController < Api::Mobile::BaseController
   before_action -> { doorkeeper_authorize! :creator_api }
   before_action :set_date_range, only: [:by_date, :by_state, :by_referral]
 
+  rescue_from Faraday::TimeoutError do
+    render json: { success: false, message: "Analytics request timed out" }, status: :gateway_timeout
+  end
+
   def data_by_date
     data = SellerMobileAnalyticsService.new(current_resource_owner, range: params[:range], fields: [:sales_count, :purchases], query: params[:query]).process
     render json: data
@@ -44,7 +48,7 @@ class Api::Mobile::AnalyticsController < Api::Mobile::BaseController
   def products
     pagination, records = pagy(current_resource_owner.products_for_creator_analytics, limit_max: nil, limit_param: :items)
     render json: {
-      products: records.as_json(mobile: true),
+      products: records.as_json(original: true, only: [:id]),
       meta: { pagination: PagyPresenter.new(pagination).metadata }
     }
   end

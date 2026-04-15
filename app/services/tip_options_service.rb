@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class TipOptionsService
-  DEFAULT_TIP_OPTIONS = [0, 10, 20]
+  DEFAULT_TIP_OPTIONS = [0, 15, 20, 25]
   DEFAULT_DEFAULT_TIP_OPTION = 0
 
   def self.get_tip_options

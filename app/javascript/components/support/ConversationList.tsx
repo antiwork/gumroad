@@ -3,7 +3,8 @@ import placeholderImage from "images/placeholders/support.png";
 import React from "react";
 
 import { Button } from "$app/components/Button";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 export function ConversationList({
   onSelect,
@@ -23,9 +24,7 @@ export function ConversationList({
     return (
       <section className="p-4 md:p-8">
         <Placeholder>
-          <figure>
-            <img src={placeholderImage} />
-          </figure>
+          <PlaceholderImage src={placeholderImage} />
           <h2>Need a hand? We're here for you.</h2>
           <p>
             Got a question about selling, payouts, or your products? Send us a message and we'll reply right here so you
@@ -41,18 +40,18 @@ export function ConversationList({
 
   return (
     <div className="p-4 md:p-8">
-      <table>
-        <thead>
-          <tr>
-            <th>Subject</th>
-            <th>Last updated</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Subject</TableHead>
+            <TableHead>Last updated</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {conversations.map((c) => (
-            <tr key={c.slug} aria-selected={false} onClick={() => onSelect(c.slug)}>
-              <td className={c.isUnread ? "w-full font-bold" : "w-full"}>{c.subject}</td>
-              <td className="whitespace-nowrap">
+            <TableRow key={c.slug} selected={false} onClick={() => onSelect(c.slug)}>
+              <TableCell className={c.isUnread ? "w-full font-bold" : "w-full"}>{c.subject}</TableCell>
+              <TableCell className="whitespace-nowrap">
                 {c.latestMessageAt
                   ? new Date(c.latestMessageAt).toLocaleDateString(undefined, {
                       day: "numeric",
@@ -64,11 +63,11 @@ export function ConversationList({
                       hour12: true,
                     })
                   : "—"}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

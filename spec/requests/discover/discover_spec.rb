@@ -215,6 +215,36 @@ describe("Discover", js: true, type: :system) do
         expect_product_cards_in_order([related_wishlist, *wishlists.first(3)])
       end
     end
+
+    it "allows users to follow and unfollow a wishlist from the discover page" do
+      login_as @buyer
+      visit discover_url(host: discover_host)
+      wait_for_ajax
+
+      within_section "Wishlists you might like", section_element: :section do
+        wishlist_card = find_product_card(wishlists.first)
+        within wishlist_card do
+          click_on "Follow"
+          wait_for_ajax
+          expect(page).to have_button("Unfollow")
+        end
+      end
+
+      expect(WishlistFollower.where(wishlist: wishlists.first, follower_user: @buyer)).to exist
+      expect(wishlists.first.reload.follower_count).to eq(1)
+
+      within_section "Wishlists you might like", section_element: :section do
+        wishlist_card = find_product_card(wishlists.first)
+        within wishlist_card do
+          click_on "Unfollow"
+          wait_for_ajax
+          expect(page).to have_button("Follow")
+        end
+      end
+
+      expect(WishlistFollower.alive.where(wishlist: wishlists.first, follower_user: @buyer)).not_to exist
+      expect(wishlists.first.reload.follower_count).to eq(0)
+    end
   end
 
   describe "category pages" do
@@ -384,6 +414,7 @@ describe("Discover", js: true, type: :system) do
 
     create(:thumbnail, product:)
     product.reload
+    product.thumbnail.url
 
     allow(product).to receive(:recommendable?).and_return(true)
     allow(product).to receive(:reviews_count).and_return(1)
@@ -547,7 +578,7 @@ describe("Discover", js: true, type: :system) do
         visit discover_url(host: discover_host)
 
         find("[role=menuitem]", text: "More").hover
-        click_on "Writing & Publishing"
+        click_on "Other"
 
         within "[role=menubar]" do
           expect(page).to have_selector("[aria-current=true]", text: "More")

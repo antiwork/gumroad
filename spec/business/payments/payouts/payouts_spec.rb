@@ -88,7 +88,7 @@ describe Payouts do
         let(:user) { create(:tos_user, payment_address: "bob1@example.com") }
 
         before do
-          create(:balance, user: user, amount_cents: 1001, date: payout_date - 3)
+          create(:balance, user: user, amount_cents: 100_01, date: payout_date - 3)
           create(:user_compliance_info, user:)
         end
 
@@ -101,8 +101,8 @@ describe Payouts do
     describe "unpaid balance" do
       let(:payout_date) { Date.today }
       let(:u1) { create(:singaporean_user_with_compliance_info, user_risk_state: "compliant", payment_address: "bob1@example.com") }
-      let(:u1b1) { create(:balance, user: u1, amount_cents: 499, date: payout_date - 3) }
-      let(:u1b2) { create(:balance, user: u1, amount_cents: 501, date: payout_date - 2) }
+      let(:u1b1) { create(:balance, user: u1, amount_cents: 49_99, date: payout_date - 3) }
+      let(:u1b2) { create(:balance, user: u1, amount_cents: 50_01, date: payout_date - 2) }
 
       describe "enough money in balance to meet minimum" do
         before { u1b1 && u1b2 }
@@ -122,7 +122,7 @@ describe Payouts do
         end
 
         describe "paid balances for the same payout date" do
-          let(:u1p1) { create(:payment_completed, user: u1, payout_period_end_date: payout_date, amount_cents: 501) }
+          let(:u1p1) { create(:payment_completed, user: u1, payout_period_end_date: payout_date, amount_cents: 50_01) }
 
           before { u1b1 && u1p1 }
 
@@ -132,7 +132,7 @@ describe Payouts do
         end
 
         describe "returned balances for the same payout date" do
-          let(:u1p1) { create(:payment_returned, user: u1, payout_period_end_date: payout_date, amount_cents: 501) }
+          let(:u1p1) { create(:payment_returned, user: u1, payout_period_end_date: payout_date, amount_cents: 50_01) }
 
           before { u1p1 }
 
@@ -148,7 +148,7 @@ describe Payouts do
 
       before do
         allow(StripePayoutProcessor).to receive(:is_user_payable).and_return(true)
-        create(:balance, user: seller, amount_cents: 50_00, date: payout_date - 3)
+        create(:balance, user: seller, amount_cents: 100_00, date: payout_date - 3)
       end
 
       it "returns true when instant payouts are supported and the user has an eligible balance" do
@@ -167,6 +167,31 @@ describe Payouts do
         allow_any_instance_of(User).to receive(:unpaid_balance_cents_up_to_date).and_return(200_00)
         expect(StripePayoutProcessor).to receive(:is_user_payable).with(seller, 100_00, add_comment: false, from_admin: false, payout_type: anything)
         described_class.is_user_payable(seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+      end
+    end
+
+    describe "instant payouts with settling funds" do
+      let(:settling_seller) { create(:compliant_user) }
+
+      before do
+        allow(settling_seller).to receive(:instant_payouts_supported?).and_return(true)
+        allow(settling_seller).to receive(:instantly_payable_unpaid_balance_cents_up_to_date).and_return(0)
+        allow(settling_seller).to receive(:unpaid_balance_cents_up_to_date).and_return(200_00)
+      end
+
+      it "returns false and adds a settling funds note when add_comment is true" do
+        expect(described_class.is_user_payable(settling_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: true)).to be(false)
+
+        date = Time.current.to_fs(:formatted_date_full_month)
+        expect(settling_seller.comments.with_type_payout_note.last.content).to eq(
+          "Instant Payout on #{date} was skipped because funds are still settling. This should resolve within 1-2 days."
+        )
+      end
+
+      it "returns false without adding a note when add_comment is false" do
+        expect do
+          described_class.is_user_payable(settling_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: false)
+        end.not_to change { settling_seller.comments.with_type_payout_note.count }
       end
     end
 
@@ -432,10 +457,10 @@ describe Payouts do
 
         seller = create(:compliant_user, payment_address: "seller@gr.co")
         create(:user_compliance_info, user: seller)
-        create(:balance, user: seller, date: Date.today - 3, amount_cents: 900)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 99_00)
         seller2 = create(:compliant_user, payment_address: "seller@gr.co")
         create(:user_compliance_info, user: seller2)
-        create(:balance, user: seller2, date: Date.today - 3, amount_cents: 1000)
+        create(:balance, user: seller2, date: Date.today - 3, amount_cents: 100_00)
         seller3 = create(:compliant_user, payment_address: "seller@gr.co")
         create(:user_compliance_info, user: seller3)
         expect(seller3.unpaid_balance_cents).to eq(0)
@@ -449,12 +474,27 @@ describe Payouts do
         end.not_to change { seller3.comments.count }
 
         date = Time.current.to_fs(:formatted_date_full_month)
-        content = "Payout on #{date} was skipped because the account balance $9 USD was less than the minimum payout amount of $10 USD."
+        content = "Payout on #{date} was skipped because the account balance $99 USD was less than the minimum payout amount of $100 USD."
+        expect(seller.comments.with_type_payout_note.last.content).to eq(content)
+      end
+
+      it "adds a comment if payout is skipped because the account is under review" do
+        seller = create(:user, payment_address: "seller@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+        end.to change { seller.comments.with_type_payout_note.count }.by(1)
+
+        date = Time.current.to_fs(:formatted_date_full_month)
+        content = "Payout on #{date} was skipped because the account was under review."
+        expect(seller.comments.with_type_payout_note.count).to eq 1
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
       end
 
       it "adds a comment if payout is skipped because the account is suspended" do
-        seller = create(:user, user_risk_state: "suspended_for_fraud", payment_address: "seller@gr.co")
+        seller = create(:user, user_risk_state: "suspended_for_fraud", payment_address: "seller@example.com")
         create(:user_compliance_info, user: seller)
         create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
 

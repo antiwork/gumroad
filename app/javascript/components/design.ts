@@ -6,5 +6,5 @@ export type VisualState = (typeof visualStates)[number];
 export const mainColors = ["primary", "black", "accent", "filled"] as const;
 export type MainColor = (typeof mainColors)[number];
 
-export const buttonColors = [...visualStates, ...mainColors];
+export const buttonColors = ["default", ...visualStates, ...mainColors] as const;
 export type ButtonColor = (typeof buttonColors)[number];

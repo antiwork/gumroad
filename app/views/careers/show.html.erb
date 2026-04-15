@@ -1,0 +1,78 @@
+<% job = @job %>
+
+<div class="min-h-screen">
+  <%= render "home/shared/header",
+    bg_color: "dark-gray",
+    text_color: "white",
+    title: job[:title],
+    description: "#{job[:type]}&nbsp;&nbsp;&nbsp;&nbsp;#{job[:location]}",
+    no_border: true,
+    gap: "gap-4 md:gap-6"
+  %>
+
+  <div class="bg-white py-16 md:py-24">
+    <div class="mx-auto max-w-2xl px-8">
+      <div class="prose prose-lg max-w-none">
+        <p class="text-lg md:text-xl leading-relaxed">
+          <%= job[:intro] %>
+        </p>
+        <p class="text-lg md:text-xl leading-relaxed">
+          This is a full-time, in-person role in New York. If you'd prefer to contribute remotely, check out our <a href="https://antiwork.com/bounties" class="underline hover:text-pink">open-source bounties</a>.
+        </p>
+
+        <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">What you'll do</h2>
+        <p class="text-lg">
+          <%= job[:role_summary] %>
+        </p>
+        <ul class="mt-6 space-y-3">
+          <% job[:responsibilities]&.each do |item| %>
+            <li class="text-lg"><strong><%= item[:title] %>:</strong> <%= item[:description] %></li>
+          <% end %>
+        </ul>
+
+        <% if job[:stack].present? %>
+          <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">The stack</h2>
+          <p class="text-lg mb-4">We ship with tools that work.</p>
+          <ul class="space-y-2">
+            <% job[:stack].each do |item| %>
+              <li class="text-lg"><strong><%= item[:name] %>:</strong> <%= item[:tech] %></li>
+            <% end %>
+          </ul>
+        <% end %>
+
+        <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">What we offer</h2>
+        <p class="text-lg mb-4">
+          We are a high-output team of builders. We don't have an HR department, we don't have "middle managers," and we don't do corporate side quests.
+        </p>
+        <ul class="space-y-3">
+          <li class="text-lg"><strong><%= job[:salary] %>/year + bonus + benefits</strong></li>
+          <li class="text-lg"><strong>Stock ownership:</strong> Opportunity to purchase Gumroad stock at the latest FMV price at least once a year.</li>
+          <li class="text-lg"><strong>35-Hour week:</strong> We expect 35 hours of deep focus. The other 133 hours of your week are yours.</li>
+          <li class="text-lg"><strong>Lunch and coffee:</strong> We cover your food and coffee on the days you're in the office.</li>
+          <li class="text-lg"><strong>Full coverage:</strong> Premium health, dental, and vision insurance (US).</li>
+          <li class="text-lg"><strong>20 days paid vacation:</strong> Take time off to recharge throughout the year.</li>
+          <li class="text-lg"><strong>Retreats:</strong> Regular team events and offsites to sync on the road ahead.</li>
+          <li class="text-lg"><strong>Open Source:</strong> Our code is public. You can read the <a href="https://github.com/antiwork/gumroad" class="underline hover:text-pink">repo</a> before you even apply.</li>
+        </ul>
+
+        <h2 class="text-2xl md:text-3xl font-bold mt-12 mb-6">How to apply</h2>
+        <ol class="space-y-4 list-decimal list-inside">
+          <% job[:how_to_apply]&.each do |item| %>
+            <li class="text-lg"><strong><%= item[:step] %></strong> <%= item[:description].gsub('jobs@antiwork.com', '<a href="mailto:jobs@antiwork.com" class="underline hover:text-pink">jobs@antiwork.com</a>').gsub('GitHub repo', '<a href="https://github.com/antiwork/gumroad" class="underline hover:text-pink">GitHub repo</a>').html_safe %></li>
+          <% end %>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="px-8 pb-16 lg:px-[4vw] lg:pb-24">
+    <div class="flex flex-col gap-8 lg:gap-16 max-w-5xl mx-auto items-center">
+      <%= render "home/shared/button", text: "See open roles", url: "#{careers_path}#open-roles" %>
+    </div>
+  </div>
+
+  <%= image_tag "about/new-sale.svg", alt: "Gumroad illustration", class: "w-full min-h-[300px] object-cover" %>
+
+  <%= render "home/shared/footer" %>
+</div>
+

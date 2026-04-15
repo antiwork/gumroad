@@ -39,5 +39,11 @@ module ExternalId
     def by_external_ids(external_ids)
       where(id: Array.wrap(external_ids).map { from_external_id(it) })
     end
+
+    def external_id?(id_or_external_id)
+      raise ArgumentError, "value can't be blank" if id_or_external_id.blank?
+
+      id_or_external_id.to_i.to_s != id_or_external_id
+    end
   end
 end

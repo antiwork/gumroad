@@ -11,7 +11,7 @@ const MarkCompliantAction = ({ user }: MarkCompliantActionProps) =>
   !user.compliant && (
     <AdminAction
       label="Mark compliant"
-      url={Routes.mark_compliant_admin_user_path(user.id)}
+      url={Routes.mark_compliant_admin_user_path(user.external_id)}
       loading="Marking compliant..."
       done="Marked compliant"
       success_message="Marked compliant!"

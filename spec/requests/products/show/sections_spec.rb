@@ -25,32 +25,32 @@ describe "Profile settings on product pages", type: :system, js: true do
     product.update!(sections: [section1, section2, section3, section5, section4].map(&:id), main_section_index: 2)
 
     visit short_link_path(product)
-    expect(page).to have_selector("section:nth-child(2) h2", text: "Section 1")
+    expect(page).to have_selector("section:nth-child(3) h2", text: "Section 1")
     within_section "Section 1", section_element: :section do
       expect_product_cards_in_order(products)
     end
 
-    expect(page).to have_selector("section:nth-child(3) h2", text: "Section 2")
+    expect(page).to have_selector("section:nth-child(4) h2", text: "Section 2")
     within_section "Section 2", section_element: :section do
       expect(page).to have_link(count: 2)
       posts.each { expect(page).to have_link(_1.name, href: "/p/#{_1.slug}") }
     end
 
-    expect(page).to have_selector("section:nth-child(4) article", text: product.name)
+    expect(page).to have_selector("section:nth-child(5) article", text: product.name)
 
-    expect(page).to have_selector("section:nth-child(5) h2", text: "Section 3")
+    expect(page).to have_selector("section:nth-child(6) h2", text: "Section 3")
     within_section "Section 3", section_element: :section do
       expect(page).to have_selector("h2", text: "Heading")
       expect(page).to have_text("Some more text")
     end
 
-    expect(page).to have_selector("section:nth-child(6) h2", text: "Section 5")
+    expect(page).to have_selector("section:nth-child(7) h2", text: "Section 5")
     within_section "Section 4", section_element: :section do
       expect(page).to have_field "Your email address"
       expect(page).to have_button "Subscribe"
     end
 
-    expect(page).to have_selector("section:nth-child(7) h2", text: "Section 4")
+    expect(page).to have_selector("section:nth-child(8) h2", text: "Section 4")
     within_section "Section 5", section_element: :section do
       expect(page).to have_section("Featured product", section_element: :article)
     end
@@ -68,7 +68,7 @@ describe "Profile settings on product pages", type: :system, js: true do
       click_on "Products"
       check product2.name
     end
-    toggle_disclosure "Edit section"
+    find(:disclosure_button, "Edit section").execute_script("this.scrollIntoView({block: 'center'}); this.click()")
     click_on "Move section down"
 
     select_disclosure "Add section", match: :first do
@@ -80,25 +80,25 @@ describe "Profile settings on product pages", type: :system, js: true do
       select_combo_box_option search: product2.name, from: "Featured Product"
     end
 
-    all(:disclosure, "Add section").last.select_disclosure do
+    all(:disclosure_button, "Add section").last.select_disclosure do
       click_on "Posts"
     end
     sleep 1
-    all(:disclosure, "Edit section").last.select_disclosure do
+    all(:disclosure_button, "Edit section").last.select_disclosure do
       click_on "Name"
       fill_in "Name", with: "Posts!"
     end
 
-    all(:disclosure, "Add section").last.select_disclosure do
+    all(:disclosure_button, "Add section").last.select_disclosure do
       click_on "Subscribe"
     end
     sleep 1
 
-    all(:disclosure, "Add section")[2].select_disclosure do
+    all(:disclosure_button, "Add section")[2].select_disclosure do
       click_on "Rich text"
     end
     sleep 1
-    edit_rich_text_disclosure = all(:disclosure, "Edit section")[1]
+    edit_rich_text_disclosure = all(:disclosure_button, "Edit section")[1]
     edit_rich_text_disclosure.select_disclosure do
       click_on "Name"
       fill_in "Name", with: "Rich text!"
@@ -159,6 +159,37 @@ describe "Profile settings on product pages", type: :system, js: true do
     within_section "Rich text!" do
       expect(page).to have_text("Text!")
       expect(page).to have_image(src: image_url)
+    end
+  end
+
+  it "paginates product sections with more than 9 products", :elasticsearch_wait_for_refresh do
+    products = 12.times.map { |i| create(:product, user: seller, name: "Product #{i + 1}") }
+    Link.import(refresh: true, force: true)
+
+    section = create(
+      :seller_profile_products_section,
+      seller: seller,
+      product: product,
+      header: "More Products",
+      shown_products: products.map(&:id)
+    )
+
+    product.update!(sections: [section.id], main_section_index: 0)
+
+    visit short_link_path(product)
+
+    within_section "More Products", section_element: :section do
+      expect(page).to have_product_card(count: 9)
+      expect(page).to have_product_card(products[0])
+      expect(page).to_not have_product_card(products[9])
+    end
+
+    page.scroll_to :bottom
+    wait_for_ajax
+
+    within_section "More Products", section_element: :section do
+      expect(page).to have_product_card(products[9])
+      expect(page).to have_product_card(count: 12)
     end
   end
 end

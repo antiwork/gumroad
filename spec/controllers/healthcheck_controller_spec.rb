@@ -12,6 +12,8 @@ describe HealthcheckController do
     end
   end
 
+  SIDEKIQ_QUEUE_NAMES = [:critical, :default].freeze
+
   shared_examples "sidekiq healthcheck" do |queue_type, queue_name, limit|
     context "#{queue_type} queues" do
       before do
@@ -19,6 +21,10 @@ describe HealthcheckController do
           allow(queue_class).to receive(:new).and_return(queue_double)
         else
           allow(queue_class).to receive(:new).with(queue_name).and_return(queue_double)
+          (SIDEKIQ_QUEUE_NAMES - [queue_name]).each do |other_name|
+            other_double = double("queue #{other_name} double", size: 0)
+            allow(queue_class).to receive(:new).with(other_name).and_return(other_double)
+          end
         end
       end
 
@@ -49,6 +55,10 @@ describe HealthcheckController do
       it_behaves_like "sidekiq healthcheck", :queue, :critical, 12_000 do
         let(:queue_class) { Sidekiq::Queue }
       end
+
+      it_behaves_like "sidekiq healthcheck", :queue, :default, 300_000 do
+        let(:queue_class) { Sidekiq::Queue }
+      end
     end
 
     describe "Sidekiq retry set" do
@@ -56,10 +66,45 @@ describe HealthcheckController do
         let(:queue_class) { Sidekiq::RetrySet }
       end
     end
+  end
 
-    describe "Sidekiq dead set" do
-      it_behaves_like "sidekiq healthcheck", :retry_set, nil, 10_000 do
-        let(:queue_class) { Sidekiq::DeadSet }
+  describe "GET 'paypal_balance'" do
+    context "when PayPal topup is not needed (Redis key is false)" do
+      before do
+        $redis.set(RedisKey.paypal_topup_needed, "false")
+      end
+
+      it "returns HTTP success" do
+        get :paypal_balance
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("PayPal balance: topup not required")
+      end
+    end
+
+    context "when Redis key is not set" do
+      before do
+        $redis.del(RedisKey.paypal_topup_needed)
+      end
+
+      it "returns HTTP service_unavailable" do
+        get :paypal_balance
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("PayPal balance: topup required")
+      end
+    end
+
+    context "when PayPal topup is needed (Redis key is true)" do
+      before do
+        $redis.set(RedisKey.paypal_topup_needed, "true")
+      end
+
+      it "returns HTTP service_unavailable" do
+        get :paypal_balance
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("PayPal balance: topup required")
       end
     end
   end

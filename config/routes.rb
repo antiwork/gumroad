@@ -18,12 +18,19 @@ end
 Rails.application.routes.draw do
   get "/healthcheck" => "healthcheck#index"
   get "/healthcheck/sidekiq" => "healthcheck#sidekiq"
+  get "/healthcheck/paypal_balance" => "healthcheck#paypal_balance"
 
   use_doorkeeper do
     controllers applications: "oauth/applications"
     controllers authorized_applications: "oauth/authorized_applications"
     controllers authorizations: "oauth/authorizations"
     controllers tokens: "oauth/tokens"
+  end
+
+  namespace :oauth do
+    resource :mobile_pre_authorization, only: [:new] do
+      get :switch_account, on: :member
+    end
   end
 
   # third party analytics (near the top to matches constraint first)
@@ -35,12 +42,15 @@ Rails.application.routes.draw do
   # API routes used in both api.gumroad.com and gumroad.com/api
   def api_routes
     scope "v2", module: "v2", as: "v2" do
+      post "files/presign", to: "files#presign"
+      post "files/complete", to: "files#complete"
       resources :licenses, only: [] do
         collection do
           post :verify
           put :enable
           put :disable
           put :decrement_uses_count
+          put :rotate
         end
       end
 
@@ -53,6 +63,9 @@ Rails.application.routes.draw do
         end
         resources :skus, only: [:index]
         resources :subscribers, only: [:index]
+        put "bundle_contents", to: "bundle_contents#update"
+        resource :thumbnail, only: [:create, :destroy]
+        resources :covers, only: [:create, :destroy]
         member do
           put "disable"
           put "enable"
@@ -65,13 +78,30 @@ Rails.application.routes.draw do
           post :resend_receipt
         end
       end
-      resources :payouts, only: [:index, :show]
+      resources :payouts, only: [:index, :show] do
+        collection do
+          get :upcoming
+        end
+      end
       resources :subscribers, only: [:show]
 
       put "/resource_subscriptions", to: "resource_subscriptions#create"
       delete "/resource_subscriptions/:id", to: "resource_subscriptions#destroy"
       get "/resource_subscriptions", to: "resource_subscriptions#index"
     end
+  end
+
+  def purchases_invoice_routes
+    scope module: :purchases do
+      resources :purchases, only: [] do
+        resource :invoice, only: [:create, :new] do
+          get :confirm
+          post :confirm, action: :confirm_email
+        end
+      end
+    end
+
+    get "/purchases/:purchase_id/generate_invoice", to: redirect { |path_params, request| "/purchases/#{path_params[:purchase_id]}/invoice/new#{request.query_string.present? ? "?#{request.query_string}" : ""}" }
   end
 
   def product_tracking_routes(named_routes: true)
@@ -92,20 +122,15 @@ Rails.application.routes.draw do
 
   def product_info_and_purchase_routes(named_routes: true)
     product_tracking_routes(named_routes:)
+    purchases_invoice_routes
 
     get "/offer_codes/compute_discount", to: "offer_codes#compute_discount"
     get "/products/search", to: "links#search"
 
     if named_routes
       get "/braintree/client_token", to: "braintree#client_token", as: :braintree_client_token
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice", as: :generate_invoice_by_buyer
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice", as: :confirm_generate_invoice
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice", as: :send_invoice
     else
       get "/braintree/client_token", to: "braintree#client_token"
-      get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-      get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
-      post "/purchases/:id/send_invoice", to: "purchases#send_invoice"
     end
 
     post "/braintree/generate_transient_customer_token", to: "braintree#generate_transient_customer_token"
@@ -141,7 +166,6 @@ Rails.application.routes.draw do
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address"
 
     # discover/autocomplete_search
-    get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
     delete "/discover_search_autocomplete", to: "discover/search_autocomplete#delete_search_suggestion"
 
     put "/links/:id/sections", to: "links#update_sections"
@@ -151,10 +175,6 @@ Rails.application.routes.draw do
     get "/", to: "home#about"
 
     get "/discover", to: "discover#index"
-    get "/discover/recommended_products", to: "discover#recommended_products", as: :discover_recommended_products
-    namespace :discover do
-      resources :recommended_wishlists, only: [:index]
-    end
 
     product_info_and_purchase_routes
 
@@ -196,6 +216,7 @@ Rails.application.routes.draw do
         get "/purchases/purchase_attributes/:id", to: "purchases#purchase_attributes"
         post "/purchases/:id/archive", to: "purchases#archive"
         post "/purchases/:id/unarchive", to: "purchases#unarchive"
+        delete "/purchases/:id", to: "purchases#destroy"
         get "/url_redirects/get_url_redirect_attributes/:id", to: "url_redirects#url_redirect_attributes"
         get "/url_redirects/fetch_placeholder_products", to: "url_redirects#fetch_placeholder_products"
         get "/url_redirects/stream/:token/:product_file_id", to: "url_redirects#stream", as: :stream_video
@@ -227,6 +248,7 @@ Rails.application.routes.draw do
       end
 
       namespace :internal do
+        resource :mobile_minimum_version, only: :show
         resources :home_page_numbers, only: :index
         namespace :helper do
           post :webhook, to: "webhook#handle"
@@ -235,6 +257,7 @@ Rails.application.routes.draw do
             collection do
               get :user_info
               post :create_appeal
+              post :create_comment
               post :user_suspension_info
               post :send_reset_password_instructions
               post :update_email
@@ -277,7 +300,10 @@ Rails.application.routes.draw do
 
   constraints GumroadDomainConstraint do
     get "/about", to: "home#about"
+    get "/careers", to: "careers#index"
+    get "/careers/:slug", to: "careers#show", as: :career
     get "/features", to: "home#features"
+    get "/features.md", to: "home#features_md"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
     get "/prohibited", to: "home#prohibited"
@@ -313,9 +339,6 @@ Rails.application.routes.draw do
     post "/notion/unfurl" => "api/v2/notion_unfurl_urls#create"
     delete "/notion/unfurl" => "api/v2/notion_unfurl_urls#destroy"
 
-    # legacy routes
-    get "users/password/new" => redirect("/login")
-
     # /robots.txt
     get "/robots.:format" => "robots#index"
 
@@ -326,8 +349,9 @@ Rails.application.routes.draw do
                  registrations: "signup",
                  confirmations: "confirmations",
                  omniauth_callbacks: "user/omniauth_callbacks",
-                 passwords: "user/passwords"
-               })
+                 passwords: "user/passwords",
+               },
+               path_names: { password: "forgot_password" })
 
     devise_scope :user do
       get "signup", to: "signup#new", as: :signup
@@ -339,13 +363,15 @@ Rails.application.routes.draw do
       get "/oauth/login" => "logins#new"
 
       post "login", to: "logins#create"
-      get "logout", to: "logins#destroy" # TODO: change the method to DELETE to conform to REST
-      post "forgot_password", to: "user/passwords#create"
+      # TODO: Keeping both routes for now to support legacy GET requests until all logout links are migrated to DELETE(inertia).
+      get "logout", to: "logins#destroy"
+      delete "logout", to: "logins#destroy"
       scope "/users" do
-        get "/check_twitter_link", to: "users/oauth#check_twitter_link"
         get "/unsubscribe/:id", to: "users#email_unsubscribe", as: :user_unsubscribe
-        get "/unsubscribe_review_reminders", to: "users#unsubscribe_review_reminders", as: :user_unsubscribe_review_reminders
-        get "/subscribe_review_reminders", to: "users#subscribe_review_reminders", as: :user_subscribe_review_reminders
+        scope module: :users do
+          get "subscribe_review_reminders", to: "review_reminders#subscribe", as: :user_subscribe_review_reminders
+          get "unsubscribe_review_reminders", to: "review_reminders#unsubscribe", as: :user_unsubscribe_review_reminders
+        end
       end
     end
 
@@ -356,11 +382,7 @@ Rails.application.routes.draw do
     resources :test_pings, only: [:create]
 
     # followers
-    resources :followers, only: [:index, :destroy], format: :json do
-      collection do
-        get "search"
-      end
-    end
+    resources :followers, only: [:index, :destroy]
 
     post "/follow_from_embed_form", to: "followers#from_embed_form", as: :follow_user_from_embed_form
     post "/follow", to: "followers#create", as: :follow_user
@@ -381,25 +403,28 @@ Rails.application.routes.draw do
         post :approve_all
       end
     end
-    resources :affiliates, only: [:index] do
+    resources :affiliates, only: [:index, :new, :edit, :create, :update, :destroy] do
       member do
         get :subscribe_posts
         get :unsubscribe_posts
+        get :statistics
       end
       collection do
+        get :onboarding
         get :export
       end
     end
-    resources :collaborators, only: [:index]
-    # Routes handled by react-router. Non-catch-all routes are declared to
-    # generate URL helpers.
-    get "/collaborators/incomings", to: "collaborators#index"
-    get "/collaborators/*other", to: "collaborators#index"
 
-    get "/affiliates/*other", to: "affiliates#index" # route handled by react-router
-    get "/emails/*other", to: "emails#index" # route handled by react-router
-    get "/dashboard/utm_links/*other", to: "utm_links#index" # route handled by react-router
-    get "/communities/*other", to: "communities#index" # route handled by react-router
+    resources :collaborators, only: [:index, :new, :create, :edit, :update, :destroy], path: "collaborators", controller: "collaborators/main"
+    scope path: "collaborators", module: :collaborators, as: "collaborators" do
+      resources :incomings, only: [:index, :destroy], controller: "incomings" do
+        member do
+          post :accept
+          post :decline
+        end
+      end
+    end
+
 
     get "/a/:affiliate_id", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_redirect
     get "/a/:affiliate_id/:unique_permalink", to: "affiliate_redirect#set_cookie_and_redirect", as: :affiliate_product
@@ -413,27 +438,22 @@ Rails.application.routes.draw do
 
     draw(:admin)
 
-    post "/settings/store_facebook_token", to: "users/oauth#async_facebook_store_token", as: :ajax_facebook_access_token
-
-    get "/settings/async_twitter_complete", to: "users/oauth#async_twitter_complete", as: :async_twitter_complete
-
     # user account settings stuff
     resource :settings, only: [] do
       resources :applications, only: [] do
         resources :access_tokens, only: :create, controller: "oauth/access_tokens"
       end
       get :profiles, to: redirect("/settings")
-      resource :connections, only: [] do
-        member do
-          post :unlink_twitter
-        end
-      end
     end
     namespace :settings do
       resource :main, only: %i[show update], path: "", controller: "main" do
         post :resend_confirmation_email
       end
       resource :password, only: %i[show update], controller: "password"
+      resource :totp, only: %i[create destroy], controller: "totp" do
+        post :confirm
+        post :regenerate_recovery_codes
+      end
       resource :profile, only: %i[show update], controller: "profile"
       resource :third_party_analytics, only: %i[show update], controller: "third_party_analytics"
       resource :advanced, only: %i[show update], controller: "advanced"
@@ -503,7 +523,6 @@ Rails.application.routes.draw do
         post :confirm
         post :change_can_contact
         post :resend_receipt
-        post :send_invoice
         put :refund
         put :revoke_access
         put :undo_revoke_access
@@ -515,7 +534,9 @@ Rails.application.routes.draw do
       resources :pings, controller: "purchases/pings", only: [:create]
       resource :product, controller: "purchases/product", only: [:show]
       resources :variants, controller: "purchases/variants", param: :variant_id, only: [:update]
-      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update]
+      resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update] do
+        get :success
+      end
     end
 
     resources :orders, only: [:create] do
@@ -535,17 +556,13 @@ Rails.application.routes.draw do
     end
 
     # Two-Factor Authentication
-    get "/two-factor", to: "two_factor_authentication#new", as: :two_factor_authentication
-
-    # Enforce stricter formats to restrict people from bypassing Rack::Attack by using different formats in URL.
-    scope format: true, constraints: { format: :json } do
-      post "/two-factor", to: "two_factor_authentication#create"
-      post "/two-factor/resend_authentication_token", to: "two_factor_authentication#resend_authentication_token", as: :resend_authentication_token
+    resource :two_factor_authentication, path: "two-factor", controller: "two_factor_authentication", only: [:show, :create] do
+      get :verify
     end
-
-    scope format: true, constraints: { format: :html } do
-      get "/two-factor/verify", to: "two_factor_authentication#verify", as: :verify_two_factor_authentication
-    end
+    post "/two-factor/resend_authentication_token", to: "two_factor_authentication#resend_authentication_token", as: :resend_authentication_token
+    post "/two-factor/switch_to_email", to: "two_factor_authentication#switch_to_email", as: :switch_to_email_two_factor
+    post "/two-factor/switch_to_recovery", to: "two_factor_authentication#switch_to_recovery", as: :switch_to_recovery_two_factor
+    post "/two-factor/switch_to_authenticator", to: "two_factor_authentication#switch_to_authenticator", as: :switch_to_authenticator_two_factor
 
     # library
     get "/library", to: "library#index", as: :library
@@ -559,6 +576,7 @@ Rails.application.routes.draw do
     get "/customers/sales", controller: "customers", action: "customers_paged", format: "json", as: :sales_paged
     get "/customers", controller: "customers", action: "index", format: "html", as: :customers
     get "/customers/paged", controller: "customers", action: "paged", format: "json"
+    get "/customers/sale/:purchase_id", controller: "customers", action: "show", format: "html", as: :customer_sale
     get "/customers/:link_id", controller: "customers", action: "index", format: "html", as: :customers_link_id
     post "/customers/import", to: "customers#customers_import", as: :customers_import
     post "/customers/import_manually_entered_emails", to: "customers#customers_import_manually_entered_emails", as: :customers_import_manually_entered_emails
@@ -579,7 +597,7 @@ Rails.application.routes.draw do
     get "/purchases" => redirect("/library")
     get "/purchases/search", to: "purchases#search"
 
-    resources :checkout, only: [:index]
+    resource :checkout, only: [:show, :update], controller: :checkout
 
     resources :licenses, only: [:update]
 
@@ -606,15 +624,26 @@ Rails.application.routes.draw do
       get :compute_discount
     end
 
-    resources :bundles, only: [:show, :update] do
-      member do
-        get "*other", to: "bundles#show"
-        post :update_purchases_content
+    resources :bundles, only: [:show] do
+      collection do
+        get :create_from_email
+      end
+    end
+
+    resources :bundles, only: [] do
+      scope module: :bundles do
+        resource :product, only: [:edit, :update], controller: "product"
+        resource :content, only: [:edit, :update], controller: "content" do
+          post :update_purchases_content
+        end
+        resource :share, only: [:edit, :update], controller: "share"
       end
 
-      collection do
-        get :products
-        get :create_from_email
+      # Backward compatibility redirects for old bundle edit URLs
+      member do
+        get :edit, to: redirect("/bundles/%{id}/product/edit")
+        get "edit/content", to: redirect("/bundles/%{id}/content/edit")
+        get "edit/share", to: redirect("/bundles/%{id}/share/edit")
       end
     end
 
@@ -661,33 +690,20 @@ Rails.application.routes.draw do
       resource :invalidate_active_sessions, only: :update
     end
 
-    get "/memberships/paged", to: "links#memberships_paged", as: :memberships_paged
-
     namespace :products do
       resources :affiliated, only: [:index]
-      resources :collabs, only: [:index] do
-        collection do
-          get :products_paged
-          get :memberships_paged
-        end
-      end
-      resources :archived, only: %i[index create destroy] do
-        collection do
-          get :products_paged
-          get :memberships_paged
-        end
-      end
+      resources :collabs, only: [:index]
+      resources :archived, only: %i[index create destroy]
     end
 
     resources :products, only: [:new], controller: "links" do
       scope module: :products, format: true, constraints: { format: :json } do
         resources :other_refund_policies, only: :index
         resources :remaining_call_availabilities, only: :index
+        resources :available_offer_codes, only: :index
       end
     end
 
-    # TODO: move these within resources :products block above
-    get "/products/paged", to: "links#products_paged", as: :products_paged
     get "/products/:id/edit", to: "links#edit", as: :edit_link
     get "/products/:id/edit/*other", to: "links#edit"
     get "/products/:id/card", to: "links#card", as: :product_card
@@ -738,6 +754,7 @@ Rails.application.routes.draw do
     get "/dashboard/active_members_count" => "dashboard#active_members_count", as: :dashboard_active_members_count
     get "/dashboard/monthly_recurring_revenue" => "dashboard#monthly_recurring_revenue", as: :dashboard_monthly_recurring_revenue
     get "/dashboard/download_tax_form" => "dashboard#download_tax_form", as: :dashboard_download_tax_form
+    post "/dashboard/dismiss_getting_started_checklist" => "dashboard#dismiss_getting_started_checklist", as: :dashboard_dismiss_getting_started_checklist
 
     get "/products", to: "links#index", as: :products
     get "/l/:id", to: "links#show", defaults: { format: "html" }, as: :short_link
@@ -760,6 +777,7 @@ Rails.application.routes.draw do
     # analytics
     get "/analytics" => redirect("/dashboard/sales")
     get "/dashboard/sales", to: "analytics#index", as: :sales_dashboard
+    get "/dashboard/churn", to: "churn#show", as: :churn_dashboard
     get "/analytics/data/by_date", to: "analytics#data_by_date", as: "analytics_data_by_date"
     get "/analytics/data/by_state", to: "analytics#data_by_state", as: "analytics_data_by_state"
     get "/analytics/data/by_referral", to: "analytics#data_by_referral", as: "analytics_data_by_referral"
@@ -767,13 +785,11 @@ Rails.application.routes.draw do
     # audience
     get "/audience" => redirect("/dashboard/audience")
     get "/dashboard/audience", to: "audience#index", as: :audience_dashboard
-    get "/audience/data/by_date/:start_time/:end_time", to: "audience#data_by_date", as: "audience_data_by_date"
     post "/audience/export", to: "audience#export", as: :audience_export
     get "/dashboard/consumption" => redirect("/dashboard/audience")
 
     # invoices
-    get "/purchases/:id/generate_invoice/confirm", to: "purchases#confirm_generate_invoice"
-    get "/purchases/:id/generate_invoice", to: "purchases#generate_invoice"
+    purchases_invoice_routes
 
     # preorder
     post "/purchases/:id/cancel_preorder_by_seller", to: "purchases#cancel_preorder_by_seller", as: :cancel_preorder_by_seller
@@ -785,11 +801,12 @@ Rails.application.routes.draw do
     resources :subscriptions, only: [] do
       member do
         get :manage
-        get :magic_link
-        post :send_magic_link
         post :unsubscribe_by_user
         post :unsubscribe_by_seller
         put :update, to: "purchases#update_subscription"
+      end
+      scope module: "subscriptions" do
+        resource :magic_link, only: %i[new create]
       end
     end
 
@@ -798,10 +815,23 @@ Rails.application.routes.draw do
     post "/posts/:id/send_for_purchase/:purchase_id", to: "posts#send_for_purchase", as: :send_for_purchase
 
     # communities
-    get "/communities(/:seller_id/:community_id)", to: "communities#index", as: :community
+    resources :communities, only: %i[index] do
+      scope module: "communities" do
+        resources :chat_messages, only: [:create, :update, :destroy]
+        resource :last_read_chat_message, only: [:create]
+        resource :notification_settings, only: [:update]
+      end
+    end
+    get "/communities/:seller_id/:community_id", to: "communities#show", as: :community
 
     # emails
-    get "/emails", to: "emails#index", as: :emails
+    resources :emails, only: [:index, :new, :create, :edit, :update, :destroy] do
+      collection do
+        get :published
+        get :scheduled
+        get :drafts
+      end
+    end
     get "/posts", to: redirect("/emails")
 
     # workflows
@@ -815,7 +845,9 @@ Rails.application.routes.draw do
 
     # utm links
     get "/utm_links" => redirect("/dashboard/utm_links")
-    get "/dashboard/utm_links", to: "utm_links#index", as: :utm_links_dashboard
+    scope as: :dashboard, path: "dashboard" do
+      resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy]
+    end
 
     # shipments
     post "/shipments/verify_shipping_address", to: "shipments#verify_shipping_address", as: :verify_shipping_address
@@ -823,12 +855,15 @@ Rails.application.routes.draw do
 
     # balances
     get "/payouts", to: "balance#index", as: :balance
-    get "/payouts/payments", to: "balance#payments_paged", as: :payments_paged
     resources :instant_payouts, only: [:create]
     namespace :payouts do
       resources :exportables, only: [:index]
       resources :exports, only: [:create]
     end
+
+    # tax center
+    get "/payouts/taxes", to: "tax_center#index", as: :tax_center
+    get "/payouts/taxes/:year/:form_type/download", to: "tax_center#download", as: :download_tax_form
 
     # wishlists
     namespace :wishlists do
@@ -836,7 +871,7 @@ Rails.application.routes.draw do
     end
     resources :wishlists, only: [:index, :create, :update, :destroy] do
       resources :products, only: [:create], controller: "wishlists/products"
-      resource :followers, only: [:destroy], controller: "wishlists/followers" do
+      resource :followers, only: [:create, :destroy], controller: "wishlists/followers" do
         get :unsubscribe
       end
     end
@@ -862,8 +897,6 @@ Rails.application.routes.draw do
     get "/r/:id/:product_file_id/:subtitle_file_id", to: "url_redirects#download_subtitle_file", as: :url_redirect_download_subtitle_file
     get "/s/:id", to: "url_redirects#stream", as: :url_redirect_stream_page
     get "/s/:id/:product_file_id", to: "url_redirects#stream", as: :url_redirect_stream_page_for_product_file
-    get "/latest_media_locations/:id", to: "url_redirects#latest_media_locations", as: :url_redirect_latest_media_locations
-    get "/audio_durations/:id", to: "url_redirects#audio_durations", as: :url_redirect_audio_durations
     get "/media_urls/:id", to: "url_redirects#media_urls", as: :url_redirect_media_urls
 
     get "/read", to: "library#index"
@@ -875,6 +908,7 @@ Rails.application.routes.draw do
     post "/confirm-redirect", to: "url_redirects#confirm"
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :url_redirect_change_purchaser
+    post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :url_redirect_save_last_content_page
 
     get "crossdomain", to: "public#crossdomain"
 
@@ -885,11 +919,6 @@ Rails.application.routes.draw do
       api_routes
     end
 
-    # developers pages
-    scope "developers" do
-      get "/", to: "public#developers", as: "developers"
-    end
-
     scope "api" do
       get "/", to: "public#api"
     end
@@ -897,24 +926,7 @@ Rails.application.routes.draw do
     # React Router routes
     scope module: :api, defaults: { format: :json } do
       namespace :internal do
-        resources :affiliates, only: [:index, :show, :create, :update, :destroy] do
-          collection do
-            get :onboarding
-          end
-          get :statistics, on: :member
-        end
-
-        resources :collaborators, only: [:index, :new, :create, :edit, :update, :destroy] do
-          scope module: :collaborators do
-            resources :invitation_acceptances, only: [:create]
-            resources :invitation_declines, only: [:create]
-          end
-        end
-        namespace :collaborators do
-          resources :incomings, only: [:index]
-        end
-
-        resources :installments, only: [:index, :new, :edit, :create, :update, :destroy] do
+        resources :installments, only: [] do
           member do
             resource :audience_count, only: [:show], controller: "installments/audience_counts", as: :installment_audience_count
             resource :preview_email, only: [:create], controller: "installments/preview_emails", as: :installment_preview_email
@@ -923,23 +935,12 @@ Rails.application.routes.draw do
             resource :recipient_count, only: [:show], controller: "installments/recipient_counts", as: :installment_recipient_count
           end
         end
-        resource :cart, only: [:update]
         resources :products, only: [:show] do
           resources :product_posts, only: [:index]
           resources :existing_product_files, only: [:index]
-        end
-        resources :utm_links, only: [:index, :new, :create, :edit, :update, :destroy] do
-          collection do
-            resource :unique_permalink, only: [:show], controller: "utm_links/unique_permalinks", as: :utm_link_unique_permalink
-            resources :stats, only: [:index], controller: "utm_links/stats", as: :utm_links_stats
-          end
+          resource :receipt_preview, only: [:show]
         end
         resources :product_public_files, only: [:create]
-        resources :communities, only: [:index] do
-          resources :chat_messages, only: [:index, :create, :update, :destroy], controller: "communities/chat_messages", as: "chat_messages"
-          resource :last_read_chat_message, only: [:create], controller: "communities/last_read_chat_messages"
-          resource :notification_setting, only: [:update], controller: "communities/notification_settings", as: "notification_setting"
-        end
 
         resources :product_review_videos, only: [] do
           scope module: :product_review_videos do
@@ -967,10 +968,12 @@ Rails.application.routes.draw do
     get "/paypal_charge_data", to: "public#paypal_charge_data", as: :paypal_charge_data
     get "/CHARGE" => redirect("/charge")
 
+    get "/install-cli.sh", to: redirect("https://raw.githubusercontent.com/antiwork/gumroad-cli/refs/heads/main/script/install.sh")
+
     # discover
+    get "/blackfriday", to: redirect("/discover?offer_code=BLACKFRIDAY2025"), as: :blackfriday
     get "/discover", to: "discover#index"
     get "/discover/categories",          to: "discover#categories"
-    get "/discover_search_autocomplete", to: "discover/search_autocomplete#search"
 
     root to: "public#home"
 
@@ -1034,11 +1037,16 @@ Rails.application.routes.draw do
 
   # The following constraints will only catch non-gumroad domains as any domain owned by gumroad will be caught by the GumroadDomainConstraint
   constraints ProductCustomDomainConstraint do
+    get "/.well-known/acme-challenge/:token", to: "acme_challenges#show"
     product_tracking_routes(named_routes: false)
     get "/", to: "links#show", defaults: { format: "html" }
+    get "/l/:id", to: "links#show", defaults: { format: "html" }
+    get "/l/:id/:code", to: "links#show", defaults: { format: "html" }
+    get "/:code", to: "links#show", defaults: { format: "html" }
   end
 
   constraints UserCustomDomainConstraint do
+    get "/.well-known/acme-challenge/:token", to: "acme_challenges#show", as: :acme_challenge
     product_info_and_purchase_routes(named_routes: false)
     devise_scope :user do
       post "signup", to: "signup#create"
@@ -1085,6 +1093,7 @@ Rails.application.routes.draw do
     post "/confirm-redirect", to: "url_redirects#confirm"
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :custom_domain_send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :custom_domain_url_redirect_change_purchaser
+    post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :custom_domain_url_redirect_save_last_content_page
 
     get "/library", to: "library#index"
     patch "/library/purchase/:id/archive", to: "library#archive"

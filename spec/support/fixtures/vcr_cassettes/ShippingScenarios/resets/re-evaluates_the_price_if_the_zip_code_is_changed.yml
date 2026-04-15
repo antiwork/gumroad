@@ -163,7 +163,7 @@ http_interactions:
       Content-Type:
       - application/json
       Authorization:
-      - Basic RVpUSzJhNDk1NTQyNTdlODQ5YmRiMTc5NDI4YTc2MTZkZWY2S2x5U3lkZkIxdjd2UkpDZFpjeGtzQTo=
+      - Basic <EASYPOST_API_KEY_BASE64>
   response:
     status:
       code: 201

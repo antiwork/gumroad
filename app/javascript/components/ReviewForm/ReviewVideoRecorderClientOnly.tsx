@@ -1,8 +1,8 @@
+import { Trash } from "@boxicons/react";
 import cx from "classnames";
 import React, { useEffect, useRef, useState } from "react";
 import { useReactMediaRecorder } from "react-media-recorder";
 
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import {
   ReviewVideoRecorderContainer,
@@ -67,9 +67,12 @@ const disabledButtonClassNames = "cursor-not-allowed opacity-80";
 
 const StartRecordingCountdownButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
-    className={cx("absolute bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full", {
-      [disabledButtonClassNames]: disabled,
-    })}
+    className={cx(
+      "absolute bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full all-unset",
+      {
+        [disabledButtonClassNames]: disabled,
+      },
+    )}
     onClick={onClick}
     disabled={disabled}
   >
@@ -81,9 +84,12 @@ const StartRecordingCountdownButton = ({ onClick, disabled }: { onClick: () => v
 
 const StopRecordingButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
-    className={cx("absolute bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full", {
-      [disabledButtonClassNames]: disabled,
-    })}
+    className={cx(
+      "absolute bottom-2 left-1/2 flex h-8 w-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full all-unset",
+      {
+        [disabledButtonClassNames]: disabled,
+      },
+    )}
     onClick={onClick}
     disabled={disabled}
   >
@@ -95,13 +101,16 @@ const StopRecordingButton = ({ onClick, disabled }: { onClick: () => void; disab
 
 const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
-    className={cx("absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-sm bg-black", {
-      [disabledButtonClassNames]: disabled,
-    })}
+    className={cx(
+      "absolute top-2 right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm bg-black all-unset",
+      {
+        [disabledButtonClassNames]: disabled,
+      },
+    )}
     onClick={onClick}
     disabled={disabled}
   >
-    <Icon name="trash2" className="text-sm text-white" />
+    <Trash className="size-5 text-sm text-white" />
   </button>
 );
 

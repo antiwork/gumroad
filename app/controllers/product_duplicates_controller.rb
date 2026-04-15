@@ -11,7 +11,10 @@ class ProductDuplicatesController < Sellers::BaseController
     end
 
     DuplicateProductWorker.perform_async(@product.id)
-    @product.update!(is_duplicating: true)
+    @product.is_duplicating = true
+    # Skip validations because products may have update-only validation errors (e.g. call products
+    # without durations) unrelated to toggling this flag.
+    @product.save!(validate: false)
 
     render json: { success: true }
   end
@@ -27,30 +30,13 @@ class ProductDuplicatesController < Sellers::BaseController
 
     unless duplicated_product
       # Product is not duplicating and we can't find it in redis
-      render(json: { success: false, status: ProductDuplicatorService::DUPLICATION_FAILED }) && return
+      error_message = ProductDuplicatorService.new(@product.id).recently_failed_error_message
+      render(json: { success: false, status: ProductDuplicatorService::DUPLICATION_FAILED, error_message: }) && return
     end
 
-    if duplicated_product.is_recurring_billing?
-      page_props = DashboardProductsPagePresenter.new(
-        pundit_user:,
-        memberships: [duplicated_product],
-        memberships_pagination: nil,
-        products: [],
-        products_pagination: nil
-      ).page_props
-      duplicated_product = page_props[:memberships].first
-      is_membership = true
-    else
-      page_props = DashboardProductsPagePresenter.new(
-        pundit_user:,
-        memberships: [],
-        memberships_pagination: nil,
-        products: [duplicated_product],
-        products_pagination: nil
-      ).page_props
-      duplicated_product = page_props[:products].first
-      is_membership = false
-    end
+    is_membership = duplicated_product.is_recurring_billing?
+    presenter = DashboardProductsPagePresenter.new(pundit_user:)
+    duplicated_product = presenter.product_props(duplicated_product)
 
     render json: {
       success: true,

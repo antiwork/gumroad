@@ -62,7 +62,7 @@ describe CreateUsStatesSalesSummaryReportJob do
 
       described_class.new.perform(subdivision_codes, month, year)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)
@@ -94,7 +94,7 @@ describe CreateUsStatesSalesSummaryReportJob do
 
       described_class.new.perform(subdivision_codes, month, year, push_to_taxjar: false)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "US Sales Tax Summary Report", anything, "green")
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

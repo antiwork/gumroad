@@ -1,10 +1,8 @@
-import cx from "classnames";
+import { usePage } from "@inertiajs/react";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
-import { cast } from "ts-safe-cast";
 
-import { Button, ButtonProps } from "$app/components/Button";
-import { useRunOnce } from "$app/components/useRunOnce";
+import { BrandName, Button, ButtonProps } from "$app/components/Button";
 
 export const SocialAuthButton = ({
   href,
@@ -12,11 +10,10 @@ export const SocialAuthButton = ({
   ...props
 }: {
   href: string;
-  provider: "facebook" | "google" | "twitter" | "stripe";
+  provider: BrandName;
 } & ButtonProps) => {
   const formRef = React.useRef<HTMLFormElement>(null);
-  const [csrfToken, setCsrfToken] = React.useState("");
-  useRunOnce(() => setCsrfToken(cast(document.querySelector("meta[name=csrf-token]")?.getAttribute("content"))));
+  const { authenticity_token: csrfToken } = usePage<{ authenticity_token: string }>().props;
 
   return (
     // Omniauth requires a non-AJAX POST request to redirect to the provider, so we need to submit a form.
@@ -30,11 +27,9 @@ export const SocialAuthButton = ({
             document.body,
           )
         : null}
-      <Button
-        {...props}
-        className={cx(props.className, `button-${provider}`)}
-        onClick={() => formRef.current?.submit()}
-      />
+      <Button {...props} color={provider} onClick={() => formRef.current?.submit()}>
+        {props.children}
+      </Button>
     </>
   );
 };

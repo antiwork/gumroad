@@ -17,6 +17,7 @@ class ProfilePresenter
       name: seller.name || seller.username,
       twitter_handle: seller.twitter_handle,
       subdomain: seller.subdomain,
+      is_verified: !!seller.verified,
     }
   end
 

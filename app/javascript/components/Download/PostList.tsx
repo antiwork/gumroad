@@ -1,7 +1,10 @@
+import { FileDetail } from "@boxicons/react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import * as React from "react";
 
-import { Icon } from "$app/components/Icons";
+import { Button } from "$app/components/Button";
+import { InlineList } from "$app/components/ui/InlineList";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 import { TrackClick } from "./Interactions";
@@ -11,17 +14,17 @@ export type Post = { id: string; name: string; view_url: string; action_at: stri
 export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
   const userAgentInfo = useUserAgentInfo();
   return (
-    <div className="rows" role="list" aria-label="Posts">
+    <Rows role="list" aria-label="Posts">
       {posts.map((post) => {
         const actionAt = parseISO(post.action_at);
         return (
-          <div key={post.id} role="listitem">
-            <div className="content">
-              <Icon name="file-earmark-medical-fill" className="type-icon" />
+          <Row key={post.id} role="listitem">
+            <RowContent>
+              <FileDetail pack="filled" className="type-icon size-5" />
               <div>
                 <div>
                   <h4>{post.name}</h4>
-                  <ul className="inline">
+                  <InlineList>
                     <li>
                       {actionAt.toLocaleDateString(userAgentInfo.locale, {
                         month: "long",
@@ -30,20 +33,20 @@ export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
                       })}
                     </li>
                     <li>{formatDistanceToNow(actionAt)} ago</li>
-                  </ul>
+                  </InlineList>
                 </div>
               </div>
-            </div>
-            <div className="actions">
-              <TrackClick eventName="post_click" resourceId={post.id}>
-                <a href={post.view_url} className="button">
-                  View
-                </a>
+            </RowContent>
+            <RowActions>
+              <TrackClick eventName="post_click" post={post}>
+                <Button asChild>
+                  <a href={post.view_url}>View</a>
+                </Button>
               </TrackClick>
-            </div>
-          </div>
+            </RowActions>
+          </Row>
         );
       })}
-    </div>
+    </Rows>
   );
 };

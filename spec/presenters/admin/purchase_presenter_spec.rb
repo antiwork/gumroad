@@ -15,11 +15,10 @@ describe Admin::PurchasePresenter do
       describe "fields" do
         it "returns the correct field values" do
           expect(props).to match(
-            id: purchase.id,
             formatted_display_price: purchase.formatted_display_price,
             formatted_gumroad_tax_amount: nil,
             gumroad_responsible_for_tax: purchase.gumroad_responsible_for_tax?,
-            product: { id: product.id, name: product.name, long_url: product.long_url },
+            product: { external_id: product.external_id, name: product.name, long_url: product.long_url },
             seller: { email: seller.email, support_email: seller.support_email },
             email: purchase.email,
             created_at: purchase.created_at,
@@ -45,7 +44,7 @@ describe Admin::PurchasePresenter do
               search_url: ChargeProcessor.transaction_url_for_admin(purchase.charge_processor_id, purchase.stripe_transaction_id, purchase.charged_using_gumroad_merchant_account?),
             },
             merchant_account: {
-              id: purchase.merchant_account.id,
+              external_id: purchase.merchant_account.external_id,
               charge_processor_id: purchase.merchant_account.charge_processor_id.capitalize,
               holder_of_funds: purchase.merchant_account.holder_of_funds.capitalize,
             },
@@ -100,6 +99,50 @@ describe Admin::PurchasePresenter do
 
         it "returns the tip amount in cents" do
           expect(props[:tip]).to eq(500)
+        end
+      end
+
+      context "when purchase has a subscription" do
+        let(:product) { create(:subscription_product, user: seller) }
+        let(:subscription) { create(:subscription, link: product) }
+        let(:purchase) { create(:purchase, link: product, seller: seller, subscription: subscription, is_original_subscription_purchase: true) }
+
+        it "returns subscription fields including cancellation timestamps" do
+          expect(props[:subscription]).to include(
+            id: subscription.id,
+            external_id: subscription.external_id,
+            user_requested_cancellation_at: nil,
+            ended_at: nil,
+            failed_at: nil,
+          )
+        end
+
+        context "when the subscription is cancelled by a buyer" do
+          let(:cancellation_time) { Time.current }
+          let(:end_time) { 1.month.from_now }
+
+          before do
+            subscription.update!(user_requested_cancellation_at: cancellation_time, cancelled_at: end_time, cancelled_by_buyer: true)
+          end
+
+          it "sets ended_at to cancelled_at and returns cancellation timestamps" do
+            freeze_time do
+              expect(props[:subscription][:user_requested_cancellation_at]).to be_present
+              expect(props[:subscription][:ended_at]).to be_within(1.second).of(end_time)
+              expect(props[:subscription][:cancelled_by_buyer]).to eq(true)
+            end
+          end
+        end
+
+        context "when a fixed-length subscription ends without explicit cancellation" do
+          before do
+            subscription.update!(ended_at: Time.current)
+          end
+
+          it "sets ended_at to ended_at" do
+            expect(props[:subscription][:ended_at]).to be_present
+            expect(props[:subscription][:user_requested_cancellation_at]).to be_nil
+          end
         end
       end
     end

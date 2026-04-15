@@ -91,7 +91,7 @@ describe("Discover - Search scenarios", js: true, type: :system) do
 
       visit discover_url(host: discover_host)
       fill_in "Search products", with: "pine martens\n"
-      expect(page).not_to have_selector(".product-card")
+      expect(page).not_to have_selector("article")
     end
 
     it "shows autocomplete results for products" do

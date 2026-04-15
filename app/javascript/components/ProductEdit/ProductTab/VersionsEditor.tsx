@@ -1,15 +1,21 @@
+import { ChevronDown, ChevronUp, LayersAlt, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
-import { Toggle } from "$app/components/Toggle";
-import Placeholder from "$app/components/ui/Placeholder";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
+import { Placeholder } from "$app/components/ui/Placeholder";
+import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newVersionId = 0;
@@ -51,7 +57,7 @@ export const VersionsEditor = ({
         ]);
       }}
     >
-      <Icon name="plus" />
+      <Plus className="size-5" />
       Add version
     </Button>
   );
@@ -128,99 +134,102 @@ const VersionEditor = ({
     .map(([name]) => name);
 
   return (
-    <div role="listitem">
-      <div className="content">
+    <Row role="listitem">
+      <RowContent>
         <ReorderingHandle />
-        <Icon name="stack-fill" />
+        <LayersAlt pack="filled" className="size-5" />
         <h3>{version.name || "Untitled"}</h3>
-      </div>
-      <div className="actions">
+      </RowContent>
+      <RowActions>
         <WithTooltip tip={isOpen ? "Close drawer" : "Open drawer"}>
-          <Button onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
-            <Icon name={isOpen ? "outline-cheveron-up" : "outline-cheveron-down"} />
+          <Button size="icon" onClick={() => setIsOpen((prevIsOpen) => !prevIsOpen)}>
+            {isOpen ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
         </WithTooltip>
         <WithTooltip tip="Remove">
-          <Button onClick={onDelete} aria-label="Remove version">
-            <Icon name="trash2" />
+          <Button size="icon" onClick={onDelete} aria-label="Remove version">
+            <Trash className="size-5" />
           </Button>
         </WithTooltip>
-      </div>
+      </RowActions>
       {isOpen ? (
-        <Drawer className="grid gap-6">
-          <fieldset>
-            <label htmlFor={`${uid}-name`}>Name</label>
-            <div className="input">
-              <input
-                id={`${uid}-name`}
-                type="text"
-                value={version.name}
-                placeholder="Version name"
-                onChange={(evt) => updateVersion({ name: evt.target.value })}
+        <RowDetails asChild>
+          <Drawer className="grid gap-6">
+            <Fieldset>
+              <Label htmlFor={`${uid}-name`}>Name</Label>
+              <InputGroup>
+                <Input
+                  id={`${uid}-name`}
+                  type="text"
+                  value={version.name}
+                  placeholder="Version name"
+                  onChange={(evt) => updateVersion({ name: evt.target.value })}
+                />
+                <a href={url} target="_blank" rel="noreferrer">
+                  Share
+                </a>
+              </InputGroup>
+            </Fieldset>
+            <Fieldset>
+              <Label htmlFor={`${uid}-description`}>Description</Label>
+              <Textarea
+                id={`${uid}-description`}
+                value={version.description}
+                onChange={(evt) => updateVersion({ description: evt.target.value })}
               />
-              <a href={url} target="_blank" rel="noreferrer">
-                Share
-              </a>
-            </div>
-          </fieldset>
-          <fieldset>
-            <label htmlFor={`${uid}-description`}>Description</label>
-            <textarea
-              id={`${uid}-description`}
-              value={version.description}
-              onChange={(evt) => updateVersion({ description: evt.target.value })}
-            />
-          </fieldset>
-          <section style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", alignItems: "flex-end" }}>
-            <fieldset>
-              <label htmlFor={`${uid}-price`}>Additional amount</label>
-              <PriceInput
-                id={`${uid}-price`}
-                currencyCode={currencyType}
-                cents={version.price_difference_cents}
-                onChange={(price_difference_cents) => updateVersion({ price_difference_cents })}
-                placeholder="0"
-              />
-            </fieldset>
-            <fieldset>
-              <label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</label>
-              <NumberInput
-                onChange={(value) => updateVersion({ max_purchase_count: value })}
-                value={version.max_purchase_count}
-              >
-                {(inputProps) => (
-                  <input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
-                )}
-              </NumberInput>
-            </fieldset>
-          </section>
-          {integrations.length > 0 ? (
-            <fieldset>
-              <legend>Integrations</legend>
-              {integrations.map((integration) => (
-                <Toggle
-                  value={version.integrations[integration]}
-                  onChange={(enabled) =>
-                    updateVersion({ integrations: { ...version.integrations, [integration]: enabled } })
-                  }
-                  key={integration}
+            </Fieldset>
+            <section className="grid grid-flow-col items-end gap-6">
+              <Fieldset>
+                <Label htmlFor={`${uid}-price`}>Additional amount</Label>
+                <PriceInput
+                  id={`${uid}-price`}
+                  currencyCode={currencyType}
+                  cents={version.price_difference_cents}
+                  onChange={(price_difference_cents) => updateVersion({ price_difference_cents })}
+                  placeholder="0"
+                />
+              </Fieldset>
+              <Fieldset>
+                <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of purchases</Label>
+                <NumberInput
+                  onChange={(value) => updateVersion({ max_purchase_count: value })}
+                  value={version.max_purchase_count}
                 >
-                  {integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"}
-                </Toggle>
-              ))}
-            </fieldset>
-          ) : null}
-        </Drawer>
+                  {(inputProps) => (
+                    <Input id={`${uid}-max-purchase-count`} type="number" placeholder="∞" {...inputProps} />
+                  )}
+                </NumberInput>
+              </Fieldset>
+            </section>
+            {integrations.length > 0 ? (
+              <Fieldset>
+                <FieldsetTitle>Integrations</FieldsetTitle>
+                {integrations.map((integration) => (
+                  <Switch
+                    checked={version.integrations[integration]}
+                    onChange={(e) =>
+                      updateVersion({ integrations: { ...version.integrations, [integration]: e.target.checked } })
+                    }
+                    key={integration}
+                    label={
+                      integration === "circle" ? "Enable access to Circle community" : "Enable access to Discord server"
+                    }
+                  />
+                ))}
+              </Fieldset>
+            ) : null}
+          </Drawer>
+        </RowDetails>
       ) : null}
-    </div>
+    </Row>
   );
 };
 
 export const SortableVersionEditors = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ children }, ref) => (
-    <div ref={ref} className="rows" role="list" aria-label="Version editor">
+    <Rows ref={ref} role="list" aria-label="Version editor">
       {children}
-    </div>
+    </Rows>
   ),
 );
 SortableVersionEditors.displayName = "SortableVersionEditors";

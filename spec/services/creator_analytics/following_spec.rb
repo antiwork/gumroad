@@ -166,4 +166,47 @@ describe CreatorAnalytics::Following do
       }
     )
   end
+
+  describe "DST handling" do
+    context "when event occurs near midnight during DST" do
+      it "correctly attributes event to the right day" do
+        user = create(:user, timezone: "Pacific Time (US & Canada)")
+        service = described_class.new(user)
+
+        # Event at July 15, 00:30 PDT = July 15, 07:30 UTC
+        EsClient.index(
+          index: ConfirmedFollowerEvent.index_name,
+          body: { followed_user_id: user.id, name: "added", timestamp: Time.utc(2025, 7, 15, 7, 30) }
+        )
+        ConfirmedFollowerEvent.__elasticsearch__.refresh_index!
+
+        result = service.send(:counts, [Date.new(2025, 7, 14), Date.new(2025, 7, 15)])
+
+        expect(result[:new_followers]).to eq([0, 1])
+      end
+    end
+
+    context "when query spans DST transition" do
+      it "correctly buckets events across DST boundary" do
+        user = create(:user, timezone: "Pacific Time (US & Canada)")
+        service = described_class.new(user)
+
+        # Event on March 8 at 11:00 PM PST = March 9, 07:00 UTC (before DST starts)
+        EsClient.index(
+          index: ConfirmedFollowerEvent.index_name,
+          body: { followed_user_id: user.id, name: "added", timestamp: Time.utc(2025, 3, 9, 7, 0) }
+        )
+        # Event on March 10 at 01:00 AM PDT = March 10, 08:00 UTC (after DST starts)
+        EsClient.index(
+          index: ConfirmedFollowerEvent.index_name,
+          body: { followed_user_id: user.id, name: "added", timestamp: Time.utc(2025, 3, 10, 8, 0) }
+        )
+        ConfirmedFollowerEvent.__elasticsearch__.refresh_index!
+
+        result = service.send(:counts, (Date.new(2025, 3, 8)..Date.new(2025, 3, 10)).to_a)
+
+        expect(result[:new_followers]).to eq([1, 0, 1])
+      end
+    end
+  end
 end

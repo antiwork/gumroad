@@ -2,6 +2,36 @@ import * as React from "react";
 
 export class RecaptchaCancelledError extends Error {}
 
+const RECAPTCHA_SCRIPT_URL = "https://www.google.com/recaptcha/enterprise.js?render=explicit";
+
+let loadPromise: Promise<void> | null = null;
+
+const loadRecaptchaScript = (): Promise<void> => {
+  if ("grecaptcha" in window) {
+    return Promise.resolve();
+  }
+
+  if (loadPromise) {
+    return loadPromise;
+  }
+
+  loadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = RECAPTCHA_SCRIPT_URL;
+    script.async = true;
+    script.onload = () => {
+      resolve();
+    };
+    script.onerror = () => {
+      loadPromise = null;
+      reject(new Error("Failed to load reCAPTCHA script"));
+    };
+    document.head.appendChild(script);
+  });
+
+  return loadPromise;
+};
+
 const isRecaptchaIframe = (node: Node) =>
   node instanceof HTMLIFrameElement && node.src.includes("google.com/recaptcha");
 
@@ -39,18 +69,25 @@ export function useRecaptcha({ siteKey }: { siteKey: string | null }) {
 
   React.useEffect(() => {
     if (!siteKey) return;
-    grecaptcha.enterprise.ready(() => {
-      if (!containerRef.current || containerRef.current.childElementCount) return;
-      recaptchaId.current = grecaptcha.enterprise.render(containerRef.current, {
-        sitekey: siteKey,
-        callback: (response) => {
-          resolveRef.current?.(response);
-          resolveRef.current = null;
-        },
-        size: "invisible",
+
+    const initRecaptcha = () => {
+      grecaptcha.enterprise.ready(() => {
+        if (!containerRef.current || containerRef.current.childElementCount) return;
+        recaptchaId.current = grecaptcha.enterprise.render(containerRef.current, {
+          sitekey: siteKey,
+          callback: (response) => {
+            resolveRef.current?.(response);
+            resolveRef.current = null;
+          },
+          size: "invisible",
+        });
       });
-    });
-  }, [containerRef]);
+    };
+
+    loadRecaptchaScript()
+      .then(initRecaptcha)
+      .catch(() => {});
+  }, [siteKey]);
 
   const execute = () => {
     const widgetId = recaptchaId.current;

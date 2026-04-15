@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 class ConfirmationsController < Devise::ConfirmationsController
+  include PageMeta::Base
+
+  before_action :set_default_page_title
+  before_action :set_csrf_meta_tags
+  before_action :set_default_meta_tags
+  helper_method :erb_meta_tags
+
   def show
     @user = User.find_or_initialize_with_error_by(:confirmation_token, params[:confirmation_token])
 

@@ -33,7 +33,7 @@ describe LibraryPresenter do
     end
 
     it "returns all necessary properties for library page" do
-      purchases, creator_counts = described_class.new(buyer).library_cards
+      purchases, creators = described_class.new(buyer).library_cards
 
       expect(purchases).to eq([
                                 product: product_details,
@@ -47,7 +47,7 @@ describe LibraryPresenter do
                                   is_bundle_purchase: false,
                                 }])
 
-      expect(creator_counts).to eq([{ count: 1, id: creator.external_id, name: creator.name }])
+      expect(creators).to eq([{ id: creator.external_id, name: creator.name }])
     end
 
     it "does not return the URL of a deleted thumbnail" do
@@ -85,12 +85,13 @@ describe LibraryPresenter do
       end
 
       before do
+        product.update!(block_access_after_membership_cancellation: true)
         create(:recurring_membership_purchase, link: product, purchaser: buyer, subscription: purchase.subscription)
         create(:membership_purchase, link: product, purchaser: buyer).tap { _1.subscription.update!(cancelled_at: 1.day.ago) }
       end
 
-      it "returns results for all live subscriptions" do
-        purchases, creator_counts = described_class.new(buyer).library_cards
+      it "returns results for all live subscriptions and excludes cancelled ones when access is blocked" do
+        purchases, creators = described_class.new(buyer).library_cards
 
         expect(purchases).to eq([
                                   {
@@ -119,7 +120,123 @@ describe LibraryPresenter do
                                   },
                                 ])
 
-        expect(creator_counts).to eq([{ count: 1, id: creator.external_id, name: creator.name }])
+        expect(creators).to eq([{ id: creator.external_id, name: creator.name }])
+      end
+    end
+
+    context "when subscription is cancelled or ended" do
+      context "when block_access_after_membership_cancellation is enabled (default)" do
+        before do
+          product.update!(block_access_after_membership_cancellation: true)
+        end
+
+        it "excludes cancelled subscriptions from library" do
+          purchase.subscription.update!(cancelled_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases).to be_empty
+        end
+
+        it "excludes ended subscriptions from library" do
+          purchase.subscription.update!(ended_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases).to be_empty
+        end
+
+        it "excludes failed subscriptions from library" do
+          purchase.subscription.update!(failed_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases).to be_empty
+        end
+      end
+
+      context "when block_access_after_membership_cancellation is disabled" do
+        before do
+          product.update!(block_access_after_membership_cancellation: false)
+        end
+
+        it "includes cancelled subscriptions in library" do
+          purchase.subscription.update!(cancelled_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases.size).to eq(1)
+          expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
+        end
+
+        it "includes ended subscriptions in library" do
+          purchase.subscription.update!(ended_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases.size).to eq(1)
+          expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
+        end
+
+        it "includes failed subscriptions in library" do
+          purchase.subscription.update!(failed_at: 1.day.ago)
+
+          purchases, _ = described_class.new(buyer).library_cards
+          expect(purchases.size).to eq(1)
+          expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
+        end
+      end
+    end
+
+    context "when the user has a gifted membership purchase" do
+      let(:gifted_product) { create(:membership_product, name: "Gifted Membership", user: creator) }
+      let(:subscription) { create(:subscription, link: gifted_product, user: buyer) }
+      let!(:gift_receiver_purchase) do
+        create(:purchase,
+               :gift_receiver,
+               link: gifted_product,
+               purchaser: buyer,
+               subscription: subscription,
+               is_original_subscription_purchase: false).tap { _1.create_url_redirect! }
+      end
+
+      it "includes gifted membership purchases in the library" do
+        purchases, _ = described_class.new(buyer).library_cards
+
+        gift_purchase_ids = purchases.map { |p| p[:purchase][:id] }
+        expect(gift_purchase_ids).to include(gift_receiver_purchase.external_id)
+      end
+    end
+
+    describe "has_third_party_analytics" do
+      it "detects product-level receipt analytics" do
+        create(:third_party_analytic, user: creator, link: product, location: "receipt", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(true)
+      end
+
+      it "detects product-level analytics with 'all' location" do
+        create(:third_party_analytic, user: creator, link: product, location: "all", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(true)
+      end
+
+      it "detects user-level universal receipt analytics" do
+        create(:third_party_analytic, user: creator, link: nil, location: "receipt", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(true)
+      end
+
+      it "ignores deleted analytics" do
+        create(:third_party_analytic, user: creator, link: product, location: "receipt", analytics_code: "<script>test</script>", deleted_at: 1.day.ago)
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(false)
+      end
+
+      it "ignores analytics for non-receipt locations" do
+        create(:third_party_analytic, user: creator, link: product, location: "product", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(false)
       end
     end
 

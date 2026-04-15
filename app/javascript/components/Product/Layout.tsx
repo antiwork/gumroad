@@ -1,3 +1,4 @@
+import { Pencil } from "@boxicons/react";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
@@ -6,7 +7,6 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import {
   Product,
   ProductDiscount,
@@ -126,7 +126,7 @@ const SectionEditor = ({
             ) : (
               <div className="mx-auto w-full max-w-6xl">{children}</div>
             )}
-            {i === sections.length - 1 ? <AddSectionButton index={i + 1} position="top" /> : null}
+            {i === sections.length - 1 ? <AddSectionButton index={i + 1} side="top" /> : null}
           </SectionLayout>
         ))}
       </ImageUploadSettingsContext.Provider>
@@ -253,7 +253,7 @@ const CtaBar = ({
   return (
     <section
       aria-label="Product information bar"
-      className="border-0"
+      className="border-0 bg-background"
       style={{
         overflow: "hidden",
         padding: 0,
@@ -276,7 +276,7 @@ const CtaBar = ({
     >
       <div
         ref={ref}
-        className="product-cta"
+        className="mx-auto flex max-w-product-page items-center justify-between gap-2 p-4 lg:gap-4 lg:px-8"
         style={{
           transition: "var(--transition-duration)",
           marginTop: visible || !isDesktop ? undefined : -height,
@@ -299,31 +299,33 @@ const CtaBar = ({
           isSalesLimited={product.is_sales_limited}
           creatorName={product.seller?.name}
         />
-        <h3>{product.name}</h3>
+        <h3 className="hidden flex-1 lg:block">{product.name}</h3>
         {product.ratings != null && product.ratings.count > 0 ? (
           <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
         ) : null}
-        <CtaButton
-          product={product}
-          purchase={purchase}
-          discountCode={discountCode ?? null}
-          selection={selection}
-          label={ctaLabel}
-          onClick={(evt) => {
-            if (
-              isPWYW ||
-              product.options.length > 1 ||
-              hasRentOption ||
-              hasMultipleRecurrences ||
-              hasConfigurableQuantity
-            ) {
-              evt.preventDefault();
-              ctaButtonRef.current?.scrollIntoView(false);
-              configurationSelectorRef.current?.focusRequiredInput();
-              if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
-            }
-          }}
-        />
+        <div className="flex items-center gap-2">
+          <CtaButton
+            product={product}
+            purchase={purchase}
+            discountCode={discountCode ?? null}
+            selection={selection}
+            label={ctaLabel}
+            onClick={(evt) => {
+              if (
+                isPWYW ||
+                product.options.length > 1 ||
+                hasRentOption ||
+                hasMultipleRecurrences ||
+                hasConfigurableQuantity
+              ) {
+                evt.preventDefault();
+                ctaButtonRef.current?.scrollIntoView(false);
+                configurationSelectorRef.current?.focusRequiredInput();
+                if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
+              }
+            }}
+          />
+        </div>
       </div>
     </section>
   );
@@ -349,10 +351,11 @@ const EditButton = ({ product }: { product: Product }) => {
       <WithTooltip tip="Edit product" position={isDesktop ? "right" : "left"}>
         <NavigationButton
           color="filled"
+          size="icon"
           href={Routes.edit_link_url({ id: product.permalink }, { host: appDomain })}
           aria-label="Edit product"
         >
-          <Icon name="pencil" />
+          <Pencil className="size-5" />
         </NavigationButton>
       </WithTooltip>
     </div>

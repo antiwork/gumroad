@@ -6,7 +6,23 @@
   and the client-side version for Inertia-powered views. Once the migration is complete, the server-side navbar will be phased out.
 */
 
-import { Link, router } from "@inertiajs/react";
+import {
+  ArchiveAlt,
+  Bank,
+  BarChartBig,
+  BookmarkHeart,
+  Cart,
+  DollarCircle,
+  Envelope,
+  Gift,
+  Handshake,
+  HomeAlt2,
+  MessageBubble,
+  Search,
+  Workflow,
+} from "@boxicons/react";
+import { type LinkPrefetchOption } from "@inertiajs/core";
+import { Link } from "@inertiajs/react";
 import * as React from "react";
 
 import { escapeRegExp } from "$app/utils";
@@ -14,11 +30,11 @@ import { classNames } from "$app/utils/classNames";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
+import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Nav as NavFramework, NavLink, NavSection, useNav } from "$app/components/Nav";
+import { Nav as NavFramework, NavSection } from "$app/components/Nav";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -34,14 +50,16 @@ export const ClientNavLink = ({
   exactHrefMatch,
   additionalPatterns = [],
   onClick,
+  prefetch = "hover",
 }: {
   text: string;
-  icon?: IconName;
+  icon?: React.ReactNode;
   badge?: React.ReactNode;
   href: string;
   exactHrefMatch?: boolean;
   additionalPatterns?: string[];
   onClick?: (event: React.MouseEvent) => void;
+  prefetch?: boolean | LinkPrefetchOption | LinkPrefetchOption[];
 }) => {
   const currentPath = window.location.pathname + window.location.search;
 
@@ -57,6 +75,7 @@ export const ClientNavLink = ({
     <Link
       aria-current={ariaCurrent}
       href={href}
+      prefetch={prefetch}
       title={text}
       {...(onClick && { onClick })}
       className={classNames(
@@ -64,8 +83,8 @@ export const ClientNavLink = ({
         { "text-accent": !!ariaCurrent },
       )}
     >
-      {icon ? <Icon name={icon} className="mr-4" /> : null}
-      {text}
+      {icon}
+      <span className="ml-4">{text}</span>
       {badge ? (
         <>
           <span className="flex-1" />
@@ -74,18 +93,6 @@ export const ClientNavLink = ({
       ) : null}
     </Link>
   );
-};
-
-const CloseOnNavigate = () => {
-  const nav = useNav();
-  const close = nav?.close;
-
-  React.useEffect(() => {
-    if (!close) return;
-    return router.on("before", close);
-  }, [close]);
-
-  return null;
 };
 
 export const Nav = (props: Props) => {
@@ -118,51 +125,88 @@ export const Nav = (props: Props) => {
     <NavFramework footer={<NavbarFooter />} {...props}>
       <CloseOnNavigate />
       <NavSection>
-        <ClientNavLink text="Home" icon="shop-window-fill" href={Routes.dashboard_url(routeParams)} exactHrefMatch />
+        <ClientNavLink
+          text="Home"
+          icon={<HomeAlt2 pack="filled" className="size-5" />}
+          href={Routes.dashboard_url(routeParams)}
+          exactHrefMatch
+        />
         <ClientNavLink
           text="Products"
-          icon="archive-fill"
+          icon={<ArchiveAlt pack="filled" className="size-5" />}
           href={Routes.products_url(routeParams)}
-          additionalPatterns={[Routes.bundle_path(".", routeParams).slice(0, -1)]}
+          additionalPatterns={["/bundles/"]}
         />
         {loggedInUser?.policies.collaborator.create ? (
-          <ClientNavLink text="Collaborators" icon="deal-fill" href={Routes.collaborators_url(routeParams)} />
+          <ClientNavLink
+            text="Collaborators"
+            icon={<Handshake pack="filled" className="size-5" />}
+            href={Routes.collaborators_url(routeParams)}
+          />
         ) : null}
         <ClientNavLink
           text="Checkout"
-          icon="cart3-fill"
+          icon={<Cart pack="filled" className="size-5" />}
           href={Routes.checkout_discounts_url(routeParams)}
           additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
         />
-        <NavLink
+        <ClientNavLink
           text="Emails"
-          icon="envelope-fill"
+          icon={<Envelope pack="filled" className="size-5" />}
           href={Routes.emails_url(routeParams)}
           additionalPatterns={[Routes.followers_url(routeParams)]}
         />
-        <ClientNavLink text="Workflows" icon="diagram-2-fill" href={Routes.workflows_url(routeParams)} />
-        <ClientNavLink text="Sales" icon="solid-currency-dollar" href={Routes.customers_url(routeParams)} />
+        <ClientNavLink
+          text="Workflows"
+          icon={<Workflow pack="filled" className="size-5" />}
+          href={Routes.workflows_url(routeParams)}
+        />
+        <ClientNavLink
+          text="Sales"
+          icon={<DollarCircle pack="filled" className="size-5" />}
+          href={Routes.customers_url(routeParams)}
+        />
         <ClientNavLink
           text="Analytics"
-          icon="bar-chart-fill"
+          icon={<BarChartBig pack="filled" className="size-5" />}
           href={Routes.sales_dashboard_url(routeParams)}
-          additionalPatterns={[Routes.audience_dashboard_url(routeParams), Routes.utm_links_dashboard_url(routeParams)]}
+          additionalPatterns={[
+            Routes.audience_dashboard_url(routeParams),
+            Routes.dashboard_utm_links_url(routeParams),
+            Routes.churn_dashboard_url(routeParams),
+          ]}
+        />
+        <ClientNavLink
+          text="Affiliates"
+          icon={<Gift pack="filled" className="size-5" />}
+          href={Routes.affiliates_url(routeParams)}
         />
         {loggedInUser?.policies.balance.index ? (
-          <ClientNavLink text="Payouts" icon="bank" href={Routes.balance_url(routeParams)} />
+          <ClientNavLink
+            text="Payouts"
+            icon={<Bank pack="filled" className="size-5" />}
+            href={Routes.balance_url(routeParams)}
+          />
         ) : null}
         {loggedInUser?.policies.community.index ? (
-          <NavLink text="Community" icon="solid-chat-alt" href={Routes.community_path(routeParams)} />
+          <ClientNavLink
+            text="Community"
+            icon={<MessageBubble pack="filled" className="size-5" />}
+            href={Routes.communities_path()}
+            onClick={() => {
+              sessionStorage.setItem("communities:referrer", window.location.pathname + window.location.search);
+            }}
+          />
         ) : null}
       </NavSection>
       <NavSection>
-        <NavLink text="Discover" icon="solid-search" href={discoverUrl} exactHrefMatch />
+        <ClientNavLink text="Discover" icon={<Search className="size-5" />} href={discoverUrl} exactHrefMatch />
         {currentSeller?.id === loggedInUser?.id ? (
-          <NavLink
+          <ClientNavLink
             text="Library"
-            icon="bookmark-heart-fill"
+            icon={<BookmarkHeart pack="filled" className="size-5" />}
             href={Routes.library_url(routeParams)}
-            additionalPatterns={[Routes.wishlists_url(routeParams)]}
+            additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
           />
         ) : null}
       </NavSection>

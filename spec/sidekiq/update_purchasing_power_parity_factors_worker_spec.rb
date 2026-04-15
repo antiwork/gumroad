@@ -5,6 +5,8 @@ require "spec_helper"
 describe UpdatePurchasingPowerParityFactorsWorker, :vcr do
   describe "#perform" do
     before do
+      # The VCR cassette for PPP data is from 2025, so this prevents the worker complaining it's out of date
+      travel_to Date.new(2025, 1, 1)
       @seller = create(:user)
       @worker = described_class.new
       @service = PurchasingPowerParityService.new

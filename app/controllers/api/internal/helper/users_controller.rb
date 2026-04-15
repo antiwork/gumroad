@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseController
+  skip_before_action :authorize_helper_token!, only: [:user_info]
+  before_action :authorize_hmac_signature!, only: [:user_info]
+
   def user_info
     render json: { success: false, error: "'email' parameter is required" }, status: :bad_request if params[:email].blank?
 
@@ -123,7 +126,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         }
       end
     rescue HTTParty::Error, Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, Errno::ECONNREFUSED, SocketError => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
 
       render json: {
         success: false,
@@ -332,12 +335,148 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     if user.present?
       user.two_factor_authentication_enabled = params[:enabled]
       if user.save
+        user.totp_credential&.destroy unless user.two_factor_authentication_enabled?
         render json: { success: true, message: "Two-factor authentication #{user.two_factor_authentication_enabled? ? "enabled" : "disabled"}." }
       else
         render json: { success: false, error_message: user.errors.full_messages.join(", ") }, status: :unprocessable_entity
       end
     else
       render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+    end
+  end
+
+  CREATE_COMMENT_OPENAPI = {
+    summary: "Create a comment on a user",
+    description: "Add a note-type comment to a user's record in Gumroad admin",
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: "object",
+            properties: {
+              email: { type: "string", description: "Email address of the user" },
+              content: { type: "string", description: "Comment content (max 10,000 characters)" },
+              idempotency_key: { type: "string", description: "Client-generated UUID to prevent duplicate comments on retry" }
+            },
+            required: ["email", "content", "idempotency_key"]
+          }
+        }
+      }
+    },
+    security: [{ bearer: [] }],
+    responses: {
+      '200': {
+        description: "Comment created successfully",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: true },
+                comment: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    author_name: { type: "string" },
+                    content: { type: "string" },
+                    comment_type: { type: "string" },
+                    created_at: { type: "string", format: "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '400': {
+        description: "Missing required parameters",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                error_message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      '409': {
+        description: "Idempotency key reused with different content",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                error_message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      '422': {
+        description: "User not found or validation error",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                error_message: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }.freeze
+  def create_comment
+    if params[:email].blank?
+      return render json: { success: false, error_message: "'email' parameter is required" }, status: :bad_request
+    end
+    if params[:content].blank?
+      return render json: { success: false, error_message: "'content' parameter is required" }, status: :bad_request
+    end
+    if params[:idempotency_key].blank?
+      return render json: { success: false, error_message: "'idempotency_key' parameter is required" }, status: :bad_request
+    end
+
+    user = User.alive.by_email(params[:email]).first
+    if user.blank?
+      return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+    end
+
+    normalized_content = Comment.normalize_content(params[:content])
+
+    existing = user.comments.find_by(idempotency_key: params[:idempotency_key])
+    if existing
+      if existing.content != normalized_content
+        return render json: { success: false, error_message: "Idempotency key already used with different content" }, status: :conflict
+      end
+      return render json: { success: true, comment: HelperUserInfoService.serialize_comment(existing) }
+    end
+
+    comment = user.comments.new(
+      content: params[:content],
+      comment_type: Comment::COMMENT_TYPE_NOTE,
+      author_id: GUMROAD_ADMIN_ID,
+      idempotency_key: params[:idempotency_key]
+    )
+
+    if comment.save
+      render json: { success: true, comment: HelperUserInfoService.serialize_comment(comment) }
+    else
+      render json: { success: false, error_message: comment.errors.full_messages.join(", ") }, status: :unprocessable_entity
+    end
+  rescue ActiveRecord::RecordNotUnique
+    existing = user.comments.find_by!(idempotency_key: params[:idempotency_key])
+    if existing.content != normalized_content
+      render json: { success: false, error_message: "Idempotency key already used with different content" }, status: :conflict
+    else
+      render json: { success: true, comment: HelperUserInfoService.serialize_comment(existing) }
     end
   end
 
@@ -465,7 +604,7 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
         appeal_url: appeal_url
       }
     rescue HTTParty::Error, Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, Errno::ECONNREFUSED, SocketError => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
 
       render json: {
         success: false,

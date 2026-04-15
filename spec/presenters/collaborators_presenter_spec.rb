@@ -21,19 +21,8 @@ describe CollaboratorsPresenter do
         collaborators: [confirmed_collaborator, pending_collaborator].map do
           CollaboratorPresenter.new(seller:, collaborator: _1).collaborator_props
         end,
-        collaborators_disabled_reason: nil,
         has_incoming_collaborators: false,
       )
-    end
-
-    it "returns collaborators supported as false if using a Brazilian Stripe Connect account" do
-      brazilian_stripe_account = create(:merchant_account_stripe_connect, user: seller, country: "BR")
-      seller.update!(check_merchant_account_is_linked: true)
-      expect(seller.merchant_account(StripeChargeProcessor.charge_processor_id)).to eq brazilian_stripe_account
-
-      props = described_class.new(seller:).index_props
-
-      expect(props[:collaborators_disabled_reason]).to eq "Collaborators with Brazilian Stripe accounts are not supported."
     end
 
     it "returns if the seller has any incoming collaborations" do

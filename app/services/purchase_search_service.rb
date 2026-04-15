@@ -7,6 +7,7 @@ class PurchaseSearchService
     seller: nil,
     purchaser: nil,
     revenue_sharing_user: nil,
+    id: nil,
     product: nil,
     exclude_product: nil,
     exclude_purchasers_of_product: nil,
@@ -30,6 +31,10 @@ class PurchaseSearchService
     exclude_non_successful_preorder_authorizations: false,
     exclude_bundle_product_purchases: false,
     exclude_commission_completion_purchases: false,
+    exclude_deleted_by_buyer: false,
+    exclude_additional_contributions: false,
+    exclude_access_revoked: false,
+    for_library: false,
     # Ranges
     price_greater_than: nil, # Integer, compared to price_cents
     price_less_than: nil, # Integer, compared to price_cents
@@ -60,6 +65,7 @@ class PurchaseSearchService
 
   def initialize(options = {})
     @options = DEFAULT_OPTIONS.merge(options)
+    apply_for_library
     build_body
   end
 
@@ -74,12 +80,30 @@ class PurchaseSearchService
   end
 
   private
+    def apply_for_library
+      return unless @options[:for_library]
+      @options.merge!(
+        state: Purchase::ALL_SUCCESS_STATES,
+        exclude_additional_contributions: true,
+        exclude_non_original_subscription_purchases: true,
+        exclude_deactivated_subscriptions: true,
+        exclude_gifters: true,
+        exclude_refunded_except_subscriptions: true,
+        exclude_unreversed_chargedback: true,
+        exclude_bundle_product_purchases: true,
+        exclude_commission_completion_purchases: true,
+        exclude_access_revoked: true,
+        exclude_deleted_by_buyer: true,
+      )
+    end
+
     def build_body
       @body = { query: { bool: Hash.new { |hash, key| hash[key] = [] } } }
       ### Filters
       # Objects and ids
       build_body_seller
       build_body_purchaser
+      build_body_id
       build_body_product
       build_body_buyer_search
       build_body_exclude_product
@@ -106,6 +130,9 @@ class PurchaseSearchService
       build_body_exclude_non_successful_preorder_authorizations
       build_body_exclude_bundle_product_purchases
       build_body_exclude_commission_completion_purchases
+      build_body_exclude_deleted_by_buyer
+      build_body_exclude_additional_contributions
+      build_body_exclude_access_revoked
       # Ranges
       build_body_price_greater_than
       build_body_price_less_than
@@ -138,6 +165,11 @@ class PurchaseSearchService
         purchaser.is_a?(User) ? purchaser.id : purchaser
       end
       @body[:query][:bool][:filter] << { terms: { "purchaser_id" => ids } }
+    end
+
+    def build_body_id
+      return if @options[:id].blank?
+      @body[:query][:bool][:filter] << { terms: { "id" => Array.wrap(@options[:id]) } }
     end
 
     def build_body_product
@@ -312,6 +344,21 @@ class PurchaseSearchService
     def build_body_exclude_commission_completion_purchases
       return unless @options[:exclude_commission_completion_purchases]
       @body[:query][:bool][:must_not] << { term: { "selected_flags" => "is_commission_completion_purchase" } }
+    end
+
+    def build_body_exclude_deleted_by_buyer
+      return unless @options[:exclude_deleted_by_buyer]
+      @body[:query][:bool][:must_not] << { term: { "selected_flags" => "is_deleted_by_buyer" } }
+    end
+
+    def build_body_exclude_additional_contributions
+      return unless @options[:exclude_additional_contributions]
+      @body[:query][:bool][:must_not] << { term: { "selected_flags" => "is_additional_contribution" } }
+    end
+
+    def build_body_exclude_access_revoked
+      return unless @options[:exclude_access_revoked]
+      @body[:query][:bool][:must_not] << { term: { "selected_flags" => "is_access_revoked" } }
     end
 
     def build_body_price_greater_than

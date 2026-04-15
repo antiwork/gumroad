@@ -21,7 +21,7 @@ class CleanUsZipCodeDatabaseFile
     File.delete(destination_file_path) if File.exist?(destination_file_path)
     rows = CSV.parse(File.read(source_file_path)).map! { |row| [row[0], row[6]] }
 
-    CSV.open(destination_file_path, "w") do |csv|
+    CsvSafe.open(destination_file_path, "w") do |csv|
       rows.each do |row|
         csv << row
       end

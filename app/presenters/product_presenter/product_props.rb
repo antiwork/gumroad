@@ -43,6 +43,7 @@ class ProductPresenter::ProductProps
         **ProductPresenter::InstallmentPlanProps.new(product:).props,
         is_legacy_subscription: product.is_legacy_subscription?,
         is_tiered_membership: product.is_tiered_membership,
+        is_recurring_billing: product.is_recurring_billing,
         is_physical: product.is_physical,
         custom_view_content_button_text: product.custom_view_content_button_text.presence,
         is_multiseat_license: product.is_tiered_membership && product.is_multiseat_license,
@@ -80,24 +81,12 @@ class ProductPresenter::ProductProps
   private
     attr_reader :product, :seller
 
-    def discount_code_props(discount_code, quantity)
-      return if discount_code.blank?
-
-      offer_code_response = OfferCodeDiscountComputingService.new(
-        discount_code,
-        {
-          product.unique_permalink => {
-            permalink: product.unique_permalink,
-            quantity: [quantity, product.find_offer_code(code: discount_code)&.minimum_quantity || 0].max
-          }
-        }
-      ).process
-
-      if offer_code_response[:error_code].present?
-        { valid: false, error_code: offer_code_response[:error_code] }
-      else
-        { valid: true, code: discount_code, **offer_code_response[:products_data][product.unique_permalink] }
-      end
+    def discount_code_props(discount_code_from_url, quantity)
+      BestOfferCodeService.new(
+        product: product,
+        url_code: discount_code_from_url,
+        quantity: quantity
+      ).result
     end
 
     def purchase_props(purchase_info)

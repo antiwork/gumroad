@@ -1,3 +1,4 @@
+import { Discord } from "@boxicons/react";
 import * as React from "react";
 
 import { fetchServerInfo } from "$app/data/discord_integration";
@@ -9,7 +10,10 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import { Toggle } from "$app/components/Toggle";
+import { Alert } from "$app/components/ui/Alert";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Label } from "$app/components/ui/Label";
+import { Switch } from "$app/components/ui/Switch";
 
 export type DiscordIntegration = {
   keep_inactive_members: boolean;
@@ -66,7 +70,7 @@ export const DiscordIntegrationEditor = ({
           ) : !integration ? (
             <div>
               <Button
-                className="button-discord"
+                color="discord"
                 onClick={() => {
                   setIsLoading(true);
                   const oauthPopup = window.open(getDiscordUrl(), "discord", "popup=yes");
@@ -97,6 +101,7 @@ export const DiscordIntegrationEditor = ({
                   });
                 }}
               >
+                <Discord pack="brands" className="size-5" />
                 Connect to Discord
               </Button>
             </div>
@@ -115,38 +120,36 @@ export const DiscordIntegrationEditor = ({
                     setIsLoading(false);
                   }}
                 >
-                  <span className="icon brand-icon-discord" />
+                  <Discord pack="brands" className="size-5" />
                   Disconnect Discord
                 </Button>
               </div>
               {product.variants.length > 0 ? (
                 <>
                   {product.variants.every(({ integrations }) => !integrations.discord) ? (
-                    <div role="status" className="warning">
+                    <Alert role="status" variant="warning">
                       {product.native_type === "membership"
                         ? "Your integration is not assigned to any tier. Check your tiers' settings."
                         : "Your integration is not assigned to any version. Check your versions' settings."}
-                    </div>
+                    </Alert>
                   ) : null}
-                  <Toggle
-                    value={product.variants.every(({ integrations }) => integrations.discord)}
-                    onChange={setEnabledForOptions}
-                  >
-                    {product.native_type === "membership" ? "Enable for all tiers" : "Enable for all versions"}
-                  </Toggle>
+                  <Switch
+                    checked={product.variants.every(({ integrations }) => integrations.discord)}
+                    onChange={(e) => setEnabledForOptions(e.target.checked)}
+                    label={product.native_type === "membership" ? "Enable for all tiers" : "Enable for all versions"}
+                  />
                 </>
               ) : null}
               {product.native_type === "membership" ? (
-                <label>
-                  <input
-                    type="checkbox"
+                <Label>
+                  <Checkbox
                     checked={integration.keep_inactive_members}
                     onChange={() =>
                       onChange({ ...integration, keep_inactive_members: !integration.keep_inactive_members })
                     }
                   />
                   Do not remove Discord access when membership ends
-                </label>
+                </Label>
               ) : null}
             </>
           )}

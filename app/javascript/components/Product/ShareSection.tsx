@@ -1,6 +1,8 @@
+import { Check, ChevronDown, FileDetail, Link, Plus, Share } from "@boxicons/react";
 import * as React from "react";
 
 import { Wishlist, addToWishlist, createWishlist } from "$app/data/wishlists";
+import { classNames } from "$app/utils/classNames";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -8,14 +10,14 @@ import { ComboBox } from "$app/components/ComboBox";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useAppDomain } from "$app/components/DomainSettings";
 import { FacebookShareButton } from "$app/components/FacebookShareButton";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
-import { Popover } from "$app/components/Popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Product, WishlistForProduct } from "$app/components/Product";
 import { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
-import { WithTooltip } from "$app/components/WithTooltip";
+import { Alert } from "$app/components/ui/Alert";
+import { Input } from "$app/components/ui/Input";
 
 type SuccessState = { newlyCreated: boolean; wishlist: Wishlist };
 
@@ -34,6 +36,9 @@ export const ShareSection = ({
   const [saveState, setSaveState] = React.useState<
     { type: "initial" | "saving" } | ({ type: "success" } & SuccessState)
   >({ type: "initial" });
+  const [dropdownState, setDropdownState] = React.useState<
+    { state: "closed" } | { state: "open" } | { state: "creating"; newWishlistName: string }
+  >({ state: "closed" });
 
   const isSelectionInWishlist = (wishlist: WishlistForProduct) =>
     wishlist.selections_in_wishlist.some(
@@ -46,6 +51,7 @@ export const ShareSection = ({
 
   const addProduct = async (resolveWishlist: Promise<SuccessState>) => {
     setSaveState({ type: "saving" });
+    setDropdownState({ state: "closed" });
 
     try {
       const { newlyCreated, wishlist } = await resolveWishlist;
@@ -80,8 +86,8 @@ export const ShareSection = ({
     }
   };
 
-  const newWishlist = async () => {
-    const { wishlist } = await createWishlist();
+  const newWishlist = async (name: string): Promise<SuccessState> => {
+    const { wishlist } = await createWishlist(name);
     setWishlists([...wishlists, { ...wishlist, selections_in_wishlist: [] }]);
     return { newlyCreated: true, wishlist };
   };
@@ -91,15 +97,22 @@ export const ShareSection = ({
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <ComboBox
           input={(props) => (
-            <div {...props} className="input" aria-label="Add to wishlist">
-              <span className="fake-input text-singleline">
+            <div
+              {...props}
+              className={classNames(
+                "flex cursor-pointer items-center rounded border border-border bg-background px-4 py-3",
+                dropdownState.state !== "closed" && "rounded-b-none",
+              )}
+              aria-label="Add to wishlist"
+            >
+              <span className="flex-1 truncate">
                 {saveState.type === "success"
                   ? saveState.wishlist.name
                   : saveState.type === "saving"
                     ? "Adding to wishlist..."
                     : "Add to wishlist"}
               </span>
-              <Icon name="outline-cheveron-down" />
+              <ChevronDown className="size-5" />
             </div>
           )}
           disabled={saveState.type === "saving"}
@@ -109,67 +122,94 @@ export const ShareSection = ({
               <div
                 {...props}
                 inert={isSelectionInWishlist(wishlist)}
+                className={classNames(props.className, isSelectionInWishlist(wishlist) ? "opacity-30" : undefined)}
                 onClick={(e) => {
                   props.onClick?.(e);
                   void addProduct(Promise.resolve({ newlyCreated: false, wishlist }));
                 }}
               >
                 <div>
-                  <Icon name="file-text" /> {wishlist.name}
+                  <FileDetail className="size-5" /> {wishlist.name}
                 </div>
               </div>
-            ) : (
-              <div
-                {...props}
-                onClick={(e) => {
-                  props.onClick?.(e);
-                  void addProduct(newWishlist());
+            ) : dropdownState.state === "creating" ? (
+              <form
+                role={props.role}
+                className="flex gap-2 p-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!dropdownState.newWishlistName.trim()) {
+                    showAlert("Please enter a wishlist name", "error");
+                    return;
+                  }
+                  void addProduct(newWishlist(dropdownState.newWishlistName));
                 }}
               >
+                <Input
+                  type="text"
+                  autoFocus
+                  placeholder="Wishlist name"
+                  value={dropdownState.newWishlistName}
+                  onChange={(e) => setDropdownState({ state: "creating", newWishlistName: e.target.value })}
+                  aria-label="Wishlist name"
+                />
+                <Button type="submit" size="icon" aria-label="Create wishlist" color="primary">
+                  <Check className="size-5" />
+                </Button>
+              </form>
+            ) : (
+              <div {...props} onClick={() => setDropdownState({ state: "creating", newWishlistName: "" })}>
                 <div>
-                  <Icon name="plus" /> New wishlist
+                  <Plus className="size-5" /> New wishlist
                 </div>
               </div>
             )
           }
-          onClick={() => {
-            if (loggedInUser) return;
-            window.location.href = Routes.login_url({ host: appDomain, next: product.long_url });
+          open={loggedInUser ? dropdownState.state !== "closed" : false}
+          onToggle={(open) => {
+            if (!loggedInUser) {
+              window.location.href = Routes.login_url({ host: appDomain, next: product.long_url });
+              return;
+            }
+            if (open) {
+              setDropdownState({ state: "open" });
+            } else {
+              setDropdownState({ state: "closed" });
+            }
           }}
-          open={loggedInUser ? undefined : false}
         />
 
-        <Popover
-          aria-label="Share"
-          trigger={
-            <WithTooltip tip="Share" position="bottom">
-              <Button aria-label="Share">
-                <Icon name="share" />
+        <Popover>
+          <PopoverAnchor>
+            <PopoverTrigger aria-label="Share" asChild>
+              <Button size="icon">
+                <Share className="size-5" />
               </Button>
-            </WithTooltip>
-          }
-        >
-          <div className="grid grid-cols-1 gap-4">
-            <TwitterShareButton url={product.long_url} text={`Buy ${product.name} on @Gumroad`} />
-            <FacebookShareButton url={product.long_url} text={product.name} />
-            <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
-              <Button aria-label="Copy product URL">
-                <Icon name="link" /> Copy link
-              </Button>
-            </CopyToClipboard>
-          </div>
+            </PopoverTrigger>
+          </PopoverAnchor>
+          <PopoverContent sideOffset={4} onFocusOutside={(e) => e.preventDefault()}>
+            <div className="grid grid-cols-1 gap-4">
+              <TwitterShareButton url={product.long_url} text={`Buy ${product.name} on @Gumroad`} />
+              <FacebookShareButton url={product.long_url} text={product.name} />
+              <CopyToClipboard text={product.long_url} copyTooltip="Copy product URL">
+                <Button aria-label="Copy product URL">
+                  <Link className="size-5" /> Copy link
+                </Button>
+              </CopyToClipboard>
+            </div>
+          </PopoverContent>
         </Popover>
       </div>
       {saveState.type === "success" ? (
-        <div role="alert" className="success">
+        <Alert variant="success">
           {saveState.newlyCreated ? (
-            <span>
+            <>
               Wishlist created! <a href={Routes.wishlists_url()}>Edit it here.</a>
-            </span>
+            </>
           ) : (
             "Added to wishlist!"
           )}
-        </div>
+        </Alert>
       ) : null}
     </>
   );

@@ -373,10 +373,9 @@ class ReceiptPresenter::PaymentInfo
       if @_subscription_charge_number.key?(purchase.id)
         @_subscription_charge_number[purchase.id]
       else
-        @_subscription_charge_number[purchase.id] = purchase
-          .subscription
-          .purchases
-          .successful
+        subscription = purchase.subscription
+        scope = subscription.is_test_subscription ? subscription.purchases.test_successful : subscription.purchases.successful
+        @_subscription_charge_number[purchase.id] = scope
           .where("succeeded_at < ?", purchase.succeeded_at)
           .count + 1
       end
