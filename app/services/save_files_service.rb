@@ -61,6 +61,11 @@ class SaveFilesService
           file_params[:display_name] ||= file_params[:name]
           file_params.delete(:name)
         end
+
+        if file_params.key?(:file_name)
+          file_params[:display_name] ||= file_params[:file_name]
+          file_params.delete(:file_name)
+        end
       end
     end
 end
