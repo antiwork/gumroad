@@ -211,12 +211,13 @@ describe LoginsController, type: :controller, inertia: true do
         end
       end
 
-      it "allows a user suspended for fraud to log in" do
+      it "does not log in a user who is suspended for fraud" do
         user = create(:user, password: "password", user_risk_state: "suspended_for_fraud")
 
         post :create, params: { user: { login_identifier: user.email, password: "password" } }
 
-        expect(controller.user_signed_in?).to be(true)
+        expect(flash[:warning]).to eq("You can't perform this action because your account has been suspended.")
+        expect(controller.user_signed_in?).to be(false)
       end
     end
 
