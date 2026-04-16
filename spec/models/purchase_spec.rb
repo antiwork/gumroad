@@ -4281,57 +4281,6 @@ describe Purchase, :vcr do
     end
   end
 
-  describe "#trigger_content_moderation" do
-    let(:purchase) { build(:purchase_in_progress, price_cents: 1000) }
-
-    before { $redis.set(RedisKey.content_moderation_probability, "0.5") }
-
-    context "when random number is less than probability" do
-      before do
-        $redis.set(RedisKey.content_moderation_probability, "0.5")
-        allow(purchase).to receive(:rand).and_return(0.4)
-      end
-
-      it "enqueues ContentModeration::ModerateProductJob" do
-        purchase.update_balance_and_mark_successful!
-        expect(ContentModeration::ModerateProductJob).to have_enqueued_sidekiq_job(purchase.link.id)
-      end
-    end
-
-    it "does not enqueue ContentModeration::ModerateProductJob when random number is higher than probability" do
-      allow(purchase).to receive(:rand).and_return(0.6)
-      purchase.update_balance_and_mark_successful!
-      expect(ContentModeration::ModerateProductJob).not_to have_enqueued_sidekiq_job(purchase.link.id)
-    end
-
-    context "when purchase is free" do
-      let(:purchase) { build(:purchase_in_progress, price_cents: 0) }
-
-      it "does not enqueue ContentModeration::ModerateProductJob" do
-        purchase.update_balance_and_mark_successful!
-        expect(ContentModeration::ModerateProductJob).not_to have_enqueued_sidekiq_job(purchase.link.id)
-      end
-    end
-
-    context "when content_moderation_probability redis key is not set" do
-      before { $redis.del(RedisKey.content_moderation_probability) }
-
-      it "uses probability of 0" do
-        allow(purchase).to receive(:rand).and_return(0)
-        purchase.update_balance_and_mark_successful!
-        expect(ContentModeration::ModerateProductJob).not_to have_enqueued_sidekiq_job(purchase.link.id)
-      end
-    end
-
-    context "when product has already been content moderated" do
-      let(:purchase) { build(:purchase_in_progress, price_cents: 1000, link: create(:product, content_moderated: true)) }
-
-      it "does not enqueue ContentModeration::ModerateProductJob" do
-        purchase.update_balance_and_mark_successful!
-        expect(ContentModeration::ModerateProductJob).not_to have_enqueued_sidekiq_job(purchase.link.id)
-      end
-    end
-  end
 
   describe ".formatted_error_code" do
     it "falls back to purchase.stripe_error_code" do

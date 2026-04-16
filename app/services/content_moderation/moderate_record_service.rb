@@ -3,9 +3,31 @@
 class ContentModeration::ModerateRecordService
   AUTHOR_NAME = "ContentModeration"
 
+  CheckResult = Struct.new(:passed, :reasons, keyword_init: true)
+
+  def self.check(record, entity_type)
+    new(record, entity_type).check
+  end
+
   def initialize(record, entity_type)
     @record = record
     @entity_type = entity_type
+  end
+
+  def check
+    return CheckResult.new(passed: true, reasons: []) unless moderation_enabled?
+
+    content = extract_content
+    return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
+
+    results = run_strategies(content)
+    flagged_results = results.select { |r| r.status == "flagged" }
+
+    if flagged_results.any?
+      CheckResult.new(passed: false, reasons: flagged_results.flat_map(&:reasoning))
+    else
+      CheckResult.new(passed: true, reasons: [])
+    end
   end
 
   def perform
@@ -190,7 +212,7 @@ class ContentModeration::ModerateRecordService
                 when :product then record.user
                 when :post then record.user
                 when :profile then record
-                end
+      end
     end
 
     def log_moderation_result(status, reasoning)
@@ -198,7 +220,7 @@ class ContentModeration::ModerateRecordService
                      when :product then "Product##{record.id} (#{record.name})"
                      when :post then "Post##{record.id} (#{record.name})"
                      when :profile then "Profile##{record.id} (#{user.display_name})"
-                     end
+      end
 
       message = "Content moderation: #{record_label} - #{status}"
       message += " - #{reasoning}" if reasoning.present?

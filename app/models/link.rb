@@ -208,8 +208,11 @@ class Link < ApplicationRecord
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
   validate :default_offer_code_must_be_valid
+  validate :content_moderation_check, if: -> { publishing? }
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
+
+  attr_accessor :publishing
 
   before_save :downcase_filetype
   before_save :remove_xml_tags
@@ -417,7 +420,12 @@ class Link < ApplicationRecord
     self.purchase_disabled_at = nil
     self.deleted_at = nil
     self.draft = false
-    save!
+    self.publishing = true
+    begin
+      save!
+    ensure
+      self.publishing = false
+    end
 
     user.direct_affiliates.alive.apply_to_all_products.each do |affiliate|
       unless affiliate.products.include?(self)
@@ -425,6 +433,10 @@ class Link < ApplicationRecord
         AffiliateMailer.notify_direct_affiliate_of_new_product(affiliate.id, id).deliver_later
       end
     end
+  end
+
+  def publishing?
+    !!publishing
   end
 
   def unpublish!(is_unpublished_by_admin: false)
@@ -1424,5 +1436,14 @@ class Link < ApplicationRecord
       return unless is_unpublished_by_admin? && !saved_change_to_is_unpublished_by_admin?
 
       ContentModeration::ModerateProductJob.perform_async(id)
+    end
+
+    def content_moderation_check
+      return if user&.vip_creator?
+
+      result = ContentModeration::ModerateRecordService.check(self, :product)
+      return if result.passed
+
+      errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")
     end
 end

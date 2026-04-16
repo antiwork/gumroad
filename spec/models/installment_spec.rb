@@ -779,6 +779,56 @@ const b = 2;</code></pre>
         expect(@installment.errors.full_messages.to_sentence).to eq("You have to confirm your email address before you can do that.")
       end
     end
+
+    context "content moderation" do
+      it "blocks publishing when ContentModeration::ModerateRecordService.check fails" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["policy violation"])
+        )
+
+        expect { @installment.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(@installment.reload.published_at).to be(nil)
+        expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
+      end
+
+      it "skips the content moderation check for VIP creators" do
+        allow(@installment.user).to receive(:vip_creator?).and_return(true)
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        @installment.publish!
+
+        expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
+      end
+
+      it "publishes successfully when the content moderation check passes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        @installment.publish!
+
+        expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
+      end
+
+      it "clears the publishing flag after publish! completes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        @installment.publish!
+
+        expect(@installment.publishing?).to eq(false)
+      end
+
+      it "clears the publishing flag even when publish! raises" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["bad"])
+        )
+
+        expect { @installment.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(@installment.publishing?).to eq(false)
+      end
+    end
   end
 
   describe "#is_affiliate_product_post?" do

@@ -165,6 +165,73 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
     end
   end
 
+  describe ".check" do
+    let(:product) { create(:product) }
+
+    before do
+      allow_any_instance_of(ContentModeration::ContentExtractor)
+        .to receive(:extract_from_product)
+        .and_return(ContentModeration::ContentExtractor::Result.new(text: "product text", image_urls: []))
+    end
+
+    it "returns passed: true when moderation is disabled" do
+      allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_ENABLED").and_return("false")
+
+      result = described_class.check(product, :product)
+
+      expect(result.passed).to eq(true)
+      expect(result.reasons).to eq([])
+    end
+
+    it "returns passed: true when content is empty" do
+      allow_any_instance_of(ContentModeration::ContentExtractor)
+        .to receive(:extract_from_product)
+        .and_return(ContentModeration::ContentExtractor::Result.new(text: "", image_urls: []))
+
+      result = described_class.check(product, :product)
+
+      expect(result.passed).to eq(true)
+      expect(result.reasons).to eq([])
+    end
+
+    it "returns passed: false with reasons when any strategy flags content" do
+      allow_any_instance_of(described_class).to receive(:run_strategies).and_return(
+        [
+          result_class.new(status: "compliant", reasoning: []),
+          result_class.new(status: "flagged", reasoning: ["policy violation"]),
+        ]
+      )
+
+      result = described_class.check(product, :product)
+
+      expect(result.passed).to eq(false)
+      expect(result.reasons).to eq(["policy violation"])
+    end
+
+    it "returns passed: true when all strategies are compliant" do
+      allow_any_instance_of(described_class).to receive(:run_strategies).and_return(
+        [result_class.new(status: "compliant", reasoning: [])]
+      )
+
+      result = described_class.check(product, :product)
+
+      expect(result.passed).to eq(true)
+      expect(result.reasons).to eq([])
+    end
+
+    it "does not take actions (record stays published, user stays compliant)" do
+      seller = product.user
+      allow_any_instance_of(described_class).to receive(:run_strategies).and_return(
+        [result_class.new(status: "flagged", reasoning: ["bad"])]
+      )
+
+      described_class.check(product, :product)
+
+      expect(product.reload).not_to be_is_unpublished_by_admin
+      expect(seller.reload).not_to be_suspended
+    end
+  end
+
   describe "#should_moderate?" do
     let(:service) { described_class.new(create(:product), :product) }
 
