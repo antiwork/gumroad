@@ -23,7 +23,7 @@ class AffiliateMailer < ApplicationMailer
       "#{product[:fee_percent]}%"
     end
     @affiliate_referral_url = affiliate_referral_url
-    @final_destination_url = @products.one? ? product[:destination_url] : @direct_affiliate.final_destination_url
+    @final_destination_url = @direct_affiliate.final_destination_url
 
     @subject = "#{@seller_name} has added you as an affiliate."
     params = {

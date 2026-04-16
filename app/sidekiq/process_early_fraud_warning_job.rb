@@ -54,7 +54,8 @@ class ProcessEarlyFraudWarningJob
     end
 
     def process_refundable_for_fraud!(early_fraud_warning)
-      early_fraud_warning.chargeable.refund_for_fraud_and_block_buyer!(GUMROAD_ADMIN_ID)
+      return unless early_fraud_warning.chargeable.refund_for_fraud_and_block_buyer!(GUMROAD_ADMIN_ID)
+
       early_fraud_warning.update_as_resolved!(
         resolution: EarlyFraudWarning::RESOLUTION_RESOLVED_REFUNDED_FOR_FRAUD
       )

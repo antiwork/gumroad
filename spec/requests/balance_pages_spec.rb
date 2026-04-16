@@ -903,6 +903,72 @@ describe "Balance Pages Scenario", js: true, type: :system do
       end
     end
 
+    describe "scheduled payout banner" do
+      context "when seller is suspended with a pending payout" do
+        let(:seller) { create(:named_seller, user_risk_state: "suspended_for_fraud") }
+        let(:scheduled_date) { 21.days.from_now }
+        let(:formatted_date) { scheduled_date.strftime("%-m/%-d/%Y") }
+
+        it "displays payout scheduled message" do
+          create(:scheduled_payout, user: seller, action: "payout", status: "pending", payout_amount_cents: 50_000, scheduled_at: scheduled_date)
+
+          visit balance_path
+
+          expect(page).to have_status(text: "Your balance of $500.00 is scheduled for payout on #{formatted_date}.")
+        end
+
+        it "displays flagged payout message" do
+          create(:scheduled_payout, user: seller, action: "payout", status: "flagged", payout_amount_cents: 50_000, scheduled_at: scheduled_date)
+
+          visit balance_path
+
+          expect(page).to have_status(text: "Your balance of $500.00 is scheduled for payout on #{formatted_date}. Your payout is under review. Please contact support for details.")
+        end
+
+        it "displays refund scheduled message" do
+          create(:scheduled_payout, user: seller, action: "refund", status: "pending", payout_amount_cents: 50_000, scheduled_at: scheduled_date)
+
+          visit balance_path
+
+          expect(page).to have_status(text: "Your balance will not be paid out. Unpaid sales are scheduled to be refunded to buyers on #{formatted_date}.")
+        end
+
+        it "displays hold message" do
+          create(:scheduled_payout, user: seller, action: "hold", status: "held", payout_amount_cents: 50_000)
+
+          visit balance_path
+
+          expect(page).to have_status(text: "Your balance is on hold. Please contact support for details.")
+        end
+
+        it "displays executed payout message" do
+          create(:scheduled_payout, user: seller, action: "payout", status: "executed", executed_at: Time.current, payout_amount_cents: 50_000)
+
+          visit balance_path
+
+          expect(page).to have_status(text: "Your balance of $500.00 has been paid out.")
+        end
+
+        it "displays executed refund message" do
+          create(:scheduled_payout, user: seller, action: "refund", status: "executed", executed_at: Time.current, payout_amount_cents: 50_000)
+
+          visit balance_path
+
+          expect(page).to have_status(text: "Your unpaid sales have been refunded to buyers.")
+        end
+      end
+
+      context "when seller is not suspended" do
+        it "does not display the banner" do
+          create(:scheduled_payout, user: seller, action: "payout", status: "pending", payout_amount_cents: 50_000)
+
+          visit balance_path
+
+          expect(page).not_to have_text("is scheduled for payout on")
+        end
+      end
+    end
+
     describe "past payouts" do
       let!(:now) { Time.current }
       let!(:payout_date) { 1.week.ago }

@@ -266,7 +266,6 @@ module Compliance
       Compliance::Countries::GEO.alpha2, # Georgia
       Compliance::Countries::KAZ.alpha2, # Kazakhstan
       Compliance::Countries::MYS.alpha2, # Malaysia
-      Compliance::Countries::MEX.alpha2, # Mexico
       Compliance::Countries::MDA.alpha2, # Moldova
       Compliance::Countries::MAR.alpha2, # Morocco
       Compliance::Countries::RUS.alpha2, # Russia

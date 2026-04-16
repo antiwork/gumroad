@@ -132,9 +132,8 @@ class Charge < ApplicationRecord
 
   def refund_for_fraud_and_block_buyer!(refunding_user_id)
     with_lock do
-      successful_purchases.each do |purchase|
-        purchase.refund_for_fraud!(refunding_user_id)
-      end
+      return false unless successful_purchases.all? { _1.refund_for_fraud!(refunding_user_id) }
+
       block_buyer!(blocking_user_id: refunding_user_id)
     end
   end

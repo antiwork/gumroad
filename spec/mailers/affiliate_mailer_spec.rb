@@ -196,6 +196,19 @@ describe AffiliateMailer do
           expect(mail.body.encoded).to_not include("— after they click, we'll redirect them to")
         end
       end
+
+      context "when affiliate has a destination URL but product affiliate does not" do
+        it "uses the model fallback URL instead of nil" do
+          direct_affiliate = create(:direct_affiliate, seller:, destination_url: "https://example.com")
+          create(:product_affiliate, product:, affiliate: direct_affiliate, destination_url: nil)
+
+          mail = AffiliateMailer.direct_affiliate_invitation(direct_affiliate.id)
+          expect(mail.to).to eq([direct_affiliate.affiliate_user.form_email])
+          expect(mail.body.encoded).to include("— after they click, we'll redirect them to")
+          final_url = direct_affiliate.final_destination_url
+          expect(mail.body.encoded.squish).to include(%(href="#{final_url}">#{final_url}</a>))
+        end
+      end
     end
 
     context "when affiliate has multiple products" do

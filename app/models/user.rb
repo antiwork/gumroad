@@ -77,6 +77,7 @@ class User < ApplicationRecord
   has_many :user_compliance_infos
   has_many :user_compliance_info_requests
   has_many :user_tax_forms
+  has_many :scheduled_payouts
   has_many :workflows, foreign_key: :seller_id
   has_many :merchant_accounts
   has_many :shipping_destinations
@@ -322,6 +323,7 @@ class User < ApplicationRecord
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :log_suspension_time_to_mongo
+    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :send_suspension_email
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation],
                      :do => :add_to_gmail_abuse_filter
 

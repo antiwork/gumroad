@@ -354,4 +354,49 @@ describe Admin::UsersController, type: :controller, inertia: true do
       end
     end
   end
+
+  describe "POST 'suspend_for_fraud' with scheduled payout" do
+    let(:user) { create(:user, user_risk_state: "flagged_for_fraud") }
+
+    it "creates a scheduled payout when params are provided" do
+      post :suspend_for_fraud, params: {
+        external_id: user.external_id,
+        scheduled_payout: { action: "payout", delay_days: "14" }
+      }
+
+      expect(response.parsed_body["success"]).to be(true)
+      expect(user.reload.suspended?).to be(true)
+
+      scheduled_payout = user.scheduled_payouts.last
+      expect(scheduled_payout).to be_present
+      expect(scheduled_payout.action).to eq("payout")
+      expect(scheduled_payout.delay_days).to eq(14)
+      expect(scheduled_payout.created_by).to eq(@admin_user)
+
+      payout_comment = user.comments.with_type_payout_note.last
+      expect(payout_comment).to be_present
+      expect(payout_comment.content).to include("Scheduled payout")
+    end
+
+    it "does not create scheduled payout when no params" do
+      post :suspend_for_fraud, params: { external_id: user.external_id }
+
+      expect(response.parsed_body["success"]).to be(true)
+      expect(user.reload.suspended?).to be(true)
+      expect(user.scheduled_payouts.count).to eq(0)
+    end
+
+    it "creates a hold scheduled payout with default delay" do
+      post :suspend_for_fraud, params: {
+        external_id: user.external_id,
+        scheduled_payout: { action: "hold" }
+      }
+
+      expect(response.parsed_body["success"]).to be(true)
+
+      scheduled_payout = user.scheduled_payouts.last
+      expect(scheduled_payout.action).to eq("hold")
+      expect(scheduled_payout.delay_days).to eq(21)
+    end
+  end
 end

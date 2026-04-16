@@ -81,10 +81,18 @@ describe ProcessEarlyFraudWarningJob, :vcr do
 
           context "when associated with a purchase" do
             it "resolves as refunded for fraud" do
-              expect_any_instance_of(Purchase).to receive(:refund_for_fraud_and_block_buyer!).once.with(GUMROAD_ADMIN_ID)
+              expect_any_instance_of(Purchase).to receive(:refund_for_fraud_and_block_buyer!).once.with(GUMROAD_ADMIN_ID).and_return(true)
               described_class.new.perform(early_fraud_warning.id)
               expect(early_fraud_warning.reload.resolved?).to eq(true)
               expect(early_fraud_warning.resolution).to eq(EarlyFraudWarning::RESOLUTION_RESOLVED_REFUNDED_FOR_FRAUD)
+            end
+
+            it "does not resolve as refunded for fraud when the refund fails" do
+              expect_any_instance_of(Purchase).to receive(:refund_for_fraud_and_block_buyer!).once.with(GUMROAD_ADMIN_ID).and_return(false)
+
+              described_class.new.perform(early_fraud_warning.id)
+
+              expect(early_fraud_warning.reload.resolved?).to eq(false)
             end
           end
 
@@ -94,7 +102,7 @@ describe ProcessEarlyFraudWarningJob, :vcr do
             let!(:early_fraud_warning) { create(:early_fraud_warning, purchase: nil, charge:) }
 
             it "resolves as refunded for fraud" do
-              expect_any_instance_of(Charge).to receive(:refund_for_fraud_and_block_buyer!).once.with(GUMROAD_ADMIN_ID)
+              expect_any_instance_of(Charge).to receive(:refund_for_fraud_and_block_buyer!).once.with(GUMROAD_ADMIN_ID).and_return(true)
               described_class.new.perform(early_fraud_warning.id)
               expect(early_fraud_warning.reload.resolved?).to eq(true)
               expect(early_fraud_warning.resolution).to eq(EarlyFraudWarning::RESOLUTION_RESOLVED_REFUNDED_FOR_FRAUD)

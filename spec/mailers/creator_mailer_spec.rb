@@ -171,4 +171,25 @@ describe CreatorMailer do
       end
     end
   end
+
+  describe "#scheduled_payout_chargeback_hold" do
+    let(:user) { create(:user) }
+    let(:scheduled_payout) { create(:scheduled_payout, user: user, action: "payout") }
+
+    it "sends chargeback hold notification email" do
+      mail = CreatorMailer.scheduled_payout_chargeback_hold(scheduled_payout_id: scheduled_payout.id)
+
+      expect(mail.to).to eq([user.form_email])
+      expect(mail.subject).to eq("Your payout has been delayed")
+
+      body = mail.body.encoded
+      expect(body).to have_text("delayed due to a chargeback")
+      expect(body).to have_text("contact our support team")
+    end
+
+    it "does not send if scheduled payout does not exist" do
+      mail = CreatorMailer.scheduled_payout_chargeback_hold(scheduled_payout_id: 0)
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+  end
 end
