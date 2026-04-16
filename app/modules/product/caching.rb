@@ -63,13 +63,13 @@ module Product::Caching
             "revenue_pending" => cache_or_product.revenue_pending.to_f,
             "total_usd_cents" => cache_or_product.total_usd_cents.to_f,
           }
-        rescue Elasticsearch::Transport::Transport::Errors::NotFound, Faraday::ConnectionFailed, Faraday::TimeoutError => e
+        rescue Elasticsearch::Transport::Transport::Error, Faraday::ConnectionFailed, Faraday::TimeoutError => e
           Rails.logger.warn("[Product::Caching] Elasticsearch unavailable for product #{product.id}: #{e.class}")
           {
             "successful_sales_count" => 0,
             "remaining_for_sale_count" => product.remaining_for_sale_count,
             "monthly_recurring_revenue" => 0.0,
-            "revenue_pending" => 0.0,
+            "revenue_pending" => product.revenue_pending.to_f,
             "total_usd_cents" => 0.0,
           }
         end

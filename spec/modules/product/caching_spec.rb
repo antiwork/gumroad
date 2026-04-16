@@ -272,7 +272,7 @@ describe Product::Caching do
                                                 "id" => product.id,
                                                 "monthly_recurring_revenue" => 0.0,
                                                 "remaining_for_sale_count" => 100,
-                                                "revenue_pending" => 0.0,
+                                                "revenue_pending" => product.revenue_pending.to_f,
                                                 "successful_sales_count" => 0,
                                                 "total_usd_cents" => 0.0,
                                               })
