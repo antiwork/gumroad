@@ -4,7 +4,7 @@ class ContentModeration::Strategies::BlocklistStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
 
   def initialize(text:, image_urls: [])
-    @text = text.to_s.downcase
+    @text = text.to_s
   end
 
   def perform

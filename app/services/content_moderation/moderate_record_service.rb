@@ -60,7 +60,12 @@ class ContentModeration::ModerateRecordService
       ]
 
       threads = strategies.map do |strategy|
-        Thread.new { strategy.perform }
+        Thread.new do
+          strategy.perform
+        rescue StandardError => e
+          Rails.logger.error("ContentModeration strategy error: #{e.message}")
+          strategy.class::Result.new(status: "compliant", reasoning: [])
+        end
       end
 
       threads.map(&:value)
@@ -100,7 +105,7 @@ class ContentModeration::ModerateRecordService
       return if user.vip_creator?
 
       record.unpublish!(is_unpublished_by_admin: true)
-      record.update_column(:content_moderated, true) if record.respond_to?(:content_moderated)
+      record.update_attribute(:content_moderated, true) if record.respond_to?(:content_moderated)
     end
 
     def flag_post(reasoning)
@@ -126,7 +131,7 @@ class ContentModeration::ModerateRecordService
 
       record.update!(is_unpublished_by_admin: false)
       record.publish!
-      record.update_column(:content_moderated, true) if record.respond_to?(:content_moderated)
+      record.update_attribute(:content_moderated, true) if record.respond_to?(:content_moderated)
     end
 
     def mark_post_compliant
@@ -151,10 +156,12 @@ class ContentModeration::ModerateRecordService
 
       if flagged_count >= threshold
         ActiveRecord::Base.transaction do
+          user.reload
+          return if user.suspended?
           reason = "Content policy violation"
           user.update!(tos_violation_reason: reason)
           comment_content = "Suspended for policy violations on #{Time.current.to_fs(:formatted_date_full_month)} (#{flagged_count} flagged records)"
-          user.suspend_for_tos_violation!(author_name: AUTHOR_NAME, content: comment_content, bulk: true) unless user.suspended?
+          user.suspend_for_tos_violation!(author_name: AUTHOR_NAME, content: comment_content, bulk: true)
         end
       end
     end
@@ -173,8 +180,8 @@ class ContentModeration::ModerateRecordService
     end
 
     def user_flagged_record_count
-      products_flagged = user.links.alive.where(is_unpublished_by_admin: true).count
-      posts_flagged = user.installments.where(is_unpublished_by_admin: true).count
+      products_flagged = user.links.alive.count(&:is_unpublished_by_admin?)
+      posts_flagged = user.installments.count(&:is_unpublished_by_admin?)
       products_flagged + posts_flagged
     end
 

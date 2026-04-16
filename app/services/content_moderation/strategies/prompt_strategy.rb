@@ -117,7 +117,8 @@ class ContentModeration::Strategies::PromptStrategy
       parsed = JSON.parse(content)
 
       !parsed["uncertain"]
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("ContentModeration::PromptStrategy uncertainty check error: #{e.message}")
       true
     end
 
