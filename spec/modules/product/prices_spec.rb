@@ -261,6 +261,18 @@ describe Product::Prices do
       end
     end
 
+    context "for rent_only products" do
+      let(:product) { create(:product, rental_price_cents: 2_00, purchase_type: :rent_only) }
+
+      it "returns the updated rental price after a price change" do
+        expect(product.available_price_cents).to match_array([2_00])
+
+        product.update!(price_cents: 5_00)
+
+        expect(product.available_price_cents).to match_array([5_00])
+      end
+    end
+
     context "for tiered membership" do
       context "when product has multiple tiers" do
         let(:recurrence_price_values) do

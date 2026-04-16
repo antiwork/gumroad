@@ -234,7 +234,11 @@ module Product::Prices
         base_price = default_price_cents
         current_base_variants.pluck(:price_difference_cents).map { |difference| base_price + difference.to_i }
       else
-        prices.alive.is_buy.pluck(:price_cents)
+        if rent_only?
+          prices.alive.is_rental.where(currency: price_currency_type).pluck(:price_cents)
+        else
+          prices.alive.is_buy.pluck(:price_cents)
+        end
       end
 
     available_prices.uniq
