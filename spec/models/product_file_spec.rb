@@ -1050,4 +1050,44 @@ describe ProductFile do
       expect(product_file.signed_url).to eq("https://example.com/file.zip")
     end
   end
+
+  describe "subtitle file S3 NotFound handling" do
+    let(:product_file) { create(:product_file) }
+    let(:english_srt_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/english.srt" }
+    let(:missing_srt_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/missing.srt" }
+    let(:subtitle_file_en) { create(:subtitle_file, language: "English", url: english_srt_url, product_file:) }
+    let(:subtitle_file_missing) { create(:subtitle_file, language: "Missing", url: missing_srt_url, product_file:) }
+
+    before do
+      allow_any_instance_of(SignedUrlHelper).to(
+        receive(:signed_download_url_for_s3_key_and_filename)
+          .with(subtitle_file_en.s3_key, subtitle_file_en.s3_filename, is_video: true).and_return(english_srt_url))
+      allow_any_instance_of(SignedUrlHelper).to(
+        receive(:signed_download_url_for_s3_key_and_filename)
+          .with(subtitle_file_missing.s3_key, subtitle_file_missing.s3_filename, is_video: true)
+          .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found")))
+    end
+
+    describe "#as_json" do
+      it "excludes subtitle files whose S3 object does not exist" do
+        json = product_file.as_json
+        subtitle_languages = json[:subtitle_files].map { |sf| sf[:language] }
+        expect(subtitle_languages).to eq(["English"])
+      end
+    end
+
+    describe "#subtitle_files_urls" do
+      it "excludes subtitle files whose S3 object does not exist" do
+        result = product_file.subtitle_files_urls
+        expect(result).to eq([{ file: english_srt_url, label: "English", kind: "captions" }])
+      end
+    end
+
+    describe "#subtitle_files_for_mobile" do
+      it "excludes subtitle files whose S3 object does not exist" do
+        result = product_file.subtitle_files_for_mobile
+        expect(result).to eq([{ url: english_srt_url, language: "English" }])
+      end
+    end
+  end
 end

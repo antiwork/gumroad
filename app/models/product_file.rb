@@ -106,7 +106,9 @@ class ProductFile < ApplicationRecord
       is_transcoding_in_progress: options[:existing_product_file] ? false : transcoding_in_progress?,
       id: external_id,
       attached_product_name: link.try(:name),
-      subtitle_files: alive_subtitle_files.map do |file|
+      subtitle_files: alive_subtitle_files.filter_map do |file|
+        signed = safe_signed_download_url(file.s3_key, file.s3_filename, is_video: true)
+        next if signed.nil?
         {
           url: file.url,
           file_name: file.s3_display_name,
@@ -114,7 +116,7 @@ class ProductFile < ApplicationRecord
           language: file.language,
           file_size: file.size,
           size: file.size_displayable,
-          signed_url: signed_download_url_for_s3_key_and_filename(file.s3_key, file.s3_filename, is_video: true),
+          signed_url: signed,
           status: { type: "saved" },
         }
       end,
@@ -166,9 +168,7 @@ class ProductFile < ApplicationRecord
   def signed_url
     return url if external_link?
 
-    signed_download_url_for_s3_key_and_filename(s3_key, s3_filename, is_video: streamable?)
-  rescue Aws::S3::Errors::NotFound
-    nil
+    safe_signed_download_url(s3_key, s3_filename, is_video: streamable?)
   end
 
   def readable?
@@ -246,9 +246,11 @@ class ProductFile < ApplicationRecord
   end
 
   def subtitle_files_urls
-    subtitle_files.alive.map do |file|
+    subtitle_files.alive.filter_map do |file|
+      signed = safe_signed_download_url(file.s3_key, file.s3_filename, is_video: true)
+      next if signed.nil?
       {
-        file: signed_download_url_for_s3_key_and_filename(file.s3_key, file.s3_filename, is_video: true),
+        file: signed,
         label: file.language,
         kind: "captions"
       }
@@ -256,9 +258,11 @@ class ProductFile < ApplicationRecord
   end
 
   def subtitle_files_for_mobile
-    subtitle_files.alive.map do |file|
+    subtitle_files.alive.filter_map do |file|
+      signed = safe_signed_download_url(file.s3_key, file.s3_filename, is_video: true)
+      next if signed.nil?
       {
-        url: signed_download_url_for_s3_key_and_filename(file.s3_key, file.s3_filename, is_video: true),
+        url: signed,
         language: file.language
       }
     end
@@ -340,6 +344,12 @@ class ProductFile < ApplicationRecord
   end
 
   private
+    def safe_signed_download_url(s3_key, s3_filename, is_video: false)
+      signed_download_url_for_s3_key_and_filename(s3_key, s3_filename, is_video:)
+    rescue Aws::S3::Errors::NotFound
+      nil
+    end
+
     def schedule_rename_in_storage
       return if external_link?
       # a slight delay to allow the new `display_name` to propagate to replica DBs
