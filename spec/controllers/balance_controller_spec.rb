@@ -40,6 +40,66 @@ describe BalanceController, type: :controller, inertia: true do
       expect(inertia.props[:pagination]).to be_present
     end
 
+    context "with scheduled payout" do
+      it "returns nil when seller is not suspended" do
+        create(:scheduled_payout, user: seller, action: "payout", status: "pending")
+
+        get :index
+
+        expect(inertia.props[:scheduled_payout]).to be_nil
+      end
+
+      context "when seller is suspended" do
+        before do
+          seller.update!(user_risk_state: "suspended_for_fraud")
+        end
+
+        it "returns pending payout props" do
+          sp = create(:scheduled_payout, user: seller, action: "payout", status: "pending", payout_amount_cents: 50_000)
+
+          get :index
+
+          expect(inertia.props[:scheduled_payout]).to eq({
+            action: "payout",
+            status: "pending",
+            scheduled_at: sp.scheduled_at,
+            payout_amount_cents: 50_000
+          })
+        end
+
+        it "returns executed payout props" do
+          sp = create(:scheduled_payout, user: seller, action: "refund", status: "executed", executed_at: Time.current, payout_amount_cents: 30_000)
+
+          get :index
+
+          expect(inertia.props[:scheduled_payout]).to eq({
+            action: "refund",
+            status: "executed",
+            scheduled_at: sp.scheduled_at,
+            payout_amount_cents: 30_000
+          })
+        end
+
+        it "returns the most recent scheduled payout" do
+          create(:scheduled_payout, user: seller, action: "refund", status: "pending")
+          create(:scheduled_payout, user: seller, action: "payout", status: "pending", payout_amount_cents: 75_000)
+
+          get :index
+
+          expect(inertia.props[:scheduled_payout][:action]).to eq("payout")
+          expect(inertia.props[:scheduled_payout][:payout_amount_cents]).to eq(75_000)
+        end
+
+        it "returns nil when no active scheduled payout exists" do
+          create(:scheduled_payout, user: seller, action: "payout", status: "cancelled")
+
+          get :index
+
+          expect(inertia.props[:scheduled_payout]).to be_nil
+        end
+      end
+    end
+
     context "with pagination" do
       let(:payments_per_page) { 2 }
 

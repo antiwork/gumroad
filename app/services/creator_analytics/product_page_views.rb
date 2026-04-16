@@ -72,6 +72,8 @@ class CreatorAnalytics::ProductPageViews
         after_key = response_agg["after_key"]
       end
       buckets
+    rescue Elasticsearch::Transport::Transport::Errors::NotFound
+      []
     end
 
     def build_body(sources)

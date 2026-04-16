@@ -138,6 +138,14 @@ namespace :admin do
     end
   end
 
+  # Scheduled Payouts
+  resources :scheduled_payouts, only: [:index], param: :external_id do
+    member do
+      post :execute
+      post :cancel
+    end
+  end
+
   # Payouts
   post "/paydays/pay_user/:id", to: "paydays#pay_user", as: :pay_user
   resources :payouts, only: [:show], param: :external_id do

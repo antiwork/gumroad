@@ -2336,7 +2336,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       Capybara.current_session.driver.browser.manage.delete_all_cookies
 
       create(:zip_tax_rate, country: "MX", state: nil, zip_code: nil, combined_rate: 0.16, is_seller_responsible: false)
-      create(:zip_tax_rate, country: "MX", state: nil, zip_code: nil, combined_rate: 0.00, is_seller_responsible: false, is_epublication_rate: true)
       allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("187.189.0.1") # Mexico
 
       @product = create(:product, price_cents: 100_00)
@@ -2348,97 +2347,19 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       @product.save!
     end
 
-    context "when collect_tax_mx feature flag is off" do
-      it "does not apply tax in Mexico" do
-        visit "/l/#{@product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(@product)
+    it "does not apply tax in Mexico" do
+      visit "/l/#{@product.unique_permalink}"
+      expect(page).to have_text("$100")
+      add_to_cart(@product)
 
-        check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
+      check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(100_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(0)
-        expect(purchase.was_purchase_taxable).to be(false)
-      end
-    end
-
-    context "when collect_tax_mx feature flag is on" do
-      before do
-        Feature.activate(:collect_tax_mx)
-      end
-
-      it "applies tax in Mexico" do
-        visit "/l/#{@product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(@product)
-
-        check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(116_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(16_00)
-        expect(purchase.was_purchase_taxable).to be(true)
-      end
-
-      it "applies the epublication tax rate for epublications in Mexico" do
-        @product.update!(is_epublication: true)
-
-        visit "/l/#{@product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(@product)
-
-        check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(100_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(0)
-        expect(purchase.was_purchase_taxable).to be(false)
-      end
-
-      it "does not apply tax for physical products", :mock_easypost do
-        physical_product = create(:physical_product, price_cents: 100_00)
-
-        visit "/l/#{physical_product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(physical_product)
-
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Mexico City", zip_code: "01000", state: "DF", country: "MX" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(100_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(0)
-        expect(purchase.was_purchase_taxable).to be(false)
-      end
-
-      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
-        visit "/l/#{@product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(@product)
-
-        check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" }, rfc_id: "RTL-630713-7M9")
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(100_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(0)
-        expect(purchase.was_purchase_taxable).to be(false)
-
-        # Check Tax ID is present on the invoice as well
-
-        visit purchase.receipt_url
-        click_on("Generate")
-        expect(page).to(have_text("RTL-630713-7M9"))
-      end
+      purchase = Purchase.last
+      expect(purchase.total_transaction_cents).to eq(100_00)
+      expect(purchase.price_cents).to eq(100_00)
+      expect(purchase.tax_cents).to eq(0)
+      expect(purchase.gumroad_tax_cents).to eq(0)
+      expect(purchase.was_purchase_taxable).to be(false)
     end
   end
 

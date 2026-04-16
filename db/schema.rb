@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_19_011939) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_19_011940) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1912,6 +1912,22 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_19_011939) do
     t.index ["larger_product_id", "sales_count"], name: "index_larger_product_id_and_sales_count"
     t.index ["smaller_product_id", "larger_product_id"], name: "index_smaller_and_larger_product_ids", unique: true
     t.index ["smaller_product_id", "sales_count"], name: "index_smaller_product_id_and_sales_count"
+  end
+
+  create_table "scheduled_payouts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "action", null: false
+    t.integer "delay_days", default: 21, null: false
+    t.datetime "scheduled_at", null: false
+    t.string "status", default: "pending", null: false
+    t.bigint "created_by_id"
+    t.datetime "executed_at"
+    t.bigint "payout_amount_cents"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_scheduled_payouts_on_created_by_id"
+    t.index ["status", "scheduled_at"], name: "index_scheduled_payouts_on_status_and_scheduled_at"
+    t.index ["user_id"], name: "index_scheduled_payouts_on_user_id"
   end
 
   create_table "self_service_affiliate_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

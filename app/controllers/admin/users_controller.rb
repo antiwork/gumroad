@@ -141,6 +141,7 @@ class Admin::UsersController < Admin::BaseController
           content: suspension_note
         )
       end
+      create_scheduled_payout_if_requested
     end
     render json: { success: true }
   rescue => e
@@ -219,6 +220,25 @@ class Admin::UsersController < Admin::BaseController
   end
 
   private
+    def create_scheduled_payout_if_requested
+      sp_params = params.dig(:scheduled_payout)
+      return if sp_params.blank? || sp_params[:action].blank?
+
+      scheduled_payout = @user.scheduled_payouts.create!(
+        action: sp_params[:action],
+        delay_days: sp_params[:delay_days].presence || 21,
+        payout_amount_cents: @user.unpaid_balance_cents,
+        created_by: current_user
+      )
+
+      @user.comments.create!(
+        author_id: current_user.id,
+        author_name: current_user.name,
+        comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+        content: "Scheduled #{scheduled_payout.action} for #{scheduled_payout.scheduled_at.to_fs(:formatted_date_full_month)} (#{scheduled_payout.delay_days} day delay)"
+      )
+    end
+
     def mass_transfer_purchases_params
       params.require(:mass_transfer_purchases).permit(:new_email)
     end

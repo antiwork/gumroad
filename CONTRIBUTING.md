@@ -65,6 +65,14 @@ End with an AI disclosure after a `---` separator. Name the specific model (e.g.
 - If you want to deduplicate a job (using sidekiq-unique-jobs), 99% of the time, you're looking for `lock: :until_executed`. It is fast because it works by maintaining a Redis Set of job digests: If a job digest is in this list (`O(1)`), running `perform_async` will be a noop and will return `nil`.
 - Furthermore, you likely should **NOT** use `on_conflict: :replace`, because for it to remove an existing enqueued job, it needs to find it first, by scrolling through the Scheduled Set, which is CPU expensive and slow. It also means that `perform_async` will be as slow as the length of the queue, or fail entirely ⇒ you can break Sidekiq but just having one job like this enqueued too often.
 
+### UI components
+
+- Use the shared UI components in `$app/components/ui/` for all standard UI elements. Do not use native HTML elements like `<table>`, `<input>`, `<select>` when a UI component exists.
+- Import them with the `$app` alias: `import { Table } from "$app/components/ui/Table"` (not `<table>`)
+- Available components include: `Alert`, `Avatar`, `Calendar`, `Card`, `Checkbox`, `CodeSnippet`, `ColorPicker`, `DefinitionList`, `Details`, `Fieldset`, `FormSection`, `InlineList`, `Input`, `InputGroup`, `Label`, `Menu`, `PageHeader`, `Pill`, `Placeholder`, `ProductCard`, `ProductCardGrid`, `Radio`, `Range`, `Rows`, `Select`, `Sheet`, `StretchedLink`, `Switch`, `Table`, `Tabs`, `Textarea`
+- Check what already exists in `app/javascript/components/ui/` before creating new components
+- Do not recreate or inline components that already exist in the UI library
+
 ### Code patterns
 
 - When creating financial records (receipts, sales), copy the specific values (amount, currency, percentage) at the time of purchase instead of referencing mutable data like a `DiscountCode` ID. This ensures historical records remain accurate if the original object is edited or deleted.
