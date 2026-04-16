@@ -810,6 +810,15 @@ const b = 2;</code></pre>
         expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
       end
 
+      it "skips the content moderation check when explicitly requested" do
+        @installment.skip_content_moderation_check = true
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        @installment.publish!
+
+        expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
+      end
+
       it "clears the publishing flag after publish! completes" do
         allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
           ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])

@@ -68,6 +68,14 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.text).to eq("Name: Moderated Post Message: Hello world")
       expect(result.image_urls).to eq(["https://cdn.example.com/post.png"])
     end
+
+    it "ignores images without a src attribute" do
+      post.message = '<div><p>Hello</p><img><img src="https://cdn.example.com/post.png"></div>'
+
+      result = extractor.extract_from_post(post)
+
+      expect(result.image_urls).to eq(["https://cdn.example.com/post.png"])
+    end
   end
 
   describe "#extract_from_profile" do

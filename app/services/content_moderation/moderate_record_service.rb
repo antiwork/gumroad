@@ -127,7 +127,7 @@ class ContentModeration::ModerateRecordService
       return if user.vip_creator?
 
       record.unpublish!(is_unpublished_by_admin: true)
-      record.update_attribute(:content_moderated, true) if record.respond_to?(:content_moderated)
+      update_flag(record, :content_moderated, true) if record.respond_to?(:content_moderated)
     end
 
     def flag_post(reasoning)
@@ -150,17 +150,17 @@ class ContentModeration::ModerateRecordService
 
     def mark_product_compliant
       return if !record.is_unpublished_by_admin?
+      return if !record.content_moderated?
 
       record.update!(is_unpublished_by_admin: false)
-      record.publish!
-      record.update_attribute(:content_moderated, true) if record.respond_to?(:content_moderated)
+      with_skipped_content_moderation_check(record) { record.publish! }
     end
 
     def mark_post_compliant
       return if record.published? || !record.is_unpublished_by_admin?
 
       record.is_unpublished_by_admin = false
-      record.publish!
+      with_skipped_content_moderation_check(record) { record.publish! }
     end
 
     def mark_profile_compliant
@@ -202,8 +202,13 @@ class ContentModeration::ModerateRecordService
     end
 
     def user_flagged_record_count
-      products_flagged = user.links.alive.count(&:is_unpublished_by_admin?)
-      posts_flagged = user.installments.count(&:is_unpublished_by_admin?)
+      products_flagged = user.links
+                             .where("links.flags & ? > 0", Link.flag_mapping["flags"][:is_unpublished_by_admin])
+                             .where("links.flags & ? > 0", Link.flag_mapping["flags"][:content_moderated])
+                             .count
+      posts_flagged = user.installments.alive
+                          .where("installments.flags & ? > 0", Installment.flag_mapping["flags"][:is_unpublished_by_admin])
+                          .count
       products_flagged + posts_flagged
     end
 
@@ -216,6 +221,8 @@ class ContentModeration::ModerateRecordService
     end
 
     def log_moderation_result(status, reasoning)
+      return if status == "compliant"
+
       record_label = case entity_type
                      when :product then "Product##{record.id} (#{record.name})"
                      when :post then "Post##{record.id} (#{record.name})"
@@ -229,5 +236,21 @@ class ContentModeration::ModerateRecordService
       InternalNotificationWorker.perform_async("content_moderation_log", AUTHOR_NAME, message)
     rescue StandardError => e
       Rails.logger.error("Failed to log moderation result: #{e.message}")
+    end
+
+    def with_skipped_content_moderation_check(record)
+      record.skip_content_moderation_check = true
+      yield
+    ensure
+      record.skip_content_moderation_check = false
+    end
+
+    def update_flag(record, flag_name, enabled)
+      bit = record.class.flag_mapping["flags"][flag_name]
+      flags = record.flags.to_i
+      updated_flags = enabled ? (flags | bit) : (flags & ~bit)
+
+      record.update_columns(flags: updated_flags, updated_at: Time.current)
+      record["flags"] = updated_flags
     end
 end

@@ -7,7 +7,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy do
 
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
-    allow(GlobalConfig).to receive(:get).with("OPENAI_API_KEY").and_return("test-key")
+    allow(GlobalConfig).to receive(:get).with("OPENAI_ACCESS_TOKEN").and_return("test-key")
     allow(OpenAI::Client).to receive(:new).with(access_token: "test-key").and_return(client)
     allow(Rails.logger).to receive(:error)
     allow(Rails.logger).to receive(:warn)
@@ -22,7 +22,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy do
   end
 
   it "returns compliant when the API key is blank" do
-    allow(GlobalConfig).to receive(:get).with("OPENAI_API_KEY").and_return(nil)
+    allow(GlobalConfig).to receive(:get).with("OPENAI_ACCESS_TOKEN").and_return(nil)
 
     result = described_class.new(text: "moderate me").perform
 

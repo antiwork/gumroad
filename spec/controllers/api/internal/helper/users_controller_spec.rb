@@ -184,6 +184,16 @@ describe Api::Internal::Helper::UsersController do
         expect(comment.author_name).to eq("appeal")
         expect(comment.commentable).to eq(user)
       end
+
+      it "bypasses adult keyword validation for appeal comments" do
+        allow(AdultKeywordDetector).to receive(:adult?).and_return(true)
+
+        expect do
+          post :create_appeal, params: { email: user.email, reason: "blocked text" }
+        end.to change { Comment.count }.by(1)
+
+        expect(response).to have_http_status(:success)
+      end
     end
   end
 

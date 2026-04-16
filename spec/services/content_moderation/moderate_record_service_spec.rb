@@ -40,6 +40,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
       end
 
       it "unpublishes flagged products and marks them content moderated" do
+        expect(ContentModeration::ModerateProductJob).not_to receive(:perform_async)
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "flagged", reasoning: ["blocked"])])
 
         service.perform
@@ -50,12 +51,23 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
       it "republishes compliant products that were unpublished by admin" do
         product.unpublish!(is_unpublished_by_admin: true)
+        product.update_attribute(:content_moderated, true)
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+        expect(described_class).not_to receive(:check)
 
         service.perform
 
         expect(product.reload).not_to be_is_unpublished_by_admin
         expect(product.reload).to be_content_moderated
+      end
+
+      it "does not republish admin-unpublished products that were not content moderated" do
+        product.unpublish!(is_unpublished_by_admin: true)
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+
+        service.perform
+
+        expect(product.reload).to be_is_unpublished_by_admin
       end
 
       it "does not unpublish flagged products for VIP creators" do
@@ -80,6 +92,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
       it "marks suspended creators compliant once the flagged count drops below the threshold" do
         product.unpublish!(is_unpublished_by_admin: true)
+        product.update_attribute(:content_moderated, true)
         seller.suspend_for_tos_violation!(author_name: "Admin")
         allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_SUSPENSION_THRESHOLD").and_return("1")
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
@@ -116,6 +129,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
         post.publish!
         post.unpublish!(is_unpublished_by_admin: true)
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+        expect(described_class).not_to receive(:check)
 
         service.perform
 
@@ -283,6 +297,41 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
       expect(results.map(&:status)).to eq(["compliant", "compliant", "compliant"])
       expect(Rails.logger).to have_received(:error).with("ContentModeration strategy error: boom")
+    end
+  end
+
+  describe "#user_flagged_record_count" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:service) { described_class.new(product, :product) }
+
+    it "counts only moderated products and alive flagged posts" do
+      moderated_product = create(:product, user: seller)
+      moderated_product.unpublish!(is_unpublished_by_admin: true)
+      moderated_product.update_attribute(:content_moderated, true)
+
+      unmoderated_product = create(:product, user: seller)
+      unmoderated_product.unpublish!(is_unpublished_by_admin: true)
+
+      alive_post = create(:audience_post, seller: seller)
+      alive_post.update!(is_unpublished_by_admin: true)
+
+      deleted_post = create(:audience_post, seller: seller)
+      deleted_post.update!(is_unpublished_by_admin: true)
+      deleted_post.mark_deleted!
+
+      expect(service.send(:user_flagged_record_count)).to eq(2)
+    end
+  end
+
+  describe "#log_moderation_result" do
+    let(:product) { create(:product) }
+    let(:service) { described_class.new(product, :product) }
+
+    it "skips internal notifications for compliant results" do
+      service.send(:log_moderation_result, "compliant", nil)
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
     end
   end
 end

@@ -40,7 +40,7 @@ class ContentModeration::Strategies::PromptStrategy
   def perform
     return Result.new(status: "compliant", reasoning: []) if @text.blank?
 
-    api_key = GlobalConfig.get("OPENAI_API_KEY")
+    api_key = GlobalConfig.get("OPENAI_ACCESS_TOKEN")
     return Result.new(status: "compliant", reasoning: []) if api_key.blank?
 
     @client = OpenAI::Client.new(access_token: api_key)
