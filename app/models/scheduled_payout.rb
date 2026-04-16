@@ -62,8 +62,12 @@ class ScheduledPayout < ApplicationRecord
 
     if process_payout
       begin
-        payments = Payouts.create_payments_for_balances_up_to_date_for_users(Date.yesterday, user.current_payout_processor, [user], from_admin: true)
-        payment = payments.flatten.last
+        payments = PayoutUsersService.new(
+          date_string: Date.yesterday.to_s,
+          processor_type: user.current_payout_processor,
+          user_ids: user.id
+        ).process
+        payment = payments.last
         if payment.blank? || payment.failed?
           raise "Payout failed: #{payment&.errors&.full_messages&.first || "Payment was not sent."}"
         end

@@ -125,11 +125,12 @@ describe ScheduledPayout do
     context "when action is payout" do
       let(:scheduled_payout) { create(:scheduled_payout, user: user, action: "payout", scheduled_at: 1.day.ago) }
 
-      it "calls Payouts to create payout and marks as executed" do
+      it "calls PayoutUsersService to create payout and marks as executed" do
         payment = instance_double(Payment, failed?: false)
-        expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users)
-          .with(Date.yesterday, user.current_payout_processor, [user], from_admin: true)
-          .and_return([[payment]])
+        service = instance_double(PayoutUsersService, process: [payment])
+        expect(PayoutUsersService).to receive(:new)
+          .with(date_string: Date.yesterday.to_s, processor_type: user.current_payout_processor, user_ids: user.id)
+          .and_return(service)
 
         scheduled_payout.execute!
 
@@ -139,18 +140,20 @@ describe ScheduledPayout do
 
       it "raises if payout fails" do
         payment = instance_double(Payment, failed?: true, errors: double(full_messages: ["Stripe account not found"]))
-        allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users)
-          .with(Date.yesterday, user.current_payout_processor, [user], from_admin: true)
-          .and_return([[payment]])
+        service = instance_double(PayoutUsersService, process: [payment])
+        allow(PayoutUsersService).to receive(:new)
+          .with(date_string: Date.yesterday.to_s, processor_type: user.current_payout_processor, user_ids: user.id)
+          .and_return(service)
 
         expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed/)
         expect(scheduled_payout.reload.status).to eq("pending")
       end
 
       it "raises if no payment is created" do
-        allow(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users)
-          .with(Date.yesterday, user.current_payout_processor, [user], from_admin: true)
-          .and_return([])
+        service = instance_double(PayoutUsersService, process: [])
+        allow(PayoutUsersService).to receive(:new)
+          .with(date_string: Date.yesterday.to_s, processor_type: user.current_payout_processor, user_ids: user.id)
+          .and_return(service)
 
         expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payment was not sent/)
         expect(scheduled_payout.reload.status).to eq("pending")
@@ -161,7 +164,7 @@ describe ScheduledPayout do
       let(:scheduled_payout) { create(:scheduled_payout, user: user, action: "payout", scheduled_at: 1.day.ago, payout_amount_cents: 150_000) }
 
       it "flags for review instead of executing" do
-        expect(Payouts).not_to receive(:create_payments_for_balances_up_to_date_for_users)
+        expect(PayoutUsersService).not_to receive(:new)
 
         scheduled_payout.execute!
 
