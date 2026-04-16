@@ -94,8 +94,8 @@ class Exports::PurchaseExportService
   def self.export(seller:, recipient:, filters: {})
     product_ids = Link.by_external_ids(filters[:product_ids]).ids if filters[:product_ids].present?
     variant_ids = BaseVariant.by_external_ids(filters[:variant_ids]).ids if filters[:variant_ids].present?
-    start_time = Date.parse(filters[:start_time]).in_time_zone(seller.timezone).beginning_of_day if filters[:start_time].present?
-    end_time = Date.parse(filters[:end_time]).in_time_zone(seller.timezone).end_of_day if filters[:end_time].present?
+    start_time = Date.parse(filters[:start_time]).in_time_zone("UTC").beginning_of_day if filters[:start_time].present?
+    end_time = Date.parse(filters[:end_time]).in_time_zone("UTC").end_of_day if filters[:end_time].present?
 
     search_service = PurchaseSearchService.new(
       seller:,
