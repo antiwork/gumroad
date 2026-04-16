@@ -46,6 +46,17 @@ End with an AI disclosure after a `---` separator. Name the specific model (e.g.
 - Use `example.com`, `example.org`, and `example.net` as custom domains or request hosts in tests.
 - Avoid `to_not have_enqueued_sidekiq_job` or `not_to have_enqueued_sidekiq_job` because they're prone to false positives. Make assertions on `SidekiqWorkerName.jobs.size` instead.
 
+### Before pushing
+
+Always run linting and type checking before pushing commits:
+
+```bash
+bundle exec rubocop -a              # Ruby lint + auto-correct
+DISABLE_TYPE_CHECKED=1 npx eslint   # JS/TS lint
+```
+
+Fix any issues before committing. CI does not auto-fix your code.
+
 ### Code standards
 
 - Always use the latest version of Ruby, Rails, TypeScript, and React
