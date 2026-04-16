@@ -752,9 +752,11 @@ describe Api::V2::LinksController do
         good_file = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf")
         bad_file = create(:product_file, link: @product, url: "#{S3_BASE_URL}attachments/missing-guid/original/gone.zip")
 
-        allow_any_instance_of(ProductFile).to receive(:signed_url).and_call_original
-        allow(bad_file).to receive(:signed_url).and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
-        allow(@product).to receive(:ordered_alive_product_files).and_return([good_file, bad_file])
+        bad_url = bad_file.url
+        allow_any_instance_of(ProductFile).to receive(:signed_url) do |product_file|
+          raise Aws::S3::Errors::NotFound.new(nil, "Not Found") if product_file.url == bad_url
+          "https://signed.example.com/test.pdf"
+        end
 
         get :show, params: @params
         expect(response).to be_successful
