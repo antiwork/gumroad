@@ -792,7 +792,7 @@ const b = 2;</code></pre>
       end
 
       it "skips the content moderation check for VIP creators" do
-        allow(@installment.user).to receive(:vip_creator?).and_return(true)
+        allow_any_instance_of(User).to receive(:vip_creator?).and_return(true)
         expect(ContentModeration::ModerateRecordService).not_to receive(:check)
 
         @installment.publish!

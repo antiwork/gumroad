@@ -402,6 +402,62 @@ describe Link, :vcr do
       end
     end
 
+    describe "content moderation on publish" do
+      let(:product) { create(:product, purchase_disabled_at: Time.current) }
+
+      before do
+        allow(product).to receive(:enforce_shipping_destinations_presence!).and_return(true)
+        allow(product).to receive(:enforce_user_email_confirmation!).and_return(true)
+        allow(product).to receive(:enforce_merchant_account_exits_for_new_users!).and_return(true)
+        allow(product).to receive(:enable_transcode_videos_on_purchase!).and_return(true)
+        allow(product).to receive(:auto_transcode_videos?).and_return(false)
+      end
+
+      it "blocks publishing when ContentModeration::ModerateRecordService.check fails" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["policy violation"])
+        )
+
+        expect { product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(product.reload.purchase_disabled_at).not_to be(nil)
+        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
+      end
+
+      it "skips the content moderation check for VIP creators" do
+        allow_any_instance_of(User).to receive(:vip_creator?).and_return(true)
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        expect { product.publish! }.to change { product.reload.purchase_disabled_at }.to(nil)
+      end
+
+      it "publishes successfully when the content moderation check passes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        expect { product.publish! }.to change { product.reload.purchase_disabled_at }.to(nil)
+      end
+
+      it "clears the publishing flag after publish! completes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        product.publish!
+
+        expect(product.publishing?).to eq(false)
+      end
+
+      it "clears the publishing flag even when publish! raises" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["bad"])
+        )
+
+        expect { product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(product.publishing?).to eq(false)
+      end
+    end
+
     describe "initialize_suggested_amount_if_needed!" do
       let(:seller) { create(:user, :eligible_for_service_products) }
       let(:product) { build(:product, user: seller, price_cents: 200) }
@@ -819,51 +875,6 @@ describe Link, :vcr do
         end
       end
 
-      context "content moderation" do
-        it "blocks publishing when ContentModeration::ModerateRecordService.check fails" do
-          allow(ContentModeration::ModerateRecordService).to receive(:check).with(@product, :product).and_return(
-            ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["policy violation"])
-          )
-
-          expect { @product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
-          expect(@product.reload.purchase_disabled_at).not_to be(nil)
-          expect(@product.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
-        end
-
-        it "skips the content moderation check for VIP creators" do
-          allow(@user).to receive(:vip_creator?).and_return(true)
-          expect(ContentModeration::ModerateRecordService).not_to receive(:check)
-
-          expect { @product.publish! }.to change { @product.reload.purchase_disabled_at }.to(nil)
-        end
-
-        it "publishes successfully when the content moderation check passes" do
-          allow(ContentModeration::ModerateRecordService).to receive(:check).with(@product, :product).and_return(
-            ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
-          )
-
-          expect { @product.publish! }.to change { @product.reload.purchase_disabled_at }.to(nil)
-        end
-
-        it "clears the publishing flag after publish! completes" do
-          allow(ContentModeration::ModerateRecordService).to receive(:check).with(@product, :product).and_return(
-            ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
-          )
-
-          @product.publish!
-
-          expect(@product.publishing?).to eq(false)
-        end
-
-        it "clears the publishing flag even when publish! raises" do
-          allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
-            ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["bad"])
-          )
-
-          expect { @product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
-          expect(@product.publishing?).to eq(false)
-        end
-      end
 
       context "when the seller has universal affiliates" do
         it "associates those affiliates with the product and notifies them" do
