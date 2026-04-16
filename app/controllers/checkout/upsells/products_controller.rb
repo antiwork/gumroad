@@ -5,8 +5,6 @@ class Checkout::Upsells::ProductsController < ApplicationController
 
   MAX_PRODUCTS = 25
 
-  QUERY_TIMEOUT_MS = 10_000
-
   PRODUCT_INCLUDES = [
     :skus_alive_not_default,
     :variant_categories_alive,
@@ -20,7 +18,7 @@ class Checkout::Upsells::ProductsController < ApplicationController
     seller = user_by_domain(request.host) || current_seller
     return render json: [] unless seller
 
-    products = with_query_timeout do
+    products = WithMaxExecutionTime.timeout_queries(seconds: 10) do
       seller.products
         .eligible_for_content_upsells
         .includes(*PRODUCT_INCLUDES)
@@ -29,25 +27,19 @@ class Checkout::Upsells::ProductsController < ApplicationController
         .to_a
     end
     render json: products.map { |product| Checkout::Upsells::ProductPresenter.new(product).product_props }
+  rescue WithMaxExecutionTime::QueryTimeoutError
+    render json: []
   end
 
   def show
-    product = with_query_timeout do
+    product = WithMaxExecutionTime.timeout_queries(seconds: 10) do
       Link.eligible_for_content_upsells
           .includes(*PRODUCT_INCLUDES)
           .find_by_external_id!(params[:id])
     end
 
     render json: Checkout::Upsells::ProductPresenter.new(product).product_props
-  end
-
-  private
-
-  def with_query_timeout
-    previous_timeout = ActiveRecord::Base.connection.execute("SELECT @@SESSION.max_execution_time AS t").first.first
-    ActiveRecord::Base.connection.execute("SET SESSION max_execution_time = #{QUERY_TIMEOUT_MS}")
-    yield
-  ensure
-    ActiveRecord::Base.connection.execute("SET SESSION max_execution_time = #{previous_timeout || 0}")
+  rescue WithMaxExecutionTime::QueryTimeoutError
+    render json: { error: "Request timed out" }, status: :gateway_timeout
   end
 end
