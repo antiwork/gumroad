@@ -815,8 +815,7 @@ describe "PurchaseRefunds", :vcr do
           purchase.reload
         end
 
-        it "does not issue a refund while the dispute is still active",
-           vcr: { cassette_name: "PurchaseRefunds/refund_purchase/do_not_decrement_seller_balance_twice/refund_after_a_dispute_event_which_is_functionally_treated_as_a_chargeback_on_our_side/does_not_decrement_balance_from_the_user_on_such_an_event" } do
+        it "does not issue a refund while the dispute is still active" do
           expect(ChargeProcessor).not_to receive(:refund!)
 
           expect(purchase.refund_and_save!(create(:admin_user).id)).to be(false)
@@ -824,8 +823,7 @@ describe "PurchaseRefunds", :vcr do
           expect(purchase.reload.refunds).to be_empty
         end
 
-        it "does not refund Gumroad taxes while the dispute is still active",
-           vcr: { cassette_name: "PurchaseRefunds/refund_purchase/do_not_decrement_seller_balance_twice/refund_after_a_dispute_event_which_is_functionally_treated_as_a_chargeback_on_our_side/does_not_decrement_balance_from_the_user_on_such_an_event" } do
+        it "does not refund Gumroad taxes while the dispute is still active" do
           allow(purchase).to receive(:gumroad_tax_refundable_cents).and_return(20)
           expect(ChargeProcessor).not_to receive(:refund!)
 
@@ -1303,8 +1301,7 @@ describe "PurchaseRefunds", :vcr do
       end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded_for_fraud).with(@purchase.id)
     end
 
-    it "does not cancel the subscription or queue an email when the refund fails",
-       vcr: { cassette_name: "PurchaseRefunds/_refund_for_fraud_/refunds_the_original_purchase" } do
+    it "does not cancel the subscription or queue an email when the refund fails" do
       subscription = double(deactivated?: false)
       allow(@purchase).to receive(:subscription).and_return(subscription)
       allow(@purchase).to receive(:refund_and_save!).and_return(false)
@@ -1315,8 +1312,7 @@ describe "PurchaseRefunds", :vcr do
       expect(@purchase.refund_for_fraud!(create(:admin_user).id)).to be(false)
     end
 
-    it "still runs side effects when refund_and_save! is an idempotent no-op",
-       vcr: { cassette_name: "PurchaseRefunds/_refund_for_fraud_/refunds_the_original_purchase" } do
+    it "still runs side effects when refund_and_save! is an idempotent no-op" do
       subscription = double(deactivated?: false)
       allow(@purchase).to receive(:subscription).and_return(subscription)
       allow(@purchase).to receive(:refund_and_save!).and_return(nil)
