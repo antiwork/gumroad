@@ -58,14 +58,14 @@ describe "Product Edit Covers", type: :system, js: true do
     visit edit_link_path(product.unique_permalink)
     upload_image(["disguised_html_script.png"])
     allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
-    expect(page).to have_alert(text: "Could not process your preview, please try again.")
+    expect(page).to have_alert(text: "Cover must be an image (JPEG, PNG, GIF) or a video.")
   end
 
   it "allows uploading valid image after trying an invalid one" do
     visit edit_link_path(product.unique_permalink)
     upload_image(["disguised_html_script.png"])
     allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
-    expect(page).to have_alert(text: "Could not process your preview, please try again.")
+    expect(page).to have_alert(text: "Cover must be an image (JPEG, PNG, GIF) or a video.")
     upload_image(["test-small.jpg"])
     wait_for_ajax
     within "[role=tablist][aria-label='Product covers']" do
