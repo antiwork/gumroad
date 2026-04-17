@@ -183,7 +183,7 @@ describe Api::Internal::Helper::UsersController do
 
         comment = Comment.last
         expect(comment.content).to eq("Appeal submitted: I believe this was a mistake")
-        expect(comment.author_name).to eq("appeal")
+        expect(comment.author_name).to eq("ContentModeration")
         expect(comment.commentable).to eq(user)
       end
 
@@ -195,6 +195,16 @@ describe Api::Internal::Helper::UsersController do
         end.to change { Comment.count }.by(1)
 
         expect(response).to have_http_status(:success)
+      end
+    end
+
+    context "when the user is neither suspended nor flagged" do
+      it "returns an error_message response" do
+        post :create_appeal, params: { email: user.email, reason: "Please review" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("User is not suspended or flagged")
       end
     end
   end

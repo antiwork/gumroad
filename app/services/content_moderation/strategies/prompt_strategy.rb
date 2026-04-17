@@ -38,7 +38,7 @@ class ContentModeration::Strategies::PromptStrategy
   end
 
   def perform
-    return Result.new(status: "compliant", reasoning: []) if @text.blank?
+    return Result.new(status: "compliant", reasoning: []) if @text.blank? && @image_urls.empty?
 
     api_key = GlobalConfig.get("OPENAI_ACCESS_TOKEN")
     return Result.new(status: "compliant", reasoning: []) if api_key.blank?
@@ -124,7 +124,7 @@ class ContentModeration::Strategies::PromptStrategy
 
     def build_messages(rules, skip_images: false)
       user_content = []
-      user_content << { type: "text", text: "Content to evaluate:\n\n#{@text}" }
+      user_content << { type: "text", text: "Content to evaluate:\n\n#{@text.presence || '[no text provided]'}" }
 
       if !skip_images && @image_urls.present?
         @image_urls.first(3).each do |url|

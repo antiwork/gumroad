@@ -391,6 +391,8 @@ class ProductFile < ApplicationRecord
 
     def reset_content_moderated_flag
       return unless filegroup == "image"
+      return if link.blank? || link.is_unpublished_by_admin? || !link.content_moderated?
+
       link&.update_attribute(:content_moderated, false)
     end
 

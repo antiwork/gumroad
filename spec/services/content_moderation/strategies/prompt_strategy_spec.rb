@@ -13,12 +13,18 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy do
     allow(Rails.logger).to receive(:warn)
   end
 
-  it "returns compliant when the text is blank" do
+  it "moderates image-only content" do
+    allow(client).to receive(:chat).and_return(
+      json_chat_response(flagged: true, reasoning: "clear adult content"),
+      json_chat_response(uncertain: false),
+      json_chat_response(flagged: false, reasoning: "")
+    )
+
     result = described_class.new(text: "", image_urls: ["https://cdn.example.com/1.png"]).perform
 
-    expect(result.status).to eq("compliant")
-    expect(result.reasoning).to eq([])
-    expect(OpenAI::Client).not_to have_received(:new)
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq(["adult_content: clear adult content"])
+    expect(OpenAI::Client).to have_received(:new).with(access_token: "test-key")
   end
 
   it "returns compliant when the API key is blank" do

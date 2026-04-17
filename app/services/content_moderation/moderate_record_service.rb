@@ -135,6 +135,7 @@ class ContentModeration::ModerateRecordService
       return if user.vip_creator?
 
       record.unpublish!(is_unpublished_by_admin: true)
+      update_flag(record, :content_moderated, true) if record.respond_to?(:content_moderated)
     end
 
     def flag_profile(reasoning)
@@ -153,22 +154,27 @@ class ContentModeration::ModerateRecordService
       return unless record.content_moderated?
       return unless record.is_unpublished_by_admin?
 
+      record.is_unpublished_by_admin = false
       with_skipped_content_moderation_check(record) { record.publish! }
-      record.update!(is_unpublished_by_admin: false)
       update_flag(record, :content_moderated, false)
     end
 
     def mark_post_compliant
-      return if record.published? || !record.is_unpublished_by_admin?
+      return if record.published?
+      return unless record.content_moderated?
+      return unless record.is_unpublished_by_admin?
 
       record.is_unpublished_by_admin = false
       with_skipped_content_moderation_check(record) { record.publish! }
+      update_flag(record, :content_moderated, false)
     end
 
     def mark_profile_compliant
-      return if user.suspended? && !suspended_by_content_moderation?
+      return if user.suspended?
+      return unless user.flagged?
+      return unless flagged_by_content_moderation?
 
-      user.mark_compliant!(author_name: AUTHOR_NAME) if user.flagged? || user.suspended?
+      user.mark_compliant!(author_name: AUTHOR_NAME)
     end
 
     def check_user_suspension_threshold
@@ -176,17 +182,17 @@ class ContentModeration::ModerateRecordService
       return if user.suspended?
 
       threshold = (GlobalConfig.get("CONTENT_MODERATION_SUSPENSION_THRESHOLD") || "1").to_i
-      flagged_count = user_flagged_record_count
-
-      if flagged_count >= threshold
-        ActiveRecord::Base.transaction do
+      user.with_lock do
           user.reload
-          return if user.suspended?
+          next if user.suspended?
+
+          flagged_count = user_flagged_record_count
+          next if flagged_count < threshold
+
           reason = "Content policy violation"
           user.update!(tos_violation_reason: reason)
           comment_content = "Suspended for policy violations on #{Time.current.to_fs(:formatted_date_full_month)} (#{flagged_count} flagged records)"
           user.suspend_for_tos_violation!(author_name: AUTHOR_NAME, content: comment_content, bulk: true)
-        end
       end
     end
 
@@ -196,23 +202,30 @@ class ContentModeration::ModerateRecordService
       return if user.vip_creator?
 
       threshold = (GlobalConfig.get("CONTENT_MODERATION_SUSPENSION_THRESHOLD") || "1").to_i
-      flagged_count = user_flagged_record_count
+      user.with_lock do
+        user.reload
+        next if !user.suspended?
+        next unless suspended_by_content_moderation?
 
-      if flagged_count < threshold
-        user.mark_compliant!(author_name: AUTHOR_NAME)
+        flagged_count = user_flagged_record_count
+        user.mark_compliant!(author_name: AUTHOR_NAME) if flagged_count < threshold
       end
     end
 
     def user_flagged_record_count
-      products_flagged = user.links
-                             .visible
-                             .where("links.flags & ? > 0", Link.flag_mapping["flags"][:is_unpublished_by_admin])
-                             .where("links.flags & ? > 0", Link.flag_mapping["flags"][:content_moderated])
-                             .count
-      posts_flagged = user.installments.alive
-                          .where("installments.flags & ? > 0", Installment.flag_mapping["flags"][:is_unpublished_by_admin])
-                          .count
+      products_flagged = user.links.visible.is_unpublished_by_admin.content_moderated.count
+      posts_flagged = user.installments.alive.is_unpublished_by_admin.content_moderated.count
+
       products_flagged + posts_flagged
+    end
+
+    def flagged_by_content_moderation?
+      last_flag = user.comments
+                      .where(comment_type: Comment::COMMENT_TYPE_FLAGGED)
+                      .order(created_at: :desc)
+                      .first
+
+      last_flag&.author_name == AUTHOR_NAME
     end
 
     def suspended_by_content_moderation?
@@ -259,10 +272,9 @@ class ContentModeration::ModerateRecordService
 
     def update_flag(record, flag_name, enabled)
       bit = record.class.flag_mapping["flags"][flag_name]
-      flags = record.flags.to_i
-      updated_flags = enabled ? (flags | bit) : (flags & ~bit)
+      flag_expression = enabled ? "flags | #{bit}" : "flags & ~#{bit}"
 
-      record.update_columns(flags: updated_flags, updated_at: Time.current)
-      record["flags"] = updated_flags
+      record.class.where(id: record.id).update_all(["flags = #{flag_expression}, updated_at = ?", Time.current])
+      record.reload
     end
 end

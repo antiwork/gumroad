@@ -536,14 +536,18 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     end
 
     if !user.suspended? && !user.flagged?
-      return render json: { success: false, error: "User is not suspended or flagged" }, status: :unprocessable_entity
+      return render json: { success: false, error_message: "User is not suspended or flagged" }, status: :unprocessable_entity
     end
 
-    comment = user.comments.create!(
+    comment = user.comments.new(
       content: "Appeal submitted: #{params[:reason]}",
-      author_name: "appeal",
+      author_name: ContentModeration::ModerateRecordService::AUTHOR_NAME,
       comment_type: Comment::COMMENT_TYPE_NOTE
     )
+
+    unless comment.save
+      return render json: { success: false, error_message: comment.errors.full_messages.join(", ") }, status: :unprocessable_entity
+    end
 
     render json: {
       success: true,

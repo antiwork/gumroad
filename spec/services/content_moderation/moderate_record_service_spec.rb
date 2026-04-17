@@ -123,11 +123,13 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
         service.perform
 
         expect(post.reload).to be_is_unpublished_by_admin
+        expect(post.reload).to be_content_moderated
       end
 
       it "republishes compliant posts that were unpublished by admin" do
         post.publish!
         post.unpublish!(is_unpublished_by_admin: true)
+        post.update_attribute(:content_moderated, true)
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
         expect(described_class).not_to receive(:check)
 
@@ -135,6 +137,18 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
         expect(post.reload).to be_published
         expect(post.reload).not_to be_is_unpublished_by_admin
+        expect(post.reload).not_to be_content_moderated
+      end
+
+      it "does not republish admin-unpublished posts that were not content moderated" do
+        post.publish!
+        post.unpublish!(is_unpublished_by_admin: true)
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+
+        service.perform
+
+        expect(post.reload).not_to be_published
+        expect(post.reload).to be_is_unpublished_by_admin
       end
     end
 
@@ -160,12 +174,32 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
       end
 
       it "marks flagged profiles compliant when moderation passes" do
-        user.update!(user_risk_state: "flagged_for_tos_violation")
+        user.flag_for_tos_violation!(author_name: "ContentModeration", content: "Flagged for testing", bulk: true)
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
 
         service.perform
 
         expect(user.reload).to be_compliant
+      end
+
+      it "does not clear admin-set flags when moderation passes" do
+        user.flag_for_tos_violation!(author_name: "Admin", content: "Flagged manually", bulk: true)
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+
+        service.perform
+
+        expect(user.reload).to be_flagged_for_tos_violation
+      end
+
+      it "does not unsuspend profile-only changes while flagged records still meet the threshold" do
+        user.suspend_for_tos_violation!(author_name: "ContentModeration", content: "Suspended for testing")
+        allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_SUSPENSION_THRESHOLD").and_return("1")
+        allow(service).to receive(:user_flagged_record_count).and_return(1)
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+
+        service.perform
+
+        expect(user.reload).to be_suspended_for_tos_violation
       end
 
       it "does not flag violating profiles for VIP creators" do

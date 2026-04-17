@@ -96,6 +96,7 @@ class Installment < ApplicationRecord
             9 => :send_emails,
             10 => :ready_to_publish,
             11 => :allow_comments,
+            12 => :content_moderated,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -954,7 +955,7 @@ class Installment < ApplicationRecord
     def content_moderation_check
       return if user&.vip_creator?
 
-      result = ContentModeration::ModerateRecordService.check(self, :post)
+      result = ContentModeration::ModerateRecordService.check(self, :post, text_only: true)
       return if result.passed
 
       errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")

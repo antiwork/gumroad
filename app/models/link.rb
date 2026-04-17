@@ -1429,6 +1429,8 @@ class Link < ApplicationRecord
     end
 
     def reset_content_moderated_flag
+      return if is_unpublished_by_admin? || !content_moderated?
+
       update_attribute(:content_moderated, false)
     end
 

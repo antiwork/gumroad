@@ -112,6 +112,8 @@ class RichContent < ApplicationRecord
 
     def reset_content_moderated_flag
       return unless entity.is_a?(Link)
+      return if entity.is_unpublished_by_admin? || !entity.content_moderated?
+
       entity.update_attribute(:content_moderated, false)
     end
 end
