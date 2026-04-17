@@ -70,6 +70,36 @@ describe SuspendUsersWorker do
         end
       end
 
+      it "passes the scheduled_payout_id through to the suspension email so the mailer uses the correct record" do
+        Feature.activate(:account_suspended_email)
+        user_id = not_reviewed_user.id
+
+        expect do
+          described_class.new.perform(admin_user.id, [user_id], reason, additional_notes, scheduled_payout)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with { [user_id, ScheduledPayout.where(user_id: user_id).last.id] }
+      end
+
+      it "does not reuse a stale pending scheduled payout from a previous suspension" do
+        Feature.activate(:account_suspended_email)
+        stale_payout = create(:scheduled_payout, user: not_reviewed_user, action: "payout", payout_amount_cents: 999_99)
+        user_id = not_reviewed_user.id
+
+        expect do
+          described_class.new.perform(admin_user.id, [user_id], reason, additional_notes, scheduled_payout)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with { [user_id, ScheduledPayout.where(user_id: user_id).order(:id).last.id] }
+
+        new_payout = not_reviewed_user.reload.scheduled_payouts.order(:id).last
+        expect(new_payout.id).not_to eq(stale_payout.id)
+      end
+
+      it "passes a nil scheduled_payout_id when no scheduled payout is created" do
+        Feature.activate(:account_suspended_email)
+
+        expect do
+          described_class.new.perform(admin_user.id, [not_reviewed_user.id], reason, additional_notes, nil)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(not_reviewed_user.id, nil)
+      end
+
       it "does not create a scheduled payout for users who were already suspended" do
         described_class.new.perform(admin_user.id, user_ids_to_suspend, reason, additional_notes, scheduled_payout)
 

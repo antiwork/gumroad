@@ -105,10 +105,11 @@ module User::Risk
   end
 
   def send_suspension_email(transition)
-    return if transition.args.first&.dig(:skip_generic_suspension_email)
+    args = transition.args.first || {}
+    return if args[:skip_generic_suspension_email]
     return unless Feature.active?(:account_suspended_email)
 
-    ContactingCreatorMailer.account_suspended(id).deliver_later
+    ContactingCreatorMailer.account_suspended(id, args[:scheduled_payout_id]).deliver_later
   end
 
   def log_suspension_time_to_mongo

@@ -23,7 +23,7 @@ describe User::Risk do
 
       expect do
         user.suspend_for_tos_violation!(author_name: "admin")
-      end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(user.id, nil)
     end
 
     it "sends suspension email when suspended for fraud" do
@@ -32,7 +32,17 @@ describe User::Risk do
 
       expect do
         user.suspend_for_fraud!(author_name: "admin")
-      end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(user.id, nil)
+    end
+
+    it "passes scheduled_payout_id from transition args through to the mailer" do
+      user = create(:user)
+      user.flag_for_tos_violation!(author_name: "admin", bulk: true)
+      scheduled_payout = create(:scheduled_payout, user: user)
+
+      expect do
+        user.suspend_for_tos_violation!(author_name: "admin", scheduled_payout_id: scheduled_payout.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(user.id, scheduled_payout.id)
     end
 
     it "skips the generic suspension email when called with skip_generic_suspension_email" do

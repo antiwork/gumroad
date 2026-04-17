@@ -13,13 +13,15 @@ class SuspendUsersWorker
       was_suspended = user.suspended?
       content = "Suspended for a policy violation by #{author_name} on #{Time.current.to_fs(:formatted_date_full_month)} as part of mass suspension. Reason: #{reason}."
       content += "\nAdditional notes: #{additional_notes}" if additional_notes.present?
-      user.suspend_for_tos_violation(author_id:, content:)
 
-      next if was_suspended || !user.suspended?
-      next if scheduled_payout.blank? || scheduled_payout["action"].blank?
-      next if user.unpaid_balance_cents.to_i <= 0
+      scheduled_payout_record = nil
+      if !was_suspended &&
+         scheduled_payout.present? && scheduled_payout["action"].present? &&
+         user.unpaid_balance_cents.to_i > 0
+        scheduled_payout_record = create_scheduled_payout(user, author, scheduled_payout)
+      end
 
-      create_scheduled_payout(user, author, scheduled_payout)
+      user.suspend_for_tos_violation(author_id:, content:, scheduled_payout_id: scheduled_payout_record&.id)
     end
   end
 
@@ -38,5 +40,7 @@ class SuspendUsersWorker
         comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
         content: "Scheduled #{record.action} for #{record.scheduled_at.to_fs(:formatted_date_full_month)} (#{record.delay_days} day delay)"
       )
+
+      record
     end
 end
