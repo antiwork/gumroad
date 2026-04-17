@@ -44,6 +44,7 @@ Rails.application.routes.draw do
     scope "v2", module: "v2", as: "v2" do
       post "files/presign", to: "files#presign"
       post "files/complete", to: "files#complete"
+      post "files/abort", to: "files#abort"
       resources :licenses, only: [] do
         collection do
           post :verify

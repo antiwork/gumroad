@@ -27,6 +27,13 @@ export const FilesOverview = () => (
           <code>PUT /v2/products/:id</code>.
         </li>
       </ol>
+      <p>
+        If an upload fails partway through, call <a href="#post-/files/abort">/v2/files/abort</a> to cancel it. Abort
+        responses include a <code>status</code> field: <code>accepted</code> means S3 took the cancellation but parts
+        still in flight may finish seconds later, and <code>already_gone</code> means S3 has no multipart session for
+        this <code>upload_id</code>. Call abort again while you see <code>accepted</code>; stop when you see{" "}
+        <code>already_gone</code>.
+      </p>
     </div>
   </CardContent>
 );
@@ -124,6 +131,54 @@ export const CompleteFile = () => (
   "file_url": "https://gumroad-specials.s3.amazonaws.com/attachments/A-m3CDDC5dlrSdKZp0RFhA==/9f2c1b7d6e4a/original/course.pdf"
 }`}
     </CodeSnippet>
+    <p>
+      <strong>Don't retry this call.</strong> The <code>upload_id</code> works only once. If you lose the response,
+      start a fresh upload with <code>/v2/files/presign</code> and use the new <code>file_url</code>.
+    </p>
+  </ApiEndpoint>
+);
+
+export const AbortFile = () => (
+  <ApiEndpoint
+    method="post"
+    path="/files/abort"
+    description="Cancel a multipart upload started by /v2/files/presign. Requires the edit_products scope."
+  >
+    <ApiParameters>
+      <ApiParameter name="upload_id" description="(returned by /files/presign)" />
+      <ApiParameter name="key" description="(returned by /files/presign)" />
+    </ApiParameters>
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        {
+          name: "status",
+          type: "string",
+          description:
+            "accepted if S3 took the cancellation on this call (parts still in flight may finish seconds later); already_gone if S3 has no multipart session for this upload_id",
+        },
+      ])}
+    </ApiResponseFields>
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/files/abort \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -d "upload_id=ibZBv_75gd9o.uPYmGbJ5JjxqK4_VsP3..." \\
+  -d "key=attachments/A-m3CDDC5dlrSdKZp0RFhA==/9f2c1b7d6e4a/original/course.pdf" \\
+  -X POST`}
+    </CodeSnippet>
+    <CodeSnippet caption="Example response:">
+      {`{
+  "success": true,
+  "status": "accepted"
+}`}
+    </CodeSnippet>
+    <p>
+      Loop on <code>status</code>: while it's <code>accepted</code>, keep calling abort; when it's{" "}
+      <code>already_gone</code>, stop. <code>already_gone</code> only tells you S3 has no multipart session for this{" "}
+      <code>upload_id</code> — it does not distinguish "fully cancelled" from "finalized by a racing{" "}
+      <code>/v2/files/complete</code>". To avoid ambiguity, don't issue abort and complete for the same upload
+      concurrently.
+    </p>
   </ApiEndpoint>
 );
 
