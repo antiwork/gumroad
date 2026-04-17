@@ -535,6 +535,10 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
     end
 
+    if !user.suspended? && !user.flagged?
+      return render json: { success: false, error: "User is not suspended or flagged" }, status: :unprocessable_entity
+    end
+
     comment = user.comments.create!(
       content: "Appeal submitted: #{params[:reason]}",
       author_name: "appeal",

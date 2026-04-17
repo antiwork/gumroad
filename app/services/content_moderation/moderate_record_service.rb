@@ -149,11 +149,12 @@ class ContentModeration::ModerateRecordService
     end
 
     def mark_product_compliant
-      return if !record.is_unpublished_by_admin?
-      return if !record.content_moderated?
+      return unless record.content_moderated?
+      return unless record.is_unpublished_by_admin?
 
-      record.update!(is_unpublished_by_admin: false)
       with_skipped_content_moderation_check(record) { record.publish! }
+      record.update!(is_unpublished_by_admin: false)
+      update_flag(record, :content_moderated, false)
     end
 
     def mark_post_compliant
@@ -164,7 +165,7 @@ class ContentModeration::ModerateRecordService
     end
 
     def mark_profile_compliant
-      return if user.suspended_by_admin?
+      return if user.suspended? && !suspended_by_content_moderation?
 
       user.mark_compliant!(author_name: AUTHOR_NAME) if user.flagged? || user.suspended?
     end
@@ -190,7 +191,7 @@ class ContentModeration::ModerateRecordService
 
     def check_user_unsuspension
       return if !user.suspended?
-      return if user.suspended_by_admin?
+      return unless suspended_by_content_moderation?
       return if user.vip_creator?
 
       threshold = (GlobalConfig.get("CONTENT_MODERATION_SUSPENSION_THRESHOLD") || "1").to_i
@@ -203,6 +204,7 @@ class ContentModeration::ModerateRecordService
 
     def user_flagged_record_count
       products_flagged = user.links
+                             .visible
                              .where("links.flags & ? > 0", Link.flag_mapping["flags"][:is_unpublished_by_admin])
                              .where("links.flags & ? > 0", Link.flag_mapping["flags"][:content_moderated])
                              .count
@@ -210,6 +212,15 @@ class ContentModeration::ModerateRecordService
                           .where("installments.flags & ? > 0", Installment.flag_mapping["flags"][:is_unpublished_by_admin])
                           .count
       products_flagged + posts_flagged
+    end
+
+    def suspended_by_content_moderation?
+      last_suspension = user.comments
+                            .where(comment_type: Comment::COMMENT_TYPE_SUSPENDED)
+                            .order(created_at: :desc)
+                            .first
+
+      last_suspension&.author_name == AUTHOR_NAME
     end
 
     def user
