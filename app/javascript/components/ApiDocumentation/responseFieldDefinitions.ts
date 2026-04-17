@@ -1,5 +1,26 @@
 import { FieldDefinition } from "./ApiResponseFields";
 
+export const COVER_FIELDS: FieldDefinition[] = [
+  { name: "id", type: "string", description: "Unique identifier for the cover" },
+  {
+    name: "url",
+    type: "string",
+    description: "Display URL (retina variant for non-GIF images; original URL for GIFs, videos, and oEmbed covers)",
+  },
+  { name: "original_url", type: "string", description: "URL of the original uploaded asset" },
+  {
+    name: "thumbnail",
+    type: "string | null",
+    description: "Thumbnail URL for oEmbed covers; null otherwise",
+  },
+  { name: "type", type: "string", description: 'One of "image", "video", "oembed", or "unsplash"' },
+  { name: "filetype", type: "string | null", description: "File extension; null when no file is attached" },
+  { name: "width", type: "number", description: "Display width in pixels" },
+  { name: "height", type: "number", description: "Display height in pixels" },
+  { name: "native_width", type: "number", description: "Intrinsic width of the source asset in pixels" },
+  { name: "native_height", type: "number", description: "Intrinsic height of the source asset in pixels" },
+];
+
 const PRODUCT_VARIANT_FIELDS: FieldDefinition[] = [
   { name: "title", type: "string", description: 'Variant category title (e.g. "Tier")' },
   {
@@ -86,6 +107,17 @@ const SHARED_PRODUCT_FIELDS: FieldDefinition[] = [
   { name: "currency", type: "string", description: 'ISO currency code (e.g. "usd")' },
   { name: "short_url", type: "string", description: "Short Gumroad URL for the product" },
   { name: "thumbnail_url", type: "string | null", description: "URL of the product thumbnail image" },
+  {
+    name: "covers",
+    type: "array",
+    description: "Covers for the product, in display order",
+    children: COVER_FIELDS,
+  },
+  {
+    name: "main_cover_id",
+    type: "string | null",
+    description: "ID of the first cover in display order; null when the product has no covers",
+  },
   { name: "tags", type: "array", description: "Tags associated with the product" },
   { name: "formatted_price", type: "string", description: "Human-readable formatted price" },
   {
@@ -94,12 +126,6 @@ const SHARED_PRODUCT_FIELDS: FieldDefinition[] = [
     description:
       'Legacy single-file metadata; returns {} for products with 0 or 2+ files. For complete file state, fetch the product via GET /v2/products/:id and read the "files" array (not returned by GET /v2/products).',
   },
-  {
-    name: "covers",
-    type: "array",
-    description: "Cover images and videos attached to the product",
-  },
-  { name: "main_cover_id", type: "string | null", description: "GUID of the cover shown first" },
   {
     name: "bundle_products",
     type: "array",

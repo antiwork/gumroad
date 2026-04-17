@@ -2,6 +2,7 @@ import React from "react";
 
 import { ApiResource } from "$app/components/ApiDocumentation/ApiResource";
 import { Authentication } from "$app/components/ApiDocumentation/Authentication";
+import { CreateCover, DeleteCover } from "$app/components/ApiDocumentation/Endpoints/Covers";
 import {
   GetCustomFields,
   CreateCustomField,
@@ -108,6 +109,11 @@ export default function Api() {
                 <PresignFile />
                 <CompleteFile />
                 <AttachFile />
+              </ApiResource>
+
+              <ApiResource name="Covers" id="covers">
+                <CreateCover />
+                <DeleteCover />
               </ApiResource>
 
               <ApiResource name="Variant categories" id="variant-categories">
