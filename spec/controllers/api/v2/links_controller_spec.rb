@@ -1153,9 +1153,8 @@ describe Api::V2::LinksController do
           expect(message).to include("POST /v2/files/complete")
           expect(message).to include("files[][url]")
           expect(message).to include("full replacement")
-          expect(message).to include("id")
-          expect(message).to include("canonical url")
-          expect(message).to include("not the signed URL")
+          expect(message).to include("include an entry with its id")
+          expect(message).to include("files missing from the array are removed")
         end
 
         it "points preview rejections to the covers endpoint rather than presign" do
@@ -1389,6 +1388,18 @@ describe Api::V2::LinksController do
         expect(file.reload.display_name).to eq("Old")
       end
 
+      it "ignores client-supplied modified flag so partial updates with a canonical url still apply" do
+        existing_file = create(:product_file, link: @product, display_name: "Old")
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(existing_file.s3_key).put(body: "test content")
+
+        put @action, params: @params.merge(files: [
+                                             { id: existing_file.external_id, url: existing_file.url, modified: "false", display_name: "New" }
+                                           ]), as: :json
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(existing_file.reload.display_name).to eq("New")
+      end
+
       it "preserves existing subtitle tracks when id-only files[] entry keeps a video file unchanged" do
         video = create(:streamable_video, link: @product)
         subtitle = create(:subtitle_file, product_file: video)
@@ -1405,7 +1416,7 @@ describe Api::V2::LinksController do
         original_external_id = file.external_id
 
         stubbed_once = false
-        allow_any_instance_of(Link).to receive(:alive_product_files).and_wrap_original do |m, *args|
+        allow_any_instance_of(Link).to receive(:assign_attributes).and_wrap_original do |m, *args|
           unless stubbed_once
             stubbed_once = true
             file.mark_deleted!

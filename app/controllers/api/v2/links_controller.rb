@@ -245,6 +245,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       existing_files_by_id = @product.product_files.alive.index_by(&:external_id)
       new_files = []
       params[:files].each do |f|
+        f.delete(:modified) if f.respond_to?(:delete)
         existing = f[:id].present? ? existing_files_by_id[f[:id]] : nil
         if existing
           if f[:url].blank?
@@ -322,7 +323,7 @@ class Api::V2::LinksController < Api::V2::BaseController
         unless @normalized_files.nil?
           keep_only_ids = @normalized_files.filter_map { |f| f[:id] if f[:modified].to_s == "false" }
           if keep_only_ids.any?
-            missing_ids = keep_only_ids - @product.alive_product_files.map(&:external_id)
+            missing_ids = keep_only_ids - @product.product_files.alive.map(&:external_id)
             raise Link::LinkInvalid, "Cannot keep file(s) #{missing_ids.join(', ')}: they were deleted concurrently. Retry with the current file list." if missing_ids.any?
           end
 
@@ -458,7 +459,7 @@ class Api::V2::LinksController < Api::V2::BaseController
         if action_name == "create"
           presign_flow
         else
-          "#{presign_flow} Note: files is a full replacement — to keep an existing file, include its id and its original canonical url (not the signed URL returned by GET /v2/products/:id); files missing from the array are removed."
+          "#{presign_flow} Note: files is a full replacement — to keep an existing file, include an entry with its id; files missing from the array are removed."
         end
       when :preview
         if action_name == "create"
