@@ -21,7 +21,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
   before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy]) { doorkeeper_authorize! :edit_products }
-  before_action :check_types_of_file_objects, only: [:update, :create]
+  before_action :reject_unsupported_upload_fields, only: [:update, :create]
   before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy]
   before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy]
 
@@ -409,11 +409,55 @@ class Api::V2::LinksController < Api::V2::BaseController
       error_with_object(:product, product)
     end
 
-    def check_types_of_file_objects
-      return if params[:file].class != String && params[:preview].class != String
+    UNSUPPORTED_UPLOAD_FIELDS = %i[file preview thumbnail].freeze
 
-      render_response(false, message: "You entered the name of the file to be uploaded incorrectly. Please refer to " \
-                                      "https://gumroad.com/api#methods for the correct syntax.")
+    def reject_unsupported_upload_fields
+      rejected_field = UNSUPPORTED_UPLOAD_FIELDS.find { |key| legacy_upload_present?(params[key]) }
+      return unless rejected_field
+
+      render_response(false, message: unsupported_upload_field_message(rejected_field))
+    end
+
+    def legacy_upload_present?(value)
+      return false if value.blank?
+
+      case value
+      when ActionController::Parameters, Hash
+        value.each_value.any? { |v| legacy_upload_present?(v) }
+      when Array
+        value.any? { |v| legacy_upload_present?(v) }
+      else
+        true
+      end
+    end
+
+    def unsupported_upload_field_message(field)
+      verb_path = action_name == "create" ? "POST /v2/products" : "PUT /v2/products/:id"
+      "'#{field}' is not an accepted parameter on #{verb_path}. #{upload_field_guidance(field)}"
+    end
+
+    def upload_field_guidance(field)
+      case field
+      when :file
+        presign_flow = "Upload files with the presign flow (POST /v2/files/presign, upload parts to the returned S3 URLs, then POST /v2/files/complete), then attach them by including the returned URLs in files[][url]."
+        if action_name == "create"
+          presign_flow
+        else
+          "#{presign_flow} Note: files is a full replacement — to keep an existing file, include its id and its original canonical url (not the signed URL returned by GET /v2/products/:id); files missing from the array are removed."
+        end
+      when :preview
+        if action_name == "create"
+          "Covers can only be added after the product is created. Create the product first, then POST to /v2/products/:id/covers with a url or signed_blob_id."
+        else
+          "Use POST /v2/products/:id/covers with a url or signed_blob_id to add a cover."
+        end
+      when :thumbnail
+        if action_name == "create"
+          "Thumbnails can only be set after the product is created. Create the product first, then POST to /v2/products/:id/thumbnail with a signed_blob_id."
+        else
+          "Use POST /v2/products/:id/thumbnail with a signed_blob_id to set the thumbnail."
+        end
+      end
     end
 
     def validate_file_urls(files)

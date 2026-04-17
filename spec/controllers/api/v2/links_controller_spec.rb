@@ -474,6 +474,65 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to include("files must be an array of file objects")
       end
 
+      describe "rejecting legacy upload fields" do
+        %i[file preview thumbnail].each do |field|
+          it "rejects #{field} sent as a string" do
+            post @action, params: @params.merge(field => "something.pdf")
+
+            expect(response).to be_successful
+            expect(response.parsed_body["success"]).to be false
+            expect(response.parsed_body["message"]).to start_with("'#{field}' is not an accepted parameter on POST /v2/products.")
+          end
+
+          it "rejects #{field} sent as a multipart upload" do
+            upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
+            post @action, params: @params.merge(field => upload)
+
+            expect(response).to be_successful
+            expect(response.parsed_body["success"]).to be false
+            expect(response.parsed_body["message"]).to start_with("'#{field}' is not an accepted parameter on POST /v2/products.")
+          end
+        end
+
+        it "points file rejections to the full presign and complete flow" do
+          post @action, params: @params.merge(file: "something.pdf")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("POST /v2/files/presign")
+          expect(message).to include("POST /v2/files/complete")
+          expect(message).to include("files[][url]")
+        end
+
+        it "points preview rejections to the covers endpoint rather than presign" do
+          post @action, params: @params.merge(preview: "cover.png")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("/v2/products/:id/covers")
+          expect(message).to include("Create the product first")
+          expect(message).not_to include("POST /v2/files/presign")
+        end
+
+        it "points thumbnail rejections to the thumbnail endpoint rather than presign" do
+          post @action, params: @params.merge(thumbnail: "thumb.png")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("/v2/products/:id/thumbnail")
+          expect(message).to include("Create the product first")
+          expect(message).not_to include("POST /v2/files/presign")
+        end
+
+        %i[file preview thumbnail].each do |field|
+          [nil, "", {}, { url: "" }, { signed_blob_id: "" }, { nested: { key: "" } }, [nil, ""]].each do |blank_value|
+            it "ignores #{field} when sent as #{blank_value.inspect}" do
+              post @action, params: @params.merge(field => blank_value)
+
+              expect(response).to be_successful
+              expect(response.parsed_body["success"]).to be true
+            end
+          end
+        end
+      end
+
       it "defaults taxonomy to 'other' when not specified" do
         post @action, params: @params
 
@@ -1064,6 +1123,68 @@ describe Api::V2::LinksController do
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be false
         expect(response.parsed_body["message"]).to include("rich_content must be an array of content page objects")
+      end
+
+      describe "rejecting legacy upload fields" do
+        %i[file preview thumbnail].each do |field|
+          it "rejects #{field} sent as a string" do
+            put @action, params: @params.merge(field => "something.pdf")
+
+            expect(response).to be_successful
+            expect(response.parsed_body["success"]).to be false
+            expect(response.parsed_body["message"]).to start_with("'#{field}' is not an accepted parameter on PUT /v2/products/:id.")
+          end
+
+          it "rejects #{field} sent as a multipart upload" do
+            upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
+            put @action, params: @params.merge(field => upload)
+
+            expect(response).to be_successful
+            expect(response.parsed_body["success"]).to be false
+            expect(response.parsed_body["message"]).to start_with("'#{field}' is not an accepted parameter on PUT /v2/products/:id.")
+          end
+        end
+
+        it "points file rejections to the full presign and complete flow and describes the preservation contract" do
+          put @action, params: @params.merge(file: "something.pdf")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("POST /v2/files/presign")
+          expect(message).to include("POST /v2/files/complete")
+          expect(message).to include("files[][url]")
+          expect(message).to include("full replacement")
+          expect(message).to include("id")
+          expect(message).to include("canonical url")
+          expect(message).to include("not the signed URL")
+        end
+
+        it "points preview rejections to the covers endpoint rather than presign" do
+          put @action, params: @params.merge(preview: "cover.png")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("POST /v2/products/:id/covers")
+          expect(message).not_to include("POST /v2/files/presign")
+        end
+
+        it "points thumbnail rejections to the thumbnail endpoint rather than presign" do
+          put @action, params: @params.merge(thumbnail: "thumb.png")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("POST /v2/products/:id/thumbnail")
+          expect(message).not_to include("POST /v2/files/presign")
+        end
+
+        %i[file preview thumbnail].each do |field|
+          [nil, "", {}, { url: "" }, { signed_blob_id: "" }, { nested: { key: "" } }, [nil, ""]].each do |blank_value|
+            it "ignores #{field} when sent as #{blank_value.inspect}" do
+              put @action, params: @params.merge(field => blank_value, name: "Updated")
+
+              expect(response).to be_successful
+              expect(response.parsed_body["success"]).to be true
+              expect(@product.reload.name).to eq("Updated")
+            end
+          end
+        end
       end
 
       it "rejects non-array cover_ids" do
