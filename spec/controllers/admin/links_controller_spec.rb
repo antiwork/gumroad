@@ -139,6 +139,20 @@ describe Admin::LinksController, type: :controller, inertia: true do
     end
   end
 
+  describe "GET join_discord" do
+    let(:integration) { create(:discord_integration) }
+    let(:product) { create(:product, active_integrations: [integration]) }
+
+    it "renders error when Discord returns a non-JSON response" do
+      WebMock.stub_request(:post, DISCORD_OAUTH_TOKEN_URL).
+        to_return(status: 200, body: "<html>502 Bad Gateway</html>", headers: { content_type: "text/html" })
+
+      get :join_discord, params: { external_id: product.external_id, code: "test_code" }
+
+      expect(response.body).to eq("Failed to get access token from Discord, try re-authorizing.")
+    end
+  end
+
   describe "POST is_adult" do
     it "marks the product as adult" do
       post :is_adult, params: { external_id: product.external_id, is_adult: true }

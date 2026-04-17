@@ -538,21 +538,35 @@ export default function PayoutsIndex() {
           <Alert variant="info" role="status">
             <p>
               {scheduled_payout.action === "payout" ? (
-                <>
-                  Your balance
-                  {scheduled_payout.payout_amount_cents != null
-                    ? ` of ${formatPriceCentsWithCurrencySymbol("usd", scheduled_payout.payout_amount_cents, { symbolFormat: "short", noCentsIfWhole: false })}`
-                    : ""}{" "}
-                  is scheduled for payout on{" "}
-                  <strong>{new Date(scheduled_payout.scheduled_at).toLocaleDateString()}</strong>.
-                  {scheduled_payout.status === "flagged" &&
-                    " Your payout is under review. Please contact support for details."}
-                </>
+                scheduled_payout.status === "executed" ? (
+                  <>
+                    Your balance
+                    {scheduled_payout.payout_amount_cents != null
+                      ? ` of ${formatPriceCentsWithCurrencySymbol("usd", scheduled_payout.payout_amount_cents, { symbolFormat: "short", noCentsIfWhole: false })}`
+                      : ""}{" "}
+                    has been paid out.
+                  </>
+                ) : (
+                  <>
+                    Your balance
+                    {scheduled_payout.payout_amount_cents != null
+                      ? ` of ${formatPriceCentsWithCurrencySymbol("usd", scheduled_payout.payout_amount_cents, { symbolFormat: "short", noCentsIfWhole: false })}`
+                      : ""}{" "}
+                    is scheduled for payout on{" "}
+                    <strong>{new Date(scheduled_payout.scheduled_at).toLocaleDateString()}</strong>.
+                    {scheduled_payout.status === "flagged" &&
+                      " Your payout is under review. Please contact support for details."}
+                  </>
+                )
               ) : scheduled_payout.action === "refund" ? (
-                <>
-                  Your purchases are scheduled to be refunded on{" "}
-                  <strong>{new Date(scheduled_payout.scheduled_at).toLocaleDateString()}</strong>.
-                </>
+                scheduled_payout.status === "executed" ? (
+                  <>Your unpaid sales have been refunded to buyers.</>
+                ) : (
+                  <>
+                    Your balance will not be paid out. Unpaid sales are scheduled to be refunded to buyers on{" "}
+                    <strong>{new Date(scheduled_payout.scheduled_at).toLocaleDateString()}</strong>.
+                  </>
+                )
               ) : (
                 <>
                   Your balance is on hold. Please <a href={Routes.support_index_path()}>contact support</a> for details.

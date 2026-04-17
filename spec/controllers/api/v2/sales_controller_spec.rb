@@ -615,7 +615,7 @@ describe Api::V2::SalesController do
 
         expect(response.parsed_body).to eq({
           success: false,
-          message: "The sale was unable to be modified."
+          message: Purchase::Refundable::ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
         }.as_json)
       end
 

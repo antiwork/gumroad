@@ -748,6 +748,23 @@ describe Api::V2::LinksController do
         expect(files.first["url"]).to be_present
       end
 
+      it "gracefully skips files with missing S3 objects" do
+        good_file = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf")
+        bad_file = create(:product_file, link: @product, url: "#{S3_BASE_URL}attachments/missing-guid/original/gone.zip")
+
+        bad_url = bad_file.url
+        allow_any_instance_of(ProductFile).to receive(:signed_url) do |product_file|
+          raise Aws::S3::Errors::NotFound.new(nil, "Not Found") if product_file.url == bad_url
+          "https://signed.example.com/test.pdf"
+        end
+
+        get :show, params: @params
+        expect(response).to be_successful
+        files = response.parsed_body["product"]["files"]
+        expect(files.length).to eq(1)
+        expect(files.first["id"]).to eq(good_file.external_id)
+      end
+
       it "includes raw URL for external link files" do
         create(:product_file, link: @product, url: "https://example.com/my-file.zip", filetype: "link")
 

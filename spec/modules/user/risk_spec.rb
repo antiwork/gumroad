@@ -14,6 +14,63 @@ describe User::Risk do
     end
   end
 
+  describe "suspension state machine callback" do
+    before { Feature.activate(:account_suspended_email) }
+
+    it "sends suspension email when suspended for TOS violation" do
+      user = create(:user)
+      user.flag_for_tos_violation!(author_name: "admin", bulk: true)
+
+      expect do
+        user.suspend_for_tos_violation!(author_name: "admin")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(user.id)
+    end
+
+    it "sends suspension email when suspended for fraud" do
+      user = create(:user)
+      user.flag_for_fraud!(author_name: "admin")
+
+      expect do
+        user.suspend_for_fraud!(author_name: "admin")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(user.id)
+    end
+
+    it "skips the generic suspension email when called with skip_generic_suspension_email" do
+      user = create(:user)
+      user.flag_for_tos_violation!(author_name: "admin", bulk: true)
+
+      expect do
+        user.suspend_for_tos_violation!(author_name: "admin", skip_generic_suspension_email: true)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :account_suspended)
+    end
+
+    it "does not send the generic suspension email when the feature flag is inactive" do
+      Feature.deactivate(:account_suspended_email)
+      user = create(:user)
+      user.flag_for_tos_violation!(author_name: "admin", bulk: true)
+
+      expect do
+        user.suspend_for_tos_violation!(author_name: "admin")
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :account_suspended)
+    end
+  end
+
+  describe "#suspend_due_to_stripe_risk" do
+    let(:user) { create(:user) }
+
+    before { Feature.activate(:account_suspended_email) }
+
+    it "sends the Stripe-risk-specific email and not the generic suspension email" do
+      expect do
+        user.suspend_due_to_stripe_risk
+      end.to have_enqueued_mail(ContactingCreatorMailer, :suspended_due_to_stripe_risk).with(user.id).once
+
+      expect do
+        create(:user).suspend_due_to_stripe_risk
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :account_suspended)
+    end
+  end
+
   describe "#log_suspension_time_to_mongo", :sidekiq_inline do
     let(:user) { create(:user) }
     let(:collection) { MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME] }

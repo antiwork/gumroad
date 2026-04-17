@@ -62,6 +62,20 @@ describe Api::V2::CoversController do
         expect(body["message"]).to eq("The signed_blob_id is invalid or expired.")
       end
 
+      it "returns a descriptive error for an unsupported file type" do
+        blob = ActiveStorage::Blob.create_and_upload!(
+          io: Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "webp_image.webp"), "image/webp"),
+          filename: "webp_image.webp"
+        )
+        blob.analyze
+
+        post @action, params: @params.merge(signed_blob_id: blob.signed_id)
+
+        body = response.parsed_body
+        expect(body["success"]).to be(false)
+        expect(body["message"]).to eq("Cover must be an image (JPEG, PNG, GIF) or a video.")
+      end
+
       it "returns the correct main_cover_id when covers already exist" do
         existing_cover = create(:asset_preview, link: @product)
 

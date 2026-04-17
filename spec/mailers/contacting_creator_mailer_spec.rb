@@ -1979,6 +1979,67 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "#account_suspended" do
+    let(:seller) { create(:named_seller) }
+
+    it "has the correct subject and body" do
+      mail = ContactingCreatorMailer.account_suspended(seller.id)
+
+      expect(mail.to).to eq([seller.email])
+      expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
+      expect(mail.subject).to eq("Your Gumroad account has been suspended")
+
+      expect(mail.body.encoded).to include("Your Gumroad account has been suspended for a policy violation.")
+      expect(mail.body.encoded).to include("contact our support team")
+      expect(mail.body.encoded).to include("reply to this email")
+      expect(mail.body.encoded).to include("The Gumroad team")
+    end
+
+    context "when the seller has a pending scheduled payout" do
+      it "includes scheduled payout amount and chargeback disclaimer" do
+        create(:scheduled_payout, user: seller, action: "payout", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 150_00)
+
+        mail = ContactingCreatorMailer.account_suspended(seller.id)
+
+        expect(mail.body.encoded).to include("You have a scheduled payout ($150) set for June 15, 2025.")
+        expect(mail.body.encoded).to include("If chargebacks are filed against any of your sales, your payout will be held for review and the amount may be reduced.")
+      end
+    end
+
+    context "when the seller has a pending scheduled refund" do
+      it "includes refund amount" do
+        create(:scheduled_payout, user: seller, action: "refund", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 75_50)
+
+        mail = ContactingCreatorMailer.account_suspended(seller.id)
+
+        expect(mail.body.encoded).to include("Your unpaid balance ($75.50) will be refunded back to your customers.")
+        expect(mail.body.encoded).to include("This is scheduled for June 15, 2025.")
+        expect(mail.body.encoded).not_to include("chargeback")
+      end
+    end
+
+    context "when the seller has a pending scheduled hold" do
+      it "includes hold amount" do
+        create(:scheduled_payout, user: seller, action: "hold", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 200_00)
+
+        mail = ContactingCreatorMailer.account_suspended(seller.id)
+
+        expect(mail.body.encoded).to include("Your unpaid balance ($200) is under review and will not be paid out at this time.")
+        expect(mail.body.encoded).not_to include("chargeback")
+      end
+    end
+
+    context "when the seller has no scheduled payout" do
+      it "does not include payout information or chargeback disclaimer" do
+        mail = ContactingCreatorMailer.account_suspended(seller.id)
+
+        expect(mail.body.encoded).not_to include("scheduled payout")
+        expect(mail.body.encoded).not_to include("refunded back")
+        expect(mail.body.encoded).not_to include("chargeback")
+      end
+    end
+  end
+
   describe "#flagged_for_explicit_nsfw_tos_violation" do
     let(:seller) { create(:named_seller) }
 

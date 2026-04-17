@@ -1,0 +1,16 @@
+<%= header_section("Your account has been suspended") %>
+<div>
+  <p>Your Gumroad account has been suspended for a policy violation. Your products have been taken down and your store is no longer accessible. You can still log in to your account.</p>
+  <% if @scheduled_payout %>
+    <% if @scheduled_payout.action == "refund" %>
+      <p>Your unpaid balance (<%= @payout_amount %>) will be refunded back to your customers. This is scheduled for <%= @scheduled_payout.scheduled_at.to_fs(:formatted_date_full_month) %>.</p>
+    <% elsif @scheduled_payout.action == "hold" %>
+      <p>Your unpaid balance (<%= @payout_amount %>) is under review and will not be paid out at this time.</p>
+    <% else %>
+      <p>You have a scheduled payout (<%= @payout_amount %>) set for <%= @scheduled_payout.scheduled_at.to_fs(:formatted_date_full_month) %>.</p>
+      <p>If chargebacks are filed against any of your sales, your payout will be held for review and the amount may be reduced.</p>
+    <% end %>
+  <% end %>
+  <p>If you believe this suspension was made in error, please <a href="<%= support_index_url %>">contact our support team</a> or reply to this email.</p>
+  <p>The Gumroad team</p>
+</div>

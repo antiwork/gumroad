@@ -281,7 +281,7 @@ export type PayoutsProps = {
   tax_center_enabled: boolean;
   scheduled_payout: {
     action: "refund" | "payout" | "hold";
-    status: "pending" | "flagged" | "held";
+    status: "pending" | "flagged" | "held" | "executed";
     scheduled_at: string;
     payout_amount_cents: number | null;
   } | null;

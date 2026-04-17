@@ -12,7 +12,8 @@ describe Iffy::User::BanService do
         expect_any_instance_of(User).to receive(:suspend_for_tos_violation!).with(
           author_name: "Iffy",
           content: "Banned for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} (General non-compliance)",
-          bulk: true
+          bulk: true,
+          skip_generic_suspension_email: true
         ).and_call_original
 
         expect do

@@ -259,6 +259,25 @@ describe Product::Caching do
             expect(CacheProductDataWorker).to have_enqueued_sidekiq_job(product.id)
           end
         end
+
+        context "when Elasticsearch is unavailable" do
+          it "returns default values instead of raising" do
+            allow(product).to receive(:successful_sales_count).and_raise(
+              Elasticsearch::Transport::Transport::Errors::NotFound.new("[404] no such index [purchases]")
+            )
+
+            result = described_class.dashboard_collection_data([product], cache: true) { |p| { "id" => p.id } }
+
+            expect(result).to contain_exactly({
+                                                "id" => product.id,
+                                                "monthly_recurring_revenue" => 0.0,
+                                                "remaining_for_sale_count" => 100,
+                                                "revenue_pending" => product.revenue_pending.to_f,
+                                                "successful_sales_count" => 0,
+                                                "total_usd_cents" => 0.0,
+                                              })
+          end
+        end
       end
 
       context "when multiple products exist" do

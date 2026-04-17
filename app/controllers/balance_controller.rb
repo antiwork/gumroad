@@ -30,7 +30,7 @@ class BalanceController < Sellers::BaseController
     def scheduled_payout_props
       return nil if !current_seller.suspended?
 
-      sp = current_seller.scheduled_payouts.where(status: %w[pending flagged held]).order(id: :desc).first
+      sp = current_seller.scheduled_payouts.where(status: %w[pending flagged held executed]).order(id: :desc).first
       return nil if sp.nil?
 
       {
