@@ -145,6 +145,10 @@ const SuspendUsers = () => {
             </div>
           ) : null}
         </div>
+        <small>
+          Only applied to users with an unpaid balance. Users with a zero balance are suspended but no scheduled payout
+          is created.
+        </small>
 
         <Button type="submit" color="primary">
           Suspend users
