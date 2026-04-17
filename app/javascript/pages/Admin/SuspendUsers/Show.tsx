@@ -117,38 +117,40 @@ const SuspendUsers = () => {
           onChange={setAdditionalNotes}
         />
 
-        <div className="flex items-end gap-2">
-          <div className="flex flex-1 flex-col gap-2">
-            <Label htmlFor="scheduled_payout_action">Balance action</Label>
-            <Select
-              id="scheduled_payout_action"
-              name="scheduled_payout[action]"
-              value={form.data.scheduled_payout.action}
-              onChange={setPayoutAction}
-            >
-              <option value="payout">Payout after delay</option>
-              <option value="refund">Refund purchases</option>
-              <option value="hold">Hold (manual release)</option>
-            </Select>
-          </div>
-          {form.data.scheduled_payout.action !== "hold" ? (
-            <div className="flex w-24 flex-col gap-2">
-              <Label htmlFor="scheduled_payout_delay">Delay (days)</Label>
-              <Input
-                id="scheduled_payout_delay"
-                type="number"
-                name="scheduled_payout[delay_days]"
-                min={0}
-                value={form.data.scheduled_payout.delay_days}
-                onChange={setPayoutDelayDays}
-              />
+        <div className="flex flex-col gap-2">
+          <div className="flex items-end gap-2">
+            <div className="flex flex-1 flex-col gap-2">
+              <Label htmlFor="scheduled_payout_action">Balance action</Label>
+              <Select
+                id="scheduled_payout_action"
+                name="scheduled_payout[action]"
+                value={form.data.scheduled_payout.action}
+                onChange={setPayoutAction}
+              >
+                <option value="payout">Payout after delay</option>
+                <option value="refund">Refund purchases</option>
+                <option value="hold">Hold (manual release)</option>
+              </Select>
             </div>
-          ) : null}
+            {form.data.scheduled_payout.action !== "hold" ? (
+              <div className="flex w-24 flex-col gap-2">
+                <Label htmlFor="scheduled_payout_delay">Delay (days)</Label>
+                <Input
+                  id="scheduled_payout_delay"
+                  type="number"
+                  name="scheduled_payout[delay_days]"
+                  min={0}
+                  value={form.data.scheduled_payout.delay_days}
+                  onChange={setPayoutDelayDays}
+                />
+              </div>
+            ) : null}
+          </div>
+          <small>
+            Only applied to users with an unpaid balance. Users with a zero balance are suspended but no scheduled
+            payout is created.
+          </small>
         </div>
-        <small>
-          Only applied to users with an unpaid balance. Users with a zero balance are suspended but no scheduled payout
-          is created.
-        </small>
 
         <Button type="submit" color="primary">
           Suspend users
