@@ -215,7 +215,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   def account_suspended
     scheduled_payout = ScheduledPayout.pending.last
     user_id = scheduled_payout&.user_id || User.last&.id
-    ContactingCreatorMailer.account_suspended(user_id)
+    ContactingCreatorMailer.account_suspended(user_id, scheduled_payout&.id)
   end
 
   private

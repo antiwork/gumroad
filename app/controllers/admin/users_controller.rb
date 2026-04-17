@@ -131,7 +131,16 @@ class Admin::UsersController < Admin::BaseController
 
   def suspend_for_fraud
     unless @user.suspended?
-      @user.suspend_for_fraud!(author_id: current_user.id)
+      # If we're going to create a scheduled payout as part of this
+      # suspension, skip the generic suspension email fired from the
+      # state-machine callback and send a payout-aware email ourselves
+      # *after* creating the record, so the email references the exact
+      # scheduled payout created here (not an unrelated pending record).
+      has_scheduled_payout_params = params.dig(:scheduled_payout, :action).present?
+      @user.suspend_for_fraud!(
+        author_id: current_user.id,
+        skip_generic_suspension_email: has_scheduled_payout_params
+      )
       suspension_note = params.dig(:suspend_for_fraud, :suspension_note).presence
       if suspension_note
         @user.comments.create!(
@@ -141,7 +150,10 @@ class Admin::UsersController < Admin::BaseController
           content: suspension_note
         )
       end
-      create_scheduled_payout_if_requested
+      scheduled_payout = create_scheduled_payout_if_requested
+      if has_scheduled_payout_params && Feature.active?(:account_suspended_email)
+        ContactingCreatorMailer.account_suspended(@user.id, scheduled_payout&.id).deliver_later
+      end
     end
     render json: { success: true }
   rescue => e
@@ -237,6 +249,8 @@ class Admin::UsersController < Admin::BaseController
         comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
         content: "Scheduled #{scheduled_payout.action} for #{scheduled_payout.scheduled_at.to_fs(:formatted_date_full_month)} (#{scheduled_payout.delay_days} day delay)"
       )
+
+      scheduled_payout
     end
 
     def mass_transfer_purchases_params

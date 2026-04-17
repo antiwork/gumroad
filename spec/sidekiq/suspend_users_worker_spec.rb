@@ -112,6 +112,35 @@ describe SuspendUsersWorker do
         expect(not_reviewed_user.scheduled_payouts.count).to eq(0)
         expect(not_reviewed_user.comments.with_type_payout_note.count).to eq(0)
       end
+
+      context "suspension email" do
+        before { Feature.activate(:account_suspended_email) }
+        after { Feature.deactivate(:account_suspended_email) }
+
+        it "sends the account_suspended email with the scheduled_payout id created in this run (not an unrelated pending record)" do
+          # Stale pending payout from an earlier, unrelated flow on the same user.
+          stale = create(:scheduled_payout, user: not_reviewed_user, action: "payout", payout_amount_cents: 999_99, scheduled_at: Date.parse("2025-06-15"))
+
+          captured_args = []
+          mail = double("mail", deliver_later: true)
+          allow(ContactingCreatorMailer).to receive(:account_suspended) do |*args|
+            captured_args << args
+            mail
+          end
+
+          described_class.new.perform(admin_user.id, [not_reviewed_user.id], reason, additional_notes, scheduled_payout)
+
+          created = not_reviewed_user.reload.scheduled_payouts.where.not(id: stale.id).last
+          expect(created).to be_present
+
+          # The email must be called with the id of the scheduled_payout created
+          # in this run, never with the stale pre-existing payout id, and never
+          # without any id (which would suppress details safely but would also
+          # mean the explicit post-create email path did not run as intended).
+          expect(captured_args).to include([not_reviewed_user.id, created.id])
+          expect(captured_args).not_to include([not_reviewed_user.id, stale.id])
+        end
+      end
     end
   end
 end

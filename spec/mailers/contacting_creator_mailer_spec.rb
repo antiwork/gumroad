@@ -1995,22 +1995,22 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include("The Gumroad team")
     end
 
-    context "when the seller has a pending scheduled payout" do
+    context "when a scheduled payout id is passed" do
       it "includes scheduled payout amount and chargeback disclaimer" do
-        create(:scheduled_payout, user: seller, action: "payout", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 150_00)
+        scheduled_payout = create(:scheduled_payout, user: seller, action: "payout", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 150_00)
 
-        mail = ContactingCreatorMailer.account_suspended(seller.id)
+        mail = ContactingCreatorMailer.account_suspended(seller.id, scheduled_payout.id)
 
         expect(mail.body.encoded).to include("You have a scheduled payout ($150) set for June 15, 2025.")
         expect(mail.body.encoded).to include("If chargebacks are filed against any of your sales, your payout will be held for review and the amount may be reduced.")
       end
     end
 
-    context "when the seller has a pending scheduled refund" do
+    context "when a scheduled refund id is passed" do
       it "includes refund amount" do
-        create(:scheduled_payout, user: seller, action: "refund", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 75_50)
+        scheduled_payout = create(:scheduled_payout, user: seller, action: "refund", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 75_50)
 
-        mail = ContactingCreatorMailer.account_suspended(seller.id)
+        mail = ContactingCreatorMailer.account_suspended(seller.id, scheduled_payout.id)
 
         expect(mail.body.encoded).to include("Your unpaid balance ($75.50) will be refunded back to your customers.")
         expect(mail.body.encoded).to include("This is scheduled for June 15, 2025.")
@@ -2018,24 +2018,63 @@ describe ContactingCreatorMailer do
       end
     end
 
-    context "when the seller has a pending scheduled hold" do
+    context "when a scheduled hold id is passed" do
       it "includes hold amount" do
-        create(:scheduled_payout, user: seller, action: "hold", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 200_00)
+        scheduled_payout = create(:scheduled_payout, user: seller, action: "hold", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 200_00)
 
-        mail = ContactingCreatorMailer.account_suspended(seller.id)
+        mail = ContactingCreatorMailer.account_suspended(seller.id, scheduled_payout.id)
 
         expect(mail.body.encoded).to include("Your unpaid balance ($200) is under review and will not be paid out at this time.")
         expect(mail.body.encoded).not_to include("chargeback")
       end
     end
 
-    context "when the seller has no scheduled payout" do
+    context "when no scheduled payout id is passed" do
       it "does not include payout information or chargeback disclaimer" do
         mail = ContactingCreatorMailer.account_suspended(seller.id)
 
         expect(mail.body.encoded).not_to include("scheduled payout")
         expect(mail.body.encoded).not_to include("refunded back")
         expect(mail.body.encoded).not_to include("chargeback")
+      end
+
+      it "does not leak an unrelated pending scheduled payout that exists on the seller" do
+        # Regression for https://github.com/antiwork/gumroad/pull/4543 — the
+        # mailer previously fell back to `seller.scheduled_payouts.pending.last`
+        # which could disclose financial details of an arbitrary pending record
+        # (e.g. a routine pre-existing payout) in a suspension email.
+        create(:scheduled_payout, user: seller, action: "payout", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 999_99)
+
+        mail = ContactingCreatorMailer.account_suspended(seller.id)
+
+        expect(mail.body.encoded).not_to include("$999.99")
+        expect(mail.body.encoded).not_to include("June 15, 2025")
+        expect(mail.body.encoded).not_to include("scheduled payout")
+        expect(mail.body.encoded).not_to include("chargeback")
+      end
+    end
+
+    context "when the passed scheduled payout id does not match the seller" do
+      it "does not render any payout details (cross-user id is ignored)" do
+        other_seller = create(:user)
+        other_sellers_payout = create(:scheduled_payout, user: other_seller, action: "payout", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 123_45)
+
+        mail = ContactingCreatorMailer.account_suspended(seller.id, other_sellers_payout.id)
+
+        expect(mail.body.encoded).not_to include("$123.45")
+        expect(mail.body.encoded).not_to include("June 15, 2025")
+        expect(mail.body.encoded).not_to include("scheduled payout")
+      end
+    end
+
+    context "when the passed scheduled payout id refers to a non-pending record" do
+      it "does not render any payout details" do
+        non_pending = create(:scheduled_payout, user: seller, action: "payout", status: "cancelled", scheduled_at: Date.parse("2025-06-15"), payout_amount_cents: 321_00)
+
+        mail = ContactingCreatorMailer.account_suspended(seller.id, non_pending.id)
+
+        expect(mail.body.encoded).not_to include("$321")
+        expect(mail.body.encoded).not_to include("scheduled payout")
       end
     end
   end

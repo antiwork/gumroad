@@ -398,5 +398,40 @@ describe Admin::UsersController, type: :controller, inertia: true do
       expect(scheduled_payout.action).to eq("hold")
       expect(scheduled_payout.delay_days).to eq(21)
     end
+
+    context "suspension email" do
+      before { Feature.activate(:account_suspended_email) }
+      after { Feature.deactivate(:account_suspended_email) }
+
+      it "sends the account_suspended email with the exact scheduled_payout id when one is created" do
+        mail = double("mail", deliver_later: true)
+        expect(ContactingCreatorMailer).to receive(:account_suspended) do |user_id, scheduled_payout_id|
+          expect(user_id).to eq(user.id)
+          expect(scheduled_payout_id).to eq(user.reload.scheduled_payouts.last.id)
+          mail
+        end
+
+        post :suspend_for_fraud, params: {
+          external_id: user.external_id,
+          scheduled_payout: { action: "payout", delay_days: "14" }
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "does not pass any scheduled_payout id (and so cannot leak an unrelated pending record) when no scheduled_payout params are sent" do
+        # A stale pending payout that is NOT related to this suspension flow.
+        create(:scheduled_payout, user: user, action: "payout", payout_amount_cents: 999_99, scheduled_at: Date.parse("2025-06-15"))
+
+        mail = double("mail", deliver_later: true)
+        # State-machine callback path: mailer is invoked with only the user id.
+        expect(ContactingCreatorMailer).to receive(:account_suspended).with(user.id).and_return(mail)
+        expect(ContactingCreatorMailer).not_to receive(:account_suspended).with(user.id, anything)
+
+        post :suspend_for_fraud, params: { external_id: user.external_id }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+    end
   end
 end
