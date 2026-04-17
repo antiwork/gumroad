@@ -101,7 +101,6 @@ Fix any issues before committing. CI does not auto-fix your code.
 - Use `product` instead of `link` in new code (in variable names, column names, comments, etc.)
 - Use `request` instead of `$.ajax` in new code
 - Use `buyer` and `seller` when naming variables instead of `customer` and `creator`
-- Avoid `unless`
 - Don't create new files in `app/modules/` as it is a legacy location. Prefer creating concerns in the right directory instead (eg: `app/controllers/concerns/`, `app/models/concerns/`, etc.)
 - Do not create methods ending in `_path` or `_url`. They might cause collisions with rails generated named route helpers in the future. Instead, use a module similar to `CustomDomainRouteBuilder`
 - Use Nano IDs to generate external/public IDs for new models.
