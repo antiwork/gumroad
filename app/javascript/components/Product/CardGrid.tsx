@@ -1,4 +1,5 @@
 import { Archive } from "@boxicons/react";
+import { range } from "lodash-es";
 import * as React from "react";
 
 import { getSearchResults, ProductFilter, SearchRequest, SearchResults } from "$app/data/search";
@@ -10,6 +11,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { NumberInput } from "$app/components/NumberInput";
+import { RatingStars } from "$app/components/RatingStars";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { CardContent, Card as UICard } from "$app/components/ui/Card";
@@ -121,7 +123,7 @@ type Props = {
   pagination?: "scroll" | "button";
 };
 
-const FilterCheckboxes = ({
+export const FilterCheckboxes = ({
   selection,
   setSelection,
   filters,
@@ -160,6 +162,33 @@ const FilterCheckboxes = ({
     </>
   );
 };
+
+export const RatingFilterOptions = ({
+  rating,
+  onRatingChange,
+}: {
+  rating: number | undefined;
+  onRatingChange: (rating: number | undefined) => void;
+}) => (
+  <Fieldset role="group">
+    {range(4, 0).map((number) => (
+      <Label key={number} className="w-full">
+        <span className="flex shrink-0 items-center gap-1">
+          <RatingStars rating={number} />
+          and up
+        </span>
+        <Radio
+          wrapperClassName="ml-auto"
+          value={number}
+          aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
+          checked={number === rating}
+          readOnly
+          onClick={() => onRatingChange(rating === number ? undefined : number)}
+        />
+      </Label>
+    ))}
+  </Fieldset>
+);
 
 export const CardGrid = ({
   state,

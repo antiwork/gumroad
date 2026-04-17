@@ -1,6 +1,5 @@
 import { ArrowLeft, ArrowRight, X } from "@boxicons/react";
 import { Deferred, Link, router, usePage } from "@inertiajs/react";
-import { range } from "lodash-es";
 import * as React from "react";
 import { cast, is } from "ts-safe-cast";
 
@@ -12,19 +11,17 @@ import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { discoverTitleGenerator, Taxonomy } from "$app/utils/discover";
 
+import { MobileFilterBar } from "$app/components/Discover/MobileFilterBar";
 import { Layout } from "$app/components/Discover/Layout";
 import { RecommendedWishlists } from "$app/components/Discover/RecommendedWishlists";
 import { HomeFooter } from "$app/components/Home/Shared/Footer";
 import { HorizontalCard } from "$app/components/Product/Card";
-import { CardGrid, useSearchReducer } from "$app/components/Product/CardGrid";
-import { RatingStars } from "$app/components/RatingStars";
+import { CardGrid, RatingFilterOptions, useSearchReducer } from "$app/components/Product/CardGrid";
 import { Skeleton } from "$app/components/Skeleton";
 import { CardContent } from "$app/components/ui/Card";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
-import { Fieldset } from "$app/components/ui/Fieldset";
-import { Label } from "$app/components/ui/Label";
-import { Radio } from "$app/components/ui/Radio";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
+import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
 import { CardWishlist } from "$app/components/Wishlist/Card";
 
@@ -325,6 +322,13 @@ function DiscoverIndex() {
     dispatch({ type: "set-params", params: { ...state.params, from: undefined, ...newParams } });
 
   const hasOfferCode = !!state.params.offer_code;
+  const isDesktop = useIsAboveBreakpoint("lg");
+
+  const filterDefaults: SearchRequest = {
+    taxonomy: state.params.taxonomy,
+    query: state.params.query,
+    sort: state.params.query || hasOfferCode ? "default" : state.params.sort,
+  };
 
   const recommendedProducts = props.recommended_products ?? [];
   const isCuratedProducts = (() => {
@@ -363,6 +367,18 @@ function DiscoverIndex() {
         onTaxonomyChange={handleTaxonomyChange}
         query={state.params.query}
         setQuery={(query) => dispatch({ type: "set-params", params: { query, taxonomy: taxonomyPath } })}
+        stickyBar={
+          !isDesktop ? (
+            <MobileFilterBar
+              state={state}
+              dispatchAction={dispatch}
+              defaults={filterDefaults}
+              currencyCode={props.currency_code}
+              hideSort={!state.params.query && !hasOfferCode}
+              hasOfferCode={hasOfferCode}
+            />
+          ) : undefined
+        }
       >
         {showBlackFridayHero ? (
           <header className="relative flex flex-col items-center justify-center">
@@ -413,7 +429,7 @@ function DiscoverIndex() {
             </div>
           </header>
         ) : null}
-        <div className="grid gap-16! px-4 py-16 lg:ps-16 lg:pe-16">
+        <div className="grid gap-16! px-4 pt-2 pb-16 lg:pt-16 lg:ps-16 lg:pe-16">
           {showRecommendationSections ? (
             <Deferred data={["recommended_products"]} fallback={<ProductsCarouselSkeleton />}>
               {recommendedProducts.length ? (
@@ -475,63 +491,44 @@ function DiscoverIndex() {
               state={state}
               dispatchAction={dispatch}
               currencyCode={props.currency_code}
+              hideFilters={!isDesktop}
               hideSort={!state.params.query && !hasOfferCode}
-              defaults={{
-                taxonomy: state.params.taxonomy,
-                query: state.params.query,
-                sort: state.params.query || hasOfferCode ? "default" : state.params.sort,
-              }}
+              defaults={filterDefaults}
               appendFilters={
-                <>
-                  <CardContent asChild details>
-                    <Details>
-                      <DetailsToggle chevronPosition="right" className="grow">
-                        Rating
-                      </DetailsToggle>
-                      <Fieldset role="group">
-                        {range(4, 0).map((number) => (
-                          <Label key={number} className="w-full">
-                            <span className="flex shrink-0 items-center gap-1">
-                              <RatingStars rating={number} />
-                              and up
-                            </span>
-                            <Radio
-                              wrapperClassName="ml-auto"
-                              value={number}
-                              aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
-                              checked={number === state.params.rating}
-                              readOnly
-                              onClick={() =>
-                                updateParams(
-                                  state.params.rating === number ? { rating: undefined } : { rating: number },
-                                )
-                              }
-                            />
-                          </Label>
-                        ))}
-                      </Fieldset>
-                    </Details>
-                  </CardContent>
-                  {hasOfferCode ? (
+                isDesktop ? (
+                  <>
                     <CardContent asChild details>
-                      <Details open>
+                      <Details>
                         <DetailsToggle chevronPosition="right" className="grow">
-                          Offer code
+                          Rating
                         </DetailsToggle>
-                        <div className="flex items-center justify-between gap-2 py-1">
-                          <span>{props.black_friday_offer_code}</span>
-                          <button
-                            onClick={() => updateParams({ offer_code: undefined })}
-                            className="flex cursor-pointer items-center justify-center all-unset"
-                            aria-label="Remove offer code filter"
-                          >
-                            <X className="size-4" />
-                          </button>
-                        </div>
+                        <RatingFilterOptions
+                          rating={state.params.rating}
+                          onRatingChange={(rating) => updateParams({ rating })}
+                        />
                       </Details>
                     </CardContent>
-                  ) : null}
-                </>
+                    {hasOfferCode ? (
+                      <CardContent asChild details>
+                        <Details open>
+                          <DetailsToggle chevronPosition="right" className="grow">
+                            Offer code
+                          </DetailsToggle>
+                          <div className="flex items-center justify-between gap-2 py-1">
+                            <span>{props.black_friday_offer_code}</span>
+                            <button
+                              onClick={() => updateParams({ offer_code: undefined })}
+                              className="flex cursor-pointer items-center justify-center all-unset"
+                              aria-label="Remove offer code filter"
+                            >
+                              <X className="size-4" />
+                            </button>
+                          </div>
+                        </Details>
+                      </CardContent>
+                    ) : null}
+                  </>
+                ) : undefined
               }
               pagination="button"
             />
