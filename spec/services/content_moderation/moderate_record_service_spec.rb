@@ -58,7 +58,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
         service.perform
 
         expect(product.reload).not_to be_is_unpublished_by_admin
-        expect(product.reload).to be_content_moderated
+        expect(product.reload).not_to be_content_moderated
       end
 
       it "does not republish admin-unpublished products that were not content moderated" do
@@ -93,7 +93,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
       it "marks suspended creators compliant once the flagged count drops below the threshold" do
         product.unpublish!(is_unpublished_by_admin: true)
         product.update_attribute(:content_moderated, true)
-        seller.suspend_for_tos_violation!(author_name: "Admin")
+        seller.suspend_for_tos_violation!(author_name: "ContentModeration")
         allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_SUSPENSION_THRESHOLD").and_return("1")
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
 

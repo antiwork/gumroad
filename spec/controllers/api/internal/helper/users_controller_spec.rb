@@ -170,6 +170,8 @@ describe Api::Internal::Helper::UsersController do
     end
 
     context "when appeal is successfully created" do
+      before { user.flag_for_tos_violation!(author_name: "ContentModeration", content: "Flagged for testing") }
+
       it "creates a comment and returns success" do
         expect do
           post :create_appeal, params: { email: user.email, reason: "I believe this was a mistake" }
