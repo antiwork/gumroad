@@ -163,19 +163,33 @@ class ContentModeration::ModerateRecordService
       return unless record.content_moderated?
       return unless record.is_unpublished_by_admin?
 
+      update_flag(record, :content_moderated, false)
+
+      # Don't republish if the user is suspended for fraud (Stripe-risk) — only clear the CM flag
+      return if user.suspended_for_fraud? || user.flagged_for_fraud?
+
       record.is_unpublished_by_admin = false
       with_skipped_content_moderation_check(record) { record.publish! }
-      update_flag(record, :content_moderated, false)
     end
 
     def mark_post_compliant
-      return if record.published?
+      # If the post was manually re-published but still has stale CM flags, clear them
+      if record.published? && record.content_moderated?
+        update_flag(record, :content_moderated, false)
+        record.update_columns(is_unpublished_by_admin: false) if record.is_unpublished_by_admin?
+        return
+      end
+
       return unless record.content_moderated?
       return unless record.is_unpublished_by_admin?
 
+      update_flag(record, :content_moderated, false)
+
+      # Don't republish if the user is suspended for fraud
+      return if user.suspended_for_fraud? || user.flagged_for_fraud?
+
       record.is_unpublished_by_admin = false
       with_skipped_content_moderation_check(record) { record.publish! }
-      update_flag(record, :content_moderated, false)
     end
 
     def mark_profile_compliant

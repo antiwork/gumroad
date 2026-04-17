@@ -61,6 +61,18 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
         expect(product.reload).not_to be_content_moderated
       end
 
+      it "clears content_moderated but does not republish when user is suspended for fraud" do
+        product.unpublish!(is_unpublished_by_admin: true)
+        product.update_attribute(:content_moderated, true)
+        seller.flag_for_fraud!(author_name: "FraudOps")
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+
+        service.perform
+
+        expect(product.reload).not_to be_content_moderated
+        expect(product.reload).to be_is_unpublished_by_admin
+      end
+
       it "does not republish admin-unpublished products that were not content moderated" do
         product.unpublish!(is_unpublished_by_admin: true)
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
@@ -149,6 +161,21 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
         expect(post.reload).to be_published
         expect(post.reload).not_to be_is_unpublished_by_admin
         expect(post.reload).not_to be_content_moderated
+      end
+
+      it "clears stale CM flags on manually re-published posts" do
+        post.publish!
+        post.unpublish!(is_unpublished_by_admin: true)
+        post.update_attribute(:content_moderated, true)
+        # Simulate creator manually re-publishing the post
+        post.publish!
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+
+        service.perform
+
+        expect(post.reload).to be_published
+        expect(post.reload).not_to be_content_moderated
+        expect(post.reload).not_to be_is_unpublished_by_admin
       end
 
       it "does not republish admin-unpublished posts that were not content moderated" do

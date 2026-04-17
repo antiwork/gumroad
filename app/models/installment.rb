@@ -947,8 +947,8 @@ class Installment < ApplicationRecord
     end
 
     def trigger_content_moderation
-      return unless published?
       return unless saved_change_to_name? || saved_change_to_message?
+      return unless published? || (content_moderated? && is_unpublished_by_admin? && !saved_change_to_is_unpublished_by_admin?)
 
       ContentModeration::ModeratePostJob.perform_async(id)
     end
