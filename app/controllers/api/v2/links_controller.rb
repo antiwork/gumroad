@@ -242,10 +242,12 @@ class Api::V2::LinksController < Api::V2::BaseController
       if !params[:files].is_a?(Array) || params[:files].any? { |f| !f.respond_to?(:key?) }
         return render_response(false, message: "files must be an array of file objects.")
       end
+      if params[:files].any? { |f| f.key?(:modified) }
+        return render_response(false, message: "'modified' is not an accepted parameter on files[]; it is an internal save-path flag.")
+      end
       existing_files_by_id = @product.product_files.alive.index_by(&:external_id)
       new_files = []
       params[:files].each do |f|
-        f.delete(:modified) if f.respond_to?(:delete)
         existing = f[:id].present? ? existing_files_by_id[f[:id]] : nil
         if existing
           if f[:url].blank?
@@ -321,11 +323,11 @@ class Api::V2::LinksController < Api::V2::BaseController
         flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
 
         unless @normalized_files.nil?
-          keep_only_ids = @normalized_files.filter_map { |f| f[:id] if f[:modified].to_s == "false" }
-          if keep_only_ids.any?
+          referenced_existing_ids = @normalized_files.filter_map { |f| f[:id] if f[:id].present? }
+          if referenced_existing_ids.any?
             locked_alive_ids = @product.product_files.alive.lock.map(&:external_id)
-            missing_ids = keep_only_ids - locked_alive_ids
-            raise Link::LinkInvalid, "Cannot keep file(s) #{missing_ids.join(', ')}: they were deleted concurrently. Retry with the current file list." if missing_ids.any?
+            missing_ids = referenced_existing_ids - locked_alive_ids
+            raise Link::LinkInvalid, "File(s) #{missing_ids.join(', ')} no longer exist; they may have been deleted by a concurrent request. Retry with the current file list." if missing_ids.any?
           end
 
           validate_file_embed_conflicts!(skip_variant_embeds: flag_changed && @product.has_same_rich_content_for_all_variants? && !@normalized_rich_content.nil?)

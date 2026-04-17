@@ -1388,16 +1388,16 @@ describe Api::V2::LinksController do
         expect(file.reload.display_name).to eq("Old")
       end
 
-      it "ignores client-supplied modified flag so partial updates with a canonical url still apply" do
+      it "rejects client-supplied modified flag on files[] entries" do
         existing_file = create(:product_file, link: @product, display_name: "Old")
-        Aws::S3::Resource.new.bucket(S3_BUCKET).object(existing_file.s3_key).put(body: "test content")
 
         put @action, params: @params.merge(files: [
                                              { id: existing_file.external_id, url: existing_file.url, modified: "false", display_name: "New" }
                                            ]), as: :json
 
-        expect(response.parsed_body["success"]).to be(true)
-        expect(existing_file.reload.display_name).to eq("New")
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("modified")
+        expect(existing_file.reload.display_name).to eq("Old")
       end
 
       it "preserves existing subtitle tracks when id-only files[] entry keeps a video file unchanged" do
@@ -1411,7 +1411,7 @@ describe Api::V2::LinksController do
         expect(subtitle.reload.alive?).to be(true)
       end
 
-      it "fails id-only keep requests if the file was deleted concurrently instead of resurrecting it" do
+      it "fails requests that reference a file deleted concurrently instead of resurrecting it" do
         file = create(:product_file, link: @product)
         original_external_id = file.external_id
 
@@ -1427,7 +1427,7 @@ describe Api::V2::LinksController do
         put @action, params: @params.merge(files: [{ id: original_external_id }]), as: :json
 
         expect(response.parsed_body["success"]).to be(false)
-        expect(response.parsed_body["message"]).to include("deleted concurrently")
+        expect(response.parsed_body["message"]).to include("no longer exist")
         expect(ProductFile.where(link: @product).count).to eq(1)
       end
 
