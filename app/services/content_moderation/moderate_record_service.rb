@@ -165,8 +165,9 @@ class ContentModeration::ModerateRecordService
 
       update_flag(record, :content_moderated, false)
 
-      # Don't republish if the user is suspended for fraud (Stripe-risk) — only clear the CM flag
-      return if user.suspended_for_fraud? || user.flagged_for_fraud?
+      # Don't republish if the user is suspended/flagged for any non-CM reason
+      return if user.suspended? && !suspended_by_content_moderation?
+      return if user.flagged_for_fraud?
 
       record.is_unpublished_by_admin = false
       with_skipped_content_moderation_check(record) { record.publish! }
@@ -185,8 +186,9 @@ class ContentModeration::ModerateRecordService
 
       update_flag(record, :content_moderated, false)
 
-      # Don't republish if the user is suspended for fraud
-      return if user.suspended_for_fraud? || user.flagged_for_fraud?
+      # Don't republish if the user is suspended/flagged for any non-CM reason
+      return if user.suspended? && !suspended_by_content_moderation?
+      return if user.flagged_for_fraud?
 
       record.is_unpublished_by_admin = false
       with_skipped_content_moderation_check(record) { record.publish! }

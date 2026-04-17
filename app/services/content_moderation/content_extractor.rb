@@ -9,7 +9,8 @@ class ContentModeration::ContentExtractor
   Result = Struct.new(:text, :image_urls, keyword_init: true)
 
   def extract_from_product(product, text_only: false)
-    text = "Name: #{product.name} Description: #{product.description} " + rich_content_text(product.alive_rich_contents)
+    description_text = Nokogiri::HTML(product.description.to_s).text
+    text = "Name: #{product.name} Description: #{description_text} " + rich_content_text(product.alive_rich_contents)
     image_urls = text_only ? [] : product_image_urls(product)
     Result.new(text: text, image_urls: image_urls)
   end

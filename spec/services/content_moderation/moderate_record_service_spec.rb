@@ -61,7 +61,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
         expect(product.reload).not_to be_content_moderated
       end
 
-      it "clears content_moderated but does not republish when user is suspended for fraud" do
+      it "clears content_moderated but does not republish when user is flagged for fraud" do
         product.unpublish!(is_unpublished_by_admin: true)
         product.update_attribute(:content_moderated, true)
         seller.flag_for_fraud!(author_name: "FraudOps")
@@ -71,6 +71,19 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
         expect(product.reload).not_to be_content_moderated
         expect(product.reload).to be_is_unpublished_by_admin
+      end
+
+      it "clears content_moderated but does not republish when user is suspended by Stripe risk" do
+        product.unpublish!(is_unpublished_by_admin: true)
+        product.update_attribute(:content_moderated, true)
+        seller.suspend_for_tos_violation!(author_name: "stripe_risk", content: "Stripe risk suspension", bulk: true)
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+
+        service.perform
+
+        expect(product.reload).not_to be_content_moderated
+        expect(product.reload).to be_is_unpublished_by_admin
+        expect(seller.reload).to be_suspended_for_tos_violation
       end
 
       it "does not republish admin-unpublished products that were not content moderated" do
