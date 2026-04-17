@@ -21,7 +21,7 @@ class ContentModeration::ModerateRecordService
     content = extract_content(text_only: @text_only)
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
 
-    results = run_strategies(content)
+    results = run_publish_check_strategies(content)
     flagged_results = results.select { |r| r.status == "flagged" }
 
     if flagged_results.any?
@@ -94,6 +94,10 @@ class ContentModeration::ModerateRecordService
       threads.map(&:value)
     end
 
+    def run_publish_check_strategies(content)
+      [ContentModeration::Strategies::BlocklistStrategy.new(text: content.text, image_urls: content.image_urls).perform]
+    end
+
     def handle_flagged(reasoning)
       reasoning_text = reasoning.join("; ")
 
@@ -140,13 +144,18 @@ class ContentModeration::ModerateRecordService
 
     def flag_profile(reasoning)
       return if user.vip_creator?
-      return if !user.can_flag_for_tos_violation?
 
-      ActiveRecord::Base.transaction do
-        reason = "Content policy violation"
-        user.update!(tos_violation_reason: reason)
-        comment_content = "Flagged for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} (#{reason})"
-        user.flag_for_tos_violation!(author_name: AUTHOR_NAME, content: comment_content, bulk: true)
+      user.with_lock do
+        user.reload
+        next if user.flagged_for_fraud? || user.suspended_for_fraud?
+        next unless user.can_flag_for_tos_violation?
+
+        ActiveRecord::Base.transaction do
+          reason = "Content policy violation"
+          user.update!(tos_violation_reason: reason)
+          comment_content = "Flagged for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} (#{reason})"
+          user.flag_for_tos_violation!(author_name: AUTHOR_NAME, content: comment_content, bulk: true)
+        end
       end
     end
 
@@ -184,11 +193,13 @@ class ContentModeration::ModerateRecordService
 
     def check_user_suspension_threshold
       return if user.vip_creator?
+      return if user.flagged_for_fraud?
       return if user.suspended?
 
       threshold = (GlobalConfig.get("CONTENT_MODERATION_SUSPENSION_THRESHOLD") || "1").to_i
       user.with_lock do
           user.reload
+          next if user.flagged_for_fraud?
           next if user.suspended?
 
           flagged_count = user_flagged_record_count
@@ -202,6 +213,7 @@ class ContentModeration::ModerateRecordService
     end
 
     def check_user_unsuspension
+      return if user.flagged_for_fraud?
       return if !user.suspended?
       return unless suspended_by_content_moderation?
       return if user.vip_creator?
@@ -209,6 +221,7 @@ class ContentModeration::ModerateRecordService
       threshold = (GlobalConfig.get("CONTENT_MODERATION_SUSPENSION_THRESHOLD") || "1").to_i
       user.with_lock do
         user.reload
+        next if user.flagged_for_fraud?
         next if !user.suspended?
         next unless suspended_by_content_moderation?
 

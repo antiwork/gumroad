@@ -24,6 +24,13 @@ describe Installment do
     end
   end
 
+  describe "flag mapping" do
+    it "reuses deprecated bit 2 for content_moderated" do
+      expect(described_class.flag_mapping["flags"][:content_moderated]).to eq(2)
+      expect(described_class.flag_mapping["flags"]).not_to have_key(:DEPRECATED_is_automated_installment)
+    end
+  end
+
   describe "#is_downloadable?" do
     it "returns false if post has no files" do
       expect(@installment.is_downloadable?).to eq(false)

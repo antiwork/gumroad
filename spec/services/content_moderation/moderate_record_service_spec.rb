@@ -90,6 +90,17 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
         expect(seller.tos_violation_reason).to eq("Content policy violation")
       end
 
+      it "does not overwrite flagged_for_fraud users with a tos suspension" do
+        seller.flag_for_fraud!(author_name: "FraudOps")
+        allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_SUSPENSION_THRESHOLD").and_return("1")
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "flagged", reasoning: ["blocked"])])
+        allow(service).to receive(:user_flagged_record_count).and_return(1)
+
+        service.perform
+
+        expect(seller.reload).to be_flagged_for_fraud
+      end
+
       it "marks suspended creators compliant once the flagged count drops below the threshold" do
         product.unpublish!(is_unpublished_by_admin: true)
         product.update_attribute(:content_moderated, true)
@@ -166,11 +177,21 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
       it "flags violating profiles" do
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "flagged", reasoning: ["blocked"])])
+        expect(user).to receive(:with_lock).at_least(:once).and_call_original
 
         service.perform
 
         expect(user.reload).to be_flagged_for_tos_violation
         expect(user.tos_violation_reason).to eq("Content policy violation")
+      end
+
+      it "does not overwrite flagged_for_fraud profiles" do
+        user.flag_for_fraud!(author_name: "FraudOps")
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "flagged", reasoning: ["blocked"])])
+
+        service.perform
+
+        expect(user.reload).to be_flagged_for_fraud
       end
 
       it "marks flagged profiles compliant when moderation passes" do
@@ -244,11 +265,8 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
     end
 
     it "returns passed: false with reasons when any strategy flags content" do
-      allow_any_instance_of(described_class).to receive(:run_strategies).and_return(
-        [
-          result_class.new(status: "compliant", reasoning: []),
-          result_class.new(status: "flagged", reasoning: ["policy violation"]),
-        ]
+      allow_any_instance_of(described_class).to receive(:run_publish_check_strategies).and_return(
+        [result_class.new(status: "flagged", reasoning: ["policy violation"])]
       )
 
       result = described_class.check(product, :product)
@@ -258,7 +276,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
     end
 
     it "returns passed: true when all strategies are compliant" do
-      allow_any_instance_of(described_class).to receive(:run_strategies).and_return(
+      allow_any_instance_of(described_class).to receive(:run_publish_check_strategies).and_return(
         [result_class.new(status: "compliant", reasoning: [])]
       )
 
@@ -270,7 +288,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
     it "does not take actions (record stays published, user stays compliant)" do
       seller = product.user
-      allow_any_instance_of(described_class).to receive(:run_strategies).and_return(
+      allow_any_instance_of(described_class).to receive(:run_publish_check_strategies).and_return(
         [result_class.new(status: "flagged", reasoning: ["bad"])]
       )
 
@@ -278,6 +296,16 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
       expect(product.reload).not_to be_is_unpublished_by_admin
       expect(seller.reload).not_to be_suspended
+    end
+
+    it "only runs the blocklist strategy for synchronous checks" do
+      blocklist_strategy = instance_double(ContentModeration::Strategies::BlocklistStrategy)
+      allow(blocklist_strategy).to receive(:perform).and_return(result_class.new(status: "compliant", reasoning: []))
+      allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:new).and_return(blocklist_strategy)
+      expect(ContentModeration::Strategies::ClassifierStrategy).not_to receive(:new)
+      expect(ContentModeration::Strategies::PromptStrategy).not_to receive(:new)
+
+      described_class.check(product, :product)
     end
   end
 

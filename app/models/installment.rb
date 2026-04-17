@@ -86,7 +86,7 @@ class Installment < ApplicationRecord
   validate :content_moderation_check, if: -> { publishing? && !skip_content_moderation_check }
 
   has_flags 1 => :is_unpublished_by_admin,
-            2 => :DEPRECATED_is_automated_installment,
+            2 => :content_moderated,
             3 => :DEPRECATED_stream_only,
             4 => :DEPRECATED_is_open_rate_tracking_enabled,
             5 => :DEPRECATED_is_click_rate_tracking_enabled,
@@ -96,7 +96,6 @@ class Installment < ApplicationRecord
             9 => :send_emails,
             10 => :ready_to_publish,
             11 => :allow_comments,
-            12 => :content_moderated,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
