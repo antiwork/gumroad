@@ -8,29 +8,33 @@ class ContentModeration::ContentExtractor
 
   Result = Struct.new(:text, :image_urls, keyword_init: true)
 
-  def extract_from_product(product)
+  def extract_from_product(product, text_only: false)
     text = "Name: #{product.name} Description: #{product.description} " + rich_content_text(product.alive_rich_contents)
-    image_urls = product_image_urls(product)
+    image_urls = text_only ? [] : product_image_urls(product)
     Result.new(text: text, image_urls: image_urls)
   end
 
-  def extract_from_post(installment)
+  def extract_from_post(installment, text_only: false)
     parsed_message = Nokogiri::HTML(installment.message)
     text = "Name: #{installment.name} Message: #{parsed_message.text}"
-    image_urls = parsed_message.css("img").filter_map { |img| img["src"] }
+    image_urls = text_only ? [] : parsed_message.css("img").filter_map { |img| img["src"] }
     Result.new(text: text, image_urls: image_urls)
   end
 
-  def extract_from_profile(user)
+  def extract_from_profile(user, text_only: false)
     rich_text_sections = SellerProfileRichTextSection.where(seller_id: user.id)
 
     text = "#{user.display_name} #{user.bio} #{profile_rich_text_content(rich_text_sections)}"
 
-    image_urls = rich_text_sections.flat_map do |section|
-      section.json_data.dig("text", "content")&.filter_map do |content|
-        content.dig("attrs", "src") if content["type"] == "image"
-      end
-    end.compact.reject(&:empty?)
+    image_urls = if text_only
+                   []
+                 else
+                   rich_text_sections.flat_map do |section|
+                     section.json_data.dig("text", "content")&.filter_map do |content|
+                       content.dig("attrs", "src") if content["type"] == "image"
+                     end
+                   end.compact.reject(&:empty?)
+                 end
 
     Result.new(text: text, image_urls: image_urls)
   end

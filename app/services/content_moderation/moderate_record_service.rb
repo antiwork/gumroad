@@ -18,8 +18,7 @@ class ContentModeration::ModerateRecordService
   def check
     return CheckResult.new(passed: true, reasons: []) unless moderation_enabled?
 
-    content = extract_content
-    content = ContentModeration::ContentExtractor::Result.new(text: content.text, image_urls: []) if @text_only
+    content = extract_content(text_only: @text_only)
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
 
     results = run_strategies(content)
@@ -64,15 +63,15 @@ class ContentModeration::ModerateRecordService
       rand(100) < percentage
     end
 
-    def extract_content
+    def extract_content(text_only: false)
       extractor = ContentModeration::ContentExtractor.new
       case entity_type
       when :product
-        extractor.extract_from_product(record)
+        extractor.extract_from_product(record, text_only: text_only)
       when :post
-        extractor.extract_from_post(record)
+        extractor.extract_from_post(record, text_only: text_only)
       when :profile
-        extractor.extract_from_profile(record)
+        extractor.extract_from_profile(record, text_only: text_only)
       end
     end
 
