@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class LoginsController < Devise::SessionsController
-  include OauthApplicationConfig, ValidateRecaptcha, InertiaRendering
+  include OauthApplicationConfig, InertiaRendering
 
   include PageMeta::Base
 
@@ -26,11 +26,6 @@ class LoginsController < Devise::SessionsController
   end
 
   def create
-    site_key = GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
-    if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key)
-      return redirect_with_login_error("Sorry, we could not verify the CAPTCHA. Please try again.")
-    end
-
     if params["user"].instance_of?(ActionController::Parameters)
       login_identifier = params["user"]["login_identifier"]
       password = params["user"]["password"]

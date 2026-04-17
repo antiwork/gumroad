@@ -12,7 +12,6 @@ class AuthPresenter
     {
       email: params[:email] || retrieve_team_invitation_email(params[:next]),
       application_name: application&.name,
-      recaptcha_site_key: GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"),
     }
   end
 

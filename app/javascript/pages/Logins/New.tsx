@@ -11,12 +11,10 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { useRecaptcha } from "$app/components/useRecaptcha";
 
 type PageProps = {
   email: string | null;
   application_name: string | null;
-  recaptcha_site_key: string | null;
   authenticity_token: string;
 };
 
@@ -26,16 +24,14 @@ type FormData = {
     password: string;
   };
   next: string | null;
-  "g-recaptcha-response": string | null;
   authenticity_token: string;
 };
 
 function LoginPage() {
-  const { email: initialEmail, application_name, recaptcha_site_key, authenticity_token } = usePage<PageProps>().props;
+  const { email: initialEmail, application_name, authenticity_token } = usePage<PageProps>().props;
 
   const url = new URL(useOriginalLocation());
   const next = url.searchParams.get("next");
-  const recaptcha = useRecaptcha({ siteKey: recaptcha_site_key });
   const uid = React.useId();
 
   const form = useForm<FormData>({
@@ -44,22 +40,12 @@ function LoginPage() {
       password: "",
     },
     next,
-    "g-recaptcha-response": null,
     authenticity_token,
   });
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    try {
-      const recaptchaResponse = recaptcha_site_key !== null ? await recaptcha.execute() : null;
-      form.transform((data) => ({
-        ...data,
-        "g-recaptcha-response": recaptchaResponse,
-      }));
-      form.post(Routes.login_path());
-    } catch {
-      // reCAPTCHA timed out or failed to initialize — silently abort the submission
-    }
+    form.post(Routes.login_path());
   };
 
   return (
@@ -67,7 +53,7 @@ function LoginPage() {
       header={<h1>{application_name ? `Connect ${application_name} to Gumroad` : "Log in"}</h1>}
       headerActions={<Link href={Routes.signup_path({ next })}>Sign up</Link>}
     >
-      <form onSubmit={(e) => void handleSubmit(e)}>
+      <form onSubmit={handleSubmit}>
         <SocialAuth />
         <Separator>
           <span>or</span>
@@ -109,7 +95,6 @@ function LoginPage() {
           </Button>
         </section>
       </form>
-      {recaptcha.container}
     </Layout>
   );
 }
