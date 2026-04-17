@@ -323,7 +323,8 @@ class Api::V2::LinksController < Api::V2::BaseController
         unless @normalized_files.nil?
           keep_only_ids = @normalized_files.filter_map { |f| f[:id] if f[:modified].to_s == "false" }
           if keep_only_ids.any?
-            missing_ids = keep_only_ids - @product.product_files.alive.map(&:external_id)
+            locked_alive_ids = @product.product_files.alive.lock.map(&:external_id)
+            missing_ids = keep_only_ids - locked_alive_ids
             raise Link::LinkInvalid, "Cannot keep file(s) #{missing_ids.join(', ')}: they were deleted concurrently. Retry with the current file list." if missing_ids.any?
           end
 
