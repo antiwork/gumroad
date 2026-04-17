@@ -101,6 +101,17 @@ describe SuspendUsersWorker do
 
         expect(not_reviewed_user.reload.scheduled_payouts.count).to eq(0)
       end
+
+      it "does not create a scheduled payout when the user has no unpaid balance" do
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(0)
+
+        described_class.new.perform(admin_user.id, [not_reviewed_user.id], reason, additional_notes, scheduled_payout)
+
+        not_reviewed_user.reload
+        expect(not_reviewed_user.suspended?).to be(true)
+        expect(not_reviewed_user.scheduled_payouts.count).to eq(0)
+        expect(not_reviewed_user.comments.with_type_payout_note.count).to eq(0)
+      end
     end
   end
 end

@@ -16,7 +16,10 @@ class SuspendUsersWorker
       user.suspend_for_tos_violation(author_id:, content:)
 
       next if was_suspended || !user.suspended?
-      create_scheduled_payout(user, author, scheduled_payout) if scheduled_payout.present? && scheduled_payout["action"].present?
+      next if scheduled_payout.blank? || scheduled_payout["action"].blank?
+      next if user.unpaid_balance_cents.to_i <= 0
+
+      create_scheduled_payout(user, author, scheduled_payout)
     end
   end
 
