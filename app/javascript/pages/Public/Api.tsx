@@ -27,6 +27,8 @@ import {GetPayouts, GetPayout, GetUpcomingPayouts} from "$app/components/ApiDocu
 import {
   GetProducts,
   GetProduct,
+  CreateProduct,
+  UpdateProduct,
   DeleteProduct,
   EnableProduct,
   DisableProduct,
@@ -94,6 +96,8 @@ export default function Api() {
               <ApiResource name="Products" id="products">
                 <GetProducts />
                 <GetProduct />
+                <CreateProduct />
+                <UpdateProduct />
                 <DeleteProduct />
                 <EnableProduct />
                 <DisableProduct />
