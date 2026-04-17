@@ -5,19 +5,21 @@ class ContentModeration::ModerateRecordService
 
   CheckResult = Struct.new(:passed, :reasons, keyword_init: true)
 
-  def self.check(record, entity_type)
-    new(record, entity_type).check
+  def self.check(record, entity_type, text_only: false)
+    new(record, entity_type, text_only: text_only).check
   end
 
-  def initialize(record, entity_type)
+  def initialize(record, entity_type, text_only: false)
     @record = record
     @entity_type = entity_type
+    @text_only = text_only
   end
 
   def check
     return CheckResult.new(passed: true, reasons: []) unless moderation_enabled?
 
     content = extract_content
+    content = ContentModeration::ContentExtractor::Result.new(text: content.text, image_urls: []) if @text_only
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
 
     results = run_strategies(content)

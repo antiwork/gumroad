@@ -1441,7 +1441,7 @@ class Link < ApplicationRecord
     def content_moderation_check
       return if user&.vip_creator?
 
-      result = ContentModeration::ModerateRecordService.check(self, :product)
+      result = ContentModeration::ModerateRecordService.check(self, :product, text_only: true)
       return if result.passed
 
       errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")
