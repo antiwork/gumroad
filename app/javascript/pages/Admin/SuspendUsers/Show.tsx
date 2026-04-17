@@ -27,7 +27,7 @@ const SuspendUsers = () => {
       additional_notes: "",
     },
     scheduled_payout: {
-      action: "",
+      action: "payout",
       delay_days: DEFAULT_SCHEDULED_PAYOUT_DELAY_DAYS,
     },
   });
@@ -126,13 +126,12 @@ const SuspendUsers = () => {
               value={form.data.scheduled_payout.action}
               onChange={setPayoutAction}
             >
-              <option value="">None (skip scheduled payout)</option>
               <option value="payout">Payout after delay</option>
               <option value="refund">Refund purchases</option>
               <option value="hold">Hold (manual release)</option>
             </Select>
           </div>
-          {form.data.scheduled_payout.action !== "" && form.data.scheduled_payout.action !== "hold" ? (
+          {form.data.scheduled_payout.action !== "hold" ? (
             <div className="flex w-24 flex-col gap-2">
               <Label htmlFor="scheduled_payout_delay">Delay (days)</Label>
               <Input
