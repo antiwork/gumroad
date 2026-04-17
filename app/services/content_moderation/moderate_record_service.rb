@@ -176,7 +176,7 @@ class ContentModeration::ModerateRecordService
       # If the post was manually re-published but still has stale CM flags, clear them
       if record.published? && record.content_moderated?
         update_flag(record, :content_moderated, false)
-        record.update_columns(is_unpublished_by_admin: false) if record.is_unpublished_by_admin?
+        update_flag(record, :is_unpublished_by_admin, false) if record.is_unpublished_by_admin?
         return
       end
 
