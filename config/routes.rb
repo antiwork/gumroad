@@ -302,6 +302,7 @@ Rails.application.routes.draw do
     get "/about", to: "home#about"
     get "/careers", to: "careers#index"
     get "/careers/:slug", to: "careers#show", as: :career
+    get "/jobs", to: redirect("/careers")
     get "/features", to: "home#features"
     get "/features.md", to: "home#features_md"
     get "/pricing", to: "home#pricing"
