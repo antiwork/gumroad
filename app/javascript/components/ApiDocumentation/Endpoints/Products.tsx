@@ -215,7 +215,11 @@ export const CreateProduct = () => (
   <ApiEndpoint
     method="post"
     path="/products"
-    description="Create a new product (as a draft). Requires the edit_products or account scope."
+    description={
+      <>
+        Create a new product (as a draft). Requires the <code>edit_products</code> or <code>account</code> scope.
+      </>
+    }
   >
     <ApiParameters>
       <ApiParameter
@@ -281,7 +285,7 @@ export const CreateProduct = () => (
     "main_cover_id": null,
     "rich_content": [],
     "has_same_rich_content_for_all_variants": true
-    // ...remaining product fields
+# ...remaining product fields
   }
 }`}
     </CodeSnippet>
@@ -361,7 +365,7 @@ export const UpdateProduct = () => (
         "filegroup": "image"
       }
     ]
-    // ...remaining product fields
+# ...remaining product fields
   }
 }`}
     </CodeSnippet>
