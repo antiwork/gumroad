@@ -54,7 +54,7 @@ class ContentModeration::ContentExtractor
 
       rich_content_file_image_urls = rich_contents.flat_map do |rich_content|
         ProductFile.where(id: rich_content.embedded_product_file_ids_in_order, filegroup: "image").map do
-          signed_download_url_for_s3_key_and_filename(_1.s3_key, _1.s3_filename, expires_in: 99.years)
+          signed_download_url_for_s3_key_and_filename(_1.s3_key, _1.s3_filename, expires_in: 1.hour)
         end
       end
 
