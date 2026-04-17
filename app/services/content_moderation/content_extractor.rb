@@ -17,7 +17,7 @@ class ContentModeration::ContentExtractor
   def extract_from_post(installment, text_only: false)
     parsed_message = Nokogiri::HTML(installment.message)
     text = "Name: #{installment.name} Message: #{parsed_message.text}"
-    image_urls = text_only ? [] : parsed_message.css("img").filter_map { |img| img["src"] }
+    image_urls = text_only ? [] : parsed_message.css("img").filter_map { |img| img["src"] }.reject(&:empty?)
     Result.new(text: text, image_urls: image_urls)
   end
 

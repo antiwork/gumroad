@@ -782,7 +782,7 @@ const b = 2;</code></pre>
 
     context "content moderation" do
       it "blocks publishing when ContentModeration::ModerateRecordService.check fails" do
-        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post, text_only: true).and_return(
           ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["policy violation"])
         )
 
@@ -801,7 +801,7 @@ const b = 2;</code></pre>
       end
 
       it "publishes successfully when the content moderation check passes" do
-        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post, text_only: true).and_return(
           ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
         )
 
@@ -1050,6 +1050,12 @@ const b = 2;</code></pre>
   describe "#trigger_content_moderation" do
     let!(:installment) { create(:installment, name: "Original Name", message: "Original Message") }
 
+    it "does not trigger a content moderation job for draft posts" do
+      expect do
+        installment.update!(name: "New Name")
+      end.not_to change { ContentModeration::ModeratePostJob.jobs.size }
+    end
+
     it "does not trigger a content moderation job if neither name nor message have changed" do
       expect do
         installment.update!(published_at: Time.current)
@@ -1057,12 +1063,16 @@ const b = 2;</code></pre>
     end
 
     it "triggers a content moderation job if the name has changed" do
+      installment.update!(published_at: Time.current)
+
       expect do
         installment.update!(name: "New Name")
       end.to change { ContentModeration::ModeratePostJob.jobs.size }.by(1)
     end
 
     it "triggers a content moderation job if the message has changed" do
+      installment.update!(published_at: Time.current)
+
       expect do
         installment.update!(message: "New Message")
       end.to change { ContentModeration::ModeratePostJob.jobs.size }.by(1)

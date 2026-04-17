@@ -176,6 +176,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
       it "marks flagged profiles compliant when moderation passes" do
         user.flag_for_tos_violation!(author_name: "ContentModeration", content: "Flagged for testing", bulk: true)
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+        expect(user).to receive(:with_lock).and_call_original
 
         service.perform
 
@@ -347,11 +348,16 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
       unmoderated_product = create(:product, user: seller)
       unmoderated_product.unpublish!(is_unpublished_by_admin: true)
 
+      deleted_moderated_product = create(:product, user: seller)
+      deleted_moderated_product.unpublish!(is_unpublished_by_admin: true)
+      deleted_moderated_product.update_attribute(:content_moderated, true)
+      deleted_moderated_product.mark_deleted!
+
       alive_post = create(:audience_post, seller: seller)
-      alive_post.update!(is_unpublished_by_admin: true)
+      alive_post.update!(is_unpublished_by_admin: true, content_moderated: true)
 
       deleted_post = create(:audience_post, seller: seller)
-      deleted_post.update!(is_unpublished_by_admin: true)
+      deleted_post.update!(is_unpublished_by_admin: true, content_moderated: true)
       deleted_post.mark_deleted!
 
       expect(service.send(:user_flagged_record_count)).to eq(2)

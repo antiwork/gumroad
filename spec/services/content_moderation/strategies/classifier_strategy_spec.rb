@@ -12,7 +12,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy do
     allow(GlobalConfig).to receive(:get).with("OPENAI_ACCESS_TOKEN").and_return("test-key")
     allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_CLASSIFIER_THRESHOLDS").and_return(nil)
     allow(Rails.logger).to receive(:error)
-    allow(OpenAI::Client).to receive(:new).with(access_token: "test-key").and_return(client)
+    allow(OpenAI::Client).to receive(:new).with(access_token: "test-key", request_timeout: 10).and_return(client)
   end
 
   it "returns compliant when the API key is blank" do

@@ -2,6 +2,7 @@
 
 class ContentModeration::Strategies::PromptStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
+  OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
 
   ADULT_CONTENT_RULES = <<~RULES
     You are a content moderator. Evaluate the following content for adult/sexual content policy violations.
@@ -43,7 +44,7 @@ class ContentModeration::Strategies::PromptStrategy
     api_key = GlobalConfig.get("OPENAI_ACCESS_TOKEN")
     return Result.new(status: "compliant", reasoning: []) if api_key.blank?
 
-    @client = OpenAI::Client.new(access_token: api_key)
+    @client = OpenAI::Client.new(access_token: api_key, request_timeout: OPENAI_REQUEST_TIMEOUT_IN_SECONDS)
 
     all_reasoning = []
 

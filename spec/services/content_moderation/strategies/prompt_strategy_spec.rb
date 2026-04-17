@@ -8,7 +8,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy do
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(GlobalConfig).to receive(:get).with("OPENAI_ACCESS_TOKEN").and_return("test-key")
-    allow(OpenAI::Client).to receive(:new).with(access_token: "test-key").and_return(client)
+    allow(OpenAI::Client).to receive(:new).with(access_token: "test-key", request_timeout: 10).and_return(client)
     allow(Rails.logger).to receive(:error)
     allow(Rails.logger).to receive(:warn)
   end
@@ -24,7 +24,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy do
 
     expect(result.status).to eq("flagged")
     expect(result.reasoning).to eq(["adult_content: clear adult content"])
-    expect(OpenAI::Client).to have_received(:new).with(access_token: "test-key")
+    expect(OpenAI::Client).to have_received(:new).with(access_token: "test-key", request_timeout: 10)
   end
 
   it "returns compliant when the API key is blank" do

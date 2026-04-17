@@ -2,6 +2,7 @@
 
 class ContentModeration::Strategies::ClassifierStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
+  OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
 
   DEFAULT_THRESHOLDS = {
     "harassment" => 0.8,
@@ -30,7 +31,7 @@ class ContentModeration::Strategies::ClassifierStrategy
     api_key = GlobalConfig.get("OPENAI_ACCESS_TOKEN")
     return Result.new(status: "compliant", reasoning: []) if api_key.blank?
 
-    client = OpenAI::Client.new(access_token: api_key)
+    client = OpenAI::Client.new(access_token: api_key, request_timeout: OPENAI_REQUEST_TIMEOUT_IN_SECONDS)
 
     input = build_input
     response = client.moderations(parameters: { model: "omni-moderation-latest", input: input })

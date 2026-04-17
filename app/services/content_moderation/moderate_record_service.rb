@@ -171,10 +171,15 @@ class ContentModeration::ModerateRecordService
 
     def mark_profile_compliant
       return if user.suspended?
-      return unless user.flagged?
-      return unless flagged_by_content_moderation?
 
-      user.mark_compliant!(author_name: AUTHOR_NAME)
+      user.with_lock do
+        user.reload
+        next if user.suspended?
+        next unless user.flagged?
+        next unless flagged_by_content_moderation?
+
+        user.mark_compliant!(author_name: AUTHOR_NAME)
+      end
     end
 
     def check_user_suspension_threshold
