@@ -40,12 +40,12 @@ module ValidateRecaptcha
     def passing_recaptcha_score?(verification_response)
       score = verification_response.dig("riskAnalysis", "score")
       if score.nil?
-        Rails.logger.warn("reCAPTCHA riskAnalysis.score missing from response, skipping score check (IP: #{request.remote_ip})")
+        Rails.logger.warn("reCAPTCHA riskAnalysis.score missing from response, skipping score check (#{controller_name}##{action_name}, IP: #{request.remote_ip})")
         return true
       end
 
       if score < RECAPTCHA_SCORE_THRESHOLD
-        Rails.logger.warn("reCAPTCHA score #{score} below threshold #{RECAPTCHA_SCORE_THRESHOLD} (IP: #{request.remote_ip})")
+        Rails.logger.warn("reCAPTCHA score #{score} below threshold #{RECAPTCHA_SCORE_THRESHOLD} (#{controller_name}##{action_name}, IP: #{request.remote_ip})")
         return false
       end
 
