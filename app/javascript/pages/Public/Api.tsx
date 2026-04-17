@@ -8,6 +8,7 @@ import {
   UpdateCustomField,
   DeleteCustomField,
 } from "$app/components/ApiDocumentation/Endpoints/CustomFields";
+import { FilesOverview, PresignFile, CompleteFile, AttachFile } from "$app/components/ApiDocumentation/Endpoints/Files";
 import {
   VerifyLicense,
   EnableLicense,
@@ -96,6 +97,13 @@ export default function Api() {
                 <DeleteProduct />
                 <EnableProduct />
                 <DisableProduct />
+              </ApiResource>
+
+              <ApiResource name="Files" id="files">
+                <FilesOverview />
+                <PresignFile />
+                <CompleteFile />
+                <AttachFile />
               </ApiResource>
 
               <ApiResource name="Variant categories" id="variant-categories">
