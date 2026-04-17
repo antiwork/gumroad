@@ -170,7 +170,7 @@ describe Api::Internal::Helper::UsersController do
     end
 
     context "when appeal is successfully created" do
-      before { user.flag_for_tos_violation!(author_name: "ContentModeration", content: "Flagged for testing") }
+      before { user.flag_for_tos_violation!(author_name: "ContentModeration", content: "Flagged for testing", bulk: true) }
 
       it "creates a comment and returns success" do
         expect do
