@@ -242,14 +242,23 @@ class Api::V2::LinksController < Api::V2::BaseController
       if !params[:files].is_a?(Array) || params[:files].any? { |f| !f.respond_to?(:key?) }
         return render_response(false, message: "files must be an array of file objects.")
       end
-      existing_files_by_id = @product.alive_product_files.index_by(&:external_id)
+      existing_files_by_id = @product.product_files.alive.index_by(&:external_id)
       new_files = []
       params[:files].each do |f|
         existing = f[:id].present? ? existing_files_by_id[f[:id]] : nil
         if existing
-          if f[:url].present? && f[:url] != existing.url
+          if f[:url].blank?
+            if (f.keys.map(&:to_s) - %w[id]).empty?
+              f[:url] = existing.url
+              f[:modified] = "false"
+            else
+              return render_response(false, message: "Include the canonical url returned by POST /v2/files/complete when updating fields on an existing file; an entry with only id keeps the file unchanged.")
+            end
+          elsif f[:url] != existing.url
             return render_response(false, message: "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first.")
           end
+        elsif f[:url].blank?
+          return render_response(false, message: "Each files entry must reference an existing file by id or include a url for a new file uploaded via POST /v2/files/complete.")
         else
           new_files << f
         end
@@ -311,6 +320,12 @@ class Api::V2::LinksController < Api::V2::BaseController
         flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
 
         unless @normalized_files.nil?
+          keep_only_ids = @normalized_files.filter_map { |f| f[:id] if f[:modified].to_s == "false" }
+          if keep_only_ids.any?
+            missing_ids = keep_only_ids - @product.alive_product_files.map(&:external_id)
+            raise Link::LinkInvalid, "Cannot keep file(s) #{missing_ids.join(', ')}: they were deleted concurrently. Retry with the current file list." if missing_ids.any?
+          end
+
           validate_file_embed_conflicts!(skip_variant_embeds: flag_changed && @product.has_same_rich_content_for_all_variants? && !@normalized_rich_content.nil?)
 
           rich_content_params = build_rich_content_params
