@@ -8,7 +8,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { SupportSlaMessage } from "$app/components/support/SupportSlaMessage";
 import { Input } from "$app/components/ui/Input";
 import { Textarea } from "$app/components/ui/Textarea";
-import { useRecaptcha, RecaptchaCancelledError } from "$app/components/useRecaptcha";
+import { useRecaptcha } from "$app/components/useRecaptcha";
 
 export function UnauthenticatedNewTicketModal({
   open,
@@ -61,7 +61,6 @@ export function UnauthenticatedNewTicketModal({
       setSubject("");
       setMessage("");
     } catch (error) {
-      if (error instanceof RecaptchaCancelledError) return;
       assertResponseError(error);
       showAlert(error.message, "error");
     } finally {

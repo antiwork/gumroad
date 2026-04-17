@@ -13,7 +13,7 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-import { RecaptchaCancelledError, useRecaptcha } from "$app/components/useRecaptcha";
+import { useRecaptcha } from "$app/components/useRecaptcha";
 
 type PageProps = {
   email: string | null;
@@ -67,9 +67,8 @@ function SignupPage() {
         "g-recaptcha-response": recaptchaResponse,
       }));
       form.post(Routes.signup_path());
-    } catch (e) {
-      if (e instanceof RecaptchaCancelledError) return;
-      throw e;
+    } catch {
+      // reCAPTCHA timed out or failed to initialize — silently abort the submission
     }
   };
 

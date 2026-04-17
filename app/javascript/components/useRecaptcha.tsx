@@ -1,8 +1,7 @@
 import * as React from "react";
 
-export class RecaptchaCancelledError extends Error {}
-
 const RECAPTCHA_SCRIPT_URL = "https://www.google.com/recaptcha/enterprise.js?render=explicit";
+const RECAPTCHA_TIMEOUT_MS = 10_000;
 
 let loadPromise: Promise<void> | null = null;
 
@@ -30,36 +29,6 @@ const loadRecaptchaScript = (): Promise<void> => {
   });
 
   return loadPromise;
-};
-
-const isRecaptchaIframe = (node: Node) =>
-  node instanceof HTMLIFrameElement && node.src.includes("google.com/recaptcha");
-
-const listenForRecaptchaCancel = (widgetId: number, onCancel: () => void) => {
-  let recaptchaContainerObserver: MutationObserver | null = null;
-
-  // Recaptcha doesn't have an API to detect when the user clicks away from the captcha
-  // without selecting anything. To work around this, we first detect the recaptcha
-  // prompt container being added, then we listen for it becoming invisible (which happens
-  // when the user dismisses the prompt). Note that recaptcha currently recreates the
-  // container on reset, so we need to handle recaptchaContainer changing.
-  const observer = new MutationObserver((changes) => {
-    if (changes.some((change) => [...change.removedNodes].some(isRecaptchaIframe))) {
-      recaptchaContainerObserver?.disconnect();
-      observer.disconnect();
-      return;
-    }
-
-    const recaptchaIframe = changes.flatMap((change) => [...change.addedNodes]).find(isRecaptchaIframe);
-    const recaptchaContainer = recaptchaIframe?.parentElement?.parentElement;
-    if (!recaptchaContainer) return;
-
-    recaptchaContainerObserver = new MutationObserver(() => {
-      if (recaptchaContainer.style.visibility === "hidden" && !grecaptcha.enterprise.getResponse(widgetId)) onCancel();
-    });
-    recaptchaContainerObserver.observe(recaptchaContainer, { attributes: true });
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
 };
 
 export function useRecaptcha({ siteKey }: { siteKey: string | null }) {
@@ -91,17 +60,17 @@ export function useRecaptcha({ siteKey }: { siteKey: string | null }) {
 
   const execute = () => {
     const widgetId = recaptchaId.current;
-    if (widgetId === null) return Promise.reject(new RecaptchaCancelledError());
+    if (widgetId === null) return Promise.reject(new Error("reCAPTCHA not initialized"));
     grecaptcha.enterprise.reset(widgetId);
     void grecaptcha.enterprise.execute(widgetId);
-    // This promise should always complete if recaptcha works correctly, but it's not guaranteed to (e.g.
-    // if recaptcha's DOM structure ever changes, or if there's an error during their processing).
     return new Promise<string>((resolve, reject) => {
-      listenForRecaptchaCancel(widgetId, () => {
-        reject(new RecaptchaCancelledError());
-        resolveRef.current = null;
-      });
       resolveRef.current = resolve;
+      setTimeout(() => {
+        if (resolveRef.current) {
+          resolveRef.current = null;
+          reject(new Error("reCAPTCHA timed out"));
+        }
+      }, RECAPTCHA_TIMEOUT_MS);
     });
   };
 
