@@ -20,8 +20,7 @@ export const FilesOverview = () => (
           header.
         </li>
         <li>
-          <a href="#post-/files/complete">Complete</a> — finalize the upload with the list of ETags to receive the
-          canonical <code>file_url</code>.
+          <a href="#post-/files/complete">Complete</a> — finalize the upload by submitting the list of ETags.
         </li>
         <li>
           <a href="#attach-file">Attach</a> — pass the <code>file_url</code> to <code>POST /v2/products</code> or{" "}
@@ -51,7 +50,7 @@ export const PresignFile = () => (
           name: "file_url",
           type: "string",
           description:
-            "Canonical S3 URL ({S3_BASE_URL}attachments/{seller_external_id}/{guid}/original/{filename}); not valid until /files/complete succeeds — use the file_url from that response instead",
+            "Canonical S3 URL ({S3_BASE_URL}attachments/{seller_external_id}/{guid}/original/{filename}); the S3 object isn't accessible until /files/complete finalizes the multipart upload",
         },
         {
           name: "parts",
