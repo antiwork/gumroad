@@ -396,6 +396,8 @@ describe Link, :vcr do
       end
 
       it "enqueues a ContentModeration::ModerateProductJob when a published product description changes" do
+        product
+
         expect do
           product.update!(description: "New description")
         end.to change { ContentModeration::ModerateProductJob.jobs.size }.by(1)

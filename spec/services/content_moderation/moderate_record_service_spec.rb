@@ -40,6 +40,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
       end
 
       it "unpublishes flagged products and marks them content moderated" do
+        product
         expect(ContentModeration::ModerateProductJob).not_to receive(:perform_async)
         allow(service).to receive(:run_strategies).and_return([result_class.new(status: "flagged", reasoning: ["blocked"])])
 
