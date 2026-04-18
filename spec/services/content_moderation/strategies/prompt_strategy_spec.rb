@@ -53,7 +53,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy do
 
   it "logs uncertainty-check failures at warn level and keeps the flagged result" do
     call_count = 0
-    allow(client).to receive(:chat) do |**_kwargs|
+    allow(client).to receive(:chat) do |_kwargs|
       call_count += 1
 
       case call_count
