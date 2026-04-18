@@ -159,16 +159,21 @@ class ContentModeration::ModerateRecordService
     end
 
     def mark_product_compliant
+      # If the product was manually re-published but still has stale CM flags, clear them
+      if record.published? && record.content_moderated?
+        update_flag(record, :content_moderated, false)
+        return
+      end
+
       return unless record.content_moderated?
       return unless record.is_unpublished_by_admin?
-
-      update_flag(record, :content_moderated, false)
 
       # Don't republish if the user is suspended/flagged for any non-CM reason
       return if user.suspended? && !suspended_by_content_moderation?
       return if user.flagged? && !flagged_by_content_moderation?
       return if user.flagged_for_fraud?
 
+      update_flag(record, :content_moderated, false)
       record.is_unpublished_by_admin = false
       with_skipped_content_moderation_check(record) { record.publish! }
     end

@@ -61,7 +61,20 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
         expect(product.reload).not_to be_content_moderated
       end
 
-      it "clears content_moderated but does not republish when user is flagged for fraud" do
+      it "clears stale CM flags on manually re-published products" do
+        product.unpublish!(is_unpublished_by_admin: true)
+        product.update_attribute(:content_moderated, true)
+        product.publish!
+        allow(service).to receive(:run_strategies).and_return([result_class.new(status: "compliant", reasoning: [])])
+
+        service.perform
+
+        expect(product.reload).to be_published
+        expect(product.reload).not_to be_content_moderated
+        expect(product.reload).to be_is_unpublished_by_admin
+      end
+
+      it "keeps content_moderated and does not republish when user is flagged for fraud" do
         product.unpublish!(is_unpublished_by_admin: true)
         product.update_attribute(:content_moderated, true)
         seller.flag_for_fraud!(author_name: "FraudOps")
@@ -69,11 +82,11 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
         service.perform
 
-        expect(product.reload).not_to be_content_moderated
+        expect(product.reload).to be_content_moderated
         expect(product.reload).to be_is_unpublished_by_admin
       end
 
-      it "clears content_moderated but does not republish when user is suspended by Stripe risk" do
+      it "keeps content_moderated and does not republish when user is suspended by Stripe risk" do
         product.unpublish!(is_unpublished_by_admin: true)
         product.update_attribute(:content_moderated, true)
         seller.suspend_for_tos_violation!(author_name: "stripe_risk", content: "Stripe risk suspension", bulk: true)
@@ -81,7 +94,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
         service.perform
 
-        expect(product.reload).not_to be_content_moderated
+        expect(product.reload).to be_content_moderated
         expect(product.reload).to be_is_unpublished_by_admin
         expect(seller.reload).to be_suspended_for_tos_violation
       end
@@ -222,7 +235,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
         service.perform
 
         expect(user.reload).to be_flagged_for_tos_violation
-        expect(user.tos_violation_reason).to eq("Content policy violation")
+        expect(user.tos_violation_reason).to eq("blocked")
       end
 
       it "does not overwrite flagged_for_fraud profiles" do

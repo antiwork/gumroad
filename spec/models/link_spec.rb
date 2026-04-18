@@ -395,10 +395,10 @@ describe Link, :vcr do
         end.not_to change { ContentModeration::ModerateProductJob.jobs.size }
       end
 
-      it "does not enqueue a ContentModeration::ModerateProductJob when the product is not unpublished by admin" do
+      it "enqueues a ContentModeration::ModerateProductJob when a published product description changes" do
         expect do
           product.update!(description: "New description")
-        end.not_to change { ContentModeration::ModerateProductJob.jobs.size }
+        end.to change { ContentModeration::ModerateProductJob.jobs.size }.by(1)
       end
     end
 
