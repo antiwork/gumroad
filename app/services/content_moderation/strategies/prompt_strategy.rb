@@ -120,7 +120,7 @@ class ContentModeration::Strategies::PromptStrategy
       !parsed["uncertain"]
     rescue StandardError => e
       Rails.logger.warn("ContentModeration::PromptStrategy uncertainty check error: #{e.message}")
-      false
+      true
     end
 
     def build_messages(rules, skip_images: false)

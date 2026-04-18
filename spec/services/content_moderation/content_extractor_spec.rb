@@ -32,7 +32,7 @@ RSpec.describe ContentModeration::ContentExtractor do
         .with(id: [123], filegroup: "image")
         .and_return([double(s3_key: "images/file.png", s3_filename: "file.png")])
       allow(extractor).to receive(:signed_download_url_for_s3_key_and_filename)
-        .with("images/file.png", "file.png", expires_in: 99.years)
+        .with("images/file.png", "file.png", expires_in: 1.hour)
         .and_return("https://signed.example.com/file.png")
     end
 
