@@ -5868,6 +5868,30 @@ describe Purchase, :vcr do
     end
   end
 
+  describe "#load_flow_of_funds" do
+    context "when the purchase is part of a combined charge and processor_charge.flow_of_funds is nil" do
+      it "assigns a simple flow_of_funds fallback instead of raising NoMethodError" do
+        charge = create(:charge, amount_cents: 100_00, gumroad_amount_cents: 10_00)
+        purchase = create(:purchase, total_transaction_cents: 20_00,
+                                     charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                     is_part_of_combined_charge: true)
+        purchase.update!(fee_cents: 2_00)
+        charge.purchases << purchase
+
+        processor_charge = instance_double(
+          StripeCharge,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          flow_of_funds: nil
+        )
+
+        expect { purchase.send(:load_flow_of_funds, processor_charge) }.not_to raise_error
+        expect(purchase.flow_of_funds).to be_present
+        expect(purchase.flow_of_funds.issued_amount.cents).to eq(4_00)
+        expect(purchase.flow_of_funds.issued_amount.currency).to eq(Currency::USD)
+      end
+    end
+  end
+
   describe "#refunded?" do
     it "returns false when stripe_refunded is nil or false" do
       purchase = create(:purchase, stripe_refunded: nil)

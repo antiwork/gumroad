@@ -2753,10 +2753,11 @@ class Purchase < ApplicationRecord
 
     def load_flow_of_funds(processor_charge)
       processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, self.total_transaction_cents) if StripeChargeProcessor.charge_processor_id != charge_processor_id
+      flow_of_funds = processor_charge.flow_of_funds || FlowOfFunds.build_simple_flow_of_funds(Currency::USD, self.total_transaction_cents)
       self.flow_of_funds = if is_part_of_combined_charge?
-        build_flow_of_funds_from_combined_charge(processor_charge.flow_of_funds)
+        build_flow_of_funds_from_combined_charge(flow_of_funds)
       else
-        processor_charge.flow_of_funds
+        flow_of_funds
       end
     end
 
