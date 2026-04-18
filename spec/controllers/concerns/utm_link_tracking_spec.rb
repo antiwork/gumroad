@@ -290,6 +290,20 @@ describe UtmLinkTracking, type: :controller do
       end
     end
 
+    it "truncates UTM params that exceed the maximum length", :sidekiq_inline do
+      long_source = "a" * 300
+      request.host = "#{seller.subdomain}"
+      request.path = "/"
+      allow(controller).to receive(:root_path).and_return("/")
+
+      expect do
+        get :action, params: utm_params.merge(utm_source: long_source)
+      end.to change(UtmLink, :count).by(1)
+
+      utm_link = UtmLink.last
+      expect(utm_link.utm_source.length).to eq(UtmLink::MAX_UTM_PARAM_LENGTH)
+    end
+
     it "does not auto-create UTM link when feature is disabled" do
       Feature.deactivate_user(:utm_links, seller)
       request.host = "#{seller.subdomain}"
