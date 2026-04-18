@@ -52,14 +52,18 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 
 ### Before pushing
 
-Always run linting and type checking before pushing commits:
+Always run the relevant tests locally and confirm they pass before pushing:
 
 ```bash
+# Run the specs affected by your changes
+bundle exec rspec spec/path/to/changed_spec.rb
+
+# Lint
 bundle exec rubocop -a              # Ruby lint + auto-correct
 DISABLE_TYPE_CHECKED=1 npx eslint   # JS/TS lint
 ```
 
-Fix any issues before committing. CI does not auto-fix your code.
+Do not push code with failing tests. CI is not a substitute for local verification. Fix any issues before committing.
 
 ### Code standards
 
