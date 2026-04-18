@@ -5,7 +5,9 @@ class ContentModeration::ModerateProductJob
   sidekiq_options queue: :low, retry: 3
 
   def perform(product_id)
-    product = Link.find(product_id)
+    product = Link.alive.find_by(id: product_id)
+    return if product.nil?
+
     ContentModeration::ModerateRecordService.new(product, :product).perform
   end
 end

@@ -151,9 +151,8 @@ class ContentModeration::ModerateRecordService
         next unless user.can_flag_for_tos_violation?
 
         ActiveRecord::Base.transaction do
-          reason = "Content policy violation"
-          user.update!(tos_violation_reason: reason)
-          comment_content = "Flagged for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} (#{reason})"
+          user.update!(tos_violation_reason: reasoning)
+          comment_content = "Flagged for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} (#{reasoning})"
           user.flag_for_tos_violation!(author_name: AUTHOR_NAME, content: comment_content, bulk: true)
         end
       end
@@ -167,6 +166,7 @@ class ContentModeration::ModerateRecordService
 
       # Don't republish if the user is suspended/flagged for any non-CM reason
       return if user.suspended? && !suspended_by_content_moderation?
+      return if user.flagged? && !flagged_by_content_moderation?
       return if user.flagged_for_fraud?
 
       record.is_unpublished_by_admin = false
@@ -188,6 +188,7 @@ class ContentModeration::ModerateRecordService
 
       # Don't republish if the user is suspended/flagged for any non-CM reason
       return if user.suspended? && !suspended_by_content_moderation?
+      return if user.flagged? && !flagged_by_content_moderation?
       return if user.flagged_for_fraud?
 
       record.is_unpublished_by_admin = false

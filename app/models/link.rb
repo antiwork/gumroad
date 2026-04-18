@@ -1435,9 +1435,11 @@ class Link < ApplicationRecord
     end
 
     def queue_content_moderation_job
-      return unless is_unpublished_by_admin? && !saved_change_to_is_unpublished_by_admin?
-
-      ContentModeration::ModerateProductJob.perform_async(id)
+      if is_unpublished_by_admin? && !saved_change_to_is_unpublished_by_admin?
+        ContentModeration::ModerateProductJob.perform_async(id)
+      elsif !is_unpublished_by_admin? && (saved_change_to_name? || saved_change_to_description?)
+        ContentModeration::ModerateProductJob.perform_async(id)
+      end
     end
 
     def content_moderation_check
