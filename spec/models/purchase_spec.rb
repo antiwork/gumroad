@@ -5626,6 +5626,10 @@ describe Purchase, :vcr do
       expect(flow_of_funds.merchant_account_net_amount.cents).to eq(-31_25)
       expect(flow_of_funds.merchant_account_net_amount.currency).to eq(Currency::CAD)
     end
+
+    it "returns nil when combined_flow_of_funds is nil" do
+      expect(@purchase1.build_flow_of_funds_from_combined_charge(nil)).to be_nil
+    end
   end
 
   describe "#mandate_options_for_stripe" do
