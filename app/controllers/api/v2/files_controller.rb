@@ -12,7 +12,7 @@ class Api::V2::FilesController < Api::V2::BaseController
     filename = ActiveStorage::Filename.new(params[:filename].to_s).sanitized
     return error_400("filename is required") if filename.blank?
 
-    file_size = params[:file_size].to_i
+    file_size = params[:file_size].to_s.to_i
     return error_400("file_size is required") if file_size <= 0
     return error_400("file_size exceeds the #{MAX_FILE_SIZE_GB} GB maximum") if file_size > MAX_FILE_SIZE
 
