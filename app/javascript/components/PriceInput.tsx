@@ -21,6 +21,7 @@ export const PriceInput = React.forwardRef<
     cents: number | null;
     onChange?: (cents: number | null) => void;
     id?: string;
+    name?: string;
     placeholder?: string;
     hasError?: boolean;
     ariaLabel?: string;
@@ -36,6 +37,7 @@ export const PriceInput = React.forwardRef<
       cents,
       onChange,
       id,
+      name,
       placeholder,
       hasError,
       ariaLabel,
@@ -85,6 +87,7 @@ export const PriceInput = React.forwardRef<
           type="text"
           inputMode="decimal"
           id={id}
+          name={name}
           value={value}
           onChange={(evt) => handleChange(evt.target.value)}
           maxLength={10}

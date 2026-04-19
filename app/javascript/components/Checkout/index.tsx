@@ -466,6 +466,7 @@ const TipSelector = () => {
             }}
             placeholder="Custom tip"
             disabled={isProcessing(state)}
+            name="tip_amount"
           />
         </Fieldset>
       </div>
