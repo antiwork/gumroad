@@ -111,13 +111,6 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: true }
   end
 
-  def mark_compliant_from_iffy
-    @user.mark_compliant!(author_name: "iffy")
-    render json: { success: true }
-  rescue => e
-    render json: { success: false, message: e.message }
-  end
-
   def invalidate_active_sessions
     @user.invalidate_active_sessions!
 
@@ -127,6 +120,13 @@ class Admin::UsersController < Admin::BaseController
   def mass_transfer_purchases
     transfer = transfer_purchases(user: @user, new_email: mass_transfer_purchases_params[:new_email])
     render json: { success: transfer[:success], message: transfer[:message] }, status: transfer[:status]
+  end
+
+  def mark_compliant_from_iffy
+    @user.mark_compliant!(author_name: "iffy")
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
   end
 
   def suspend_for_fraud
