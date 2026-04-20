@@ -294,7 +294,7 @@ class User < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
-  LINK_PROPERTIES = %w[username twitter_handle bio name google_analytics_id flags
+  LINK_PROPERTIES = %w[username bio name google_analytics_id flags
                        facebook_pixel_id tiktok_pixel_id skip_free_sale_analytics disable_third_party_analytics].freeze
 
   after_update :clear_products_cache, if: -> (user) { (User::LINK_PROPERTIES & user.saved_changes.keys).present? || user.tiktok_pixel_id_changed_in_json_data? || (%w[font background_color highlight_color] & user.seller_profile&.saved_changes&.keys).present? }
@@ -1008,8 +1008,7 @@ class User < ApplicationRecord
     return tax_form_1099_download_url if tax_form_1099_download_url.present?
 
     begin
-      key = Digest::SHA1.hexdigest("#{year}-#{id}")
-      s3_path = "tax-forms/#{key}/#{external_id}/tax-1099-form-#{year}.pdf"
+      s3_path = tax_form_1099_s3_key(year:)
       s3_filename = s3_path.split("/").last
       download_url = signed_download_url_for_s3_key_and_filename(s3_path, s3_filename, expires_in: 10.years)
       $redis.set("tax_form_1099_download_url_#{year}_#{external_id}", download_url)
@@ -1017,6 +1016,21 @@ class User < ApplicationRecord
     rescue
       nil
     end
+  end
+
+  def tax_form_1099_s3_bytes(year:)
+    Aws::S3::Resource.new.bucket(S3_BUCKET).object(tax_form_1099_s3_key(year:)).get.body.read
+  rescue Aws::S3::Errors::NoSuchKey
+    nil
+  end
+
+  def tax_form_available_years
+    (created_at.year..(Time.current.year - 1)).to_a
+  end
+
+  private def tax_form_1099_s3_key(year:)
+    key = Digest::SHA1.hexdigest("#{year}-#{id}")
+    "tax-forms/#{key}/#{external_id}/tax-1099-form-#{year}.pdf"
   end
 
   def accessible_communities_ids

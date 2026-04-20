@@ -48,8 +48,8 @@ export type AffiliatedPageProps = {
   affiliated_products: AffiliatedProduct[];
   stats: Stats;
   global_affiliates_data: {
-    global_affiliate_id: number;
-    global_affiliate_sales: string;
+    global_affiliate_id: number | null;
+    global_affiliate_sales: string | null;
     cookie_expiry_days: number;
     affiliate_query_param: string;
   };
@@ -260,10 +260,10 @@ const AffiliatedPage = ({
       }
       archivedTabVisible={archivedTabVisible}
     >
-      {isShowingGlobalAffiliates ? (
+      {isShowingGlobalAffiliates && globalAffiliatesData.global_affiliate_id != null ? (
         <GlobalAffiliates
           globalAffiliateId={globalAffiliatesData.global_affiliate_id}
-          totalSales={globalAffiliatesData.global_affiliate_sales}
+          totalSales={globalAffiliatesData.global_affiliate_sales ?? "$0"}
           cookieExpiryDays={globalAffiliatesData.cookie_expiry_days}
           affiliateQueryParam={globalAffiliatesData.affiliate_query_param}
         />

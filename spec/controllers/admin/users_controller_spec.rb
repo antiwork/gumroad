@@ -399,4 +399,90 @@ describe Admin::UsersController, type: :controller, inertia: true do
       expect(scheduled_payout.delay_days).to eq(21)
     end
   end
+
+  describe "POST 'schedule_payout'" do
+    let(:user) { create(:user, user_risk_state: "suspended_for_fraud") }
+
+    it "creates a scheduled payout for a suspended user" do
+      post :schedule_payout, params: {
+        external_id: user.external_id,
+        scheduled_payout: { action: "payout", delay_days: "14" }
+      }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+
+      scheduled_payout = user.scheduled_payouts.last
+      expect(scheduled_payout).to be_present
+      expect(scheduled_payout.action).to eq("payout")
+      expect(scheduled_payout.delay_days).to eq(14)
+      expect(scheduled_payout.created_by).to eq(@admin_user)
+
+      payout_comment = user.comments.with_type_payout_note.last
+      expect(payout_comment).to be_present
+      expect(payout_comment.content).to include("Scheduled payout")
+    end
+
+    it "creates a hold scheduled payout with default delay" do
+      post :schedule_payout, params: {
+        external_id: user.external_id,
+        scheduled_payout: { action: "hold" }
+      }
+
+      expect(response.parsed_body["success"]).to be(true)
+
+      scheduled_payout = user.scheduled_payouts.last
+      expect(scheduled_payout.action).to eq("hold")
+      expect(scheduled_payout.delay_days).to eq(21)
+    end
+
+    it "returns an error when the user is not suspended" do
+      non_suspended_user = create(:user)
+
+      post :schedule_payout, params: {
+        external_id: non_suspended_user.external_id,
+        scheduled_payout: { action: "payout", delay_days: "14" }
+      }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("User is not suspended.")
+      expect(non_suspended_user.scheduled_payouts.count).to eq(0)
+    end
+
+    it "returns an error when no scheduled_payout params are provided" do
+      post :schedule_payout, params: { external_id: user.external_id }
+
+      expect(response.parsed_body["success"]).to be(true)
+      expect(user.scheduled_payouts.count).to eq(0)
+    end
+
+    it "works for users suspended for tos violation" do
+      tos_user = create(:user, user_risk_state: "suspended_for_tos_violation")
+
+      post :schedule_payout, params: {
+        external_id: tos_user.external_id,
+        scheduled_payout: { action: "payout", delay_days: "7" }
+      }
+
+      expect(response.parsed_body["success"]).to be(true)
+      scheduled_payout = tos_user.scheduled_payouts.last
+      expect(scheduled_payout.action).to eq("payout")
+      expect(scheduled_payout.delay_days).to eq(7)
+    end
+
+    it "rejects when the user already has an in-progress scheduled payout" do
+      create(:scheduled_payout, user: user, status: "pending")
+
+      post :schedule_payout, params: {
+        external_id: user.external_id,
+        scheduled_payout: { action: "payout", delay_days: "14" }
+      }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to include("already has a scheduled payout in progress")
+      expect(user.scheduled_payouts.count).to eq(1)
+    end
+  end
 end

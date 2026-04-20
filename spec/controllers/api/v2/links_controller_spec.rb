@@ -474,6 +474,65 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to include("files must be an array of file objects")
       end
 
+      describe "rejecting legacy upload fields" do
+        %i[file preview thumbnail].each do |field|
+          it "rejects #{field} sent as a string" do
+            post @action, params: @params.merge(field => "something.pdf")
+
+            expect(response).to be_successful
+            expect(response.parsed_body["success"]).to be false
+            expect(response.parsed_body["message"]).to start_with("'#{field}' is not an accepted parameter on POST /v2/products.")
+          end
+
+          it "rejects #{field} sent as a multipart upload" do
+            upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
+            post @action, params: @params.merge(field => upload)
+
+            expect(response).to be_successful
+            expect(response.parsed_body["success"]).to be false
+            expect(response.parsed_body["message"]).to start_with("'#{field}' is not an accepted parameter on POST /v2/products.")
+          end
+        end
+
+        it "points file rejections to the full presign and complete flow" do
+          post @action, params: @params.merge(file: "something.pdf")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("POST /v2/files/presign")
+          expect(message).to include("POST /v2/files/complete")
+          expect(message).to include("files[][url]")
+        end
+
+        it "points preview rejections to the covers endpoint rather than presign" do
+          post @action, params: @params.merge(preview: "cover.png")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("/v2/products/:id/covers")
+          expect(message).to include("Create the product first")
+          expect(message).not_to include("POST /v2/files/presign")
+        end
+
+        it "points thumbnail rejections to the thumbnail endpoint rather than presign" do
+          post @action, params: @params.merge(thumbnail: "thumb.png")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("/v2/products/:id/thumbnail")
+          expect(message).to include("Create the product first")
+          expect(message).not_to include("POST /v2/files/presign")
+        end
+
+        %i[file preview thumbnail].each do |field|
+          [nil, "", {}, { url: "" }, { signed_blob_id: "" }, { nested: { key: "" } }, [nil, ""]].each do |blank_value|
+            it "ignores #{field} when sent as #{blank_value.inspect}" do
+              post @action, params: @params.merge(field => blank_value)
+
+              expect(response).to be_successful
+              expect(response.parsed_body["success"]).to be true
+            end
+          end
+        end
+      end
+
       it "defaults taxonomy to 'other' when not specified" do
         post @action, params: @params
 
@@ -996,12 +1055,12 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to include("files must be an array of file objects")
       end
 
-      it "rejects file objects missing url" do
+      it "rejects file objects missing url when no existing file id is provided" do
         put @action, params: @params.merge(files: [{ display_name: "No URL" }])
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["message"]).to include("must include a url string")
+        expect(response.parsed_body["message"]).to include("must reference an existing file by id or include a url")
       end
 
       it "rejects file urls that are not the seller's S3 path" do
@@ -1066,6 +1125,67 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to include("rich_content must be an array of content page objects")
       end
 
+      describe "rejecting legacy upload fields" do
+        %i[file preview thumbnail].each do |field|
+          it "rejects #{field} sent as a string" do
+            put @action, params: @params.merge(field => "something.pdf")
+
+            expect(response).to be_successful
+            expect(response.parsed_body["success"]).to be false
+            expect(response.parsed_body["message"]).to start_with("'#{field}' is not an accepted parameter on PUT /v2/products/:id.")
+          end
+
+          it "rejects #{field} sent as a multipart upload" do
+            upload = Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/smilie.png"), "image/png")
+            put @action, params: @params.merge(field => upload)
+
+            expect(response).to be_successful
+            expect(response.parsed_body["success"]).to be false
+            expect(response.parsed_body["message"]).to start_with("'#{field}' is not an accepted parameter on PUT /v2/products/:id.")
+          end
+        end
+
+        it "points file rejections to the full presign and complete flow and describes the preservation contract" do
+          put @action, params: @params.merge(file: "something.pdf")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("POST /v2/files/presign")
+          expect(message).to include("POST /v2/files/complete")
+          expect(message).to include("files[][url]")
+          expect(message).to include("full replacement")
+          expect(message).to include("include an entry with its id")
+          expect(message).to include("files missing from the array are removed")
+        end
+
+        it "points preview rejections to the covers endpoint rather than presign" do
+          put @action, params: @params.merge(preview: "cover.png")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("POST /v2/products/:id/covers")
+          expect(message).not_to include("POST /v2/files/presign")
+        end
+
+        it "points thumbnail rejections to the thumbnail endpoint rather than presign" do
+          put @action, params: @params.merge(thumbnail: "thumb.png")
+
+          message = response.parsed_body["message"]
+          expect(message).to include("POST /v2/products/:id/thumbnail")
+          expect(message).not_to include("POST /v2/files/presign")
+        end
+
+        %i[file preview thumbnail].each do |field|
+          [nil, "", {}, { url: "" }, { signed_blob_id: "" }, { nested: { key: "" } }, [nil, ""]].each do |blank_value|
+            it "ignores #{field} when sent as #{blank_value.inspect}" do
+              put @action, params: @params.merge(field => blank_value, name: "Updated")
+
+              expect(response).to be_successful
+              expect(response.parsed_body["success"]).to be true
+              expect(@product.reload.name).to eq("Updated")
+            end
+          end
+        end
+      end
+
       it "rejects non-array cover_ids" do
         put @action, params: @params.merge(cover_ids: "not-an-array")
 
@@ -1089,7 +1209,7 @@ describe Api::V2::LinksController do
 
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["message"]).to include("must include a url string")
+        expect(response.parsed_body["message"]).to include("must reference an existing file by id or include a url")
       end
 
       it "rejects rich_content when numeric-keyed params normalize into non-hash elements" do
@@ -1233,6 +1353,96 @@ describe Api::V2::LinksController do
         ), as: :json
         expect(response.parsed_body["success"]).to be(true)
         expect(file.reload.alive?).to be(false)
+      end
+
+      it "treats id-only files[] entries as keep-unchanged for existing files" do
+        file = create(:product_file, link: @product, display_name: "Keep me")
+
+        put @action, params: @params.merge(files: [{ id: file.external_id }]), as: :json
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(file.reload.alive?).to be(true)
+        expect(file.display_name).to eq("Keep me")
+      end
+
+      it "preserves rich-content embeds when id-only files[] entries match existing files" do
+        file = create(:product_file, link: @product)
+        rc = create(:rich_content, entity: @product, title: "Page", description: [
+                      { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
+                    ], position: 0)
+
+        put @action, params: @params.merge(files: [{ id: file.external_id }]), as: :json
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(file.reload.alive?).to be(true)
+        expect(rc.reload.description.first.dig("attrs", "id")).to eq(file.external_id)
+      end
+
+      it "rejects partial updates to an existing file that omit the canonical url" do
+        file = create(:product_file, link: @product, display_name: "Old")
+
+        put @action, params: @params.merge(files: [{ id: file.external_id, display_name: "New" }]), as: :json
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("canonical url")
+        expect(file.reload.display_name).to eq("Old")
+      end
+
+      it "rejects client-supplied modified flag on files[] entries" do
+        existing_file = create(:product_file, link: @product, display_name: "Old")
+
+        put @action, params: @params.merge(files: [
+                                             { id: existing_file.external_id, url: existing_file.url, modified: "false", display_name: "New" }
+                                           ]), as: :json
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("modified")
+        expect(existing_file.reload.display_name).to eq("Old")
+      end
+
+      it "preserves existing subtitle tracks when id-only files[] entry keeps a video file unchanged" do
+        video = create(:streamable_video, link: @product)
+        subtitle = create(:subtitle_file, product_file: video)
+
+        put @action, params: @params.merge(files: [{ id: video.external_id }]), as: :json
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(video.reload.alive?).to be(true)
+        expect(subtitle.reload.alive?).to be(true)
+      end
+
+      it "fails requests that reference a file deleted concurrently instead of resurrecting it" do
+        file = create(:product_file, link: @product)
+        original_external_id = file.external_id
+
+        stubbed_once = false
+        allow_any_instance_of(Link).to receive(:assign_attributes).and_wrap_original do |m, *args|
+          unless stubbed_once
+            stubbed_once = true
+            file.mark_deleted!
+          end
+          m.call(*args)
+        end
+
+        put @action, params: @params.merge(files: [{ id: original_external_id }]), as: :json
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("no longer exist")
+        expect(ProductFile.where(link: @product).count).to eq(1)
+      end
+
+      it "supports round-tripping serialized file entries back through PUT using id only" do
+        file = create(:product_file, link: @product, display_name: "Round Trip")
+        serialized_files = JSON.parse(@product.as_json(api_scopes: ["view_public", "edit_products"]).to_json)["files"]
+        expect(serialized_files.first["id"]).to eq(file.external_id)
+
+        put @action, params: @params.merge(
+          files: serialized_files.map { |f| { id: f["id"] } }
+        ), as: :json
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(file.reload.alive?).to be(true)
+        expect(file.display_name).to eq("Round Trip")
       end
 
       it "reorders covers via cover_ids" do

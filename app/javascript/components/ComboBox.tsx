@@ -122,7 +122,7 @@ export const ComboBox = <Option extends unknown>({
           aria-multiselectable={multiple}
           style={maxHeight ? { maxHeight } : undefined}
           className={classNames(
-            "absolute top-full left-0 z-10 block w-full overflow-auto rounded-b border border-t-0 border-border bg-background py-2 shadow",
+            "absolute top-full left-0 z-10 block w-full overflow-auto rounded-b border border-t-0 border-border bg-background py-2 text-foreground shadow [--color:var(--contrast-filled)]",
           )}
         >
           {options.map((item, index) => (

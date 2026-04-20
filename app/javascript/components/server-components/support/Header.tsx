@@ -1,8 +1,8 @@
-import { Github, Search } from "@boxicons/react";
+import { Search } from "@boxicons/react";
 import { HelperClientProvider } from "@helperai/react";
 import React from "react";
 
-import { Button, NavigationButton } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { UnauthenticatedNewTicketModal } from "$app/components/support/UnauthenticatedNewTicketModal";
 import { UnreadTicketsBadge } from "$app/components/support/UnreadTicketsBadge";
 import { PageHeader } from "$app/components/ui/PageHeader";
@@ -51,39 +51,13 @@ export function SupportHeader({
               </a>
             </Button>
           ) : isAnonymousUserOnHelpCenter ? (
-            <>
-              <NavigationButton
-                color="accent"
-                outline
-                href="https://github.com/antiwork/gumroad/issues/new"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2"
-              >
-                <Github pack="brands" className="size-5" />
-                Report a bug
-              </NavigationButton>
               <Button color="accent" onClick={() => setIsUnauthenticatedNewTicketOpen(true)}>
                 Contact support
               </Button>
-            </>
           ) : hasHelperSession ? (
-            <>
-              <NavigationButton
-                color="accent"
-                outline
-                href="https://github.com/antiwork/gumroad/issues/new"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2"
-              >
-                <Github pack="brands" className="size-5" />
-                Report a bug
-              </NavigationButton>
               <Button color="accent" onClick={onOpenNewTicket}>
                 New ticket
               </Button>
-            </>
           ) : null
         }
       >

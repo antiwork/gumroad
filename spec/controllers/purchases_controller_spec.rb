@@ -813,19 +813,35 @@ describe PurchasesController, :vcr do
         expect(response.body).to include(free_trial_membership_purchase.external_id)
       end
 
-      it "transforms the submitted start_time / end_time in the seller's time zone" do
-        # Simulates someone's browser being in California (-07:00, ignored) while their TZ is in Japan (+09:00)
+      it "interprets the submitted start_time / end_time as UTC regardless of seller's time zone" do
         seller.update!(timezone: "Tokyo")
 
         expect(PurchaseSearchService).to receive(:new).with(
           hash_including(
-            created_on_or_after: Time.utc(2020, 7, 31, 15),
-            created_before: Time.utc(2020, 8, 31, 14).end_of_hour,
+            created_on_or_after: Time.utc(2020, 8, 1).beginning_of_day,
+            created_before: Time.utc(2020, 8, 31).end_of_day,
         )).and_call_original
 
         params[:start_time] = "2020-08-01"
         params[:end_time] = "2020-08-31"
         get :export, params:
+      end
+
+      it "includes purchases at UTC midnight boundary regardless of seller's timezone" do
+        seller.update!(timezone: "Pacific Time (US & Canada)")
+
+        at_start_boundary = create(:purchase, link: @product, seller:, created_at: Time.utc(2023, 6, 10, 3, 0, 0))
+        at_end_boundary = create(:purchase, link: @product, seller:, created_at: Time.utc(2023, 6, 20, 22, 0, 0))
+        before_range = create(:purchase, link: @product, seller:, created_at: Time.utc(2023, 6, 9, 23, 59, 59))
+        after_range = create(:purchase, link: @product, seller:, created_at: Time.utc(2023, 6, 21, 0, 0, 1))
+        index_model_records(Purchase)
+
+        get :export, params: { start_time: "2023-06-10", end_time: "2023-06-20" }
+
+        expect(response.body).to include(at_start_boundary.external_id)
+        expect(response.body).to include(at_end_boundary.external_id)
+        expect(response.body).not_to include(before_range.external_id)
+        expect(response.body).not_to include(after_range.external_id)
       end
     end
 

@@ -525,6 +525,21 @@ describe AffiliatedProductsPresenter do
     end
   end
 
+  describe "#affiliated_products_page_props when the global affiliate has been deleted" do
+    it "returns nil for global affiliate fields without raising" do
+      user = create(:affiliate_user)
+      user.global_affiliate.update!(deleted_at: Time.current)
+      user.reload
+
+      props = described_class.new(user).affiliated_products_page_props
+
+      expect(props[:global_affiliates_data][:global_affiliate_id]).to be_nil
+      expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
+      expect(props[:global_affiliates_data][:cookie_expiry_days]).to eq GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS
+      expect(props[:global_affiliates_data][:affiliate_query_param]).to eq Affiliate::SHORT_QUERY_PARAM
+    end
+  end
+
   describe "#archived_tab_visible" do
     let(:seller) { create(:user, username: "seller1") }
     let!(:product) { create(:product, archived: true, user: seller) }

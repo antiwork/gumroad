@@ -40,7 +40,7 @@ describe AssetPreview, :vcr do
       asset_preview = create(:asset_preview)
       asset_preview.file.attach Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "test.zip"), "application/octet-stream")
       expect(asset_preview.save).to eq(false)
-      expect(asset_preview.errors.full_messages).to eq(["Could not process your preview, please try again."])
+      expect(asset_preview.errors.full_messages).to eq(["Cover must be an image (JPEG, PNG, GIF) or a video."])
     end
 
     describe "#analyze_file" do
@@ -59,7 +59,7 @@ describe AssetPreview, :vcr do
         blob.analyze
         asset_preview.file.attach(blob)
         expect(asset_preview.save).to eq(false)
-        expect(asset_preview.errors.full_messages).to include("Could not process your preview, please try again.")
+        expect(asset_preview.errors.full_messages).to include("Cover must be an image (JPEG, PNG, GIF) or a video.")
       end
 
       it "fails with an image which cannot be analyzed" do
@@ -76,7 +76,7 @@ describe AssetPreview, :vcr do
       asset_preview = create(:asset_preview)
       asset_preview.file.attach(Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "webp_image.webp"), "image/webp"))
       expect(asset_preview.save).to eq(false)
-      expect(asset_preview.errors.full_messages).to eq(["Could not process your preview, please try again."])
+      expect(asset_preview.errors.full_messages).to eq(["Cover must be an image (JPEG, PNG, GIF) or a video."])
     end
 
     context "deleted" do

@@ -1244,6 +1244,30 @@ describe CustomerMailer do
       expect(mail.to).to eq([purchases.last.email])
       expect(mail.subject).to eq("Receipts for Purchases")
     end
+
+    it "eager loads charges and orders to avoid N+1 queries" do
+      purchases_with_charges = Array.new(3) do
+        purchase = create(:purchase, link: product, seller:)
+        charge = create(:charge, seller:)
+        charge.purchases << purchase
+        charge.order.purchases << purchase
+        purchase
+      end
+
+      queries = []
+      callback = lambda { |_name, _start, _finish, _id, payload|
+        queries << payload[:sql] if payload[:sql] && !payload[:name]&.match?(/SCHEMA|TRANSACTION/)
+      }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        CustomerMailer.grouped_receipt(purchases_with_charges.map(&:id)).message
+      end
+
+      charge_queries = queries.select { |sql| sql.match?(/FROM `charges`/i) }
+      order_queries = queries.select { |sql| sql.match?(/FROM `orders`/i) }
+      expect(charge_queries.size).to be <= 2
+      expect(order_queries.size).to be <= 2
+    end
   end
 
   describe "#refund" do

@@ -67,6 +67,23 @@ class Api::V2::FilesController < Api::V2::BaseController
     error_400(e.message)
   end
 
+  def abort
+    upload_id = params[:upload_id].to_s
+    key = params[:key].to_s
+
+    return error_400("upload_id is required") if upload_id.blank?
+    return error_400("key is required") if key.blank?
+    return error_400("invalid key") unless key.start_with?(s3_key_prefix)
+
+    Aws::S3::Client.new.abort_multipart_upload(bucket: S3_BUCKET, key:, upload_id:)
+
+    render json: { success: true, status: "accepted" }
+  rescue Aws::S3::Errors::NoSuchUpload
+    render json: { success: true, status: "already_gone" }
+  rescue Aws::S3::Errors::ServiceError => e
+    error_400(e.message)
+  end
+
   private
     def s3_key_prefix
       "attachments/#{current_resource_owner.external_id}/"

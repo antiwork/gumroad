@@ -29,6 +29,10 @@ Non-trivial PRs should follow this structure:
 
 End with an AI disclosure after a `---` separator. Name the specific model (e.g., "Claude Opus 4.6") and list the prompts given to the agent.
 
+## AI models
+
+Use the latest and greatest state-of-the-art models from American AI companies like [Anthropic](https://www.anthropic.com/) and [OpenAI](https://openai.com/). As of this writing, that means Claude Opus 4.6 and GPT-5.4, but always check for the newest releases. Don't settle for last-gen models when better ones are available.
+
 ## Development guidelines
 
 ### Testing guidelines
@@ -48,14 +52,18 @@ End with an AI disclosure after a `---` separator. Name the specific model (e.g.
 
 ### Before pushing
 
-Always run linting and type checking before pushing commits:
+Always run the relevant tests locally and confirm they pass before pushing:
 
 ```bash
+# Run the specs affected by your changes
+bundle exec rspec spec/path/to/changed_spec.rb
+
+# Lint
 bundle exec rubocop -a              # Ruby lint + auto-correct
 DISABLE_TYPE_CHECKED=1 npx eslint   # JS/TS lint
 ```
 
-Fix any issues before committing. CI does not auto-fix your code.
+Do not push code with failing tests. CI is not a substitute for local verification. Fix any issues before committing.
 
 ### Code standards
 
@@ -101,7 +109,6 @@ Fix any issues before committing. CI does not auto-fix your code.
 - Use `product` instead of `link` in new code (in variable names, column names, comments, etc.)
 - Use `request` instead of `$.ajax` in new code
 - Use `buyer` and `seller` when naming variables instead of `customer` and `creator`
-- Avoid `unless`
 - Don't create new files in `app/modules/` as it is a legacy location. Prefer creating concerns in the right directory instead (eg: `app/controllers/concerns/`, `app/models/concerns/`, etc.)
 - Do not create methods ending in `_path` or `_url`. They might cause collisions with rails generated named route helpers in the future. Instead, use a module similar to `CustomDomainRouteBuilder`
 - Use Nano IDs to generate external/public IDs for new models.

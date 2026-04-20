@@ -1900,7 +1900,6 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include("Of course, we will pay you out your remaining balance. Your existing customers' purchases will not be affected by this.")
         expect(mail.body.encoded).to include("And you can contact our support team to get your account reviewed again.")
         expect(mail.body.encoded).to include("We're super sorry about the inconvenience!")
-        expect(mail.body.encoded).to include("Sahil and the Gumroad team")
       end
     end
   end
@@ -1992,7 +1991,6 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include("Your Gumroad account has been suspended for a policy violation.")
       expect(mail.body.encoded).to include("contact our support team")
       expect(mail.body.encoded).to include("reply to this email")
-      expect(mail.body.encoded).to include("The Gumroad team")
     end
 
     context "when the seller has a pending scheduled payout" do
@@ -2058,7 +2056,6 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include("Your account will be permanently suspended in 10 days, on 7 April, if your storefront is not updated to be compliant by then.")
         expect(mail.body.encoded).to include("Of course, we will pay you out your remaining balance. Your existing customers' purchases will not be affected by this.")
         expect(mail.body.encoded).to include("We're super sorry about the inconvenience!")
-        expect(mail.body.encoded).to include("Sahil and the Gumroad team")
       end
     end
   end

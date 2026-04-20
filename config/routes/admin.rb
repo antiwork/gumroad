@@ -53,6 +53,7 @@ namespace :admin do
       post :disable_paypal_sales
       post :mark_compliant
       post :suspend_for_fraud
+      post :schedule_payout
       post :suspend_for_tos_violation
       post :put_on_probation
       post :flag_for_fraud

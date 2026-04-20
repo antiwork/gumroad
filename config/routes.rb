@@ -44,6 +44,7 @@ Rails.application.routes.draw do
     scope "v2", module: "v2", as: "v2" do
       post "files/presign", to: "files#presign"
       post "files/complete", to: "files#complete"
+      post "files/abort", to: "files#abort"
       resources :licenses, only: [] do
         collection do
           post :verify
@@ -88,6 +89,10 @@ Rails.application.routes.draw do
       put "/resource_subscriptions", to: "resource_subscriptions#create"
       delete "/resource_subscriptions/:id", to: "resource_subscriptions#destroy"
       get "/resource_subscriptions", to: "resource_subscriptions#index"
+
+      get "/tax_forms", to: "tax_forms#index"
+      get "/tax_forms/:year/:tax_form_type/download", to: "tax_forms#download"
+      get "/earnings", to: "earnings#show"
     end
   end
 
@@ -298,6 +303,7 @@ Rails.application.routes.draw do
     get "/about", to: "home#about"
     get "/careers", to: "careers#index"
     get "/careers/:slug", to: "careers#show", as: :career
+    get "/jobs", to: redirect("/careers")
     get "/features", to: "home#features"
     get "/features.md", to: "home#features_md"
     get "/pricing", to: "home#pricing"

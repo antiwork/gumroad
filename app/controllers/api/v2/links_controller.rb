@@ -21,7 +21,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
   before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy]) { doorkeeper_authorize! :edit_products }
-  before_action :check_types_of_file_objects, only: [:update, :create]
+  before_action :reject_unsupported_upload_fields, only: [:update, :create]
   before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy]
   before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy]
 
@@ -242,14 +242,26 @@ class Api::V2::LinksController < Api::V2::BaseController
       if !params[:files].is_a?(Array) || params[:files].any? { |f| !f.respond_to?(:key?) }
         return render_response(false, message: "files must be an array of file objects.")
       end
-      existing_files_by_id = @product.alive_product_files.index_by(&:external_id)
+      if params[:files].any? { |f| f.key?(:modified) }
+        return render_response(false, message: "'modified' is not an accepted parameter on files[]; it is an internal save-path flag.")
+      end
+      existing_files_by_id = @product.product_files.alive.index_by(&:external_id)
       new_files = []
       params[:files].each do |f|
         existing = f[:id].present? ? existing_files_by_id[f[:id]] : nil
         if existing
-          if f[:url].present? && f[:url] != existing.url
+          if f[:url].blank?
+            if (f.keys.map(&:to_s) - %w[id]).empty?
+              f[:url] = existing.url
+              f[:modified] = "false"
+            else
+              return render_response(false, message: "Include the canonical url returned by POST /v2/files/complete when updating fields on an existing file; an entry with only id keeps the file unchanged.")
+            end
+          elsif f[:url] != existing.url
             return render_response(false, message: "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first.")
           end
+        elsif f[:url].blank?
+          return render_response(false, message: "Each files entry must reference an existing file by id or include a url for a new file uploaded via POST /v2/files/complete.")
         else
           new_files << f
         end
@@ -311,6 +323,13 @@ class Api::V2::LinksController < Api::V2::BaseController
         flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
 
         unless @normalized_files.nil?
+          referenced_existing_ids = @normalized_files.filter_map { |f| f[:id] if f[:id].present? }
+          if referenced_existing_ids.any?
+            locked_alive_ids = @product.product_files.alive.lock.map(&:external_id)
+            missing_ids = referenced_existing_ids - locked_alive_ids
+            raise Link::LinkInvalid, "File(s) #{missing_ids.join(', ')} no longer exist; they may have been deleted by a concurrent request. Retry with the current file list." if missing_ids.any?
+          end
+
           validate_file_embed_conflicts!(skip_variant_embeds: flag_changed && @product.has_same_rich_content_for_all_variants? && !@normalized_rich_content.nil?)
 
           rich_content_params = build_rich_content_params
@@ -409,11 +428,55 @@ class Api::V2::LinksController < Api::V2::BaseController
       error_with_object(:product, product)
     end
 
-    def check_types_of_file_objects
-      return if params[:file].class != String && params[:preview].class != String
+    UNSUPPORTED_UPLOAD_FIELDS = %i[file preview thumbnail].freeze
 
-      render_response(false, message: "You entered the name of the file to be uploaded incorrectly. Please refer to " \
-                                      "https://gumroad.com/api#methods for the correct syntax.")
+    def reject_unsupported_upload_fields
+      rejected_field = UNSUPPORTED_UPLOAD_FIELDS.find { |key| legacy_upload_present?(params[key]) }
+      return unless rejected_field
+
+      render_response(false, message: unsupported_upload_field_message(rejected_field))
+    end
+
+    def legacy_upload_present?(value)
+      return false if value.blank?
+
+      case value
+      when ActionController::Parameters, Hash
+        value.each_value.any? { |v| legacy_upload_present?(v) }
+      when Array
+        value.any? { |v| legacy_upload_present?(v) }
+      else
+        true
+      end
+    end
+
+    def unsupported_upload_field_message(field)
+      verb_path = action_name == "create" ? "POST /v2/products" : "PUT /v2/products/:id"
+      "'#{field}' is not an accepted parameter on #{verb_path}. #{upload_field_guidance(field)}"
+    end
+
+    def upload_field_guidance(field)
+      case field
+      when :file
+        presign_flow = "Upload files with the presign flow (POST /v2/files/presign, upload parts to the returned S3 URLs, then POST /v2/files/complete), then attach them by including the returned URLs in files[][url]."
+        if action_name == "create"
+          presign_flow
+        else
+          "#{presign_flow} Note: files is a full replacement — to keep an existing file, include an entry with its id; files missing from the array are removed."
+        end
+      when :preview
+        if action_name == "create"
+          "Covers can only be added after the product is created. Create the product first, then POST to /v2/products/:id/covers with a url or signed_blob_id."
+        else
+          "Use POST /v2/products/:id/covers with a url or signed_blob_id to add a cover."
+        end
+      when :thumbnail
+        if action_name == "create"
+          "Thumbnails can only be set after the product is created. Create the product first, then POST to /v2/products/:id/thumbnail with a signed_blob_id."
+        else
+          "Use POST /v2/products/:id/thumbnail with a signed_blob_id to set the thumbnail."
+        end
+      end
     end
 
     def validate_file_urls(files)
