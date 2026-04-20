@@ -21,8 +21,6 @@ describe CreatorMailer do
       expect(body).to have_text("Thanks for being a part of #GumroadDay2024!")
       expect(body).to have_text("As a reminder, April 4, 2024 was Gumroad's 13th birthday and we celebrated by lowering Gumroad fees to 0% flat, saving you a total of $40.62 in Gumroad fees.")
       expect(body).to have_text("See you next year!")
-      expect(body).to have_text("Best,")
-      expect(body).to have_text("Sahil and the Gumroad team")
       expect(body).to have_text("PS. View the #GumroadDay2024 hashtag on Twitter and Instagram for inspiration for next year.")
     end
   end

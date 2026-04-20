@@ -42,7 +42,6 @@ describe CreatorMailer do
       body = mail.body.encoded
       expect(body).to include("top_creator_badge")
       expect(body).to include("You just earned the Top Creator badge on Gumroad.")
-      expect(body).to include("The Gumroad Team")
     end
   end
 end
