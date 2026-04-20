@@ -9147,7 +9147,9 @@ describe StripeMerchantAccountManager, :vcr do
         subject.update_bank_account(user, passphrase: "1234")
       end
 
-      it "syncs to Stripe when the account holder name has changed" do
+      it "syncs to Stripe when the account holder name has changed for JP accounts" do
+        user_compliance_info.update!(country: "Japan")
+
         stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
         stripe_account.metadata["bank_account_id"] = bank_account_1.external_id
 
