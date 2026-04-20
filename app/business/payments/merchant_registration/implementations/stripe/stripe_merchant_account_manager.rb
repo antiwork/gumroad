@@ -253,7 +253,16 @@ module StripeMerchantAccountManager
     raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a bank account") if bank_account.nil?
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
-    return if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
+    if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
+      country_code = bank_account.user.alive_user_compliance_info&.legal_entity_country_code
+      if [Compliance::Countries::JPN.alpha2, Compliance::Countries::VNM.alpha2, Compliance::Countries::IDN.alpha2].include?(country_code)
+        stripe_external_account = stripe_account["external_accounts"]&.first
+        stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
+        return if stripe_holder_name.present? && stripe_holder_name == bank_account.account_holder_full_name
+      else
+        return
+      end
+    end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
     Stripe::Account.update(stripe_account.id, attributes)

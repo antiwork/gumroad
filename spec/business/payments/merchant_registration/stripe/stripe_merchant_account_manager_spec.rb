@@ -9146,6 +9146,18 @@ describe StripeMerchantAccountManager, :vcr do
         end
         subject.update_bank_account(user, passphrase: "1234")
       end
+
+      it "syncs to Stripe when the account holder name has changed" do
+        stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+        stripe_account.metadata["bank_account_id"] = bank_account_1.external_id
+
+        bank_account_1.update!(account_holder_full_name: "Updated Name")
+
+        expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
+        expect(Stripe::Account).to receive(:update).with(merchant_account.charge_processor_merchant_id, hash_including(:bank_account)).and_call_original
+
+        subject.update_bank_account(user, passphrase: "1234")
+      end
     end
 
     describe "bank accounts without routing numbers" do

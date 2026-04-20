@@ -948,7 +948,11 @@ const BankAccountSection = ({
             aria-invalid={errorFieldNames.has("account_holder_full_name")}
             onChange={(evt) => updateBankAccount({ account_holder_full_name: evt.target.value })}
           />
-          <FieldsetDescription>Must exactly match the name on your bank account</FieldsetDescription>
+          <FieldsetDescription>
+            {user.country_code === "JP"
+              ? "Must be in Katakana and exactly match the name on your bank account"
+              : "Must exactly match the name on your bank account"}
+          </FieldsetDescription>
         </Fieldset>
         <div className="grid gap-2">
           {showNewBankAccount ? (

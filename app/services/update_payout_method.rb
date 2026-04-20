@@ -161,8 +161,9 @@ class UpdatePayoutMethod
         return { error: :bank_account_error, data: bank_account.errors.full_messages.to_sentence } if bank_account.errors.present?
 
         user.update!(payment_address: "") if user.payment_address.present?
-      elsif params[:bank_account][:account_holder_full_name].present?
-        old_bank_account.update(account_holder_full_name: params[:bank_account][:account_holder_full_name])
+      elsif params[:bank_account][:account_holder_full_name].present? && old_bank_account.present?
+        old_bank_account.update!(account_holder_full_name: params[:bank_account][:account_holder_full_name])
+        HandleNewBankAccountWorker.perform_in(5.seconds, old_bank_account.id)
       end
     elsif params[:payment_address].present?
       payment_address = params[:payment_address].strip
