@@ -1,0 +1,10 @@
+<%= header_section("Your bank account holder name was rejected.") %>
+<div>
+  <p>Hi there. Your bank rejected the account holder name on your Gumroad payout settings. This prevents your payouts from being delivered.</p>
+  <% if @country_code == Compliance::Countries::JPN.alpha2 %>
+    <p>For Japanese bank accounts, the account holder name must be written in Katakana and exactly match the name registered with your bank.</p>
+  <% else %>
+    <p>Please make sure the account holder name exactly matches the name registered with your bank, using the characters required by your bank.</p>
+  <% end %>
+  <p>Please update your name in <%= link_to "your payout settings", settings_payments_url %>. Thanks!</p>
+</div>

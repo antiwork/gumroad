@@ -273,9 +273,9 @@ module StripeMerchantAccountManager
 
     save_stripe_bank_account_info(bank_account, stripe_account.refresh)
   rescue Stripe::InvalidRequestError => e
+    return ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if e.code == "incorrect_account_holder_name"
     return ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if e.message["Invalid account number"] ||
-                                                                            e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] ||
-                                                                            e.code == "incorrect_account_holder_name"
+                                                                            e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"]
 
     ErrorNotifier.notify(e)
   rescue Stripe::CardError => e

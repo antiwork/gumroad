@@ -9131,6 +9131,18 @@ describe StripeMerchantAccountManager, :vcr do
           end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
         end
       end
+
+      describe "account holder name rejected by Stripe" do
+        before do
+          expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("Account holder name is invalid", "account_holder_name", code: "incorrect_account_holder_name"))
+        end
+
+        it "emails the creator about the rejected name" do
+          expect do
+            subject.update_bank_account(user, passphrase: "1234")
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_account_holder_name).with(user.id)
+        end
+      end
     end
 
     describe "all info provided previously, bank account not changed" do
@@ -9158,7 +9170,7 @@ describe StripeMerchantAccountManager, :vcr do
         stripe_account.define_singleton_method(:id) { "acct_123" }
 
         expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
-        expect(Stripe::Account).to receive(:update).with("acct_123", hash_including(:bank_account)).and_raise(StandardError, "stop here")
+        expect(Stripe::Account).to receive(:update).with("acct_123", hash_including(bank_account: hash_including(account_holder_name: "Updated Name"))).and_raise(StandardError, "stop here")
 
         expect { subject.update_bank_account(user, passphrase: "1234") }.to raise_error(StandardError, "stop here")
       end

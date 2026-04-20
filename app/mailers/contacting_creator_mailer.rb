@@ -145,6 +145,12 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "We were unable to verify your bank account."
   end
 
+  def invalid_account_holder_name(user_id)
+    @seller = User.find(user_id)
+    @country_code = @seller.alive_user_compliance_info&.legal_entity_country_code
+    @subject = "Your bank account holder name was rejected."
+  end
+
   def cannot_pay(payment_id)
     @payment = Payment.find(payment_id)
     @seller = @payment.user
