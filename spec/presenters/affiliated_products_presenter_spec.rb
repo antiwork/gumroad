@@ -186,21 +186,6 @@ describe AffiliatedProductsPresenter do
       expect(props[:affiliates_disabled_reason]).to be nil
     end
 
-    context "when the global affiliate has been deleted" do
-      before do
-        global_affiliate.update!(deleted_at: Time.current)
-        affiliate_user.reload
-      end
-
-      it "returns nil for global affiliate fields without raising" do
-        props = described_class.new(affiliate_user).affiliated_products_page_props
-        expect(props[:global_affiliates_data][:global_affiliate_id]).to be_nil
-        expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
-        expect(props[:global_affiliates_data][:cookie_expiry_days]).to eq GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS
-        expect(props[:global_affiliates_data][:affiliate_query_param]).to eq Affiliate::SHORT_QUERY_PARAM
-      end
-    end
-
     it "returns affiliates_disabled_reason if using Brazilian Stripe Connect account" do
       brazilian_stripe_account = create(:merchant_account_stripe_connect, user: affiliate_user, country: "BR")
       affiliate_user.update!(check_merchant_account_is_linked: true)
@@ -537,6 +522,21 @@ describe AffiliatedProductsPresenter do
                                                                  url: direct_affiliate_one.referral_url_for_product(creator_one_product_two)
                                                                })
       end
+    end
+  end
+
+  describe "#affiliated_products_page_props when the global affiliate has been deleted" do
+    it "returns nil for global affiliate fields without raising" do
+      user = create(:affiliate_user)
+      user.global_affiliate.update!(deleted_at: Time.current)
+      user.reload
+
+      props = described_class.new(user).affiliated_products_page_props
+
+      expect(props[:global_affiliates_data][:global_affiliate_id]).to be_nil
+      expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
+      expect(props[:global_affiliates_data][:cookie_expiry_days]).to eq GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS
+      expect(props[:global_affiliates_data][:affiliate_query_param]).to eq Affiliate::SHORT_QUERY_PARAM
     end
   end
 
