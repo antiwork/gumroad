@@ -85,10 +85,10 @@ describe Api::V2::FilesController do
         expect(response.parsed_body["error"]).to be_present
       end
 
-      it "returns 400 when file_size is not a valid number" do
-        post action, params: params.merge(file_size: "not_a_number")
+      it "returns 400 when file_size is sent as a file upload" do
+        post action, params: params.merge(file_size: fixture_file_upload("blah.txt", "text/plain"))
         expect(response.status).to eq(400)
-        expect(response.parsed_body["error"]).to be_present
+        expect(response.parsed_body["error"]).to eq("file_size is required")
       end
 
       it "returns 400 when S3 raises a service error" do
