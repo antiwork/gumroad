@@ -420,6 +420,14 @@ describe "Product::Searchable - Search scenarios" do
       end
     end
 
+    describe "search_options with String ids param" do
+      it "does not raise NoMethodError when ids is a String" do
+        expect do
+          Link.search_options({ ids: "some-id", sort: "page_layout" })
+        end.not_to raise_error
+      end
+    end
+
     describe "on indexed products with reviews" do
       before do
         creator = create(:compliant_user, username: "username")
