@@ -261,6 +261,18 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(controller.logged_in_user.carts.alive).to be_present
       end
 
+      it "does not raise when `discountCodes` is omitted" do
+        expect do
+          patch :update, params: { cart: { items: [] } }, as: :json
+        end.to change(Cart, :count).by(1)
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+
+        cart = controller.logged_in_user.alive_cart
+        expect(cart.discount_codes).to eq([])
+      end
+
       it "creates and populates a cart" do
         product = create(:product)
         call_start_time = Time.current.round

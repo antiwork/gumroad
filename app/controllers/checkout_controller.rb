@@ -26,7 +26,7 @@ class CheckoutController < ApplicationController
       cart.email = update_permitted_params[:email].presence || logged_in_user&.email
       cart.return_url = update_permitted_params[:returnUrl]
       cart.reject_ppp_discount = update_permitted_params[:rejectPppDiscount] || false
-      cart.discount_codes = update_permitted_params[:discountCodes].map { { code: _1[:code], fromUrl: _1[:fromUrl] } }
+      cart.discount_codes = (update_permitted_params[:discountCodes] || []).map { { code: _1[:code], fromUrl: _1[:fromUrl] } }
       cart.save!
 
       updated_cart_products = update_permitted_params[:items].map do |item|
