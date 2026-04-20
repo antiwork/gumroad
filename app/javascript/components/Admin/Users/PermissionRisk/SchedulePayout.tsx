@@ -18,7 +18,8 @@ const SchedulePayout = ({ user }: SchedulePayoutProps) => {
   const [payoutAction, setPayoutAction] = React.useState("payout");
 
   return (
-    user.suspended && (
+    user.suspended &&
+    user.unpaid_balance_cents > 0 && (
       <>
         <hr />
         <Details>
