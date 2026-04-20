@@ -163,23 +163,20 @@ class SettingsPresenter
   end
 
   def authorized_applications_props
-    authorized_applications = OauthApplication.alive.authorized_for(seller)
-    application_grants = {}
-    valid_applications = []
+    authorized_applications = OauthApplication.alive.authorized_for(seller).to_a
+    application_grants = Doorkeeper::AccessGrant
+      .where(application_id: authorized_applications.map(&:id), resource_owner_id: seller.id)
+      .order(:created_at)
+      .each_with_object({}) { |grant, memo| memo[grant.application_id] ||= grant }
 
-    authorized_applications.each do |application|
-      access_grant = Doorkeeper::AccessGrant.order("created_at").where(application_id: application.id, resource_owner_id: seller.id).first
-      next if access_grant.nil?
-
-      valid_applications << application
-      application_grants[application.id] = access_grant
-    end
-    valid_applications = valid_applications.sort_by { |application| application_grants[application.id].created_at }
+    valid_applications = authorized_applications
+      .select { |application| application_grants[application.id] }
+      .sort_by { |application| application_grants[application.id].created_at }
 
     authorized_applications = valid_applications.map do |application| {
       name: application.name,
       icon_url: application.icon_url,
-      is_own_app: application.owner == seller,
+      is_own_app: application.owner_id == seller.id,
       first_authorized_at: application_grants[application.id].created_at.iso8601,
       scopes: application_grants[application.id].scopes,
       id: application.external_id,
