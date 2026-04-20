@@ -133,6 +133,22 @@ describe Settings::Team::InvitationsController do
       expect(team_invitation.reload.deleted?).to eq(false)
     end
 
+    context "when the email is associated with an existing team member" do
+      before do
+        member = create(:user, email: team_invitation.email)
+        member.create_owner_membership_if_needed!
+        create(:team_membership, seller: seller, user: member)
+      end
+
+      it "returns an error" do
+        put :restore, params: { id: team_invitation.external_id }, as: :json
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["error_message"]).to include("existing team member")
+        expect(team_invitation.reload.deleted?).to eq(true)
+      end
+    end
+
     context "with record belonging to other seller" do
       let(:team_invitation) { create(:team_invitation) }
 
