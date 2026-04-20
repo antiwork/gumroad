@@ -13,10 +13,10 @@ Send one-off emails to Gumroad creators by executing Ruby inline against the pro
 
 ## Prerequisites
 
-- SSH access to bastion (configured via `gumroad-deployment`)
-- `dotenv` CLI installed
-- AWS credentials configured
+- Production console access configured via the `gumroad-prod-console` skill (see its SKILL.md for setup)
 - Metabase API key (in 1Password: "Metabase (Gumroad)" → "API Key")
+
+All production Ruby execution in this skill goes through `.claude/skills/gumroad-prod-console/scripts/prod_query.sh`. That script targets the read replica for MySQL, which is sufficient here — `User.alive.not_suspended...find_each` is a read, and `deliver_later` + `$redis.set` hit Redis, not MySQL. Do not add any MySQL-write operations to blast scripts.
 
 ## Workflow
 
@@ -60,9 +60,9 @@ Show the count to the human before executing.
 
 ### 4. Dry run (preview)
 
-Generate a script that sends to just 1-2 test recipients first. Run via `prod_exec.sh`:
+Generate a script that sends to just 1-2 test recipients first. Run via `prod_query.sh`:
 ```bash
-cat << 'RUBY' | .claude/skills/email-blast/scripts/prod_exec.sh
+cat << 'RUBY' | .claude/skills/gumroad-prod-console/scripts/prod_query.sh
 test_user = User.find_by(email: "sahil@gumroad.com")
 OneOffMailer.email(
   email: test_user.form_email,
@@ -86,7 +86,7 @@ RUBY
 Generate the full script with Redis checkpointing for resumability:
 
 ```bash
-cat << 'RUBY' | .claude/skills/email-blast/scripts/prod_exec.sh
+cat << 'RUBY' | .claude/skills/gumroad-prod-console/scripts/prod_query.sh
 redis_key = "email_blast_DESCRIPTIVE_KEY_last_user_id"
 last_processed_id = $redis.get(redis_key).to_i
 count = 0
@@ -120,7 +120,7 @@ RUBY
 - **Resume** (if interrupted): Just re-run the same script. Redis checkpoint skips already-processed users.
 - **Reset** (to re-send): Delete the Redis key first:
   ```bash
-  echo '$redis.del("email_blast_DESCRIPTIVE_KEY_last_user_id")' | .claude/skills/email-blast/scripts/prod_exec.sh
+  echo '$redis.del("email_blast_DESCRIPTIVE_KEY_last_user_id")' | .claude/skills/gumroad-prod-console/scripts/prod_query.sh
   ```
 
 ## Safety Rules
