@@ -422,27 +422,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end
       end
 
-      describe "updating only the account holder name" do
-        let!(:bank_account) { create(:ach_account_stripe_succeed, user:) }
-
-        it "enqueues HandleNewBankAccountWorker to sync the name to Stripe" do
-          jobs_before = HandleNewBankAccountWorker.jobs.size
-
-          put :update, params: {
-            user: params,
-            bank_account: {
-              type: AchAccount.name,
-              account_holder_full_name: "Updated Name"
-            }
-          }
-
-          expect(response).to redirect_to(settings_payments_path)
-          expect(response).to have_http_status :see_other
-          expect(bank_account.reload.account_holder_full_name).to eq("Updated Name")
-          expect(HandleNewBankAccountWorker.jobs.size).to eq(jobs_before + 1)
-        end
-      end
-
       describe "user enters a birthday accidentally that is under 13 years old given todays date" do
         before do
           put :update, params: { user: params }

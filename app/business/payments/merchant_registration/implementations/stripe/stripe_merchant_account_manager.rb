@@ -10,6 +10,13 @@ module StripeMerchantAccountManager
                                            "Malta", "Netherlands", "New Zealand", "Norway", "Poland", "Portugal",
                                            "Romania", "Singapore", "Slovakia", "Slovenia", "Spain", "Sweden", "Switzerland",
                                            "United Arab Emirates", "United Kingdom", "United States"].map { |country_name| Compliance::Countries.find_by_name(country_name).alpha2 }
+  ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES = [Compliance::Countries::JPN.alpha2, Compliance::Countries::VNM.alpha2, Compliance::Countries::IDN.alpha2].freeze
+  private_constant :ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES
+
+  def self.account_holder_name_synced_to_stripe?(user)
+    country_code = user.alive_user_compliance_info&.legal_entity_country_code
+    ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code)
+  end
 
   # Use "CEO" as the default title for all Stripe custom connect account owners for now.
   DEFAULT_RELATIONSHIP_TITLE = "CEO"
@@ -254,14 +261,11 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-      country_code = bank_account.user.alive_user_compliance_info&.legal_entity_country_code
-      if [Compliance::Countries::JPN.alpha2, Compliance::Countries::VNM.alpha2, Compliance::Countries::IDN.alpha2].include?(country_code)
-        stripe_external_account = stripe_account["external_accounts"]&.first
-        stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-        return if stripe_holder_name.present? && stripe_holder_name == bank_account.account_holder_full_name
-      else
-        return
-      end
+      return unless account_holder_name_synced_to_stripe?(bank_account.user)
+
+      stripe_external_account = stripe_account["external_accounts"]&.first
+      stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
+      return if stripe_holder_name.present? && stripe_holder_name == bank_account.account_holder_full_name
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
@@ -270,7 +274,8 @@ module StripeMerchantAccountManager
     save_stripe_bank_account_info(bank_account, stripe_account.refresh)
   rescue Stripe::InvalidRequestError => e
     return ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if e.message["Invalid account number"] ||
-                                                                            e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"]
+                                                                            e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] ||
+                                                                            e.message["account_holder_name"]
 
     ErrorNotifier.notify(e)
   rescue Stripe::CardError => e
@@ -420,7 +425,7 @@ module StripeMerchantAccountManager
           bank_account_hash[:routing_number] = routing_number
         end
         bank_account_hash[:account_type] = bank_account.account_type if [Compliance::Countries::CHL.alpha2, Compliance::Countries::COL.alpha2].include?(country_code) && bank_account.account_type.present?
-        bank_account_hash[:account_holder_name] = bank_account.account_holder_full_name if [Compliance::Countries::JPN.alpha2, Compliance::Countries::VNM.alpha2, Compliance::Countries::IDN.alpha2].include?(country_code)
+        bank_account_hash[:account_holder_name] = bank_account.account_holder_full_name if account_holder_name_synced_to_stripe?(bank_account.user)
         bank_account_hash
       end
 

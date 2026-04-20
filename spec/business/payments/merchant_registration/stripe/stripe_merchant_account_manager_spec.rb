@@ -9148,15 +9148,31 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "syncs to Stripe when the account holder name has changed for JP accounts" do
-        user_compliance_info.update!(country: "Japan")
-
-        stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-        stripe_account.metadata["bank_account_id"] = bank_account_1.external_id
-
+        user_compliance_info.update_columns(country: "Japan")
         bank_account_1.update!(account_holder_full_name: "Updated Name")
 
+        stripe_account = {
+          "metadata" => { "bank_account_id" => bank_account_1.external_id },
+          "external_accounts" => [{ "account_holder_name" => "Previous Name" }]
+        }
+        stripe_account.define_singleton_method(:id) { "acct_123" }
+
         expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
-        expect(Stripe::Account).to receive(:update).with(merchant_account.charge_processor_merchant_id, hash_including(:bank_account)).and_call_original
+        expect(Stripe::Account).to receive(:update).with("acct_123", hash_including(:bank_account)).and_raise(StandardError, "stop here")
+
+        expect { subject.update_bank_account(user, passphrase: "1234") }.to raise_error(StandardError, "stop here")
+      end
+
+      it "does not sync to Stripe when the account holder name already matches for JP accounts" do
+        user_compliance_info.update_columns(country: "Japan")
+
+        stripe_account = {
+          "metadata" => { "bank_account_id" => bank_account_1.external_id },
+          "external_accounts" => [{ "account_holder_name" => bank_account_1.account_holder_full_name }]
+        }
+
+        expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
+        expect(Stripe::Account).not_to receive(:update)
 
         subject.update_bank_account(user, passphrase: "1234")
       end
