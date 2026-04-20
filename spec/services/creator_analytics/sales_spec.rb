@@ -167,6 +167,29 @@ describe CreatorAnalytics::Sales do
   end
 end
 
+describe CreatorAnalytics::Sales, "timezone with DST gap at midnight" do
+  context "when user timezone has a DST transition at midnight (e.g. Tehran)" do
+    it "does not raise an Elasticsearch parse error" do
+      # Iran DST: on 2026-03-22 at 00:00, clocks jump to 01:00.
+      # Passing 'Asia/Tehran' as time_zone to ES with a date-only string causes a
+      # parse_exception because midnight on that date is an illegal instant.
+      # Using a fixed UTC offset for range queries avoids the problem.
+      user = create(:user, timezone: "Tehran")
+      product = create(:product, user: user)
+      create(:free_purchase, link: product, created_at: Time.utc(2026, 3, 21, 12, 0))
+      index_model_records(Purchase)
+
+      service = described_class.new(
+        user: user,
+        products: [product],
+        dates: (Date.new(2026, 3, 20)..Date.new(2026, 3, 23)).to_a
+      )
+
+      expect { service.by_product_and_date }.not_to raise_error
+    end
+  end
+end
+
 describe CreatorAnalytics::Sales, "DST handling" do
   context "when sale occurs near midnight during DST" do
     it "correctly attributes sale to the right day" do

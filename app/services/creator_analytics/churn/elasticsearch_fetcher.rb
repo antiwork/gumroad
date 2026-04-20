@@ -22,7 +22,7 @@ class CreatorAnalytics::Churn::ElasticsearchFetcher
     query[:bool][:filter] << {
       range: {
         subscription_cancelled_at: {
-          time_zone: date_window.timezone_id,
+          time_zone: date_window.timezone_formatted_offset,
           gte: date_window.start_date.to_s,
           lte: date_window.end_date.to_s
         }
@@ -54,7 +54,7 @@ class CreatorAnalytics::Churn::ElasticsearchFetcher
     query[:bool][:filter] << {
       range: {
         created_at: {
-          time_zone: date_window.timezone_id,
+          time_zone: date_window.timezone_formatted_offset,
           gte: date_window.start_date.to_s,
           lte: date_window.end_date.to_s
         }
@@ -80,10 +80,10 @@ class CreatorAnalytics::Churn::ElasticsearchFetcher
 
     query = base_query
     start_boundary = date_window.start_date.to_s
-    query[:bool][:filter] << { range: { created_at: { lt: start_boundary, time_zone: date_window.timezone_id } } }
+    query[:bool][:filter] << { range: { created_at: { lt: start_boundary, time_zone: date_window.timezone_formatted_offset } } }
     query[:bool][:should] ||= []
     query[:bool][:should] << { bool: { must_not: { exists: { field: "subscription_deactivated_at" } } } }
-    query[:bool][:should] << { range: { subscription_deactivated_at: { time_zone: date_window.timezone_id, gt: start_boundary } } }
+    query[:bool][:should] << { range: { subscription_deactivated_at: { time_zone: date_window.timezone_formatted_offset, gt: start_boundary } } }
     query[:bool][:minimum_should_match] = 1
 
     sources = [

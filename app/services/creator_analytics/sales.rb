@@ -12,7 +12,7 @@ class CreatorAnalytics::Sales
     @dates = dates
     @query = PurchaseSearchService.new(SEARCH_OPTIONS).body[:query]
     @query[:bool][:filter] << { terms: { product_id: @products.map(&:id) } }
-    @query[:bool][:must] << { range: { created_at: { time_zone: @user.timezone_id, gte: @dates.first.to_s, lte: @dates.last.to_s } } }
+    @query[:bool][:must] << { range: { created_at: { time_zone: @user.timezone_formatted_offset, gte: @dates.first.to_s, lte: @dates.last.to_s } } }
   end
 
   def by_product_and_date

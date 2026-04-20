@@ -8,7 +8,7 @@ class CreatorAnalytics::ProductPageViews
     @query = {
       bool: {
         filter: [{ terms: { product_id: @products.map(&:id) } }],
-        must: [{ range: { timestamp: { time_zone: @user.timezone_id, gte: @dates.first.to_s, lte: @dates.last.to_s } } }]
+        must: [{ range: { timestamp: { time_zone: @user.timezone_formatted_offset, gte: @dates.first.to_s, lte: @dates.last.to_s } } }]
       }
     }
   end
