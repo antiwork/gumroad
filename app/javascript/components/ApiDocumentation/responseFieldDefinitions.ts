@@ -515,7 +515,6 @@ export const PAYOUT_DETAIL_FIELDS: FieldDefinition[] = [
 export const USER_FIELDS: FieldDefinition[] = [
   { name: "bio", type: "string | null", description: "User's bio" },
   { name: "name", type: "string", description: "User's display name" },
-  { name: "twitter_handle", type: "string | null", description: "User's Twitter handle" },
   { name: "id", type: "string", description: "Unique identifier for the user" },
   { name: "user_id", type: "string", description: "Alternate user ID, not currently used" },
   {

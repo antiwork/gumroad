@@ -27,8 +27,8 @@ describe Admin::ScheduledPayoutsController, type: :controller, inertia: true do
     end
 
     it "filters by status" do
-      create(:scheduled_payout, user: user, status: "pending")
-      create(:scheduled_payout, user: user, status: "executed")
+      create(:scheduled_payout, status: "pending")
+      create(:scheduled_payout, status: "executed")
 
       get :index, params: { status: "pending" }
 
@@ -37,7 +37,7 @@ describe Admin::ScheduledPayoutsController, type: :controller, inertia: true do
     end
 
     it "paginates results" do
-      22.times { create(:scheduled_payout, user: user) }
+      22.times { create(:scheduled_payout) }
 
       get :index
 

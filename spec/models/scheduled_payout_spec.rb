@@ -62,6 +62,37 @@ describe ScheduledPayout do
       scheduled_payout = build(:scheduled_payout, payout_amount_cents: 0)
       expect(scheduled_payout).to be_valid
     end
+
+    describe "no_in_progress_scheduled_payout_for_user" do
+      let(:user) { create(:user) }
+
+      %w[pending flagged held].each do |status|
+        it "is invalid when the user already has a #{status} scheduled payout" do
+          create(:scheduled_payout, user: user, status: status)
+          scheduled_payout = build(:scheduled_payout, user: user)
+
+          expect(scheduled_payout).not_to be_valid
+          expect(scheduled_payout.errors[:base]).to include("User already has a scheduled payout in progress")
+        end
+      end
+
+      %w[executed cancelled].each do |status|
+        it "is valid when the user's only existing scheduled payout is #{status}" do
+          create(:scheduled_payout, user: user, status: status)
+          scheduled_payout = build(:scheduled_payout, user: user)
+
+          expect(scheduled_payout).to be_valid
+        end
+      end
+
+      it "does not affect other users" do
+        other_user = create(:user)
+        create(:scheduled_payout, user: other_user, status: "pending")
+        scheduled_payout = build(:scheduled_payout, user: user)
+
+        expect(scheduled_payout).to be_valid
+      end
+    end
   end
 
   describe "#set_scheduled_at" do
@@ -109,6 +140,10 @@ describe ScheduledPayout do
 
     it "returns held payouts" do
       expect(described_class.held).to contain_exactly(held_payout)
+    end
+
+    it "returns in_progress payouts" do
+      expect(described_class.in_progress).to contain_exactly(pending_payout, future_payout, flagged_payout, held_payout)
     end
   end
 

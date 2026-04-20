@@ -43,9 +43,6 @@ module Onetime::DeactivateAffiliatesForStripeConnectBrazil
             Unfortunately, recent changes made by Stripe have required us to suspend our affiliate and collaborator programs for Brazilian creators. Going forward, your affiliates and collaborators will be disabled and will no longer receive payments for purchases made through them, including for pre-existing membership subscriptions. They will be separately notified of this change.
 
             We apologize for the inconvenience.
-
-            Best,
-            Sahil and the Gumroad Team.
           BODY
           OneOffMailer.email(user_id: seller.id, subject:, body:)
 
@@ -62,9 +59,6 @@ module Onetime::DeactivateAffiliatesForStripeConnectBrazil
               Unfortunately, recent changes made by Stripe have required us to suspend our #{affiliate_type} program for Brazilian creators. Going forward, you will no longer receive affiliate payments for purchases made through these creators, including for pre-existing membership subscriptions. Non-Brazil-based creators are not affected by this change, and you will continue to receive #{affiliate_type} payments as usual for those creators.
 
               We apologize for the inconvenience.
-
-              Best,
-              Sahil and the Gumroad Team.
             BODY
             OneOffMailer.email(user_id: affiliate.affiliate_user_id, subject:, body:)
             affiliate.mark_deleted!

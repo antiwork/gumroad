@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_21_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_22_000000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2538,7 +2538,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_21_000000) do
     t.boolean "payment_notification", default: true
     t.string "currency_type", default: "usd"
     t.text "bio", size: :medium
-    t.string "twitter_handle"
     t.string "username"
     t.bigint "credit_card_id"
     t.string "profile_picture_url"

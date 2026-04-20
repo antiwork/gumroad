@@ -484,6 +484,35 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(response).to redirect_to(checkout_path)
         expect(flash[:alert]).to eq("You cannot add more than 50 products to the cart.")
       end
+
+      it "creates an empty cart when the `items` key is missing from params" do
+        expect do
+          patch :update, params: { cart: { discountCodes: [] } }, as: :json
+        end.to change(Cart, :count).by(1)
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+      end
+
+      it "creates a cart when the `discountCodes` key is missing from params" do
+        expect do
+          patch :update, params: { cart: { items: [] } }, as: :json
+        end.to change(Cart, :count).by(1)
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+        expect(Cart.last.discount_codes).to eq([])
+      end
+
+      it "returns an error when the `cart` param is not a Hash" do
+        expect do
+          patch :update, params: { cart: "foo" }, as: :json
+        end.not_to change(Cart, :count)
+
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+      end
     end
 
     context "when user is not signed in" do

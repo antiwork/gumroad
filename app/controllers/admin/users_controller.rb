@@ -148,6 +148,15 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: false, message: e.message }
   end
 
+  def schedule_payout
+    return render json: { success: false, message: "User is not suspended." }, status: :unprocessable_content unless @user.suspended?
+
+    create_scheduled_payout_if_requested
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }, status: :unprocessable_content
+  end
+
   def suspend_for_fraud_from_iffy
     @user.flag_for_fraud!(author_name: "iffy") unless @user.flagged_for_fraud? || @user.on_probation? || @user.suspended?
     @user.suspend_for_fraud!(author_name: "iffy") unless @user.suspended?

@@ -21,7 +21,7 @@ jobs:
         with:
           script: |
             const MS_PER_HOUR = 60 * 60 * 1000;
-            const THRESHOLD_HOURS = 24;
+            const THRESHOLD_BUSINESS_HOURS = 24;
             const BOT_AUTHORS = ["gumclaw", "gumroad-buildkite", "dependabot", "renovate"];
             const NAG_MARKER = "<!-- gumclaw-review-nag -->";
             const ACTIONS_BOT = "github-actions[bot]";
@@ -31,7 +31,21 @@ jobs:
             const { owner, repo } = context.repo;
             const now = Date.now();
 
-            const hoursSince = (isoDate) => Math.floor((now - new Date(isoDate).getTime()) / MS_PER_HOUR);
+            const businessHoursSince = (isoDate) => {
+              const start = new Date(isoDate).getTime();
+              if (start >= now) return 0;
+              let totalMs = 0;
+              let cursor = start;
+              while (cursor < now) {
+                const d = new Date(cursor);
+                const dayOfWeek = d.getUTCDay();
+                const nextDayUtc = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+                const segmentEnd = Math.min(nextDayUtc, now);
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) totalMs += segmentEnd - cursor;
+                cursor = segmentEnd;
+              }
+              return Math.floor(totalMs / MS_PER_HOUR);
+            };
 
             const prs = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: "open", per_page: 100
@@ -60,10 +74,10 @@ jobs:
 
               const changesRequested = reviews.data.some(r => r.state === CHANGES_REQUESTED);
               const lastActivity = latestReviewDate || pr.created_at;
-              const hoursWaiting = hoursSince(lastActivity);
+              const hoursWaiting = businessHoursSince(lastActivity);
 
-              if (hoursWaiting < THRESHOLD_HOURS) {
-                core.info(`#${pr.number} — ${hoursWaiting}h since last activity (under threshold)`);
+              if (hoursWaiting < THRESHOLD_BUSINESS_HOURS) {
+                core.info(`#${pr.number} — ${hoursWaiting} business hours since last activity (under threshold)`);
                 continue;
               }
 
@@ -77,9 +91,9 @@ jobs:
               );
 
               if (recentNag) {
-                const nagHoursAgo = hoursSince(recentNag.created_at);
-                if (nagHoursAgo < THRESHOLD_HOURS) {
-                  core.info(`#${pr.number} — already nagged ${nagHoursAgo}h ago`);
+                const nagHoursAgo = businessHoursSince(recentNag.created_at);
+                if (nagHoursAgo < THRESHOLD_BUSINESS_HOURS) {
+                  core.info(`#${pr.number} — already nagged ${nagHoursAgo} business hours ago`);
                   continue;
                 }
               }
@@ -91,7 +105,7 @@ jobs:
               if (changesRequested) {
                 body = [
                   NAG_MARKER,
-                  `👋 @${author} — This PR has had changes requested for over **${hoursWaiting}h**. Could you address the review feedback when you get a chance? Keeping the review cycle under 24h helps keep things moving.`,
+                  `👋 @${author} — This PR has had changes requested for over **${hoursWaiting} business hours**. Could you address the review feedback when you get a chance? Keeping the review cycle under 24 business hours helps keep things moving.`,
                   "",
                   FOOTER
                 ].join("\n");
@@ -99,7 +113,7 @@ jobs:
                 const pings = reviewers.map(r => `@${r}`).join(" ");
                 body = [
                   NAG_MARKER,
-                  `👋 ${pings} — PR #${pr.number} has been waiting for review for **${hoursWaiting}h**. Could you take a look when you get a chance? We're aiming for 24h review cycles.`,
+                  `👋 ${pings} — PR #${pr.number} has been waiting for review for **${hoursWaiting} business hours**. Could you take a look when you get a chance? We're aiming for 24 business hour review cycles.`,
                   "",
                   FOOTER
                 ].join("\n");
@@ -116,7 +130,7 @@ jobs:
                 const suggestion = contributors.length > 0 ? contributors.join(", ") : "a teammate";
                 body = [
                   NAG_MARKER,
-                  `👋 @${author} — This PR has been open for **${hoursWaiting}h** with no reviewers assigned. Consider requesting a review from ${suggestion} to keep things moving.`,
+                  `👋 @${author} — This PR has been open for **${hoursWaiting} business hours** with no reviewers assigned. Consider requesting a review from ${suggestion} to keep things moving.`,
                   "",
                   FOOTER
                 ].join("\n");
@@ -128,6 +142,6 @@ jobs:
                 await github.rest.issues.createComment({
                   owner, repo, issue_number: pr.number, body
                 });
-                core.info(`#${pr.number} — reminder posted (${hoursWaiting}h waiting)`);
+                core.info(`#${pr.number} — reminder posted (${hoursWaiting} business hours waiting)`);
               }
             }

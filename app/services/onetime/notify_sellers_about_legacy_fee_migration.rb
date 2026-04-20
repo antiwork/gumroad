@@ -8,7 +8,6 @@ class Onetime::NotifySellersAboutLegacyFeeMigration < Onetime::Base
     <p>Starting today, those memberships will move to the same pricing as everything else on Gumroad.</p>
     <p>You can see the full details at <a href="https://gumroad.com/pricing">gumroad.com/pricing</a>.</p>
     <p>If you have any questions, just reply to this email.</p>
-    <p>The Gumroad Team</p>
   HTML
 
   attr_reader :seller_ids, :emailed_user_ids
