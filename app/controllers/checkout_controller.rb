@@ -14,7 +14,12 @@ class CheckoutController < ApplicationController
   end
 
   def update
-    if update_permitted_params[:items].length > Cart::MAX_ALLOWED_CART_PRODUCTS
+    if update_permitted_params.blank?
+      return redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
+    end
+
+    items = update_permitted_params[:items].to_a
+    if items.length > Cart::MAX_ALLOWED_CART_PRODUCTS
       return redirect_to checkout_path, alert: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart."
     end
 
@@ -26,10 +31,10 @@ class CheckoutController < ApplicationController
       cart.email = update_permitted_params[:email].presence || logged_in_user&.email
       cart.return_url = update_permitted_params[:returnUrl]
       cart.reject_ppp_discount = update_permitted_params[:rejectPppDiscount] || false
-      cart.discount_codes = update_permitted_params[:discountCodes].map { { code: _1[:code], fromUrl: _1[:fromUrl] } }
+      cart.discount_codes = update_permitted_params[:discountCodes].to_a.map { { code: _1[:code], fromUrl: _1[:fromUrl] } }
       cart.save!
 
-      updated_cart_products = update_permitted_params[:items].map do |item|
+      updated_cart_products = items.map do |item|
         product = Link.find_by_external_id!(item[:product][:id])
         option = item[:option_id].present? ? BaseVariant.find_by_external_id(item[:option_id]) : nil
 
@@ -128,7 +133,12 @@ class CheckoutController < ApplicationController
     end
 
     def update_permitted_params
-      @_update_permitted_params ||= params.require(:cart).permit(
+      return @_update_permitted_params if defined?(@_update_permitted_params)
+
+      cart_param = params[:cart]
+      return @_update_permitted_params = nil unless cart_param.is_a?(ActionController::Parameters)
+
+      @_update_permitted_params = cart_param.permit(
         :email, :returnUrl, :rejectPppDiscount,
         discountCodes: [:code, :fromUrl],
         items: [
