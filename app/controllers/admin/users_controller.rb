@@ -4,6 +4,8 @@ class Admin::UsersController < Admin::BaseController
   include Admin::FetchUser
   include MassTransferPurchases
 
+  skip_before_action :require_admin!, if: :request_from_iffy?, only: %i[suspend_for_fraud_from_iffy mark_compliant_from_iffy flag_for_explicit_nsfw_tos_violation_from_iffy]
+
   before_action :fetch_user, except: %i[block_ip_address]
 
   def show
@@ -109,6 +111,13 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: true }
   end
 
+  def mark_compliant_from_iffy
+    @user.mark_compliant!(author_name: "iffy")
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
   def invalidate_active_sessions
     @user.invalidate_active_sessions!
 
@@ -146,6 +155,21 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: true }
   rescue => e
     render json: { success: false, message: e.message }, status: :unprocessable_content
+  end
+
+  def suspend_for_fraud_from_iffy
+    @user.flag_for_fraud!(author_name: "iffy") unless @user.flagged_for_fraud? || @user.on_probation? || @user.suspended?
+    @user.suspend_for_fraud!(author_name: "iffy") unless @user.suspended?
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
+  def flag_for_explicit_nsfw_tos_violation_from_iffy
+    @user.flag_for_explicit_nsfw_tos_violation!(author_name: "iffy") unless @user.flagged_for_explicit_nsfw?
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
   end
 
   def flag_for_fraud

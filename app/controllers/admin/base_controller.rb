@@ -85,6 +85,10 @@ class Admin::BaseController < ApplicationController
       end
     end
 
+    def request_from_iffy?
+      ActiveSupport::SecurityUtils.secure_compare(params[:auth_token].to_s, GlobalConfig.get("IFFY_TOKEN"))
+    end
+
     def require_admin!
       if current_user.nil?
         return e404_json if xhr_or_json_request?
