@@ -265,7 +265,7 @@ module StripeMerchantAccountManager
 
       stripe_external_account = stripe_account["external_accounts"]&.first
       stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-      return if stripe_holder_name.present? && stripe_holder_name == bank_account.account_holder_full_name
+      return if stripe_holder_name == bank_account.account_holder_full_name
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
