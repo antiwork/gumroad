@@ -250,6 +250,12 @@ describe CheckoutController, type: :controller, inertia: true do
         sign_in(seller)
       end
 
+      it "returns a 400 when cart param is not a hash" do
+        patch :update, params: { cart: "invalid_string" }, as: :json
+
+        expect(response).to have_http_status(:bad_request)
+      end
+
       it "creates an empty cart" do
         expect do
           patch :update, params: { cart: { items: [], discountCodes: [] } }, as: :json

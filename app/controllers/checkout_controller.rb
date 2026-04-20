@@ -14,6 +14,8 @@ class CheckoutController < ApplicationController
   end
 
   def update
+    return head :bad_request unless params[:cart].is_a?(ActionController::Parameters)
+
     if update_permitted_params[:items].length > Cart::MAX_ALLOWED_CART_PRODUCTS
       return redirect_to checkout_path, alert: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart."
     end
