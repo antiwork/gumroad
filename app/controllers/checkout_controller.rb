@@ -14,7 +14,9 @@ class CheckoutController < ApplicationController
   end
 
   def update
-    if update_permitted_params.blank?
+    # Guard against the rare case where `cart` is sent as a scalar (e.g. `cart=foo`);
+    # `params.require(:cart)` would return the String unchanged and `.permit` would raise.
+    unless params[:cart].respond_to?(:permit)
       return redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
     end
 
@@ -133,12 +135,7 @@ class CheckoutController < ApplicationController
     end
 
     def update_permitted_params
-      return @_update_permitted_params if defined?(@_update_permitted_params)
-
-      cart_param = params[:cart]
-      return @_update_permitted_params = nil unless cart_param.is_a?(ActionController::Parameters)
-
-      @_update_permitted_params = cart_param.permit(
+      @_update_permitted_params ||= params.require(:cart).permit(
         :email, :returnUrl, :rejectPppDiscount,
         discountCodes: [:code, :fromUrl],
         items: [
