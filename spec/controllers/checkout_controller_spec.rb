@@ -476,6 +476,20 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
       end
 
+      it "does not crash when `items` and `discountCodes` are omitted" do
+        expect do
+          patch :update, params: { cart: { email: "john@example.com" } }, as: :json
+        end.to change(Cart, :count).by(1)
+
+        expect(response).to have_http_status(:see_other)
+        expect(response).to redirect_to(checkout_path)
+
+        cart = controller.logged_in_user.alive_cart
+        expect(cart.email).to eq("john@example.com")
+        expect(cart.alive_cart_products).to be_empty
+        expect(cart.discount_codes).to eq([])
+      end
+
       it "returns an error when cart contains more than allowed number of cart products" do
         items = (Cart::MAX_ALLOWED_CART_PRODUCTS + 1).times.map { { product: { id: _1 + 1 } }  }
         patch :update, params: { cart: { items: } }, as: :json
