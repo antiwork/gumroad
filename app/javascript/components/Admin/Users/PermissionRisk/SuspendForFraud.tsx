@@ -39,7 +39,7 @@ const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
                   placeholder="Add suspension note (optional)"
                 />
                 <div className="flex items-end gap-2">
-                  {user.unpaid_balance_cents > 0 && (
+                  {user.unpaid_balance_cents > 0 && !user.has_in_progress_scheduled_payout && (
                     <ScheduledPayoutFields action={payoutAction} onActionChange={setPayoutAction} />
                   )}
                   <Button type="submit" disabled={isLoading}>

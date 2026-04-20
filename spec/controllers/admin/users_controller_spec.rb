@@ -470,5 +470,19 @@ describe Admin::UsersController, type: :controller, inertia: true do
       expect(scheduled_payout.action).to eq("payout")
       expect(scheduled_payout.delay_days).to eq(7)
     end
+
+    it "rejects when the user already has an in-progress scheduled payout" do
+      create(:scheduled_payout, user: user, status: "pending")
+
+      post :schedule_payout, params: {
+        external_id: user.external_id,
+        scheduled_payout: { action: "payout", delay_days: "14" }
+      }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to include("already has a scheduled payout in progress")
+      expect(user.scheduled_payouts.count).to eq(1)
+    end
   end
 end

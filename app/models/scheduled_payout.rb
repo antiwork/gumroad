@@ -5,6 +5,7 @@ class ScheduledPayout < ApplicationRecord
 
   ACTIONS = %w[refund payout hold].freeze
   STATUSES = %w[pending executed cancelled flagged held].freeze
+  IN_PROGRESS_STATUSES = %w[pending flagged held].freeze
 
   AUTO_PAYOUT_THRESHOLD_CENTS = 100_000
 
@@ -16,12 +17,14 @@ class ScheduledPayout < ApplicationRecord
   validates :delay_days, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :scheduled_at, presence: true
   validates :payout_amount_cents, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validate :no_in_progress_scheduled_payout_for_user, on: :create
 
   scope :pending, -> { where(status: "pending") }
   scope :executed, -> { where(status: "executed") }
   scope :cancelled, -> { where(status: "cancelled") }
   scope :flagged, -> { where(status: "flagged") }
   scope :held, -> { where(status: "held") }
+  scope :in_progress, -> { where(status: IN_PROGRESS_STATUSES) }
   scope :due, -> { pending.where(scheduled_at: ..Time.current) }
   scope :for_user, ->(user) { where(user: user) }
 
@@ -119,5 +122,12 @@ class ScheduledPayout < ApplicationRecord
   private
     def set_scheduled_at
       self.scheduled_at ||= delay_days.days.from_now if delay_days.present?
+    end
+
+    def no_in_progress_scheduled_payout_for_user
+      return unless user_id
+      return unless self.class.for_user(user).in_progress.exists?
+
+      errors.add(:base, "User already has a scheduled payout in progress")
     end
 end
