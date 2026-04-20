@@ -1,0 +1,24 @@
+# VCR cassettes - recorded HTTP fixtures, 202 MB / ~50M tokens
+spec/support/fixtures/vcr_cassettes/
+
+# Binary assets - images, fonts, videos
+app/assets/images/
+app/assets/fonts/
+app/assets/videos/
+
+# Generated/vendored
+public/assets/
+public/analytics/
+vendor/
+
+# Lock files
+package-lock.json
+
+# Data files
+config/zip_code_database.csv
+
+# Database migrations (historical, already applied)
+db/migrate/
+
+# Schema is auto-generated
+db/schema.rb
