@@ -89,8 +89,8 @@ SecureHeaders::Configuration.default do |config|
       # helper widget
       "help.gumroad.com",
 
-      # lottie - homepage
-      "unpkg.com/@lottiefiles/lottie-player@latest/",
+      # lottie - homepage (pinned version; no @latest)
+      "unpkg.com/@lottiefiles/lottie-player@2.0.12/",
     ],
     script_src: [
       "'self'",
@@ -158,8 +158,8 @@ SecureHeaders::Configuration.default do |config|
       # helper widget
       "help.gumroad.com",
 
-      # lottie - homepage
-      "unpkg.com/@lottiefiles/lottie-player@latest/"
+      # lottie - homepage (pinned version; no @latest)
+      "unpkg.com/@lottiefiles/lottie-player@2.0.12/"
     ],
     style_src: [
       "'self'",
