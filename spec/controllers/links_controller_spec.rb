@@ -336,6 +336,17 @@ describe LinksController, :vcr, inertia: true do
         let(:response_status) { 204 }
       end
 
+      it "returns the existing validation error when suggested price is set but the default price record is missing" do
+        @product.prices.destroy_all
+        @product.update_column(:customizable_price, true)
+
+        put :update, params: @params.merge(suggested_price: "10", customizable_price: true), as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["error_message"]).to eq("Default price cents can't be blank")
+        expect(@product.reload.suggested_price_cents).to be_nil
+      end
+
       context "when user email is empty" do
         before do
           seller.email = ""
