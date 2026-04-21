@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class UpdatePayoutMethod
+  include AfterCommitEverywhere
+
   attr_reader :params, :user
 
   BANK_ACCOUNT_TYPES = {
@@ -120,10 +122,9 @@ class UpdatePayoutMethod
     # `with_lock` serializes concurrent payout-method changes so overlapping requests can't each
     # mark the same old bank deleted and save a new row, leaving multiple alive rows. The block
     # returns its value rather than using `return`, which would roll back the transaction on
-    # non-local exit in Rails 7+. Side effects that must wait for the commit are deferred via
-    # `@pending_bank_account_sync_id` and flushed after `with_lock`.
-    @pending_bank_account_sync_id = nil
-    result = user.with_lock do
+    # non-local exit in Rails 7+. Sidekiq enqueues are wrapped in `after_commit` so their workers
+    # can't race the transaction and observe pre-commit or rolled-back state.
+    user.with_lock do
       if params[:card]
         process_card_params
       elsif bank_account_params_present?
@@ -134,8 +135,6 @@ class UpdatePayoutMethod
         { success: true }
       end
     end
-    HandleNewBankAccountWorker.perform_in(5.seconds, @pending_bank_account_sync_id) if @pending_bank_account_sync_id
-    result
   end
 
   private
@@ -210,7 +209,7 @@ class UpdatePayoutMethod
       current_active.save!
 
       if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user)
-        @pending_bank_account_sync_id = current_active.id
+        after_commit { HandleNewBankAccountWorker.perform_in(5.seconds, current_active.id) }
       end
       { success: true }
     end
@@ -231,7 +230,7 @@ class UpdatePayoutMethod
       user.user_compliance_info_requests.requested.find_each(&:mark_provided!)
       user.update!(payouts_paused_internally: false, payouts_paused_by: nil) if user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE && !user.flagged? && !user.suspended?
 
-      CheckPaymentAddressWorker.perform_async(user.id)
+      after_commit { CheckPaymentAddressWorker.perform_async(user.id) }
       { success: true }
     end
 
