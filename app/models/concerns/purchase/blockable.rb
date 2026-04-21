@@ -180,9 +180,10 @@ module Purchase::Blockable
       return unless failure_code == PurchaseErrorCode::CARD_DECLINED_FRAUDULENT
       return unless purchaser.present?
       return if purchaser.created_at < MAX_PURCHASER_AGE_FOR_SUSPENSION.ago
+      return if purchaser.suspended?
 
-      purchaser.flag_for_fraud!(author_name: "fraudulent_purchases_blocker")
-      purchaser.suspend_for_fraud!(author_name: "fraudulent_purchases_blocker")
+      purchaser.flag_for_fraud!(author_name: "fraudulent_purchases_blocker") if purchaser.can_flag_for_fraud?
+      purchaser.suspend_for_fraud!(author_name: "fraudulent_purchases_blocker") if purchaser.can_suspend_for_fraud?
     end
 
     def ban_card_testers!

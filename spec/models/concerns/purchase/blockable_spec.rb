@@ -858,6 +858,39 @@ describe Purchase::Blockable do
         end
       end
     end
+
+    context "when the buyer is already suspended for fraud" do
+      before do
+        @buyer.flag_for_fraud!(author_name: "admin")
+        @buyer.suspend_for_fraud!(author_name: "admin")
+      end
+
+      it "does not attempt an invalid state transition" do
+        expect { @purchase.mark_failed! }.not_to raise_error
+        expect(@buyer.reload.suspended_for_fraud?).to be(true)
+      end
+    end
+
+    context "when the buyer is already suspended for tos violation" do
+      before do
+        @buyer.update_column(:user_risk_state, "suspended_for_tos_violation")
+      end
+
+      it "does not attempt an invalid state transition" do
+        expect { @purchase.mark_failed! }.not_to raise_error
+        expect(@buyer.reload.suspended_for_tos_violation?).to be(true)
+      end
+    end
+
+    context "when the buyer is already flagged for fraud" do
+      before do
+        @buyer.flag_for_fraud!(author_name: "admin")
+      end
+
+      it "suspends the buyer without re-flagging" do
+        expect { @purchase.mark_failed! }.to change { @buyer.reload.suspended_for_fraud? }.from(false).to(true)
+      end
+    end
   end
 
   describe "#block_buyer_based_on_chargeback_count!" do
