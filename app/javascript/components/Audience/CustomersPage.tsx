@@ -34,7 +34,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 import { useUserAgentInfo } from "$app/components/UserAgent";
-import { useSortingTableDriver } from "$app/components/useSortingTableDriver";
+import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/customers.png";
@@ -60,6 +60,89 @@ const formatPrice = (priceCents: number, currencyType: CurrencyCode, recurrence?
     recurrence ? ` ${recurrenceLabels[recurrence]}` : ""
   }`;
 
+const getUrlSearchParams = (): URLSearchParams | null =>
+  typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+
+const parseList = (value: string | null): string[] => (value ? value.split(",").filter(Boolean) : []);
+
+const parseNumber = (value: string | null): number | null => {
+  if (value === null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseDate = (value: string | null): Date | null => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const parseSort = (value: string | null): Sort<SortKey> | null => {
+  if (!value) return null;
+  const [key, direction] = value.split(":");
+  if ((key === "created_at" || key === "price_cents") && (direction === "asc" || direction === "desc")) {
+    return { key, direction };
+  }
+  return null;
+};
+
+const buildQueryFromUrl = (): Query => {
+  const defaults: Query = {
+    page: 1,
+    query: null,
+    sort: { key: "created_at", direction: "desc" },
+    products: [],
+    variants: [],
+    excludedProducts: [],
+    excludedVariants: [],
+    minimumAmount: null,
+    maximumAmount: null,
+    createdAfter: null,
+    createdBefore: null,
+    country: null,
+    activeCustomersOnly: false,
+  };
+  const params = getUrlSearchParams();
+  if (!params) return defaults;
+  const page = parseNumber(params.get("page"));
+  return {
+    page: page && page > 0 ? page : 1,
+    query: params.get("query") ?? params.get("email"),
+    sort: parseSort(params.get("sort")) ?? defaults.sort,
+    products: parseList(params.get("products")),
+    variants: parseList(params.get("variants")),
+    excludedProducts: parseList(params.get("excluded_products")),
+    excludedVariants: parseList(params.get("excluded_variants")),
+    minimumAmount: parseNumber(params.get("minimum_amount")),
+    maximumAmount: parseNumber(params.get("maximum_amount")),
+    createdAfter: parseDate(params.get("created_after")),
+    createdBefore: parseDate(params.get("created_before")),
+    country: params.get("country"),
+    activeCustomersOnly: params.get("active_only") === "1",
+  };
+};
+
+const buildItemsFromUrl = (
+  products: Product[],
+  productsKey: string,
+  variantsKey: string,
+  fallbackProductId: string | null = null,
+): Item[] => {
+  const params = getUrlSearchParams();
+  if (!params) return fallbackProductId ? [{ type: "product", id: fallbackProductId }] : [];
+  const productIds = parseList(params.get(productsKey));
+  const variantIds = parseList(params.get(variantsKey));
+  const items: Item[] = [
+    ...productIds.map((id) => ({ type: "product" as const, id })),
+    ...variantIds.flatMap((id) => {
+      const parent = products.find((product) => product.variants.some((variant) => variant.id === id));
+      return parent ? [{ type: "variant" as const, id, productId: parent.id }] : [];
+    }),
+  ];
+  if (items.length === 0 && fallbackProductId) return [{ type: "product", id: fallbackProductId }];
+  return items;
+};
+
 const CustomersPage = ({
   product_id,
   products,
@@ -82,29 +165,14 @@ const CustomersPage = ({
 
   const uid = React.useId();
 
-  const [includedItems, setIncludedItems] = React.useState<Item[]>(
-    product_id ? [{ type: "product", id: product_id }] : [],
+  const [includedItems, setIncludedItems] = React.useState<Item[]>(() =>
+    buildItemsFromUrl(products, "products", "variants", product_id),
   );
-  const [excludedItems, setExcludedItems] = React.useState<Item[]>([]);
+  const [excludedItems, setExcludedItems] = React.useState<Item[]>(() =>
+    buildItemsFromUrl(products, "excluded_products", "excluded_variants"),
+  );
 
-  const [query, setQuery] = React.useState<Query>(() => {
-    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-    return {
-      page: 1,
-      query: urlParams?.get("query") ?? urlParams?.get("email") ?? null,
-      sort: { key: "created_at", direction: "desc" },
-      products: [],
-      variants: [],
-      excludedProducts: [],
-      excludedVariants: [],
-      minimumAmount: null,
-      maximumAmount: null,
-      createdAfter: null,
-      createdBefore: null,
-      country: null,
-      activeCustomersOnly: false,
-    };
-  });
+  const [query, setQuery] = React.useState<Query>(buildQueryFromUrl);
   const updateQuery = (update: Partial<Query>) => setQuery((prevQuery) => ({ ...prevQuery, ...update }));
   const {
     query: searchQuery,
@@ -125,6 +193,7 @@ const CustomersPage = ({
   const loadCustomers = async (page: number) => {
     activeRequest.current?.cancel();
     setIsLoading(true);
+    setQuery((prevQuery) => (prevQuery.page === page ? prevQuery : { ...prevQuery, page }));
     const request = getPagedCustomers({
       ...query,
       page,
@@ -154,8 +223,48 @@ const CustomersPage = ({
     if (searchQuery !== null) debouncedReloadCustomers();
   }, [searchQuery]);
 
-  useOnChange(() => {
-    debouncedReloadCustomers();
+  useOnChange(
+    () => {
+      debouncedReloadCustomers();
+    },
+    [
+      query.sort,
+      query.minimumAmount,
+      query.maximumAmount,
+      query.createdAfter,
+      query.createdBefore,
+      query.country,
+      query.activeCustomersOnly,
+      includedItems,
+      excludedItems,
+    ],
+  );
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams();
+    if (query.query) params.set("query", query.query);
+    if (query.sort && (query.sort.key !== "created_at" || query.sort.direction !== "desc")) {
+      params.set("sort", `${query.sort.key}:${query.sort.direction}`);
+    }
+    if (query.minimumAmount != null) params.set("minimum_amount", String(query.minimumAmount));
+    if (query.maximumAmount != null) params.set("maximum_amount", String(query.maximumAmount));
+    if (query.createdAfter) params.set("created_after", query.createdAfter.toISOString());
+    if (query.createdBefore) params.set("created_before", query.createdBefore.toISOString());
+    if (query.country) params.set("country", query.country);
+    if (query.activeCustomersOnly) params.set("active_only", "1");
+    if (query.page > 1) params.set("page", String(query.page));
+    const includedProducts = includedItems.filter((item) => item.type === "product").map((item) => item.id);
+    const includedVariants = includedItems.filter((item) => item.type === "variant").map((item) => item.id);
+    const excludedProducts = excludedItems.filter((item) => item.type === "product").map((item) => item.id);
+    const excludedVariants = excludedItems.filter((item) => item.type === "variant").map((item) => item.id);
+    if (includedProducts.length) params.set("products", includedProducts.join(","));
+    if (includedVariants.length) params.set("variants", includedVariants.join(","));
+    if (excludedProducts.length) params.set("excluded_products", excludedProducts.join(","));
+    if (excludedVariants.length) params.set("excluded_variants", excludedVariants.join(","));
+    const search = params.toString();
+    const newUrl = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+    window.history.replaceState(window.history.state, "", newUrl);
   }, [query, includedItems, excludedItems]);
 
   const [from, setFrom] = React.useState(subMonths(new Date(), 1));
