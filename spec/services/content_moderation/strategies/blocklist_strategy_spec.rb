@@ -5,6 +5,8 @@ require "spec_helper"
 RSpec.describe ContentModeration::Strategies::BlocklistStrategy do
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
+    allow(File).to receive(:exist?).and_call_original
+    allow(File).to receive(:exist?).with(described_class::YAML_PATH).and_return(false)
   end
 
   it "returns compliant when the blocklist is empty" do
@@ -31,7 +33,7 @@ RSpec.describe ContentModeration::Strategies::BlocklistStrategy do
     result = described_class.new(text: "a SECRET appears here").perform
 
     expect(result.status).to eq("flagged")
-    expect(result.reasoning).to eq(["Matched blocked word: SeCrEt"])
+    expect(result.reasoning).to eq(["Matched blocked word: secret"])
   end
 
   it "uses word boundaries when matching" do
@@ -41,5 +43,31 @@ RSpec.describe ContentModeration::Strategies::BlocklistStrategy do
 
     expect(result.status).to eq("compliant")
     expect(result.reasoning).to eq([])
+  end
+
+  it "reads words from the YAML file when present" do
+    allow(File).to receive(:exist?).with(described_class::YAML_PATH).and_return(true)
+    allow(YAML).to receive(:load_file).with(described_class::YAML_PATH).and_return("blocklist" => ["yamlword"])
+    allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_BLOCKLIST").and_return("")
+
+    result = described_class.new(text: "this contains yamlword in it").perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq(["Matched blocked word: yamlword"])
+  end
+
+  it "unions YAML and GlobalConfig entries and deduplicates" do
+    allow(File).to receive(:exist?).with(described_class::YAML_PATH).and_return(true)
+    allow(YAML).to receive(:load_file).with(described_class::YAML_PATH).and_return("blocklist" => ["yamlword", "shared"])
+    allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_BLOCKLIST").and_return("envword, Shared")
+
+    result = described_class.new(text: "mentions yamlword and envword and shared once").perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to contain_exactly(
+      "Matched blocked word: yamlword",
+      "Matched blocked word: shared",
+      "Matched blocked word: envword",
+    )
   end
 end

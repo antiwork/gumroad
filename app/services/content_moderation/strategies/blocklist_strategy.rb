@@ -3,16 +3,17 @@
 class ContentModeration::Strategies::BlocklistStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
 
+  YAML_PATH = Rails.root.join("config/content_moderation_blocklist.yml")
+
   def initialize(text:, image_urls: [])
     @text = text.to_s.downcase
   end
 
   def perform
-    blocklist = GlobalConfig.get("CONTENT_MODERATION_BLOCKLIST").to_s
-    words = blocklist.split(",").map(&:strip).reject(&:empty?)
+    words = load_blocklist
     return Result.new(status: "compliant", reasoning: []) if words.empty?
 
-    matched = words.select { |word| @text.match?(/\b#{Regexp.escape(word.downcase)}\b/) }
+    matched = words.select { |word| @text.match?(/\b#{Regexp.escape(word)}\b/) }
 
     if matched.any?
       Result.new(
@@ -23,4 +24,19 @@ class ContentModeration::Strategies::BlocklistStrategy
       Result.new(status: "compliant", reasoning: [])
     end
   end
+
+  private
+    def load_blocklist
+      (yaml_words + env_words).map(&:downcase).uniq.reject(&:empty?)
+    end
+
+    def yaml_words
+      return [] unless File.exist?(YAML_PATH)
+
+      Array(YAML.load_file(YAML_PATH).fetch("blocklist", []))
+    end
+
+    def env_words
+      GlobalConfig.get("CONTENT_MODERATION_BLOCKLIST").to_s.split(",").map(&:strip)
+    end
 end
