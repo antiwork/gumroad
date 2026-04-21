@@ -128,7 +128,7 @@ class ContentModeration::Strategies::PromptStrategy
       user_content << { type: "text", text: "Content to evaluate:\n\n#{@text.presence || '[no text provided]'}" }
 
       if !skip_images && @image_urls.present?
-        @image_urls.first(3).each do |url|
+        @image_urls.sample(3).each do |url|
           user_content << { type: "image_url", image_url: { url: url } }
         end
       end

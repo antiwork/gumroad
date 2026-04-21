@@ -69,7 +69,7 @@ class ContentModeration::Strategies::ClassifierStrategy
     def build_input
       parts = []
       parts << { type: "text", text: @text } if @text.present?
-      @image_urls.first(5).each do |url|
+      @image_urls.sample(5).each do |url|
         parts << { type: "image_url", image_url: { url: url } }
       end
       parts
