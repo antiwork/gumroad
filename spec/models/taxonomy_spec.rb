@@ -61,7 +61,7 @@ describe Taxonomy do
   end
 
   describe ".find_or_create_by!" do
-    let!(:parent) { Taxonomy.create!(slug: "parent-slug") }
+    let!(:parent) { create(:taxonomy, slug: "parent-slug") }
 
     it "creates the taxonomy when none exists" do
       result = Taxonomy.find_or_create_by!(slug: "brand-new-slug", parent:)
@@ -71,7 +71,7 @@ describe Taxonomy do
     end
 
     it "returns the existing taxonomy without creating a duplicate" do
-      existing = Taxonomy.create!(slug: "already-there", parent:)
+      existing = create(:taxonomy, slug: "already-there", parent:)
       expect do
         result = Taxonomy.find_or_create_by!(slug: "already-there", parent:)
         expect(result).to eq(existing)
@@ -119,20 +119,46 @@ describe Taxonomy do
   end
 
   describe ".find_or_create_by" do
-    let!(:parent) { Taxonomy.create!(slug: "parent-slug") }
+    let!(:parent) { create(:taxonomy, slug: "parent-slug") }
 
-    it "recovers from a RecordNotUnique race by returning the existing record" do
-      existing = Taxonomy.create!(slug: "race-slug-nonbang", parent:)
+    it "handles concurrent creation for the same slug and parent" do
+      ready = Queue.new
+      start = Queue.new
+      taxonomies = []
+      errors = []
+      mutex = Mutex.new
 
-      allow(Taxonomy).to receive(:create_or_find_by).and_raise(ActiveRecord::RecordNotUnique)
-      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!)
+      threads = 2.times.map do
+        Thread.new do
+          Taxonomy.connection_pool.with_connection do
+            ready << true
+            start.pop
+            taxonomy = Taxonomy.find_or_create_by(slug: "race-slug-nonbang", parent:)
 
-      result = nil
-      expect do
-        result = Taxonomy.find_or_create_by(slug: "race-slug-nonbang", parent:)
-      end.not_to raise_error
+            mutex.synchronize do
+              taxonomies << taxonomy
+            end
+          end
+        rescue StandardError => e
+          mutex.synchronize do
+            errors << e
+          end
+        end
+      end
 
-      expect(result).to eq(existing)
+      2.times { ready.pop }
+      2.times { start << true }
+      threads.each(&:join)
+
+      expect(errors).to be_empty
+      expect(taxonomies).to all(be_a(Taxonomy))
+      expect(taxonomies.map(&:id).uniq.size).to eq(1)
+
+      taxonomy = Taxonomy.find_by!(slug: "race-slug-nonbang", parent:)
+
+      expect(Taxonomy.where(slug: "race-slug-nonbang", parent:).count).to eq(1)
+      expect(taxonomy.parent).to eq(parent)
+      expect(taxonomies).to all(eq(taxonomy))
     end
   end
 end
