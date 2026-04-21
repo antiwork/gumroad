@@ -143,7 +143,7 @@ module Product::Prices
   end
 
   def suggested_price_greater_than_price
-    return if suggested_price_cents.blank? || !customizable_price || suggested_price_cents >= default_price_cents
+    return if suggested_price_cents.blank? || !customizable_price || default_price_cents.nil? || suggested_price_cents >= default_price_cents
 
     errors.add(:base, "The suggested price you entered was too low.")
   end
