@@ -227,5 +227,30 @@ describe CreatorAnalytics::ProductPageViews do
         expect(result[[product.id, "2025-03-10"]]).to eq(1)
       end
     end
+
+    context "when the boundary date skips midnight" do
+      let(:user_timezone) { "Tehran" }
+
+      it "filters and buckets page views consistently on March 22, 2026" do
+        user = create(:user, timezone: user_timezone)
+        product = create(:product, user: user)
+
+        Time.use_zone(user_timezone) do
+          add_page_view(product, Time.zone.parse("2026-03-21 23:30:00").utc, referrer_domain: "google.com")
+          add_page_view(product, Time.zone.parse("2026-03-22 01:15:00").utc, referrer_domain: "google.com")
+          add_page_view(product, Time.zone.parse("2026-03-23 00:15:00").utc, referrer_domain: "t.co")
+        end
+        ProductPageView.__elasticsearch__.refresh_index!
+
+        service = described_class.new(
+          user: user,
+          products: [product],
+          dates: [Date.new(2026, 3, 22)]
+        )
+
+        expect(service.by_product_and_date).to eq({ [product.id, "2026-03-22"] => 1 })
+        expect(service.by_product_and_referrer_and_date).to eq({ [product.id, "google.com", "2026-03-22"] => 1 })
+      end
+    end
   end
 end

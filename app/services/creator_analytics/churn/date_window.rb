@@ -22,10 +22,6 @@ class CreatorAnalytics::Churn::DateWindow
     seller.timezone_id
   end
 
-  def timezone_formatted_offset
-    seller.timezone_formatted_offset
-  end
-
   def daily_dates
     @daily_dates ||= (start_date..end_date).to_a
   end
