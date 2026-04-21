@@ -20,6 +20,8 @@ class Discover::AutocompletePresenter
     def product_results
       return { products: search_results(Link.partial_search_options(query:, size: PRODUCT_RESULT_COUNT)) } if query.present?
 
+      return { products: search_results(Link.search_options(size: PRODUCT_RESULT_COUNT)), viewed: false } if user.blank? && browser_guid.blank?
+
       recently_viewed_ids = ProductPageView.search(
         query: {
           bool: user.present? ? {
