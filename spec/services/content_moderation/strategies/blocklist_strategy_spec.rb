@@ -7,6 +7,11 @@ RSpec.describe ContentModeration::Strategies::BlocklistStrategy do
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(File).to receive(:exist?).and_call_original
     allow(File).to receive(:exist?).with(described_class::YAML_PATH).and_return(false)
+    described_class.reset_yaml_cache!
+  end
+
+  after do
+    described_class.reset_yaml_cache!
   end
 
   it "returns compliant when the blocklist is empty" do
@@ -54,6 +59,16 @@ RSpec.describe ContentModeration::Strategies::BlocklistStrategy do
 
     expect(result.status).to eq("flagged")
     expect(result.reasoning).to eq(["Matched blocked word: yamlword"])
+  end
+
+  it "caches the YAML contents across calls" do
+    allow(File).to receive(:exist?).with(described_class::YAML_PATH).and_return(true)
+    expect(YAML).to receive(:load_file).with(described_class::YAML_PATH).once.and_return("blocklist" => ["word"])
+    allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_BLOCKLIST").and_return("")
+
+    described_class.new(text: "word").perform
+    described_class.new(text: "word").perform
+    described_class.new(text: "word").perform
   end
 
   it "unions YAML and GlobalConfig entries and deduplicates" do

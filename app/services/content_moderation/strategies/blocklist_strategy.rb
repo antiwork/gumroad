@@ -25,15 +25,19 @@ class ContentModeration::Strategies::BlocklistStrategy
     end
   end
 
+  def self.yaml_words
+    @yaml_words ||= begin
+      File.exist?(YAML_PATH) ? Array(YAML.load_file(YAML_PATH).fetch("blocklist", [])) : []
+    end
+  end
+
+  def self.reset_yaml_cache!
+    @yaml_words = nil
+  end
+
   private
     def load_blocklist
-      (yaml_words + env_words).map(&:downcase).uniq.reject(&:empty?)
-    end
-
-    def yaml_words
-      return [] unless File.exist?(YAML_PATH)
-
-      Array(YAML.load_file(YAML_PATH).fetch("blocklist", []))
+      (self.class.yaml_words + env_words).map(&:downcase).uniq.reject(&:empty?)
     end
 
     def env_words
