@@ -439,7 +439,7 @@ const MenuItemLink = ({
     {...props}
     href={props.href ?? "#"}
     className={classNames(
-      "shrink-0 justify-between gap-2 overflow-visible! p-4! whitespace-normal! hover:bg-primary! hover:text-background!",
+      "flex shrink-0 justify-between gap-2 overflow-visible! p-4! whitespace-normal! hover:bg-primary! hover:text-background!",
       className,
     )}
     role="menuitem"
