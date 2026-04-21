@@ -391,6 +391,7 @@ const ItemsList = ({
         <MenuItemLink
           key={`back${displayedItem.key}`}
           href={displayedItem.parent?.href ?? "#"}
+          className="justify-start"
           onClick={(e) => {
             if (e.ctrlKey || e.shiftKey) return;
             setDisplayedItem(displayedItem.parent ?? initialMenuItem);
