@@ -53,7 +53,7 @@ class ContentModeration::ModerateRecordService
     attr_reader :record, :entity_type
 
     def moderation_enabled?
-      GlobalConfig.get("CONTENT_MODERATION_ENABLED") != "false"
+      Feature.active?(:content_moderation)
     end
 
     def should_moderate?

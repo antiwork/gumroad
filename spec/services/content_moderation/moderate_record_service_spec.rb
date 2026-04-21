@@ -7,9 +7,9 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
 
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
-    allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_ENABLED").and_return("true")
     allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_PERCENTAGE").and_return("100")
     allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_SUSPENSION_THRESHOLD").and_return("5")
+    Feature.activate(:content_moderation)
     allow(InternalNotificationWorker).to receive(:perform_async)
     allow(Rails.logger).to receive(:info)
     allow(Rails.logger).to receive(:error)
@@ -20,7 +20,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
       let(:product) { create(:product) }
 
       it "returns early" do
-        allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_ENABLED").and_return("false")
+        Feature.deactivate(:content_moderation)
         expect(ContentModeration::ContentExtractor).not_to receive(:new)
 
         described_class.new(product, :product).perform
@@ -299,7 +299,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
     end
 
     it "returns passed: true when moderation is disabled" do
-      allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_ENABLED").and_return("false")
+      Feature.deactivate(:content_moderation)
 
       result = described_class.check(product, :product)
 
