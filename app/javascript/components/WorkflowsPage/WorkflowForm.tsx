@@ -336,7 +336,6 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
               id="name"
               type="text"
               ref={nameInputRef}
-              placeholder="Name of workflow"
               maxLength={255}
               value={formState.name}
               onChange={(e) => updateFormState({ name: e.target.value })}
@@ -460,7 +459,6 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
               </FieldsetTitle>
               <TagInput
                 inputId="affiliated_products"
-                placeholder="Select products..."
                 isDisabled={wasPublishedPreviously}
                 tagIds={formState.affiliatedProducts}
                 tagList={selectableProductAndVariantOptions(
@@ -508,7 +506,6 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
               </FieldsetTitle>
               <TagInput
                 inputId="bought"
-                placeholder="Any product"
                 isDisabled={wasPublishedPreviously}
                 tagIds={formState.bought}
                 tagList={selectableProductAndVariantOptions(context.products_and_variant_options, formState.bought)}
@@ -530,7 +527,6 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
               </FieldsetTitle>
               <TagInput
                 inputId="not_bought"
-                placeholder="No products"
                 isDisabled={wasPublishedPreviously}
                 tagIds={formState.notBought}
                 tagList={selectableProductAndVariantOptions(context.products_and_variant_options, formState.notBought)}

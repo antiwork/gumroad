@@ -17,7 +17,7 @@ describe "Affiliates", type: :system, js: true do
     expect(page).to have_selector("[role='status']", text: "$20 off will be applied at checkout (Code FREE)")
     expect(page).to have_selector("[itemprop='price']", text: "$20 $0")
     click_on "I want this!"
-    fill_in("Your email address", with: "test@gumroad.com")
+    fill_in("Email address", with: "test@gumroad.com")
     click_on "Get"
     expect(page).to have_alert(text: "Your purchase was successful!")
   end

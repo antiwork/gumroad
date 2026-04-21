@@ -657,12 +657,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         visit settings_payments_path
 
         choose "Individual"
-        fill_in "Street address", with: "P.O. Box 123, Smith street"
+        fill_in "Address", with: "P.O. Box 123, Smith street"
         expect do
           click_on "Update settings"
           expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
         end.to_not change { @user.alive_user_compliance_info.reload.street_address }
-        fill_in "Street address", with: "123, Smith street"
+        fill_in "Address", with: "123, Smith street"
         expect do
           click_on "Update settings"
           wait_for_ajax
@@ -6276,7 +6276,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
           click_on "Opt-in to backtaxes collection"
 
-          expect(page).to have_field("Type your full name to opt-in", placeholder: "Full name")
+          expect(page).to have_field("Type your full name to opt-in")
         end
       end
     end

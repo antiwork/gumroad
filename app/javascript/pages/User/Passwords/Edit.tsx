@@ -42,7 +42,6 @@ function PasswordReset() {
               id={`${uid}-password`}
               value={form.data.user.password}
               onChange={(e) => form.setData("user.password", e.target.value)}
-              placeholder="Password"
               required
               autoFocus
               autoComplete="new-password"
@@ -56,7 +55,6 @@ function PasswordReset() {
               id={`${uid}-password-confirmation`}
               value={form.data.user.password_confirmation}
               onChange={(e) => form.setData("user.password_confirmation", e.target.value)}
-              placeholder="Password (to confirm)"
               required
               autoComplete="new-password"
             />

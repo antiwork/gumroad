@@ -80,7 +80,6 @@ export const TaxesCollectionModal = ({ taxesOwed, creditCreationDate, name }: Pr
                 id={`${uid}optInFullName`}
                 type="text"
                 aria-invalid={error.length !== 0}
-                placeholder="Full name"
                 disabled={saving}
                 value={signature}
                 onChange={(e) => {

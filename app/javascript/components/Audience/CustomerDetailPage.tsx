@@ -936,7 +936,6 @@ const AddressSection = ({
             <Input
               id={`${uid}-full-name`}
               type="text"
-              placeholder="Full name"
               value={address.full_name}
               onChange={(evt) => updateShipping({ full_name: evt.target.value })}
             />
@@ -948,7 +947,6 @@ const AddressSection = ({
             <Input
               id={`${uid}-street-address`}
               type="text"
-              placeholder="Street address"
               value={address.street_address}
               onChange={(evt) => updateShipping({ street_address: evt.target.value })}
             />
@@ -961,7 +959,6 @@ const AddressSection = ({
               <Input
                 id={`${uid}-city`}
                 type="text"
-                placeholder="City"
                 value={address.city}
                 onChange={(evt) => updateShipping({ city: evt.target.value })}
               />
@@ -973,7 +970,6 @@ const AddressSection = ({
               <Input
                 id={`${uid}-state`}
                 type="text"
-                placeholder="State"
                 value={address.state}
                 onChange={(evt) => updateShipping({ state: evt.target.value })}
               />
@@ -985,7 +981,6 @@ const AddressSection = ({
               <Input
                 id={`${uid}-zip-code`}
                 type="text"
-                placeholder="ZIP code"
                 value={address.zip_code}
                 onChange={(evt) => updateShipping({ zip_code: evt.target.value })}
               />

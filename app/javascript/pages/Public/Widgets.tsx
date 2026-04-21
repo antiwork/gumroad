@@ -219,7 +219,6 @@ const OverlayPanel = ({ selectedProduct }: PanelProps) => {
           <Input
             id={buttonTextUID}
             type="text"
-            placeholder="Buy on"
             value={buttonText}
             onChange={(evt) => setButtonText(evt.target.value)}
           />

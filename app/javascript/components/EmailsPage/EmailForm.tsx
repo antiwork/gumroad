@@ -967,7 +967,6 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                   </Label>
                   <TagInput
                     inputId={`${uid}-affiliated_products_dropdown`}
-                    placeholder="Select products..."
                     tagIds={affiliatedProducts}
                     tagList={selectableProductOptions(affiliateProductOptions, affiliatedProducts)}
                     onChangeTagIds={setAffiliatedProducts}
@@ -984,7 +983,6 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                   </FieldsetTitle>
                   <TagInput
                     inputId={`${uid}-bought`}
-                    placeholder="Any product"
                     tagIds={bought}
                     tagList={selectableProductOptions(productOptions, bought)}
                     onChangeTagIds={setBought}
@@ -1001,7 +999,6 @@ export const EmailForm = ({ context, installment }: EmailFormProps) => {
                   </FieldsetTitle>
                   <TagInput
                     inputId={`${uid}-not_bought`}
-                    placeholder="No products"
                     tagIds={notBought}
                     tagList={selectableProductOptions(productOptions, notBought)}
                     onChangeTagIds={setNotBought}

@@ -151,7 +151,6 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={6}
-            placeholder="XXXXXX"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             autoFocus

@@ -337,7 +337,6 @@ const SnippetRow = ({
             <Label htmlFor={`${uid}code`}>Code</Label>
             <Textarea
               id={`${uid}code`}
-              placeholder="Enter your analytics code"
               value={snippet.code}
               onChange={(evt) => updateSnippet({ code: evt.target.value })}
             />

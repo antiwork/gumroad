@@ -20,7 +20,7 @@ describe("Product Edit Previews", type: :system, js: true) do
   it "opens the full-screen preview only after the changes have been saved" do
     visit edit_link_path(product.unique_permalink)
 
-    fill_in("You'll get...", with: "This should be saved automatically")
+    fill_in("Summary", with: "This should be saved automatically")
 
     new_window = window_opened_by do
       click_on "Preview"
@@ -63,13 +63,13 @@ describe("Product Edit Previews", type: :system, js: true) do
 
     click_on "Add version"
     within version_rows[0] do
-      fill_in "Version name", with: "Version 1"
+      fill_in "Name", with: "Version 1"
     end
 
     click_on "Add version"
     within version_rows[0] do
       within version_option_rows[1] do
-        fill_in "Version name", with: "Version 2"
+        fill_in "Name", with: "Version 2"
         fill_in "Maximum number of purchases", with: 0
       end
     end

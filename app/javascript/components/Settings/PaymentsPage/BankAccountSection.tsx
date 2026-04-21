@@ -942,7 +942,6 @@ const BankAccountSection = ({
           </FieldsetTitle>
           <Input
             id={`${uid}-account-holder-full-name`}
-            placeholder="Full name of account holder"
             value={bankAccount?.account_holder_full_name || ""}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("account_holder_full_name")}

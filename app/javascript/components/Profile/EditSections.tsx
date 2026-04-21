@@ -289,7 +289,7 @@ export const SectionLayout = ({
           <EditorSubmenu heading="Name" text={section.header}>
             <Fieldset>
               <Input
-                placeholder="Name"
+                aria-label="Name"
                 value={section.header}
                 onChange={(e) => updateSection({ header: e.target.value })}
               />
@@ -572,7 +572,6 @@ const SubscribeSectionView = ({ section }: { section: SubscribeSection }) => {
         <EditorSubmenu key="0" heading="Button Label" text={section.button_label}>
           <Input
             type="text"
-            placeholder="Subscribe"
             aria-label="Button Label"
             value={section.button_label}
             onChange={(evt) => updateSection({ button_label: evt.target.value })}
