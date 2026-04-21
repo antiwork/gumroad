@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Form } from "$app/components/Admin/Form";
+import { ScheduledPayoutFields } from "$app/components/Admin/Users/PermissionRisk/ScheduledPayoutFields";
 import type { User } from "$app/components/Admin/Users/User";
 import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -14,6 +15,7 @@ type SuspendForFraudProps = {
 
 const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
   const show = user.flagged_for_fraud || user.on_probation;
+  const [payoutAction, setPayoutAction] = React.useState("payout");
 
   return (
     show && (
@@ -31,13 +33,15 @@ const SuspendForFraud = ({ user }: SuspendForFraudProps) => {
           >
             {(isLoading) => (
               <Fieldset>
-                <div className="flex items-start gap-2">
-                  <Textarea
-                    name="suspend_for_fraud[suspension_note]"
-                    rows={3}
-                    className="flex-1"
-                    placeholder="Add suspension note (optional)"
-                  />
+                <Textarea
+                  name="suspend_for_fraud[suspension_note]"
+                  rows={3}
+                  placeholder="Add suspension note (optional)"
+                />
+                <div className="flex items-end gap-2">
+                  {user.unpaid_balance_cents > 0 && !user.has_in_progress_scheduled_payout && (
+                    <ScheduledPayoutFields action={payoutAction} onActionChange={setPayoutAction} />
+                  )}
                   <Button type="submit" disabled={isLoading}>
                     {isLoading ? "Submitting..." : "Submit"}
                   </Button>

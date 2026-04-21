@@ -21,7 +21,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
   before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy]) { doorkeeper_authorize! :edit_products }
-  before_action :check_types_of_file_objects, only: [:update, :create]
+  before_action :reject_unsupported_upload_fields, only: [:update, :create]
   before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy]
   before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy]
 
@@ -115,13 +115,8 @@ class Api::V2::LinksController < Api::V2::BaseController
       if !params[:files].is_a?(Array) || params[:files].any? { |f| !f.respond_to?(:key?) }
         return render_response(false, message: "files must be an array of file objects.")
       end
-      if params[:files].any? { |f| !f[:url].respond_to?(:to_str) || f[:url].blank? }
-        return render_response(false, message: "Each file must include a url string.")
-      end
-      seller_s3_prefix = "#{S3_BASE_URL}attachments/#{current_resource_owner.external_id}/"
-      if params[:files].any? { |f| !f[:url].start_with?(seller_s3_prefix) || f[:url].include?("..") || f[:url].include?("%2F") || f[:url].include?("%2f") }
-        return render_response(false, message: "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first.")
-      end
+      error = validate_file_urls(params[:files])
+      return render_response(false, message: error) if error
     end
 
     if params[:taxonomy_id].present?
@@ -213,8 +208,84 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "Price cannot be updated for tiered membership products. Use the variant endpoints to manage tier pricing.")
     end
 
+    if params.key?(:tags)
+      if !params[:tags].is_a?(Array) || params[:tags].any? { |t| !t.respond_to?(:to_str) }
+        return render_response(false, message: "tags must be an array of strings.")
+      end
+    end
+
+    if params.key?(:rich_content)
+      if !params[:rich_content].is_a?(Array) || params[:rich_content].any? { |p| !p.respond_to?(:key?) }
+        return render_response(false, message: "rich_content must be an array of content page objects.")
+      end
+      params[:rich_content].each do |p|
+        desc = p[:description]
+        next if desc.blank?
+        if !desc.respond_to?(:key?) && !desc.is_a?(Array)
+          return render_response(false, message: "Each rich_content page description must be a JSON object or array.")
+        end
+        content_nodes = if desc.respond_to?(:key?)
+          if desc[:content].present? && !desc[:content].is_a?(Array)
+            return render_response(false, message: "rich_content description content must be an array.")
+          end
+          desc[:content]
+        else
+          desc
+        end
+        if content_nodes.is_a?(Array) && content_nodes.any? { |n| !n.respond_to?(:key?) }
+          return render_response(false, message: "Each rich_content content node must be a JSON object.")
+        end
+      end
+    end
+
+    if params.key?(:files)
+      if !params[:files].is_a?(Array) || params[:files].any? { |f| !f.respond_to?(:key?) }
+        return render_response(false, message: "files must be an array of file objects.")
+      end
+      if params[:files].any? { |f| f.key?(:modified) }
+        return render_response(false, message: "'modified' is not an accepted parameter on files[]; it is an internal save-path flag.")
+      end
+      existing_files_by_id = @product.product_files.alive.index_by(&:external_id)
+      new_files = []
+      params[:files].each do |f|
+        existing = f[:id].present? ? existing_files_by_id[f[:id]] : nil
+        if existing
+          if f[:url].blank?
+            if (f.keys.map(&:to_s) - %w[id]).empty?
+              f[:url] = existing.url
+              f[:modified] = "false"
+            else
+              return render_response(false, message: "Include the canonical url returned by POST /v2/files/complete when updating fields on an existing file; an entry with only id keeps the file unchanged.")
+            end
+          elsif f[:url] != existing.url
+            return render_response(false, message: "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first.")
+          end
+        elsif f[:url].blank?
+          return render_response(false, message: "Each files entry must reference an existing file by id or include a url for a new file uploaded via POST /v2/files/complete.")
+        else
+          new_files << f
+        end
+      end
+      error = validate_file_urls(new_files)
+      return render_response(false, message: error) if error
+    end
+
+    if params.key?(:cover_ids)
+      if !params[:cover_ids].is_a?(Array) || params[:cover_ids].any? { |id| !id.respond_to?(:to_str) }
+        return render_response(false, message: "cover_ids must be an array of strings.")
+      end
+    end
+
     @normalized_files = normalize_params_recursively(params[:files]) if params.key?(:files)
     @normalized_rich_content = normalize_params_recursively(params[:rich_content]) if params.key?(:rich_content)
+
+    if @normalized_files.present? && @normalized_files.any? { |f| !f.respond_to?(:key?) }
+      return render_response(false, message: "files must be an array of file objects.")
+    end
+
+    if @normalized_rich_content.present? && @normalized_rich_content.any? { |p| !p.respond_to?(:key?) }
+      return render_response(false, message: "rich_content must be an array of content page objects.")
+    end
 
     begin
       ActiveRecord::Base.transaction do
@@ -252,6 +323,13 @@ class Api::V2::LinksController < Api::V2::BaseController
         flag_changed = @product.has_same_rich_content_for_all_variants? != rich_content_flag_was
 
         unless @normalized_files.nil?
+          referenced_existing_ids = @normalized_files.filter_map { |f| f[:id] if f[:id].present? }
+          if referenced_existing_ids.any?
+            locked_alive_ids = @product.product_files.alive.lock.map(&:external_id)
+            missing_ids = referenced_existing_ids - locked_alive_ids
+            raise Link::LinkInvalid, "File(s) #{missing_ids.join(', ')} no longer exist; they may have been deleted by a concurrent request. Retry with the current file list." if missing_ids.any?
+          end
+
           validate_file_embed_conflicts!(skip_variant_embeds: flag_changed && @product.has_same_rich_content_for_all_variants? && !@normalized_rich_content.nil?)
 
           rich_content_params = build_rich_content_params
@@ -350,11 +428,66 @@ class Api::V2::LinksController < Api::V2::BaseController
       error_with_object(:product, product)
     end
 
-    def check_types_of_file_objects
-      return if params[:file].class != String && params[:preview].class != String
+    UNSUPPORTED_UPLOAD_FIELDS = %i[file preview thumbnail].freeze
 
-      render_response(false, message: "You entered the name of the file to be uploaded incorrectly. Please refer to " \
-                                      "https://gumroad.com/api#methods for the correct syntax.")
+    def reject_unsupported_upload_fields
+      rejected_field = UNSUPPORTED_UPLOAD_FIELDS.find { |key| legacy_upload_present?(params[key]) }
+      return unless rejected_field
+
+      render_response(false, message: unsupported_upload_field_message(rejected_field))
+    end
+
+    def legacy_upload_present?(value)
+      return false if value.blank?
+
+      case value
+      when ActionController::Parameters, Hash
+        value.each_value.any? { |v| legacy_upload_present?(v) }
+      when Array
+        value.any? { |v| legacy_upload_present?(v) }
+      else
+        true
+      end
+    end
+
+    def unsupported_upload_field_message(field)
+      verb_path = action_name == "create" ? "POST /v2/products" : "PUT /v2/products/:id"
+      "'#{field}' is not an accepted parameter on #{verb_path}. #{upload_field_guidance(field)}"
+    end
+
+    def upload_field_guidance(field)
+      case field
+      when :file
+        presign_flow = "Upload files with the presign flow (POST /v2/files/presign, upload parts to the returned S3 URLs, then POST /v2/files/complete), then attach them by including the returned URLs in files[][url]."
+        if action_name == "create"
+          presign_flow
+        else
+          "#{presign_flow} Note: files is a full replacement — to keep an existing file, include an entry with its id; files missing from the array are removed."
+        end
+      when :preview
+        if action_name == "create"
+          "Covers can only be added after the product is created. Create the product first, then POST to /v2/products/:id/covers with a url or signed_blob_id."
+        else
+          "Use POST /v2/products/:id/covers with a url or signed_blob_id to add a cover."
+        end
+      when :thumbnail
+        if action_name == "create"
+          "Thumbnails can only be set after the product is created. Create the product first, then POST to /v2/products/:id/thumbnail with a signed_blob_id."
+        else
+          "Use POST /v2/products/:id/thumbnail with a signed_blob_id to set the thumbnail."
+        end
+      end
+    end
+
+    def validate_file_urls(files)
+      if files.any? { |f| !f[:url].respond_to?(:to_str) || f[:url].blank? }
+        return "Each file must include a url string."
+      end
+      seller_s3_prefix = "#{S3_BASE_URL}attachments/#{current_resource_owner.external_id}/"
+      if files.any? { |f| !f[:url].start_with?(seller_s3_prefix) || f[:url].include?("..") || f[:url].include?("%2F") || f[:url].include?("%2f") }
+        return "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first."
+      end
+      nil
     end
 
     def set_link_id_to_id

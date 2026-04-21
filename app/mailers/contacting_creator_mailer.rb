@@ -371,6 +371,13 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your account has been suspended for being high risk"
   end
 
+  def account_suspended(user_id)
+    @seller = User.find(user_id)
+    @subject = "Your Gumroad account has been suspended"
+    @scheduled_payout = @seller.scheduled_payouts.pending.last
+    @payout_amount = formatted_dollar_amount(@scheduled_payout.payout_amount_cents) if @scheduled_payout
+  end
+
   def user_sales_data(user_id, sales_csv_tempfile)
     @seller = User.find(user_id)
     @subject = "Here's your customer data!"

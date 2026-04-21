@@ -86,6 +86,10 @@ module Payment::FailureReason
       reason: "the bank account has restrictions on either the type, or the number, of payouts allowed. This normally indicates that the bank account is a savings or other non-checking account",
       solution: "Confirm the bank account entered in payout settings",
     },
+    "cannot_pay" => {
+      reason: "Stripe is unable to create payouts to this account",
+      solution: "Complete any outstanding requirements in payout settings. If the issue persists, contact Gumroad Support",
+    },
     "could_not_process" => {
       reason: "the bank could not process this payout",
       solution: "Confirm the bank account entered in payout settings. If it's correct, update to a new bank account",

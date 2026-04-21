@@ -29,6 +29,10 @@ Non-trivial PRs should follow this structure:
 
 End with an AI disclosure after a `---` separator. Name the specific model (e.g., "Claude Opus 4.6") and list the prompts given to the agent.
 
+## AI models
+
+Use the latest and greatest state-of-the-art models from American AI companies like [Anthropic](https://www.anthropic.com/) and [OpenAI](https://openai.com/). As of this writing, that means Claude Opus 4.6 and GPT-5.4, but always check for the newest releases. Don't settle for last-gen models when better ones are available.
+
 ## Development guidelines
 
 ### Testing guidelines
@@ -45,6 +49,21 @@ End with an AI disclosure after a `---` separator. Name the specific model (e.g.
 - Use `@example.com` for emails in tests
 - Use `example.com`, `example.org`, and `example.net` as custom domains or request hosts in tests.
 - Avoid `to_not have_enqueued_sidekiq_job` or `not_to have_enqueued_sidekiq_job` because they're prone to false positives. Make assertions on `SidekiqWorkerName.jobs.size` instead.
+
+### Before pushing
+
+Always run the relevant tests locally and confirm they pass before pushing:
+
+```bash
+# Run the specs affected by your changes
+bundle exec rspec spec/path/to/changed_spec.rb
+
+# Lint
+bundle exec rubocop -a              # Ruby lint + auto-correct
+DISABLE_TYPE_CHECKED=1 npx eslint   # JS/TS lint
+```
+
+Do not push code with failing tests. CI is not a substitute for local verification. Fix any issues before committing.
 
 ### Code standards
 
@@ -65,6 +84,14 @@ End with an AI disclosure after a `---` separator. Name the specific model (e.g.
 - If you want to deduplicate a job (using sidekiq-unique-jobs), 99% of the time, you're looking for `lock: :until_executed`. It is fast because it works by maintaining a Redis Set of job digests: If a job digest is in this list (`O(1)`), running `perform_async` will be a noop and will return `nil`.
 - Furthermore, you likely should **NOT** use `on_conflict: :replace`, because for it to remove an existing enqueued job, it needs to find it first, by scrolling through the Scheduled Set, which is CPU expensive and slow. It also means that `perform_async` will be as slow as the length of the queue, or fail entirely ⇒ you can break Sidekiq but just having one job like this enqueued too often.
 
+### UI components
+
+- Use the shared UI components in `$app/components/ui/` for all standard UI elements. Do not use native HTML elements like `<table>`, `<input>`, `<select>` when a UI component exists.
+- Import them with the `$app` alias: `import { Table } from "$app/components/ui/Table"` (not `<table>`)
+- Available components include: `Alert`, `Avatar`, `Calendar`, `Card`, `Checkbox`, `CodeSnippet`, `ColorPicker`, `DefinitionList`, `Details`, `Fieldset`, `FormSection`, `InlineList`, `Input`, `InputGroup`, `Label`, `Menu`, `PageHeader`, `Pill`, `Placeholder`, `ProductCard`, `ProductCardGrid`, `Radio`, `Range`, `Rows`, `Select`, `Sheet`, `StretchedLink`, `Switch`, `Table`, `Tabs`, `Textarea`
+- Check what already exists in `app/javascript/components/ui/` before creating new components
+- Do not recreate or inline components that already exist in the UI library
+
 ### Code patterns
 
 - When creating financial records (receipts, sales), copy the specific values (amount, currency, percentage) at the time of purchase instead of referencing mutable data like a `DiscountCode` ID. This ensures historical records remain accurate if the original object is edited or deleted.
@@ -82,7 +109,6 @@ End with an AI disclosure after a `---` separator. Name the specific model (e.g.
 - Use `product` instead of `link` in new code (in variable names, column names, comments, etc.)
 - Use `request` instead of `$.ajax` in new code
 - Use `buyer` and `seller` when naming variables instead of `customer` and `creator`
-- Avoid `unless`
 - Don't create new files in `app/modules/` as it is a legacy location. Prefer creating concerns in the right directory instead (eg: `app/controllers/concerns/`, `app/models/concerns/`, etc.)
 - Do not create methods ending in `_path` or `_url`. They might cause collisions with rails generated named route helpers in the future. Instead, use a module similar to `CustomDomainRouteBuilder`
 - Use Nano IDs to generate external/public IDs for new models.

@@ -40,6 +40,10 @@ perform_daily_instant_payouts_worker:
   cron: "0 8 * * *" # UTC 08:00, should be run before the weekly payouts job at 10:00
   class: PerformDailyInstantPayoutsWorker
   description: Creates daily instant payouts for balances up to yesterday
+execute_scheduled_payouts_job:
+  cron: "0 9 * * *" # UTC 09:00, after daily payouts at 08:00
+  class: ExecuteScheduledPayoutsJob
+  description: Executes due scheduled payouts for suspended users
 large_sellers_update_user_balance_stats_cache_worker: # Duration: <1sec
   cron: "0 8 * * *" # UTC 08:00
   class: LargeSellersUpdateUserBalanceStatsCacheWorker

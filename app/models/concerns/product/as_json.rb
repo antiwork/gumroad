@@ -138,15 +138,20 @@ module Product::AsJson
         json.merge!(
           "rich_content" => rich_content_json,
           "has_same_rich_content_for_all_variants" => has_same_rich_content_for_all_variants?,
-          "files" => ordered_alive_product_files.map do |f|
-            {
-              id: f.external_id,
-              name: f.display_name,
-              size: f.size,
-              url: f.signed_url,
-              filetype: f.filetype,
-              filegroup: f.filegroup,
-            }
+          "files" => ordered_alive_product_files.filter_map do |f|
+            begin
+              {
+                id: f.external_id,
+                name: f.display_name,
+                size: f.size,
+                url: f.signed_url,
+                filetype: f.filetype,
+                filegroup: f.filegroup,
+              }
+            rescue Aws::S3::Errors::NotFound => e
+              Rails.logger.warn("Skipping product file #{f.id} with missing S3 object: #{e.message}")
+              nil
+            end
           end
         )
       end

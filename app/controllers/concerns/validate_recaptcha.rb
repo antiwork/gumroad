@@ -46,6 +46,16 @@ module ValidateRecaptcha
                                }.to_json,
                                timeout: 5)
       Rails.logger.info response
-      response
+
+      parsed = response.parsed_response
+      if parsed.is_a?(Hash)
+        parsed
+      else
+        Rails.logger.error("Unexpected reCAPTCHA response format: #{response.code} #{parsed.class}")
+        {}
+      end
+    rescue StandardError => e
+      Rails.logger.error("reCAPTCHA verification request failed: #{e.message}")
+      {}
     end
 end

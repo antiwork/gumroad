@@ -806,11 +806,31 @@ describe "PurchaseRefunds", :vcr do
 
       describe "refund after a dispute event which is functionally treated as a chargeback on our side" do
         before do
+          sample_image = File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg"))
+          allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(purchase).and_return(sample_image)
+          allow(DisputeEvidence::GenerateUncategorizedTextService).to receive(:perform).with(purchase).and_return("Sample uncategorized text")
+          allow(DisputeEvidence::GenerateAccessActivityLogsService).to receive(:perform).with(purchase).and_return("Sample activity logs")
           Purchase.handle_charge_event(charge_event_dispute)
           expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
           purchase.reload
         end
 
+        it "does not issue a refund while the dispute is still active" do
+          expect(ChargeProcessor).not_to receive(:refund!)
+
+          expect(purchase.refund_and_save!(create(:admin_user).id)).to be(false)
+          expect(purchase.errors[:base]).to include(Purchase::Refundable::ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE)
+          expect(purchase.reload.refunds).to be_empty
+        end
+
+        it "does not refund Gumroad taxes while the dispute is still active" do
+          allow(purchase).to receive(:gumroad_tax_refundable_cents).and_return(20)
+          expect(ChargeProcessor).not_to receive(:refund!)
+
+          expect(purchase.refund_gumroad_taxes!(refunding_user_id: create(:admin_user).id)).to be(false)
+          expect(purchase.errors[:base]).to include(Purchase::Refundable::ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE)
+          expect(purchase.reload.refunds).to be_empty
+        end
         it "does not decrement balance from the user on such an event" do
           expect(purchase).to_not receive(:process_refund_or_chargeback_for_purchase_balance)
           expect(purchase).to_not receive(:process_refund_or_chargeback_for_affiliate_credit_balance)
@@ -1274,16 +1294,41 @@ describe "PurchaseRefunds", :vcr do
     end
 
     it "queues an email to the seller informing them of the refund" do
+      allow(@purchase).to receive(:refund_and_save!).and_return(true)
+
       expect do
-        @purchase.refund_for_fraud!(@user.id)
-      end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded_for_fraud).with(@purchase_id)
+        @purchase.refund_for_fraud!(create(:admin_user).id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded_for_fraud).with(@purchase.id)
+    end
+
+    it "does not cancel the subscription or queue an email when the refund fails" do
+      subscription = double(deactivated?: false)
+      allow(@purchase).to receive(:subscription).and_return(subscription)
+      allow(@purchase).to receive(:refund_and_save!).and_return(false)
+
+      expect(subscription).not_to receive(:cancel_effective_immediately!)
+      expect(ContactingCreatorMailer).not_to receive(:purchase_refunded_for_fraud)
+
+      expect(@purchase.refund_for_fraud!(create(:admin_user).id)).to be(false)
+    end
+
+    it "still runs side effects when refund_and_save! is an idempotent no-op" do
+      subscription = double(deactivated?: false)
+      allow(@purchase).to receive(:subscription).and_return(subscription)
+      allow(@purchase).to receive(:refund_and_save!).and_return(nil)
+
+      expect(subscription).to receive(:cancel_effective_immediately!)
+
+      expect do
+        expect(@purchase.refund_for_fraud!(create(:admin_user).id)).to be(true)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :purchase_refunded_for_fraud).with(@purchase.id)
     end
 
     describe "subscription purchases" do
       it "cancels the subscription effective immediately" do
         purchase = create(:membership_purchase)
 
-        purchase.refund_for_fraud!(create(:admin_user).id)
+        expect(purchase.refund_for_fraud!(create(:admin_user).id)).to be(true)
 
         subscription = purchase.subscription
         expect(subscription.cancelled?).to eq true
@@ -1297,9 +1342,16 @@ describe "PurchaseRefunds", :vcr do
     let(:purchase) { create(:purchase) }
 
     it "calls refund_for_fraud! and block_buyer!" do
-      expect(purchase).to receive(:refund_for_fraud!).with(admin.id)
+      expect(purchase).to receive(:refund_for_fraud!).with(admin.id).and_return(true)
       expect(purchase).to receive(:block_buyer!).with(blocking_user_id: admin.id)
       purchase.refund_for_fraud_and_block_buyer!(admin.id)
+    end
+
+    it "does not block the buyer if the refund fails" do
+      expect(purchase).to receive(:refund_for_fraud!).with(admin.id).and_return(false)
+      expect(purchase).not_to receive(:block_buyer!)
+
+      expect(purchase.refund_for_fraud_and_block_buyer!(admin.id)).to be(false)
     end
   end
 

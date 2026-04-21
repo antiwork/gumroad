@@ -37,6 +37,7 @@ class Admin::UserPresenter::Card
       custom_fee_per_thousand: user.custom_fee_per_thousand,
       unpaid_balance_cents: user.unpaid_balance_cents,
       disable_paypal_sales: user.disable_paypal_sales,
+      has_in_progress_scheduled_payout: user.scheduled_payouts.in_progress.exists?,
 
       # Status flags
       verified: user.verified?,

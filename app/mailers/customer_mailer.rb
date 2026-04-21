@@ -10,7 +10,7 @@ class CustomerMailer < ApplicationMailer
   layout "layouts/email", except: :send_to_kindle
 
   def grouped_receipt(purchase_ids)
-    @chargeables = Purchase.where(id: purchase_ids).map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }.uniq
+    @chargeables = Purchase.where(id: purchase_ids).includes(charge: [:order, :seller]).map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }.uniq
     last_chargeable = @chargeables.last
 
     mail(

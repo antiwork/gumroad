@@ -51,4 +51,20 @@ class CreatorMailer < ApplicationMailer
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :creators)
     )
   end
+
+  def scheduled_payout_chargeback_hold(scheduled_payout_id:)
+    @scheduled_payout = ScheduledPayout.find_by(id: scheduled_payout_id)
+    return if @scheduled_payout.nil?
+
+    user = @scheduled_payout.user
+    email = user.form_email
+    return if !EmailFormatValidator.valid?(email)
+
+    @subject = "Your payout has been delayed"
+
+    mail(
+      to: email,
+      subject: @subject
+    )
+  end
 end

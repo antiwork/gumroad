@@ -55,6 +55,7 @@ namespace :admin do
       post :mark_compliant_from_iffy
       post :suspend_for_fraud
       post :suspend_for_fraud_from_iffy
+      post :schedule_payout
       post :flag_for_explicit_nsfw_tos_violation_from_iffy
       post :suspend_for_tos_violation
       post :put_on_probation
@@ -135,6 +136,14 @@ namespace :admin do
   resources :merchant_accounts, only: [:show], param: :external_id do
     member do
       get :live_attributes
+    end
+  end
+
+  # Scheduled Payouts
+  resources :scheduled_payouts, only: [:index], param: :external_id do
+    member do
+      post :execute
+      post :cancel
     end
   end
 

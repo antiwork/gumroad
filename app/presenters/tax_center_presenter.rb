@@ -16,6 +16,26 @@ class TaxCenterPresenter
     }
   end
 
+  def gross_cents
+    calculate_gross
+  end
+
+  def fees_cents
+    calculate_fees
+  end
+
+  def taxes_cents
+    calculate_taxes
+  end
+
+  def affiliate_credit_cents
+    calculate_affiliate_credit
+  end
+
+  def net_cents
+    calculate_net
+  end
+
   private
     attr_reader :seller, :year
 
@@ -79,10 +99,7 @@ class TaxCenterPresenter
     end
 
     def available_years
-      start_year = seller.created_at.year
-      end_year = Time.current.year - 1
-
-      (start_year..end_year).to_a.reverse
+      seller.tax_form_available_years.reverse
     end
 
     def format_cents_as_dollars(cents)

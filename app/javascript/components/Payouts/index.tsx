@@ -279,15 +279,20 @@ export type PayoutsProps = {
   show_instant_payouts_notice: boolean;
   pagination: PaginationProps;
   tax_center_enabled: boolean;
+  scheduled_payout: {
+    action: "refund" | "payout" | "hold";
+    status: "pending" | "flagged" | "held" | "executed";
+    scheduled_at: string;
+    payout_amount_cents: number | null;
+  } | null;
 };
 
-// TODO: move BankAccount|PaypalAccount out of CurrentPayoutsDataAndPaymentMethodWithUserPayable
-export type CurrentPayoutsDataAndPaymentMethodWithUserPayable = CurrentPeriodPayoutData &
-  (NoPayoutAccount | BankAccount | PaypalAccount | StripeConnectAccount);
+export type PaymentMethod = NoPayoutAccount | BankAccount | PaypalAccount | StripeConnectAccount;
+type LegacyPaymentMethod = LegacyNotAvailableAccount | BankAccount | PaypalAccount | StripeConnectAccount;
 
-// TODO: move BankAccount|PaypalAccount out of PastPayoutsDataAndPaymentMethod
-export type PastPayoutsDataAndPaymentMethod = PastPeriodPayoutsData &
-  (LegacyNotAvailableAccount | BankAccount | PaypalAccount | StripeConnectAccount);
+export type CurrentPayoutsDataAndPaymentMethodWithUserPayable = CurrentPeriodPayoutData & PaymentMethod;
+
+export type PastPayoutsDataAndPaymentMethod = PastPeriodPayoutsData & LegacyPaymentMethod;
 
 type PayoutPeriodData = CurrentPayoutsDataAndPaymentMethodWithUserPayable | PastPayoutsDataAndPaymentMethod;
 const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) => {

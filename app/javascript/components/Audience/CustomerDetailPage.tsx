@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUpRightSquare, Paperclip, Trash } from "@boxicons/react";
-import { Link } from "@inertiajs/react";
+import { Deferred, Link } from "@inertiajs/react";
 import { Blob, DirectUpload } from "@rails/activestorage";
 import * as React from "react";
 
@@ -23,10 +23,7 @@ import {
   changeCanContact,
   completeCommission,
   getCharges,
-  getCustomerEmails,
-  getMissedPosts,
   getOptions,
-  getProductPurchases,
   markShipped,
   refund,
   rejectReviewVideo,
@@ -88,6 +85,10 @@ export type CustomerDetailPageProps = {
   countries: string[];
   can_ping: boolean;
   show_refund_fee_notice: boolean;
+  emails: CustomerEmail[];
+  missed_posts?: MissedPost[];
+  charges: Charge[];
+  product_purchases: Customer[];
 };
 
 const year = new Date().getFullYear();
@@ -129,6 +130,10 @@ const CustomerDetailPage = ({
   countries,
   can_ping: canPing,
   show_refund_fee_notice: showRefundFeeNotice,
+  emails: initialEmails,
+  missed_posts: initialMissedPosts,
+  charges: initialCharges,
+  product_purchases: initialProductPurchases,
 }: CustomerDetailPageProps) => {
   const userAgentInfo = useUserAgentInfo();
   const currentSeller = useCurrentSeller();
@@ -137,22 +142,11 @@ const CustomerDetailPage = ({
   const updateCustomer = (update: Partial<Customer>) => setCustomer((prev) => ({ ...prev, ...update }));
 
   const [loadingId, setLoadingId] = React.useState<string | null>(null);
-  const [missedPosts, setMissedPosts] = React.useState<MissedPost[] | null>(null);
+  const missedPosts = initialMissedPosts ?? [];
   const [shownMissedPosts, setShownMissedPosts] = React.useState(PAGE_SIZE);
-  const [emails, setEmails] = React.useState<CustomerEmail[] | null>(null);
+  const emails = initialEmails;
   const [shownEmails, setShownEmails] = React.useState(PAGE_SIZE);
   const sentEmailIds = React.useRef<Set<string>>(new Set());
-
-  useRunOnce(() => {
-    getMissedPosts(customer.id, customer.email).then(setMissedPosts, (e: unknown) => {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    });
-    getCustomerEmails(customer.id).then(setEmails, (e: unknown) => {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    });
-  });
 
   const onSend = async (id: string, type: "receipt" | "post") => {
     setLoadingId(id);
@@ -167,36 +161,12 @@ const CustomerDetailPage = ({
     setLoadingId(null);
   };
 
-  const [productPurchases, setProductPurchases] = React.useState<Customer[]>([]);
-  useRunOnce(() => {
-    if (customer.is_bundle_purchase)
-      void getProductPurchases(customer.id).then(setProductPurchases, (e: unknown) => {
-        assertResponseError(e);
-        showAlert(e.message, "error");
-      });
-  });
+  const [productPurchases, setProductPurchases] = React.useState<Customer[]>(initialProductPurchases);
 
   const { subscription, commission, license, shipping } = customer;
 
   const showCharges = subscription || commission;
-  const [charges, setCharges] = React.useState<Charge[]>([]);
-  const [isLoadingCharges, setIsLoadingCharges] = React.useState(true);
-  React.useEffect(() => {
-    if (showCharges) {
-      setIsLoadingCharges(true);
-      getCharges(customer.id, customer.email)
-        .then((charges) => {
-          setCharges(charges);
-        })
-        .catch((e: unknown) => {
-          assertResponseError(e);
-          showAlert(e.message, "error");
-        })
-        .finally(() => {
-          setIsLoadingCharges(false);
-        });
-    }
-  }, [commission?.status]);
+  const [charges, setCharges] = React.useState<Charge[]>(initialCharges);
 
   const isCoffee = customer.product.native_type === "coffee";
 
@@ -207,8 +177,6 @@ const CustomerDetailPage = ({
       year: date.getFullYear() !== year ? "numeric" : undefined,
       timeZone: currentSeller?.timeZone.name,
     });
-
-  const isLoading = emails === null || missedPosts === null || (showCharges && isLoadingCharges);
 
   const statusPills = (
     <>
@@ -249,90 +217,99 @@ const CustomerDetailPage = ({
         }
       />
 
-      {isLoading ? (
-        <div className="grid grid-cols-1 gap-8 p-4 md:grid-cols-2 md:p-8 lg:grid-cols-3">
-          <div className="flex flex-col gap-8">
-            <div className="h-[25vh] animate-pulse rounded-lg bg-foreground/10" />
-            <div className="h-[25vh] animate-pulse rounded-lg bg-foreground/10" />
+      <ColumnLayout className="flex flex-col gap-8 p-4 md:p-8">
+        {customer.is_additional_contribution ? (
+          <div className="break-inside-avoid">
+            <Alert role="status" variant="info">
+              <strong>Additional amount: </strong>This is an additional contribution, added to a previous purchase of
+              this product.
+            </Alert>
           </div>
-          <div className="h-full animate-pulse rounded-lg bg-foreground/10" />
-          <div className="h-full animate-pulse rounded-lg bg-foreground/10" />
+        ) : null}
+        {customer.ppp ? (
+          <div className="break-inside-avoid">
+            <Alert role="status" variant="info">
+              This customer received a purchasing power parity discount of <b>{customer.ppp.discount}</b> because they
+              are located in <b>{customer.ppp.country}</b>.
+            </Alert>
+          </div>
+        ) : null}
+        {customer.giftee_email ? (
+          <div className="break-inside-avoid">
+            <Alert role="status" variant="info">
+              {customer.email} purchased this for {customer.giftee_email}.
+            </Alert>
+          </div>
+        ) : null}
+        {customer.is_preorder ? (
+          <div className="break-inside-avoid">
+            <Alert role="status" variant="info">
+              <strong>Pre-order: </strong>This is a pre-order authorization. The customer's card has not been charged
+              yet.
+            </Alert>
+          </div>
+        ) : null}
+        {customer.affiliate && customer.affiliate.type !== "Collaborator" ? (
+          <div className="break-inside-avoid">
+            <Alert role="status" variant="info">
+              <strong>Affiliate: </strong>An affiliate ({customer.affiliate.email}) helped you make this sale and
+              received {customer.affiliate.amount}.
+            </Alert>
+          </div>
+        ) : null}
+        <div className="break-inside-avoid">
+          <EmailSection
+            label="Email"
+            email={customer.email}
+            onSave={
+              customer.is_existing_user
+                ? null
+                : (email) =>
+                    updatePurchase(customer.id, { email }).then(
+                      () => {
+                        showAlert("Email updated successfully.", "success");
+                        updateCustomer({ email });
+                        if (productPurchases.length)
+                          setProductPurchases((prevProductPurchases) =>
+                            prevProductPurchases.map((productPurchase) => ({ ...productPurchase, email })),
+                          );
+                      },
+                      (e: unknown) => {
+                        assertResponseError(e);
+                        showAlert(e.message, "error");
+                      },
+                    )
+            }
+            canContact={customer.can_contact}
+            onChangeCanContact={(canContact) =>
+              changeCanContact(customer.id, canContact).then(
+                () => {
+                  showAlert(
+                    canContact
+                      ? "Your customer will now receive your posts."
+                      : "Your customer will no longer receive your posts.",
+                    "success",
+                  );
+                  updateCustomer({ can_contact: canContact });
+                },
+                (e: unknown) => {
+                  assertResponseError(e);
+                  showAlert(e.message, "error");
+                },
+              )
+            }
+          />
         </div>
-      ) : (
-        <ColumnLayout className="flex flex-col gap-8 p-4 md:p-8">
-          {customer.is_additional_contribution ? (
-            <div className="break-inside-avoid">
-              <Alert role="status" variant="info">
-                <strong>Additional amount: </strong>This is an additional contribution, added to a previous purchase of
-                this product.
-              </Alert>
-            </div>
-          ) : null}
-          {customer.ppp ? (
-            <div className="break-inside-avoid">
-              <Alert role="status" variant="info">
-                This customer received a purchasing power parity discount of <b>{customer.ppp.discount}</b> because they
-                are located in <b>{customer.ppp.country}</b>.
-              </Alert>
-            </div>
-          ) : null}
-          {customer.giftee_email ? (
-            <div className="break-inside-avoid">
-              <Alert role="status" variant="info">
-                {customer.email} purchased this for {customer.giftee_email}.
-              </Alert>
-            </div>
-          ) : null}
-          {customer.is_preorder ? (
-            <div className="break-inside-avoid">
-              <Alert role="status" variant="info">
-                <strong>Pre-order: </strong>This is a pre-order authorization. The customer's card has not been charged
-                yet.
-              </Alert>
-            </div>
-          ) : null}
-          {customer.affiliate && customer.affiliate.type !== "Collaborator" ? (
-            <div className="break-inside-avoid">
-              <Alert role="status" variant="info">
-                <strong>Affiliate: </strong>An affiliate ({customer.affiliate.email}) helped you make this sale and
-                received {customer.affiliate.amount}.
-              </Alert>
-            </div>
-          ) : null}
+        {customer.giftee_email ? (
           <div className="break-inside-avoid">
             <EmailSection
-              label="Email"
-              email={customer.email}
-              onSave={
-                customer.is_existing_user
-                  ? null
-                  : (email) =>
-                      updatePurchase(customer.id, { email }).then(
-                        () => {
-                          showAlert("Email updated successfully.", "success");
-                          updateCustomer({ email });
-                          if (productPurchases.length)
-                            setProductPurchases((prevProductPurchases) =>
-                              prevProductPurchases.map((productPurchase) => ({ ...productPurchase, email })),
-                            );
-                        },
-                        (e: unknown) => {
-                          assertResponseError(e);
-                          showAlert(e.message, "error");
-                        },
-                      )
-              }
-              canContact={customer.can_contact}
-              onChangeCanContact={(canContact) =>
-                changeCanContact(customer.id, canContact).then(
+              label="Giftee email"
+              email={customer.giftee_email}
+              onSave={(email) =>
+                updatePurchase(customer.id, { giftee_email: email }).then(
                   () => {
-                    showAlert(
-                      canContact
-                        ? "Your customer will now receive your posts."
-                        : "Your customer will no longer receive your posts.",
-                      "success",
-                    );
-                    updateCustomer({ can_contact: canContact });
+                    showAlert("Email updated successfully.", "success");
+                    updateCustomer({ giftee_email: email });
                   },
                   (e: unknown) => {
                     assertResponseError(e);
@@ -342,509 +319,510 @@ const CustomerDetailPage = ({
               }
             />
           </div>
-          {customer.giftee_email ? (
-            <div className="break-inside-avoid">
-              <EmailSection
-                label="Giftee email"
-                email={customer.giftee_email}
-                onSave={(email) =>
-                  updatePurchase(customer.id, { giftee_email: email }).then(
-                    () => {
-                      showAlert("Email updated successfully.", "success");
-                      updateCustomer({ giftee_email: email });
-                    },
-                    (e: unknown) => {
-                      assertResponseError(e);
-                      showAlert(e.message, "error");
-                    },
-                  )
-                }
-              />
-            </div>
-          ) : null}
+        ) : null}
+        <Card asChild>
+          <section className="break-inside-avoid">
+            <CardContent asChild>
+              <h3 className="flex gap-1">
+                Order information
+                {!subscription && customer.transaction_url_for_seller ? (
+                  <a
+                    href={customer.transaction_url_for_seller}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Transaction"
+                    className="grow"
+                  >
+                    <ArrowUpRightSquare className="size-5" />
+                  </a>
+                ) : null}
+              </h3>
+            </CardContent>
+            <CardContent>
+              <h5 className="grow font-bold">Customer name</h5>
+              {customer.name || customer.email}
+            </CardContent>
+            <CardContent>
+              <h5 className="grow font-bold">{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
+              {customer.quantity}
+            </CardContent>
+            {customer.download_count ? (
+              <CardContent>
+                <h5 className="grow font-bold">Download count</h5>
+                {customer.download_count}
+              </CardContent>
+            ) : null}
+            <CardContent>
+              <h5 className="grow font-bold">Price</h5>
+              <div>
+                {customer.price.cents_before_offer_code > customer.price.cents ? (
+                  <>
+                    <s>
+                      {formatPrice(
+                        customer.price.cents_before_offer_code,
+                        customer.price.currency_type,
+                        customer.price.recurrence,
+                      )}
+                    </s>{" "}
+                  </>
+                ) : null}
+                {formatPrice(
+                  customer.price.cents - (customer.price.tip_cents ?? 0),
+                  customer.price.currency_type,
+                  customer.price.recurrence,
+                )}
+              </div>
+            </CardContent>
+            {customer.price.tip_cents ? (
+              <CardContent>
+                <h5 className="grow font-bold">Tip</h5>
+                {formatPrice(customer.price.tip_cents, customer.price.currency_type, customer.price.recurrence)}
+              </CardContent>
+            ) : null}
+            {customer.discount && !customer.upsell ? (
+              <CardContent>
+                <h5 className="grow font-bold">Discount</h5>
+                {customer.discount.code ? (
+                  <div>
+                    {formatDiscount(customer.discount, customer.price.currency_type)} off with code{" "}
+                    <Pill size="small">{customer.discount.code.toUpperCase()}</Pill>
+                  </div>
+                ) : (
+                  `${formatDiscount(customer.discount, customer.price.currency_type)} off`
+                )}
+              </CardContent>
+            ) : null}
+            {customer.upsell ? (
+              <CardContent>
+                <h5 className="grow font-bold">Upsell</h5>
+                {`${customer.upsell}${
+                  customer.discount ? ` (${formatDiscount(customer.discount, customer.price.currency_type)} off)` : ""
+                }`}
+              </CardContent>
+            ) : null}
+            {subscription?.status ? (
+              <CardContent>
+                <h5 className="grow font-bold">
+                  {subscription.is_installment_plan ? "Installment plan status" : "Membership status"}
+                </h5>
+                <div
+                  style={{
+                    color:
+                      subscription.status === "alive" || subscription.status === "fixed_subscription_period_ended"
+                        ? undefined
+                        : "var(--red)",
+                  }}
+                >
+                  {subscription.is_installment_plan
+                    ? INSTALLMENT_PLAN_STATUS_LABELS[subscription.status]
+                    : MEMBERSHIP_STATUS_LABELS[subscription.status]}
+                </div>
+              </CardContent>
+            ) : null}
+            {customer.referrer ? (
+              <CardContent>
+                <h5 className="grow font-bold">Referrer</h5>
+                {customer.referrer}
+              </CardContent>
+            ) : null}
+            {customer.physical ? (
+              <>
+                <CardContent>
+                  <h5 className="grow font-bold">SKU</h5>
+                  {customer.physical.sku}
+                </CardContent>
+                <CardContent>
+                  <h5 className="grow font-bold">Order number</h5>
+                  {customer.physical.order_number}
+                </CardContent>
+              </>
+            ) : null}
+          </section>
+        </Card>
+        {customer.utm_link ? (
+          <div className="break-inside-avoid">
+            <UtmLinkCard link={customer.utm_link} />
+          </div>
+        ) : null}
+        {customer.review ? (
+          <div className="break-inside-avoid">
+            <ReviewSection
+              review={customer.review}
+              purchaseId={customer.id}
+              onChange={(updatedReview) => updateCustomer({ review: updatedReview })}
+            />
+          </div>
+        ) : null}
+        {customer.custom_fields.length > 0 ? (
           <Card asChild>
             <section className="break-inside-avoid">
               <CardContent asChild>
-                <h3 className="flex gap-1">
-                  Order information
-                  {!subscription && customer.transaction_url_for_seller ? (
-                    <a
-                      href={customer.transaction_url_for_seller}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label="Transaction"
-                      className="grow"
-                    >
-                      <ArrowUpRightSquare className="size-5" />
-                    </a>
-                  ) : null}
-                </h3>
+                <header>
+                  <h3 className="grow">Information provided</h3>
+                </header>
               </CardContent>
-              <CardContent>
-                <h5 className="grow font-bold">Customer name</h5>
-                {customer.name || customer.email}
-              </CardContent>
-              <CardContent>
-                <h5 className="grow font-bold">{customer.is_multiseat_license ? "Seats" : "Quantity"}</h5>
-                {customer.quantity}
-              </CardContent>
-              {customer.download_count ? (
-                <CardContent>
-                  <h5 className="grow font-bold">Download count</h5>
-                  {customer.download_count}
-                </CardContent>
-              ) : null}
-              <CardContent>
-                <h5 className="grow font-bold">Price</h5>
-                <div>
-                  {customer.price.cents_before_offer_code > customer.price.cents ? (
-                    <>
-                      <s>
-                        {formatPrice(
-                          customer.price.cents_before_offer_code,
-                          customer.price.currency_type,
-                          customer.price.recurrence,
-                        )}
-                      </s>{" "}
-                    </>
-                  ) : null}
-                  {formatPrice(
-                    customer.price.cents - (customer.price.tip_cents ?? 0),
-                    customer.price.currency_type,
-                    customer.price.recurrence,
-                  )}
-                </div>
-              </CardContent>
-              {customer.price.tip_cents ? (
-                <CardContent>
-                  <h5 className="grow font-bold">Tip</h5>
-                  {formatPrice(customer.price.tip_cents, customer.price.currency_type, customer.price.recurrence)}
-                </CardContent>
-              ) : null}
-              {customer.discount && !customer.upsell ? (
-                <CardContent>
-                  <h5 className="grow font-bold">Discount</h5>
-                  {customer.discount.code ? (
-                    <div>
-                      {formatDiscount(customer.discount, customer.price.currency_type)} off with code{" "}
-                      <Pill size="small">{customer.discount.code.toUpperCase()}</Pill>
-                    </div>
-                  ) : (
-                    `${formatDiscount(customer.discount, customer.price.currency_type)} off`
-                  )}
-                </CardContent>
-              ) : null}
-              {customer.upsell ? (
-                <CardContent>
-                  <h5 className="grow font-bold">Upsell</h5>
-                  {`${customer.upsell}${
-                    customer.discount ? ` (${formatDiscount(customer.discount, customer.price.currency_type)} off)` : ""
-                  }`}
-                </CardContent>
-              ) : null}
-              {subscription?.status ? (
-                <CardContent>
-                  <h5 className="grow font-bold">
-                    {subscription.is_installment_plan ? "Installment plan status" : "Membership status"}
-                  </h5>
-                  <div
-                    style={{
-                      color:
-                        subscription.status === "alive" || subscription.status === "fixed_subscription_period_ended"
-                          ? undefined
-                          : "var(--red)",
-                    }}
-                  >
-                    {subscription.is_installment_plan
-                      ? INSTALLMENT_PLAN_STATUS_LABELS[subscription.status]
-                      : MEMBERSHIP_STATUS_LABELS[subscription.status]}
-                  </div>
-                </CardContent>
-              ) : null}
-              {customer.referrer ? (
-                <CardContent>
-                  <h5 className="grow font-bold">Referrer</h5>
-                  {customer.referrer}
-                </CardContent>
-              ) : null}
-              {customer.physical ? (
-                <>
-                  <CardContent>
-                    <h5 className="grow font-bold">SKU</h5>
-                    {customer.physical.sku}
-                  </CardContent>
-                  <CardContent>
-                    <h5 className="grow font-bold">Order number</h5>
-                    {customer.physical.order_number}
-                  </CardContent>
-                </>
-              ) : null}
-            </section>
-          </Card>
-          {customer.utm_link ? (
-            <div className="break-inside-avoid">
-              <UtmLinkCard link={customer.utm_link} />
-            </div>
-          ) : null}
-          {customer.review ? (
-            <div className="break-inside-avoid">
-              <ReviewSection
-                review={customer.review}
-                purchaseId={customer.id}
-                onChange={(updatedReview) => updateCustomer({ review: updatedReview })}
-              />
-            </div>
-          ) : null}
-          {customer.custom_fields.length > 0 ? (
-            <Card asChild>
-              <section className="break-inside-avoid">
-                <CardContent asChild>
-                  <header>
-                    <h3 className="grow">Information provided</h3>
-                  </header>
-                </CardContent>
-                {customer.custom_fields.map((field, idx) => {
-                  const content = (
-                    <CardContent asChild>
-                      <section key={idx}>
-                        <h5 className="grow font-bold">{field.attribute}</h5>
-                        {field.type === "text" ? (
-                          field.value
-                        ) : (
-                          <Rows role="list" className="mt-2">
-                            {field.files.map((file) => (
-                              <FileRow file={file} key={file.key} />
-                            ))}
-                          </Rows>
-                        )}
-                      </section>
-                    </CardContent>
-                  );
-                  return field.type === "file" ? <div key={idx}>{content}</div> : content;
-                })}
-              </section>
-            </Card>
-          ) : null}
-          {customer.has_options && !isCoffee && customer.product.native_type !== "call" ? (
-            <div className="break-inside-avoid">
-              <OptionSection
-                option={customer.option}
-                onChange={(option) => updateCustomer({ option })}
-                purchaseId={customer.id}
-                productPermalink={customer.product.permalink}
-                isSubscription={!!subscription}
-                quantity={customer.quantity}
-              />
-            </div>
-          ) : null}
-          {customer.is_bundle_purchase ? (
-            <Card asChild>
-              <section className="break-inside-avoid">
-                <CardContent asChild>
-                  <header>
-                    <h3 className="grow">Content</h3>
-                  </header>
-                </CardContent>
-                {productPurchases.length > 0 ? (
-                  productPurchases.map((productPurchase) => (
-                    <CardContent asChild key={productPurchase.id}>
-                      <section>
-                        <h5 className="grow font-bold">{productPurchase.product.name}</h5>
-                        <NavigationButtonInertia href={Routes.customer_sale_path(productPurchase.id)}>
-                          Manage
-                        </NavigationButtonInertia>
-                      </section>
-                    </CardContent>
-                  ))
-                ) : (
+              {customer.custom_fields.map((field, idx) => {
+                const content = (
                   <CardContent asChild>
-                    <section>
-                      <div className="grow text-center">
-                        <LoadingSpinner className="size-8" />
-                      </div>
-                    </section>
-                  </CardContent>
-                )}
-              </section>
-            </Card>
-          ) : null}
-          {license ? (
-            <div className="break-inside-avoid">
-              <LicenseSection
-                license={license}
-                onSave={(enabled) =>
-                  updateLicense(license.id, enabled).then(
-                    () => {
-                      showAlert("Changes saved!", "success");
-                      updateCustomer({ license: { ...license, enabled } });
-                    },
-                    (e: unknown) => {
-                      assertResponseError(e);
-                      showAlert(e.message, "error");
-                    },
-                  )
-                }
-              />
-            </div>
-          ) : null}
-          {customer.is_multiseat_license ? (
-            <div className="break-inside-avoid">
-              <SeatSection
-                seats={customer.quantity}
-                onSave={(quantity) =>
-                  updatePurchase(customer.id, { quantity }).then(
-                    () => {
-                      showAlert("Successfully updated seats!", "success");
-                      updateCustomer({ quantity });
-                    },
-                    (e: unknown) => {
-                      assertResponseError(e);
-                      showAlert(e.message, "error");
-                    },
-                  )
-                }
-              />
-            </div>
-          ) : null}
-          {shipping ? (
-            <Card className="break-inside-avoid">
-              <CardContent>
-                <TrackingSection
-                  tracking={shipping.tracking}
-                  onMarkShipped={(url) =>
-                    markShipped(customer.id, url).then(
-                      () => {
-                        showAlert("Changes saved!", "success");
-                        updateCustomer({ shipping: { ...shipping, tracking: { url, shipped: true } } });
-                      },
-                      (e: unknown) => {
-                        assertResponseError(e);
-                        showAlert(e.message, "error");
-                      },
-                    )
-                  }
-                />
-              </CardContent>
-              <CardContent>
-                <AddressSection
-                  address={shipping.address}
-                  price={shipping.price}
-                  onSave={(address) =>
-                    updatePurchase(customer.id, address).then(
-                      () => {
-                        showAlert("Changes saved!", "success");
-                        updateCustomer({ shipping: { ...shipping, address } });
-                      },
-                      (e: unknown) => {
-                        assertResponseError(e);
-                        showAlert(e.message, "error");
-                      },
-                    )
-                  }
-                  countries={countries}
-                />
-              </CardContent>
-            </Card>
-          ) : null}
-          {customer.call ? (
-            <div className="break-inside-avoid">
-              <CallSection call={customer.call} onChange={(call) => updateCustomer({ call })} />
-            </div>
-          ) : null}
-          {!showCharges && !customer.refunded && !customer.chargedback && customer.price.cents_refundable > 0 ? (
-            <Card asChild>
-              <section className="break-inside-avoid">
-                <CardContent asChild>
-                  <header>
-                    <h3 className="grow">Refund</h3>
-                  </header>
-                </CardContent>
-                <CardContent asChild>
-                  <section>
-                    <RefundForm
-                      purchaseId={customer.id}
-                      currencyType={customer.price.currency_type}
-                      amountRefundable={customer.price.cents_refundable}
-                      showRefundFeeNotice={showRefundFeeNotice}
-                      paypalRefundExpired={customer.paypal_refund_expired}
-                      modalTitle="Purchase refund"
-                      modalText="Would you like to confirm this purchase refund?"
-                      onChange={(amountRefundable) =>
-                        updateCustomer({
-                          price: { ...customer.price, cents_refundable: amountRefundable },
-                          refunded: amountRefundable === 0,
-                          partially_refunded:
-                            amountRefundable > 0 && amountRefundable < customer.price.cents_refundable,
-                        })
-                      }
-                      className="grow basis-0"
-                    />
-                  </section>
-                </CardContent>
-              </section>
-            </Card>
-          ) : null}
-          {subscription?.status === "alive" ? (
-            <div className="break-inside-avoid">
-              <SubscriptionCancellationSection
-                isInstallmentPlan={subscription.is_installment_plan}
-                onCancel={() =>
-                  void cancelSubscription(subscription.id).then(
-                    () => {
-                      showAlert("Changes saved!", "success");
-                      updateCustomer({ subscription: { ...subscription, status: "pending_cancellation" } });
-                    },
-                    (e: unknown) => {
-                      assertResponseError(e);
-                      showAlert(e.message, "error");
-                    },
-                  )
-                }
-              />
-            </div>
-          ) : null}
-          {canPing && !subscription ? (
-            <Card asChild>
-              <section className="break-inside-avoid">
-                <CardContent>
-                  <PingButton purchaseId={customer.id} className="grow basis-0" />
-                </CardContent>
-              </section>
-            </Card>
-          ) : null}
-          {customer.is_access_revoked !== null && !isCoffee && !commission ? (
-            <div className="break-inside-avoid">
-              <AccessSection
-                purchaseId={customer.id}
-                onChange={(isAccessRevoked) => updateCustomer({ is_access_revoked: isAccessRevoked })}
-                isAccessRevoked={customer.is_access_revoked}
-              />
-            </div>
-          ) : null}
-          {showCharges ? (
-            <div className="break-inside-avoid">
-              <ChargesSection
-                charges={charges}
-                remainingCharges={subscription?.remaining_charges ?? null}
-                onChange={setCharges}
-                showRefundFeeNotice={showRefundFeeNotice}
-                canPing={canPing}
-                customerEmail={customer.email}
-                loading={isLoadingCharges}
-              />
-            </div>
-          ) : null}
-          {commission ? (
-            <div className="break-inside-avoid">
-              <CommissionSection commission={commission} onChange={(commission) => updateCustomer({ commission })} />
-            </div>
-          ) : null}
-          {emails.length !== 0 ? (
-            <Card asChild>
-              <section className="break-inside-avoid">
-                <CardContent asChild>
-                  <header>
-                    <h3 className="grow">Emails received</h3>
-                  </header>
-                </CardContent>
-                {emails.slice(0, shownEmails).map((email) => (
-                  <CardContent asChild key={email.id}>
-                    <section>
-                      <div className="grow">
-                        <h5>
-                          {email.type === "receipt" ? (
-                            <a href={email.url} target="_blank" rel="noreferrer">
-                              {email.name}
-                            </a>
-                          ) : (
-                            email.name
-                          )}
-                        </h5>
-                        <small className="block text-muted">{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
-                      </div>
-                      {email.type === "receipt" ? (
-                        <Button
-                          color="primary"
-                          onClick={() => void onSend(email.id, "receipt")}
-                          disabled={!!loadingId || sentEmailIds.current.has(email.id)}
-                        >
-                          {sentEmailIds.current.has(email.id)
-                            ? "Receipt resent"
-                            : loadingId === email.id
-                              ? "Resending receipt..."
-                              : "Resend receipt"}
-                        </Button>
+                    <section key={idx}>
+                      <h5 className="grow font-bold">{field.attribute}</h5>
+                      {field.type === "text" ? (
+                        field.value
                       ) : (
-                        <Button
-                          color="primary"
-                          onClick={() => void onSend(email.id, "post")}
-                          disabled={!!loadingId || sentEmailIds.current.has(email.id)}
-                        >
-                          {sentEmailIds.current.has(email.id)
-                            ? "Sent"
-                            : loadingId === email.id
-                              ? "Sending..."
-                              : "Resend email"}
-                        </Button>
+                        <Rows role="list" className="mt-2">
+                          {field.files.map((file) => (
+                            <FileRow file={file} key={file.key} />
+                          ))}
+                        </Rows>
                       )}
                     </section>
                   </CardContent>
-                ))}
-                {shownEmails < emails.length ? (
-                  <CardContent asChild>
+                );
+                return field.type === "file" ? <div key={idx}>{content}</div> : content;
+              })}
+            </section>
+          </Card>
+        ) : null}
+        {customer.has_options && !isCoffee && customer.product.native_type !== "call" ? (
+          <div className="break-inside-avoid">
+            <OptionSection
+              option={customer.option}
+              onChange={(option) => updateCustomer({ option })}
+              purchaseId={customer.id}
+              productPermalink={customer.product.permalink}
+              isSubscription={!!subscription}
+              quantity={customer.quantity}
+            />
+          </div>
+        ) : null}
+        {customer.is_bundle_purchase ? (
+          <Card asChild>
+            <section className="break-inside-avoid">
+              <CardContent asChild>
+                <header>
+                  <h3 className="grow">Content</h3>
+                </header>
+              </CardContent>
+              {productPurchases.length > 0 ? (
+                productPurchases.map((productPurchase) => (
+                  <CardContent asChild key={productPurchase.id}>
                     <section>
-                      <Button onClick={() => setShownEmails((prev) => prev + PAGE_SIZE)} className="grow basis-0">
-                        Load more
-                      </Button>
+                      <h5 className="grow font-bold">{productPurchase.product.name}</h5>
+                      <NavigationButtonInertia href={Routes.customer_sale_path(productPurchase.id)}>
+                        Manage
+                      </NavigationButtonInertia>
                     </section>
                   </CardContent>
-                ) : null}
-              </section>
-            </Card>
-          ) : null}
-          {missedPosts.length !== 0 ? (
+                ))
+              ) : (
+                <CardContent asChild>
+                  <section>
+                    <div className="grow text-center">
+                      <LoadingSpinner className="size-8" />
+                    </div>
+                  </section>
+                </CardContent>
+              )}
+            </section>
+          </Card>
+        ) : null}
+        {license ? (
+          <div className="break-inside-avoid">
+            <LicenseSection
+              license={license}
+              onSave={(enabled) =>
+                updateLicense(license.id, enabled).then(
+                  () => {
+                    showAlert("Changes saved!", "success");
+                    updateCustomer({ license: { ...license, enabled } });
+                  },
+                  (e: unknown) => {
+                    assertResponseError(e);
+                    showAlert(e.message, "error");
+                  },
+                )
+              }
+            />
+          </div>
+        ) : null}
+        {customer.is_multiseat_license ? (
+          <div className="break-inside-avoid">
+            <SeatSection
+              seats={customer.quantity}
+              onSave={(quantity) =>
+                updatePurchase(customer.id, { quantity }).then(
+                  () => {
+                    showAlert("Successfully updated seats!", "success");
+                    updateCustomer({ quantity });
+                  },
+                  (e: unknown) => {
+                    assertResponseError(e);
+                    showAlert(e.message, "error");
+                  },
+                )
+              }
+            />
+          </div>
+        ) : null}
+        {shipping ? (
+          <Card className="break-inside-avoid">
+            <CardContent>
+              <TrackingSection
+                tracking={shipping.tracking}
+                onMarkShipped={(url) =>
+                  markShipped(customer.id, url).then(
+                    () => {
+                      showAlert("Changes saved!", "success");
+                      updateCustomer({ shipping: { ...shipping, tracking: { url, shipped: true } } });
+                    },
+                    (e: unknown) => {
+                      assertResponseError(e);
+                      showAlert(e.message, "error");
+                    },
+                  )
+                }
+              />
+            </CardContent>
+            <CardContent>
+              <AddressSection
+                address={shipping.address}
+                price={shipping.price}
+                onSave={(address) =>
+                  updatePurchase(customer.id, address).then(
+                    () => {
+                      showAlert("Changes saved!", "success");
+                      updateCustomer({ shipping: { ...shipping, address } });
+                    },
+                    (e: unknown) => {
+                      assertResponseError(e);
+                      showAlert(e.message, "error");
+                    },
+                  )
+                }
+                countries={countries}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
+        {customer.call ? (
+          <div className="break-inside-avoid">
+            <CallSection call={customer.call} onChange={(call) => updateCustomer({ call })} />
+          </div>
+        ) : null}
+        {!showCharges && !customer.refunded && !customer.chargedback && customer.price.cents_refundable > 0 ? (
+          <Card asChild>
+            <section className="break-inside-avoid">
+              <CardContent asChild>
+                <header>
+                  <h3 className="grow">Refund</h3>
+                </header>
+              </CardContent>
+              <CardContent asChild>
+                <section>
+                  <RefundForm
+                    purchaseId={customer.id}
+                    currencyType={customer.price.currency_type}
+                    amountRefundable={customer.price.cents_refundable}
+                    showRefundFeeNotice={showRefundFeeNotice}
+                    paypalRefundExpired={customer.paypal_refund_expired}
+                    modalTitle="Purchase refund"
+                    modalText="Would you like to confirm this purchase refund?"
+                    onChange={(amountRefundable) =>
+                      updateCustomer({
+                        price: { ...customer.price, cents_refundable: amountRefundable },
+                        refunded: amountRefundable === 0,
+                        partially_refunded: amountRefundable > 0 && amountRefundable < customer.price.cents_refundable,
+                      })
+                    }
+                    className="grow basis-0"
+                  />
+                </section>
+              </CardContent>
+            </section>
+          </Card>
+        ) : null}
+        {subscription?.status === "alive" ? (
+          <div className="break-inside-avoid">
+            <SubscriptionCancellationSection
+              isInstallmentPlan={subscription.is_installment_plan}
+              onCancel={() =>
+                void cancelSubscription(subscription.id).then(
+                  () => {
+                    showAlert("Changes saved!", "success");
+                    updateCustomer({ subscription: { ...subscription, status: "pending_cancellation" } });
+                  },
+                  (e: unknown) => {
+                    assertResponseError(e);
+                    showAlert(e.message, "error");
+                  },
+                )
+              }
+            />
+          </div>
+        ) : null}
+        {canPing && !subscription ? (
+          <Card asChild>
+            <section className="break-inside-avoid">
+              <CardContent>
+                <PingButton purchaseId={customer.id} className="grow basis-0" />
+              </CardContent>
+            </section>
+          </Card>
+        ) : null}
+        {customer.is_access_revoked !== null && !isCoffee && !commission ? (
+          <div className="break-inside-avoid">
+            <AccessSection
+              purchaseId={customer.id}
+              onChange={(isAccessRevoked) => updateCustomer({ is_access_revoked: isAccessRevoked })}
+              isAccessRevoked={customer.is_access_revoked}
+            />
+          </div>
+        ) : null}
+        {showCharges ? (
+          <div className="break-inside-avoid">
+            <ChargesSection
+              charges={charges}
+              remainingCharges={subscription?.remaining_charges ?? null}
+              onChange={setCharges}
+              showRefundFeeNotice={showRefundFeeNotice}
+              canPing={canPing}
+              customerEmail={customer.email}
+              loading={false}
+            />
+          </div>
+        ) : null}
+        {commission ? (
+          <div className="break-inside-avoid">
+            <CommissionSection commission={commission} onChange={(commission) => {
+              updateCustomer({ commission });
+              if (commission.status === "completed") {
+                void getCharges(customer.id, customer.email).then(setCharges);
+              }
+            }} />
+          </div>
+        ) : null}
+        {emails.length !== 0 ? (
+          <Card asChild>
+            <section className="break-inside-avoid">
+              <CardContent asChild>
+                <header>
+                  <h3 className="grow">Emails received</h3>
+                </header>
+              </CardContent>
+              {emails.slice(0, shownEmails).map((email) => (
+                <CardContent asChild key={email.id}>
+                  <section>
+                    <div className="grow">
+                      <h5>
+                        {email.type === "receipt" ? (
+                          <a href={email.url} target="_blank" rel="noreferrer">
+                            {email.name}
+                          </a>
+                        ) : (
+                          email.name
+                        )}
+                      </h5>
+                      <small className="block text-muted">{`${email.state} ${formatDateWithoutTime(new Date(email.state_at))}`}</small>
+                    </div>
+                    {email.type === "receipt" ? (
+                      <Button
+                        color="primary"
+                        onClick={() => void onSend(email.id, "receipt")}
+                        disabled={!!loadingId || sentEmailIds.current.has(email.id)}
+                      >
+                        {sentEmailIds.current.has(email.id)
+                          ? "Receipt resent"
+                          : loadingId === email.id
+                            ? "Resending receipt..."
+                            : "Resend receipt"}
+                      </Button>
+                    ) : (
+                      <Button
+                        color="primary"
+                        onClick={() => void onSend(email.id, "post")}
+                        disabled={!!loadingId || sentEmailIds.current.has(email.id)}
+                      >
+                        {sentEmailIds.current.has(email.id)
+                          ? "Sent"
+                          : loadingId === email.id
+                            ? "Sending..."
+                            : "Resend email"}
+                      </Button>
+                    )}
+                  </section>
+                </CardContent>
+              ))}
+              {shownEmails < emails.length ? (
+                <CardContent asChild>
+                  <section>
+                    <Button onClick={() => setShownEmails((prev) => prev + PAGE_SIZE)} className="grow basis-0">
+                      Load more
+                    </Button>
+                  </section>
+                </CardContent>
+              ) : null}
+            </section>
+          </Card>
+        ) : null}
+        <div className="break-inside-avoid">
+          <Deferred data={["missed_posts"]} fallback={
             <Card asChild>
-              <section className="break-inside-avoid">
+              <section>
                 <CardContent asChild>
                   <header>
                     <h3 className="grow">Send missed posts</h3>
                   </header>
                 </CardContent>
-                {missedPosts.slice(0, shownMissedPosts).map((post) => (
-                  <CardContent asChild key={post.id}>
-                    <section>
-                      <div className="grow">
-                        <h5 className="font-bold">
-                          <a href={post.url} target="_blank" rel="noreferrer">
-                            {post.name}
-                          </a>
-                        </h5>
-                        <small className="block text-muted">{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
-                      </div>
-                      <Button
-                        color="primary"
-                        disabled={!!loadingId || sentEmailIds.current.has(post.id)}
-                        onClick={() => void onSend(post.id, "post")}
-                      >
-                        {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending..." : "Send"}
-                      </Button>
-                    </section>
-                  </CardContent>
-                ))}
-                {shownMissedPosts < missedPosts.length ? (
-                  <CardContent asChild>
-                    <section>
-                      <Button onClick={() => setShownMissedPosts((prev) => prev + PAGE_SIZE)} className="grow basis-0">
-                        Show more
-                      </Button>
-                    </section>
-                  </CardContent>
-                ) : null}
+                <CardContent>
+                  <LoadingSpinner className="mx-auto size-8" />
+                </CardContent>
               </section>
             </Card>
-          ) : null}
-        </ColumnLayout>
-      )}
+          }>
+            {missedPosts.length !== 0 ? (
+              <Card asChild>
+                <section>
+                  <CardContent asChild>
+                    <header>
+                      <h3 className="grow">Send missed posts</h3>
+                    </header>
+                  </CardContent>
+                  {missedPosts.slice(0, shownMissedPosts).map((post) => (
+                    <CardContent asChild key={post.id}>
+                      <section>
+                        <div className="grow">
+                          <h5 className="font-bold">
+                            <a href={post.url} target="_blank" rel="noreferrer">
+                              {post.name}
+                            </a>
+                          </h5>
+                          <small className="block text-muted">{`Originally sent on ${formatDateWithoutTime(new Date(post.published_at))}`}</small>
+                        </div>
+                        <Button
+                          color="primary"
+                          disabled={!!loadingId || sentEmailIds.current.has(post.id)}
+                          onClick={() => void onSend(post.id, "post")}
+                        >
+                          {sentEmailIds.current.has(post.id) ? "Sent" : loadingId === post.id ? "Sending..." : "Send"}
+                        </Button>
+                      </section>
+                    </CardContent>
+                  ))}
+                  {shownMissedPosts < missedPosts.length ? (
+                    <CardContent asChild>
+                      <section>
+                        <Button onClick={() => setShownMissedPosts((prev) => prev + PAGE_SIZE)} className="grow basis-0">
+                          Show more
+                        </Button>
+                      </section>
+                    </CardContent>
+                  ) : null}
+                </section>
+              </Card>
+            ) : null}
+          </Deferred>
+        </div>
+      </ColumnLayout>
     </div>
   );
 };

@@ -59,30 +59,22 @@ describe User::AsJson do
       subject(:returned_keys) { as_json.keys.collect(&:to_s) }
 
       let(:options) { {} }
-      let(:common_keys) { %w[name bio twitter_handle id user_id url profile_picture_url links] }
+      let(:common_keys) { %w[name bio id user_id url profile_picture_url links] }
       let(:api_scope_keys) { %w[currency_type profile_url email] }
       let(:internal_use_keys) { %w[created_at sign_in_count current_sign_in_at last_sign_in_at current_sign_in_ip last_sign_in_ip purchases_count successful_purchases_count] }
 
       context "when no options are provided" do
-        context "when the bio and twitter_handle are NOT set" do
+        context "when the bio is NOT set" do
           it "returns common values" do
-            expect(returned_keys).to contain_exactly(*common_keys - %w[bio twitter_handle])
+            expect(returned_keys).to contain_exactly(*common_keys - %w[bio])
           end
         end
 
         context "when the bio is set" do
           let(:user_traits) { [:with_bio] }
 
-          it "returns common values expect twitter_handle" do
-            expect(returned_keys).to contain_exactly(*common_keys - %w[twitter_handle])
-          end
-        end
-
-        context "when the twitter_handle is set" do
-          let(:user_traits) { [:with_twitter_handle] }
-
-          it "returns common values expect bio" do
-            expect(returned_keys).to contain_exactly(*common_keys - %w[bio])
+          it "returns common values" do
+            expect(returned_keys).to contain_exactly(*common_keys)
           end
         end
       end

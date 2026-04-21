@@ -171,6 +171,17 @@ describe Checkout::Upsells::ProductsController do
         )
       end
     end
+
+    it "returns an empty array when the query times out" do
+      sign_in seller
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 10)
+        .and_raise(WithMaxExecutionTime::QueryTimeoutError.new("maximum statement execution time exceeded"))
+
+      get :index
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq([])
+    end
   end
 
   describe "GET #show" do
@@ -216,6 +227,17 @@ describe Checkout::Upsells::ProductsController do
       expect do
         get :show, params: { id: "non_existent_id" }
       end.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "returns a timeout error when the query times out" do
+      sign_in seller
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 10)
+        .and_raise(WithMaxExecutionTime::QueryTimeoutError.new("maximum statement execution time exceeded"))
+
+      get :show, params: { id: product1.external_id }
+
+      expect(response).to have_http_status(:gateway_timeout)
+      expect(response.parsed_body).to eq("error" => "Request timed out")
     end
   end
 end

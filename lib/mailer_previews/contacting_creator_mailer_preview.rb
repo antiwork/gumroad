@@ -212,6 +212,12 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.ping_endpoint_failure(User.last&.id, "https://example.com/webhook", 500)
   end
 
+  def account_suspended
+    scheduled_payout = ScheduledPayout.pending.last
+    user_id = scheduled_payout&.user_id || User.last&.id
+    ContactingCreatorMailer.account_suspended(user_id)
+  end
+
   private
     def sample_csv_file
       tempfile = Tempfile.new

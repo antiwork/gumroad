@@ -29,7 +29,8 @@ class CustomersController < Sellers::BaseController
 
   def show
     purchase = current_seller.sales.find_by_external_id!(params[:purchase_id])
-    customer_data = CustomerPresenter.new(purchase:).customer(pundit_user:)
+    presenter = CustomerPresenter.new(purchase:)
+    customer_data = presenter.customer(pundit_user:)
 
     render inertia: "Customers/Show",
            props: {
@@ -37,6 +38,10 @@ class CustomersController < Sellers::BaseController
              countries: Compliance::Countries.for_select.map(&:last),
              can_ping: current_seller.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size > 0,
              show_refund_fee_notice: current_seller.show_refund_fee_notice?,
+             emails: build_customer_emails(purchase),
+             missed_posts: InertiaRails.defer { presenter.missed_posts },
+             charges: build_charges(purchase),
+             product_purchases: purchase.is_bundle_purchase ? purchase.product_purchases.map { CustomerPresenter.new(purchase: _1).customer(pundit_user:) } : [],
            }
   end
 
@@ -68,57 +73,12 @@ class CustomersController < Sellers::BaseController
 
   def customer_charges
     purchase = Purchase.where(email: params[:purchase_email].to_s).find_by_external_id!(params[:purchase_id])
-
-    if purchase.is_original_subscription_purchase?
-      return render json: purchase.subscription.purchases.successful.map { CustomerPresenter.new(purchase: _1).charge }
-    elsif purchase.is_commission_deposit_purchase?
-      return render json: [purchase, purchase.commission.completion_purchase].compact.map { CustomerPresenter.new(purchase: _1).charge }
-    end
-
-    render json: []
+    render json: build_charges(purchase)
   end
 
   def customer_emails
-    original_purchase = current_seller.sales.find_by_external_id!(params[:purchase_id]) if params[:purchase_id].present?
-
-    all_purchases = if original_purchase.subscription.present?
-      original_purchase.subscription.purchases.all_success_states_except_preorder_auth_and_gift.preload(:receipt_email_info_from_purchase)
-    else
-      [original_purchase]
-    end
-
-    receipts = all_purchases.map do |purchase|
-      receipt_email_info = purchase.receipt_email_info
-      {
-        type: "receipt",
-        name: receipt_email_info&.email_name&.humanize || "Receipt",
-        id: purchase.external_id,
-        state: receipt_email_info&.state&.humanize || "Delivered",
-        state_at: receipt_email_info.present? ? receipt_email_info.most_recent_state_at.in_time_zone(current_seller.timezone) : purchase.created_at.in_time_zone(current_seller.timezone),
-        url: receipt_purchase_url(purchase.external_id, email: purchase.email),
-        date: purchase.created_at
-      }
-    end
-
-    posts = original_purchase.installments.alive.where(seller_id: original_purchase.seller_id).map do |post|
-      email_info = CreatorContactingCustomersEmailInfo.where(purchase: original_purchase, installment: post).last
-      {
-        type: "post",
-        name: post.name,
-        id: post.external_id,
-        state: email_info.state.humanize,
-        state_at: email_info.most_recent_state_at.in_time_zone(current_seller.timezone),
-        date: post.published_at
-      }
-    end
-
-    unpublished_posts = posts.select { |post| post[:date].nil? }
-    published_posts = posts - unpublished_posts
-    emails = published_posts
-    emails = emails.sort_by { |e| -e[:date].to_i } + unpublished_posts
-    emails = receipts + emails unless original_purchase.is_bundle_product_purchase?
-
-    render json: emails
+    purchase = current_seller.sales.find_by_external_id!(params[:purchase_id]) if params[:purchase_id].present?
+    render json: build_customer_emails(purchase)
   end
 
   def missed_posts
@@ -192,6 +152,64 @@ class CustomersController < Sellers::BaseController
         )
         .in_order_of(:id, sales.records.ids)
         .load
+    end
+
+    def build_charges(purchase)
+      if purchase.is_original_subscription_purchase?
+        purchase.subscription.purchases.successful.map { CustomerPresenter.new(purchase: _1).charge }
+      elsif purchase.is_commission_deposit_purchase?
+        [purchase, purchase.commission.completion_purchase].compact.map { CustomerPresenter.new(purchase: _1).charge }
+      else
+        []
+      end
+    end
+
+    def build_customer_emails(original_purchase)
+      all_purchases = if original_purchase.subscription.present?
+        original_purchase.subscription.purchases.all_success_states_except_preorder_auth_and_gift.preload(:receipt_email_info_from_purchase)
+      else
+        [original_purchase]
+      end
+
+      receipts = all_purchases.map do |purchase|
+        receipt_email_info = purchase.receipt_email_info
+        {
+          type: "receipt",
+          name: receipt_email_info&.email_name&.humanize || "Receipt",
+          id: purchase.external_id,
+          state: receipt_email_info&.state&.humanize || "Delivered",
+          state_at: receipt_email_info.present? ? receipt_email_info.most_recent_state_at.in_time_zone(current_seller.timezone) : purchase.created_at.in_time_zone(current_seller.timezone),
+          url: receipt_purchase_url(purchase.external_id, email: purchase.email),
+          date: purchase.created_at
+        }
+      end
+
+      installments = original_purchase.installments.alive.where(seller_id: original_purchase.seller_id).to_a
+      email_infos_by_installment = CreatorContactingCustomersEmailInfo
+        .where(purchase: original_purchase, installment_id: installments.map(&:id))
+        .order(:id)
+        .group_by(&:installment_id)
+        .transform_values(&:last)
+
+      posts = installments.map do |post|
+        email_info = email_infos_by_installment[post.id]
+        {
+          type: "post",
+          name: post.name,
+          id: post.external_id,
+          state: email_info.state.humanize,
+          state_at: email_info.most_recent_state_at.in_time_zone(current_seller.timezone),
+          date: post.published_at
+        }
+      end
+
+      unpublished_posts = posts.select { |post| post[:date].nil? }
+      published_posts = posts - unpublished_posts
+      emails = published_posts
+      emails = emails.sort_by { |e| -e[:date].to_i } + unpublished_posts
+      emails = receipts + emails if !original_purchase.is_bundle_product_purchase?
+
+      emails
     end
 
     def set_default_page_title

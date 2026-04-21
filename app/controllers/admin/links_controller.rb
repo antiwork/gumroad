@@ -126,7 +126,8 @@ class Admin::LinksController < Admin::BaseController
 
     discord_api = DiscordApi.new
     oauth_response = discord_api.oauth_token(params[:code], oauth_redirect_integrations_discord_index_url(host: DOMAIN, protocol: PROTOCOL))
-    access_token = oauth_response.parsed_response&.dig("access_token")
+    parsed = oauth_response.parsed_response
+    access_token = parsed.is_a?(Hash) ? parsed.dig("access_token") : nil
 
     return render plain: "Failed to get access token from Discord, try re-authorizing." unless oauth_response.success? && access_token.present?
 

@@ -56,9 +56,10 @@ class AffiliatedProductsPresenter
     end
 
     def global_affiliates_data
+      global_affiliate = user.global_affiliate
       {
-        global_affiliate_id: user.global_affiliate.external_id_numeric,
-        global_affiliate_sales: user.global_affiliate.total_cents_earned_formatted,
+        global_affiliate_id: global_affiliate&.external_id_numeric,
+        global_affiliate_sales: global_affiliate&.total_cents_earned_formatted,
         cookie_expiry_days: GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS,
         affiliate_query_param: Affiliate::SHORT_QUERY_PARAM,
       }

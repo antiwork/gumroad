@@ -167,10 +167,18 @@ describe Api::V2::FilesController do
 
       it "returns 400 when S3 raises a service error" do
         allow_any_instance_of(Aws::S3::Client).to receive(:complete_multipart_upload)
-          .and_raise(Aws::S3::Errors::ServiceError.new(nil, "NoSuchUpload"))
+          .and_raise(Aws::S3::Errors::ServiceError.new(nil, "boom"))
         post action, params: params
         expect(response.status).to eq(400)
-        expect(response.parsed_body["error"]).to include("NoSuchUpload")
+        expect(response.parsed_body["error"]).to include("boom")
+      end
+
+      it "returns 400 with the S3 error message when the upload_id no longer exists" do
+        allow_any_instance_of(Aws::S3::Client).to receive(:complete_multipart_upload)
+          .and_raise(Aws::S3::Errors::NoSuchUpload.new(nil, "The specified upload does not exist."))
+        post action, params: params
+        expect(response.status).to eq(400)
+        expect(response.parsed_body["error"]).to include("does not exist")
       end
     end
 
@@ -182,6 +190,95 @@ describe Api::V2::FilesController do
         post action, params: params
         expect(response.parsed_body["success"]).to be true
         expect(response.parsed_body["file_url"]).to be_present
+      end
+    end
+  end
+
+  describe "POST 'abort'" do
+    let(:key) { "attachments/#{user.external_id}/abc123hex/original/course.pdf" }
+    let(:action) { :abort }
+    let(:params) { { upload_id: "test-upload-id", key: key } }
+
+    before do
+      allow_any_instance_of(Aws::S3::Client).to receive(:abort_multipart_upload)
+    end
+
+    context "without a token" do
+      it "returns 401" do
+        post action, params: params
+        expect(response.status).to eq(401)
+      end
+    end
+
+    context "with a token missing edit_products scope" do
+      let(:token) { create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "view_public view_sales") }
+      let(:params) { super().merge(access_token: token.token) }
+
+      it "returns 403" do
+        post action, params: params
+        expect(response.status).to eq(403)
+      end
+    end
+
+    context "with edit_products scope" do
+      let(:token) { create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "edit_products") }
+      let(:params) { super().merge(access_token: token.token) }
+
+      it "aborts the multipart upload and returns status=accepted" do
+        expect_any_instance_of(Aws::S3::Client).to receive(:abort_multipart_upload)
+          .with(bucket: S3_BUCKET, key: key, upload_id: "test-upload-id")
+        post action, params: params
+        body = response.parsed_body
+        expect(response.status).to eq(200)
+        expect(body["success"]).to be true
+        expect(body["status"]).to eq("accepted")
+      end
+
+      it "returns 400 when upload_id is missing" do
+        post action, params: params.except(:upload_id)
+        expect(response.status).to eq(400)
+        expect(response.parsed_body["error"]).to include("upload_id")
+      end
+
+      it "returns 400 when key is missing" do
+        post action, params: params.except(:key)
+        expect(response.status).to eq(400)
+        expect(response.parsed_body["error"]).to include("key")
+      end
+
+      it "returns 400 for a key scoped to a different user" do
+        post action, params: params.merge(key: "attachments/other-user-id/abc/original/file.pdf")
+        expect(response.status).to eq(400)
+        expect(response.parsed_body["error"]).to eq("invalid key")
+      end
+
+      it "returns 400 when S3 raises a service error" do
+        allow_any_instance_of(Aws::S3::Client).to receive(:abort_multipart_upload)
+          .and_raise(Aws::S3::Errors::ServiceError.new(nil, "boom"))
+        post action, params: params
+        expect(response.status).to eq(400)
+        expect(response.parsed_body["error"]).to include("boom")
+      end
+
+      it "returns 200 with status=already_gone when S3 reports NoSuchUpload" do
+        allow_any_instance_of(Aws::S3::Client).to receive(:abort_multipart_upload)
+          .and_raise(Aws::S3::Errors::NoSuchUpload.new(nil, "The specified upload does not exist."))
+        post action, params: params
+        body = response.parsed_body
+        expect(response.status).to eq(200)
+        expect(body["success"]).to be true
+        expect(body["status"]).to eq("already_gone")
+      end
+    end
+
+    context "with account scope" do
+      let(:token) { create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "account") }
+      let(:params) { super().merge(access_token: token.token) }
+
+      it "returns success with status=accepted" do
+        post action, params: params
+        expect(response.parsed_body["success"]).to be true
+        expect(response.parsed_body["status"]).to eq("accepted")
       end
     end
   end

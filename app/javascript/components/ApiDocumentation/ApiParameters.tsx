@@ -7,7 +7,7 @@ export const ApiParameters = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-export const ApiParameter = ({ name, description }: { name: string; description?: string }) => (
+export const ApiParameter = ({ name, description }: { name: string; description?: React.ReactNode }) => (
   <p>
     <strong>{name}</strong> {description}
   </p>

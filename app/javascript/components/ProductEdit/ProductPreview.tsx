@@ -162,7 +162,6 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         avatar_url: currentSeller.avatarUrl,
         name: currentSeller.name ?? "",
         subdomain: currentSeller.subdomain,
-        twitter_handle: "",
         is_verified: seller.is_verified,
       }}
       hideFollowForm

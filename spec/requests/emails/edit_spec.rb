@@ -444,7 +444,7 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     find(:table_row, { "Subject" => "Updated original email - scheduled" }).click
     click_on "Edit"
     check "Send email"
-    fill_in "Title", with: "Updated original email - scheduled - edit 2"
+    fill_in "Title", with: "Updated original email - scheduled - edit 2", fill_options: { clear: :backspace }
     select_disclosure "Preview" do
       click_on "Preview Email"
     end

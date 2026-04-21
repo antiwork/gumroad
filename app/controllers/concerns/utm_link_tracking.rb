@@ -29,7 +29,7 @@ module UtmLinkTracking
       target_resource_type, target_resource_id = determine_utm_link_target_resource(seller)
       return if target_resource_type.blank?
 
-      utm_params = required_params.merge(optional_params).transform_values { _1.to_s.strip.downcase.gsub(/[^a-z0-9\-_]/u, "-").presence }
+      utm_params = required_params.merge(optional_params).transform_values { _1.to_s.strip.downcase.gsub(/[^a-z0-9\-_]/u, "-").first(UtmLink::MAX_UTM_PARAM_LENGTH).presence }
 
       ActiveRecord::Base.transaction do
         utm_link = UtmLink.active.find_or_initialize_by(utm_params.merge(target_resource_type:, target_resource_id:))

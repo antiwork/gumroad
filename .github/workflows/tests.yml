@@ -35,19 +35,19 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Login to Quay
+      - name: Login to Docker Hub
         uses: nick-fields/retry@v3
         with:
           timeout_seconds: 120
           max_attempts: 3
           retry_wait_seconds: 10
-          command: echo "$QUAY_PASSWORD" | docker login quay.io -u "$QUAY_USERNAME" --password-stdin
+          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
         env:
-          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
-          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
       - name: Build and push base image
         env:
-          WEB_BASE_REPO: quay.io/gumroad/web_base
+          WEB_BASE_REPO: gumroadteam/web_base
         run: |
           set -e
           GREEN='\033[0;32m'
@@ -55,13 +55,13 @@ jobs:
           logger() {
             echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
           }
-          logger "pulling quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye"
-          docker pull --quiet quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye
-          WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base.sh)
+          logger "pulling ruby:$(cat .ruby-version)-slim-bullseye"
+          docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
+          WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base.sh)
           if ! docker manifest inspect $WEB_BASE_REPO:$WEB_BASE_SHA > /dev/null 2>&1; then
             logger "Building $WEB_BASE_REPO:$WEB_BASE_SHA"
             NEW_BASE_REPO=$WEB_BASE_REPO \
-              WEB_BASE_DOCKERFILE_FROM=quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye \
+              WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye \
               BUNDLE_GEMS__CONTRIBSYS__COM=${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }} \
               make build_base
 
@@ -83,9 +83,9 @@ jobs:
           fi
       - name: Build and push test image
         env:
-          WEB_BASE_REPO: quay.io/gumroad/web_base
-          WEB_BASE_TEST_REPO: quay.io/gumroad/web_base_test
-          WEB_REPO: quay.io/gumroad/web
+          WEB_BASE_REPO: gumroadteam/web_base
+          WEB_BASE_TEST_REPO: gumroadteam/web_base_test
+          WEB_REPO: gumroadteam/web
           REVISION: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -e
@@ -94,8 +94,8 @@ jobs:
           logger() {
             echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
           }
-          docker pull --quiet quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye
-          WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base_test.sh)
+          docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
+          WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base_test.sh)
           build_and_push() {
             local repo=$1
             local tag=$2
@@ -103,7 +103,7 @@ jobs:
             if ! docker manifest inspect $repo:$tag > /dev/null 2>&1; then
               logger "building $repo:$tag"
               NEW_BASE_REPO=$WEB_BASE_REPO NEW_WEB_BASE_TEST_REPO=$WEB_BASE_TEST_REPO NEW_WEB_REPO=$WEB_REPO \
-                WEB_BASE_DOCKERFILE_FROM=quay.io/gumroad/ruby:$(cat .ruby-version)-slim-bullseye \
+                WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye \
                 BRANCH_CACHE_UPLOAD_ENABLED=false \
                   BRANCH_CACHE_RESTORE_ENABLED=false \
                   NEW_WEB_TAG=$REVISION \
@@ -146,16 +146,16 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Login to Quay
+      - name: Login to Docker Hub
         uses: nick-fields/retry@v3
         with:
           timeout_seconds: 120
           max_attempts: 3
           retry_wait_seconds: 10
-          command: echo "$QUAY_PASSWORD" | docker login quay.io -u "$QUAY_USERNAME" --password-stdin
+          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
         env:
-          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
-          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
       - name: Start services and pull test image
         uses: nick-fields/retry@v3
         with:
@@ -172,7 +172,7 @@ jobs:
             exit $((COMPOSE_EXIT + PULL_EXIT))
         env:
           COMPOSE_HTTP_TIMEOUT: "300"
-          WEB_REPO: quay.io/gumroad/web
+          WEB_REPO: gumroadteam/web
       - name: Wait for services
         uses: nick-fields/retry@v3
         with:
@@ -187,7 +187,7 @@ jobs:
             docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh minio 9000 &
             wait
         env:
-          WEB_REPO: quay.io/gumroad/web
+          WEB_REPO: gumroadteam/web
       - name: Setup test database
         uses: nick-fields/retry@v3
         with:
@@ -200,11 +200,11 @@ jobs:
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               bundle exec rake db:prepare
         env:
-          WEB_REPO: quay.io/gumroad/web
+          WEB_REPO: gumroadteam/web
 
       - name: Run tests
         env:
-          WEB_REPO: quay.io/gumroad/web
+          WEB_REPO: gumroadteam/web
           KNAPSACK_PRO_BRANCH: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref_name }}
         run: |
           docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
@@ -239,7 +239,7 @@ jobs:
     name: Test Slow ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
-      WEB_REPO: quay.io/gumroad/web
+      WEB_REPO: gumroadteam/web
     runs-on: ubicloud-standard-4
     needs: build
     strategy:
@@ -319,16 +319,16 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Login to Quay
+      - name: Login to Docker Hub
         uses: nick-fields/retry@v3
         with:
           timeout_seconds: 120
           max_attempts: 3
           retry_wait_seconds: 10
-          command: echo "$QUAY_PASSWORD" | docker login quay.io -u "$QUAY_USERNAME" --password-stdin
+          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
         env:
-          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
-          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
       - name: Start services and pull test image
         uses: nick-fields/retry@v3
         with:
@@ -345,7 +345,7 @@ jobs:
             exit $((COMPOSE_EXIT + PULL_EXIT))
         env:
           COMPOSE_HTTP_TIMEOUT: "300"
-          WEB_REPO: quay.io/gumroad/web
+          WEB_REPO: gumroadteam/web
       - name: Wait for services
         uses: nick-fields/retry@v3
         with:
@@ -360,7 +360,7 @@ jobs:
             docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh minio 9000 &
             wait
         env:
-          WEB_REPO: quay.io/gumroad/web
+          WEB_REPO: gumroadteam/web
       - name: Setup test database
         uses: nick-fields/retry@v3
         with:
@@ -373,7 +373,7 @@ jobs:
               $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
               bundle exec rake db:prepare
         env:
-          WEB_REPO: quay.io/gumroad/web
+          WEB_REPO: gumroadteam/web
 
       - name: Run tests
         env:
@@ -392,7 +392,7 @@ jobs:
           KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
           CI: true
           IN_DOCKER: true
-          WEB_REPO: quay.io/gumroad/web
+          WEB_REPO: gumroadteam/web
         run: |
           # Create local directory for artifacts
           mkdir -p ./capybara-artifacts

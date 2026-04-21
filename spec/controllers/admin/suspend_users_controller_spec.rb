@@ -37,16 +37,20 @@ describe Admin::SuspendUsersController, type: :controller, inertia: true do
     let(:user_ids_to_suspend) { users_to_suspend.map { |user| user.id.to_s } }
     let(:reason) { "Violating our terms of service" }
     let(:additional_notes) { nil }
+    let(:scheduled_payout_params) { nil }
+    let(:expected_scheduled_payout) { nil }
 
     before do
-      put :update, params: { suspend_users: { identifiers: specified_ids, reason:, additional_notes: } }
+      params = { suspend_users: { identifiers: specified_ids, reason:, additional_notes: } }
+      params[:scheduled_payout] = scheduled_payout_params if scheduled_payout_params
+      put :update, params: params
     end
 
     context "when the specified users IDs are separated by newlines" do
       let(:specified_ids) { user_ids_to_suspend.join("\n") }
 
       it "enqueues a job to suspend the specified users" do
-        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes)
+        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes, expected_scheduled_payout)
         expect(flash[:notice]).to eq "User suspension in progress!"
         expect(response).to redirect_to(admin_suspend_users_url)
       end
@@ -56,7 +60,7 @@ describe Admin::SuspendUsersController, type: :controller, inertia: true do
       let(:specified_ids) { user_ids_to_suspend.join(", ") }
 
       it "enqueues a job to suspend the specified users" do
-        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes)
+        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes, expected_scheduled_payout)
         expect(flash[:notice]).to eq "User suspension in progress!"
         expect(response).to redirect_to(admin_suspend_users_url)
       end
@@ -67,7 +71,7 @@ describe Admin::SuspendUsersController, type: :controller, inertia: true do
       let(:specified_ids) { external_ids_to_suspend.join(", ") }
 
       it "enqueues a job to suspend the specified users" do
-        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, external_ids_to_suspend, reason, additional_notes)
+        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, external_ids_to_suspend, reason, additional_notes, expected_scheduled_payout)
         expect(flash[:notice]).to eq "User suspension in progress!"
         expect(response).to redirect_to(admin_suspend_users_url)
       end
@@ -78,9 +82,38 @@ describe Admin::SuspendUsersController, type: :controller, inertia: true do
       let(:specified_ids) { user_ids_to_suspend.join(", ") }
 
       it "passes the additional notes as job's param" do
-        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes)
+        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes, expected_scheduled_payout)
         expect(flash[:notice]).to eq "User suspension in progress!"
         expect(response).to redirect_to(admin_suspend_users_url)
+      end
+    end
+
+    context "when a scheduled payout action is provided" do
+      let(:specified_ids) { user_ids_to_suspend.join(", ") }
+      let(:scheduled_payout_params) { { action: "payout", delay_days: "14" } }
+      let(:expected_scheduled_payout) { { "action" => "payout", "delay_days" => "14" } }
+
+      it "forwards the scheduled payout params to the worker" do
+        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes, expected_scheduled_payout)
+      end
+    end
+
+    context "when a hold action is provided without delay_days" do
+      let(:specified_ids) { user_ids_to_suspend.join(", ") }
+      let(:scheduled_payout_params) { { action: "hold", delay_days: "" } }
+      let(:expected_scheduled_payout) { { "action" => "hold", "delay_days" => nil } }
+
+      it "forwards the hold action and nil delay to the worker" do
+        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes, expected_scheduled_payout)
+      end
+    end
+
+    context "when scheduled payout action is blank" do
+      let(:specified_ids) { user_ids_to_suspend.join(", ") }
+      let(:scheduled_payout_params) { { action: "", delay_days: "14" } }
+
+      it "does not forward scheduled payout params to the worker" do
+        expect(SuspendUsersWorker).to have_enqueued_sidekiq_job(admin_user.id, user_ids_to_suspend, reason, additional_notes, nil)
       end
     end
   end
