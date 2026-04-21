@@ -119,14 +119,30 @@ class UpdatePayoutMethod
   end
 
   def process
+    # Card creation hits Stripe — do it before acquiring the user row lock so the DB lock doesn't
+    # span external I/O that can be slow under API degradation. Snapshot the active bank id before
+    # prep so we can detect a concurrent payout-method change that committed while our Stripe call
+    # was in flight — otherwise a slow card request could overtake a later-submitted fast request
+    # and silently overwrite its result.
+    credit_card = nil
+    baseline_active_bank_id = nil
+    if params[:card]
+      baseline_active_bank_id = user.active_bank_account&.id
+      credit_card, error = prepare_credit_card
+      return error if error
+    end
+
     # `with_lock` serializes concurrent payout-method changes so overlapping requests can't each
     # mark the same old bank deleted and save a new row, leaving multiple alive rows. The block
     # returns its value rather than using `return`, which would roll back the transaction on
     # non-local exit in Rails 7+. Sidekiq enqueues are wrapped in `after_commit` so their workers
     # can't race the transaction and observe pre-commit or rolled-back state.
     user.with_lock do
-      if params[:card]
-        process_card_params
+      if credit_card
+        if user.active_bank_account&.id != baseline_active_bank_id
+          next { error: :concurrent_payout_method_change }
+        end
+        process_card_params(credit_card)
       elsif bank_account_params_present?
         process_bank_account_params
       elsif params[:payment_address].present?
@@ -144,13 +160,18 @@ class UpdatePayoutMethod
         (params[:bank_account][:account_holder_full_name].present? || params[:bank_account][:account_number].present?)
     end
 
-    def process_card_params
+    # Returns [credit_card, nil] on success, [nil, error_hash] on failure.
+    def prepare_credit_card
       chargeable = ChargeProcessor.get_chargeable_for_params(params[:card], nil)
-      return { error: :check_card_information_prompt } if chargeable.nil?
+      return [nil, { error: :check_card_information_prompt }] if chargeable.nil?
 
       credit_card = CreditCard.create(chargeable)
-      return { error: :credit_card_error, data: credit_card.errors.full_messages.to_sentence } if credit_card.errors.present?
+      return [nil, { error: :credit_card_error, data: credit_card.errors.full_messages.to_sentence }] if credit_card.errors.present?
 
+      [credit_card, nil]
+    end
+
+    def process_card_params(credit_card)
       bank_account = CardBankAccount.new
       bank_account.user = user
       bank_account.credit_card = credit_card

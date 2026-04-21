@@ -296,9 +296,9 @@ module StripeMerchantAccountManager
     :stripe_invalid_request
   rescue Stripe::StripeError => e
     # Umbrella catch so transient errors (APIConnection/RateLimit/CardError) don't escape into the
-    # webhook path; retry is the worker's responsibility.
+    # webhook path; retry is the worker's responsibility. Breadcrumb recording is deferred to the
+    # worker's retries-exhausted callback — otherwise each Sidekiq retry spams an identical note.
     Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating bank account #{bank_account&.id} for stripe account #{stripe_account&.inspect}"
-    record_bank_sync_failure_note(user, e)
     ErrorNotifier.notify(e)
     :stripe_unknown_error
   end
