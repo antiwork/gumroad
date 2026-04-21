@@ -253,6 +253,17 @@ module StripeMerchantAccountManager
     end
   end
 
+  # Returns a symbol describing the terminal outcome. Never raises for Stripe-side errors — the
+  # worker (HandleNewBankAccountWorker) is the single place that translates :stripe_unknown_error
+  # into a Sidekiq retry. The webhook path (handle_stripe_info_requirements) ignores the return
+  # value and cannot trigger a retry storm on every unrelated resource in the same Stripe event.
+  #
+  # Outcomes:
+  #   :synced                        — Stripe.Account.update succeeded; local DB refreshed.
+  #   :noop_metadata_match           — Stripe metadata already names this bank and nothing needs pushing.
+  #   :invalid_account_holder_name   — Stripe rejected the holder name (JP/VN/ID); mailer sent.
+  #   :invalid_bank_account          — Stripe rejected for a known whitelisted reason; mailer sent.
+  #   :stripe_unknown_error          — Unclassified Stripe failure; Sentry notified, worker should retry.
   def self.update_bank_account(user, passphrase:)
     validate_for_update(user)
 
@@ -261,27 +272,52 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-      return unless account_holder_name_synced_to_stripe?(bank_account.user)
+      return :noop_metadata_match unless account_holder_name_synced_to_stripe?(bank_account.user)
 
       stripe_external_account = stripe_account["external_accounts"]&.first
       stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-      return if stripe_holder_name == bank_account.account_holder_full_name
+      return :noop_metadata_match if stripe_holder_name == bank_account.account_holder_full_name
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
     Stripe::Account.update(stripe_account.id, attributes)
 
     save_stripe_bank_account_info(bank_account, stripe_account.refresh)
+    :synced
   rescue Stripe::InvalidRequestError => e
-    return ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if e.code == "incorrect_account_holder_name"
-    return ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if e.message["Invalid account number"] ||
-                                                                            e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"]
+    record_bank_sync_failure_note(user, e)
+    if e.code == "incorrect_account_holder_name"
+      ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical")
+      return :invalid_account_holder_name
+    end
+    if e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"]
+      ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical")
+      return :invalid_bank_account
+    end
 
     ErrorNotifier.notify(e)
-  rescue Stripe::CardError => e
-    Rails.logger.error "Stripe::CardError request ID #{e.request_id} when updating bank account #{bank_account.id} for stripe account #{stripe_account.inspect}"
+    :stripe_unknown_error
+  rescue Stripe::StripeError => e
+    # Catches Stripe::CardError, Stripe::APIConnectionError, Stripe::RateLimitError,
+    # Stripe::AuthenticationError, and anything else under the umbrella. Retry/re-raise is the
+    # worker's job now — keeping them here would leak through the webhook path and cause Stripe
+    # to redeliver the entire account-update event on every unrelated resource.
+    Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating bank account #{bank_account&.id} for stripe account #{stripe_account&.inspect}"
+    record_bank_sync_failure_note(user, e)
+    ErrorNotifier.notify(e)
+    :stripe_unknown_error
+  end
 
-    raise e
+  private_class_method
+  # Must never raise — callers rely on this landing a breadcrumb without masking the underlying
+  # Stripe error. A Comment.create! failure (deadlock, validation glitch) must not reintroduce the
+  # "webhook crashes on Stripe error" regression that change 3's symbol return is preventing.
+  def self.record_bank_sync_failure_note(user, error)
+    code = error.respond_to?(:code) ? error.code : nil
+    user.add_payout_note(content: "Stripe bank sync failed: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")
+  rescue => e
+    Rails.logger.error "Failed to record payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
   end
 
   def self.disconnect(user:)
@@ -779,7 +815,14 @@ module StripeMerchantAccountManager
         # Ignore request for card bank account until charges become enabled
         fields_needed.delete_if { |field_needed| field_needed[0] == UserComplianceInfoFields::BANK_ACCOUNT }
       elsif card_account_needs_syncing
-        update_bank_account(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        result = update_bank_account(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+        # update_bank_account now returns a symbol for every terminal path. An unclassified Stripe
+        # failure used to bubble out and cause Stripe to redeliver the entire webhook; now it's
+        # funneled through Sidekiq retry via the worker. The worker re-reads active_bank_account
+        # at execution time, so the retry always targets whichever bank is current then.
+        if result == :stripe_unknown_error && user.active_bank_account
+          HandleNewBankAccountWorker.perform_in(5.seconds, user.active_bank_account.id)
+        end
         if user.active_bank_account.stripe_connect_account_id.present?
           fields_needed.delete_if { |field_needed| field_needed[0] == UserComplianceInfoFields::BANK_ACCOUNT }
         end

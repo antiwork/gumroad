@@ -932,11 +932,23 @@ const BankAccountSection = ({
     }
   }, []);
 
+  const jpHolderNameClientError = (() => {
+    if (user.country_code !== "JP") return null;
+    const name = bankAccount?.account_holder_full_name?.trim() ?? "";
+    if (name === "") return null;
+    const isKatakanaOnly = /^[\p{Script=Katakana}ー・\uFF65-\uFF9F\u3000]+$/u.test(name);
+    const isLatinOnly = /^[A-Za-z ]+$/u.test(name);
+    if (isKatakanaOnly || isLatinOnly) return null;
+    return "Use all katakana (with a full-width space between names) or all Latin letters. Mixing scripts is not allowed.";
+  })();
+
   return (
     <>
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <section className="grid gap-8">
-        <Fieldset state={errorFieldNames.has("account_holder_full_name") ? "danger" : undefined}>
+        <Fieldset
+          state={errorFieldNames.has("account_holder_full_name") || jpHolderNameClientError ? "danger" : undefined}
+        >
           <FieldsetTitle>
             <Label htmlFor={`${uid}-account-holder-full-name`}>Pay to the order of</Label>
           </FieldsetTitle>
@@ -945,11 +957,14 @@ const BankAccountSection = ({
             placeholder="Full name of account holder"
             value={bankAccount?.account_holder_full_name || ""}
             disabled={isFormDisabled}
-            aria-invalid={errorFieldNames.has("account_holder_full_name")}
+            aria-invalid={errorFieldNames.has("account_holder_full_name") || Boolean(jpHolderNameClientError)}
             onChange={(evt) => updateBankAccount({ account_holder_full_name: evt.target.value })}
           />
           <FieldsetDescription>
-            {`Must exactly match the name on your bank account${user.country_code === "JP" ? " (Katakana only)" : ""}`}
+            {jpHolderNameClientError ??
+              `Must exactly match the name on your bank account${
+                user.country_code === "JP" ? " (all katakana or all Latin — not mixed)" : ""
+              }`}
           </FieldsetDescription>
         </Fieldset>
         <div className="grid gap-2">

@@ -117,60 +117,99 @@ class UpdatePayoutMethod
   end
 
   def process
-    old_bank_account = user.active_bank_account
+    # The row lock serializes concurrent payout-method changes for the same user — without it, two
+    # overlapping requests (double-click, retry, tab reload + resubmit) could each mark the same
+    # old bank deleted and each save a new row, leaving multiple alive rows for one user. The block
+    # returns the per-branch result so `return` (which would roll back the transaction on non-local
+    # exit in Rails 7+) is avoided. Side effects that must wait for the commit — like enqueueing
+    # a sync worker against the newly-persisted row — are collected into @pending_* and flushed
+    # only after `with_lock` returns.
+    @pending_bank_account_sync_id = nil
+    result = user.with_lock do
+      if params[:card]
+        process_card_params
+      elsif bank_account_params_present?
+        process_bank_account_params
+      elsif params[:payment_address].present?
+        process_payment_address_params
+      else
+        { success: true }
+      end
+    end
+    HandleNewBankAccountWorker.perform_in(5.seconds, @pending_bank_account_sync_id) if @pending_bank_account_sync_id
+    result
+  end
 
-    if params[:card]
+  private
+    def bank_account_params_present?
+      params[:bank_account].present? &&
+        params[:bank_account][:type].present? &&
+        (params[:bank_account][:account_holder_full_name].present? || params[:bank_account][:account_number].present?)
+    end
+
+    def process_card_params
       chargeable = ChargeProcessor.get_chargeable_for_params(params[:card], nil)
       return { error: :check_card_information_prompt } if chargeable.nil?
 
       credit_card = CreditCard.create(chargeable)
       return { error: :credit_card_error, data: credit_card.errors.full_messages.to_sentence } if credit_card.errors.present?
 
-      old_bank_account.try(:mark_deleted!)
-
       bank_account = CardBankAccount.new
       bank_account.user = user
       bank_account.credit_card = credit_card
-      bank_account.save
+      return bank_account_error_for(bank_account) unless bank_account.valid?
 
-      return { error: :bank_account_error, data: bank_account.errors.full_messages.to_sentence } if bank_account.errors.present?
-
+      replace_active_bank_account_with_validated_delete!(bank_account)
       user.update!(payment_address: "") if user.payment_address.present?
-    elsif params[:bank_account].present? &&
-      params[:bank_account][:type].present? &&
-      (params[:bank_account][:account_holder_full_name].present? || params[:bank_account][:account_number].present?)
+      { success: true }
+    end
 
+    def process_bank_account_params
       raise unless params[:bank_account][:type].in?(BANK_ACCOUNT_TYPES)
 
       if params[:bank_account][:account_number].present?
-        bank_account_account_number = params[:bank_account][:account_number].delete("-").strip
-        bank_account_account_number_confirmation = params[:bank_account][:account_number_confirmation].delete("-").strip
-
-        return { error: :account_number_does_not_match } if bank_account_account_number != bank_account_account_number_confirmation
-
-        old_bank_account.try(:mark_deleted, validate: false)
-
-        bank_account = BANK_ACCOUNT_TYPES[params[:bank_account][:type]][:class].new(bank_account_params_for_bank_account_type)
-        bank_account.user = user
-        bank_account.account_holder_full_name = params[:bank_account][:account_holder_full_name]
-        bank_account.account_number = bank_account_account_number
-        bank_account.account_number_last_four = bank_account_account_number.last(4)
-        bank_account.account_type = params[:bank_account][:account_type] if params[:bank_account][:account_type].present?
-        bank_account.save
-
-        return { error: :bank_account_error, data: bank_account.errors.full_messages.to_sentence } if bank_account.errors.present?
-
-        user.update!(payment_address: "") if user.payment_address.present?
-      elsif params[:bank_account][:account_holder_full_name].present? &&
-            old_bank_account.present? &&
-            !old_bank_account.is_a?(CardBankAccount) &&
-            old_bank_account.account_holder_full_name != params[:bank_account][:account_holder_full_name]
-        old_bank_account.update!(account_holder_full_name: params[:bank_account][:account_holder_full_name])
-        if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user)
-          HandleNewBankAccountWorker.perform_in(5.seconds, old_bank_account.id)
-        end
+        process_full_bank_account_replacement
+      elsif params[:bank_account][:account_holder_full_name].present?
+        process_holder_name_update
+      else
+        { success: true }
       end
-    elsif params[:payment_address].present?
+    end
+
+    def process_full_bank_account_replacement
+      account_number = params[:bank_account][:account_number].delete("-").strip
+      account_number_confirmation = params[:bank_account][:account_number_confirmation].delete("-").strip
+      return { error: :account_number_does_not_match } if account_number != account_number_confirmation
+
+      bank_account = BANK_ACCOUNT_TYPES[params[:bank_account][:type]][:class].new(bank_account_params_for_bank_account_type)
+      bank_account.user = user
+      bank_account.account_holder_full_name = params[:bank_account][:account_holder_full_name]
+      bank_account.account_number = account_number
+      bank_account.account_number_last_four = account_number.last(4)
+      bank_account.account_type = params[:bank_account][:account_type] if params[:bank_account][:account_type].present?
+      return bank_account_error_for(bank_account) unless bank_account.valid?
+
+      replace_active_bank_account_with_unvalidated_delete!(bank_account)
+      user.update!(payment_address: "") if user.payment_address.present?
+      { success: true }
+    end
+
+    def process_holder_name_update
+      current_active = user.active_bank_account
+      return { success: true } if current_active.blank? || current_active.is_a?(CardBankAccount)
+      return { success: true } if current_active.account_holder_full_name == params[:bank_account][:account_holder_full_name]
+
+      current_active.account_holder_full_name = params[:bank_account][:account_holder_full_name]
+      return bank_account_error_for(current_active) unless current_active.valid?
+      current_active.save!
+
+      if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user)
+        @pending_bank_account_sync_id = current_active.id
+      end
+      { success: true }
+    end
+
+    def process_payment_address_params
       payment_address = params[:payment_address].strip
 
       return { error: :provide_valid_email_prompt } unless EmailFormatValidator.valid?(payment_address)
@@ -187,12 +226,31 @@ class UpdatePayoutMethod
       user.update!(payouts_paused_internally: false, payouts_paused_by: nil) if user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE && !user.flagged? && !user.suspended?
 
       CheckPaymentAddressWorker.perform_async(user.id)
+      { success: true }
     end
 
-    { success: true }
-  end
+    def replace_active_bank_account_with_validated_delete!(new_bank_account)
+      user.active_bank_account&.mark_deleted!
+      new_bank_account.save!
+      assert_single_alive_bank_account!
+    end
 
-  private
+    def replace_active_bank_account_with_unvalidated_delete!(new_bank_account)
+      user.active_bank_account&.mark_deleted(validate: false)
+      new_bank_account.save!
+      assert_single_alive_bank_account!
+    end
+
+    # Asserts post-condition to surface pre-existing multi-alive corruption loudly instead of deepening it.
+    def assert_single_alive_bank_account!
+      alive_count = user.bank_accounts.alive.count
+      raise "Invariant violation: expected 1 alive bank account for user #{user.id}, found #{alive_count}" if alive_count != 1
+    end
+
+    def bank_account_error_for(record)
+      { error: :bank_account_error, data: record.errors.full_messages.to_sentence }
+    end
+
     def bank_account_params_for_bank_account_type
       bank_account_type = params[:bank_account][:type]
       permitted_params = BANK_ACCOUNT_TYPES[bank_account_type][:permitted_params]
