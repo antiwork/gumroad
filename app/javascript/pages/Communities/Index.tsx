@@ -725,7 +725,7 @@ const NotificationsSettingsModal = ({
         value={form.data.recap_frequency !== null}
         onChange={(newValue) => form.setData("recap_frequency", newValue ? "weekly" : null)}
         dropdown={
-          <div className="radio-buttons flex! flex-col!" role="radiogroup">
+          <div className="radio-buttons flex! flex-col! gap-2" role="radiogroup">
             <Button
               role="radio"
               aria-checked={form.data.recap_frequency === "daily"}
