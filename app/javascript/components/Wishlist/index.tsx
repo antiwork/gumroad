@@ -118,7 +118,7 @@ const WishlistItemCard = ({
       footerAction={
         <>
           {canEdit ? (
-            <div style={{ padding: 0, display: "grid" }}>
+            <div style={{ padding: 0, display: "grid", placeItems: "center" }}>
               <WithTooltip position="top" tip="Remove this product">
                 <button
                   disabled={isDeleting}
@@ -132,7 +132,7 @@ const WishlistItemCard = ({
             </div>
           ) : null}
           {item.purchasable && item.giftable ? (
-            <div style={{ padding: 0, display: "grid" }}>
+            <div style={{ padding: 0, display: "grid", placeItems: "center" }}>
               <WithTooltip position="top" tip="Gift this product">
                 <a
                   aria-label="Gift this product"

@@ -23,7 +23,7 @@ class Admin::ProductPresenter::Card
       created_at: product.created_at,
       user: {
         external_id: product.user.external_id,
-        name: product.user.name,
+        name: product.user.display_name,
         suspended: product.user.suspended?,
         flagged_for_tos_violation: product.user.flagged_for_tos_violation?
       },

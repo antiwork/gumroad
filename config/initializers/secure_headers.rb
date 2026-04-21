@@ -88,6 +88,9 @@ SecureHeaders::Configuration.default do |config|
 
       # helper widget
       "help.gumroad.com",
+
+      # lottie - homepage
+      "unpkg.com/@lottiefiles/lottie-player@latest/",
     ],
     script_src: [
       "'self'",
