@@ -195,7 +195,15 @@ class UpdatePayoutMethod
     def process_holder_name_update
       current_active = user.active_bank_account
       return { success: true } if current_active.blank? || current_active.is_a?(CardBankAccount)
-      return { success: true } if current_active.account_holder_full_name == params[:bank_account][:account_holder_full_name]
+
+      if current_active.account_holder_full_name == params[:bank_account][:account_holder_full_name]
+        # Name unchanged. If the stored value itself is invalid (e.g. a pre-validator record),
+        # surface that so creators can't silently re-submit bad data. Scoped to the name key so
+        # an unrelated latent failure (e.g. bank_code) doesn't get reported from this path.
+        current_active.valid?
+        return bank_account_error_for_attribute(current_active, :account_holder_full_name) if current_active.errors[:account_holder_full_name].any?
+        return { success: true }
+      end
 
       current_active.account_holder_full_name = params[:bank_account][:account_holder_full_name]
       return bank_account_error_for(current_active) unless current_active.valid?
@@ -247,6 +255,10 @@ class UpdatePayoutMethod
 
     def bank_account_error_for(record)
       { error: :bank_account_error, data: record.errors.full_messages.to_sentence }
+    end
+
+    def bank_account_error_for_attribute(record, attribute)
+      { error: :bank_account_error, data: record.errors.full_messages_for(attribute).to_sentence }
     end
 
     def bank_account_params_for_bank_account_type

@@ -31,8 +31,11 @@ class JapanBankAccount < BankAccount
   validate :validate_bank_code
   validate :validate_branch_code
   validate :validate_account_number
-  # Skip on delete so existing rows with pre-validator invalid names can still be soft-deleted.
-  validate :validate_account_holder_full_name, unless: :deleted?
+  # `if:` lets the inherited presence validator own blank input; `unless: :deleted?` lets
+  # pre-validator invalid names still be soft-deleted.
+  validate :validate_account_holder_full_name,
+           if: -> { account_holder_full_name.present? },
+           unless: :deleted?
 
   def routing_number
     "#{bank_code}#{branch_code}"
@@ -79,8 +82,7 @@ class JapanBankAccount < BankAccount
     end
 
     def validate_account_holder_full_name
-      name = account_holder_full_name.to_s
-      return if KATAKANA_NAME_FORMAT_REGEX.match?(name) || LATIN_NAME_FORMAT_REGEX.match?(name)
+      return if KATAKANA_NAME_FORMAT_REGEX.match?(account_holder_full_name) || LATIN_NAME_FORMAT_REGEX.match?(account_holder_full_name)
       errors.add :account_holder_full_name, "must be written in either katakana or Latin letters — not both. If using katakana, separate names with a full-width space."
     end
 end

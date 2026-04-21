@@ -932,8 +932,11 @@ const BankAccountSection = ({
     }
   }, []);
 
+  // Avoid flashing a red error on page load for creators whose stored name predates this validator.
+  const [holderNameTouched, setHolderNameTouched] = React.useState(false);
   const jpHolderNameClientError = (() => {
     if (user.country_code !== "JP") return null;
+    if (!holderNameTouched) return null;
     const name = bankAccount?.account_holder_full_name?.trim() ?? "";
     if (name === "") return null;
     const isKatakanaOnly = /^[\p{Script=Katakana}ー・\uFF65-\uFF9F\u3000]+$/u.test(name);
@@ -958,7 +961,10 @@ const BankAccountSection = ({
             value={bankAccount?.account_holder_full_name || ""}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("account_holder_full_name") || Boolean(jpHolderNameClientError)}
-            onChange={(evt) => updateBankAccount({ account_holder_full_name: evt.target.value })}
+            onChange={(evt) => {
+              setHolderNameTouched(true);
+              updateBankAccount({ account_holder_full_name: evt.target.value });
+            }}
           />
           <FieldsetDescription>
             {jpHolderNameClientError ??

@@ -304,9 +304,8 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  # Must never raise — a Comment.create! failure here would escape the surrounding rescue and
-  # leak a non-Stripe exception into the webhook caller, which is exactly what the symbol
-  # contract is avoiding.
+  # Must never raise — an add_payout_note failure here would escape the surrounding rescue and
+  # leak a non-Stripe exception into the webhook caller, breaking the symbol contract.
   def self.record_bank_sync_failure_note(user, error)
     code = error.respond_to?(:code) ? error.code : nil
     user.add_payout_note(content: "Stripe bank sync failed: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")

@@ -36,6 +36,19 @@ describe UpdatePayoutMethod do
 
           expect(bank_account.reload.account_holder_full_name).to eq("Japanese Creator")
         end
+
+        it "surfaces a validation error when the submitted name equals a pre-validator invalid stored name" do
+          bank_account.update_columns(account_holder_full_name: "ハルナ マサシ")
+
+          params = ActionController::Parameters.new(
+            bank_account: { type: JapanBankAccount.name, account_holder_full_name: "ハルナ マサシ" }
+          )
+
+          expect do
+            result = described_class.new(user_params: params, seller: user).process
+            expect(result[:error]).to eq(:bank_account_error)
+          end.not_to change { HandleNewBankAccountWorker.jobs.size }
+        end
       end
 
       context "when the seller is in a country that does NOT sync holder name to Stripe" do

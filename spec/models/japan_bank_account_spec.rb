@@ -124,5 +124,12 @@ describe JapanBankAccount do
       expect { account.mark_deleted! }.not_to raise_error
       expect(account.reload.deleted_at).to be_present
     end
+
+    it "defers to the presence validator for blank input instead of adding a confusing format error" do
+      account = build(:japan_bank_account, account_holder_full_name: "")
+      expect(account).to_not be_valid
+      expect(account.errors[:account_holder_full_name]).to be_present
+      expect(account.errors[:account_holder_full_name].grep(/katakana or Latin/)).to be_empty
+    end
   end
 end
