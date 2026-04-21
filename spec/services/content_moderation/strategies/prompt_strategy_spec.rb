@@ -51,7 +51,7 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy do
     expect(result.reasoning).to eq(["spam: clear spam"])
   end
 
-  it "logs uncertainty-check failures at warn level and keeps the flagged result" do
+  it "logs and re-raises when the uncertainty check fails" do
     call_count = 0
     allow(client).to receive(:chat) do |_kwargs|
       call_count += 1
@@ -59,27 +59,19 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy do
       case call_count
       when 1
         json_chat_response(flagged: true, reasoning: "clear adult content")
-      when 2
-        raise StandardError, "judge failure"
       else
-        json_chat_response(flagged: false, reasoning: "")
+        raise StandardError, "judge failure"
       end
     end
 
-    result = described_class.new(text: "moderate me").perform
-
-    expect(result.status).to eq("flagged")
-    expect(result.reasoning).to eq(["adult_content: clear adult content"])
-    expect(Rails.logger).to have_received(:warn).with("ContentModeration::PromptStrategy uncertainty check error: judge failure")
+    expect { described_class.new(text: "moderate me").perform }.to raise_error(StandardError, "judge failure")
+    expect(Rails.logger).to have_received(:error).with("ContentModeration::PromptStrategy uncertainty check error: judge failure")
   end
 
-  it "returns compliant when the OpenAI request fails" do
+  it "logs and re-raises when the OpenAI request fails" do
     allow(client).to receive(:chat).and_raise(StandardError, "API failure")
 
-    result = described_class.new(text: "moderate me").perform
-
-    expect(result.status).to eq("compliant")
-    expect(result.reasoning).to eq([])
+    expect { described_class.new(text: "moderate me").perform }.to raise_error(StandardError, "API failure")
     expect(Rails.logger).to have_received(:error).with("ContentModeration::PromptStrategy preset evaluation error: API failure").at_least(:once)
   end
 

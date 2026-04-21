@@ -391,7 +391,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
     let(:service) { described_class.new(create(:product), :product) }
     let(:content) { ContentModeration::ContentExtractor::Result.new(text: "content", image_urls: []) }
 
-    it "rescues failures within strategy threads and returns a compliant fallback" do
+    it "propagates strategy failures so Sidekiq can retry" do
       success_strategy_class = Class.new do
         def perform
           self.class::Result.new(status: "compliant", reasoning: [])
@@ -410,10 +410,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :freeze_time do
       allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(error_strategy_class.new)
       allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(success_strategy_class.new)
 
-      results = service.send(:run_strategies, content)
-
-      expect(results.map(&:status)).to eq(["compliant", "compliant", "compliant"])
-      expect(Rails.logger).to have_received(:error).with("ContentModeration strategy error: boom")
+      expect { service.send(:run_strategies, content) }.to raise_error(StandardError, "boom")
     end
   end
 

@@ -84,10 +84,9 @@ class ContentModeration::ModerateRecordService
 
       threads = strategies.map do |strategy|
         Thread.new do
+          # Silence Ruby's stderr dump on thread death; Thread#value re-raises for Sidekiq to handle.
+          Thread.current.report_on_exception = false
           strategy.perform
-        rescue StandardError => e
-          Rails.logger.error("ContentModeration strategy error: #{e.message}")
-          strategy.class::Result.new(status: "compliant", reasoning: [])
         end
       end
 

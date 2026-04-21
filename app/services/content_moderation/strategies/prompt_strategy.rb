@@ -67,7 +67,7 @@ class ContentModeration::Strategies::PromptStrategy
     end
   rescue StandardError => e
     Rails.logger.error("ContentModeration::PromptStrategy error: #{e.message}")
-    Result.new(status: "compliant", reasoning: [])
+    raise
   end
 
   private
@@ -92,7 +92,7 @@ class ContentModeration::Strategies::PromptStrategy
       }
     rescue StandardError => e
       Rails.logger.error("ContentModeration::PromptStrategy preset evaluation error: #{e.message}")
-      { status: "compliant", reasoning: "" }
+      raise
     end
 
     def passes_uncertainty_check?(reasoning)
@@ -119,8 +119,8 @@ class ContentModeration::Strategies::PromptStrategy
 
       !parsed["uncertain"]
     rescue StandardError => e
-      Rails.logger.warn("ContentModeration::PromptStrategy uncertainty check error: #{e.message}")
-      true
+      Rails.logger.error("ContentModeration::PromptStrategy uncertainty check error: #{e.message}")
+      raise
     end
 
     def build_messages(rules, skip_images: false)

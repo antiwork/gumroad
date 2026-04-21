@@ -54,13 +54,10 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy do
     expect(result.reasoning).to eq([])
   end
 
-  it "returns compliant when the OpenAI request fails" do
+  it "logs and re-raises when the OpenAI request fails" do
     allow(client).to receive(:moderations).and_raise(StandardError, "API failure")
 
-    result = described_class.new(text:, image_urls:).perform
-
-    expect(result.status).to eq("compliant")
-    expect(result.reasoning).to eq([])
+    expect { described_class.new(text:, image_urls:).perform }.to raise_error(StandardError, "API failure")
     expect(Rails.logger).to have_received(:error).with("ContentModeration::ClassifierStrategy error: API failure")
   end
 end

@@ -62,7 +62,7 @@ class ContentModeration::Strategies::ClassifierStrategy
     end
   rescue StandardError => e
     Rails.logger.error("ContentModeration::ClassifierStrategy error: #{e.message}")
-    Result.new(status: "compliant", reasoning: [])
+    raise
   end
 
   private
