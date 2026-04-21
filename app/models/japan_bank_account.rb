@@ -14,12 +14,10 @@ class JapanBankAccount < BankAccount
   ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{4,8}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
-  # Stripe JP validates `account_holder_name` as a single-script value: all katakana or all Latin.
-  # Katakana variant covers: full-width block (`\p{Katakana}`), the script-Common marks U+30FC (ー)
-  # and U+30FB (・) that `\p{Katakana}` misses, half-width katakana (U+FF65-U+FF9F including voiced
-  # and semi-voiced marks still common on JP input systems), and the full-width space U+3000.
-  # ASCII space is deliberately only allowed in the Latin variant — mixing it with katakana is the
-  # exact pattern Stripe rejects and the originating incident exposed.
+  # \p{Katakana} misses the script-Common marks ー (U+30FC) and ・ (U+30FB), which appear in real
+  # names and must be allowed explicitly. U+FF65-U+FF9F covers half-width katakana. U+3000 is the
+  # full-width space used between katakana names; ASCII space is only valid in the Latin variant
+  # because Stripe rejects it inside katakana.
   KATAKANA_NAME_FORMAT_REGEX = /\A[\p{Katakana}ー・\uFF65-\uFF9F\u3000]+\z/
   private_constant :KATAKANA_NAME_FORMAT_REGEX
 

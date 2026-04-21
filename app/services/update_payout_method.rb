@@ -117,13 +117,11 @@ class UpdatePayoutMethod
   end
 
   def process
-    # The row lock serializes concurrent payout-method changes for the same user — without it, two
-    # overlapping requests (double-click, retry, tab reload + resubmit) could each mark the same
-    # old bank deleted and each save a new row, leaving multiple alive rows for one user. The block
-    # returns the per-branch result so `return` (which would roll back the transaction on non-local
-    # exit in Rails 7+) is avoided. Side effects that must wait for the commit — like enqueueing
-    # a sync worker against the newly-persisted row — are collected into @pending_* and flushed
-    # only after `with_lock` returns.
+    # `with_lock` serializes concurrent payout-method changes so overlapping requests can't each
+    # mark the same old bank deleted and save a new row, leaving multiple alive rows. The block
+    # returns its value rather than using `return`, which would roll back the transaction on
+    # non-local exit in Rails 7+. Side effects that must wait for the commit are deferred via
+    # `@pending_bank_account_sync_id` and flushed after `with_lock`.
     @pending_bank_account_sync_id = nil
     result = user.with_lock do
       if params[:card]
