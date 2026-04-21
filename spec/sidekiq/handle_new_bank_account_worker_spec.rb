@@ -16,7 +16,7 @@ describe HandleNewBankAccountWorker do
     end
 
     it "does not raise when the manager returns a classified outcome" do
-      %i[synced noop_metadata_match invalid_account_holder_name invalid_bank_account].each do |outcome|
+      %i[synced noop_metadata_match invalid_account_holder_name invalid_bank_account stripe_invalid_request].each do |outcome|
         allow(StripeMerchantAccountManager).to receive(:handle_new_bank_account).with(bank_account).and_return(outcome)
 
         expect { described_class.new.perform(bank_account.id) }.not_to raise_error

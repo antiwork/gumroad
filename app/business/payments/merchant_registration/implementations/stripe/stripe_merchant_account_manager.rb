@@ -253,12 +253,12 @@ module StripeMerchantAccountManager
     end
   end
 
-  # Returns a symbol; never raises for Stripe errors. The worker is the single place that turns
-  # :stripe_unknown_error into a Sidekiq retry — inline callers (webhook) ignore the return so a
-  # Stripe error can't cascade into redelivery of the whole webhook event.
+  # Returns a symbol; never raises for Stripe errors. Only :stripe_unknown_error triggers a
+  # Sidekiq retry in the worker — deterministic 4xx outcomes are terminal. Inline callers (webhook)
+  # ignore the return so a Stripe error can't cascade into redelivery of the whole webhook event.
   #
   # Outcomes: :synced, :noop_metadata_match, :invalid_account_holder_name, :invalid_bank_account,
-  # :stripe_unknown_error.
+  # :stripe_invalid_request, :stripe_unknown_error.
   def self.update_bank_account(user, passphrase:)
     validate_for_update(user)
 
@@ -290,8 +290,10 @@ module StripeMerchantAccountManager
       return :invalid_bank_account
     end
 
+    # InvalidRequestError is a deterministic HTTP 400; retrying produces the same response and
+    # just spams Sentry / admin breadcrumbs. Treat unclassified ones as terminal.
     ErrorNotifier.notify(e)
-    :stripe_unknown_error
+    :stripe_invalid_request
   rescue Stripe::StripeError => e
     # Umbrella catch so transient errors (APIConnection/RateLimit/CardError) don't escape into the
     # webhook path; retry is the worker's responsibility.

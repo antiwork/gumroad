@@ -116,5 +116,13 @@ describe JapanBankAccount do
       expect(account).to be_valid
       expect(account.account_holder_full_name).to eq("Japanese Creator")
     end
+
+    it "does not run on soft-delete so pre-validator invalid names can still be marked deleted" do
+      account = create(:japan_bank_account)
+      account.update_columns(account_holder_full_name: "ハルナ マサシ")
+
+      expect { account.mark_deleted! }.not_to raise_error
+      expect(account.reload.deleted_at).to be_present
+    end
   end
 end

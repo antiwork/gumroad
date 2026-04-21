@@ -31,7 +31,9 @@ class JapanBankAccount < BankAccount
   validate :validate_bank_code
   validate :validate_branch_code
   validate :validate_account_number
-  validate :validate_account_holder_full_name
+  # Skip on delete so users with pre-existing (pre-validator) invalid names can still soft-delete
+  # the row — otherwise switching payout method to card or PayPal rolls back.
+  validate :validate_account_holder_full_name, unless: :deleted?
 
   def routing_number
     "#{bank_code}#{branch_code}"
