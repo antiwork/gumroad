@@ -174,6 +174,7 @@ describe CustomerPresenter do
             id: purchase2.license.external_id,
             enabled: true,
             key: purchase2.license.serial,
+            uses: purchase2.license.uses,
           },
           call: nil,
           commission: nil,
