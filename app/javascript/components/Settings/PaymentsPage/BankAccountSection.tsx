@@ -939,7 +939,7 @@ const BankAccountSection = ({
     const isKatakanaOnly = /^[\p{Script=Katakana}ー・\uFF65-\uFF9F\u3000]+$/u.test(name);
     const isLatinOnly = /^[A-Za-z ]+$/u.test(name);
     if (isKatakanaOnly || isLatinOnly) return null;
-    return "Use all katakana (with a full-width space between names) or all Latin letters. Mixing scripts is not allowed.";
+    return "Use either katakana or Latin letters — not both. If using katakana, separate names with a full-width space.";
   })();
 
   return (
@@ -963,7 +963,7 @@ const BankAccountSection = ({
           <FieldsetDescription>
             {jpHolderNameClientError ??
               `Must exactly match the name on your bank account${
-                user.country_code === "JP" ? " (all katakana or all Latin — not mixed)" : ""
+                user.country_code === "JP" ? " (in katakana or Latin letters)" : ""
               }`}
           </FieldsetDescription>
         </Fieldset>
