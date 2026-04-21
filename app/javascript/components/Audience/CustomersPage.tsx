@@ -41,6 +41,8 @@ import placeholder from "$assets/images/placeholders/customers.png";
 
 type Product = { id: string; name: string; variants: { id: string; name: string }[] };
 
+type Item = { type: "product"; id: string } | { type: "variant"; id: string; productId: string };
+
 export type CustomerPageProps = {
   customers: Customer[];
   pagination: PaginationProps | null;
@@ -59,6 +61,90 @@ const formatPrice = (priceCents: number, currencyType: CurrencyCode, recurrence?
   `${formatPriceCentsWithCurrencySymbol(currencyType, priceCents, { symbolFormat: "long" })}${
     recurrence ? ` ${recurrenceLabels[recurrence]}` : ""
   }`;
+
+const parseIntOrNull = (value: string | null): number | null => {
+  if (value === null) return null;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseDateOrNull = (value: string | null): Date | null => {
+  if (value === null) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const parseSortFromParams = (urlParams: URLSearchParams): Query["sort"] => {
+  const key = urlParams.get("sort_key");
+  const direction = urlParams.get("sort_direction");
+  if ((key === "created_at" || key === "price_cents") && (direction === "asc" || direction === "desc")) {
+    return { key, direction };
+  }
+  return { key: "created_at", direction: "desc" };
+};
+
+const parseItemsFromParams = (urlParams: URLSearchParams, productKey: string, variantKey: string): Item[] => {
+  const items: Item[] = [];
+  for (const id of urlParams.getAll(productKey)) {
+    if (id) items.push({ type: "product", id });
+  }
+  for (const value of urlParams.getAll(variantKey)) {
+    const [productId, variantId] = value.split(":");
+    if (productId && variantId) items.push({ type: "variant", id: variantId, productId });
+  }
+  return items;
+};
+
+const buildUrlParams = (
+  query: Query,
+  includedItems: Item[],
+  excludedItems: Item[],
+  existingSearch: string,
+): string => {
+  const params = new URLSearchParams(existingSearch);
+  const persistKeys = [
+    "query",
+    "email",
+    "minimum_amount_cents",
+    "maximum_amount_cents",
+    "created_after",
+    "created_before",
+    "country",
+    "active_customers_only",
+    "sort_key",
+    "sort_direction",
+    "page",
+    "products",
+    "variants",
+    "excluded_products",
+    "excluded_variants",
+  ];
+  for (const key of persistKeys) params.delete(key);
+
+  if (query.query) params.set("query", query.query);
+  if (query.minimumAmount !== null) params.set("minimum_amount_cents", String(query.minimumAmount));
+  if (query.maximumAmount !== null) params.set("maximum_amount_cents", String(query.maximumAmount));
+  if (query.createdAfter) params.set("created_after", query.createdAfter.toISOString());
+  if (query.createdBefore) params.set("created_before", query.createdBefore.toISOString());
+  if (query.country) params.set("country", query.country);
+  if (query.activeCustomersOnly) params.set("active_customers_only", "true");
+  if (query.sort) {
+    params.set("sort_key", query.sort.key);
+    params.set("sort_direction", query.sort.direction);
+  }
+  if (query.page > 1) params.set("page", String(query.page));
+
+  for (const item of includedItems) {
+    if (item.type === "product") params.append("products", item.id);
+    else params.append("variants", `${item.productId}:${item.id}`);
+  }
+  for (const item of excludedItems) {
+    if (item.type === "product") params.append("excluded_products", item.id);
+    else params.append("excluded_variants", `${item.productId}:${item.id}`);
+  }
+
+  return params.toString();
+};
 
 const CustomersPage = ({
   product_id,
@@ -82,27 +168,36 @@ const CustomersPage = ({
 
   const uid = React.useId();
 
-  const [includedItems, setIncludedItems] = React.useState<Item[]>(
-    product_id ? [{ type: "product", id: product_id }] : [],
+  const initialUrlParams = React.useMemo(
+    () => (typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams()),
+    [],
   );
-  const [excludedItems, setExcludedItems] = React.useState<Item[]>([]);
+
+  const [includedItems, setIncludedItems] = React.useState<Item[]>(() => {
+    const fromUrl = parseItemsFromParams(initialUrlParams, "products", "variants");
+    if (fromUrl.length > 0) return fromUrl;
+    return product_id ? [{ type: "product", id: product_id }] : [];
+  });
+  const [excludedItems, setExcludedItems] = React.useState<Item[]>(() =>
+    parseItemsFromParams(initialUrlParams, "excluded_products", "excluded_variants"),
+  );
 
   const [query, setQuery] = React.useState<Query>(() => {
-    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const pageParam = parseIntOrNull(initialUrlParams.get("page"));
     return {
-      page: 1,
-      query: urlParams?.get("query") ?? urlParams?.get("email") ?? null,
-      sort: { key: "created_at", direction: "desc" },
+      page: pageParam && pageParam > 0 ? pageParam : 1,
+      query: initialUrlParams.get("query") ?? initialUrlParams.get("email") ?? null,
+      sort: parseSortFromParams(initialUrlParams),
       products: [],
       variants: [],
       excludedProducts: [],
       excludedVariants: [],
-      minimumAmount: null,
-      maximumAmount: null,
-      createdAfter: null,
-      createdBefore: null,
-      country: null,
-      activeCustomersOnly: false,
+      minimumAmount: parseIntOrNull(initialUrlParams.get("minimum_amount_cents")),
+      maximumAmount: parseIntOrNull(initialUrlParams.get("maximum_amount_cents")),
+      createdAfter: parseDateOrNull(initialUrlParams.get("created_after")),
+      createdBefore: parseDateOrNull(initialUrlParams.get("created_before")),
+      country: initialUrlParams.get("country"),
+      activeCustomersOnly: initialUrlParams.get("active_customers_only") === "true",
     };
   });
   const updateQuery = (update: Partial<Query>) => setQuery((prevQuery) => ({ ...prevQuery, ...update }));
@@ -156,6 +251,15 @@ const CustomersPage = ({
 
   useOnChange(() => {
     debouncedReloadCustomers();
+  }, [query, includedItems, excludedItems]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const search = buildUrlParams(query, includedItems, excludedItems, window.location.search);
+    const newUrl = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
+    if (newUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(window.history.state, "", newUrl);
+    }
   }, [query, includedItems, excludedItems]);
 
   const [from, setFrom] = React.useState(subMonths(new Date(), 1));
@@ -506,8 +610,6 @@ const CustomersPage = ({
     </div>
   );
 };
-
-type Item = { type: "product"; id: string } | { type: "variant"; id: string; productId: string };
 
 const ProductSelect = ({
   label,
