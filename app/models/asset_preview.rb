@@ -9,7 +9,6 @@ class AssetPreview < ApplicationRecord
   RETINA_DISPLAY_WIDTH = (DEFAULT_DISPLAY_WIDTH * 1.5).to_i
 
   after_commit :invalidate_product_cache
-  after_create :reset_content_moderated_flag
 
   # Update updated_at of product to regenerate the sitemap in RefreshSitemapMonthlyWorker
   belongs_to :link, touch: true, optional: true
@@ -265,12 +264,6 @@ class AssetPreview < ApplicationRecord
 
     def invalidate_product_cache
       link.invalidate_cache if link.present?
-    end
-
-    def reset_content_moderated_flag
-      return if link.blank? || link.is_unpublished_by_admin? || !link.content_moderated?
-
-      link&.update_attribute(:content_moderated, false)
     end
 
     def safe_url?(url)

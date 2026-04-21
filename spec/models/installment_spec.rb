@@ -24,13 +24,6 @@ describe Installment do
     end
   end
 
-  describe "flag mapping" do
-    it "reuses deprecated bit 2 for content_moderated" do
-      expect(described_class.flag_mapping["flags"][:content_moderated]).to eq(2)
-      expect(described_class.flag_mapping["flags"]).not_to have_key(:DEPRECATED_is_automated_installment)
-    end
-  end
-
   describe "#is_downloadable?" do
     it "returns false if post has no files" do
       expect(@installment.is_downloadable?).to eq(false)
@@ -1051,38 +1044,6 @@ const b = 2;</code></pre>
                                                                                                                                       product_post, # Published 3 days ago
                                                                                                                                       seller_post, # Published 6 days ago
                                                                                                                                     ])
-    end
-  end
-
-  describe "#trigger_content_moderation" do
-    let!(:installment) { create(:installment, name: "Original Name", message: "Original Message") }
-
-    it "does not trigger a content moderation job for draft posts" do
-      expect do
-        installment.update!(name: "New Name")
-      end.not_to change { ContentModeration::ModeratePostJob.jobs.size }
-    end
-
-    it "does not trigger a content moderation job if neither name nor message have changed" do
-      expect do
-        installment.update!(published_at: Time.current)
-      end.not_to change { ContentModeration::ModeratePostJob.jobs.size }
-    end
-
-    it "triggers a content moderation job if the name has changed" do
-      installment.update!(published_at: Time.current)
-
-      expect do
-        installment.update!(name: "New Name")
-      end.to change { ContentModeration::ModeratePostJob.jobs.size }.by(1)
-    end
-
-    it "triggers a content moderation job if the message has changed" do
-      installment.update!(published_at: Time.current)
-
-      expect do
-        installment.update!(message: "New Message")
-      end.to change { ContentModeration::ModeratePostJob.jobs.size }.by(1)
     end
   end
 

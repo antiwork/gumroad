@@ -85,33 +85,4 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.image_urls).to eq(["https://cdn.example.com/post.png"])
     end
   end
-
-  describe "#extract_from_profile" do
-    let(:extractor) { described_class.new }
-    let(:user) { create(:user, name: "Creator Name", bio: "Creator bio") }
-
-    before do
-      create(
-        :seller_profile_rich_text_section,
-        seller: user,
-        header: "About",
-        text: {
-          type: "doc",
-          content: [
-            { type: "paragraph", content: [{ type: "text", text: "Profile rich text" }] },
-            { type: "image", attrs: { src: "https://cdn.example.com/profile.png" } }
-          ]
-        }
-      )
-    end
-
-    it "extracts profile text and image URLs" do
-      result = extractor.extract_from_profile(user)
-
-      expect(result.text).to include("Creator Name")
-      expect(result.text).to include("Creator bio")
-      expect(result.text).to include("Profile rich text")
-      expect(result.image_urls).to eq(["https://cdn.example.com/profile.png"])
-    end
-  end
 end

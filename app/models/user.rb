@@ -301,7 +301,6 @@ class User < ApplicationRecord
 
   after_save :create_updated_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
   after_save :delete_old_stripe_apple_pay_domain, if: ->(user) { user.saved_change_to_username? }
-  after_save :trigger_content_moderation
   after_update :update_audience_members_affiliates
   after_update :update_product_search_index!
   after_update :update_alive_cart_email, if: :saved_change_to_email?
@@ -1224,14 +1223,6 @@ class User < ApplicationRecord
 
     def cancel_active_subscriptions!
       subscriptions.active.each { |s| s.cancel!(by_seller: false) }
-    end
-
-    def trigger_content_moderation
-      return unless saved_change_to_name? ||
-                    saved_change_to_username? ||
-                    saved_change_to_bio?
-
-      ContentModeration::ModerateProfileJob.perform_async(id)
     end
 
     def has_completed_payouts?

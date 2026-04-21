@@ -3177,34 +3177,6 @@ describe User, :vcr do
     end
   end
 
-  describe "#trigger_content_moderation" do
-    let!(:user) { create(:user, name: "Original Name", bio: "Original Bio") }
-
-    it "does not trigger a content moderation job if neither name nor bio have changed" do
-      expect do
-        user.update!(email: "newemail@example.com")
-      end.not_to change { ContentModeration::ModerateProfileJob.jobs.size }
-    end
-
-    it "triggers a content moderation job if the name has changed" do
-      expect do
-        user.update!(name: "New Name")
-      end.to change { ContentModeration::ModerateProfileJob.jobs.size }.by(1)
-    end
-
-    it "triggers a content moderation job if the bio has changed" do
-      expect do
-        user.update!(bio: "New Bio")
-      end.to change { ContentModeration::ModerateProfileJob.jobs.size }.by(1)
-    end
-
-    it "triggers a content moderation job if the username has changed" do
-      expect do
-        user.update!(username: "username1")
-      end.to change { ContentModeration::ModerateProfileJob.jobs.size }.by(1)
-    end
-  end
-
   describe "#eligible_for_instant_payouts?" do
     let(:user) { create(:compliant_user) }
     let!(:compliance_info) { create(:user_compliance_info, user:) }

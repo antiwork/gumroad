@@ -362,55 +362,6 @@ describe Link, :vcr do
       end
     end
 
-    describe "reset_content_moderated_flag" do
-      let(:product) { create(:product, content_moderated: true) }
-
-      context "when the product is alive" do
-        it "resets the content_moderated flag when description changes" do
-          expect do
-            product.update!(description: "New description")
-          end.to change { product.reload.content_moderated }.from(true).to(false)
-        end
-
-        it "does not reset the content_moderated flag when other attributes change" do
-          expect do
-            product.update!(price_cents: 1000)
-          end.not_to change { product.reload.content_moderated }
-        end
-      end
-    end
-
-    describe "queue_content_moderation_job" do
-      let(:product) { create(:product) }
-
-      it "enqueues a ContentModeration::ModerateProductJob when the product has changed and was already unpublished by admin" do
-        product.update!(is_unpublished_by_admin: true)
-        product.update!(description: "New description")
-        expect(ContentModeration::ModerateProductJob).to have_enqueued_sidekiq_job(product.id)
-      end
-
-      it "does not enqueue a ContentModeration::ModerateProductJob when the product is only unpublished by admin" do
-        expect do
-          product.unpublish!(is_unpublished_by_admin: true)
-        end.not_to change { ContentModeration::ModerateProductJob.jobs.size }
-      end
-
-      it "enqueues a ContentModeration::ModerateProductJob when a published product description changes" do
-        product
-
-        expect do
-          product.update!(description: "New description")
-        end.to change { ContentModeration::ModerateProductJob.jobs.size }.by(1)
-      end
-
-      it "does not enqueue a ContentModeration::ModerateProductJob when a flagged product is saved without content changes" do
-        product.update!(is_unpublished_by_admin: true)
-
-        expect do
-          product.touch
-        end.not_to change { ContentModeration::ModerateProductJob.jobs.size }
-      end
-    end
 
     describe "content moderation on publish" do
       let(:product) { create(:product, purchase_disabled_at: Time.current) }

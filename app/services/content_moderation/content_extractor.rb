@@ -8,35 +8,16 @@ class ContentModeration::ContentExtractor
 
   Result = Struct.new(:text, :image_urls, keyword_init: true)
 
-  def extract_from_product(product, text_only: false)
+  def extract_from_product(product)
     description_text = Nokogiri::HTML(product.description.to_s).text
     text = "Name: #{product.name} Description: #{description_text} " + rich_content_text(product.alive_rich_contents)
-    image_urls = text_only ? [] : product_image_urls(product)
-    Result.new(text: text, image_urls: image_urls)
+    Result.new(text: text, image_urls: product_image_urls(product))
   end
 
-  def extract_from_post(installment, text_only: false)
+  def extract_from_post(installment)
     parsed_message = Nokogiri::HTML(installment.message)
     text = "Name: #{installment.name} Message: #{parsed_message.text}"
-    image_urls = text_only ? [] : parsed_message.css("img").filter_map { |img| img["src"] }.reject(&:empty?)
-    Result.new(text: text, image_urls: image_urls)
-  end
-
-  def extract_from_profile(user, text_only: false)
-    rich_text_sections = SellerProfileRichTextSection.where(seller_id: user.id)
-
-    text = "#{user.display_name} #{user.bio} #{profile_rich_text_content(rich_text_sections)}"
-
-    image_urls = if text_only
-                   []
-                 else
-                   rich_text_sections.flat_map do |section|
-                     section.json_data.dig("text", "content")&.filter_map do |content|
-                       content.dig("attrs", "src") if content["type"] == "image"
-                     end
-                   end.compact.reject(&:empty?)
-                 end
-
+    image_urls = parsed_message.css("img").filter_map { |img| img["src"] }.reject(&:empty?)
     Result.new(text: text, image_urls: image_urls)
   end
 
@@ -91,15 +72,5 @@ class ContentModeration::ContentExtractor
       else
         []
       end
-    end
-
-    def profile_rich_text_content(rich_text_sections)
-      rich_text_sections.map do |section|
-        section.json_data.dig("text", "content")&.filter_map do |content|
-          if content["type"] == "paragraph" && content["content"]
-            content["content"].map { |item| item["text"] }.join
-          end
-        end
-      end.flatten.join(" ")
     end
 end

@@ -38,7 +38,7 @@ class Link < ApplicationRecord
             29 => :is_unpublished_by_admin,
             30 => :community_chat_enabled,
             31 => :DEPRECATED_excluded_from_mobile_app_discover,
-            32 => :content_moderated,
+            32 => :DEPRECATED_moderated_by_iffy,
             33 => :hide_sold_out_variants,
             :column => "flags",
             :flag_query_mode => :bit_operator,
@@ -221,8 +221,6 @@ class Link < ApplicationRecord
   after_update :create_licenses_for_existing_customers,
                if: ->(link) { link.saved_change_to_is_licensed? && link.is_licensed? }
   after_update :delete_unused_prices, if: :saved_change_to_purchase_type?
-  after_update :reset_content_moderated_flag, if: :saved_change_to_description?
-  after_save :queue_content_moderation_job
 
   enum subscription_duration: %i[monthly yearly quarterly biannually every_two_years]
   enum purchase_type: %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
@@ -1422,24 +1420,10 @@ class Link < ApplicationRecord
       end
     end
 
-    def reset_content_moderated_flag
-      return if is_unpublished_by_admin? || !content_moderated?
-
-      update_attribute(:content_moderated, false)
-    end
-
-    def queue_content_moderation_job
-      return if previously_new_record?
-
-      if saved_change_to_name? || saved_change_to_description?
-        ContentModeration::ModerateProductJob.perform_async(id)
-      end
-    end
-
     def content_moderation_check
       return if user&.vip_creator?
 
-      result = ContentModeration::ModerateRecordService.check(self, :product, text_only: true)
+      result = ContentModeration::ModerateRecordService.check(self, :product)
       return if result.passed
 
       errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")

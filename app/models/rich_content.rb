@@ -56,8 +56,6 @@ class RichContent < ApplicationRecord
   validates :entity, presence: true
   validates :description, json: { schema: DESCRIPTION_JSON_SCHEMA, message: :invalid }
 
-  after_update :reset_content_moderated_flag, if: -> { saved_change_to_description? && alive? }
-
   def embedded_product_file_ids_in_order
     description.flat_map { select_file_embed_ids(_1) }.compact.uniq
   end
@@ -108,12 +106,5 @@ class RichContent < ApplicationRecord
 
         []
       end
-    end
-
-    def reset_content_moderated_flag
-      return unless entity.is_a?(Link)
-      return if entity.is_unpublished_by_admin? || !entity.content_moderated?
-
-      entity.update_attribute(:content_moderated, false)
     end
 end

@@ -75,8 +75,6 @@ class Installment < ApplicationRecord
 
   friendly_id :slug_candidates, use: :slugged
 
-  after_save :trigger_content_moderation
-
   attr_accessor :publishing, :skip_content_moderation_check
 
   validates :name, length: { maximum: 255 }
@@ -86,7 +84,7 @@ class Installment < ApplicationRecord
   validate :content_moderation_check, if: -> { publishing? && !skip_content_moderation_check }
 
   has_flags 1 => :is_unpublished_by_admin,
-            2 => :content_moderated,
+            2 => :DEPRECATED_is_automated_installment,
             3 => :DEPRECATED_stream_only,
             4 => :DEPRECATED_is_open_rate_tracking_enabled,
             5 => :DEPRECATED_is_click_rate_tracking_enabled,
@@ -946,17 +944,10 @@ class Installment < ApplicationRecord
       Rails.cache.write(cache_key, cache)
     end
 
-    def trigger_content_moderation
-      return unless saved_change_to_name? || saved_change_to_message?
-      return unless published? || (content_moderated? && is_unpublished_by_admin? && !saved_change_to_is_unpublished_by_admin?)
-
-      ContentModeration::ModeratePostJob.perform_async(id)
-    end
-
     def content_moderation_check
       return if user&.vip_creator?
 
-      result = ContentModeration::ModerateRecordService.check(self, :post, text_only: true)
+      result = ContentModeration::ModerateRecordService.check(self, :post)
       return if result.passed
 
       errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")
