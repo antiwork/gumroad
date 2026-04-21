@@ -81,8 +81,8 @@ describe License do
   end
 
   describe "search index callbacks" do
-    let(:purchase) { create(:purchase, :with_license) }
-    let(:license) { purchase.license }
+    let!(:purchase) { create(:purchase, :with_license) }
+    let!(:license) { purchase.license }
 
     it "enqueues a purchase re-index when uses changes" do
       expect(ElasticsearchIndexerWorker).to receive(:perform_in).with(
