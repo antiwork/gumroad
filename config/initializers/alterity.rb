@@ -16,6 +16,7 @@ Alterity.configure do |config|
       --recursion-method 'dsn=D=#{config.replicas_dsns_database},t=#{config.replicas_dsns_table}'
       --execute
       --no-check-alter
+      --preserve-triggers
       D=#{config.database},t=#{altered_table}
       --alter #{alter_argument}
     SHELL
