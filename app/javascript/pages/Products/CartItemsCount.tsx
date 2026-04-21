@@ -11,10 +11,13 @@ const CartItemsCount = () => {
 
   React.useEffect(() => {
     void document.hasStorageAccess().then((hasAccess) =>
-      window.parent.postMessage({
-        type: "cart-items-count",
-        cartItemsCount: hasAccess ? cart_items_count : "not-available",
-      }),
+      window.parent.postMessage(
+        {
+          type: "cart-items-count",
+          cartItemsCount: hasAccess ? cart_items_count : "not-available",
+        },
+        "*",
+      ),
     );
   }, [cart_items_count]);
 

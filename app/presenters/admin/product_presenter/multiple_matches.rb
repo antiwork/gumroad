@@ -16,7 +16,7 @@ class Admin::ProductPresenter::MultipleMatches
       price_formatted: product.price_formatted,
       user: {
         external_id: product.user.external_id,
-        name: product.user.name
+        name: product.user.display_name
       }
     }
   end

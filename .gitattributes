@@ -6,5 +6,8 @@ db/schema.rb linguist-generated
 # Mark any vendored files as having been vendored.
 vendor/* linguist-vendored
 
+# Mark VCR cassettes as generated so AI tools and GitHub stats skip them.
+spec/support/fixtures/vcr_cassettes/** linguist-generated
+
 config/credentials/*.yml.enc diff=rails_credentials
 config/credentials.yml.enc diff=rails_credentials

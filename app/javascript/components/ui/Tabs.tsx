@@ -62,7 +62,7 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(({ children, cla
 Tabs.displayName = "Tabs";
 
 export const TabIcon = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex-shrink-0 text-xl">{children}</div>
+  <div className="flex shrink-0 items-center text-xl">{children}</div>
 );
 
 interface TabProps extends Omit<React.HTMLProps<HTMLAnchorElement>, "selected"> {

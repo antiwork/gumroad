@@ -9,6 +9,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
@@ -43,12 +44,14 @@ export type State = {
   params: SearchRequest;
   results: SearchResults | null;
   offset?: number | undefined;
+  loading?: boolean;
 };
 
 export type Action =
   | { type: "set-params"; params: SearchRequest }
   | { type: "set-results"; results: SearchResults }
-  | { type: "load-more" };
+  | { type: "load-more" }
+  | { type: "load-error" };
 
 export const useSearchReducer = (initial: Omit<State, "offset">) => {
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
@@ -61,10 +64,12 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             ...action.params,
             taxonomy: action.params.taxonomy === "discover" ? undefined : action.params.taxonomy,
           };
-          return { params, results: null, offset: action.params.from };
+          return { params, results: null, offset: action.params.from, loading: false };
         }
         case "set-results":
-          return { ...state, results: action.results };
+          return { ...state, results: action.results, loading: false };
+        case "load-error":
+          return { ...state, loading: false };
         case "load-more":
           if (
             !state.results ||
@@ -74,6 +79,7 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             return state;
           return {
             ...state,
+            loading: true,
             params: { ...state.params, from: (state.offset ?? 1) + state.results.products.length },
           };
       }
@@ -94,12 +100,14 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
               ? results
               : { ...results, products: [...state.results.products, ...results.products] },
         });
-        activeRequest.current = null;
       } catch (e) {
         if (!(e instanceof AbortError)) {
           assertResponseError(e);
           showAlert("Something went wrong. Please try refreshing the page.", "error");
         }
+        dispatch({ type: "load-error" });
+      } finally {
+        activeRequest.current = null;
       }
     }),
     [state.params],
@@ -397,7 +405,9 @@ export const CardGrid = ({
           {pagination === "button" &&
           !((state.results?.total ?? 0) < (state.offset ?? 1) + (state.results?.products.length ?? 0)) ? (
             <div className="mt-8 w-full text-center">
-              <Button onClick={() => dispatchAction({ type: "load-more" })}>Load more</Button>
+              <Button onClick={() => dispatchAction({ type: "load-more" })} disabled={state.loading}>
+                {state.loading ? <LoadingSpinner /> : "Load more"}
+              </Button>
             </div>
           ) : null}
         </div>
