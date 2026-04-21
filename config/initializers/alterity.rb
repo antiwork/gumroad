@@ -13,6 +13,7 @@ Alterity.configure do |config|
       --critical-load Threads_running=1000
       --max-load Threads_running=200
       --set-vars lock_wait_timeout=1
+      --preserve-triggers
       --recursion-method 'dsn=D=#{config.replicas_dsns_database},t=#{config.replicas_dsns_table}'
       --execute
       --no-check-alter
