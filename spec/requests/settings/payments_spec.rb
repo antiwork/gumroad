@@ -689,7 +689,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(page).to have_alert(text: "Thanks! You're all set.")
           sleep 0.5 # Since the previous Alerts takes time to disappear, checking alert returns early before the api call is complete
         end.to change { @user.alive_user_compliance_info.reload.business_street_address }.to("123 North street")
-        fill_in "Street address", with: "po box 123 smith street"
+        fill_in "Address", with: "po box 123 smith street"
         expect do
           click_on "Update settings"
           expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
