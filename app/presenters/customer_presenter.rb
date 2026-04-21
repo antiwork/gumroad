@@ -95,6 +95,7 @@ class CustomerPresenter
           id: purchase.linked_license.external_id,
           key: purchase.linked_license.serial,
           enabled: !purchase.linked_license.disabled?,
+          uses: purchase.linked_license.uses,
         } : nil,
       review: review.present? ?
         {
