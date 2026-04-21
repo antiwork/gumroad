@@ -14,7 +14,7 @@ export type Discount = ({ type: "fixed"; cents: number } | { type: "percent"; pe
   code: string | null;
 };
 
-export type License = { id: string; key: string; enabled: boolean };
+export type License = { id: string; key: string; enabled: boolean; uses: number };
 export type Address = {
   full_name: string;
   street_address: string;

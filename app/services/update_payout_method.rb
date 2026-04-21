@@ -161,8 +161,14 @@ class UpdatePayoutMethod
         return { error: :bank_account_error, data: bank_account.errors.full_messages.to_sentence } if bank_account.errors.present?
 
         user.update!(payment_address: "") if user.payment_address.present?
-      elsif params[:bank_account][:account_holder_full_name].present?
-        old_bank_account.update(account_holder_full_name: params[:bank_account][:account_holder_full_name])
+      elsif params[:bank_account][:account_holder_full_name].present? &&
+            old_bank_account.present? &&
+            !old_bank_account.is_a?(CardBankAccount) &&
+            old_bank_account.account_holder_full_name != params[:bank_account][:account_holder_full_name]
+        old_bank_account.update!(account_holder_full_name: params[:bank_account][:account_holder_full_name])
+        if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user)
+          HandleNewBankAccountWorker.perform_in(5.seconds, old_bank_account.id)
+        end
       end
     elsif params[:payment_address].present?
       payment_address = params[:payment_address].strip

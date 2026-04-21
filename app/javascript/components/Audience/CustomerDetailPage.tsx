@@ -1467,6 +1467,10 @@ const LicenseSection = ({ license, onSave }: { license: License; onSave: (enable
           </pre>
         </CardContent>
         <CardContent>
+          <h5 className="grow font-bold">Uses</h5>
+          {license.uses}
+        </CardContent>
+        <CardContent>
           {license.enabled ? (
             <Button color="danger" disabled={isLoading} onClick={() => void handleSave(false)} className="grow basis-0">
               Disable
