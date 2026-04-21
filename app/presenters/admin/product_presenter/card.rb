@@ -24,6 +24,7 @@ class Admin::ProductPresenter::Card
       user: {
         external_id: product.user.external_id,
         name: product.user.name,
+        username: product.user.username,
         suspended: product.user.suspended?,
         flagged_for_tos_violation: product.user.flagged_for_tos_violation?
       },
