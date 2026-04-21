@@ -402,6 +402,14 @@ describe Link, :vcr do
           product.update!(description: "New description")
         end.to change { ContentModeration::ModerateProductJob.jobs.size }.by(1)
       end
+
+      it "does not enqueue a ContentModeration::ModerateProductJob when a flagged product is saved without content changes" do
+        product.update!(is_unpublished_by_admin: true)
+
+        expect do
+          product.touch
+        end.not_to change { ContentModeration::ModerateProductJob.jobs.size }
+      end
     end
 
     describe "content moderation on publish" do
