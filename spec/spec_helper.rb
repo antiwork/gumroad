@@ -10,6 +10,7 @@ require "capybara/rspec"
 require "rspec/rails"
 require "paper_trail/frameworks/rspec"
 require "pundit/rspec"
+require "faker"
 Dir.glob(Rails.root.join("spec", "support", "**", "*.rb")).each { |f| require f }
 
 JsonMatchers.schema_root = "spec/support/schemas"
