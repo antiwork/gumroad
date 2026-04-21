@@ -27,7 +27,7 @@ describe Admin::ProductPresenter::Card do
           user: {
             external_id: product.user.external_id,
             name: product.user.name,
-            username: product.user.username,
+            display_name: product.user.display_name,
             suspended: false,
             flagged_for_tos_violation: false
           },

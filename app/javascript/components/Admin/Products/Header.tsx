@@ -46,7 +46,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
               <DateTimeWithRelativeTooltip date={product.created_at} utc />
             </li>
             <li>
-              <Link href={Routes.admin_user_path(product.user.external_id)}>{product.user.name || product.user.username}</Link>
+              <Link href={Routes.admin_user_path(product.user.external_id)}>{product.user.display_name}</Link>
             </li>
             <AdminProductStats product_external_id={product.external_id} />
           </InlineList>

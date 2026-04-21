@@ -25,7 +25,7 @@ export type ActiveIntegration = {
 export type ProductUser = {
   external_id: string;
   name: string | null;
-  username: string;
+  display_name: string;
   suspended: boolean;
   flagged_for_tos_violation: boolean;
 };
