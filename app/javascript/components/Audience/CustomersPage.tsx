@@ -103,6 +103,7 @@ const CustomersPage = ({
       createdBefore: null,
       country: null,
       activeCustomersOnly: false,
+      minimumLicenseUses: null,
     };
   });
   const updateQuery = (update: Partial<Query>) => setQuery((prevQuery) => ({ ...prevQuery, ...update }));
@@ -115,6 +116,7 @@ const CustomersPage = ({
     createdBefore,
     country,
     activeCustomersOnly,
+    minimumLicenseUses,
   } = query;
 
   const thProps = useSortingTableDriver<SortKey>(sort, (sort) => updateQuery({ sort }));
@@ -307,6 +309,27 @@ const CustomersPage = ({
                           </option>
                         ))}
                       </FormSelect>
+                    </Fieldset>
+                  </CardContent>
+                  <CardContent>
+                    <Fieldset className="grow basis-0">
+                      <Label htmlFor={`${uid}-minimum-license-uses`}>Minimum license uses</Label>
+                      <input
+                        id={`${uid}-minimum-license-uses`}
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="0"
+                        value={minimumLicenseUses ?? ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const parsed = value === "" ? null : Number.parseInt(value, 10);
+                          updateQuery({ minimumLicenseUses: Number.isFinite(parsed) ? parsed : null });
+                        }}
+                      />
+                      <FieldsetDescription>
+                        Only show sales whose license has been used at least this many times.
+                      </FieldsetDescription>
                     </Fieldset>
                   </CardContent>
                   <CardContent>
