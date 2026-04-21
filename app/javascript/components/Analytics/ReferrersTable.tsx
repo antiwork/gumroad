@@ -71,7 +71,7 @@ export const ReferrersTable = ({ data }: { data: AnalyticsReferrerTotals }) => {
         </TableBody>
       </Table>
       {items.length > maxRowsShown && (
-        <Button onClick={() => setMaxRowsShown(maxRowsShown + ROWS_PER_PAGE)} className="flex">
+        <Button onClick={() => setMaxRowsShown(maxRowsShown + ROWS_PER_PAGE)} className="mt-4 flex">
           Show more
         </Button>
       )}
