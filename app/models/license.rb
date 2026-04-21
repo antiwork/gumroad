@@ -14,6 +14,7 @@ class License < ApplicationRecord
   belongs_to :imported_customer, optional: true
 
   before_validation :generate_serial, on: :create
+  after_commit :update_purchase_search_index, on: [:create, :update]
 
   has_flags 1 => :DEPRECATED_is_pregenerated,
             :column => "flags",
@@ -45,4 +46,23 @@ class License < ApplicationRecord
     generate_serial
     save!
   end
+
+  private
+    def update_purchase_search_index
+      return if purchase_id.blank?
+      changed_tracked_columns = previous_changes.keys & %w[uses serial]
+      return if changed_tracked_columns.blank?
+
+      fields = []
+      fields << "license_serial" if changed_tracked_columns.include?("serial")
+      fields << "license_uses" if changed_tracked_columns.include?("uses")
+      return if fields.blank?
+
+      options = {
+        "record_id" => purchase_id,
+        "class_name" => "Purchase",
+        "fields" => fields
+      }
+      ElasticsearchIndexerWorker.perform_in(2.seconds, "update", options)
+    end
 end

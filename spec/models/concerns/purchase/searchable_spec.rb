@@ -79,6 +79,7 @@ describe Purchase::Searchable do
         "subscription_deactivated_at" => nil,
         "taxonomy_id" => nil,
         "license_serial" => @purchase.license.serial,
+        "license_uses" => @purchase.license.uses,
       )
 
       @product.default_price.update!(recurrence: "yearly")

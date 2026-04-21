@@ -103,6 +103,23 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(customer_ids[response]).to match_array([purchases.third.external_id, purchases.fourth.external_id])
     end
+
+    it "filters by minimum license uses" do
+      customer_ids = -> (res) { res.parsed_body.deep_symbolize_keys[:customers].map { _1[:id] } }
+
+      purchases.first.license.update!(uses: 10)
+      purchases.second.license.update!(uses: 5)
+      purchases.third.license.update!(uses: 1)
+      index_model_records(Purchase)
+
+      get :paged, params: { page: 1, minimum_license_uses: 4 }
+      expect(response).to be_successful
+      expect(customer_ids[response]).to match_array([purchases.first.external_id, purchases.second.external_id])
+
+      get :paged, params: { page: 1, minimum_license_uses: 9 }
+      expect(response).to be_successful
+      expect(customer_ids[response]).to match_array([purchases.first.external_id])
+    end
   end
 
   describe "GET charges" do
