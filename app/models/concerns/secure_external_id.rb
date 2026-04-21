@@ -101,7 +101,7 @@ module SecureExternalId
       return nil if inner_payload[:exp] && Time.current.to_i > inner_payload[:exp]
 
       inner_payload[:id]
-    rescue JSON::ParserError, ArgumentError, ActiveSupport::MessageEncryptor::InvalidMessage => e
+    rescue JSON::ParserError, ArgumentError, EncodingError, ActiveSupport::MessageEncryptor::InvalidMessage => e
       Rails.logger.error "SecureExternalId decryption failed: #{e.class}"
       nil
     end
