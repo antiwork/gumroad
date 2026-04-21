@@ -5180,8 +5180,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "El Salvadorian Creator")
-        fill_in("IBAN", with: "SV44BCIE12345678901234567890")
-        fill_in("Confirm IBAN", with: "SV44BCIE12345678901234567890")
+        fill_in("Account number", with: "12345678901234")
+        fill_in("Confirm account number", with: "12345678901234")
         fill_in("SWIFT / BIC Code", with: "AAAASVS1XXX")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
@@ -5199,7 +5199,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.zip_code).to eq("1101")
         expect(compliance_info.phone).to eq("+50368765432")
         expect(compliance_info.birthday).to eq(Date.new(1901, 1, 1))
-        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("SV44BCIE12345678901234567890")
+        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("12345678901234")
         expect(@user.reload.active_bank_account.routing_number).to eq("AAAASVS1XXX")
       end
     end
