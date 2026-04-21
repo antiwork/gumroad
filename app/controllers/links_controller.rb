@@ -184,6 +184,7 @@ class LinksController < ApplicationController
   end
 
   def search
+    format_search_params!
     search_params = params
     in_section = search_params[:user_id].present?
     if in_section
