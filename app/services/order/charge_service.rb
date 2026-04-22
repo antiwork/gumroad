@@ -12,6 +12,8 @@ class Order::ChargeService
   end
 
   def perform
+    Purchase.validate_offer_code_usage_across_line_items(order.purchases)
+
     # We need to make off session charges if there are products from more than one seller
     # In such case we create a reusable payment method before initiating the order from front-end
     off_session = order.purchases.non_free.pluck(:seller_id).uniq.count > 1
