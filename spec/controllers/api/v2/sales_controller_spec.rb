@@ -164,6 +164,19 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "filters sales by partial customer name when name is specified" do
+        matching_purchase = create(:purchase, purchaser: @purchaser, link: @product, full_name: "Ada Lovelace")
+        create(:purchase, purchaser: @purchaser, link: @product, full_name: "Grace Hopper")
+        index_model_records(Purchase)
+
+        get :index, params: @params.merge(name: "Ada")
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          sales: [matching_purchase.as_json(version: 2)]
+        }.as_json)
+      end
+
       it "filters sales by license key when license_key is specified" do
         matching_purchase = create(:purchase, purchaser: @purchaser, link: @product)
         matching_purchase.create_license!(link: @product, serial: "12345678-12345678-12345678-12345678")
