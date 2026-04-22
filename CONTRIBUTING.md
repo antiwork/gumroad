@@ -45,6 +45,7 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 - Use factories for test data instead of creating objects directly
 - Tests must fail when the fix is reverted. If the test passes without the application code change, it is invalid.
 - Scope VCR cassettes to specific test files. Sharing cassettes across tests causes collisions where tests read incorrect cached responses.
+- When your code change causes a spec to follow a new HTTP code path (e.g., removing a guard clause, adding a new API call), run the spec locally to regenerate VCR cassettes. Do not stub external APIs to work around missing cassettes. See [VCR Cassettes](#vcr-cassettes) in docs/testing.md.
 - Don't start Rspec test names with "should". See https://www.betterspecs.org/#should
 - Use `@example.com` for emails in tests
 - Use `example.com`, `example.org`, and `example.net` as custom domains or request hosts in tests.
