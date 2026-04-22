@@ -75,13 +75,13 @@ class Installment < ApplicationRecord
 
   friendly_id :slug_candidates, use: :slugged
 
-  attr_accessor :publishing, :skip_content_moderation_check
+  attr_accessor :publishing
 
   validates :name, length: { maximum: 255 }
   validate :message_must_be_provided, :validate_call_to_action_url_and_text, :validate_channel,
            :published_at_cannot_be_in_the_future, :validate_sending_limit_for_sellers
   validate :shown_on_profile_only_for_confirmed_users, if: :shown_on_profile_changed?
-  validate :content_moderation_check, if: -> { publishing? && !skip_content_moderation_check }
+  validate :content_moderation_check, if: -> { publishing? }
 
   has_flags 1 => :is_unpublished_by_admin,
             2 => :DEPRECATED_is_automated_installment,

@@ -399,13 +399,6 @@ describe Link, :vcr do
         expect { product.publish! }.to change { product.reload.purchase_disabled_at }.to(nil)
       end
 
-      it "skips the content moderation check when explicitly requested" do
-        product.skip_content_moderation_check = true
-        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
-
-        expect { product.publish! }.to change { product.reload.purchase_disabled_at }.to(nil)
-      end
-
       it "clears the publishing flag after publish! completes" do
         allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
           ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])

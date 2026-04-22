@@ -208,11 +208,11 @@ class Link < ApplicationRecord
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
   validate :default_offer_code_must_be_valid
-  validate :content_moderation_check, if: -> { publishing? && !skip_content_moderation_check }
+  validate :content_moderation_check, if: -> { publishing? }
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 
-  attr_accessor :publishing, :skip_content_moderation_check
+  attr_accessor :publishing
 
   before_save :downcase_filetype
   before_save :remove_xml_tags
