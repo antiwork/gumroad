@@ -2,6 +2,7 @@
 
 class ContentModeration::ModerateRecordService
   AUTHOR_NAME = "ContentModeration"
+  ADMIN_COMMENT_DEDUP_WINDOW = 5.minutes
 
   CheckResult = Struct.new(:passed, :reasons, keyword_init: true)
 
@@ -82,6 +83,12 @@ class ContentModeration::ModerateRecordService
       end
 
       content = "Content moderation blocked publish of #{record_label}: #{reasons.join("; ")}"
+      return if user.comments
+                    .with_type_note
+                    .where(author_name: AUTHOR_NAME, content: content)
+                    .where("created_at > ?", ADMIN_COMMENT_DEDUP_WINDOW.ago)
+                    .exists?
+
       user.comments.create!(
         author_name: AUTHOR_NAME,
         comment_type: Comment::COMMENT_TYPE_NOTE,

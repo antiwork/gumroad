@@ -828,6 +828,50 @@ const b = 2;</code></pre>
         expect { @installment.publish! }.to raise_error(ActiveRecord::RecordInvalid)
         expect(@installment.publishing?).to eq(false)
       end
+
+      context "when editing an already-published post" do
+        before do
+          allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+          )
+          @installment.publish!
+        end
+
+        it "re-checks moderation when the name changes" do
+          expect(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in name"])
+          )
+
+          @installment.name = "New bad name"
+          expect(@installment.save).to eq(false)
+          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in name")
+        end
+
+        it "re-checks moderation when the message changes" do
+          expect(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in message"])
+          )
+
+          @installment.message = "<p>New bad body</p>"
+          expect(@installment.save).to eq(false)
+          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in message")
+        end
+
+        it "does not re-check moderation when unrelated attributes change" do
+          expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+          @installment.shown_on_profile = !@installment.shown_on_profile
+          @installment.save!
+        end
+      end
+
+      context "when editing a draft post" do
+        it "does not run moderation on name/message edits" do
+          expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+          @installment.update!(name: "Still a draft", message: "<p>Still drafting</p>")
+        end
+      end
     end
   end
 

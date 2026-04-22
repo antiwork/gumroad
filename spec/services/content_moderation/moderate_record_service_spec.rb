@@ -73,6 +73,25 @@ RSpec.describe ContentModeration::ModerateRecordService do
         expect(comment.content).to include("Product ##{product.id}")
         expect(comment.content).to include("Matched blocked word: banned")
       end
+
+      it "does not create a duplicate note on rapid retries with identical content" do
+        described_class.check(product, :product)
+
+        expect do
+          described_class.check(product, :product)
+          described_class.check(product, :product)
+        end.not_to change { seller.reload.comments.count }
+      end
+
+      it "creates a fresh note once the dedup window has elapsed" do
+        described_class.check(product, :product)
+
+        travel_to(described_class::ADMIN_COMMENT_DEDUP_WINDOW.from_now + 1.second) do
+          expect do
+            described_class.check(product, :product)
+          end.to change { seller.reload.comments.count }.by(1)
+        end
+      end
     end
 
     context "when an AI strategy flags the content" do
