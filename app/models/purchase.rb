@@ -225,8 +225,7 @@ class Purchase < ApplicationRecord
     after_transition any => :failed, :do => :ban_buyer_on_fraud_related_error_code!
     after_transition any => :failed, :do => :suspend_buyer_on_fraudulent_card_decline!
     after_transition any => :failed, :do => :send_failure_email
-    after_transition any => %i[failed successful not_charged], :do => :check_purchase_heuristics
-    after_transition any => %i[failed successful not_charged], :do => :score_product
+
     after_transition any => %i[preorder_authorization_successful successful not_charged preorder_concluded_unsuccessfully], :do => :queue_product_cache_invalidation
     after_transition any => %i[successful preorder_authorization_successful], :do => :touch_variants_if_limited_quantity, unless: lambda { |purchase|
       purchase.not_charged_and_not_free_trial?
@@ -3646,13 +3645,7 @@ class Purchase < ApplicationRecord
       PostToPingEndpointsWorker.perform_in(5.seconds, id, url_parameters, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
 
-    def score_product
-      ScoreProductWorker.perform_in(5.seconds, link.id) if run_risk_checks?
-    end
 
-    def check_purchase_heuristics
-      CheckPurchaseHeuristicsWorker.perform_in(5.seconds, id) if run_risk_checks?
-    end
 
     def log_transition
       logger.info "Purchase: purchase ID #{id} transitioned to #{purchase_state}"
@@ -3771,10 +3764,6 @@ class Purchase < ApplicationRecord
     def downcase_email
       return if email.blank?
       self.email = email.downcase
-    end
-
-    def run_risk_checks?
-      price_cents > 0 && !not_charged? && charged_using_gumroad_merchant_account?
     end
 
     def all_workflows

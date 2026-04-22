@@ -2547,17 +2547,6 @@ describe Purchase, :vcr do
     end
   end
 
-  describe "check purchase heuristics after purchase" do
-    it "queue up job to assess risk of purchase after purchase" do
-      user = create(:user)
-      product = create(:product, user:)
-      purchase = create(:purchase, link: product, card_country: "US", ip_address: "110.227.155.107")
-      purchase.send(:check_purchase_heuristics)
-
-      expect(CheckPurchaseHeuristicsWorker).to have_enqueued_sidekiq_job(purchase.id)
-    end
-  end
-
   describe "#purchase_info" do
     let(:link) { create(:product_with_pdf_file) }
     let(:purchase) { create(:purchase, link:) }
