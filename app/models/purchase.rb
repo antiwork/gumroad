@@ -385,9 +385,11 @@ class Purchase < ApplicationRecord
     original_sub_bit = flag_mapping["flags"][:is_original_subscription_purchase]
     gift_receiver_bit = flag_mapping["flags"][:is_gift_receiver_purchase]
     archived_original_bit = flag_mapping["flags"][:is_archived_original_subscription_purchase]
+    gift_sender_bit = flag_mapping["flags"][:is_gift_sender_purchase]
 
     return false if raw_flags & additional_contribution_bit != 0
     return false if raw_flags & archived_original_bit != 0
+    return false if raw_flags & gift_sender_bit != 0
 
     if subscription_id.present?
       is_original = raw_flags & original_sub_bit != 0
