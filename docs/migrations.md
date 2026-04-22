@@ -2,7 +2,7 @@
 
 ## Frozen tables
 
-**Do not write migrations that alter the schema of `users` or `purchases`.** These tables are too large for online schema changes. Even with PT-OSC, column additions/removals/renames block deployments and can cause extended downtime.
+**Do not write migrations that alter the schema of `users` or `purchases`.** These tables are too large for online schema changes. Even with PT-OSC, column additions/removals/renames block deployments.
 
 If you need new data associated with users or purchases, create a separate table (e.g., `user_settings`, `purchase_metadata`) and join to it.
 
