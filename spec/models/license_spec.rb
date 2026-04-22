@@ -84,7 +84,7 @@ describe License do
     let!(:purchase) { create(:purchase, :with_license) }
     let!(:license) { purchase.license }
 
-    it "enqueues a purchase re-index when uses changes" do
+    it "enqueues a purchase re-index when uses changes via increment!" do
       expect(ElasticsearchIndexerWorker).to receive(:perform_in).with(
         2.seconds,
         "update",
@@ -94,7 +94,7 @@ describe License do
           "fields" => ["license_uses"]
         )
       )
-      license.update!(uses: license.uses + 1)
+      license.increment!(:uses)
     end
 
     it "enqueues a purchase re-index when serial changes" do
