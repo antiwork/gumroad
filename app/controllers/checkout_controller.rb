@@ -14,7 +14,14 @@ class CheckoutController < ApplicationController
   end
 
   def update
-    if update_permitted_params[:items].length > Cart::MAX_ALLOWED_CART_PRODUCTS
+    # Guard against the rare case where `cart` is sent as a scalar (e.g. `cart=foo`);
+    # `params.require(:cart)` would return the String unchanged and `.permit` would raise.
+    unless params[:cart].respond_to?(:permit)
+      return redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
+    end
+
+    items = update_permitted_params[:items].to_a
+    if items.length > Cart::MAX_ALLOWED_CART_PRODUCTS
       return redirect_to checkout_path, alert: "You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart."
     end
 
@@ -26,10 +33,10 @@ class CheckoutController < ApplicationController
       cart.email = update_permitted_params[:email].presence || logged_in_user&.email
       cart.return_url = update_permitted_params[:returnUrl]
       cart.reject_ppp_discount = update_permitted_params[:rejectPppDiscount] || false
-      cart.discount_codes = update_permitted_params[:discountCodes].map { { code: _1[:code], fromUrl: _1[:fromUrl] } }
+      cart.discount_codes = update_permitted_params[:discountCodes].to_a.map { { code: _1[:code], fromUrl: _1[:fromUrl] } }
       cart.save!
 
-      updated_cart_products = update_permitted_params[:items].map do |item|
+      updated_cart_products = items.map do |item|
         product = Link.find_by_external_id!(item[:product][:id])
         option = item[:option_id].present? ? BaseVariant.find_by_external_id(item[:option_id]) : nil
 
@@ -62,7 +69,7 @@ class CheckoutController < ApplicationController
 
     redirect_to checkout_path, status: :see_other
   rescue ActiveRecord::RecordInvalid => e
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     Rails.logger.error(e.full_message) if Rails.env.development?
     redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."
   end
@@ -99,6 +106,8 @@ class CheckoutController < ApplicationController
       true
     end
 
+    RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS = 10
+
     def recommended_products
       args = {
         purchaser: logged_in_user,
@@ -108,16 +117,21 @@ class CheckoutController < ApplicationController
         recommendation_type: params[:recommendation_type],
       }
 
-      RecommendedProducts::CheckoutService.fetch_for_cart(**args).map do |product_info|
-        ProductPresenter.card_for_web(
-          product: product_info.product,
-          request:,
-          recommended_by: product_info.recommended_by,
-          target: product_info.target,
-          recommender_model_name: product_info.recommender_model_name,
-          affiliate_id: product_info.affiliate_id,
-        )
+      Timeout.timeout(RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS) do
+        RecommendedProducts::CheckoutService.fetch_for_cart(**args).map do |product_info|
+          ProductPresenter.card_for_web(
+            product: product_info.product,
+            request:,
+            recommended_by: product_info.recommended_by,
+            target: product_info.target,
+            recommender_model_name: product_info.recommender_model_name,
+            affiliate_id: product_info.affiliate_id,
+          )
+        end
       end
+    rescue Timeout::Error
+      Rails.logger.warn("[CheckoutController] Recommended products timed out after #{RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS}s")
+      []
     end
 
     def update_permitted_params
@@ -126,7 +140,7 @@ class CheckoutController < ApplicationController
         discountCodes: [:code, :fromUrl],
         items: [
           :option_id, :affiliate_id, :price, :quantity, :recurrence, :recommended_by, :rent,
-          :referrer, :recommender_model_name, :call_start_time, :pay_in_installments,
+          :referrer, :recommender_model_name, :call_start_time, :pay_in_installments, :force_new_subscription,
           url_parameters: {}, product: [:id], accepted_offer: [:id, :original_product_id, :original_variant_id],
         ]
       )

@@ -167,6 +167,31 @@ describe CreatorAnalytics::Sales do
   end
 end
 
+describe CreatorAnalytics::Sales, "timezone with DST gap at midnight" do
+  context "when user timezone has a DST transition at midnight (e.g. Tehran)" do
+    it "filters and buckets sales consistently on March 22, 2026" do
+      user = create(:user, timezone: "Tehran")
+      product = create(:product, user: user)
+
+      Time.use_zone(user.timezone) do
+        create(:free_purchase, link: product, created_at: Time.zone.parse("2026-03-21 23:30:00").utc, referrer: "https://google.com")
+        create(:free_purchase, link: product, created_at: Time.zone.parse("2026-03-22 01:15:00").utc, referrer: "https://google.com")
+        create(:free_purchase, link: product, created_at: Time.zone.parse("2026-03-23 00:15:00").utc, referrer: "https://t.co")
+      end
+      index_model_records(Purchase)
+
+      service = described_class.new(
+        user: user,
+        products: [product],
+        dates: [Date.new(2026, 3, 22)]
+      )
+
+      expect(service.by_product_and_date).to eq({ [product.id, "2026-03-22"] => { count: 1, total: 0 } })
+      expect(service.by_product_and_referrer_and_date).to eq({ [product.id, "google.com", "2026-03-22"] => { count: 1, total: 0 } })
+    end
+  end
+end
+
 describe CreatorAnalytics::Sales, "DST handling" do
   context "when sale occurs near midnight during DST" do
     it "correctly attributes sale to the right day" do

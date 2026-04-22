@@ -1,3 +1,4 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import {
@@ -7,7 +8,6 @@ import {
   parseCurrencyUnitStringToCents,
 } from "$app/utils/currency";
 
-import { Icon } from "$app/components/Icons";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -21,6 +21,7 @@ export const PriceInput = React.forwardRef<
     cents: number | null;
     onChange?: (cents: number | null) => void;
     id?: string;
+    name?: string;
     placeholder?: string;
     hasError?: boolean;
     ariaLabel?: string;
@@ -36,6 +37,7 @@ export const PriceInput = React.forwardRef<
       cents,
       onChange,
       id,
+      name,
       placeholder,
       hasError,
       ariaLabel,
@@ -76,7 +78,7 @@ export const PriceInput = React.forwardRef<
               }))}
               className="absolute inset-0 z-1 m-0! cursor-pointer opacity-0"
             />
-            <Icon name="outline-cheveron-down" className="ml-auto" />
+            <ChevronDown className="ml-auto size-5" />
           </Pill>
         ) : (
           <Pill className="-ml-2 shrink-0">{getLongCurrencySymbol(currencyCode)}</Pill>
@@ -85,6 +87,7 @@ export const PriceInput = React.forwardRef<
           type="text"
           inputMode="decimal"
           id={id}
+          name={name}
           value={value}
           onChange={(evt) => handleChange(evt.target.value)}
           maxLength={10}

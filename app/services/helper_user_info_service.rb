@@ -8,12 +8,26 @@ class HelperUserInfoService
     @recent_purchase_period = recent_purchase_period
   end
 
+  STRUCTURED_COMMENTS_LIMIT = 50
+  FALLBACK_AUTHOR_NAME = "System"
+
+  def self.serialize_comment(comment)
+    {
+      id: comment.external_id,
+      author_name: comment.author_name.presence || comment.author&.name || FALLBACK_AUTHOR_NAME,
+      content: comment.content,
+      comment_type: comment.comment_type,
+      created_at: comment.created_at.iso8601
+    }
+  end
+
   def customer_info
     {
       **user_details,
+      comments: structured_comments,
+      can_add_comment: primary_email_user.present?,
       metadata: {
         **user_metadata,
-        **seller_comments,
         **sales_info,
         **recent_purchase_info,
       }
@@ -21,6 +35,18 @@ class HelperUserInfoService
   end
 
   private
+    def primary_email_user
+      return @_primary_email_user if defined?(@_primary_email_user)
+      @_primary_email_user = (user if user&.email == @email && !user&.deleted?)
+    end
+
+    def structured_comments
+      return [] unless primary_email_user
+      primary_email_user.comments.includes(:author).order(created_at: :desc).limit(STRUCTURED_COMMENTS_LIMIT).map do |comment|
+        self.class.serialize_comment(comment)
+      end
+    end
+
     def user_details
       return {} unless user
 
@@ -76,26 +102,6 @@ class HelperUserInfoService
         "Account Status" => user.suspended? ? "Suspended" : "Active",
         "Country" => user.country,
       }.compact_blank
-    end
-
-    def seller_comments
-      return {} unless user
-      comments = user.comments.order(:created_at)
-
-      formatted_comments = comments.map do |comment|
-        case comment.comment_type
-        when Comment::COMMENT_TYPE_PAYOUT_NOTE
-          "Payout Note: #{comment.content}" if comment.author_id == GUMROAD_ADMIN_ID
-        when Comment::COMMENT_TYPE_SUSPENSION_NOTE
-          "Suspension Note: #{comment.content}" if user.suspended?
-        when *Comment::RISK_STATE_COMMENT_TYPES
-          "Risk Note: #{comment.content}"
-        else
-          "Comment: #{comment.content}"
-        end
-      end
-
-      { "Comments" => formatted_comments } if formatted_comments.present?
     end
 
     def recent_purchase_info

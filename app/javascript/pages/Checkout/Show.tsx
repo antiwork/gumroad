@@ -10,34 +10,38 @@ import { type SavedCreditCard } from "$app/parsers/card";
 import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
 import { isOpenTuple } from "$app/utils/array";
 import { assert } from "$app/utils/assert";
-import { getIsSingleUnitCurrency } from "$app/utils/currency";
+import { formatPriceCentsWithCurrencySymbol, getIsSingleUnitCurrency } from "$app/utils/currency";
 import { isValidEmail } from "$app/utils/email";
 import { calculateFirstInstallmentPaymentPriceCents } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
 import { startTrackingForSeller, trackProductEvent } from "$app/utils/user_analytics";
 
+import { Button } from "$app/components/Button";
 import { Checkout } from "$app/components/Checkout";
 import {
   type CartItem,
   type CartState,
   convertToUSD,
+  CrossSell,
   findCartItem,
   getDiscountedPrice,
-  type ProductToAdd,
-  type CrossSell,
-  type Result,
   newCartState,
+  type ProductToAdd,
+  type Result,
 } from "$app/components/Checkout/cartState";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import {
-  StateContext,
-  createReducer,
-  type Product,
-  loadSurcharges,
-  requiresReusablePaymentMethod,
-  type Gift,
-  getCustomFieldKey,
+  computeTip,
   computeTipForPrice,
+  createReducer,
+  getCustomFieldKey,
+  getTotalPriceFromProducts,
+  type Gift,
+  isTipSuspiciouslyLarge,
+  loadSurcharges,
+  type Product,
+  requiresReusablePaymentMethod,
+  StateContext,
 } from "$app/components/Checkout/payment";
 import { Receipt } from "$app/components/Checkout/Receipt";
 import { TemporaryLibrary } from "$app/components/Checkout/TemporaryLibrary";
@@ -66,6 +70,7 @@ const GUMROAD_PARAMS = [
   "recommender_model_name",
   "call_start_time",
   "pay_in_installments",
+  "force_new_subscription",
 ];
 
 type CheckoutIndexPageProps = {
@@ -357,8 +362,15 @@ const CheckoutIndexPage = () => {
     });
   }
 
+  const [showLargeTipConfirmation, setShowLargeTipConfirmation] = React.useState(false);
+  const largeTipConfirmedRef = React.useRef(false);
+
   async function pay() {
     if (state.status.type !== "finished") return;
+    if (isTipSuspiciouslyLarge(state) && !largeTipConfirmedRef.current) {
+      setShowLargeTipConfirmation(true);
+      return;
+    }
     try {
       await trackUserActionEvent("process_payment");
       if (user) {
@@ -446,6 +458,7 @@ const CheckoutIndexPage = () => {
               !cartForm.data.cart.rejectPppDiscount &&
               discounted.discount?.type === "ppp" &&
               item.price !== 0,
+            forceNewSubscription: item.force_new_subscription,
             acceptedOffer: item.accepted_offer ?? null,
             bundleProducts: item.product.bundle_products.map((bundleProduct) => ({
               productId: bundleProduct.product_id,
@@ -558,6 +571,12 @@ const CheckoutIndexPage = () => {
     }
   }
   React.useEffect(() => void pay(), [state.status]);
+  React.useEffect(() => {
+    if (largeTipConfirmedRef.current && state.status.type === "finished") void pay();
+  }, [showLargeTipConfirmation]);
+  React.useEffect(() => {
+    largeTipConfirmedRef.current = false;
+  }, [state.tip]);
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
     cartForm.patch(Routes.checkout_path(), {
@@ -608,6 +627,7 @@ const CheckoutIndexPage = () => {
               referrer: originalCartItem.referrer,
               recommender_model_name: null,
               pay_in_installments: originalCartItem.pay_in_installments,
+              force_new_subscription: originalCartItem.force_new_subscription,
               accepted_offer: {
                 id: currentOffer.id,
                 original_product_id: originalCartItem.product.id,
@@ -673,6 +693,49 @@ const CheckoutIndexPage = () => {
           )}
         </Modal>
       ) : null}
+      <Modal
+        open={showLargeTipConfirmation}
+        onClose={() => {
+          setShowLargeTipConfirmation(false);
+          dispatch({ type: "cancel" });
+        }}
+        title="Confirm tip amount"
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                setShowLargeTipConfirmation(false);
+                dispatch({ type: "cancel" });
+              }}
+            >
+              Edit tip
+            </Button>
+            <Button
+              color="primary"
+              onClick={() => {
+                largeTipConfirmedRef.current = true;
+                setShowLargeTipConfirmation(false);
+              }}
+            >
+              Yes, leave tip
+            </Button>
+          </>
+        }
+      >
+        <p>
+          You're about to leave a tip of{" "}
+          {formatPriceCentsWithCurrencySymbol("usd", computeTip(state), {
+            symbolFormat: "short",
+            noCentsIfWhole: true,
+          })}{" "}
+          on a{" "}
+          {formatPriceCentsWithCurrencySymbol("usd", getTotalPriceFromProducts(state), {
+            symbolFormat: "short",
+            noCentsIfWhole: true,
+          })}{" "}
+          purchase. Are you sure?
+        </p>
+      </Modal>
     </StateContext.Provider>
   );
 };

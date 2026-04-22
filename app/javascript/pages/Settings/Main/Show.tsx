@@ -362,7 +362,6 @@ export default function MainPage() {
                       maxLength={3000}
                       rows={10}
                       value={form.data.user.seller_refund_policy.fine_print || ""}
-                      placeholder="Describe your refund policy"
                       disabled={isFormDisabled}
                       onChange={(e) =>
                         updateUserSettings({
@@ -565,7 +564,9 @@ const InvalidateActiveSessionsSection = () => {
         >
           Sign out from all active sessions
         </button>
-        <small>You will be signed out from all your active sessions including this session.</small>
+        <FieldsetDescription>
+          You will be signed out from all your active sessions including this session.
+        </FieldsetDescription>
       </Fieldset>
       {isConfirmationDialogOpen ? (
         <Modal

@@ -166,6 +166,20 @@ describe DashboardController, type: :controller, inertia: true do
       end
     end
 
+    context "when seller has dismissed the getting started checklist" do
+      before do
+        seller.update!(has_dismissed_getting_started_checklist: true)
+      end
+
+      it "returns only first_product in getting started stats and marks checklist as dismissed" do
+        get :index
+
+        expect(response).to be_successful
+        expect(inertia.props[:creator_home][:getting_started_stats]).to eq({ first_product: false })
+        expect(inertia.props[:creator_home][:getting_started_dismissed]).to be(true)
+      end
+    end
+
     context "when seller is suspended for TOS" do
       let(:admin_user) { create(:user) }
       let!(:product) { create(:product, user: seller) }
@@ -248,6 +262,30 @@ describe DashboardController, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to eq(true)
       expect(response.parsed_body["value"]).to eq("$1,234.56")
+    end
+  end
+
+  describe "POST dismiss_getting_started_checklist" do
+    it_behaves_like "authorize called for action", :post, :dismiss_getting_started_checklist do
+      let(:record) { :dashboard }
+    end
+
+    it "dismisses the getting started checklist" do
+      expect(seller.has_dismissed_getting_started_checklist?).to be(false)
+
+      post :dismiss_getting_started_checklist
+
+      expect(response).to have_http_status(:ok)
+      expect(seller.reload.has_dismissed_getting_started_checklist?).to be(true)
+    end
+
+    it "succeeds when checklist is already dismissed" do
+      seller.update!(has_dismissed_getting_started_checklist: true)
+
+      post :dismiss_getting_started_checklist
+
+      expect(response).to have_http_status(:ok)
+      expect(seller.reload.has_dismissed_getting_started_checklist?).to be(true)
     end
   end
 

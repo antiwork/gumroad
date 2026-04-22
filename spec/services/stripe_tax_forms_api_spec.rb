@@ -15,7 +15,7 @@ describe StripeTaxFormsApi, vcr: { cassette_name: "StripeTaxFormsApi/tax_forms" 
       expect(result.keys).to eq([2024, 2023, 2022, 2021, 2020])
 
       tax_form_2024 = result[2024]
-      expect(tax_form_2024.id).to eq("taxform_1")
+      expect(tax_form_2024.id).to eq("taxform_1c")
       expect(tax_form_2024.object).to eq("tax.form")
       expect(tax_form_2024.type).to eq("us_1099_k")
       expect(tax_form_2024.livemode).to be(true)
@@ -31,7 +31,7 @@ describe StripeTaxFormsApi, vcr: { cassette_name: "StripeTaxFormsApi/tax_forms" 
 
     it "returns empty hash on Stripe API error" do
       allow(Stripe).to receive(:raw_request).and_raise(Stripe::APIConnectionError.new("Connection failed"))
-      expect(Bugsnag).to receive(:notify).with(instance_of(Stripe::APIConnectionError))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::APIConnectionError))
 
       result = service.tax_forms_by_year
 
@@ -49,7 +49,7 @@ describe StripeTaxFormsApi, vcr: { cassette_name: "StripeTaxFormsApi/tax_forms" 
       expect(result.path).to include("tax_form_us_1099_k_2024_acct_1234567890")
       expect(result.path).to end_with(".pdf")
       expect(HTTParty).to have_received(:get).with(
-        "https://files.stripe.com/v1/tax/forms/taxform_1/pdf",
+        "https://files.stripe.com/v1/tax/forms/taxform_1c/pdf",
         hash_including(headers: hash_including("Authorization" => /Bearer/))
       )
       result.close
@@ -66,7 +66,7 @@ describe StripeTaxFormsApi, vcr: { cassette_name: "StripeTaxFormsApi/tax_forms" 
 
     it "returns nil when there is an error" do
       allow(HTTParty).to receive(:get).and_raise(HTTParty::Error.new("Connection failed"))
-      expect(Bugsnag).to receive(:notify).with(instance_of(HTTParty::Error))
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(HTTParty::Error))
 
       result = service.download_tax_form
 

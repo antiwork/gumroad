@@ -1,3 +1,4 @@
+import { FileDetail } from "@boxicons/react";
 import { useForm } from "@inertiajs/react";
 import React from "react";
 
@@ -9,7 +10,6 @@ import { assertResponseError } from "$app/utils/request";
 import { Button, NavigationButton } from "$app/components/Button";
 import { EditEmailButton, NewEmailButton } from "$app/components/EmailsPage/Layout";
 import { ViewEmailButton } from "$app/components/EmailsPage/ViewEmailButton";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 
@@ -105,7 +105,7 @@ export const EmailSheetActions = ({ installment, onDelete }: EmailSheetActionsPr
       {installment.send_emails ? <ViewEmailButton installment={installment} /> : null}
       {installment.shown_on_profile ? (
         <NavigationButton href={installment.full_url} target="_blank" rel="noopener noreferrer">
-          <Icon name="file-earmark-medical-fill" />
+          <FileDetail pack="filled" className="size-5" />
           View post
         </NavigationButton>
       ) : null}

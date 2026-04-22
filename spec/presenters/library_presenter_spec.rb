@@ -183,6 +183,63 @@ describe LibraryPresenter do
       end
     end
 
+    context "when the user has a gifted membership purchase" do
+      let(:gifted_product) { create(:membership_product, name: "Gifted Membership", user: creator) }
+      let(:subscription) { create(:subscription, link: gifted_product, user: buyer) }
+      let!(:gift_receiver_purchase) do
+        create(:purchase,
+               :gift_receiver,
+               link: gifted_product,
+               purchaser: buyer,
+               subscription: subscription,
+               is_original_subscription_purchase: false).tap { _1.create_url_redirect! }
+      end
+
+      it "includes gifted membership purchases in the library" do
+        purchases, _ = described_class.new(buyer).library_cards
+
+        gift_purchase_ids = purchases.map { |p| p[:purchase][:id] }
+        expect(gift_purchase_ids).to include(gift_receiver_purchase.external_id)
+      end
+    end
+
+    describe "has_third_party_analytics" do
+      it "detects product-level receipt analytics" do
+        create(:third_party_analytic, user: creator, link: product, location: "receipt", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(true)
+      end
+
+      it "detects product-level analytics with 'all' location" do
+        create(:third_party_analytic, user: creator, link: product, location: "all", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(true)
+      end
+
+      it "detects user-level universal receipt analytics" do
+        create(:third_party_analytic, user: creator, link: nil, location: "receipt", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(true)
+      end
+
+      it "ignores deleted analytics" do
+        create(:third_party_analytic, user: creator, link: product, location: "receipt", analytics_code: "<script>test</script>", deleted_at: 1.day.ago)
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(false)
+      end
+
+      it "ignores analytics for non-receipt locations" do
+        create(:third_party_analytic, user: creator, link: product, location: "product", analytics_code: "<script>test</script>")
+
+        purchases, _ = described_class.new(buyer).library_cards
+        expect(purchases.first[:product][:has_third_party_analytics]).to eq(false)
+      end
+    end
+
     describe "bundle purchase" do
       let(:purchase1) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }
       let(:purchase2) { create(:purchase, purchaser: buyer, link: create(:product, :bundle)) }

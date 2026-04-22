@@ -156,7 +156,7 @@ class ForeignWebhooksController < ApplicationController
       # Compare signatures using secure comparison
       raise "Invalid signature" unless ActiveSupport::SecurityUtils.secure_compare(signature, expected)
     rescue => e
-      Bugsnag.notify("Error verifying Resend webhook: #{e.message}")
+      ErrorNotifier.notify("Error verifying Resend webhook: #{e.message}")
       render json: { success: false }, status: :bad_request
     end
 end

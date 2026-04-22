@@ -2,12 +2,14 @@ import React from "react";
 
 import { ApiResource } from "$app/components/ApiDocumentation/ApiResource";
 import { Authentication } from "$app/components/ApiDocumentation/Authentication";
+import { CreateCover, DeleteCover } from "$app/components/ApiDocumentation/Endpoints/Covers";
 import {
   GetCustomFields,
   CreateCustomField,
   UpdateCustomField,
   DeleteCustomField,
 } from "$app/components/ApiDocumentation/Endpoints/CustomFields";
+import { FilesOverview, PresignFile, CompleteFile, AbortFile, AttachFile } from "$app/components/ApiDocumentation/Endpoints/Files";
 import {
   VerifyLicense,
   EnableLicense,
@@ -22,10 +24,13 @@ import {
   UpdateOfferCode,
   DeleteOfferCode,
 } from "$app/components/ApiDocumentation/Endpoints/OfferCodes";
+import { GetEarnings } from "$app/components/ApiDocumentation/Endpoints/Earnings";
 import {GetPayouts, GetPayout, GetUpcomingPayouts} from "$app/components/ApiDocumentation/Endpoints/Payouts";
 import {
   GetProducts,
   GetProduct,
+  CreateProduct,
+  UpdateProduct,
   DeleteProduct,
   EnableProduct,
   DisableProduct,
@@ -43,6 +48,7 @@ import {
   ResendReceipt,
 } from "$app/components/ApiDocumentation/Endpoints/Sales";
 import { GetSubscribers, GetSubscriber } from "$app/components/ApiDocumentation/Endpoints/Subscribers";
+import { GetTaxForms, DownloadTaxForm } from "$app/components/ApiDocumentation/Endpoints/TaxForms";
 import { GetUser } from "$app/components/ApiDocumentation/Endpoints/User";
 import {
   CreateVariantCategory,
@@ -93,9 +99,24 @@ export default function Api() {
               <ApiResource name="Products" id="products">
                 <GetProducts />
                 <GetProduct />
+                <CreateProduct />
+                <UpdateProduct />
                 <DeleteProduct />
                 <EnableProduct />
                 <DisableProduct />
+              </ApiResource>
+
+              <ApiResource name="Files" id="files">
+                <FilesOverview />
+                <PresignFile />
+                <CompleteFile />
+                <AbortFile />
+                <AttachFile />
+              </ApiResource>
+
+              <ApiResource name="Covers" id="covers">
+                <CreateCover />
+                <DeleteCover />
               </ApiResource>
 
               <ApiResource name="Variant categories" id="variant-categories">
@@ -161,6 +182,15 @@ export default function Api() {
                 <GetPayouts />
                 <GetPayout />
                 <GetUpcomingPayouts />
+              </ApiResource>
+
+              <ApiResource name="Tax forms" id="tax-forms">
+                <GetTaxForms />
+                <DownloadTaxForm />
+              </ApiResource>
+
+              <ApiResource name="Earnings" id="earnings">
+                <GetEarnings />
               </ApiResource>
             </article>
           </div>

@@ -16,21 +16,41 @@ class TaxCenterPresenter
     }
   end
 
+  def gross_cents
+    calculate_gross
+  end
+
+  def fees_cents
+    calculate_fees
+  end
+
+  def taxes_cents
+    calculate_taxes
+  end
+
+  def affiliate_credit_cents
+    calculate_affiliate_credit
+  end
+
+  def net_cents
+    calculate_net
+  end
+
   private
     attr_reader :seller, :year
 
     def fetch_documents
       documents = []
 
-      tax_form_type = seller.user_tax_forms.for_year(year).first&.tax_form_type
-      return documents unless tax_form_type
+      tax_form = seller.user_tax_forms.for_year(year).first
+      return documents unless tax_form
 
-      documents << Rails.cache.fetch("tax_form_data_#{tax_form_type}_#{year}_#{seller.id}") do
+      cached_data = Rails.cache.fetch("tax_form_data_#{tax_form.tax_form_type}_#{year}_#{seller.id}") do
         {
-          document: format_tax_form_type_for_display(tax_form_type),
+          document: format_tax_form_type_for_display(tax_form.tax_form_type),
           type: "IRS form",
           year:,
-          form_type: tax_form_type,
+          form_type: tax_form.tax_form_type,
           gross: format_cents_as_dollars(calculate_gross),
           fees: format_cents_as_dollars(calculate_fees),
           taxes: format_cents_as_dollars(calculate_taxes),
@@ -38,6 +58,10 @@ class TaxCenterPresenter
           net: format_cents_as_dollars(calculate_net)
         }
       end
+
+      documents << cached_data.merge(
+        filed_at: tax_form.filed? ? Time.at(tax_form.filed_at).strftime("%B %-d, %Y") : nil
+      )
 
       documents
     end
@@ -75,10 +99,7 @@ class TaxCenterPresenter
     end
 
     def available_years
-      start_year = seller.created_at.year
-      end_year = Time.current.year - 1
-
-      (start_year..end_year).to_a.reverse
+      seller.tax_form_available_years.reverse
     end
 
     def format_cents_as_dollars(cents)

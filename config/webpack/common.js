@@ -135,15 +135,6 @@ const config = {
     },
   },
 
-  // Remove when migrated to React 18
-  // Refer https://github.com/shakacode/react_on_rails/pull/1460
-  ignoreWarnings: [
-    {
-      module: /react-on-rails\/node_package\/lib\/reactHydrateOrRender.js/u,
-      message: /Can't resolve 'react-dom\/client'/u,
-    },
-  ],
-
   optimization: {
     // Create a webpack runtime chunk to improve caching.
     // This is basically code which is otherwise embedded in every entry file by Webpack.

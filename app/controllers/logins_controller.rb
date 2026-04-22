@@ -5,7 +5,7 @@ class LoginsController < Devise::SessionsController
 
   include PageMeta::Base
 
-  skip_before_action :check_suspended, only: %i[create destroy]
+  skip_before_action :check_suspended
   before_action :block_json_request, only: :new
   after_action :clear_dashboard_preference, only: :destroy
   before_action :reset_impersonated_user, only: :destroy
@@ -22,13 +22,15 @@ class LoginsController < Devise::SessionsController
 
     set_meta_tag(title: "Log In")
     auth_presenter = AuthPresenter.new(params:, application: @application)
-    render inertia: "Logins/New", props: auth_presenter.login_props
+    render inertia: "Logins/New", props: auth_presenter.login_props.merge(is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?)
   end
 
   def create
-    site_key = GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
-    if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key)
-      return redirect_with_login_error("Sorry, we could not verify the CAPTCHA. Please try again.")
+    unless Feature.active?(:disable_login_recaptcha)
+      site_key = GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY")
+      if !(Rails.env.development? && site_key.blank?) && !valid_recaptcha_response?(site_key: site_key)
+        return redirect_with_login_error("Sorry, we could not verify the CAPTCHA. Please try again.")
+      end
     end
 
     if params["user"].instance_of?(ActionController::Parameters)
@@ -43,19 +45,15 @@ class LoginsController < Devise::SessionsController
 
     return redirect_with_login_error("You cannot log in because your account was permanently deleted. Please sign up for a new account to start selling!") if @user.deleted?
 
-    if @user.suspended_for_fraud?
-      check_suspended
-    else
-      @user.remember_me = true # Always "remember" user sessions
+    @user.remember_me = true # Always "remember" user sessions
 
-      sign_in_or_prepare_for_two_factor_auth(@user)
+    sign_in_or_prepare_for_two_factor_auth(@user)
 
-      if @user.respond_to?(:pwned?) && @user.pwned?
-        flash[:warning] = "Your password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. We strongly recommend you change your password everywhere you have used it."
-      end
-
-      redirect_to login_path_for(@user), allow_other_host: true
+    if @user.respond_to?(:pwned?) && @user.pwned?
+      flash[:warning] = "Your password has previously appeared in a data breach as per haveibeenpwned.com and should never be used. We strongly recommend you change your password everywhere you have used it."
     end
+
+    redirect_to login_path_for(@user), allow_other_host: true
   end
 
   private

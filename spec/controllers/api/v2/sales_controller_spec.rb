@@ -149,6 +149,33 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "filters sales by customer name (case-insensitive, partial match) when name is specified" do
+        matching_purchase = create(:purchase, purchaser: @purchaser, link: @product, full_name: "Ada Lovelace")
+        create(:purchase, purchaser: @purchaser, link: @product, full_name: "Grace Hopper")
+
+        get :index, params: @params.merge(name: "ada")
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          sales: [matching_purchase.as_json(version: 2)]
+        }.as_json)
+      end
+
+      it "filters sales by license key when license_key is specified" do
+        @product.update!(is_licensed: true)
+        matching_purchase = create(:purchase, purchaser: @purchaser, link: @product)
+        matching_purchase.create_license!
+        other_purchase = create(:purchase, purchaser: @purchaser, link: @product)
+        other_purchase.create_license!
+
+        get :index, params: @params.merge(license_key: matching_purchase.license.serial.downcase)
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          sales: [matching_purchase.as_json(version: 2)]
+        }.as_json)
+      end
+
       it "returns a 400 error if date format is incorrect" do
         @params.merge!(after: "394293")
         get :index, params: @params
@@ -192,7 +219,7 @@ describe Api::V2::SalesController do
       end
 
       it "returns empty result set when filtered by non-existing purchase ID" do
-        get :index, params: @params.merge(order_id: ObfuscateIds.decrypt_numeric(0))
+        get :index, params: @params.merge(order_id: 0)
 
         expect(response.parsed_body).to eq({
           success: true,
@@ -244,6 +271,12 @@ describe Api::V2::SalesController do
         expect(response.code).to eq "403"
       end
     end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+      get :index, params: { access_token: token.token }
+      expect(response).to be_successful
+    end
   end
 
   describe "GET 'show'" do
@@ -266,6 +299,27 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "includes invoice_url in the response" do
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]["invoice_url"]).to eq(
+          Rails.application.routes.url_helpers.new_purchase_invoice_url(
+            @purchase.external_id,
+            email: @purchase.email,
+            host: UrlService.domain_with_protocol
+          )
+        )
+      end
+
+      it "includes license_uses in the response for a purchase with a license key" do
+        @product.update!(is_licensed: true)
+        purchase_with_license = create(:purchase, :with_license, purchaser: @purchaser, link: @product)
+        purchase_with_license.license.update!(uses: 5)
+
+        get :show, params: @params.merge(id: purchase_with_license.external_id)
+        expect(response.parsed_body["sale"]["license_uses"]).to eq 5
+      end
+
       it "does not return a sale that does not belong to the seller" do
         @params.merge!(id: @purchase_by_seller.external_id)
         get :show, params: @params
@@ -286,6 +340,12 @@ describe Api::V2::SalesController do
         get :show, params: @params
         expect(response.code).to eq "403"
       end
+    end
+
+    it "grants access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+      get :show, params: { id: @purchase.external_id, access_token: token.token }
+      expect(response).to be_successful
     end
   end
 
@@ -521,6 +581,40 @@ describe Api::V2::SalesController do
           }.as_json)
         end
 
+        context "when product is sold in a single unit currency type" do
+          before do
+            @product.update!(price_currency_type: "jpy", price_cents: 1000)
+            @jpy_purchase = create(:purchase_in_progress,
+                                   link: @product,
+                                   seller: @product.user,
+                                   price_cents: 914,
+                                   total_transaction_cents: 100,
+                                   fee_cents: 54,
+                                   displayed_price_cents: 1000,
+                                   displayed_price_currency_type: "jpy",
+                                   rate_converted_to_usd: "109.383",
+                                   chargeable: create(:chargeable))
+            @jpy_purchase.process!
+            @jpy_purchase.mark_successful!
+          end
+
+          it "does not divide by 100 for JPY (unit_scaling_factor is 1)" do
+            expect_any_instance_of(Purchase).to receive(:refund!).with(refunding_user_id: @seller.id, amount: 500.0).and_return(true)
+
+            put :refund, params: @params.merge(id: @jpy_purchase.external_id, amount_cents: 500)
+
+            expect(response.parsed_body["success"]).to eq true
+          end
+
+          it "divides by 100 for USD purchases" do
+            expect_any_instance_of(Purchase).to receive(:refund!).with(refunding_user_id: @seller.id, amount: 50.50).and_return(true)
+
+            put :refund, params: @params.merge(id: @purchase.external_id, amount_cents: 5050)
+
+            expect(response.parsed_body["success"]).to eq true
+          end
+        end
+
         it "does nothing if refund amount is more than the available balance" do
           allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(99_99)
 
@@ -560,7 +654,7 @@ describe Api::V2::SalesController do
 
         expect(response.parsed_body).to eq({
           success: false,
-          message: "The sale was unable to be modified."
+          message: Purchase::Refundable::ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
         }.as_json)
       end
 
@@ -606,12 +700,12 @@ describe Api::V2::SalesController do
       context "when request for a full refund" do
         it "refunds a sale fully" do
           expect(@purchase.price_cents).to eq 100_00
-          expect(@purchase.refunded?).to be_falsey
+          expect(@purchase.refunded?).to be false
 
           put :refund, params: @params
 
           @purchase.reload
-          expect(@purchase.refunded?).to be_truthy
+          expect(@purchase.refunded?).to be true
           expect(@purchase.refunds.last.refunding_user_id).to eq @product.user.id
 
 

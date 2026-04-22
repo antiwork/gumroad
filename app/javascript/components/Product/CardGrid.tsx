@@ -1,20 +1,29 @@
+import { Archive } from "@boxicons/react";
 import * as React from "react";
 
 import { getSearchResults, ProductFilter, SearchRequest, SearchResults } from "$app/data/search";
-import { SORT_KEYS, PROFILE_SORT_KEYS } from "$app/parsers/product";
+import { PROFILE_SORT_KEYS, SORT_KEYS } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, getShortCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
+import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Card as UICard, CardContent } from "$app/components/ui/Card";
+import { Skeleton } from "$app/components/Skeleton";
+import { CardContent, Card as UICard } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Radio } from "$app/components/ui/Radio";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
 
@@ -35,12 +44,14 @@ export type State = {
   params: SearchRequest;
   results: SearchResults | null;
   offset?: number | undefined;
+  loading?: boolean;
 };
 
 export type Action =
   | { type: "set-params"; params: SearchRequest }
   | { type: "set-results"; results: SearchResults }
-  | { type: "load-more" };
+  | { type: "load-more" }
+  | { type: "load-error" };
 
 export const useSearchReducer = (initial: Omit<State, "offset">) => {
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
@@ -53,10 +64,12 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             ...action.params,
             taxonomy: action.params.taxonomy === "discover" ? undefined : action.params.taxonomy,
           };
-          return { params, results: null, offset: action.params.from };
+          return { params, results: null, offset: action.params.from, loading: false };
         }
         case "set-results":
-          return { ...state, results: action.results };
+          return { ...state, results: action.results, loading: false };
+        case "load-error":
+          return { ...state, loading: false };
         case "load-more":
           if (
             !state.results ||
@@ -66,6 +79,7 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             return state;
           return {
             ...state,
+            loading: true,
             params: { ...state.params, from: (state.offset ?? 1) + state.results.products.length },
           };
       }
@@ -86,12 +100,14 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
               ? results
               : { ...results, products: [...state.results.products, ...results.products] },
         });
-        activeRequest.current = null;
       } catch (e) {
         if (!(e instanceof AbortError)) {
           assertResponseError(e);
           showAlert("Something went wrong. Please try refreshing the page.", "error");
         }
+        dispatch({ type: "load-error" });
+      } finally {
+        activeRequest.current = null;
       }
     }),
     [state.params],
@@ -128,10 +144,10 @@ const FilterCheckboxes = ({
   return (
     <>
       {(showingAll ? filters : filters.slice(0, 5)).map((option) => (
-        <label key={option.key}>
+        <Label key={option.key} className="w-full">
           {option.key} ({option.doc_count})
-          <input
-            type="checkbox"
+          <Checkbox
+            wrapperClassName="ml-auto"
             checked={selection.includes(option.key)}
             disabled={disabled}
             onChange={() =>
@@ -142,7 +158,7 @@ const FilterCheckboxes = ({
               )
             }
           />
-        </label>
+        </Label>
       ))}
       {filters.length > 5 && !showingAll ? (
         <button className="cursor-pointer underline all-unset" onClick={() => setShowingAll(true)}>
@@ -251,39 +267,43 @@ export const CardGrid = ({
           {prependFilters}
           {hideSort ? null : (
             <CardContent asChild details>
-              <details>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Sort by</summary>
-                <fieldset role="group">
+              <Details>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  Sort by
+                </DetailsToggle>
+                <Fieldset role="group">
                   {(onProfile ? PROFILE_SORT_KEYS : SORT_KEYS).map((key) => (
-                    <label key={key}>
+                    <Label key={key} className="w-full">
                       {SORT_BY_LABELS[key]}
-                      <input
-                        type="radio"
+                      <Radio
+                        wrapperClassName="ml-auto"
                         disabled={disableFilters}
                         name={`${uid}-sortBy`}
                         checked={(searchParams.sort ?? defaults.sort) === key}
                         onChange={() => updateParams({ sort: key })}
                       />
-                    </label>
+                    </Label>
                   ))}
-                </fieldset>
-              </details>
+                </Fieldset>
+              </Details>
             </CardContent>
           )}
           {results?.tags_data.length || searchParams.tags?.length || tagsOpen ? (
             <CardContent asChild details>
-              <details onToggle={() => setTagsOpen(!tagsOpen)}>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Tags</summary>
-                <fieldset role="group">
-                  <label>
+              <Details open={tagsOpen} onToggle={setTagsOpen}>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  Tags
+                </DetailsToggle>
+                <Fieldset role="group">
+                  <Label className="w-full">
                     All Products
-                    <input
-                      type="checkbox"
+                    <Checkbox
+                      wrapperClassName="ml-auto"
                       checked={!searchParams.tags?.length}
                       disabled={disableFilters || !searchParams.tags?.length}
                       onChange={() => updateParams({ tags: undefined })}
                     />
-                  </label>
+                  </Label>
                   {results ? (
                     <FilterCheckboxes
                       filters={concatFoundAndNotFound(results.tags_data, searchParams.tags)}
@@ -292,15 +312,17 @@ export const CardGrid = ({
                       disabled={disableFilters ?? false}
                     />
                   ) : null}
-                </fieldset>
-              </details>
+                </Fieldset>
+              </Details>
             </CardContent>
           ) : null}
           {results?.filetypes_data.length || searchParams.filetypes?.length || filetypesOpen ? (
             <CardContent asChild details>
-              <details onToggle={() => setFiletypesOpen(!filetypesOpen)}>
-                <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Contains</summary>
-                <fieldset role="group">
+              <Details open={filetypesOpen} onToggle={setFiletypesOpen}>
+                <DetailsToggle chevronPosition="right" className="grow">
+                  Contains
+                </DetailsToggle>
+                <Fieldset role="group">
                   {results ? (
                     <FilterCheckboxes
                       filters={concatFoundAndNotFound(results.filetypes_data, searchParams.filetypes)}
@@ -309,13 +331,15 @@ export const CardGrid = ({
                       disabled={disableFilters ?? false}
                     />
                   ) : null}
-                </fieldset>
-              </details>
+                </Fieldset>
+              </Details>
             </CardContent>
           ) : null}
           <CardContent asChild details>
-            <details>
-              <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Price</summary>
+            <Details>
+              <DetailsToggle chevronPosition="right" className="grow">
+                Price
+              </DetailsToggle>
               <div
                 style={{
                   display: "grid",
@@ -324,11 +348,11 @@ export const CardGrid = ({
                   gap: "var(--spacer-3)",
                 }}
               >
-                <fieldset>
-                  <legend>
-                    <label htmlFor={minPriceUid}>Minimum price</label>
-                  </legend>
-                  <div className="input">
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={minPriceUid}>Minimum price</Label>
+                  </FieldsetTitle>
+                  <InputGroup>
                     <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
                     <NumberInput
                       onChange={(value) => {
@@ -337,15 +361,15 @@ export const CardGrid = ({
                       }}
                       value={enteredMinPrice ?? null}
                     >
-                      {(props) => <input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
+                      {(props) => <Input id={minPriceUid} placeholder="0" disabled={disableFilters} {...props} />}
                     </NumberInput>
-                  </div>
-                </fieldset>
-                <fieldset>
-                  <legend>
-                    <label htmlFor={maxPriceUid}>Maximum price</label>
-                  </legend>
-                  <div className="input">
+                  </InputGroup>
+                </Fieldset>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={maxPriceUid}>Maximum price</Label>
+                  </FieldsetTitle>
+                  <InputGroup>
                     <Pill className="-ml-2 shrink-0">{currencySymbol}</Pill>
                     <NumberInput
                       onChange={(value) => {
@@ -354,19 +378,19 @@ export const CardGrid = ({
                       }}
                       value={enteredMaxPrice ?? null}
                     >
-                      {(props) => <input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
+                      {(props) => <Input id={maxPriceUid} placeholder="∞" disabled={disableFilters} {...props} />}
                     </NumberInput>
-                  </div>
-                </fieldset>
+                  </InputGroup>
+                </Fieldset>
               </div>
-            </details>
+            </Details>
           </CardContent>
           {appendFilters}
         </UICard>
       )}
       {results?.products.length === 0 ? (
         <Placeholder>
-          <Icon name="archive-fill" />
+          <Archive pack="filled" className="size-5" />
           No products found
         </Placeholder>
       ) : (
@@ -376,12 +400,14 @@ export const CardGrid = ({
             {results?.products.map((result, idx) => <Card key={result.permalink} product={result} eager={idx < 4} />) ??
               Array(6)
                 .fill(0)
-                .map((_, i) => <div key={i} className="dummy" />)}
+                .map((_, i) => <Skeleton key={i} className="h-75 sm:h-95" />)}
           </ProductCardGrid>
           {pagination === "button" &&
           !((state.results?.total ?? 0) < (state.offset ?? 1) + (state.results?.products.length ?? 0)) ? (
             <div className="mt-8 w-full text-center">
-              <Button onClick={() => dispatchAction({ type: "load-more" })}>Load more</Button>
+              <Button onClick={() => dispatchAction({ type: "load-more" })} disabled={state.loading}>
+                {state.loading ? <LoadingSpinner /> : "Load more"}
+              </Button>
             </div>
           ) : null}
         </div>

@@ -1,8 +1,8 @@
 services:
   db_test:
-    image: quay.io/gumroad/mysql:8.0.32
-    volumes:
-      - mysql_data:/var/lib/mysql
+    image: mysql:8.0.32
+    tmpfs:
+      - /var/lib/mysql:size=512M
     ports:
       - "3306"
     environment:
@@ -12,16 +12,21 @@ services:
       - "--default-authentication-plugin=mysql_native_password"
       - "--collation-server=utf8mb4_unicode_ci"
       - "--character-set-server=utf8mb4"
+      - "--innodb-flush-log-at-trx-commit=0"
+      - "--innodb-doublewrite=0"
+      - "--sync-binlog=0"
+      - "--innodb-flush-method=nosync"
+      - "--skip-log-bin"
 
   redis:
-    image: quay.io/gumroad/redis:7.0.7
+    image: redis:7.0.7
     volumes:
       - redis_data:/data
     ports:
       - "6379"
 
   mongo:
-    image: quay.io/gumroad/mongo:3.6.16
+    image: mongo:3.6.16
     volumes:
       - mongo_data:/data/db
     ports:
@@ -29,20 +34,20 @@ services:
     command: "mongod --smallfiles"
 
   elasticsearch:
-    image: quay.io/gumroad/elasticsearch:7.9.3
+    image: elasticsearch:7.9.3
     ports:
       - "9200"
     environment:
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"
       - "discovery.type=single-node"
 
   memcached:
-    image: quay.io/gumroad/memcached:latest
+    image: memcached:latest
     ports:
       - "11211"
 
   minio:
-    image: quay.io/gumroad/minio:RELEASE.2025-09-07T16-13-09Z
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     ports:
       - "9000"
       - "9001"
@@ -60,7 +65,7 @@ services:
       start_period: 30s
 
   createbuckets:
-    image: quay.io/gumroad/minio-mc:RELEASE.2025-08-13T08-35-41Z
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       minio:
         condition: service_healthy
@@ -80,7 +85,7 @@ services:
       done; exit 0; "
 
   copyfixturefiles:
-    image: quay.io/gumroad/minio-mc:RELEASE.2025-08-13T08-35-41Z
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       createbuckets:
         condition: service_completed_successfully
@@ -112,7 +117,6 @@ services:
       done < /fixture-files-public.txt; echo \"Fixture files copied successfully\"; exit 0; "
 
 volumes:
-  mysql_data:
   redis_data:
   mongo_data:
   minio_data:

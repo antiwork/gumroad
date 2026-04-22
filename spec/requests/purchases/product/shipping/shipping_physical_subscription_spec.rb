@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
-describe("Product Page - Shipping physical subscription", type: :system, js: true, shipping: true) do
+describe("Product Page - Shipping physical subscription", type: :system, js: true, shipping: true, force_vcr_on: true) do
   before do
+    MerchantAccount.find_or_create_by!(user_id: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id) do |ma|
+      ma.charge_processor_alive_at = Time.current
+    end
     @creator = create(:user_with_compliance_info)
     Feature.deactivate_user(:merchant_migration, @creator)
     @sub_link = create(:physical_product, user: @creator, name: "physical subscription", price_cents: 16_00, is_recurring_billing: true, subscription_duration: :monthly, require_shipping: true)
@@ -40,6 +43,9 @@ describe("Product Page - Shipping physical subscription", type: :system, js: tru
     visit "/l/#{@sub_link.unique_permalink}"
     add_to_cart(@sub_link)
     check_out(@sub_link, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+      fill_in "ZIP code", with: "85144"
+      page.execute_script("document.activeElement.blur()")
+      wait_for_ajax
       expect(page).to have_text("Subtotal US$16", normalize_ws: true)
       expect(page).to have_text("Sales tax US$1.07", normalize_ws: true)
       expect(page).to have_text("Shipping rate US$4", normalize_ws: true)

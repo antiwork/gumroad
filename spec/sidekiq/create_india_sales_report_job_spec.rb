@@ -35,7 +35,7 @@ describe CreateIndiaSalesReportJob do
         allow(s3_object_double).to receive(:presigned_url).and_return("https://example.com/test-url")
 
         # Mock Slack notification
-        allow(SlackMessageWorker).to receive(:perform_async)
+        allow(InternalNotificationWorker).to receive(:perform_async)
 
         # Mock database queries to prevent actual data access
         purchase_double = double
@@ -124,7 +124,7 @@ describe CreateIndiaSalesReportJob do
 
       described_class.new.perform(6, 2023)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "India Sales Reporting", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "India Sales Reporting", anything, "green")
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

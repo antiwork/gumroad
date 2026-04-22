@@ -8,7 +8,7 @@ class CreatorAnalytics::ProductPageViews
     @query = {
       bool: {
         filter: [{ terms: { product_id: @products.map(&:id) } }],
-        must: [{ range: { timestamp: { time_zone: @user.timezone_id, gte: @dates.first.to_s, lte: @dates.last.to_s } } }]
+        must: [CreatorAnalytics::DateQuery.day_range(field: :timestamp, start_date: @dates.first, end_date: @dates.last, timezone: @user.timezone)]
       }
     }
   end
@@ -72,12 +72,15 @@ class CreatorAnalytics::ProductPageViews
         after_key = response_agg["after_key"]
       end
       buckets
+    rescue Elasticsearch::Transport::Transport::Errors::NotFound
+      []
     end
 
     def build_body(sources)
       {
         query: @query,
         size: 0,
+        timeout: "60s",
         aggs: { composite_agg: { composite: { size: ES_MAX_BUCKET_SIZE, sources: } } }
       }
     end

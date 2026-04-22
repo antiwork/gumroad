@@ -418,8 +418,8 @@ describe PurchasesController, :vcr do
           allow_any_instance_of(Purchase).to receive(:refund!).and_raise(ActiveRecord::RecordInvalid)
         end
 
-        it "notifies Bugsnag and responds with error message" do
-          expect(Bugsnag).to receive(:notify).with(instance_of(ActiveRecord::RecordInvalid))
+        it "notifies error tracker and responds with error message" do
+          expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordInvalid))
 
           put :refund, params: { id: @obfuscated_id, amount: "1000", format: :json }
 
@@ -813,19 +813,35 @@ describe PurchasesController, :vcr do
         expect(response.body).to include(free_trial_membership_purchase.external_id)
       end
 
-      it "transforms the submitted start_time / end_time in the seller's time zone" do
-        # Simulates someone's browser being in California (-07:00, ignored) while their TZ is in Japan (+09:00)
+      it "interprets the submitted start_time / end_time as UTC regardless of seller's time zone" do
         seller.update!(timezone: "Tokyo")
 
         expect(PurchaseSearchService).to receive(:new).with(
           hash_including(
-            created_on_or_after: Time.utc(2020, 7, 31, 15),
-            created_before: Time.utc(2020, 8, 31, 14).end_of_hour,
+            created_on_or_after: Time.utc(2020, 8, 1).beginning_of_day,
+            created_before: Time.utc(2020, 8, 31).end_of_day,
         )).and_call_original
 
         params[:start_time] = "2020-08-01"
         params[:end_time] = "2020-08-31"
         get :export, params:
+      end
+
+      it "includes purchases at UTC midnight boundary regardless of seller's timezone" do
+        seller.update!(timezone: "Pacific Time (US & Canada)")
+
+        at_start_boundary = create(:purchase, link: @product, seller:, created_at: Time.utc(2023, 6, 10, 3, 0, 0))
+        at_end_boundary = create(:purchase, link: @product, seller:, created_at: Time.utc(2023, 6, 20, 22, 0, 0))
+        before_range = create(:purchase, link: @product, seller:, created_at: Time.utc(2023, 6, 9, 23, 59, 59))
+        after_range = create(:purchase, link: @product, seller:, created_at: Time.utc(2023, 6, 21, 0, 0, 1))
+        index_model_records(Purchase)
+
+        get :export, params: { start_time: "2023-06-10", end_time: "2023-06-20" }
+
+        expect(response.body).to include(at_start_boundary.external_id)
+        expect(response.body).to include(at_end_boundary.external_id)
+        expect(response.body).not_to include(before_range.external_id)
+        expect(response.body).not_to include(after_range.external_id)
       end
     end
 
@@ -939,9 +955,23 @@ describe PurchasesController, :vcr do
     describe "POST confirm" do
       let(:chargeable) { build(:chargeable, card: StripePaymentMethodHelper.success_sca_not_required) }
       let(:purchase) { create(:purchase_in_progress, chargeable:, was_product_recommended: true, recommended_by: "discover") }
+      let(:secure_confirm_id) { purchase.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now) }
       before do
         allow_any_instance_of(Link).to receive(:recommendable?).and_return(true)
         purchase.process!
+      end
+
+      it "returns 404 for plain external_id" do
+        expect do
+          post :confirm, params: { id: purchase.external_id }
+        end.to raise_error(ActionController::RoutingError)
+      end
+
+      it "returns 404 for expired token" do
+        expired_token = purchase.secure_external_id(scope: "confirm", expires_at: 1.minute.ago)
+        expect do
+          post :confirm, params: { id: expired_token }
+        end.to raise_error(ActionController::RoutingError)
       end
 
       context "when purchase was marked as failed" do
@@ -951,7 +981,7 @@ describe PurchasesController, :vcr do
 
         it "renders an error" do
           post :confirm, params: {
-            id: purchase.external_id
+            id: secure_confirm_id
           }
 
           expect(ChargeProcessor).not_to receive(:confirm_payment_intent!)
@@ -964,7 +994,7 @@ describe PurchasesController, :vcr do
       context "when SCA fails" do
         it "marks purchase as failed and renders an error" do
           post :confirm, params: {
-            id: purchase.external_id,
+            id: secure_confirm_id,
             stripe_error: {
               code: "invalid_request_error",
               message: "We are unable to authenticate your payment method."
@@ -984,7 +1014,7 @@ describe PurchasesController, :vcr do
         end
 
         it "marks purchase as failed and renders an error" do
-          post :confirm, params: { id: purchase.external_id }
+          post :confirm, params: { id: secure_confirm_id }
 
           expect(purchase.reload.purchase_state).to eq("failed")
 
@@ -995,7 +1025,7 @@ describe PurchasesController, :vcr do
         it "does not delete the bundle cookie" do
           cookies["gumroad-bundle"] = "bundle cookie"
 
-          post :confirm, params: { id: purchase.external_id }
+          post :confirm, params: { id: secure_confirm_id }
           cookies.update(response.cookies)
 
           expect(cookies["gumroad-bundle"]).to be_present
@@ -1011,7 +1041,7 @@ describe PurchasesController, :vcr do
           expect(purchase.reload.successful?).to eq(false)
           expect(Purchase::ConfirmService).to receive(:new).with(hash_including(purchase:)).and_call_original
 
-          post :confirm, params: { id: purchase.external_id }
+          post :confirm, params: { id: secure_confirm_id }
           expect(response.parsed_body["success"]).to eq(true)
 
           expect(response.parsed_body).to eq(purchase.reload.purchase_response.as_json)
@@ -1032,7 +1062,7 @@ describe PurchasesController, :vcr do
           it "marks pre-order authorized" do
             expect(Purchase::ConfirmService).to receive(:new).with(hash_including(purchase:)).and_call_original
 
-            post :confirm, params: { id: purchase.external_id }
+            post :confirm, params: { id: secure_confirm_id }
             expect(response.parsed_body["success"]).to eq(true)
 
             expect(response.parsed_body).to eq(purchase.reload.purchase_response.as_json)
@@ -1044,7 +1074,7 @@ describe PurchasesController, :vcr do
 
         it "creates a purchase event" do
           expect do
-            post :confirm, params: { id: purchase.external_id }
+            post :confirm, params: { id: secure_confirm_id }
 
             event = Event.last
             expect(event.purchase_id).to eq(purchase.id)
@@ -1058,7 +1088,7 @@ describe PurchasesController, :vcr do
 
         it "creates recommended purchase info" do
           expect do
-            post :confirm, params: { id: purchase.external_id }
+            post :confirm, params: { id: secure_confirm_id }
             purchase.reload
             expect(purchase.recommended_purchase_info.recommendation_type).to eq("discover")
             expect(purchase.recommended_purchase_info.discover_fee_per_thousand).to eq(100)

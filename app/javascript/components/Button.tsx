@@ -1,5 +1,5 @@
 import { Slot } from "@radix-ui/react-slot";
-import { cva } from "class-variance-authority";
+import { cva, VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
@@ -22,7 +22,7 @@ export const brandNames = [
 export type BrandName = (typeof brandNames)[number];
 
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none",
+  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none",
   {
     variants: {
       variant: {
@@ -32,8 +32,9 @@ export const buttonVariants = cva(
         destructive: "",
       },
       size: {
-        default: "px-4 py-3 text-base leading-[1.4]",
+        default: "px-4 py-3 text-base leading-snug",
         sm: "p-2 text-sm leading-[1.3]",
+        icon: "size-12 box-border",
       },
       color: {
         default: "bg-transparent",
@@ -107,23 +108,25 @@ export const buttonVariants = cva(
   },
 );
 
-// Legacy props for backward compatibility
 type ButtonVariation = {
   color?: ButtonColor | BrandName | undefined;
   outline?: boolean | undefined;
-  small?: boolean | undefined;
 };
 
 export interface ButtonProps extends Omit<React.ComponentPropsWithoutRef<"button">, "color">, ButtonVariation {
+  size?: VariantProps<typeof buttonVariants>["size"];
   asChild?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, color, outline, small, disabled, children, asChild = false, ...props }, ref) => {
+  ({ className, color, outline, size, disabled, children, asChild = false, ...props }, ref) => {
     const variant = outline ? "outline" : color === "danger" ? "destructive" : "default";
-    const size = small ? "sm" : "default";
 
-    const classes = classNames(buttonVariants({ variant, size, color: color || undefined }), className);
+    const classes = classNames(
+      buttonVariants({ variant, size, color: color || undefined }),
+      disabled && "cursor-not-allowed opacity-30 hover:translate-0 hover:shadow-none",
+      className,
+    );
     const Comp = asChild ? Slot : "button";
 
     return (
@@ -136,12 +139,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 
 export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutRef<"a">, "color">, ButtonVariation {
+  size?: VariantProps<typeof buttonVariants>["size"];
   disabled?: boolean | undefined;
 }
 
 export const NavigationButton = React.forwardRef<HTMLAnchorElement, NavigationButtonProps>(
-  ({ className, color, outline, small, disabled, children, ...props }, ref) => (
-    <Button asChild className={className} color={color} outline={outline} small={small} disabled={disabled}>
+  ({ className, color, outline, size, disabled, children, ...props }, ref) => (
+    <Button asChild className={className} color={color} outline={outline} size={size} disabled={disabled}>
       <a
         ref={ref}
         inert={disabled}

@@ -18,7 +18,7 @@ class SignupController < Devise::RegistrationsController
   def new
     set_meta_tag(title: "Sign Up")
     auth_presenter = AuthPresenter.new(params:, application: @application)
-    render inertia: "Signup/New", props: auth_presenter.signup_props
+    render inertia: "Signup/New", props: auth_presenter.signup_props.merge(is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?)
   end
 
   def create
@@ -43,7 +43,8 @@ class SignupController < Devise::RegistrationsController
         end
       end
 
-      attach_past_purchases_to_user(chargeable, card_data_handling_mode)
+      attach_current_purchase_to_user(chargeable, card_data_handling_mode)
+      AttachPastPurchasesToUserWorker.perform_async(@user.id)
 
       @user.mark_as_invited(params[:referral]) if params[:referral].present?
 
@@ -78,7 +79,8 @@ class SignupController < Devise::RegistrationsController
     @user = build_user_with_params(permitted_params) if params[:user]
 
     if @user&.save
-      attach_past_purchases_to_user(nil, nil)
+      attach_current_purchase_to_user(nil, nil)
+      AttachPastPurchasesToUserWorker.perform_async(@user.id)
       return render json: { success: true }
     end
 
@@ -89,14 +91,20 @@ class SignupController < Devise::RegistrationsController
   end
 
   private
-    def attach_past_purchases_to_user(chargeable, card_data_handling_mode)
+    def attach_current_purchase_to_user(chargeable, card_data_handling_mode)
       purchase = Purchase.find_by_external_id(params[:user][:purchase_id]) if params[:user][:purchase_id].present?
       purchase&.attach_to_user_and_card(@user, chargeable, card_data_handling_mode)
 
-      if params[:user][:email].present?
-        Purchase.where(email: params[:user][:email], purchaser_id: nil).each do |past_purchase|
-          past_purchase.attach_to_user_and_card(@user, chargeable, card_data_handling_mode)
-        end
+      if purchase.nil? && chargeable.present? && @user.credit_card.nil?
+        save_credit_card_to_user(chargeable, card_data_handling_mode)
+      end
+    end
+
+    def save_credit_card_to_user(chargeable, card_data_handling_mode)
+      card = CreditCard.create(chargeable, card_data_handling_mode, @user)
+      if card.errors.empty?
+        card.users << @user
+        @user.reload
       end
     end
 

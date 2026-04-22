@@ -1,5 +1,5 @@
-<main class="stack">
-  <header>
+<main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+  <header class="flex flex-col gap-4 p-4 text-center">
     <div>
       <%= image_tag OauthApplication.find(@pre_auth.client.id).icon_url || asset_path("gumroad_app.png"), size: "72" %>
     </div>
@@ -10,8 +10,8 @@
     </h2>
   </header>
   <% if @pre_auth.scopes.present? %>
-    <div class="flex flex-col gap-4">
-      <h4>This application will be able to:</h4>
+    <div class="flex flex-col gap-4 p-4">
+      <h4 class="font-bold">This application will be able to:</h4>
       <ul>
         <% @pre_auth.scopes.each do |scope| %>
           <li>
@@ -27,9 +27,11 @@
               when "revenue_share" then "Revenue Share"
               when "unfurl" then "Fetch public information of any product to preview it in Notion."
               when "view_profile" then "See your profile data."
-              when "view_public" then "See your public information (name, Facebook profile, bio, Twitter handle)."
+              when "view_public" then "See your public information (name, bio)."
               when "view_sales" then "See your sales data."
               when "view_payouts" then "See your payouts data."
+              when "view_tax_data" then "See your tax forms and annual earnings summary."
+              when "account" then "Full access to your account."
             end
             %>
           </li>
@@ -37,14 +39,16 @@
       </ul>
     </div>
   <% end %>
-  <footer>
+  <footer class="flex flex-col gap-4 p-4 text-center">
     <%= form_tag oauth_authorization_path, method: :post, style: "display: contents" do %>
       <%= hidden_field_tag :client_id, @pre_auth.client.uid %>
       <%= hidden_field_tag :redirect_uri, @pre_auth.redirect_uri %>
       <%= hidden_field_tag :state, @pre_auth.state %>
       <%= hidden_field_tag :response_type, @pre_auth.response_type %>
       <%= hidden_field_tag :scope, @pre_auth.scope %>
-      <%= button_tag "Authorize", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-[1.4]" %>
+      <%= hidden_field_tag :code_challenge, @pre_auth.code_challenge %>
+      <%= hidden_field_tag :code_challenge_method, @pre_auth.code_challenge_method %>
+      <%= button_tag "Authorize", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent text-accent-foreground px-4 py-3 text-base leading-snug" %>
     <% end %>
     <%= form_tag oauth_authorization_path, method: :delete, style: "display: contents" do %>
       <%= hidden_field_tag :client_id, @pre_auth.client.uid %>
@@ -52,7 +56,9 @@
       <%= hidden_field_tag :state, @pre_auth.state %>
       <%= hidden_field_tag :response_type, @pre_auth.response_type %>
       <%= hidden_field_tag :scope, @pre_auth.scope %>
-      <%= button_tag "Deny", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-[1.4]" %>
+      <%= hidden_field_tag :code_challenge, @pre_auth.code_challenge %>
+      <%= hidden_field_tag :code_challenge_method, @pre_auth.code_challenge_method %>
+      <%= button_tag "Deny", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-snug" %>
     <% end %>
   </footer>
 </main>

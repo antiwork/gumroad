@@ -24,6 +24,17 @@ describe LoginsController, type: :controller, inertia: true do
       expect(inertia.props[:recaptcha_site_key]).to eq(GlobalConfig.get("RECAPTCHA_LOGIN_SITE_KEY"))
     end
 
+    context "when disable_login_recaptcha feature flag is active" do
+      before { Feature.activate(:disable_login_recaptcha) }
+      after { Feature.deactivate(:disable_login_recaptcha) }
+
+      it "does not pass reCAPTCHA site key" do
+        get :new
+
+        expect(inertia.props[:recaptcha_site_key]).to be_nil
+      end
+    end
+
     context "with an email in the query parameters" do
       it "renders successfully" do
         get :new, params: { email: "test@example.com" }
@@ -166,6 +177,20 @@ describe LoginsController, type: :controller, inertia: true do
       expect(controller.user_signed_in?).to be(true)
     end
 
+    context "when disable_login_recaptcha feature flag is active" do
+      before { Feature.activate(:disable_login_recaptcha) }
+      after { Feature.deactivate(:disable_login_recaptcha) }
+
+      it "skips reCAPTCHA validation and logs in the user" do
+        allow(controller).to receive(:valid_recaptcha_response?).and_return(false)
+
+        post :create, params: { user: { login_identifier: @user.email, password: "password" } }
+
+        expect(response).to redirect_to(dashboard_path)
+        expect(controller.user_signed_in?).to be(true)
+      end
+    end
+
     it "logs in a user when reCAPTCHA site key is not set in development environment" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
       allow(GlobalConfig).to receive(:get).with("RECAPTCHA_LOGIN_SITE_KEY").and_return(nil)
@@ -211,13 +236,12 @@ describe LoginsController, type: :controller, inertia: true do
         end
       end
 
-      it "does not log in a user who is suspended for fraud" do
+      it "allows a user suspended for fraud to log in" do
         user = create(:user, password: "password", user_risk_state: "suspended_for_fraud")
 
         post :create, params: { user: { login_identifier: user.email, password: "password" } }
 
-        expect(flash[:warning]).to eq("You can't perform this action because your account has been suspended.")
-        expect(controller.user_signed_in?).to be(false)
+        expect(controller.user_signed_in?).to be(true)
       end
     end
 

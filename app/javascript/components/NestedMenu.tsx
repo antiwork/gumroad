@@ -1,3 +1,5 @@
+import { ChevronDown, ChevronLeft, ChevronRight, MenuFilter, X } from "@boxicons/react";
+import * as Dialog from "@radix-ui/react-dialog";
 import * as React from "react";
 import { CSSProperties } from "react";
 
@@ -7,7 +9,6 @@ import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Sheet } from "$app/components/ui/Sheet";
 import { useIsOnTouchDevice } from "$app/components/useIsOnTouchDevice";
@@ -266,7 +267,7 @@ const MenubarItem = ({
         }}
       >
         {menuItem.label}
-        {showExpandableIcon ? <Icon name="outline-cheveron-down" className="float-right" /> : null}
+        {showExpandableIcon ? <ChevronDown className="float-right size-5" /> : null}
       </a>
     </Button>
   );
@@ -317,6 +318,7 @@ const OverlayMenu = ({
     <>
       <Button
         color="filled"
+        size="icon"
         onClick={() => setMenuOpen(true)}
         aria-controls={overlayMenuUID}
         aria-expanded={menuOpen}
@@ -324,14 +326,21 @@ const OverlayMenu = ({
         aria-label={buttonLabel ?? "Open Menu"}
         {...extraAriaAttrs}
       >
-        <Icon name="filter" />
+        <MenuFilter className="size-5" />
       </Button>
       <Sheet
         open={menuOpen}
         onOpenChange={setMenuOpen}
         modal
-        className="right-auto w-80 max-w-80 border-l-0 p-0 md:left-0 md:border-r"
+        className="w-[calc(20rem+3rem)] bg-transparent p-0 pr-12 md:left-0 md:border-l-0"
       >
+        <Dialog.Title className="sr-only">{buttonLabel ?? "Categories"}</Dialog.Title>
+        <Dialog.Close
+          className="absolute top-4 right-4 z-40 cursor-pointer bg-transparent all-unset"
+          aria-label="Close Menu"
+        >
+          <X className="size-6 text-white" />
+        </Dialog.Close>
         <ItemsList
           key={`${overlayMenuUID}-${menuOpen}`}
           menuId={overlayMenuUID}
@@ -346,7 +355,7 @@ const OverlayMenu = ({
             setMenuOpen(false);
             onSelectItem?.(newSelectedItem, e);
           }}
-          className="h-full overflow-x-hidden overflow-y-auto"
+          className="h-full w-80 overflow-x-hidden overflow-y-auto bg-background"
         />
       </Sheet>
     </>
@@ -382,13 +391,14 @@ const ItemsList = ({
         <MenuItemLink
           key={`back${displayedItem.key}`}
           href={displayedItem.parent?.href ?? "#"}
+          className="justify-start"
           onClick={(e) => {
             if (e.ctrlKey || e.shiftKey) return;
             setDisplayedItem(displayedItem.parent ?? initialMenuItem);
             e.preventDefault();
           }}
         >
-          <Icon name="outline-cheveron-left" />
+          <ChevronLeft className="size-5" />
           <span>Back</span>
         </MenuItemLink>
       ) : null}
@@ -412,7 +422,7 @@ const ItemsList = ({
           aria-haspopup={item.children.length ? "menu" : undefined}
         >
           <span className="min-w-0 flex-1 overflow-visible! break-words">{item.label}</span>
-          {item.children.length > 0 && <Icon name="outline-cheveron-right" className="shrink-0" />}
+          {item.children.length > 0 && <ChevronRight className="size-5 shrink-0" />}
         </MenuItemLink>
       ))}
       {displayedItem.image ? <img src={displayedItem.image} className="w-full translate-x-6 translate-y-6" /> : null}
@@ -431,7 +441,7 @@ const MenuItemLink = ({
     {...props}
     href={props.href ?? "#"}
     className={classNames(
-      "shrink-0 justify-between gap-2 overflow-visible! p-4! whitespace-normal! hover:bg-primary! hover:text-background!",
+      "flex shrink-0 justify-between gap-2 overflow-visible! p-4! whitespace-normal! hover:bg-primary! hover:text-background!",
       className,
     )}
     role="menuitem"

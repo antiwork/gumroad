@@ -1,3 +1,4 @@
+import { ArrowUp } from "@boxicons/react";
 import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
 
@@ -8,9 +9,9 @@ import { request } from "$app/utils/request";
 import { buttonVariants } from "$app/components/Button";
 import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
 import { FileKindIcon } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 
@@ -82,8 +83,8 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
 
   const fileUpload = (
     <label className={buttonVariants({ size: "default", color: "primary" })}>
-      <input type="file" onChange={handleFileChange} disabled={isUploading} multiple />
-      <Icon name="upload-fill" />
+      <input type="file" className="sr-only" onChange={handleFileChange} disabled={isUploading} multiple />
+      <ArrowUp pack="filled" className="size-5" />
       Upload files
     </label>
   );
@@ -98,10 +99,10 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
                 <FileKindIcon extension={file.extension} />
                 <div>
                   <h4 className="font-bold">{file.name}</h4>
-                  <ul className="inline">
+                  <InlineList>
                     <li>{file.extension}</li>
                     <li>{FileUtils.getFullFileSizeString(file.size)}</li>
-                  </ul>
+                  </InlineList>
                 </div>
               </RowContent>
             </Row>

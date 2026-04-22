@@ -85,7 +85,7 @@ export const AdminActionButton = ({
   return (
     <Button
       type="button"
-      small
+      size="sm"
       outline={outline ?? false}
       color={color ?? undefined}
       className={className ?? undefined}

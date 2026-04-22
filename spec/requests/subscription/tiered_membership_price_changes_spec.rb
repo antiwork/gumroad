@@ -481,6 +481,33 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
     end
   end
 
+  context "when the subscription is deactivated" do
+    before do
+      travel_to(@originally_subscribed_at + 4.months)
+      @subscription.update!(cancelled_at: 1.week.ago, deactivated_at: 1.week.ago, cancelled_by_buyer: true)
+      setup_subscription_token
+    end
+
+    it "displays a warning notice regarding the price change upon restarting" do
+      @original_tier_quarterly_price.update!(price_cents: 8_99)
+
+      visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+      within find(:radio_button, text: "First Tier") do
+        expect(page).not_to have_selector("[role='status']", text: "based on previous pricing")
+        expect(page).to have_text("$8.99 every 3 months")
+      end
+
+      expect(page).to have_selector("[role='status']", text: "Restarting will update your subscription to the current price of $8.99 every 3 months per seat.")
+    end
+
+    it "does not display a restarting warning when the price has not changed" do
+      visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+      expect(page).not_to have_selector("[role='status']", text: "Restarting will update your subscription to the current price of")
+    end
+  end
+
   context "when the subscription is overdue for charge" do
     before do
       @subscription.last_purchase.update(succeeded_at: 1.year.ago)

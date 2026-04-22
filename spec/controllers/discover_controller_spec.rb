@@ -229,6 +229,30 @@ describe DiscoverController, type: :controller, inertia: true do
       expect(DiscoverSearch.last!.discover_search_suggestion).to be_present
     end
 
+    context "when curated products fetch times out" do
+      it "renders the page with empty curated products" do
+        allow(RecommendedProducts::DiscoverService).to receive(:fetch).and_raise(Timeout::Error)
+
+        get :index
+
+        expect(response).to be_successful
+        expect_inertia.to render_component("Discover/Index")
+        expect(inertia.props[:curated_product_ids]).to eq([])
+      end
+    end
+
+    context "when curated products fetch raises an error" do
+      it "renders the page with empty curated products" do
+        allow(RecommendedProducts::DiscoverService).to receive(:fetch).and_raise(StandardError, "connection lost")
+
+        get :index
+
+        expect(response).to be_successful
+        expect_inertia.to render_component("Discover/Index")
+        expect(inertia.props[:curated_product_ids]).to eq([])
+      end
+    end
+
     context "meta tags" do
       let(:default_description) { "Browse over 1.6 million free and premium digital products in education, tech, design, and more categories from Gumroad creators and online entrepreneurs." }
 

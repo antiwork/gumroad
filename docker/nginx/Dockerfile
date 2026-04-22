@@ -1,7 +1,5 @@
 FROM nginx:1.23.4
 
-# Expire Docker images after 1 week in Quay
-LABEL quay.expires-after=1w
 
 COPY public /public
 COPY docker/nginx/nginx.conf /nginx.conf

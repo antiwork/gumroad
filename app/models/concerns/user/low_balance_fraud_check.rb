@@ -57,7 +57,7 @@ module User::LowBalanceFraudCheck
     when "not_reviewed"
       mark_not_reviewed!(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
     else
-      Bugsnag.notify(StandardError.new("Unknown previous risk state for LowBalanceFraudCheck recovery: #{previous_state.inspect} (user_id=#{id})"))
+      ErrorNotifier.notify(StandardError.new("Unknown previous risk state for LowBalanceFraudCheck recovery: #{previous_state.inspect} (user_id=#{id})"))
     end
   end
 

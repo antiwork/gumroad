@@ -6,7 +6,7 @@ export const Navigation = () => (
     aria-label="API Reference"
     className="lg:sticky lg:top-8 lg:h-full lg:max-h-[calc(100vh-4rem)] lg:overflow-auto"
   >
-    <menu>
+    <menu className="grid list-none gap-3">
       <li>
         <a href="#api-intro">Introduction</a>
       </li>
@@ -21,9 +21,15 @@ export const Navigation = () => (
       </li>
       <li>
         <a href="#api-methods">Methods</a>
-        <menu>
+        <menu className="mt-3 grid list-none gap-3 pl-4 text-sm">
           <li>
             <a href="#products">Products</a>
+          </li>
+          <li>
+            <a href="#files">Files</a>
+          </li>
+          <li>
+            <a href="#covers">Covers</a>
           </li>
           <li>
             <a href="#variant-categories">Variant categories</a>
@@ -51,6 +57,12 @@ export const Navigation = () => (
           </li>
           <li>
             <a href="#payouts">Payouts</a>
+          </li>
+          <li>
+            <a href="#tax-forms">Tax forms</a>
+          </li>
+          <li>
+            <a href="#earnings">Earnings</a>
           </li>
         </menu>
       </li>

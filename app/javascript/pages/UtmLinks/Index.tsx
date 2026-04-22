@@ -1,3 +1,4 @@
+import { Copy, DotsHorizontalRounded, Link as LinkIcon, Pencil, Trash } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import * as React from "react";
 
@@ -7,7 +8,6 @@ import { classNames } from "$app/utils/classNames";
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
@@ -17,6 +17,7 @@ import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -120,10 +121,12 @@ export default function UtmLinksIndex() {
   const query = initialQuery ?? "";
 
   const onChangePage = (newPage: number) => {
+    fetchUtmLinksStats.cancel();
     router.reload({ data: { page: newPage } });
   };
 
   const onSetSort = (newSort: Sort<SortKey> | null) => {
+    fetchUtmLinksStats.cancel();
     setSort(newSort);
     router.reload({
       data: {
@@ -201,7 +204,7 @@ export default function UtmLinksIndex() {
                       <h4>
                         <TruncatedTextWithTooltip text={link.title} maxLength={35} />
                       </h4>
-                      <small>
+                      <small className="block">
                         <a href={link.destination_option?.url} target="_blank" rel="noopener noreferrer">
                           <TruncatedTextWithTooltip text={link.destination_option?.label ?? ""} maxLength={35} />
                         </a>
@@ -320,37 +323,37 @@ const UtmLinkActions = ({ link, onDelete }: { link: SavedUtmLink; onDelete: () =
   return (
     <div className="flex flex-wrap gap-3 lg:justify-end" onClick={(e) => e.stopPropagation()}>
       <CopyToClipboard copyTooltip="Copy short link" text={link.short_url}>
-        <Button aria-label="Copy link">
-          <Icon name="link" />
+        <Button size="icon" aria-label="Copy link">
+          <LinkIcon className="size-5" />
         </Button>
       </CopyToClipboard>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverAnchor>
           <PopoverTrigger aria-label="Open action menu" asChild>
-            <Button>
-              <Icon name="three-dots" />
+            <Button size="icon">
+              <DotsHorizontalRounded className="size-5" />
             </Button>
           </PopoverTrigger>
         </PopoverAnchor>
         <PopoverContent className="w-48 border-none p-0 shadow-none">
-          <div role="menu" className="grid gap-1">
-            <Link href={Routes.edit_dashboard_utm_link_path(link.id)} role="menuitem" className="no-underline">
-              <Icon name="pencil" />
-              &ensp;Edit
-            </Link>
-            <Link
-              href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })}
-              role="menuitem"
-              className="no-underline"
-            >
-              <Icon name="outline-duplicate" />
-              &ensp;Duplicate
-            </Link>
-            <div className="danger" role="menuitem" onClick={onDelete}>
-              <Icon name="trash2" />
-              &ensp;Delete
-            </div>
-          </div>
+          <Menu>
+            <MenuItem asChild>
+              <Link href={Routes.edit_dashboard_utm_link_path(link.id)} className="no-underline">
+                <Pencil className="size-5" />
+                Edit
+              </Link>
+            </MenuItem>
+            <MenuItem asChild>
+              <Link href={Routes.new_dashboard_utm_link_path({ copy_from: link.id })} className="no-underline">
+                <Copy className="size-5" />
+                Duplicate
+              </Link>
+            </MenuItem>
+            <MenuItem variant="danger" onClick={onDelete}>
+              <Trash className="size-5" />
+              Delete
+            </MenuItem>
+          </Menu>
         </PopoverContent>
       </Popover>
     </div>
@@ -462,7 +465,7 @@ const UtmLinkDetails = ({
             <h3 className="grow">Short link</h3>
             <CopyToClipboard text={utmLink.short_url} copyTooltip="Copy short link">
               <Button aria-label="Copy short link">
-                <Icon name="link" />
+                <LinkIcon className="size-5" />
               </Button>
             </CopyToClipboard>
           </CardContent>
@@ -477,7 +480,7 @@ const UtmLinkDetails = ({
             <h3 className="grow">UTM link</h3>
             <CopyToClipboard text={utmLink.utm_url} copyTooltip="Copy UTM link">
               <Button aria-label="Copy UTM link">
-                <Icon name="link" />
+                <LinkIcon className="size-5" />
               </Button>
             </CopyToClipboard>
           </CardContent>

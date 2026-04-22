@@ -1,23 +1,24 @@
+import { ChevronDown } from "@boxicons/react";
 import {
   endOfMonth,
+  endOfQuarter,
   endOfYear,
   startOfMonth,
+  startOfQuarter,
   startOfYear,
   subDays,
   subMonths,
-  subYears,
-  endOfQuarter,
-  startOfQuarter,
   subQuarters,
+  subYears,
 } from "date-fns";
 import * as React from "react";
 
 import { DateInput } from "$app/components/DateInput";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
 export const DateRangePicker = ({
@@ -56,7 +57,7 @@ export const DateRangePicker = ({
         <PopoverTrigger>
           <InputGroup aria-label="Date range selector" className="whitespace-nowrap">
             <span suppressHydrationWarning>{Intl.DateTimeFormat(locale).formatRange(from, to)}</span>
-            <Icon name="outline-cheveron-down" className="ml-auto" />
+            <ChevronDown className="ml-auto size-5" />
           </InputGroup>
         </PopoverTrigger>
       </PopoverAnchor>
@@ -91,59 +92,41 @@ export const DateRangePicker = ({
             </Fieldset>
           </div>
         ) : (
-          <div role="menu">
-            <div role="menuitem" onClick={() => quickSet(subDays(today, 30), today)}>
-              Last 30 days
-            </div>
-            <div role="menuitem" onClick={() => quickSet(startOfMonth(today), today)}>
-              This month
-            </div>
-            <div
-              role="menuitem"
+          <Menu>
+            <MenuItem onClick={() => quickSet(subDays(today, 30), today)}>Last 30 days</MenuItem>
+            <MenuItem onClick={() => quickSet(startOfMonth(today), today)}>This month</MenuItem>
+            <MenuItem
               onClick={() => {
                 const lastMonth = subMonths(today, 1);
                 quickSet(startOfMonth(lastMonth), endOfMonth(lastMonth));
               }}
             >
               Last month
-            </div>
-            <div
-              role="menuitem"
-              onClick={() => quickSet(startOfMonth(subMonths(today, 3)), endOfMonth(subMonths(today, 1)))}
-            >
+            </MenuItem>
+            <MenuItem onClick={() => quickSet(startOfMonth(subMonths(today, 3)), endOfMonth(subMonths(today, 1)))}>
               Last 3 months
-            </div>
-            <div role="menuitem" onClick={() => quickSet(startOfQuarter(today), today)}>
-              This quarter
-            </div>
-            <div
-              role="menuitem"
+            </MenuItem>
+            <MenuItem onClick={() => quickSet(startOfQuarter(today), today)}>This quarter</MenuItem>
+            <MenuItem
               onClick={() => {
                 const lastQuarter = subQuarters(today, 1);
                 quickSet(startOfQuarter(lastQuarter), endOfQuarter(lastQuarter));
               }}
             >
               Last quarter
-            </div>
-            <div role="menuitem" onClick={() => quickSet(startOfYear(today), today)}>
-              This year
-            </div>
-            <div
-              role="menuitem"
+            </MenuItem>
+            <MenuItem onClick={() => quickSet(startOfYear(today), today)}>This year</MenuItem>
+            <MenuItem
               onClick={() => {
                 const lastYear = subYears(today, 1);
                 quickSet(startOfYear(lastYear), endOfYear(lastYear));
               }}
             >
               Last year
-            </div>
-            <div role="menuitem" onClick={() => quickSet(new Date("2012-10-13"), today)}>
-              All time
-            </div>
-            <div role="menuitem" onClick={() => setIsCustom(true)}>
-              Custom range...
-            </div>
-          </div>
+            </MenuItem>
+            <MenuItem onClick={() => quickSet(new Date("2012-10-13"), today)}>All time</MenuItem>
+            <MenuItem onClick={() => setIsCustom(true)}>Custom range...</MenuItem>
+          </Menu>
         )}
       </PopoverContent>
     </Popover>

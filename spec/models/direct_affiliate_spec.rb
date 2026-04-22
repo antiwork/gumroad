@@ -58,6 +58,19 @@ describe DirectAffiliate do
           expect(direct_affiliate).to be_valid
         end
       end
+
+      context "when soft-deleting an affiliate whose user has a Brazilian Stripe account" do
+        let(:direct_affiliate) { create(:direct_affiliate, seller:, affiliate_user:) }
+
+        it "allows soft deletion" do
+          direct_affiliate # force creation before stubbing
+          allow(affiliate_user).to receive(:has_brazilian_stripe_connect_account?).and_return(true)
+          allow(seller).to receive(:has_brazilian_stripe_connect_account?).and_return(false)
+
+          expect { direct_affiliate.mark_deleted! }.not_to raise_error
+          expect(direct_affiliate.reload).to be_deleted
+        end
+      end
     end
   end
 

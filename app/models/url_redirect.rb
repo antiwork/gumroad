@@ -115,7 +115,7 @@ class UrlRedirect < ApplicationRecord
         end.uniq
         ProductFile.where(id: file_ids).in_order
       else
-        referenced_link.product_files.alive.in_order
+        referenced_link&.product_files&.alive&.in_order || ProductFile.none
       end
 
     @cached_alive_product_files
@@ -255,7 +255,8 @@ class UrlRedirect < ApplicationRecord
   end
 
   def product_json_data
-    result = referenced_link.as_json(mobile: true).merge(url_redirect_external_id: external_id, url_redirect_token: token)
+    link_data = referenced_link&.as_json(mobile: true) || {}
+    result = link_data.merge(url_redirect_external_id: external_id, url_redirect_token: token)
     result[:file_data] = product_file_json_data_for_mobile unless purchase.present? && purchase.subscription.present? && !purchase.subscription.alive?
     purchase = self.purchase
     if purchase

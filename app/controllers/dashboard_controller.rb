@@ -2,7 +2,7 @@
 
 class DashboardController < Sellers::BaseController
   include ActionView::Helpers::NumberHelper, CurrencyHelper
-  skip_before_action :check_suspended
+
   before_action :check_payment_details, only: :index
 
   layout "inertia", only: :index
@@ -57,5 +57,13 @@ class DashboardController < Sellers::BaseController
 
     flash[:alert] = "A 1099 form for #{year} was not filed for your account."
     redirect_to dashboard_path
+  end
+
+  def dismiss_getting_started_checklist
+    authorize :dashboard
+
+    current_seller.update!(has_dismissed_getting_started_checklist: true)
+
+    head :ok
   end
 end

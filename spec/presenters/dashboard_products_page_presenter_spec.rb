@@ -17,13 +17,26 @@ describe DashboardProductsPagePresenter do
   describe "#page_props" do
     let!(:archived_product) { create(:product, user: seller, archived: true) }
 
-    it "returns archived_products_count and can_create_product" do
+    it "returns has_products false when seller has no visible non-archived products" do
       presenter = described_class.new(pundit_user:)
+      props = presenter.page_props
+      expect(props[:has_products].call).to eq(false)
+      expect(props[:archived_products_count].call).to eq(1)
+      expect(props[:can_create_product].call).to eq(true)
+    end
 
-      expect(presenter.page_props).to eq({
-                                           archived_products_count: 1,
-                                           can_create_product: true
-                                         })
+    context "when seller has visible non-archived products" do
+      let!(:product) { create(:product, user: seller, name: "Active product") }
+
+      it "returns has_products true" do
+        presenter = described_class.new(pundit_user:)
+        expect(presenter.page_props[:has_products].call).to eq(true)
+      end
+
+      it "keeps has_products true even when query has no matches" do
+        presenter = described_class.new(pundit_user:, query: "no-match")
+        expect(presenter.page_props[:has_products].call).to eq(true)
+      end
     end
   end
 
@@ -222,8 +235,9 @@ describe DashboardProductsPagePresenter do
       expect((page1_ids + page2_ids) - products.map(&:id)).to be_empty
     end
 
-    it "raises on page overflow" do
-      expect { described_class.new(pundit_user:, products_page: 10).products_table_props }.to raise_error(Pagy::OverflowError)
+    it "returns last page on page overflow" do
+      props = described_class.new(pundit_user:, products_page: 10).products_table_props
+      expect(props[:products_pagination]).to eq(page: 3, pages: 3)
     end
 
     context "when some products are deleted" do
@@ -267,8 +281,9 @@ describe DashboardProductsPagePresenter do
       expect((page1_ids + page2_ids) - memberships.map(&:id)).to be_empty
     end
 
-    it "raises on page overflow" do
-      expect { described_class.new(pundit_user:, memberships_page: 10).memberships_table_props }.to raise_error(Pagy::OverflowError)
+    it "returns last page on page overflow" do
+      props = described_class.new(pundit_user:, memberships_page: 10).memberships_table_props
+      expect(props[:memberships_pagination]).to eq(page: 3, pages: 3)
     end
 
     context "when some memberships are deleted" do
@@ -522,7 +537,10 @@ describe DashboardProductsPagePresenter do
     describe "#page_props" do
       it "returns only can_create_product (no archived_products_count)" do
         presenter = described_class.new(pundit_user:, archived: true)
-        expect(presenter.page_props).to eq({ can_create_product: true })
+        props = presenter.page_props
+        expect(props[:has_products].call).to eq(false)
+        expect(props[:can_create_product].call).to eq(true)
+        expect(props).not_to have_key(:archived_products_count)
       end
     end
 

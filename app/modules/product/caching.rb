@@ -55,7 +55,7 @@ module Product::Caching
     collection.map do |product|
       cache_or_product = cached_values.find { |cached_value| cached_value.product_id == product.id } || product
       if block_given?
-        yield(product).merge(
+        stats = begin
           {
             "successful_sales_count" => cache_or_product.successful_sales_count,
             "remaining_for_sale_count" => cache_or_product.remaining_for_sale_count,
@@ -63,7 +63,17 @@ module Product::Caching
             "revenue_pending" => cache_or_product.revenue_pending.to_f,
             "total_usd_cents" => cache_or_product.total_usd_cents.to_f,
           }
-        )
+        rescue Elasticsearch::Transport::Transport::Error, Faraday::ConnectionFailed, Faraday::TimeoutError => e
+          Rails.logger.warn("[Product::Caching] Elasticsearch unavailable for product #{product.id}: #{e.class}")
+          {
+            "successful_sales_count" => 0,
+            "remaining_for_sale_count" => product.remaining_for_sale_count,
+            "monthly_recurring_revenue" => 0.0,
+            "revenue_pending" => product.revenue_pending.to_f,
+            "total_usd_cents" => 0.0,
+          }
+        end
+        yield(product).merge(stats)
       else
         cache_or_product
       end

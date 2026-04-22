@@ -174,6 +174,7 @@ describe CustomerPresenter do
             id: purchase2.license.external_id,
             enabled: true,
             key: purchase2.license.serial,
+            uses: purchase2.license.uses,
           },
           call: nil,
           commission: nil,
@@ -313,6 +314,35 @@ describe CustomerPresenter do
             content: utm_link.utm_content,
           }
         )
+      end
+    end
+
+    context "when purchase has no full_name but purchaser has a name" do
+      let(:purchaser) { create(:named_user) }
+      let(:purchase) { create(:purchase, full_name: nil, purchaser:) }
+
+      it "falls back to the purchaser name" do
+        props = described_class.new(purchase:).customer(pundit_user:)
+        expect(props[:name]).to eq(purchaser.name)
+      end
+    end
+
+    context "when purchase has a whitespace-only full_name but purchaser has a name" do
+      let(:purchaser) { create(:named_user) }
+      let(:purchase) { create(:purchase, full_name: "  ", purchaser:) }
+
+      it "falls back to the purchaser name" do
+        props = described_class.new(purchase:).customer(pundit_user:)
+        expect(props[:name]).to eq(purchaser.name)
+      end
+    end
+
+    context "when purchase has no full_name and no purchaser" do
+      let(:purchase) { create(:purchase, full_name: nil, purchaser: nil) }
+
+      it "returns an empty string" do
+        props = described_class.new(purchase:).customer(pundit_user:)
+        expect(props[:name]).to eq("")
       end
     end
 

@@ -12,14 +12,16 @@ class StripeCharge < BaseProcessorCharge
     self.refunded = stripe_charge[:refunded]
     self.disputed = stripe_charge[:dispute].present?
 
-    stripe_fee_detail = stripe_charge_balance_transaction[:fee_details].find { |fee_detail| fee_detail[:type] == "stripe_fee" }
-    if stripe_fee_detail.present?
-      self.fee_currency = stripe_fee_detail[:currency]
-      self.fee = stripe_fee_detail[:amount]
-    end
+    if stripe_charge_balance_transaction.present?
+      stripe_fee_detail = stripe_charge_balance_transaction[:fee_details].find { |fee_detail| fee_detail[:type] == "stripe_fee" }
+      if stripe_fee_detail.present?
+        self.fee_currency = stripe_fee_detail[:currency]
+        self.fee = stripe_fee_detail[:amount]
+      end
 
-    self.flow_of_funds = build_flow_of_funds(stripe_charge, stripe_charge_balance_transaction, stripe_application_fee_balance_transaction,
-                                             stripe_destination_payment_balance_transaction, stripe_destination_transfer)
+      self.flow_of_funds = build_flow_of_funds(stripe_charge, stripe_charge_balance_transaction, stripe_application_fee_balance_transaction,
+                                               stripe_destination_payment_balance_transaction, stripe_destination_transfer)
+    end
 
 
     return if stripe_charge["payment_method_details"].nil?
@@ -59,8 +61,8 @@ class StripeCharge < BaseProcessorCharge
 
     def build_flow_of_funds(stripe_charge, stripe_charge_balance_transaction, stripe_application_fee_balance_transaction,
                             stripe_destination_payment_balance_transaction, stripe_destination_transfer)
-      return if stripe_charge[:destination] && stripe_application_fee_balance_transaction.nil? &&
-        stripe_destination_transfer.nil?
+      return if stripe_charge[:destination] && (stripe_destination_payment_balance_transaction.nil? ||
+        (stripe_application_fee_balance_transaction.nil? && stripe_destination_transfer.nil?))
 
       issued_amount = FlowOfFunds::Amount.new(currency: stripe_charge[:currency],
                                               cents: stripe_charge[:amount])

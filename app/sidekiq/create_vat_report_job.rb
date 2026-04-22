@@ -98,7 +98,7 @@ class CreateVatReportJob
       s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.week.to_i).to_s
 
       AccountingMailer.vat_report(quarter, year, s3_signed_url).deliver_now
-      SlackMessageWorker.perform_async("payments", "VAT Reporting", "Q#{quarter} #{year} VAT report is ready - #{s3_signed_url}", "green")
+      InternalNotificationWorker.perform_async("payments", "VAT Reporting", "Q#{quarter} #{year} VAT report is ready - #{s3_signed_url}", "green")
     ensure
       temp_file.close
     end

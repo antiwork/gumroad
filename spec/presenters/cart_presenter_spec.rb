@@ -74,6 +74,7 @@ describe CartPresenter do
                 referrer: "direct",
                 call_start_time: call_start_time,
                 pay_in_installments: true,
+                force_new_subscription: false,
               },
               {
                 product: a_hash_including(permalink: recurring_product.unique_permalink),
@@ -90,6 +91,7 @@ describe CartPresenter do
                 referrer: "direct",
                 call_start_time: nil,
                 pay_in_installments: false,
+                force_new_subscription: false,
               },
               {
                 product: a_hash_including(permalink: simple_product.unique_permalink),
@@ -106,10 +108,72 @@ describe CartPresenter do
                 referrer: "google.com",
                 call_start_time: nil,
                 pay_in_installments: false,
+                force_new_subscription: false,
               },
             ],
           }
         )
+      end
+    end
+
+    context "when the cart contains archived products" do
+      let(:cart) { create(:cart, user:) }
+      let(:archived_product) { create(:product, archived: true) }
+      let(:active_product) { create(:product) }
+
+      before do
+        create(:cart_product, cart:, product: archived_product)
+        create(:cart_product, cart:, product: active_product)
+      end
+
+      it "excludes archived products from cart items" do
+        props = presenter.cart_props
+        permalinks = props[:items].map { |item| item[:product][:permalink] }
+
+        expect(permalinks).to include(active_product.unique_permalink)
+        expect(permalinks).not_to include(archived_product.unique_permalink)
+      end
+
+      context "when all cart products are archived" do
+        before do
+          active_product.update!(archived: true)
+        end
+
+        it "returns an empty items list" do
+          props = presenter.cart_props
+          expect(props[:items]).to be_empty
+        end
+      end
+    end
+
+    context "with many cart items" do
+      let(:cart) { create(:cart, user:) }
+      let(:seller) { create(:user) }
+
+      def count_queries(&block)
+        queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          next if payload[:cached]
+          next if payload[:name]&.match?(/SCHEMA|TRANSACTION/)
+          queries << payload[:sql] if payload[:sql].present?
+        end
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+        queries
+      end
+
+      def add_cart_product!
+        product = create(:product, user: seller)
+        create(:cart_product, cart:, product:)
+      end
+
+      it "keeps per-product query growth bounded" do
+        3.times { add_cart_product! }
+        baseline = count_queries { described_class.new(logged_in_user: user, ip:, browser_guid:).cart_props }.size
+
+        7.times { add_cart_product! }
+        grown = count_queries { described_class.new(logged_in_user: user, ip:, browser_guid:).cart_props }.size
+
+        expect((grown - baseline) / 7.0).to be < 15
       end
     end
 
@@ -173,6 +237,7 @@ describe CartPresenter do
                   referrer: "direct",
                   call_start_time: nil,
                   pay_in_installments: false,
+                  force_new_subscription: false,
                   accepted_offer: {
                     id: upsell.external_id,
                     original_product_id: upsell.product.external_id,

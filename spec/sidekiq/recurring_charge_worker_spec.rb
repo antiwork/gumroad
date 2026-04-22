@@ -214,13 +214,6 @@ describe RecurringChargeWorker, :vcr do
       expect(last_purchase.displayed_price_cents).to eq @new_tier_monthly_price.price_cents
     end
 
-    it "switches the subscription to the new flat fee" do
-      @subscription.update!(flat_fee_applicable: false)
-      expect do
-        described_class.new.perform(@subscription.id)
-      end.to change { @subscription.reload.flat_fee_applicable? }.to(true)
-    end
-
     context "for a PWYW tier" do
       it "sets the original purchase price to the perceived_price_cents" do
         @new_tier.update!(customizable_price: true)

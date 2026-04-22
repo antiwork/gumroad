@@ -49,6 +49,78 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       actual_props[:countries] = actual_props[:countries].transform_keys(&:to_s) if actual_props[:countries] && actual_props[:countries].keys.first.is_a?(Symbol)
       expect(actual_props).to eq(expected_props)
     end
+
+    describe "account_status prop" do
+      it "does not show section for compliant user with no issues" do
+        seller.mark_compliant!(author_name: "test")
+
+        get :show
+
+        account_status = inertia.props[:account_status]
+        expect(account_status[:show_section]).to be false
+        expect(account_status[:is_suspended]).to be false
+        expect(account_status[:suspension_reason]).to be_nil
+        expect(account_status).not_to have_key(:is_under_review)
+      end
+
+      it "shows section for user on probation" do
+        seller.put_on_probation!(author_name: "test")
+
+        get :show
+
+        account_status = inertia.props[:account_status]
+        expect(account_status[:show_section]).to be true
+        expect(account_status[:is_suspended]).to be false
+        expect(account_status[:suspension_reason]).to be_nil
+        expect(account_status[:gumroad_status]).to include("under review")
+        expect(account_status).not_to have_key(:is_under_review)
+      end
+
+      it "shows section for suspended user with reason" do
+        seller.flag_for_tos_violation!(author_name: "test", bulk: true)
+        seller.suspend_for_tos_violation!(author_name: "test", bulk: true)
+
+        get :show
+
+        account_status = inertia.props[:account_status]
+        expect(account_status[:show_section]).to be true
+        expect(account_status[:is_suspended]).to be true
+        expect(account_status[:suspension_reason]).to eq("Your account has been suspended for a policy violation.")
+      end
+
+      it "shows section for user with fraud suspension" do
+        seller.flag_for_fraud!(author_name: "test")
+        seller.suspend_for_fraud!(author_name: "test")
+
+        get :show
+
+        account_status = inertia.props[:account_status]
+        expect(account_status[:show_section]).to be true
+        expect(account_status[:is_suspended]).to be true
+        expect(account_status[:suspension_reason]).to eq("Your account has been suspended due to fraudulent activity.")
+      end
+
+      it "shows section when payouts are paused internally" do
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: "admin")
+
+        get :show
+
+        account_status = inertia.props[:account_status]
+        expect(account_status[:show_section]).to be true
+      end
+
+      it "shows section with compliance actions when there are pending requests" do
+        request = create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+        request.verification_error = { "message" => "Please provide your tax ID" }
+        request.save!
+
+        get :show
+
+        account_status = inertia.props[:account_status]
+        expect(account_status[:show_section]).to be true
+        expect(account_status[:compliance_actions]).to include(message: "Please provide your tax ID.", href: nil)
+      end
+    end
   end
 
   describe "PUT update" do
@@ -134,8 +206,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
     describe "minimum payout threshold" do
       it "updates the payout threshold for valid amounts" do
         expect do
-          put :update, params: { payout_threshold_cents: 2000 }
-        end.to change { user.reload.payout_threshold_cents.to_i }.from(1000).to(2000)
+          put :update, params: { payout_threshold_cents: 20_000 }
+        end.to change { user.reload.payout_threshold_cents.to_i }.from(Payouts::MIN_AMOUNT_CENTS).to(20_000)
 
         expect(response).to redirect_to(settings_payments_path)
         expect(response).to have_http_status :see_other
@@ -143,12 +215,12 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       end
 
       it "returns an error for invalid amounts" do
-        put :update, params: { payout_threshold_cents: 500 }
+        put :update, params: { payout_threshold_cents: 5_000 }
 
         expect(response).to redirect_to(settings_payments_path)
         expect(response).to have_http_status :found
         expect(session[:inertia_errors][:base]).to include("Your payout threshold must be greater than the minimum payout amount")
-        expect(user.reload.payout_threshold_cents).to eq(1000)
+        expect(user.reload.payout_threshold_cents).to eq(Payouts::MIN_AMOUNT_CENTS)
       end
     end
 
@@ -327,6 +399,26 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             expect(response).to have_http_status :found
             expect(session[:inertia_errors][:base]).to include("You must use a test bank account number in test mode. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
           end
+
+          it "handles Stripe::APIError gracefully instead of raising a 500" do
+            all_params.merge!(
+              bank_account: {
+                type: AchAccount.name,
+                account_number: "000123456789",
+                account_number_confirmation: "000123456789",
+                routing_number: "110000000",
+                account_holder_full_name: "gumbot"
+              }
+            )
+
+            expect(StripeMerchantAccountManager).to receive(:create_account).and_raise(Stripe::APIError.new("An unknown error occurred"))
+
+            put :update, params: all_params
+
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to eq(["An unknown error occurred"])
+          end
         end
       end
 
@@ -409,10 +501,10 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             put :update, params: { user: params }
           end
 
-          it "returns an error" do
+          it "returns an error with the actual Stripe error message" do
             expect(response).to redirect_to(settings_payments_path)
             expect(response).to have_http_status :found
-            expect(session[:inertia_errors][:base]).to be_present
+            expect(session[:inertia_errors][:base]).to eq(["Invalid request: You cannot change legal_entity[first_name] via API if an account is verified."])
           end
 
           it "the users current compliance info should be changed" do
@@ -753,6 +845,23 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           put(:update, params:)
           request.reload
           expect(request.state).to eq("provided")
+        end
+      end
+
+      describe "concurrent payout method change" do
+        let(:params) { { card: { token: "tok_123" } } }
+        let(:service) { instance_double(UpdatePayoutMethod, process: { error: :concurrent_payout_method_change }) }
+
+        before do
+          allow(UpdatePayoutMethod).to receive(:new).and_return(service)
+        end
+
+        it "shows a retry message" do
+          put :update, params: params
+
+          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to include("Another change was submitted at the same time. Please try again.")
         end
       end
 
@@ -1198,8 +1307,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(flash[:notice]).to eq("Your country has been updated!")
       end
 
-      it "notifies Bugsnag if there is an error" do
-        expect(Bugsnag).to receive(:notify).exactly(:once)
+      it "notifies error tracker if there is an error" do
+        expect(ErrorNotifier).to receive(:notify).exactly(:once)
         allow_any_instance_of(User).to receive(:update!).and_raise(StandardError)
 
         put :update, params: { user: { updated_country_code: "GB" } }
@@ -1310,7 +1419,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
     end
 
     before do
-      seller.mark_compliant!(author_name: "Iffy")
+      seller.mark_compliant!(author_name: "ContentModeration")
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
       create(:payment_completed, user: seller)
     end

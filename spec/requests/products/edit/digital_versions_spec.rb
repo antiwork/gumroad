@@ -77,7 +77,7 @@ describe("Product Edit Digital Versions", type: :system, js: true) do
       click_on "Add version"
       within version_rows[0] do
         within version_option_rows[2] do
-          fill_in "Version name", with: "Second version"
+          fill_in "Name", with: "Second version"
         end
 
         # Fix flaky spec when the banner component is present.

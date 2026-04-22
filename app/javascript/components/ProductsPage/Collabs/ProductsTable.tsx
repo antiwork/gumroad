@@ -71,7 +71,7 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                   </a>
 
                   <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
-                    <small>{product.url_without_protocol}</small>
+                    <small className="block">{product.url_without_protocol}</small>
                   </a>
                 </div>
               </TableCell>
@@ -86,7 +86,9 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 </a>
 
                 {product.remaining_for_sale_count ? (
-                  <small>{product.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining</small>
+                  <small className="block">
+                    {product.remaining_for_sale_count.toLocaleString(userAgentInfo.locale)} remaining
+                  </small>
                 ) : null}
               </TableCell>
 

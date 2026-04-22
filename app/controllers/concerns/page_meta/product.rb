@@ -88,9 +88,5 @@ module PageMeta::Product
       end
       description = description.length > 200 ? "#{description[0, 197]}..." : description
       set_meta_tag(property: "twitter:description", value: description)
-
-      if product.user&.twitter_handle?
-        set_meta_tag(property: "twitter:creator", value: "@#{product.user.twitter_handle}")
-      end
     end
 end

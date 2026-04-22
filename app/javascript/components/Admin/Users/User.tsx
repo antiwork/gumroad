@@ -57,6 +57,7 @@ export type User = {
   compliant?: boolean | null;
   suspended: boolean;
   unpaid_balance_cents: number;
+  has_in_progress_scheduled_payout: boolean;
   disable_paypal_sales: boolean;
   flagged_for_fraud: boolean;
   flagged_for_tos_violation: boolean;

@@ -14,7 +14,7 @@ class InstantPayoutsService
     balances = seller.instantly_payable_unpaid_balances
       .filter { |balance| balance.date <= date }
       .sort_by(&:created_at)
-    return { success: false, error: "You need at least $10 in your balance to request an instant payout." } if balances.sum(&:holding_amount_cents) < StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
+    return { success: false, error: "You need at least $100 in your balance to request an instant payout." } if balances.sum(&:holding_amount_cents) < StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
 
     if balances.any? { |balance| balance.holding_amount_cents > StripePayoutProcessor::MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS }
       return { success: false, error: "Your balance exceeds the maximum instant payout amount. Please contact support for assistance." }

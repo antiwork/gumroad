@@ -15,7 +15,7 @@ class Admin::PaymentPresenter
       created_at: payment.created_at,
       user: payment.user ? {
         external_id: payment.user.external_id,
-        name: payment.user.name,
+        name: payment.user.display_name,
       } : nil,
 
       # State

@@ -41,7 +41,7 @@ class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::Base
       }
     rescue => e
       Rails.logger.error "Product details generation using AI failed: #{e.full_message}"
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       render json: {
         success: false,
         error: "Failed to generate product details. Please try again."

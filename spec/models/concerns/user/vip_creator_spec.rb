@@ -6,23 +6,30 @@ describe User::VipCreator do
   let(:user) { create(:user) }
 
   describe "#vip_creator?" do
-    context "when gross sales are above $5,000" do
+    context "when gross completed payouts exceed the threshold" do
       it "returns true" do
-        create(:purchase, link: create(:product, user:, price_cents: 1_00))
-        create_list(:purchase, 2, link: create(:product, user:, price_cents: 2500_00))
-        index_model_records(Purchase)
+        create(:payment_completed, user:, amount_cents: 3_000_00)
+        create(:payment_completed, user:, amount_cents: 2_500_00)
 
         expect(user.vip_creator?).to be true
       end
     end
 
-    context "when gross sales are less than or equal to $5,000" do
-      it "returns false" do
-        expect(user.sales).to be_empty
+    context "when gross completed payouts are at or below the threshold" do
+      it "returns false when the user has no payments" do
+        expect(user.payments).to be_empty
         expect(user.vip_creator?).to be false
+      end
 
-        create_list(:purchase, 2, link: create(:product, user:, price_cents: 2500_00))
-        index_model_records(Purchase)
+      it "returns false at exactly the threshold" do
+        create(:payment_completed, user:, amount_cents: 5_000_00)
+
+        expect(user.vip_creator?).to be false
+      end
+
+      it "ignores non-completed payouts" do
+        create(:payment, user:, amount_cents: 10_000_00)
+
         expect(user.vip_creator?).to be false
       end
     end

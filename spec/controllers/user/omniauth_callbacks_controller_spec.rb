@@ -40,7 +40,7 @@ describe User::OmniauthCallbacksController do
         user = User.last
         expect(user.email).to eq("stripe.connect@gum.co")
         expect(user.confirmed?).to be true
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
 
       it "redirects directly to completion when user has no email" do
@@ -61,7 +61,7 @@ describe User::OmniauthCallbacksController do
         user = User.last
         expect(user.email).to eq("stripe.connect@gum.co")
         expect(controller.user_signed_in?).to be false
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
 
       it "does not create a new user if the email is already taken" do
@@ -69,7 +69,7 @@ describe User::OmniauthCallbacksController do
 
         expect { post :stripe_connect }.not_to change { User.count }
 
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
     end
 
@@ -109,13 +109,13 @@ describe User::OmniauthCallbacksController do
 
       include_examples "stripe connect user creation"
 
-      it "does not log in admin user" do
-        create(:merchant_account_stripe_connect, user: create(:admin_user), charge_processor_merchant_id: stripe_uid)
+      it "allows admin user to log in" do
+        admin = create(:admin_user)
+        create(:merchant_account_stripe_connect, user: admin, charge_processor_merchant_id: stripe_uid)
 
         post :stripe_connect
 
-        expect(flash[:alert]).to eq "You're an admin, you can't login with Stripe."
-        expect(response).to redirect_to login_url
+        expect(flash[:alert]).to be_nil
       end
 
       it "does not allow user to login if the account is deleted" do
@@ -147,7 +147,7 @@ describe User::OmniauthCallbacksController do
         expect(user.email).to eq("stripe.connect@gum.co")
         expect(purchase1.reload.purchaser_id).to eq(user.id)
         expect(purchase2.reload.purchaser_id).to eq(user.id)
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
     end
 
@@ -172,7 +172,7 @@ describe User::OmniauthCallbacksController do
 
         expect { post :stripe_connect }.not_to change { User.count }
 
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
 
       it "allows existing users with matching email (without Stripe connected) to log in" do
@@ -180,7 +180,7 @@ describe User::OmniauthCallbacksController do
 
         expect { post :stripe_connect }.not_to change { User.count }
 
-        expect(response).to redirect_to safe_redirect_path(two_factor_authentication_path(next: oauth_completions_stripe_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: oauth_completions_stripe_path)
       end
 
       it "allows existing users without email to log in" do
@@ -196,20 +196,22 @@ describe User::OmniauthCallbacksController do
     end
   end
 
-  describe "#facebook" do
+  describe "#apple" do
     before do
-      OmniAuth.config.mock_auth[:facebook] = OmniAuth::AuthHash.new fetch_json("facebook")
-      request.env["omniauth.params"] = { state: true }
-      request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:facebook]
+      OmniAuth.config.mock_auth[:apple] = OmniAuth::AuthHash.new fetch_json("apple")
+      request.env["omniauth.auth"] = fetch_json("apple")
+      request.env["omniauth.params"] = { "state" => true }
     end
 
     it "creates user if none exists" do
       expect do
-        post :facebook
+        post :apple
       end.to change { User.count }.by(1)
+
       user = User.last
-      expect(user.name).to eq "Sidharth Shanker"
-      expect(user.email).to match "sps2133@columbia.edu"
+      expect(user.name).to eq "Jane Appleseed"
+      expect(user.email).to eq "apple-user@example.com"
+      expect(user.user_external_authentications.find_by(provider: "apple")&.uid).to eq "001234.abcdef1234567890abcdef1234567890.1234"
       expect(user.global_affiliate).to be_present
     end
 
@@ -220,162 +222,33 @@ describe User::OmniauthCallbacksController do
       expect(purchase1.purchaser_id).to be_nil
       expect(purchase2.purchaser_id).to be_nil
 
-      post :facebook
+      post :apple
 
       user = User.last
       expect(purchase1.reload.purchaser_id).to eq(user.id)
       expect(purchase2.reload.purchaser_id).to eq(user.id)
     end
 
-    it "creates user even if there's no email address" do
-      request.env["omniauth.auth"]["info"].delete "email"
-      request.env["omniauth.auth"]["extra"]["raw_info"].delete "email"
-      post :facebook
-      user = User.last
-      expect(user.name).to eq "Sidharth Shanker"
-      expect(user.email).to_not be_present
-    end
-
-    describe "user is admin" do
-      it "does not log in user" do
-        allow(User).to receive(:new).and_return(create(:admin_user))
-        post :facebook
-        expect(flash[:alert]).to eq "You're an admin, you can't login with Facebook."
-        expect(response).to redirect_to login_url
-      end
-    end
-
-    context "when user is marked as deleted" do
-      let!(:user) { create(:user, facebook_uid: "509129169", deleted_at: Time.current) }
-
-      it "does not allow user to login" do
-        post :facebook
-
-        expect(flash[:alert]).to eq ACCOUNT_DELETION_ERROR_MSG
-        expect(response).to redirect_to login_url
-      end
-    end
-
-    context "when user has 2FA" do
-      let!(:user) { create(:user, facebook_uid: "509129169", email: "sps2133@example.com", two_factor_authentication_enabled: true) }
-
-      it "does not allow user to login with FB only" do
-        post :facebook
-        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: dashboard_path))
-      end
-
-      it "keeps referral intact" do
-        post :facebook, params: { referer: balance_path }
-        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: balance_path))
-      end
-    end
-
-    describe "no facebook account connected" do
-      it "links facebook account to existing account" do
-        @user = create(:user)
-        OmniAuth.config.mock_auth[:facebook] = OmniAuth::AuthHash.new fetch_json("facebook")
-        request.env["omniauth.params"] = { "state" => "link_facebook_account" }
-        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:facebook]
-        allow(controller).to receive(:current_user).and_return(@user)
-        post :facebook
-        @user.reload
-        expect(@user.facebook_uid).to_not be(nil)
-      end
-
-      describe "facebook account connected to different account" do
-        before do
-          @existing_facebook_account = create(:user, facebook_uid: fetch_json("facebook")["uid"])
-          @new_user = create(:user)
-          OmniAuth.config.mock_auth[:facebook] = OmniAuth::AuthHash.new fetch_json("facebook")
-          request.env["omniauth.params"] = { "state" => "link_facebook_account" }
-          request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:facebook]
-
-          sign_in @new_user
-        end
-
-        it "does not link accounts if the facebook account is already linked to a gumroad account" do
-          expect do
-            post :facebook
-          end.to_not change {
-            @new_user.reload.facebook_uid
-          }
-        end
-
-        it "sets the correct flash message" do
-          post :facebook
-          expect(flash[:alert]).to eq "Your Facebook account has already been linked to a Gumroad account."
-          expect(response).to redirect_to user_url(@new_user)
-        end
-      end
-    end
-
-    describe "has no 2FA email" do
-      before do
-        user = create(:user)
-        allow(User).to receive(:new).and_return(user)
-        user.email = nil
-        user.save!(validate: false)
-      end
-
-      it "redirects directly to referrer", :vcr do
-        post :facebook, params: { referer: balance_path }
-        expect(response).to redirect_to balance_path
-      end
-
-      it "redirects directly to dashboard", :vcr do
-        post :facebook
-        expect(response).to redirect_to dashboard_path
-      end
-    end
-
-    context "when user is not created" do
-      before do
-        allow(User).to receive(:find_for_facebook_oauth).and_return(User.new)
-      end
-
-      it "redirects to the signup page with an error flash message" do
-        post :facebook
-
-        expect(flash[:alert]).to eq "Sorry, something went wrong. Please try again."
-        expect(response).to redirect_to signup_path
-      end
-    end
-  end
-
-  describe "#twitter" do
-    before do
-      OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new fetch_json("twitter")
-      request.env["omniauth.auth"] = fetch_json("twitter")
-      request.env["omniauth.params"] = { "state" => true }
-    end
-
-    it "creates user if none exists", :vcr do
-      expect do
-        post :twitter
-      end.to change { User.count }.by(1)
-
-      user = User.last
-      expect(user.name).to match "Sidharth Shanker"
-      expect(user.email).to eq nil
-      expect(user.global_affiliate).to be_present
-    end
-
     context "when user is admin" do
-      it "does not allow user to login" do
-        allow(User).to receive(:new).and_return(create(:admin_user))
+      it "allows admin user to log in with Apple" do
+        admin = create(:admin_user)
+        allow(User).to receive(:find_or_create_for_apple_oauth).and_return(admin)
 
-        post :twitter
+        post :apple
 
-        expect(flash[:alert]).to eq "You're an admin, you can't login with Twitter."
-        expect(response).to redirect_to login_path
+        expect(flash[:alert]).to be_nil
       end
     end
 
     context "when user is marked as deleted" do
-      let!(:user) { create(:user, twitter_user_id: "279418691", deleted_at: Time.current) }
+      let!(:user) { create(:user, deleted_at: Time.current) }
+
+      before do
+        UserExternalAuthentication.create!(user:, provider: "apple", uid: "001234.abcdef1234567890abcdef1234567890.1234")
+      end
 
       it "does not allow user to login" do
-        post :twitter
+        post :apple
 
         expect(flash[:alert]).to eq ACCOUNT_DELETION_ERROR_MSG
         expect(response).to redirect_to login_path
@@ -383,93 +256,59 @@ describe User::OmniauthCallbacksController do
     end
 
     context "when user has 2FA" do
-      let!(:user) { create(:user, twitter_user_id: "279418691", email: "sps2133@example.com", two_factor_authentication_enabled: true) }
+      let!(:user) do
+        u = create(:user, email: "apple-user@example.com", two_factor_authentication_enabled: true)
+        UserExternalAuthentication.create!(user: u, provider: "apple", uid: "001234.abcdef1234567890abcdef1234567890.1234")
+        u
+      end
 
-      it "does not allow user to login with Twitter only" do
-        post :twitter
-        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: dashboard_path))
+      it "does not allow user to login with Apple only" do
+        post :apple
+        expect(response).to redirect_to two_factor_authentication_path(next: dashboard_path)
       end
 
       it "keeps referral intact" do
-        post :twitter, params: { referer: balance_path }
-        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: balance_path))
+        post :apple, params: { referer: balance_path }
+        expect(response).to redirect_to two_factor_authentication_path(next: balance_path)
       end
     end
 
-    describe "linking account" do
-      it "links twitter account to existing account", :vcr do
-        @user = create(:user, name: "Tim Lupton", bio: "A regular guy")
-        request.env["omniauth.params"] = { "state" => "link_twitter_account" }
-        OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new fetch_json("twitter")
-        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:twitter]
-        allow(controller).to receive(:current_user).and_return(@user)
-        post :twitter
-        @user.reload
-        expect(@user.name).to eq "Tim Lupton"
-        expect(@user.bio).to eq "A regular guy"
-        expect(@user.twitter_oauth_token).to_not be(nil)
-        expect(@user.twitter_oauth_secret).to_not be(nil)
-        expect(@user.twitter_handle).to_not be(nil)
-      end
+    context "linking account" do
+      it "links apple account to existing account" do
+        user = create(:user, email: "apple-user@example.com")
 
-      it "updates the Twitter OAuth credentials on account creation", :vcr do
-        user = create(:user)
-        allow(User).to receive(:new).and_return(user)
+        allow(controller).to receive(:current_user).and_return(user)
 
-        OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new fetch_json("twitter")
-        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:twitter]
-
-        post :twitter
+        post :apple
 
         user.reload
-        expect(user.twitter_oauth_token).to be_present
-        expect(user.twitter_oauth_secret).to be_present
-      end
-    end
 
-    describe "has no 2FA email" do
-      before do
-        user = create(:user)
-        allow(User).to receive(:new).and_return(user)
-        user.email = nil
-        user.save!(validate: false)
-      end
-
-      it "redirects to the settings page and ignores referrer", :vcr do
-        post :twitter, params: { referer: balance_path }
-
-        expect(flash[:warning]).to eq "Please enter an email address!"
-        expect(response).to redirect_to settings_main_path
-      end
-    end
-
-    context "when the user has unconfirmed email" do
-      before do
-        user = create(:user)
-        allow(User).to receive(:new).and_return(user)
-        user.email = nil
-        user.unconfirmed_email = "test@gumroad.com"
-        user.save!(validate: false)
-      end
-
-      it "redirects to the settings page with the correct warning flash message", :vcr do
-        post :twitter
-
-        expect(flash[:warning]).to eq "Please confirm your email address"
-        expect(response).to redirect_to settings_main_path
+        expect(user.name).to eq "Jane Appleseed"
+        expect(user.email).to eq "apple-user@example.com"
+        expect(user.user_external_authentications.find_by(provider: "apple")&.uid).to eq "001234.abcdef1234567890abcdef1234567890.1234"
       end
     end
 
     context "when user is not created" do
-      before do
-        allow(User).to receive(:find_or_create_for_twitter_oauth!).and_return(User.new)
+      shared_examples "redirects to signup with error message" do
+        it "redirects to the signup page with an error flash message" do
+          post :apple
+
+          expect(flash[:alert]).to eq "Sorry, something went wrong. Please try again."
+          expect(response).to redirect_to signup_path
+        end
       end
 
-      it "redirects to the signup page with an error flash message" do
-        post :twitter
+      context "when the user is not persisted" do
+        before { allow(User).to receive(:find_or_create_for_apple_oauth).and_return(User.new) }
 
-        expect(flash[:alert]).to eq "Sorry, something went wrong. Please try again."
-        expect(response).to redirect_to signup_path
+        include_examples "redirects to signup with error message"
+      end
+
+      context "when there's an error creating the user" do
+        before { allow(User).to receive(:find_or_create_for_apple_oauth).and_return(nil) }
+
+        include_examples "redirects to signup with error message"
       end
     end
   end
@@ -492,13 +331,13 @@ describe User::OmniauthCallbacksController do
     end
 
     context "when user is admin" do
-      it "does not allow user to login" do
-        allow(User).to receive(:new).and_return(create(:admin_user))
+      it "allows admin user to log in with Google" do
+        admin = create(:admin_user)
+        allow(User).to receive(:find_or_create_for_google_oauth2).and_return(admin)
 
         post :google_oauth2
 
-        expect(flash[:alert]).to eq "You're an admin, you can't login with Google."
-        expect(response).to redirect_to login_path
+        expect(flash[:alert]).to be_nil
       end
     end
 
@@ -518,12 +357,19 @@ describe User::OmniauthCallbacksController do
 
       it "does not allow user to login with Google only" do
         post :google_oauth2
-        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: dashboard_path))
+        expect(response).to redirect_to two_factor_authentication_path(next: dashboard_path)
       end
 
       it "keeps referral intact" do
-        post :google_oauth2, params: { referer: balance_path }
-        expect(response).to redirect_to CGI.unescape(two_factor_authentication_path(next: balance_path))
+        request.env["omniauth.origin"] = balance_path
+        post :google_oauth2
+        expect(response).to redirect_to two_factor_authentication_path(next: balance_path)
+      end
+
+      it "sanitizes external domain in referral to a relative path" do
+        request.env["omniauth.origin"] = "https://evil.com/phishing"
+        post :google_oauth2
+        expect(response).to redirect_to two_factor_authentication_path(next: "/phishing")
       end
     end
 

@@ -41,7 +41,16 @@ describe Api::Internal::Helper::UsersController do
         get :user_info, params: params
 
         expect(response).to have_http_status(:success)
-        expect(response.body).to eq({ success: true, customer: { metadata: {} } }.to_json)
+        expect(response.parsed_body).to eq(
+          {
+            "success" => true,
+            "customer" => {
+              "comments" => [],
+              "can_add_comment" => false,
+              "metadata" => {}
+            }
+          }
+        )
       end
     end
 
@@ -97,26 +106,17 @@ describe Api::Internal::Helper::UsersController do
     end
 
     context "when user is found but not suspended" do
-      it "returns non-suspended status" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
+      it "returns compliant status" do
         get :user_suspension_info, params: { email: user.email }
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["success"]).to be true
         expect(response.parsed_body["status"]).to eq("Compliant")
-        expect(response.parsed_body["updated_at"]).to be_nil
         expect(response.parsed_body["appeal_url"]).to be_nil
       end
     end
 
-    context "when user is suspended locally" do
+    context "when user is suspended" do
       let(:suspended_user) { create(:tos_user) }
       let(:suspension_comment) { create(:comment, commentable: suspended_user, comment_type: Comment::COMMENT_TYPE_SUSPENDED, created_at: 2.days.ago) }
 
@@ -124,9 +124,7 @@ describe Api::Internal::Helper::UsersController do
         suspension_comment
       end
 
-      it "returns suspended status from local data" do
-        expect(HTTParty).not_to receive(:get)
-
+      it "returns suspended status with details" do
         get :user_suspension_info, params: { email: suspended_user.email }
 
         expect(response).to have_http_status(:success)
@@ -134,69 +132,6 @@ describe Api::Internal::Helper::UsersController do
         expect(response.parsed_body["status"]).to eq("Suspended")
         expect(response.parsed_body["updated_at"]).to eq(suspension_comment.created_at.as_json)
         expect(response.parsed_body["appeal_url"]).to be_nil
-      end
-    end
-
-    context "when user is found and is suspended" do
-      it "returns suspended status with details" do
-        updated_at = Time.current.iso8601
-        appeal_url = "https://appeal.example.com/123"
-
-        user_data = {
-          "actionStatus" => "Suspended",
-          "actionStatusCreatedAt" => updated_at,
-          "appealUrl" => appeal_url
-        }
-
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [user_data] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        get :user_suspension_info, params: { email: user.email }
-
-        expect(response).to have_http_status(:success)
-        expect(response.parsed_body["success"]).to be true
-        expect(response.parsed_body["status"]).to eq("Suspended")
-        expect(response.parsed_body["updated_at"]).to eq(updated_at)
-        expect(response.parsed_body["appeal_url"]).to eq(appeal_url)
-      end
-    end
-
-    context "when api call to iffy fails" do
-      it "returns non-suspended status as default" do
-        failed_response = instance_double(
-          HTTParty::Response,
-          code: 400,
-          success?: false,
-          parsed_response: {}
-        )
-        allow(HTTParty).to receive(:get).and_return(failed_response)
-
-        get :user_suspension_info, params: { email: user.email }
-
-        expect(response).to have_http_status(:success)
-        expect(response.parsed_body["success"]).to be true
-        expect(response.parsed_body["status"]).to eq("Compliant")
-        expect(response.parsed_body["updated_at"]).to be_nil
-        expect(response.parsed_body["appeal_url"]).to be_nil
-      end
-    end
-
-    context "when api call to iffy raises a network error" do
-      it "notifies Bugsnag and returns an error response" do
-        network_error = HTTParty::Error.new("Connection failed")
-        allow(HTTParty).to receive(:get).and_raise(network_error)
-        expect(Bugsnag).to receive(:notify).with(network_error)
-
-        get :user_suspension_info, params: { email: user.email }
-
-        expect(response).to have_http_status(:service_unavailable)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Failed to retrieve suspension information")
       end
     end
   end
@@ -234,148 +169,191 @@ describe Api::Internal::Helper::UsersController do
       end
     end
 
-    context "when user is not found on Iffy" do
-      it "returns an error message" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
+    context "when appeal is successfully created" do
+      before { user.flag_for_tos_violation!(author_name: "ContentModeration", content: "Flagged for testing", bulk: true) }
 
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Failed to find user")
-      end
-    end
-
-    context "when user is found but not suspended" do
-      it "returns appeal creation failed" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [{ "id" => "user123" }] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        failed_response = instance_double(
-          HTTParty::Response,
-          code: 400,
-          success?: false,
-          parsed_response: { "error" => { "message" => "User is not suspended" } }
-        )
-        allow(HTTParty).to receive(:post).and_return(failed_response)
-
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("User is not suspended")
-      end
-    end
-
-    context "when user is found but user is banned" do
-      it "returns appeal creation failed" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [{ "id" => "user123" }] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        failed_response = instance_double(
-          HTTParty::Response,
-          code: 400,
-          success?: false,
-          parsed_response: { "error" => { "message" => "Banned users may not appeal" } }
-        )
-        allow(HTTParty).to receive(:post).and_return(failed_response)
-
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Banned users may not appeal")
-      end
-    end
-
-    context "when user is found but appeal already exists" do
-      it "returns appeal creation failed" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [{ "id" => "user123" }] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        failed_response = instance_double(
-          HTTParty::Response,
-          code: 400,
-          success?: false,
-          parsed_response: { "error" => { "message" => "Appeal already exists" } }
-        )
-        allow(HTTParty).to receive(:post).and_return(failed_response)
-
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Appeal already exists")
-      end
-    end
-
-    context "when user is found and appeal creation is successful" do
-      it "returns appeal id and url" do
-        appeal_url = "https://appeal.example.com/123"
-
-        user_data = {
-          "id" => "appeal123",
-          "actionStatus" => "Suspended",
-          "appealUrl" => appeal_url
-        }
-
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [{ "id" => "user123" }] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => user_data }
-        )
-        allow(HTTParty).to receive(:post).and_return(successful_response)
-
-        post :create_appeal, params: { email: user.email, reason: "test" }
+      it "creates a comment and returns success" do
+        expect do
+          post :create_appeal, params: { email: user.email, reason: "I believe this was a mistake" }
+        end.to change { Comment.count }.by(1)
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["success"]).to be true
-        expect(response.parsed_body["id"]).to eq("appeal123")
-        expect(response.parsed_body["appeal_url"]).to eq(appeal_url)
+        expect(response.parsed_body["id"]).to be_present
+
+        comment = Comment.last
+        expect(comment.content).to eq("Appeal submitted: I believe this was a mistake")
+        expect(comment.author_name).to eq("ContentModeration")
+        expect(comment.commentable).to eq(user)
+      end
+
+      it "bypasses adult keyword validation for appeal comments" do
+        allow(AdultKeywordDetector).to receive(:adult?).and_return(true)
+
+        expect do
+          post :create_appeal, params: { email: user.email, reason: "blocked text" }
+        end.to change { Comment.count }.by(1)
+
+        expect(response).to have_http_status(:success)
       end
     end
 
-    context "when api call to iffy raises a network error" do
-      it "notifies Bugsnag and returns an error response" do
-        network_error = HTTParty::Error.new("Connection failed")
-        allow(HTTParty).to receive(:get).and_raise(network_error)
-        expect(Bugsnag).to receive(:notify).with(network_error)
+    context "when the user is neither suspended nor flagged" do
+      it "returns an error_message response" do
+        post :create_appeal, params: { email: user.email, reason: "Please review" }
 
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:service_unavailable)
+        expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Failed to create appeal")
+        expect(response.parsed_body["error_message"]).to eq("User is not suspended or flagged")
+      end
+    end
+  end
+
+  describe "POST create_comment" do
+    include_examples "helper api authorization required", :post, :create_comment
+
+    context "when email parameter is missing" do
+      it "returns a bad request error" do
+        post :create_comment, params: { content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'email' parameter is required")
+      end
+    end
+
+    context "when content parameter is missing" do
+      it "returns a bad request error" do
+        post :create_comment, params: { email: user.email, idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'content' parameter is required")
+      end
+    end
+
+    context "when idempotency_key parameter is missing" do
+      it "returns a bad request error" do
+        post :create_comment, params: { email: user.email, content: "Test" }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("'idempotency_key' parameter is required")
+      end
+    end
+
+    context "when user is not found" do
+      it "returns an error message" do
+        post :create_comment, params: { email: "nonexistent@example.com", content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["error_message"]).to eq("An account does not exist with that email.")
+      end
+    end
+
+    context "when user is soft-deleted" do
+      it "returns an error message" do
+        user.mark_deleted!
+
+        post :create_comment, params: { email: user.email, content: "Test", idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+      end
+    end
+
+    context "when all parameters are valid" do
+      it "creates a comment and returns it" do
+        idempotency_key = SecureRandom.uuid
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
+        end.to change { user.comments.count }.by(1)
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["success"]).to be true
+
+        comment_data = response.parsed_body["comment"]
+        expect(comment_data["id"]).to be_present
+        expect(comment_data["content"]).to eq("Test note")
+        expect(comment_data["comment_type"]).to eq(Comment::COMMENT_TYPE_NOTE)
+        expect(comment_data["author_name"]).to be_present
+        expect(comment_data["created_at"]).to be_present
+      end
+
+      it "uses GUMROAD_ADMIN_ID as author" do
+        post :create_comment, params: { email: user.email, content: "Test", idempotency_key: SecureRandom.uuid }
+
+        comment = user.comments.last
+        expect(comment.author_id).to eq(GUMROAD_ADMIN_ID)
+      end
+    end
+
+    context "when content exceeds maximum length" do
+      it "returns a validation error" do
+        post :create_comment, params: { email: user.email, content: "x" * 10_001, idempotency_key: SecureRandom.uuid }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be false
+      end
+    end
+
+    context "idempotency" do
+      it "returns existing comment when same key and content are sent" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
+        first_response = response.parsed_body
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Test note", idempotency_key: idempotency_key }
+        end.not_to change { user.comments.count }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to eq(first_response["comment"]["id"])
+      end
+
+      it "returns conflict when same key is used with different content" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "First note", idempotency_key: idempotency_key }
+        expect(response).to have_http_status(:success)
+
+        post :create_comment, params: { email: user.email, content: "Different note", idempotency_key: idempotency_key }
+        expect(response).to have_http_status(:conflict)
+        expect(response.parsed_body["error_message"]).to eq("Idempotency key already used with different content")
+      end
+
+      it "returns existing comment when content differs only by extra newlines" do
+        idempotency_key = SecureRandom.uuid
+
+        post :create_comment, params: { email: user.email, content: "Hello\n\nWorld", idempotency_key: idempotency_key }
+        first_response = response.parsed_body
+        expect(response).to have_http_status(:success)
+
+        expect do
+          post :create_comment, params: { email: user.email, content: "Hello\n\n\n\nWorld", idempotency_key: idempotency_key }
+        end.not_to change { user.comments.count }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to eq(first_response["comment"]["id"])
+      end
+
+      it "handles concurrent inserts via RecordNotUnique" do
+        idempotency_key = SecureRandom.uuid
+        content = "Concurrent note"
+
+        allow_any_instance_of(Comment).to receive(:save).and_wrap_original do |method, *args|
+          method.call(*args)
+          raise ActiveRecord::RecordNotUnique
+        end
+
+        post :create_comment, params: { email: user.email, content: content, idempotency_key: idempotency_key }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["comment"]["id"]).to be_present
+        expect(response.parsed_body["comment"]["content"]).to eq(content)
       end
     end
   end

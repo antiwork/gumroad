@@ -36,7 +36,9 @@ describe PdfStampingService::Stamp do
 
     before do
       allow(described_class).to receive(:perform!).and_wrap_original do |method, **args|
-        created_file_paths << method.call(**args)
+        result = method.call(**args)
+        created_file_paths << result
+        result
       end
     end
 
@@ -50,6 +52,29 @@ describe PdfStampingService::Stamp do
       expect do
         described_class.perform!(product_file:, watermark_text:)
       end.not_to raise_error
+    end
+
+    it "stamps only the first page of the PDF" do
+      original_page_count = nil
+      product_file.download_original do |original_pdf|
+        original_page_count = PDF::Reader.new(original_pdf.path).page_count
+      end
+
+      stamped_path = described_class.perform!(product_file:, watermark_text:)
+
+      reader = PDF::Reader.new(stamped_path)
+      expect(reader.page_count).to eq(original_page_count)
+
+      first_page_text = reader.page(1).text
+      expect(first_page_text).to include("Sold to")
+      expect(first_page_text).to include(watermark_text)
+
+      if reader.page_count > 1
+        (2..reader.page_count).each do |page_num|
+          page_text = reader.page(page_num).text
+          expect(page_text).not_to include("Sold to")
+        end
+      end
     end
 
     context "when applying the watermark fails" do

@@ -84,12 +84,6 @@ class ContactingCreatorMailer < ApplicationMailer
     do_not_send unless should_send_email?
   end
 
-  def negative_revenue_sale_failure(purchase_id)
-    @purchase = Purchase.find(purchase_id)
-    @seller = @purchase.seller
-    @subject = "A sale failed because of negative net revenue"
-  end
-
   def chargeback_notice(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
@@ -149,6 +143,12 @@ class ContactingCreatorMailer < ApplicationMailer
   def invalid_bank_account(user_id)
     @seller = User.find(user_id)
     @subject = "We were unable to verify your bank account."
+  end
+
+  def invalid_account_holder_name(user_id)
+    @seller = User.find(user_id)
+    @country_code = @seller.alive_user_compliance_info&.legal_entity_country_code
+    @subject = "Your bank account holder name was rejected."
   end
 
   def cannot_pay(payment_id)
@@ -377,6 +377,13 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your account has been suspended for being high risk"
   end
 
+  def account_suspended(user_id)
+    @seller = User.find(user_id)
+    @subject = "Your Gumroad account has been suspended"
+    @scheduled_payout = @seller.scheduled_payouts.pending.last
+    @payout_amount = formatted_dollar_amount(@scheduled_payout.payout_amount_cents) if @scheduled_payout
+  end
+
   def user_sales_data(user_id, sales_csv_tempfile)
     @seller = User.find(user_id)
     @subject = "Here's your customer data!"
@@ -425,6 +432,7 @@ class ContactingCreatorMailer < ApplicationMailer
   def tax_form_1099k(user_id, year)
     @seller = User.find(user_id)
     @year = year
+    @is_filed = @seller.user_tax_forms.for_year(year).where(tax_form_type: "us_1099_k").first&.filed?
     @subject = "Get your 1099-K form for #{@year}"
   end
 
@@ -437,6 +445,8 @@ class ContactingCreatorMailer < ApplicationMailer
   def video_transcode_failed(product_file_id)
     @subject = "A video failed to transcode."
     product_file = ProductFile.find(product_file_id)
+    return do_not_send if product_file.link.nil?
+
     @video_transcode_error = "We attempted to transcode a video (#{product_file.s3_filename}) from your product #{product_file.link.name}, but were unable to do so."
     @seller = product_file.user
   end

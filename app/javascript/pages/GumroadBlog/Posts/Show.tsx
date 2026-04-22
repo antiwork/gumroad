@@ -1,3 +1,4 @@
+import { ArrowLeft } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import { EditorContent } from "@tiptap/react";
 import * as React from "react";
@@ -8,7 +9,6 @@ import { formatPostDate } from "$app/utils/date";
 
 import { NavigationButton } from "$app/components/Button";
 import { BlogLayout } from "$app/components/GumroadBlog/Layout";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -27,7 +27,7 @@ const BackToBlog = () => (
     href={Routes.gumroad_blog_root_path()}
     className="mt-4 flex items-center font-medium text-pink-600 hover:text-pink-800"
   >
-    <Icon name="arrow-left" className="mr-1.5" style={{ width: 18, height: 18 }} />
+    <ArrowLeft className="mr-1.5 size-5" style={{ width: 18, height: 18 }} />
     Back to Blog
   </Link>
 );

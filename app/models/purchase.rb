@@ -4,7 +4,7 @@ class Purchase < ApplicationRecord
   has_paper_trail
 
   include Rails.application.routes.url_helpers
-  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, Mongoable, PurchaseErrorCode,
+  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, PurchaseErrorCode,
           ExternalId, JsonData, TimestampScopes, Accounting, Blockable, CardCountrySource, Targeting,
           Refundable, Reviews, PingNotification, Searchable, Risk,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
@@ -21,10 +21,7 @@ class Purchase < ApplicationRecord
   SKU_ID_PREFIX_FOR_PRODUCT_WITH_NO_SKUS = "pid_"
 
   # Gumroad's fees per transaction
-  GUMROAD_FEE_PER_THOUSAND = 85
   GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND = 100
-
-  GUMROAD_NON_PRO_FEE_PERCENTAGE = 60
 
   GUMROAD_FLAT_FEE_PER_THOUSAND = 100
   GUMROAD_DISCOVER_FEE_PER_THOUSAND = 300
@@ -228,8 +225,7 @@ class Purchase < ApplicationRecord
     after_transition any => :failed, :do => :ban_buyer_on_fraud_related_error_code!
     after_transition any => :failed, :do => :suspend_buyer_on_fraudulent_card_decline!
     after_transition any => :failed, :do => :send_failure_email
-    after_transition any => %i[failed successful not_charged], :do => :check_purchase_heuristics
-    after_transition any => %i[failed successful not_charged], :do => :score_product
+
     after_transition any => %i[preorder_authorization_successful successful not_charged preorder_concluded_unsuccessfully], :do => :queue_product_cache_invalidation
     after_transition any => %i[successful preorder_authorization_successful], :do => :touch_variants_if_limited_quantity, unless: lambda { |purchase|
       purchase.not_charged_and_not_free_trial?
@@ -246,9 +242,6 @@ class Purchase < ApplicationRecord
                                                                                                                                  }
     after_transition any => :successful, :do => :block_fraudulent_free_purchases!
     after_transition any => any, :do => :log_transition
-    after_transition any => [:successful, :not_charged, :gift_receiver_purchase_successful], :do => :trigger_iffy_moderation, if: lambda { |purchase|
-      purchase.price_cents > 0 && !purchase.link.moderated_by_iffy
-    }
 
     # normal purchase transitions:
 
@@ -354,7 +347,6 @@ class Purchase < ApplicationRecord
   before_create :toggle_off_can_contact_if_buyer_has_unsubscribed
 
   before_save :assign_default_rental_expired
-  before_save :to_mongo
   before_save :truncate_referrer
 
   after_commit :attach_credit_card_to_purchaser,
@@ -460,6 +452,9 @@ class Purchase < ApplicationRecord
   }
   scope :paid, -> { successful.where("purchases.price_cents > 0").where("stripe_refunded is null OR stripe_refunded = 0") }
   scope :not_fully_refunded, -> { where("purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0") }
+  scope :not_partially_refunded_bundle_product_purchase, -> {
+    where("purchases.stripe_partially_refunded IS NULL OR purchases.stripe_partially_refunded = false").or(not_is_bundle_product_purchase)
+  }
   # always include subscription purchase regardless if refunded or not to show up in library and customers tab:
   scope :not_refunded_except_subscriptions, lambda {
     where("(purchases.subscription_id IS NULL AND (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)) OR " \
@@ -474,8 +469,9 @@ class Purchase < ApplicationRecord
   scope :not_additional_contribution, -> { where("purchases.flags IS NULL OR purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:is_additional_contribution]) }
   scope :for_products, ->(products) { where(link_id: products) if products.present? }
   scope :not_subscription_or_original_purchase, -> {
-    where("purchases.subscription_id IS NULL OR purchases.flags & ? = ?",
-          Purchase.flag_mapping["flags"][:is_original_subscription_purchase], Purchase.flag_mapping["flags"][:is_original_subscription_purchase])
+    where("purchases.subscription_id IS NULL OR purchases.flags & ? = ? OR purchases.flags & ? = ?",
+          Purchase.flag_mapping["flags"][:is_original_subscription_purchase], Purchase.flag_mapping["flags"][:is_original_subscription_purchase],
+          Purchase.flag_mapping["flags"][:is_gift_receiver_purchase], Purchase.flag_mapping["flags"][:is_gift_receiver_purchase])
   }
   # TODO: since Memberships, `not_recurring_charge` & `recurring_charge` are not an accurate names for what the scopes filter, and they should be renamed.
   scope :not_recurring_charge, lambda { not_subscription_or_original_purchase }
@@ -540,8 +536,8 @@ class Purchase < ApplicationRecord
     .not_chargedback_or_chargedback_reversed
     .not_is_archived_original_subscription_purchase
     .not_rental_expired
-    .order(:id)
-    .includes(:preorder, :purchaser, :seller, :subscription, url_redirect: { purchase: { link: [:user, :thumbnail] } })
+    .order(id: :desc)
+    .includes(:preorder, :purchaser, :seller, :subscription, url_redirect: { purchase: { link: [:user, :thumbnail_alive, { display_asset_previews: [:file_attachment, :file_blob] }] } })
   }
   scope :for_library, lambda {
     all_success_states
@@ -685,6 +681,7 @@ class Purchase < ApplicationRecord
       can_revoke_access: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).revoke_access? : nil,
       can_undo_revoke_access: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).undo_revoke_access? : nil,
       can_update: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).update? : nil,
+      invoice_url: (invoice_url if version == 2 && has_invoice?),
       upsell: upsell_purchase&.as_json,
       paypal_refund_expired: paypal_refund_expired?
     ).delete_if { |_, v| v.nil? }
@@ -2115,7 +2112,14 @@ class Purchase < ApplicationRecord
     check_filters_for_past_posts = lambda do |posts|
       posts.select do |post|
         purchases.reduce(false) do |select_post, purchase|
-          select_post || (purchase.link.should_show_all_posts? && post.purchase_passes_filters(purchase) && post.targeted_at_purchased_item?(purchase) && post.passes_member_cancellation_checks?(purchase))
+          next true if select_post
+
+          next false unless purchase.link.should_show_all_posts?
+          next false unless post.purchase_passes_filters(purchase)
+          next false unless post.targeted_at_purchased_item?(purchase)
+          next false unless post.passes_member_cancellation_checks?(purchase)
+
+          post.delivery_due?(purchase)
         end
       end
     end
@@ -2722,9 +2726,6 @@ class Purchase < ApplicationRecord
 
       calculate_fees
 
-      validate_seller_revenue
-      return if errors.present?
-
       purchase_sales_tax_info.save
       save
 
@@ -2792,15 +2793,6 @@ class Purchase < ApplicationRecord
     # Private: truncate the referrer so that they fit in our mysql string column.
     def truncate_referrer
       self.referrer = referrer.first(191) if referrer
-    end
-
-    def validate_seller_revenue
-      return unless price_cents
-      return if price_cents == 0
-      return if price_cents > fee_cents + affiliate_credit_cents
-
-      self.error_code = PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE
-      errors.add(:base, "Your purchase failed because the product is not correctly set up. Please contact the creator for more information.")
     end
 
     # Private: Prepare for charging the chargeable and retrieve any information about the chargeable that's needed
@@ -3174,27 +3166,17 @@ class Purchase < ApplicationRecord
 
     def calculate_additional_discover_fee_per_thousand
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        subscription.original_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) : 0) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+        subscription.original_purchase.discover_fee_per_thousand - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (subscription.mor_fee_applicable? && charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       elsif is_preorder_charge?
-        preorder.authorization_purchase.discover_fee_per_thousand - (flat_fee_applicable? ? (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) + PROCESSOR_FEE_PER_THOUSAND : 0)
+        preorder.authorization_purchase.discover_fee_per_thousand - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - PROCESSOR_FEE_PER_THOUSAND
       else
         GUMROAD_DISCOVER_FEE_PER_THOUSAND - (custom_fee_per_thousand.presence || GUMROAD_DISCOVER_EXTRA_FEE_PER_THOUSAND) - (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
       end
     end
 
     def calculate_gumroad_fee_per_thousand
-      if flat_fee_applicable?
-        calculate_custom_fee_per_thousand
-        (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
-      elsif seller.tier_pricing_enabled?
-        (seller.tier_fee(is_merchant_account: charged_using_gumroad_merchant_account?).to_f * 1000).round
-      else
-        if charged_using_gumroad_merchant_account?
-          gumroad_fee_percentage_for_non_migrated_account
-        else
-          gumroad_fee_percentage_for_migrated_account
-        end
-      end
+      calculate_custom_fee_per_thousand
+      (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
     end
 
     def calculate_custom_fee_per_thousand
@@ -3202,7 +3184,8 @@ class Purchase < ApplicationRecord
       return if charge_discover_fee?
 
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
-        self.custom_fee_per_thousand = subscription.original_purchase.custom_fee_per_thousand if subscription.original_purchase.custom_fee_per_thousand.present?
+        original_purchase = subscription.original_purchase
+        self.custom_fee_per_thousand = original_purchase.custom_fee_per_thousand if original_purchase&.custom_fee_per_thousand.present?
       elsif is_preorder_charge?
         self.custom_fee_per_thousand = preorder.authorization_purchase.custom_fee_per_thousand if preorder.authorization_purchase.custom_fee_per_thousand.present?
       elsif seller.custom_fee_per_thousand.present?
@@ -3212,20 +3195,6 @@ class Purchase < ApplicationRecord
 
     def gumroad_flat_fee_per_thousand
       seller.waive_gumroad_fee_on_new_sales? && subscription.blank? && !is_preorder_charge? ? 0 : GUMROAD_FLAT_FEE_PER_THOUSAND
-    end
-
-    def flat_fee_applicable?
-      # 10% flat fee is applicable to this purchase if it is not a recurring charge
-      # on a subscription that started before the flat fee was introduced.
-      subscription.blank? || subscription.flat_fee_applicable?
-    end
-
-    def gumroad_fee_percentage_for_non_migrated_account
-      GUMROAD_FEE_PER_THOUSAND
-    end
-
-    def gumroad_fee_percentage_for_migrated_account
-      GUMROAD_NON_PRO_FEE_PERCENTAGE
     end
 
     def calculate_taxes
@@ -3676,13 +3645,7 @@ class Purchase < ApplicationRecord
       PostToPingEndpointsWorker.perform_in(5.seconds, id, url_parameters, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
 
-    def score_product
-      ScoreProductWorker.perform_in(5.seconds, link.id) if run_risk_checks?
-    end
 
-    def check_purchase_heuristics
-      CheckPurchaseHeuristicsWorker.perform_in(5.seconds, id) if run_risk_checks?
-    end
 
     def log_transition
       logger.info "Purchase: purchase ID #{id} transitioned to #{purchase_state}"
@@ -3748,9 +3711,7 @@ class Purchase < ApplicationRecord
       after_commit do
         next if destroyed?
 
-        if error_code == PurchaseErrorCode::NET_NEGATIVE_SELLER_REVENUE
-          ContactingCreatorMailer.negative_revenue_sale_failure(id).deliver_later(queue: "critical")
-        elsif paid? && charge_processor_id.in?([PaypalChargeProcessor.charge_processor_id, BraintreeChargeProcessor.charge_processor_id])
+        if paid? && charge_processor_id.in?([PaypalChargeProcessor.charge_processor_id, BraintreeChargeProcessor.charge_processor_id])
           CustomerMailer.paypal_purchase_failed(id).deliver_later(queue: "critical")
         end
       end
@@ -3765,6 +3726,7 @@ class Purchase < ApplicationRecord
         license_key: selected_license.serial,
         license_id: selected_license.external_id,
         license_disabled: selected_license.disabled?,
+        license_uses: selected_license.uses,
         is_multiseat_license: is_multiseat_license?
       }
     end
@@ -3804,10 +3766,6 @@ class Purchase < ApplicationRecord
       self.email = email.downcase
     end
 
-    def run_risk_checks?
-      price_cents > 0 && !not_charged? && charged_using_gumroad_merchant_account?
-    end
-
     def all_workflows
       link.workflows.alive + seller.workflows.alive.seller_or_audience_type
     end
@@ -3822,13 +3780,6 @@ class Purchase < ApplicationRecord
 
     def purchasing_power_parity_factor
       @_purchasing_power_parity_factor ||= PurchasingPowerParityService.new.get_factor(Compliance::Countries.find_by_name(ip_country)&.alpha2, seller)
-    end
-
-    def trigger_iffy_moderation
-      probability = $redis.get(RedisKey.iffy_moderation_probability).to_f || 0.001
-      if rand < probability
-        Iffy::Product::IngestJob.perform_async(link.id)
-      end
     end
 
     def fetch_installment_plan

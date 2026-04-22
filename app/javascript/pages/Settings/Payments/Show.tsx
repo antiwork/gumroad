@@ -1,3 +1,4 @@
+import { Bank, CreditCard, Paypal, Stripe } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
@@ -13,12 +14,11 @@ import { asyncVoid } from "$app/utils/promise";
 import { Button } from "$app/components/Button";
 import { ConfirmBalanceForfeitOnPayoutMethodChangeModal } from "$app/components/ConfirmBalanceForfeitOnPayoutMethodChangeModal";
 import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
-import { Icon } from "$app/components/Icons";
-import { StripeConnectEmbeddedNotificationBanner } from "$app/components/PayoutPage/StripeConnectEmbeddedNotificationBanner";
 import { PriceInput } from "$app/components/PriceInput";
 import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
 import { Layout } from "$app/components/Settings/Layout";
 import AccountDetailsSection from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
+import AccountStatusSection, { type AccountStatus } from "$app/components/Settings/PaymentsPage/AccountStatusSection";
 import AusBackTaxesSection, { type AusBacktaxDetails } from "$app/components/Settings/PaymentsPage/AusBackTaxesSection";
 import BankAccountSection, {
   BankAccountDetails,
@@ -36,10 +36,7 @@ import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { UpdateCountryConfirmationModal } from "$app/components/UpdateCountryConfirmationModal";
-import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
-
-import logo from "$assets/images/logo-g.svg";
 
 const KANA_NAME_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\-.]*$/u;
 const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=Latin}\d\s\-.]*$/u;
@@ -48,6 +45,7 @@ const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, a
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
 const HAS_JAPANESE_CHARS = /[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF65-\uFF9F]/u;
+const HAS_KATAKANA = /[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F]/u;
 
 const PAYOUT_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly"] as const;
 type PayoutFrequency = (typeof PAYOUT_FREQUENCIES)[number];
@@ -92,7 +90,7 @@ type PaymentsPageProps = {
   formatted_balance_to_forfeit_on_payout_method_change: string | null;
   payouts_paused_internally: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
-  payouts_paused_for_reason: string | null;
+  account_status: AccountStatus;
   payouts_paused_by_user: boolean;
   payout_threshold_cents: number;
   minimum_payout_threshold_cents: number;
@@ -101,7 +99,6 @@ type PaymentsPageProps = {
   payout_frequency_daily_supported: boolean;
   errors?: {
     base?: string[];
-    error_code?: string[];
   };
 };
 
@@ -113,9 +110,8 @@ type ErrorMessageInfo = {
 export default function PaymentsPage() {
   const page = usePage();
   const props = cast<PaymentsPageProps>(page.props);
-  const errors = cast<{ base?: string[]; error_code?: string[] } | undefined>(page.props.errors);
+  const errors = cast<{ base?: string[] } | undefined>(page.props.errors);
 
-  const userAgentInfo = useUserAgentInfo();
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
   const [errorFieldNames, setErrorFieldNames] = React.useState(() => new Set<FormFieldName>());
@@ -566,6 +562,13 @@ export default function PaymentsPage() {
         "Street address (Kana)",
         KANA_ADDRESS_ERROR,
       );
+      validateKanaField(
+        "street_address_kana",
+        form.data.user.street_address_kana,
+        HAS_KATAKANA,
+        "Street address (Kana)",
+        "must include katakana characters.",
+      );
     } else if (
       !form.data.user.street_address ||
       (form.data.user.country === "US" && isStreetAddressPOBox(form.data.user.street_address))
@@ -662,6 +665,13 @@ export default function PaymentsPage() {
           KANA_ADDRESS_REGEX,
           "Business street address (Kana)",
           KANA_ADDRESS_ERROR,
+        );
+        validateKanaField(
+          "business_street_address_kana",
+          form.data.user.business_street_address_kana,
+          HAS_KATAKANA,
+          "Business street address (Kana)",
+          "must include katakana characters.",
         );
         if (form.data.user.business_name && HAS_JAPANESE_CHARS.test(form.data.user.business_name)) {
           markFieldInvalid("business_name");
@@ -868,51 +878,11 @@ export default function PaymentsPage() {
         />
       ) : null}
       <form ref={formRef}>
-        {props.payouts_paused_by !== null ? (
-          <Alert className="m-4 md:m-8" role="status" variant="warning">
-            {props.payouts_paused_by === "stripe" ? (
-              <strong>
-                Your payouts are currently paused by our payment processor. Please check for any pending verification
-                requirements below.
-              </strong>
-            ) : props.payouts_paused_by === "admin" ? (
-              <strong>
-                Your payouts have been paused by Gumroad admin.
-                {props.payouts_paused_for_reason ? ` Reason for pause: ${props.payouts_paused_for_reason}` : null}
-              </strong>
-            ) : props.payouts_paused_by === "system" ? (
-              <strong>
-                Your payouts have been automatically paused for a security review and will be resumed once the review
-                completes.
-              </strong>
-            ) : (
-              <strong>You have paused your payouts.</strong>
-            )}
-          </Alert>
-        ) : null}
-
-        <FormSection header={<h2>Verification</h2>}>
-          {props.show_verification_section ? (
-            <StripeConnectEmbeddedNotificationBanner />
-          ) : (
-            <div className="flex flex-col">
-              <Alert role="status" variant="success">
-                Your identity has been verified!
-              </Alert>
-              <div className="mt-4 flex items-center">
-                <img src={logo} alt="Gum Coin" className="mr-2 h-5 w-5" />
-                <span className="text-sm text-muted">
-                  Creator since{" "}
-                  {new Date(props.user.joined_at).toLocaleDateString(userAgentInfo.locale, {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </span>
-              </div>
-            </div>
-          )}
-        </FormSection>
+        <AccountStatusSection
+          accountStatus={props.account_status}
+          payoutsPausedBy={props.payouts_paused_by}
+          showVerificationSection={props.show_verification_section}
+        />
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
           <AusBackTaxesSection
@@ -930,15 +900,7 @@ export default function PaymentsPage() {
         {(errors?.base && errors.base.length > 0) || clientErrorMessage ? (
           <div className="mb-12 px-8">
             <Alert variant="danger" role="status">
-              {errors?.base && errors.base.length > 0 ? (
-                errors.error_code?.[0] === "stripe_error" ? (
-                  <div>Your account could not be updated due to an error with Stripe.</div>
-                ) : (
-                  errors.base[0]
-                )
-              ) : clientErrorMessage ? (
-                clientErrorMessage.message
-              ) : null}
+              {errors?.base?.[0] ?? clientErrorMessage?.message}
             </Alert>
           </div>
         ) : null}
@@ -1013,11 +975,11 @@ export default function PaymentsPage() {
               <WithTooltip
                 tip={
                   props.payouts_paused_by === "stripe"
-                    ? "Your payouts are currently paused by our payment processor. Please check for any pending verification requirements above."
+                    ? "Your payouts have been paused by Stripe."
                     : props.payouts_paused_by === "admin"
-                      ? `Your payouts have been paused by Gumroad admin.${props.payouts_paused_for_reason && ` Reason for pause: ${props.payouts_paused_for_reason}`}`
+                      ? "Your payouts have been paused by Gumroad."
                       : props.payouts_paused_by === "system"
-                        ? "Your payouts have been automatically paused for a security review and will be resumed once the review completes."
+                        ? "Your payouts have been paused for a security review."
                         : null
                 }
               >
@@ -1053,7 +1015,7 @@ export default function PaymentsPage() {
                       disabled={props.is_form_disabled}
                       className="items-start justify-start text-left"
                     >
-                      <Icon name="bank" />
+                      <Bank className="size-5" />
                       <div>
                         <h4 className="font-bold">Bank Account</h4>
                       </div>
@@ -1068,7 +1030,7 @@ export default function PaymentsPage() {
                         disabled={props.is_form_disabled}
                         className="items-start justify-start text-left"
                       >
-                        <Icon name="card" />
+                        <CreditCard className="size-5" />
                         <div>
                           <h4 className="font-bold">Debit Card</h4>
                         </div>
@@ -1086,7 +1048,7 @@ export default function PaymentsPage() {
                     disabled={props.is_form_disabled}
                     className="items-start justify-start text-left"
                   >
-                    <Icon name="shop-window" />
+                    <Paypal pack="brands" className="size-5" />
                     <div>
                       <h4 className="font-bold">PayPal</h4>
                     </div>
@@ -1104,7 +1066,7 @@ export default function PaymentsPage() {
                     disabled={props.is_form_disabled}
                     className="items-start justify-start text-left"
                   >
-                    <Icon name="stripe" />
+                    <Stripe pack="brands" className="size-5" />
                     <div>
                       <h4 className="font-bold">Connect to Stripe</h4>
                     </div>

@@ -3,7 +3,9 @@ import React from "react";
 
 import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelativeTooltip";
 import type { User, UserMembership } from "$app/components/Admin/Users/User";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 
 type MembershipsProps = {
   user: User;
@@ -17,7 +19,7 @@ type MembershipProps = {
 const Membership = ({ membership, className }: MembershipProps) => (
   <div className={className}>
     <div className="flex grow items-center gap-4">
-      <img src={membership.seller.avatar_url} className="user-avatar" alt={membership.seller.display_name_or_email} />
+      <Avatar src={membership.seller.avatar_url} alt={membership.seller.display_name_or_email} />
       <div className="grid">
         <h5>
           <Link href={Routes.admin_user_url(membership.seller.external_id)}>
@@ -46,10 +48,10 @@ const Memberships = ({ user: { admin_manageable_user_memberships } }: Membership
   admin_manageable_user_memberships.length > 0 && (
     <>
       <hr />
-      <details>
-        <summary>
+      <Details>
+        <DetailsToggle>
           <h3>User memberships</h3>
-        </summary>
+        </DetailsToggle>
         <Card>
           {admin_manageable_user_memberships.map((membership) => (
             <CardContent key={membership.id} asChild>
@@ -57,7 +59,7 @@ const Memberships = ({ user: { admin_manageable_user_memberships } }: Membership
             </CardContent>
           ))}
         </Card>
-      </details>
+      </Details>
     </>
   );
 

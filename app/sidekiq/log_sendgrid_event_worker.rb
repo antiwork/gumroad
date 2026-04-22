@@ -2,7 +2,7 @@
 
 class LogSendgridEventWorker
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :mongo
+  sidekiq_options retry: 5, queue: :low
 
   def perform(params)
     events = params["_json"]

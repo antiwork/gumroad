@@ -4,6 +4,36 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { VARIANT_CATEGORY_FIELDS, VARIANT_FIELDS } from "../responseFieldDefinitions";
+
+const VariantCategoryResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      {
+        name: "variant_category",
+        type: "object",
+        description: "The variant category object",
+        children: VARIANT_CATEGORY_FIELDS,
+      },
+    ])}
+  </ApiResponseFields>
+);
+
+const VariantResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      {
+        name: "variant",
+        type: "object",
+        description: "The variant object",
+        children: VARIANT_FIELDS,
+      },
+    ])}
+  </ApiResponseFields>
+);
 
 export const CreateVariantCategory = () => (
   <ApiEndpoint
@@ -15,6 +45,7 @@ export const CreateVariantCategory = () => (
       <ApiParameter name="variant_category" />
       <ApiParameter name="title" />
     </ApiParameters>
+    <VariantCategoryResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -39,6 +70,7 @@ export const GetVariantCategory = () => (
     path="/products/:product_id/variant_categories/:id"
     description="Retrieve the details of a variant category of a product."
   >
+    <VariantCategoryResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g== \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -66,6 +98,7 @@ export const UpdateVariantCategory = () => (
       <ApiParameter name="variant_category" />
       <ApiParameter name="title" />
     </ApiParameters>
+    <VariantCategoryResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g== \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -110,6 +143,17 @@ export const GetVariantCategories = () => (
     path="/products/:product_id/variant_categories"
     description="Retrieve all of the existing variant categories of a product."
   >
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        {
+          name: "variant_categories",
+          type: "array",
+          description: "Array of variant category objects",
+          children: VARIANT_CATEGORY_FIELDS,
+        },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -139,6 +183,7 @@ export const CreateVariant = () => (
       <ApiParameter name="price_difference_cents" />
       <ApiParameter name="max_purchase_count" description="(optional)" />
     </ApiParameters>
+    <VariantResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g==/variants \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -165,6 +210,7 @@ export const GetVariant = () => (
     path="/products/:product_id/variant_categories/:variant_category_id/variants/:id"
     description="Retrieve the details of a variant of a product."
   >
+    <VariantResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g==/variants/kuaXCPHTmRuoK13rNGVbxg== \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -196,6 +242,7 @@ export const UpdateVariant = () => (
       <ApiParameter name="price_difference_cents" />
       <ApiParameter name="max_purchase_count" description="(optional)" />
     </ApiParameters>
+    <VariantResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g==/variants/kuaXCPHTmRuoK13rNGVbxg== \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -242,6 +289,17 @@ export const GetVariants = () => (
     path="/products/:product_id/variant_categories/:variant_category_id/variants"
     description="Retrieve all of the existing variants in a variant category."
   >
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        {
+          name: "variants",
+          type: "array",
+          description: "Array of variant objects",
+          children: VARIANT_FIELDS,
+        },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products/A-m3CDDC5dlrSdKZp0RFhA==/variant_categories/mN7CdHiwHaR9FlxKvF-n-g==/variants \\
   -d "access_token=ACCESS_TOKEN" \\

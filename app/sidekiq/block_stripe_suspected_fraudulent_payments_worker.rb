@@ -47,7 +47,7 @@ class BlockStripeSuspectedFraudulentPaymentsWorker
     def parse_payment_records_from_body(body)
       body.scan(/>(ch_[a-zA-Z\d]{8,})<\/a>/).flatten
     rescue StandardError => error
-      Bugsnag.notify error
+      ErrorNotifier.notify error
       []
     end
 end

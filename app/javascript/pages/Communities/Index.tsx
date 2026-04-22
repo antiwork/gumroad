@@ -1,4 +1,5 @@
 import { Channel } from "@anycable/web";
+import { ArrowLeft, Bell, ChevronDown, ChevronLeft, X } from "@boxicons/react";
 import { InfiniteScroll, router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { debounce } from "lodash-es";
@@ -18,11 +19,11 @@ import { DateSeparator } from "$app/components/Communities/Separator";
 import { useCommunities } from "$app/components/Communities/useCommunities";
 import { UserAvatar } from "$app/components/Communities/UserAvatar";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -543,36 +544,28 @@ function CommunitiesIndex() {
                     </span>
 
                     <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
-                      <PopoverTrigger aria-label="Switch creator" className="flex h-8 w-8 justify-center">
-                        <Icon name="outline-cheveron-down" />
+                      <PopoverTrigger aria-label="Switch creator" className="flex h-8 w-8 items-center justify-center">
+                        <ChevronDown className="size-5" />
                       </PopoverTrigger>
                       <PopoverContent className="shrink-0 border-0 p-0 shadow-none">
-                        <div role="menu">
+                        <Menu>
                           {sellersExceptSelected.map((seller) => (
-                            <div
+                            <MenuItem
                               key={seller.id}
-                              role="menuitem"
-                              className="max-w-xs"
+                              className="max-w-xs gap-1"
                               onClick={() => switchSeller(seller.id)}
                             >
-                              <div className="flex items-center gap-1">
-                                <UserAvatar
-                                  src={seller.avatar_url}
-                                  alt={seller.name}
-                                  className="shrink-0"
-                                  size="small"
-                                />
-                                <span className="truncate">
-                                  {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
-                                </span>
-                              </div>
-                            </div>
+                              <UserAvatar src={seller.avatar_url} alt={seller.name} className="shrink-0" size="small" />
+                              <span className="truncate">
+                                {seller.name} {currentSeller?.id === seller.id ? <em>(your community)</em> : null}
+                              </span>
+                            </MenuItem>
                           ))}
                           {sellersExceptSelected.length > 0 ? <hr className="my-1" /> : null}
-                          <div role="menuitem" onClick={() => setShowNotificationsSettings(true)}>
-                            <Icon name="outline-bell" /> Notifications
-                          </div>
-                        </div>
+                          <MenuItem onClick={() => setShowNotificationsSettings(true)}>
+                            <Bell className="size-5" /> Notifications
+                          </MenuItem>
+                        </Menu>
                       </PopoverContent>
                     </Popover>
                   </div>
@@ -587,7 +580,7 @@ function CommunitiesIndex() {
                   })}
                   aria-label="Close sidebar"
                 >
-                  <Icon name="x" className="text-sm" />
+                  <X className="size-5 text-sm" />
                 </button>
               </div>
 
@@ -732,7 +725,7 @@ const NotificationsSettingsModal = ({
         value={form.data.recap_frequency !== null}
         onChange={(newValue) => form.setData("recap_frequency", newValue ? "weekly" : null)}
         dropdown={
-          <div className="radio-buttons flex! flex-col!" role="radiogroup">
+          <div className="radio-buttons flex! flex-col! gap-2" role="radiogroup">
             <Button
               role="radio"
               aria-checked={form.data.recap_frequency === "daily"}
@@ -780,7 +773,7 @@ const CommunityChatHeader = ({
         setSidebarOpen(true);
       }}
     >
-      <Icon name="outline-cheveron-left" className="text-sm" />
+      <ChevronLeft className="size-5 text-sm" />
     </button>
     <h1 className="flex-1 truncate py-3 text-base font-bold">{community.name}</h1>
   </div>
@@ -806,7 +799,7 @@ const GoBackHeader = () => {
           onClick={handleGoBack}
           className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline all-unset"
         >
-          <Icon name="arrow-left" className="mr-1" /> Go back
+          <ArrowLeft className="mr-1 size-5" /> Go back
         </button>
       </div>
     </header>

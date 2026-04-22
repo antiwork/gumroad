@@ -1,18 +1,32 @@
 # frozen_string_literal: true
 
 class CartPresenter
-  attr_reader :logged_in_user, :ip, :cart
+  attr_reader :logged_in_user, :ip, :cart, :checkout_presenter
 
   def initialize(logged_in_user:, ip:, browser_guid:)
     @logged_in_user = logged_in_user
     @ip = ip
     @cart = Cart.fetch_by(user: logged_in_user, browser_guid:)
+    @checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip:)
   end
 
   def cart_props
     return if cart.nil?
 
-    cart_products = cart.cart_products.alive.order(created_at: :desc)
+    cart_products = cart.cart_products.alive.joins(:product).merge(Link.not_archived).order(created_at: :desc)
+      .preload(
+        :option,
+        :affiliate,
+        { accepted_offer: :offer_code },
+        { product: [
+          :user,
+          :thumbnail,
+          :installment_plan,
+          :variant_categories_alive,
+          :alive_variants,
+          { available_upsell: :seller },
+        ] }
+      ).load
 
     {
       email: cart.email.presence,
@@ -66,6 +80,6 @@ class CartPresenter
         call_start_time: cart_product.call_start_time,
         pay_in_installments: cart_product.pay_in_installments,
       )
-      CheckoutPresenter.new(logged_in_user:, ip:).checkout_product(cart_product.product, cart_item, params)
+      checkout_presenter.checkout_product(cart_product.product, cart_item, params)
     end
 end

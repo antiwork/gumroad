@@ -1,3 +1,4 @@
+import { Archive, Copy, DotsHorizontalRounded, Trash } from "@boxicons/react";
 import * as React from "react";
 
 import { archiveProduct, deleteProduct, duplicateProduct, unarchiveProduct } from "$app/data/product_dashboard";
@@ -5,10 +6,10 @@ import { Membership, Product } from "$app/data/products";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 
 const ActionsPopover = ({
   product,
@@ -92,36 +93,48 @@ const ActionsPopover = ({
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger aria-label="Open product action menu" className="cursor-pointer all-unset">
-          <Icon name="three-dots" />
+          <DotsHorizontalRounded className="size-5" />
         </PopoverTrigger>
         <PopoverContent className="border-0 p-0 shadow-none">
-          <div role="menu">
-            <div role="menuitem" inert={!product.can_duplicate || isDuplicating} onClick={() => void handleDuplicate()}>
-              <Icon name="outline-duplicate" />
-              &ensp;{isDuplicating ? "Duplicating..." : "Duplicate"}
-            </div>
+          <Menu>
+            <MenuItem
+              inert={!product.can_duplicate || isDuplicating}
+              className={!product.can_duplicate || isDuplicating ? "opacity-30" : undefined}
+              onClick={() => void handleDuplicate()}
+            >
+              <Copy className="size-5" />
+              {isDuplicating ? "Duplicating..." : "Duplicate"}
+            </MenuItem>
             {product.can_unarchive ? (
-              <div role="menuitem" inert={isUnarchiving} onClick={() => void handleUnarchive()}>
-                <Icon name="archive" />
-                &ensp;{isUnarchiving ? "Unarchiving..." : "Unarchive"}
-              </div>
+              <MenuItem
+                inert={isUnarchiving}
+                className={isUnarchiving ? "opacity-30" : undefined}
+                onClick={() => void handleUnarchive()}
+              >
+                <Archive className="size-5" />
+                {isUnarchiving ? "Unarchiving..." : "Unarchive"}
+              </MenuItem>
             ) : null}
             {product.can_archive ? (
-              <div role="menuitem" inert={isArchiving} onClick={() => void handleArchive()}>
-                <Icon name="archive" />
-                &ensp;{isArchiving ? "Archiving..." : "Archive"}
-              </div>
+              <MenuItem
+                inert={isArchiving}
+                className={isArchiving ? "opacity-30" : undefined}
+                onClick={() => void handleArchive()}
+              >
+                <Archive className="size-5" />
+                {isArchiving ? "Archiving..." : "Archive"}
+              </MenuItem>
             ) : null}
-            <div
-              className="danger"
+            <MenuItem
+              variant="danger"
               inert={!product.can_destroy || isDeleting}
-              role="menuitem"
+              className={!product.can_destroy || isDeleting ? "opacity-30" : undefined}
               onClick={() => setConfirmingDelete(true)}
             >
-              <Icon name="trash2" />
-              &ensp;{isDeleting ? "Deleting..." : "Delete permanently"}
-            </div>
-          </div>
+              <Trash className="size-5" />
+              {isDeleting ? "Deleting..." : "Delete permanently"}
+            </MenuItem>
+          </Menu>
         </PopoverContent>
       </Popover>
       {confirmingDelete ? (

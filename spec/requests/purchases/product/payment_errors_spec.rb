@@ -125,9 +125,9 @@ describe("Purchase from a product page", type: :system, js: true) do
 
     fill_in_credit_card
     click_on "Pay"
-    expect_focused find_field("Your email address")
+    expect_focused find_field("Email address")
 
-    fill_in "Your email address", with: "gumroad@example.com"
+    fill_in "Email address", with: "gumroad@example.com"
     click_on "Pay"
     expect_focused find_field("Full name")
 

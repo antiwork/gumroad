@@ -1,3 +1,27 @@
+import {
+  ArrowFromBottomStroke,
+  ArrowUp,
+  CartPlus,
+  CheckCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CursorClick,
+  Dropbox as DropboxIcon,
+  File,
+  FileDetail,
+  FolderPlus,
+  Grid,
+  Images,
+  Key,
+  Link as LinkIcon,
+  Minus,
+  Paperclip,
+  Plus,
+  Rename,
+  Star,
+  TwitterX,
+} from "@boxicons/react";
 import { findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { EditorContent } from "@tiptap/react";
@@ -11,6 +35,7 @@ import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/
 import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 import { formatDate } from "$app/utils/date";
 import FileUtils from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
@@ -25,7 +50,6 @@ import { PageList, PageListItem, PageListLayout } from "$app/components/Download
 import { EntityInfo } from "$app/components/DownloadPage/Layout";
 import { EvaporateUploaderProvider, useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileKindIcon } from "$app/components/FileRowContent";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -43,7 +67,6 @@ import {
   validateUrl,
 } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider, useS3UploadConfig } from "$app/components/S3UploadConfig";
-import { Separator } from "$app/components/Separator";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TestimonialSelectModal } from "$app/components/TestimonialSelectModal";
 import { FileUpload } from "$app/components/TiptapExtensions/FileUpload";
@@ -59,8 +82,11 @@ import { ShortAnswer } from "$app/components/TiptapExtensions/ShortAnswer";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Product, ProductOption, UpsellSelectModal } from "$app/components/UpsellSelectModal";
@@ -71,6 +97,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import { FileEmbed, FileEmbedConfig } from "./FileEmbed";
 import { Page, PageTab, titleWithFallback } from "./PageTab";
+import { NodeVisibilityProvider } from "./useNodeVisibility";
 
 declare global {
   interface Window {
@@ -98,51 +125,51 @@ export const extensions = (productId: string, extraExtensions: TiptapNode[] = []
 const FileUploadMenu = ({
   existingFiles,
   onEmbedMedia,
-  onUploadFile,
+  onClickComputerFiles,
   onSelectExistingFiles,
   onUploadFromDropbox,
 }: {
   existingFiles: ExistingFileEntry[];
   onEmbedMedia: () => void;
-  onUploadFile: (target: HTMLInputElement) => void;
+  onClickComputerFiles: () => void;
   onSelectExistingFiles: () => void;
   onUploadFromDropbox: () => void;
 }) => (
-  <div role="menu" aria-label="Image and file uploader">
+  <Menu aria-label="Image and file uploader">
     <PopoverClose asChild>
-      <div role="menuitem" onClick={onEmbedMedia}>
-        <Icon name="media" />
+      <MenuItem onClick={onEmbedMedia}>
+        <Images className="size-5" />
         <span>Embed media</span>
-      </div>
+      </MenuItem>
     </PopoverClose>
     <PopoverClose asChild>
-      <label role="menuitem">
-        <input type="file" name="file" multiple onChange={(e) => onUploadFile(e.target)} />
-        <Icon name="paperclip" />
+      <MenuItem onClick={onClickComputerFiles}>
+        <Paperclip className="size-5" />
         <span>Computer files</span>
-      </label>
+      </MenuItem>
     </PopoverClose>
     {existingFiles.length > 0 ? (
       <PopoverClose asChild>
-        <div role="menuitem" onClick={onSelectExistingFiles}>
-          <Icon name="files-earmark" />
+        <MenuItem onClick={onSelectExistingFiles}>
+          <File className="size-5" />
           <span>Existing product files</span>
-        </div>
+        </MenuItem>
       </PopoverClose>
     ) : null}
     <PopoverClose asChild>
-      <div role="menuitem" onClick={onUploadFromDropbox}>
-        <Icon name="dropbox" />
+      <MenuItem onClick={onUploadFromDropbox}>
+        <DropboxIcon pack="brands" className="size-5" />
         <span>Dropbox files</span>
-      </div>
+      </MenuItem>
     </PopoverClose>
-  </div>
+  </Menu>
 );
 
 const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | null }) => {
   const { id, product, updateProduct, seller, save, existingFiles, setExistingFiles, uniquePermalink, filesById } =
     useProductEditContext();
   const uid = React.useId();
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const isDesktop = useIsAboveBreakpoint("lg");
   const imageSettings = useImageUploadSettings();
 
@@ -232,11 +259,15 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
         mimeType,
         onComplete: () => {
           fileStatus.uploadStatus = { type: "uploaded" };
-          updateProduct({});
+          updateProduct((product) => {
+            product.files = [...product.files];
+          });
         },
         onProgress: (progress) => {
           fileStatus.uploadStatus = { type: "uploading", progress };
-          updateProduct({});
+          updateProduct((product) => {
+            product.files = [...product.files];
+          });
         },
       });
       if (typeof status === "string") {
@@ -248,6 +279,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     updateProduct({ files: [...product.files, ...fileEntries] });
     onSelectFiles(fileEntries.map((file) => file.id));
   };
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const uploadFileInput = (input: HTMLInputElement) => {
     if (!input.files?.length) return;
     uploadFiles([...input.files]);
@@ -532,6 +564,14 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
   return (
     <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        name="file"
+        className="sr-only"
+        multiple
+        onChange={(e) => uploadFileInput(e.target)}
+      />
       <div className="h-screen sm:h-full md:flex md:flex-col">
         {editor ? (
           <RichTextEditorToolbar
@@ -542,11 +582,11 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             custom={
               <>
                 <LinkMenuItem editor={editor} />
-                <PopoverMenuItem name="Upload files" icon="upload-fill">
+                <PopoverMenuItem name="Upload files" icon={<ArrowFromBottomStroke pack="filled" className="size-5" />}>
                   <FileUploadMenu
                     existingFiles={existingFiles}
                     onEmbedMedia={() => setShowEmbedModal(true)}
-                    onUploadFile={uploadFileInput}
+                    onClickComputerFiles={() => fileInputRef.current?.click()}
                     onSelectExistingFiles={() => {
                       setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
                       void fetchLatestExistingFiles();
@@ -576,7 +616,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     }
                   >
                     <div className="flex flex-col gap-4">
-                      <input
+                      <Input
                         type="text"
                         placeholder="Find your files"
                         value={selectingExistingFiles.query}
@@ -596,15 +636,14 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         ) : (
                           filteredExistingFiles.map((file) => (
                             <Row key={file.id} role="option" className="cursor-pointer" asChild>
-                              <label>
+                              <Label>
                                 <RowContent>
                                   <FileKindIcon extension={file.extension} />
-                                  <div>
+                                  <div className="flex-1">
                                     <h4>{file.display_name}</h4>
                                     <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
                                   </div>
-                                  <input
-                                    type="checkbox"
+                                  <Checkbox
                                     checked={selectingExistingFiles.selected.includes(file)}
                                     onChange={() => {
                                       setSelectingExistingFiles({
@@ -614,10 +653,10 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                           : [...selectingExistingFiles.selected, file],
                                       });
                                     }}
-                                    style={{ marginLeft: "auto" }}
+                                    className="ml-auto"
                                   />
                                 </RowContent>
-                              </label>
+                              </Label>
                             </Row>
                           ))
                         )}
@@ -631,12 +670,12 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                   <Tabs variant="buttons">
                     <Tab isSelected aria-controls={`${uid}-embed-tab`} asChild>
                       <button type="button">
-                        <Icon name="link" />
+                        <LinkIcon className="size-5" />
                         <h4>Embed link</h4>
                       </button>
                     </Tab>
                     <Tab isSelected={false} asChild>
-                      <label>
+                      <Label>
                         <input
                           className="sr-only"
                           type="file"
@@ -653,9 +692,9 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                             setShowEmbedModal(false);
                           }}
                         />
-                        <Icon name="upload-fill" />
+                        <ArrowUp pack="filled" className="size-5" />
                         <h4>Upload</h4>
-                      </label>
+                      </Label>
                     </Tab>
                   </Tabs>
                   <div id={`${uid}-embed-tab`}>
@@ -669,113 +708,121 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     />
                   </div>
                 </Modal>
-                <Separator aria-orientation="vertical" />
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="m-2 hidden border-r border-solid border-muted sm:flex"
+                />
                 <Popover
                   open={insertMenuState != null}
                   onOpenChange={(open) => setInsertMenuState(open ? "open" : null)}
                 >
-                  <PopoverTrigger className="toolbar-item all-unset">
-                    Insert <Icon name="outline-cheveron-down" />
+                  <PopoverTrigger className="rounded px-2 py-1 all-unset hover:bg-active-bg">
+                    Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-                    <div role="menu" onClick={() => setInsertMenuState(null)}>
+                    <Menu onClick={() => setInsertMenuState(null)}>
                       {insertMenuState === "inputs" ? (
                         <>
-                          <div
-                            role="menuitem"
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setInsertMenuState("open");
                             }}
                           >
-                            <Icon name="outline-cheveron-left" />
+                            <ChevronLeft className="size-5" />
                             <span>Back</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
-                            <Icon name="card-text" />
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().insertShortAnswer({}).run()}>
+                            <FileDetail className="size-5" />
                             <span>Short answer</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
-                            <Icon name="file-text" />
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().insertLongAnswer({}).run()}>
+                            <FileDetail className="size-5" />
                             <span>Long answer</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
-                            <Icon name="folder-plus" />
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().insertFileUpload({}).run()}>
+                            <FolderPlus className="size-5" />
                             <span>Upload file</span>
-                          </div>
+                          </MenuItem>
                         </>
                       ) : (
                         <>
-                          <div role="menuitem" onClick={() => setAddingButton({ label: "", url: "" })}>
-                            <Icon name="button" />
+                          <MenuItem onClick={() => setAddingButton({ label: "", url: "" })}>
+                            <CursorClick className="size-5" />
                             <span>Button</span>
-                          </div>
-                          <div role="menuitem" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                            <Icon name="horizontal-rule" />
+                          </MenuItem>
+                          <MenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+                            <Minus className="size-5" />
                             <span>Divider</span>
-                          </div>
-                          <div
-                            role="menuitem"
+                          </MenuItem>
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setInsertMenuState("inputs");
                             }}
                             className="flex items-center"
                           >
-                            <Icon name="input-cursor-text" />
+                            <Rename />
                             <span>Input</span>
-                            <Icon name="outline-cheveron-right" className="ml-auto" />
-                          </div>
-                          <div role="menuitem" onClick={onInsertMoreLikeThis}>
-                            <Icon name="grid" />
+                            <ChevronRight className="ml-auto size-5" />
+                          </MenuItem>
+                          <MenuItem onClick={onInsertMoreLikeThis}>
+                            <Grid className="size-5" />
                             <span>More like this</span>
-                          </div>
-                          <div role="menuitem" onClick={onInsertPosts}>
-                            <Icon name="file-earmark-medical" />
+                          </MenuItem>
+                          <MenuItem onClick={onInsertPosts}>
+                            <FileDetail className="size-5" />
                             <span>List of posts</span>
-                          </div>
-                          <div role="menuitem" onClick={onInsertLicense}>
-                            <Icon name="outline-key" />
+                          </MenuItem>
+                          <MenuItem onClick={onInsertLicense}>
+                            <Key className="size-5" />
                             <span>License key</span>
-                          </div>
-                          <div role="menuitem" onClick={() => setShowInsertPostModal(true)}>
-                            <Icon name="twitter" />
-                            <span>Twitter post</span>
-                          </div>
-                          <div
-                            role="menuitem"
+                          </MenuItem>
+                          <MenuItem onClick={() => setShowInsertPostModal(true)}>
+                            <TwitterX pack="brands" className="size-5" />
+                            <span>X post</span>
+                          </MenuItem>
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowUpsellModal(true);
                             }}
                           >
-                            <Icon name="cart-plus" />
+                            <CartPlus className="size-5" />
                             <span>Upsell</span>
-                          </div>
-                          <div
-                            role="menuitem"
+                          </MenuItem>
+                          <MenuItem
                             onClick={(e) => {
                               e.stopPropagation();
                               setShowReviewModal(true);
                             }}
                           >
-                            <Icon name="solid-star" />
+                            <Star pack="filled" className="size-5" />
                             <span>Review</span>
-                          </div>
+                          </MenuItem>
                         </>
                       )}
-                    </div>
+                    </Menu>
                   </PopoverContent>
                 </Popover>
-                <Separator aria-orientation="vertical" />
-                <button className="toolbar-item cursor-pointer all-unset" onClick={handleCreatePageClick}>
-                  <Icon name="plus" /> Page
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="m-2 hidden border-r border-solid border-muted sm:flex"
+                />
+                <button
+                  className="cursor-pointer rounded px-2 py-1 all-unset hover:bg-active-bg"
+                  onClick={handleCreatePageClick}
+                >
+                  <Plus className="size-5" /> Page
                 </button>
               </>
             }
           />
         ) : null}
         <PageListLayout
+          ref={scrollContainerRef}
           className="md:h-auto! md:flex-1"
           pageList={
             !isDesktop && !showPageList ? null : (
@@ -796,7 +843,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
                             </span>
 
-                            <Icon name={pagesExpanded ? "outline-cheveron-down" : "outline-cheveron-right"} />
+                            {pagesExpanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
                           </button>
                         </PageListItem>
                       )}
@@ -807,7 +854,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                               key={page.id}
                               page={page}
                               selected={page === selectedPage}
-                              icon={pageIcons.get(page.id) ?? "file-text"}
+                              icon={pageIcons.get(page.id) ?? "text-only"}
                               dragging={!!page.chosen}
                               renaming={page.id === renamingPageId}
                               setRenaming={(renaming) => setRenamingPageId(renaming ? page.id : null)}
@@ -841,7 +888,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                   updated_at: pages[0]?.updated_at ?? new Date().toString(),
                                 }}
                                 selected={false}
-                                icon="file-arrow-down"
+                                icon="mixed-files"
                                 dragging={false}
                                 renaming={false}
                                 onClick={() => {}}
@@ -860,7 +907,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                                 handleCreatePageClick();
                               }}
                             >
-                              <Icon name="plus" />
+                              <Plus className="size-5" />
                               <span className="flex-1">Add another page</span>
                             </button>
                           </PageListItem>
@@ -883,26 +930,26 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                     <Card>
                       {product.native_type === "membership" ? (
                         <CardContent asChild details>
-                          <details>
-                            <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2" inert>
+                          <Details>
+                            <DetailsToggle chevronPosition="right" className="grow opacity-30" inert>
                               Membership
-                            </summary>
-                          </details>
+                            </DetailsToggle>
+                          </Details>
                         </CardContent>
                       ) : null}
                       <CardContent asChild details>
-                        <details>
-                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                        <Details>
+                          <DetailsToggle chevronPosition="right" className="grow opacity-30" inert>
                             Receipt
-                          </summary>
-                        </details>
+                          </DetailsToggle>
+                        </Details>
                       </CardContent>
                       <CardContent asChild details>
-                        <details>
-                          <summary inert className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                        <Details>
+                          <DetailsToggle chevronPosition="right" className="grow opacity-30" inert>
                             Library
-                          </summary>
-                        </details>
+                          </DetailsToggle>
+                        </Details>
                       </CardContent>
                     </Card>
                     <EntityInfo
@@ -915,36 +962,38 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
             )
           }
         >
-          <div className="relative h-full flex-1">
-            {editor?.isEmpty ? (
-              <div className="pointer-events-none absolute inset-0 flex items-start">
-                <p className="flex flex-wrap items-center gap-1 text-muted">
-                  <span>Enter the content you want to sell.</span>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button small className="pointer-events-auto">
-                        Upload your files
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent sideOffset={4} className="pointer-events-auto border-0 p-0 shadow-none">
-                      <FileUploadMenu
-                        existingFiles={existingFiles}
-                        onEmbedMedia={() => setShowEmbedModal(true)}
-                        onUploadFile={uploadFileInput}
-                        onSelectExistingFiles={() => {
-                          setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
-                          void fetchLatestExistingFiles();
-                        }}
-                        onUploadFromDropbox={uploadFromDropbox}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <span>or start typing.</span>
-                </p>
-              </div>
-            ) : null}
-            <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
-          </div>
+          <NodeVisibilityProvider scrollRef={scrollContainerRef}>
+            <div className="relative h-full flex-1">
+              {editor?.isEmpty ? (
+                <div className="pointer-events-none absolute inset-0 flex items-start">
+                  <p className="flex flex-wrap items-center gap-1 text-muted">
+                    <span>Enter the content you want to sell.</span>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button size="sm" className="pointer-events-auto">
+                          Upload your files
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent sideOffset={4} className="pointer-events-auto border-0 p-0 shadow-none">
+                        <FileUploadMenu
+                          existingFiles={existingFiles}
+                          onEmbedMedia={() => setShowEmbedModal(true)}
+                          onClickComputerFiles={() => fileInputRef.current?.click()}
+                          onSelectExistingFiles={() => {
+                            setSelectingExistingFiles({ selected: [], query: "", isLoading: true });
+                            void fetchLatestExistingFiles();
+                          }}
+                          onUploadFromDropbox={uploadFromDropbox}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <span>or start typing.</span>
+                  </p>
+                </div>
+              ) : null}
+              <EditorContent className="rich-text grid h-full flex-1" editor={editor} data-gumroad-ignore />
+            </div>
+          </NodeVisibilityProvider>
         </PageListLayout>
       </div>
       {confirmingDeletePage !== null ? (
@@ -974,7 +1023,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
       ) : null}
       {editor ? (
         <>
-          <Modal open={showInsertPostModal} onClose={() => setShowInsertPostModal(false)} title="Insert Twitter post">
+          <Modal open={showInsertPostModal} onClose={() => setShowInsertPostModal(false)} title="Insert X post">
             <EmbedMediaForm
               type="twitter"
               onClose={() => setShowInsertPostModal(false)}
@@ -997,7 +1046,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
               </>
             }
           >
-            <input
+            <Input
               type="text"
               placeholder="Enter text"
               autoFocus={addingButton != null}
@@ -1007,7 +1056,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                 if (el.key === "Enter") onInsertButton();
               }}
             />
-            <input
+            <Input
               type="text"
               placeholder="Enter URL"
               value={addingButton?.url ?? ""}
@@ -1126,12 +1175,12 @@ export const ContentTab = () => {
                     <ComboBox<Variant>
                       input={(props) => (
                         <InputGroup {...props} className="cursor-pointer py-3" aria-label="Select a version">
-                          <span className="text-singleline flex-1">
+                          <span className="flex-1 truncate">
                             {selectedVariant && !product.has_same_rich_content_for_all_variants
                               ? `Editing: ${selectedVariant.name || "Untitled"}`
                               : "Editing: All versions"}
                           </span>
-                          <Icon name="outline-cheveron-down" />
+                          <ChevronDown className="size-5" />
                         </InputGroup>
                       )}
                       options={product.variants}
@@ -1145,13 +1194,17 @@ export const ContentTab = () => {
                             }}
                             aria-selected={item.id === selectedVariantId}
                             inert={product.has_same_rich_content_for_all_variants}
+                            className={classNames(
+                              props.className,
+                              product.has_same_rich_content_for_all_variants ? "opacity-30" : undefined,
+                            )}
                           >
                             <div className="flex-1">
                               <h4>{item.name || "Untitled"}</h4>
                               {item.id === selectedVariant?.id ? (
-                                <small>Editing</small>
+                                <small className="block">Editing</small>
                               ) : product.has_same_rich_content_for_all_variants || item.rich_content.length ? (
-                                <small>
+                                <small className="block">
                                   Last edited on{" "}
                                   {formatDate(
                                     (product.has_same_rich_content_for_all_variants
@@ -1164,11 +1217,11 @@ export const ContentTab = () => {
                                   )}
                                 </small>
                               ) : (
-                                <small className="text-muted">No content yet</small>
+                                <small className="block text-muted">No content yet</small>
                               )}
                             </div>
                             {item.id === selectedVariant?.id && (
-                              <Icon name="solid-check-circle" className="ml-auto text-success" />
+                              <CheckCircle pack="filled" className="ml-auto size-5 text-success" />
                             )}
                           </div>
                           {index === product.variants.length - 1 ? (
@@ -1182,7 +1235,7 @@ export const ContentTab = () => {
                                     setHasSameRichContent(!product.has_same_rich_content_for_all_variants);
                                   }}
                                 />
-                                <small>Use the same content for all versions</small>
+                                <small className="block">Use the same content for all versions</small>
                               </Label>
                             </div>
                           ) : null}

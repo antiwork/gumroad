@@ -126,11 +126,9 @@ describe Order::ChargeService, :vcr do
       }
     end
 
-    before do
-      allow_any_instance_of(Purchase).to receive(:flat_fee_applicable?).and_return(true)
-    end
-
     it "charges all purchases in the order with the payment method provided in params" do
+      create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+
       params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
 
       order, _ = Order::CreateService.new(params:).perform
@@ -342,10 +340,10 @@ describe Order::ChargeService, :vcr do
       charge_responses = Order::ChargeService.new(order:, params:).perform
       expect(order.purchases.in_progress.count).to eq(2)
       expect(charge_responses.size).to eq(2)
-      expect(charge_responses[charge_responses.keys[0]]).to include(success: true, requires_card_action: true, client_secret: anything,
-                                                                    order: { id: order.external_id, stripe_connect_account_id: nil })
-      expect(charge_responses[charge_responses.keys[1]]).to include(success: true, requires_card_action: true, client_secret: anything,
-                                                                    order: { id: order.external_id, stripe_connect_account_id: nil })
+      expect(charge_responses[charge_responses.keys[0]]).to include(success: true, requires_card_action: true, client_secret: anything)
+      expect(Order.find_by_secure_external_id(charge_responses[charge_responses.keys[0]][:order][:id], scope: "confirm")).to eq(order)
+      expect(charge_responses[charge_responses.keys[1]]).to include(success: true, requires_card_action: true, client_secret: anything)
+      expect(Order.find_by_secure_external_id(charge_responses[charge_responses.keys[1]][:order][:id], scope: "confirm")).to eq(order)
     end
 
     it "creates multiple charges in case of purchases from different sellers" do
@@ -608,6 +606,41 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses.values).to match_array(order.purchases.map { _1.purchase_response })
     end
 
+    it "skips purchases that already have a processor payment intent" do
+      create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+
+      params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
+
+      order, _ = Order::CreateService.new(params:).perform
+      expect(order.purchases.in_progress.count).to eq(2)
+
+      # Simulate a subscription restart SCA purchase that was added to the order
+      # by Order::CreateService (for the confirm endpoint) but should not be charged again
+      membership_product = create(:membership_product, user: seller_1, price_cents: 500)
+      sca_purchase = create(:purchase_in_progress,
+                            link: membership_product,
+                            seller_id: seller_1.id,
+                            price_cents: 500,
+                            total_transaction_cents: 500)
+      sca_purchase.create_processor_payment_intent!(intent_id: "pi_existing_#{SecureRandom.hex(8)}")
+      order.purchases << sca_purchase
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      # The two normal purchases should be charged successfully
+      expect(order.reload.purchases.successful.count).to eq(2)
+      expect(order.charges.count).to eq(1)
+      charge = order.charges.last
+      expect(charge.purchases.successful.count).to eq(2)
+      expect(charge.purchases.pluck(:link_id)).to match_array([product_1.id, product_2.id])
+
+      # The SCA purchase should remain in progress (awaiting SCA confirmation)
+      expect(sca_purchase.reload).to be_in_progress
+      expect(sca_purchase.charge).to be_nil
+
+      expect(charge_responses.size).to eq(2)
+    end
+
     context "when payment method requires mandate" do
       let!(:membership_product) { create(:membership_product_with_preset_tiered_pricing, user: seller_1) }
       let!(:membership_product_2) { create(:membership_product, price_cents: 10_00, user: seller_1) }
@@ -691,6 +724,136 @@ describe Order::ChargeService, :vcr do
         expect(mandate_options.interval).to eq("sporadic")
         expect(mandate_options.interval_count).to be nil
       end
+    end
+  end
+
+  describe "#ensure_all_purchases_processed" do
+    it "does not raise when purchases is nil" do
+      order = create(:order)
+      service = Order::ChargeService.new(order:, params: { line_items: [] })
+      expect { service.send(:ensure_all_purchases_processed, nil) }.not_to raise_error
+    end
+
+    it "does not raise NoMethodError when an error occurs before non_free_seller_purchases is assigned" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 10_00)
+      line_items = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ]
+      }
+      params = line_items.merge(
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      )
+
+      order, _ = Order::CreateService.new(params:).perform
+
+      allow(order.charges).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      expect { Order::ChargeService.new(order:, params:).perform }.not_to raise_error
+    end
+
+    it "falls back to seller_purchases for cleanup when non_free_seller_purchases is nil" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 10_00)
+      line_items = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ]
+      }
+      params = line_items.merge(
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      )
+
+      order, _ = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+
+      allow(order.charges).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      Order::ChargeService.new(order:, params:).perform
+      purchase.reload
+      expect(purchase).to be_failed
+    end
+
+    it "marks free purchases as successful in the fallback path when an exception occurs before non_free_seller_purchases is assigned" do
+      seller = create(:user)
+      free_product = create(:product, user: seller, price_cents: 0)
+      paid_product = create(:product, user: seller, price_cents: 10_00)
+      params = {
+        line_items: [
+          { uid: "uid-free", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+          { uid: "uid-paid", permalink: paid_product.unique_permalink, perceived_price_cents: paid_product.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+
+      order, _ = Order::CreateService.new(params:).perform
+      allow(order.charges).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+      Order::ChargeService.new(order:, params:).perform
+
+      expect(order.purchases.find_by(link: free_product).reload).to be_successful
+      expect(order.purchases.find_by(link: paid_product).reload).to be_failed
+    end
+
+    it "does not schedule FailAbandonedPurchaseWorker due to stale charge_intent from a prior seller when an exception occurs" do
+      seller_a = create(:user)
+      seller_b = create(:user)
+      product_a = create(:product, user: seller_a, price_cents: 10_00)
+      product_b = create(:product, user: seller_b, price_cents: 20_00)
+      params = {
+        line_items: [
+          { uid: "uid-a", permalink: product_a.unique_permalink, perceived_price_cents: product_a.price_cents, quantity: 1 },
+          { uid: "uid-b", permalink: product_b.unique_permalink, perceived_price_cents: product_b.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+
+      order, _ = Order::CreateService.new(params:).perform
+      purchase_b = order.purchases.find_by(link: product_b)
+
+      service = Order::ChargeService.new(order:, params:)
+      requires_action_intent = double("charge_intent", requires_action?: true, succeeded?: false, client_secret: "cs_test_xxx", id: "pi_test_xxx")
+
+      call_count = 0
+      allow(service).to receive(:create_charge_for_seller_purchases) do |purchases, *|
+        call_count += 1
+        if call_count == 1
+          service.charge_intent = requires_action_intent
+          purchases.each { |p| p.create_processor_payment_intent!(intent_id: requires_action_intent.id) }
+        else
+          raise StandardError, "Simulated failure for seller B"
+        end
+      end
+
+      service.perform
+
+      expect(purchase_b.reload).to be_failed
+      expect(FailAbandonedPurchaseWorker.jobs.select { |j| j["args"] == [purchase_b.id] }.size).to eq(0)
     end
   end
 

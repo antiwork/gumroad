@@ -28,11 +28,17 @@ module SearchProducts
         params[:filetypes] = params[:filetypes].split(",").map { |f| f.squish.downcase }
       end
 
+      if params[:ids].is_a?(String)
+        params[:ids] = params[:ids].split(",").map(&:strip)
+      end
+
       params[:offer_code] = "__no_match__" if params[:offer_code].present? && !offer_codes_search_feature_active?(params)
 
       if params[:size].is_a?(String)
         params[:size] = params[:size].to_i
       end
+
+      params.delete(:search) unless params[:search].is_a?(Hash)
     end
 
     def offer_codes_search_feature_active?(params)

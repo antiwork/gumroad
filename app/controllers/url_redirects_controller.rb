@@ -27,8 +27,7 @@ class UrlRedirectsController < ApplicationController
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD) }, only: [:show]
   after_action -> { create_download_page_view_consumption_event! }, only: [:download_page]
 
-  skip_before_action :check_suspended, only: %i[show stream confirm confirm_page download_page
-                                                download_subtitle_file download_archive download_product_files]
+  skip_before_action :check_suspended, only: %i[confirm]
   before_action :set_noindex_header, only: %i[confirm_page download_page]
 
   rescue_from ActionController::RoutingError do |exception|
@@ -109,11 +108,18 @@ class UrlRedirectsController < ApplicationController
           StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
         end
 
-        return redirect_to(@url_redirect.download_page_url)
+        return redirect_to(@url_redirect.download_page_url, allow_other_host: true)
       end
 
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
+    end
+  rescue Aws::S3::Errors::NotFound
+    if request.format.json?
+      render(json: { error: "The file is no longer available." }, status: :not_found)
+    else
+      flash[:warning] = "The file is no longer available. Please contact the seller."
+      redirect_to(@url_redirect.download_page_url, allow_other_host: true)
     end
   end
 
@@ -125,12 +131,19 @@ class UrlRedirectsController < ApplicationController
       render json: { url: }
     else
       e404 if archive.nil?
-      redirect_to(
-        signed_download_url_for_s3_key_and_filename(archive.s3_key, archive.s3_filename),
-        allow_other_host: true
-      )
-      event_type = params[:folder_id].present? ? ConsumptionEvent::EVENT_TYPE_FOLDER_DOWNLOAD : ConsumptionEvent::EVENT_TYPE_DOWNLOAD_ALL
-      create_consumption_event!(event_type)
+      begin
+        redirect_to(
+          signed_download_url_for_s3_key_and_filename(archive.s3_key, archive.s3_filename),
+          allow_other_host: true
+        )
+        event_type = params[:folder_id].present? ? ConsumptionEvent::EVENT_TYPE_FOLDER_DOWNLOAD : ConsumptionEvent::EVENT_TYPE_DOWNLOAD_ALL
+        create_consumption_event!(event_type)
+      rescue Aws::S3::Errors::NotFound
+        archive.mark_in_progress!
+        archive.generate_zip_archive!
+        flash[:warning] = "We are preparing the file for download. Please try again shortly."
+        redirect_to(@url_redirect.download_page_url, allow_other_host: true)
+      end
     end
   end
 
@@ -226,19 +239,36 @@ class UrlRedirectsController < ApplicationController
   def send_to_kindle
     return render json: { success: false, error: "Please enter a valid Kindle email address" } if params[:email].blank?
 
+    purchase = @url_redirect.purchase
+    if purchase && (purchase.stripe_refunded || (purchase.chargeback_date.present? && !purchase.chargeback_reversed) || purchase.is_access_revoked)
+      return e404_json
+    end
+    return e404_json if @url_redirect.rental_expired?
+    return e404_json if purchase&.subscription && !purchase.subscription.grant_access_to_product?
+    if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
+      return e404_json
+    end
+    if purchase.present? && @url_redirect.has_been_seen && @url_redirect.imported_customer.blank?
+      identity_verified = cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
+                          (purchase.purchaser.present? && purchase.purchaser == logged_in_user) ||
+                          purchase.ip_address == request.remote_ip
+      return e404_json if !identity_verified
+    end
+
+    @product_file = @url_redirect.product_file(params[:file_external_id])
+    return render json: { success: false, error: "File not found" }, status: :not_found if @product_file.nil?
+    return render json: { success: false, error: "This file cannot be sent to Kindle" }, status: :unprocessable_entity if !@product_file.can_send_to_kindle?
+
     if logged_in_user.present?
       logged_in_user.kindle_email = params[:email]
       return render json: { success: false, error: logged_in_user.errors.full_messages.to_sentence } unless logged_in_user.save
     end
 
-    @product_file = ProductFile.find_by_external_id(params[:file_external_id])
-    begin
-      @product_file.send_to_kindle(params[:email])
-      create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ)
-      render json: { success: true }
-    rescue ArgumentError => e
-      render json: { success: false, error: e.message }
-    end
+    @product_file.send_to_kindle(params[:email])
+    create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ)
+    render json: { success: true }
+  rescue ArgumentError => e
+    render json: { success: false, error: e.message }
   end
 
   # Consumption event is created by front-end code

@@ -75,9 +75,12 @@ class TaxjarApi
         @cache.set(cache_key, response_json, ex: 10.minutes.to_i)
         JSON.parse(response_json)
       end
+    rescue Taxjar::Error::BadRequest => e
+      Rails.logger.error "TaxJar Client Error: #{e.inspect}"
+      raise e
     rescue *TaxjarErrors::CLIENT => e
       Rails.logger.error "TaxJar Client Error: #{e.inspect}"
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e) unless e.is_a?(Taxjar::Error::BadRequest) || e.is_a?(Taxjar::Error::NotFound)
       raise e
     rescue *TaxjarErrors::SERVER => e
       Rails.logger.error "TaxJar Server Error: #{e.inspect}"

@@ -15,8 +15,8 @@ class ProfilePresenter
       external_id: seller.external_id,
       avatar_url: seller.avatar_url,
       name: seller.name || seller.username,
-      twitter_handle: seller.twitter_handle,
       subdomain: seller.subdomain,
+      is_verified: !!seller.verified,
     }
   end
 

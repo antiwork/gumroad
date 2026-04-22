@@ -1,20 +1,20 @@
+import { ArrowLeft, ChevronDown, ChevronUp, Clock, Envelope, Eye, Trash, XSquare } from "@boxicons/react";
 import { Link, useForm } from "@inertiajs/react";
 import { DirectUpload } from "@rails/activestorage";
 import { findChildren, Node as TiptapNode } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { EditorContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
-import cx from "classnames";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
 import {
-  WorkflowFormContext,
-  Workflow,
-  InstallmentDeliveryTimePeriod,
-  INSTALLMENT_DELIVERY_TIME_PERIODS,
-  Installment,
-  SaveActionName,
   AbandonedCartProduct,
+  Installment,
+  INSTALLMENT_DELIVERY_TIME_PERIODS,
+  InstallmentDeliveryTimePeriod,
+  SaveActionName,
+  Workflow,
+  WorkflowFormContext,
 } from "$app/types/workflow";
 import { assert, assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
@@ -23,7 +23,7 @@ import GuidGenerator from "$app/utils/guid_generator";
 import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { CartItem, CartItemMain, CartItemMedia, CartItemTitle, CartItemList } from "$app/components/CartItemList";
+import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDomains } from "$app/components/DomainSettings";
 import {
@@ -36,21 +36,25 @@ import {
   useFiles,
 } from "$app/components/EmailAttachments";
 import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
-import { Icon } from "$app/components/Icons";
+import { Logo } from "$app/components/Logo";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
 import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-components/InvalidNameForEmailDeliveryWarning";
+import { Avatar } from "$app/components/ui/Avatar";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
+import { Select } from "$app/components/ui/Select";
 import { useConfigureEvaporate } from "$app/components/useConfigureEvaporate";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { WithTooltip } from "$app/components/WithTooltip";
 import {
-  Layout,
   EditPageNavigation,
+  Layout,
   PublishButton,
   sendToPastCustomersCheckboxLabel,
 } from "$app/components/WorkflowsPage";
@@ -110,7 +114,9 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
   );
   const updateEmail = (id: string, value: Partial<EditableEmailFormState>) => {
     setEmails((prev) => prev.map((email) => (email.id === id ? { ...email, ...value } : email)));
-    setFocusedFieldInfo({ emailId: id, fieldName: Object.keys(value)[0] ?? null });
+    setFocusedFieldInfo((prev) =>
+      prev?.emailId === id ? prev : { emailId: id, fieldName: Object.keys(value)[0] ?? null },
+    );
     if (value.name !== undefined && invalidFields.some((invalidField) => invalidField.emailId === id)) {
       setInvalidFields((prev) => prev.filter((invalidField) => !(invalidField.emailId === id)));
     }
@@ -266,15 +272,19 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
           actions={
             <>
               <Button asChild>
-                <Link href={Routes.workflows_path()} inert={isBusy || undefined}>
+                <Link
+                  href={Routes.workflows_path()}
+                  inert={isBusy || undefined}
+                  className={isBusy ? "opacity-30" : undefined}
+                >
                   {workflow.published ? (
                     <>
-                      <Icon name="x-square" />
+                      <XSquare className="size-5" />
                       Cancel
                     </>
                   ) : (
                     <>
-                      <Icon name="arrow-left" />
+                      <ArrowLeft className="size-5" />
                       Back
                     </>
                   )}
@@ -304,7 +314,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
             <EmailPreview
               key={email.id}
               email={email}
-              isEditing={focusedFieldInfo?.emailId === email.id}
+              focusedFieldInfo={focusedFieldInfo?.emailId === email.id ? focusedFieldInfo : null}
               workflowTrigger={workflowTrigger}
               gumroadAddress={context.gumroad_address}
             />
@@ -430,7 +440,6 @@ const EmailRow = ({
 }: EmailRowProps) => {
   const [editorContent, setEditorContent] = React.useState(email.message);
   const handleMessageChange = useDebouncedCallback((message: string) => onChange({ message }), 500);
-  const selfRef = React.useRef<HTMLDivElement>(null);
   const nameInputRef = React.useRef<null | HTMLInputElement>(null);
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
   React.useEffect(() => {
@@ -438,8 +447,7 @@ const EmailRow = ({
 
     const { fieldName } = focusedFieldInfo;
     if (fieldName === "name") nameInputRef.current?.focus();
-    if (fieldName !== "message" && fieldName !== "stream_only") selfRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [focusedFieldInfo]);
+  }, [focusedFieldInfo, email.id]);
   React.useEffect(() => {
     if (expanded) setEditorContent(email.message);
   }, [expanded]);
@@ -451,31 +459,32 @@ const EmailRow = ({
     );
 
   return (
-    <Row role="listitem" ref={selfRef} aria-label="Email">
+    <Row role="listitem" aria-label="Email">
       <RowContent>
-        <Icon name="envelope-fill" className="type-icon" />
+        <Envelope pack="filled" className="type-icon size-5" />
         <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
       </RowContent>
       <RowActions>
         {isAbandonedCartWorkflow ? null : (
           <Button
+            size="icon"
             outline
             disabled={(expanded && hasUploadingImages) || false}
             aria-label="Edit"
             onClick={toggleExpanded}
           >
-            <Icon name={expanded ? "outline-cheveron-up" : "outline-cheveron-down"} />
+            {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
           </Button>
         )}
         <WithTooltip tip="Send email preview">
-          <Button outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
-            <Icon name="eye-fill" />
+          <Button size="icon" outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
+            <Eye className="size-5" />
           </Button>
         </WithTooltip>
         {isAbandonedCartWorkflow ? null : (
           <WithTooltip tip="Delete">
-            <Button outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
-              <Icon name="trash2" />
+            <Button size="icon" outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
+              <Trash className="size-5" />
             </Button>
           </WithTooltip>
         )}
@@ -496,7 +505,7 @@ const EmailRow = ({
                   value={email.delayed_delivery_time_duration}
                 >
                   {(inputProps) => (
-                    <input
+                    <Input
                       type="text"
                       autoComplete="off"
                       placeholder="0"
@@ -506,7 +515,7 @@ const EmailRow = ({
                     />
                   )}
                 </NumberInput>
-                <select
+                <Select
                   value={email.delayed_delivery_time_period}
                   aria-label="Period"
                   onChange={(e) => onChange({ delayed_delivery_time_period: cast(e.target.value) })}
@@ -517,11 +526,11 @@ const EmailRow = ({
                       {`${period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
-            <fieldset className={cx({ danger: invalidFieldNames.includes("name") })}>
-              <input
+            <Fieldset state={invalidFieldNames.includes("name") ? "danger" : undefined}>
+              <Input
                 ref={nameInputRef}
                 type="text"
                 placeholder="Subject"
@@ -530,10 +539,10 @@ const EmailRow = ({
                 onChange={(e) => onChange({ name: e.target.value })}
                 onFocus={() => onFocus("name")}
               />
-            </fieldset>
+            </Fieldset>
             <RichTextEditor
               id={email.id}
-              className="textarea"
+              className="textarea block w-full rounded border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
               ariaLabel="Email message"
               placeholder="Write a personalized message..."
               extensions={[...(isAbandonedCartWorkflow ? [AbandonedCartProductList] : [])]}
@@ -557,12 +566,12 @@ const EmailRow = ({
 
 const EmailPreview = ({
   email,
-  isEditing,
+  focusedFieldInfo,
   workflowTrigger,
   gumroadAddress,
 }: {
   email: EmailFormState;
-  isEditing: boolean;
+  focusedFieldInfo: FocusedFieldInfo | null;
   workflowTrigger: WorkflowTrigger;
   gumroadAddress: string;
 }) => {
@@ -578,14 +587,16 @@ const EmailPreview = ({
   const emailFiles = useFiles((files) => files.filter(({ email_id }) => email_id === email.id));
 
   React.useEffect(() => {
-    if (isEditing) setTimeout(() => selfRef.current?.scrollIntoView({ behavior: "smooth" }), 500);
-  });
+    if (!focusedFieldInfo || !selfRef.current) return;
+    const sidebar = selfRef.current.closest("aside");
+    if (sidebar) sidebar.scrollTo({ top: selfRef.current.offsetTop, behavior: "smooth" });
+  }, [focusedFieldInfo]);
 
   return (
     <section className="flex flex-col gap-4" ref={selfRef}>
       <Separator>
         <div className="flex gap-2">
-          <Icon name="outline-clock" />
+          <Clock className="size-5" />
           {email.delayed_delivery_time_duration}{" "}
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
         </div>
@@ -598,7 +609,7 @@ const EmailPreview = ({
         <div className="flex flex-col items-center gap-4">
           <p>{gumroadAddress}</p>
           <p>
-            Powered by <span style={{ marginLeft: "var(--spacer-1)" }} className="logo-full" />
+            Powered by <Logo className="ml-1" />
           </p>
         </div>
       </div>
@@ -657,7 +668,7 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
       </WithTooltip>
       {abandonedCartProducts.length > shownProductCount ? (
         <button
-          className="link cursor-pointer all-unset"
+          className="cursor-pointer text-foreground underline all-unset"
           onClick={() =>
             setShownProductCount(
               shownProductCount + ABANDONED_CART_PRODUCTS_TO_LOAD_PER_PAGE > abandonedCartProducts.length
@@ -701,7 +712,7 @@ const SellerByLine = ({ isPreview }: { isPreview: boolean }) => {
       rel="noopener noreferrer nofollow"
       tabIndex={isPreview ? undefined : -1}
     >
-      <img className="user-avatar" src={currentSeller.avatarUrl} />
+      <Avatar src={currentSeller.avatarUrl} />
       {currentSeller.name || currentSeller.email || ""}
     </a>
   );

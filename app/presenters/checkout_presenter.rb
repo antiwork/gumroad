@@ -87,7 +87,7 @@ class CheckoutPresenter
               upsell_offered_variant_id: upsell_variant.present? &&
                 (
                   product.upsell.seller == logged_in_user ||
-                  purchases.none? { |purchase| purchase[:product] == product && purchase[:variant] == upsell_variant.offered_variant }
+                  !already_purchased?(product, upsell_variant.offered_variant)
                 ) &&
                 upsell_variant.offered_variant.available? ?
                   upsell_variant.offered_variant.external_id :
@@ -122,6 +122,7 @@ class CheckoutPresenter
       quantity: cart_item[:quantity],
       call_start_time: cart_item[:call_start_time],
       pay_in_installments: cart_item[:pay_in_installments],
+      force_new_subscription: logged_in_user.present? && (cart_item[:force_new_subscription] || false),
       affiliate_id: params[:affiliate_id],
       recommended_by: params[:recommended_by],
       recommender_model_name: params[:recommender_model_name],
@@ -134,7 +135,7 @@ class CheckoutPresenter
           (cross_sell.variant.blank? || cross_sell.variant.available?) &&
           (
             cross_sell.seller == logged_in_user ||
-            purchases.none? { |purchase| purchase[:product] == cross_sell.product && purchase[:variant] == cross_sell.variant }
+            !already_purchased?(cross_sell.product, cross_sell.variant)
           )
 
         offered_product = cross_sell.product
@@ -169,8 +170,10 @@ class CheckoutPresenter
       variants: subscription.original_purchase.tiers,
       price_cents: subscription.current_plan_displayed_price_cents / subscription.original_purchase.quantity,
     }
+    show_current_prices = subscription.deactivated? ||
+      (subscription.alive? && !subscription.overdue_for_charge? && product.recurrence_price_enabled?(subscription.recurrence))
     options = (variant_category = product.variant_categories_alive.first) ? variant_category.variants.in_order.alive.map do
-      |variant| subscription.alive? && !subscription.overdue_for_charge? && product.recurrence_price_enabled?(subscription.recurrence) ? variant.to_option : variant.to_option(subscription_attrs: tier_attrs)
+      |variant| show_current_prices ? variant.to_option : variant.to_option(subscription_attrs: tier_attrs)
     end : []
     tier = subscription.original_purchase.variant_attributes.first
     if tier.present? && !options.any? { |option| option[:id] == tier.external_id }
@@ -239,12 +242,25 @@ class CheckoutPresenter
 
     def checkout_wishlist_props(params:)
       return {} if params[:wishlist].blank?
-      wishlist = Wishlist.alive.includes(wishlist_products: [:product, :variant]).find_by_external_id(params[:wishlist])
+      wishlist = Wishlist.alive.find_by_external_id(params[:wishlist])
       return {} if wishlist.blank?
 
+      wishlist_products = wishlist.alive_wishlist_products.available_to_buy.preload(
+        :variant,
+        product: [
+          :user,
+          :thumbnail,
+          :installment_plan,
+          :variant_categories_alive,
+          :alive_variants,
+          { available_upsell: :seller },
+        ]
+      )
+      affiliate_id = wishlist.user.global_affiliate.external_id_numeric.to_s
+
       {
-        add_products: wishlist.alive_wishlist_products.available_to_buy.map do |wishlist_product|
-          checkout_wishlist_product(wishlist_product, params.reverse_merge(affiliate_id: wishlist_product.wishlist.user.global_affiliate.external_id_numeric.to_s))
+        add_products: wishlist_products.map do |wishlist_product|
+          checkout_wishlist_product(wishlist_product, params.reverse_merge(affiliate_id:))
         end
       }
     end
@@ -328,6 +344,16 @@ class CheckoutPresenter
     end
 
     def purchases
-      @_purchases ||= logged_in_user&.purchases&.map { |purchase| { product: purchase.link, variant: purchase.variant_attributes.first } } || []
+      @_purchases ||= logged_in_user&.purchases&.includes(:link, :variant_attributes)&.map { |purchase| { product: purchase.link, variant: purchase.variant_attributes.first } } || []
+    end
+
+    def purchased_product_variant_set
+      @_purchased_product_variant_set ||= purchases.each_with_object(Set.new) do |purchase, set|
+        set.add([purchase[:product]&.id, purchase[:variant]&.id])
+      end
+    end
+
+    def already_purchased?(product, variant)
+      purchased_product_variant_set.include?([product&.id, variant&.id])
     end
 end

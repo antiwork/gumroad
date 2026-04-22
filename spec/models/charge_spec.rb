@@ -469,6 +469,14 @@ describe Charge, :vcr do
       charge.refund_for_fraud_and_block_buyer!(admin.id)
       expect(refund_count).to eq(2)
     end
+
+    it "does not block the buyer if a refund fails" do
+      allow(purchase_one).to receive(:refund_for_fraud!).with(admin.id).and_return(false)
+      expect(purchase_two).not_to receive(:refund_for_fraud!)
+      expect_any_instance_of(Purchase).not_to receive(:block_buyer!)
+
+      expect(charge.refund_for_fraud_and_block_buyer!(admin.id)).to be(false)
+    end
   end
 
   describe "#first_purchase_for_subscription" do

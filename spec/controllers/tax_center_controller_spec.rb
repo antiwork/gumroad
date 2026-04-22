@@ -9,6 +9,7 @@ describe TaxCenterController, type: :controller, inertia: true do
   let(:seller) { create(:user, created_at: 2.years.ago) }
 
   before do
+    create(:user_compliance_info, user: seller)
     Feature.activate_user(:tax_center, seller)
   end
 
@@ -51,6 +52,42 @@ describe TaxCenterController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(dashboard_path)
         expect(flash[:alert]).to eq("Tax center is not enabled for your account.")
+      end
+    end
+
+    context "when seller is not from the US" do
+      before do
+        seller.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_singapore, user: seller)
+      end
+
+      it "redirects to dashboard with alert" do
+        get :index
+
+        expect(response).to redirect_to(dashboard_path)
+        expect(flash[:alert]).to eq("Tax center is not enabled for your account.")
+      end
+    end
+
+    context "when seller is suspended for TOS violation" do
+      let(:admin_user) { create(:user) }
+      let!(:product) { create(:product, user: seller) }
+
+      before do
+        seller.flag_for_tos_violation(author_id: admin_user.id, product_id: product.id)
+        seller.suspend_for_tos_violation(author_id: admin_user.id)
+        sign_in seller
+        cookies.encrypted[:current_seller_id] = seller.id
+        # NOTE: The invalidate_active_sessions! callback from suspending the user, interferes
+        # with the login mechanism, this is a hack get the `sign_in user` method work correctly
+        request.env["warden"].session["last_sign_in_at"] = DateTime.current.to_i
+      end
+
+      it "renders successfully" do
+        get :index
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("TaxCenter/Index")
       end
     end
   end
@@ -168,6 +205,15 @@ describe TaxCenterController, type: :controller, inertia: true do
         allow_any_instance_of(StripeTaxFormsApi).to receive(:download_tax_form).and_return(nil)
       end
 
+      it "redirects to the S3 download url if it is present" do
+        allow_any_instance_of(User).to receive(:tax_form_1099_download_url).and_return("https://example.com/tax1099k.pdf")
+
+        get :download, params: { year:, form_type: }
+
+        expect(response).to redirect_to("https://example.com/tax1099k.pdf")
+        expect(flash[:alert]).to be nil
+      end
+
       it "redirects with error message" do
         get :download, params: { year:, form_type: }
 
@@ -186,6 +232,36 @@ describe TaxCenterController, type: :controller, inertia: true do
 
         expect(response).to redirect_to(dashboard_path)
         expect(flash[:alert]).to eq("Tax center is not enabled for your account.")
+      end
+    end
+
+    context "when seller is suspended for TOS violation" do
+      let(:admin_user) { create(:user) }
+      let!(:product) { create(:product, user: seller) }
+
+      before do
+        seller.flag_for_tos_violation(author_id: admin_user.id, product_id: product.id)
+        seller.suspend_for_tos_violation(author_id: admin_user.id)
+        sign_in seller
+        cookies.encrypted[:current_seller_id] = seller.id
+        # NOTE: The invalidate_active_sessions! callback from suspending the user, interferes
+        # with the login mechanism, this is a hack get the `sign_in user` method work correctly
+        request.env["warden"].session["last_sign_in_at"] = DateTime.current.to_i
+      end
+
+      it "sends the tax form PDF file" do
+        pdf_tempfile = Tempfile.new(["tax_form", ".pdf"])
+        pdf_tempfile.write("PDF content")
+        pdf_tempfile.rewind
+
+        allow_any_instance_of(StripeTaxFormsApi).to receive(:download_tax_form).and_return(pdf_tempfile)
+
+        get :download, params: { year:, form_type: }
+
+        expect(response).to be_successful
+
+        pdf_tempfile.close
+        pdf_tempfile.unlink
       end
     end
   end

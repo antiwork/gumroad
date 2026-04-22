@@ -153,7 +153,6 @@ describe UtmLinkTracking, type: :controller do
 
     context "on a post page" do
       before do
-        allow(Iffy::Post::IngestJob).to receive(:perform_async)
         allow(controller).to receive(:custom_domain_view_post_path).and_return("/posts/#{post.slug}")
         request.host = "#{seller.subdomain}"
         request.path = "/posts/#{post.slug}"
@@ -288,6 +287,20 @@ describe UtmLinkTracking, type: :controller do
         end.to change(UtmLink, :count).by(0)
           .and change(UtmLinkVisit, :count).by(1)
       end
+    end
+
+    it "truncates UTM params that exceed the maximum length", :sidekiq_inline do
+      long_source = "a" * 300
+      request.host = "#{seller.subdomain}"
+      request.path = "/"
+      allow(controller).to receive(:root_path).and_return("/")
+
+      expect do
+        get :action, params: utm_params.merge(utm_source: long_source)
+      end.to change(UtmLink, :count).by(1)
+
+      utm_link = UtmLink.last
+      expect(utm_link.utm_source.length).to eq(UtmLink::MAX_UTM_PARAM_LENGTH)
     end
 
     it "does not auto-create UTM link when feature is disabled" do

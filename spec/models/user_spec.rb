@@ -1312,6 +1312,15 @@ describe User, :vcr do
           expect(@user_with_avatar.resized_avatar_url(size: 256)).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{variant}")
         end
       end
+
+      context "when avatar is attached but file is missing from storage" do
+        it "returns URL to default avatar" do
+          allow(@user.avatar).to receive(:attached?).and_return(true)
+          allow(@user.avatar).to receive(:variant).and_raise(ActiveStorage::FileNotFoundError)
+
+          expect(@user.resized_avatar_url(size: 256)).to eq(ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"))
+        end
+      end
     end
 
     describe "avatar_url" do
@@ -1725,6 +1734,30 @@ describe User, :vcr do
       expect(@user.suspend_for_fraud!(author_id: @admin_user.id)).to be(true)
     end
 
+    it "suspends the user directly from not_reviewed state" do
+      expect(@user.user_risk_state).to eq("not_reviewed")
+      expect(@user.suspend_for_fraud!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_fraud?).to be(true)
+    end
+
+    it "suspends the user directly from compliant state" do
+      @user.update!(user_risk_state: "compliant")
+      expect(@user.suspend_for_tos_violation!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_tos_violation?).to be(true)
+    end
+
+    it "suspends for fraud from flagged_for_tos_violation state" do
+      @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)
+      expect(@user.suspend_for_fraud!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_fraud?).to be(true)
+    end
+
+    it "suspends for tos_violation from flagged_for_fraud state" do
+      @user.flag_for_fraud!(author_id: @admin_user.id)
+      expect(@user.suspend_for_tos_violation!(author_id: @admin_user.id)).to be(true)
+      expect(@user.reload.suspended_for_tos_violation?).to be(true)
+    end
+
     it "is expected to call invalidate_active_sessions! if user is suspended_for_fraud" do
       expect(@user).to receive(:invalidate_active_sessions!)
 
@@ -1781,32 +1814,6 @@ describe User, :vcr do
       end
     end
 
-    describe "logging suspension time to mongo", :sidekiq_inline do
-      let(:collection) { MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME] }
-
-      shared_examples "logs suspension data to mongo" do |suspension_type|
-        it "logs suspension data to mongo when suspended for #{suspension_type}" do
-          freeze_time do
-            case suspension_type
-            when "fraud"
-              @user.flag_for_fraud!(author_id: @admin_user.id)
-              @user.suspend_for_fraud!(author_id: @admin_user.id)
-            when "tos_violation"
-              @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)
-              @user.suspend_for_tos_violation!(author_id: @admin_user.id)
-            end
-
-            record = collection.find("user_id" => @user.id).first
-            expect(record).to be_present
-            expect(record["user_id"]).to eq(@user.id)
-            expect(record["suspended_at"]).to eq(Time.current.to_s)
-          end
-        end
-      end
-
-      include_examples "logs suspension data to mongo", "fraud"
-      include_examples "logs suspension data to mongo", "tos_violation"
-    end
     it "adds a comment when flagging for TOS violation" do
       expect do
         @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)
@@ -1821,18 +1828,7 @@ describe User, :vcr do
       end.to_not change { @product_1.comments.reload.count }
     end
 
-    it "logs the timestamp to mongo on flagging" do
-      @user.update_attribute(:tos_violation_reason, "bad content")
-      @user.flag_for_tos_violation!(author_id: @admin_user.id, product_id: @product_1.id)
 
-      expect(SaveToMongoWorker).to have_enqueued_sidekiq_job(anything, anything)
-    end
-
-    it "logs the timestamp to mongo on suspension" do
-      @user.flag_for_fraud!(author_id: @admin_user.id)
-
-      expect(SaveToMongoWorker).to have_enqueued_sidekiq_job(anything, anything)
-    end
 
     describe "seller with multiple accounts" do
       before do
@@ -1877,8 +1873,8 @@ describe User, :vcr do
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(user_3.reload.suspended?).to be(true)
         expect(@user_2.reload.suspended?).to be(true)
-        expect(user_3.comments.count).to eq(2)
-        expect(@user_2.comments.count).to eq(2)
+        expect(user_3.comments.count).to eq(1)
+        expect(@user_2.comments.count).to eq(1)
         expect(@user.reload.comments.count).to eq(2)
       end
 
@@ -2934,55 +2930,23 @@ describe User, :vcr do
       @user = create(:user)
     end
 
-    context "when tier pricing is enabled" do
+    context "when the seller has $100K revenue" do
       before do
-        allow_any_instance_of(User).to receive(:tier_pricing_enabled?).and_return(true)
+        @user.update!(tier_state: 100_000)
       end
 
-      context "when the seller has $100K revenue" do
-        before do
-          @user.update!(tier_state: 100_000)
-        end
-
-        it "returns true" do
-          expect(@user.auto_transcode_videos?).to eq true
-        end
-      end
-
-      context "when the seller less than $100K revenue" do
-        before do
-          @user.update!(tier_state: 1_000)
-        end
-
-        it "returns false" do
-          expect(@user.auto_transcode_videos?).to eq false
-        end
+      it "returns true" do
+        expect(@user.auto_transcode_videos?).to eq true
       end
     end
 
-    context "when tier pricing is disabled" do
+    context "when the seller less than $100K revenue" do
       before do
-        allow_any_instance_of(User).to receive(:tier_pricing_enabled?).and_return(false)
+        @user.update!(tier_state: 1_000)
       end
 
-      context "when the seller has $100K revenue" do
-        before do
-          allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_000)
-        end
-
-        it "returns true" do
-          expect(@user.auto_transcode_videos?).to eq true
-        end
-      end
-
-      context "when the seller less than $100K revenue" do
-        before do
-          allow(@user).to receive(:sales_cents_total).and_return(1_000)
-        end
-
-        it "returns false" do
-          expect(@user.auto_transcode_videos?).to eq false
-        end
+      it "returns false" do
+        expect(@user.auto_transcode_videos?).to eq false
       end
     end
   end
@@ -3144,6 +3108,16 @@ describe User, :vcr do
       expect(@user.reload.purchasing_power_parity_excluded_product_external_ids).to eq([@product_1.external_id])
       expect(@product_2.reload.purchasing_power_parity_disabled).to eq(false)
     end
+
+    it "updates PPP flag on a published bundle with no bundle products" do
+      bundle = create(:product, user: @user, is_bundle: true, purchase_disabled_at: nil)
+
+      expect do
+        @user.update_purchasing_power_parity_excluded_products!([bundle.external_id])
+      end.not_to raise_error
+
+      expect(bundle.reload.purchasing_power_parity_disabled).to eq(true)
+    end
   end
 
   describe "#eligible_for_service_products?" do
@@ -3163,38 +3137,6 @@ describe User, :vcr do
       it "returns false" do
         expect(user.eligible_for_service_products?).to eq(false)
       end
-    end
-  end
-
-  describe "#trigger_iffy_ingest" do
-    let!(:user) { create(:user, name: "Original Name", bio: "Original Bio") }
-
-    before do
-      allow_any_instance_of(Iffy::Profile::IngestService).to receive(:perform).and_return(true)
-    end
-
-    it "does not trigger an iffy ingest job if neither name nor bio have changed" do
-      expect do
-        user.update!(email: "newemail@example.com")
-      end.not_to change { Iffy::Profile::IngestJob.jobs.size }
-    end
-
-    it "triggers an iffy ingest job if the name has changed" do
-      expect do
-        user.update!(name: "New Name")
-      end.to change { Iffy::Profile::IngestJob.jobs.size }.by(1)
-    end
-
-    it "triggers an iffy ingest job if the bio has changed" do
-      expect do
-        user.update!(bio: "New Bio")
-      end.to change { Iffy::Profile::IngestJob.jobs.size }.by(1)
-    end
-
-    it "triggers an iffy ingest job if the username has changed" do
-      expect do
-        user.update!(username: "username1")
-      end.to change { Iffy::Profile::IngestJob.jobs.size }.by(1)
     end
   end
 
@@ -3385,8 +3327,8 @@ describe User, :vcr do
     let(:user) { create(:user) }
 
     it "returns the payout threshold" do
-      user.payout_threshold_cents = 2000
-      expect(user.minimum_payout_amount_cents).to eq(2000)
+      user.payout_threshold_cents = 20_000
+      expect(user.minimum_payout_amount_cents).to eq(20_000)
     end
 
     describe "when the user is in a cross-border payout country" do
@@ -3394,9 +3336,9 @@ describe User, :vcr do
       let!(:compliance_info) { create(:user_compliance_info_korea, user:) }
 
       it "returns the higher of payout threshold and country minimum" do
-        expect(user.minimum_payout_amount_cents).to eq(3474)
-        user.payout_threshold_cents = 4000
-        expect(user.minimum_payout_amount_cents).to eq(4000)
+        expect(user.minimum_payout_amount_cents).to eq(Payouts::MIN_AMOUNT_CENTS)
+        user.payout_threshold_cents = 20_000
+        expect(user.minimum_payout_amount_cents).to eq(20_000)
       end
     end
   end

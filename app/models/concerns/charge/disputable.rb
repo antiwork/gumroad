@@ -85,7 +85,7 @@ module Charge::Disputable
 
   def handle_event_dispute_formalized!(event)
     unless disputed_purchases.any?(&:successful?)
-      Bugsnag.notify("Invalid charge event received for failed #{self.class.name} #{external_id} - " \
+      ErrorNotifier.notify("Invalid charge event received for failed #{self.class.name} #{external_id} - " \
                       "received reversal notification with ID #{event.charge_event_id}")
       return
     end
@@ -134,6 +134,7 @@ module Charge::Disputable
       purchase.mark_product_purchases_as_chargedback!
 
       purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+      purchase.block_buyer_based_on_chargeback_count!
     end
 
     dispute_evidence = create_dispute_evidence_if_needed!
@@ -155,13 +156,13 @@ module Charge::Disputable
 
   def handle_event_dispute_won!(event)
     unless disputed_purchases.any?(&:successful?)
-      Bugsnag.notify("Invalid charge event received for failed #{self.class.name} #{external_id} - " \
+      ErrorNotifier.notify("Invalid charge event received for failed #{self.class.name} #{external_id} - " \
                       "received reversal won notification with ID #{event.charge_event_id}")
       return
     end
 
     unless disputed?
-      Bugsnag.notify("Invalid charge event received for successful #{self.class.name} #{external_id} - " \
+      ErrorNotifier.notify("Invalid charge event received for successful #{self.class.name} #{external_id} - " \
                       "received reversal won notification with ID #{event.charge_event_id} but was not disputed.")
       return
     end

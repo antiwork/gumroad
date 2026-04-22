@@ -2,6 +2,10 @@
 
 class Purchase
   module Refundable
+    ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE = "This purchase has an active dispute. " \
+                                          "The funds have already been returned to the buyer. " \
+                                          "No additional refund is needed."
+
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
     def refund!(refunding_user_id:, amount: nil)
       if amount.blank?
@@ -28,6 +32,11 @@ class Purchase
     # * amount - the amount to refund (out of `Purchase#price_cents`, VAT-exclusive). VAT will be refunded proportinally to this amount.
     def refund_and_save!(refunding_user_id, amount_cents: nil, is_for_fraud: false)
       return if stripe_transaction_id.blank? || stripe_refunded || amount_refundable_cents <= 0
+
+      if chargedback_not_reversed?
+        errors.add :base, ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
+        return false
+      end
 
       if (merchant_account.is_a_stripe_connect_account? && !merchant_account.active?) ||
           (paypal_charge_processor? &&
@@ -272,6 +281,11 @@ class Purchase
     gumroad_tax_refundable_cents = self.gumroad_tax_refundable_cents
     return false if stripe_refunded || gumroad_tax_refundable_cents <= 0
 
+    if chargedback_not_reversed?
+      errors.add :base, ACTIVE_DISPUTE_REFUND_ERROR_MESSAGE
+      return false
+    end
+
     begin
       logger.info("Refunding purchase: #{id} gumroad taxes: #{self.gumroad_tax_refundable_cents}")
       charge_refund = ChargeProcessor.refund!(charge_processor_id, stripe_transaction_id,
@@ -312,14 +326,17 @@ class Purchase
   end
 
   def refund_for_fraud_and_block_buyer!(refunding_user_id)
-    refund_for_fraud!(refunding_user_id)
+    return false unless refund_for_fraud!(refunding_user_id)
+
     block_buyer!(blocking_user_id: refunding_user_id)
   end
 
   def refund_for_fraud!(refunding_user_id)
-    refund_and_save!(refunding_user_id, is_for_fraud: true)
+    return false if refund_and_save!(refunding_user_id, is_for_fraud: true) == false
+
     subscription.cancel_effective_immediately! if subscription.present? && !subscription.deactivated?
     ContactingCreatorMailer.purchase_refunded_for_fraud(id).deliver_later(queue: "default") unless seller.suspended?
+    true
   end
 
   def formatted_refund_state

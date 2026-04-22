@@ -46,7 +46,6 @@ type Policies = {
     show: boolean;
   };
   settings_profile: {
-    manage_social_connections: boolean;
     update: boolean;
     update_username: boolean;
   };

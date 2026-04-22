@@ -5,7 +5,7 @@
       <form action="https://gumroad.com/follow_from_embed_form" method="post" class="flex gap-1">
         <input name="seller_id" type="hidden" value="6282492303727">
         <div class="lg:flex-1">
-          <input name="email" placeholder="Your email address" type="email">
+          <input name="email" placeholder="Your email address" type="email" class="w-full h-12 px-4 rounded border border-white/30 bg-transparent text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent font-[inherit] text-base">
         </div>
         <%= render "home/shared/button", text: "→", url: "#", type: "submit", variant: "pink", size: "small" %>
       </form>

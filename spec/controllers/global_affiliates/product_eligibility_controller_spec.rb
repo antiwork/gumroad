@@ -30,5 +30,17 @@ describe GlobalAffiliates::ProductEligibilityController do
         expect(response.parsed_body["error"]).to eq("Please provide a valid Gumroad product URL")
       end
     end
+
+    context "with non-ASCII characters in URL" do
+      let(:url) { "https://gumroad.com/discover.json?a=123\u201D" }
+
+      it "returns an error instead of raising URI::InvalidURIError" do
+        get :show, format: :json, params: { url: }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("Please provide a valid Gumroad product URL")
+      end
+    end
   end
 end

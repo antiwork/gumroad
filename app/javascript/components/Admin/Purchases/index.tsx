@@ -1,3 +1,4 @@
+import { ArrowUpRightSquare, Copy } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -11,8 +12,10 @@ import { NoIcon, BooleanIcon } from "$app/components/Admin/Icons";
 import AdminResendReceiptForm from "$app/components/Admin/Purchases/ResendReceiptForm";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { DefinitionList } from "$app/components/ui/DefinitionList";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 
 import { type RefundPolicy, RefundPolicyTitle } from "./RefundPolicy";
@@ -83,8 +86,8 @@ export type Purchase = PurchaseStatesInfo & {
   subscription: {
     id: number;
     external_id: string;
-    cancelled_at: string | null;
     cancelled_by_buyer: boolean | null;
+    user_requested_cancellation_at: string | null;
     ended_at: string | null;
     failed_at: string | null;
   } | null;
@@ -133,31 +136,31 @@ const Header = ({ purchase }: { purchase: Purchase }) => (
       </Link>{" "}
       {purchase.variants_list}{" "}
       <Link href={purchase.product.long_url}>
-        <Icon name="arrow-up-right-square" />
+        <ArrowUpRightSquare className="size-5" />
       </Link>
     </h2>
-    <ul className="inline">
+    <InlineList>
       <li>
         <DateTimeWithRelativeTooltip date={purchase.created_at} />
       </li>
       <li>
         <Link href={Routes.admin_search_purchases_path({ query: purchase.email })}>{purchase.email}</Link>
       </li>
-    </ul>
+    </InlineList>
   </div>
 );
 
 const Info = ({ purchase }: { purchase: Purchase }) => (
   <div className="flex flex-col gap-4">
     <h3>Info</h3>
-    <dl>
+    <DefinitionList>
       {purchase.seller.support_email ? (
         <>
           <dt>Seller support email</dt>
           <dd>
             {purchase.seller.support_email}{" "}
             <CopyToClipboard text={purchase.seller.support_email}>
-              <Icon name="outline-duplicate" />
+              <Copy className="size-5" />
             </CopyToClipboard>
           </dd>
         </>
@@ -167,7 +170,7 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         {purchase.seller.email}{" "}
         <CopyToClipboard text={purchase.seller.email}>
-          <Icon name="outline-duplicate" />
+          <Copy className="size-5" />
         </CopyToClipboard>
       </dd>
 
@@ -404,9 +407,9 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
         <>
           <dt>Cancelled</dt>
           <dd>
-            <BooleanIcon value={!!purchase.subscription.cancelled_at} />
-            {purchase.subscription.cancelled_at
-              ? ` (on ${purchase.subscription.cancelled_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
+            <BooleanIcon value={!!purchase.subscription.user_requested_cancellation_at} />
+            {purchase.subscription.user_requested_cancellation_at
+              ? ` (on ${purchase.subscription.user_requested_cancellation_at} by ${purchase.subscription.cancelled_by_buyer ? "buyer" : "seller"})`
               : null}
           </dd>
 
@@ -469,18 +472,18 @@ const Info = ({ purchase }: { purchase: Purchase }) => (
       <dd aria-label="Can email">
         <BooleanIcon value={purchase.can_contact} />
       </dd>
-    </dl>
+    </DefinitionList>
   </div>
 );
 
 const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gift: Gift }) =>
   gift.is_sender_purchase ? (
     <>
-      <details>
-        <summary>
+      <Details>
+        <DetailsToggle>
           <h3>Gift Sender Info</h3>
-        </summary>
-        <dl>
+        </DetailsToggle>
+        <DefinitionList>
           <dt>For</dt>
           <dd>{gift.other_email}</dd>
 
@@ -493,14 +496,13 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
               {gift.other_purchase_external_id}
             </Link>
           </dd>
-        </dl>
-      </details>
-
+        </DefinitionList>
+      </Details>
       <hr />
-      <details>
-        <summary>
+      <Details>
+        <DetailsToggle>
           <h3>Edit giftee email</h3>
-        </summary>
+        </DetailsToggle>
         <Form
           url={Routes.update_giftee_email_admin_purchase_path(purchaseExternalId)}
           method="POST"
@@ -515,14 +517,14 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
             </div>
           )}
         </Form>
-      </details>
+      </Details>
     </>
   ) : (
-    <details>
-      <summary>
+    <Details>
+      <DetailsToggle>
         <h3>Gift Receiver Info</h3>
-      </summary>
-      <dl>
+      </DetailsToggle>
+      <DefinitionList>
         <dt>From</dt>
         <dd>{gift.other_email}</dd>
 
@@ -535,8 +537,8 @@ const GiftInfo = ({ purchaseExternalId, gift }: { purchaseExternalId: string; gi
             {gift.other_purchase_external_id}
           </Link>
         </dd>
-      </dl>
-    </details>
+      </DefinitionList>
+    </Details>
   );
 
 const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
@@ -587,10 +589,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
         />
       </>
     ) : null}
-    {purchase.subscription &&
-    !purchase.subscription.cancelled_at &&
-    !purchase.subscription.ended_at &&
-    !purchase.subscription.failed_at ? (
+    {purchase.subscription && !purchase.subscription.ended_at && !purchase.subscription.failed_at ? (
       <>
         <AdminActionButton
           label="Cancel subscription for buyer"
@@ -639,7 +638,7 @@ const ActionButtons = ({ purchase }: { purchase: Purchase }) => (
       />
     ) : null}
     {purchase.successful ? (
-      <Button asChild small>
+      <Button asChild size="sm">
         <a href={Routes.receipt_purchase_path(purchase.external_id)} target="_blank" rel="noopener noreferrer">
           Go to Receipt
         </a>
@@ -682,12 +681,12 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
     purchase.is_free_trial_purchase ? (
       <>
         <hr />
-        <details>
-          <summary>
+        <Details>
+          <DetailsToggle>
             <h3>Resend receipt</h3>
-          </summary>
+          </DetailsToggle>
           <AdminResendReceiptForm purchase_external_id={purchase.external_id} email={purchase.email} />
-        </details>
+        </Details>
       </>
     ) : null}
     <hr />
@@ -698,7 +697,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
       commentableType="purchase"
     />
     <hr />
-    <dl>
+    <DefinitionList>
       <dt>Updated</dt>
       <dd>
         <DateTimeWithRelativeTooltip date={purchase.updated_at} />
@@ -707,7 +706,7 @@ const AdminPurchase = ({ purchase }: { purchase: Purchase }) => (
       <dd>
         <DateTimeWithRelativeTooltip date={purchase.deleted_at} placeholder={<NoIcon />} />
       </dd>
-    </dl>
+    </DefinitionList>
   </div>
 );
 

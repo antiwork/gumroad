@@ -40,7 +40,7 @@ describe AssetPreview, :vcr do
       asset_preview = create(:asset_preview)
       asset_preview.file.attach Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "test.zip"), "application/octet-stream")
       expect(asset_preview.save).to eq(false)
-      expect(asset_preview.errors.full_messages).to eq(["Could not process your preview, please try again."])
+      expect(asset_preview.errors.full_messages).to eq(["Cover must be an image (JPEG, PNG, GIF) or a video."])
     end
 
     describe "#analyze_file" do
@@ -59,7 +59,7 @@ describe AssetPreview, :vcr do
         blob.analyze
         asset_preview.file.attach(blob)
         expect(asset_preview.save).to eq(false)
-        expect(asset_preview.errors.full_messages).to include("Could not process your preview, please try again.")
+        expect(asset_preview.errors.full_messages).to include("Cover must be an image (JPEG, PNG, GIF) or a video.")
       end
 
       it "fails with an image which cannot be analyzed" do
@@ -76,7 +76,7 @@ describe AssetPreview, :vcr do
       asset_preview = create(:asset_preview)
       asset_preview.file.attach(Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "webp_image.webp"), "image/webp"))
       expect(asset_preview.save).to eq(false)
-      expect(asset_preview.errors.full_messages).to eq(["Could not process your preview, please try again."])
+      expect(asset_preview.errors.full_messages).to eq(["Cover must be an image (JPEG, PNG, GIF) or a video."])
     end
 
     context "deleted" do
@@ -167,6 +167,12 @@ describe AssetPreview, :vcr do
       expect do
         asset_preview.url = "/etc/sudoers"
       end.to raise_error(URI::InvalidURIError, /not a web url/)
+    end
+
+    it "rejects URLs without a host" do
+      expect do
+        asset_preview.url = "https:///path"
+      end.to raise_error(URI::InvalidURIError, /valid host/)
     end
 
     it "blocks SSRF attempts to localhost", :skip_ssrf_stub do
@@ -266,6 +272,14 @@ describe AssetPreview, :vcr do
         expect(asset_preview.display_height).to eq(210)
       end
 
+      describe "#retina_variant" do
+        it "falls back to original file URL when image processing times out" do
+          allow(asset_preview.file).to receive(:variant).and_raise(Timeout::Error)
+
+          expect(asset_preview.url_from_file(style: :retina)).to eq(asset_preview.file.url)
+        end
+      end
+
       describe "#url" do
         it "returns retina variant" do
           expect(asset_preview.url).to match(asset_preview.retina_variant.key)
@@ -285,21 +299,6 @@ describe AssetPreview, :vcr do
           asset_preview.save!
           asset_preview.file.analyze
           expect(asset_preview.url).to match(asset_preview.file.url)
-        end
-      end
-    end
-  end
-
-  describe "callbacks" do
-    describe "#reset_moderated_by_iffy_flag" do
-      let(:product) { create(:product, moderated_by_iffy: true) }
-      let(:asset_preview) { create(:asset_preview, link: product) }
-
-      context "when a new asset preview is created" do
-        it "resets moderated_by_iffy flag on the associated product" do
-          expect do
-            create(:asset_preview, link: product)
-          end.to change { product.reload.moderated_by_iffy }.from(true).to(false)
         end
       end
     end

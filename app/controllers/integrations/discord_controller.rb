@@ -6,8 +6,10 @@ class Integrations::DiscordController < ApplicationController
   def server_info
     discord_api = DiscordApi.new
     oauth_response = discord_api.oauth_token(params[:code], oauth_redirect_integrations_discord_index_url)
-    server = oauth_response.parsed_response&.dig("guild")
-    access_token = oauth_response.parsed_response&.dig("access_token")
+    parsed = oauth_response.parsed_response
+    parsed = nil if !parsed.is_a?(Hash)
+    server = parsed&.dig("guild")
+    access_token = parsed&.dig("access_token")
     return render json: { success: false } unless oauth_response.success? && server.present? && access_token.present?
 
     begin
@@ -15,7 +17,7 @@ class Integrations::DiscordController < ApplicationController
 
       user = JSON.parse(user_response)
       render json: { success: true, server_id: server["id"], server_name: server["name"], username: user["username"] }
-    rescue Discordrb::Errors::CodeError
+    rescue Discordrb::Errors::CodeError, JSON::ParserError
       render json: { success: false }
     end
   end
@@ -25,7 +27,8 @@ class Integrations::DiscordController < ApplicationController
 
     discord_api = DiscordApi.new
     oauth_response = discord_api.oauth_token(params[:code], oauth_redirect_integrations_discord_index_url(host: DOMAIN, protocol: PROTOCOL))
-    access_token = oauth_response.parsed_response&.dig("access_token")
+    parsed = oauth_response.parsed_response
+    access_token = parsed.is_a?(Hash) ? parsed.dig("access_token") : nil
 
     return render json: { success: false } unless oauth_response.success? && access_token.present?
 
@@ -46,7 +49,7 @@ class Integrations::DiscordController < ApplicationController
       else
         render json: { success: false }
       end
-    rescue Discordrb::Errors::CodeError, Discordrb::Errors::NoPermission
+    rescue Discordrb::Errors::CodeError, Discordrb::Errors::NoPermission, JSON::ParserError
       render json: { success: false }
     end
   end

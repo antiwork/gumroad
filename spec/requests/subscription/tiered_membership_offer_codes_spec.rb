@@ -220,17 +220,17 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true do
 
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
-        # shows the correct price on the current plan
-        expect(page).to have_radio_button("First Tier", checked: true, text: "$5.99 $3.99", normalize_ws: true)
+        # shows the current tier price with the offer code applied
+        expect(page).to have_radio_button("First Tier", checked: true, text: "$10.99 $8.99", normalize_ws: true)
 
         # shows the price to be charged today
-        expect(page).to have_text "You'll be charged US$3.99"
+        expect(page).to have_text "You'll be charged US$8.99"
 
         click_on "Restart membership"
         wait_for_ajax
         expect(page).to have_alert(text: "Membership restarted")
 
-        expect(@subscription.reload.purchases.last.displayed_price_cents).to eq 3_99
+        expect(@subscription.reload.purchases.last.displayed_price_cents).to eq 8_99
       end
     end
 

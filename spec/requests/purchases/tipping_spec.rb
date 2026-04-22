@@ -290,6 +290,80 @@ describe("Product checkout with tipping", type: :system, js: true) do
     end
   end
 
+  context "when the tip is suspiciously large" do
+    let(:product) { create(:product, user: seller, price_cents: 500) }
+
+    it "shows a confirmation dialog and proceeds when confirmed" do
+      visit product.long_url
+      add_to_cart(product)
+      fill_checkout_form(product)
+
+      fill_in "Custom tip", with: 200
+
+      expect(page).to have_text("Add a tip? US$200", normalize_ws: true)
+
+      click_on "Pay"
+
+      expect(page).to have_text("Confirm tip amount")
+      expect(page).to have_text("You're about to leave a tip of $200 on a $5 purchase. Are you sure?")
+      expect(page).to have_button("Yes, leave tip")
+      expect(page).to have_button("Edit tip")
+
+      click_on "Yes, leave tip"
+
+      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+
+      purchase = Purchase.last
+      expect(purchase).to be_successful
+      expect(purchase.tip.value_cents).to eq(20_000)
+    end
+
+    it "dismisses the dialog and returns to editing when 'Edit tip' is clicked" do
+      visit product.long_url
+      add_to_cart(product)
+      fill_checkout_form(product)
+
+      fill_in "Custom tip", with: 200
+
+      click_on "Pay"
+
+      expect(page).to have_text("Confirm tip amount")
+
+      click_on "Edit tip"
+
+      expect(page).not_to have_text("Confirm tip amount")
+      expect(page).to have_field("Custom tip", with: "200")
+    end
+
+    it "does not show the dialog when the tip is under $100" do
+      visit product.long_url
+      add_to_cart(product)
+      fill_checkout_form(product)
+
+      fill_in "Custom tip", with: 50
+
+      click_on "Pay"
+
+      expect(page).not_to have_text("Confirm tip amount")
+      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+    end
+
+    it "does not show the dialog when the tip does not exceed the product price" do
+      expensive_product = create(:product, user: seller, price_cents: 50_000)
+
+      visit expensive_product.long_url
+      add_to_cart(expensive_product)
+      fill_checkout_form(expensive_product)
+
+      fill_in "Custom tip", with: 200
+
+      click_on "Pay"
+
+      expect(page).not_to have_text("Confirm tip amount")
+      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+    end
+  end
+
   context "when there is no tip" do
     it "doesn't create a tip record" do
       visit product1.long_url

@@ -5,6 +5,9 @@ import { formatPriceCentsWithCurrencySymbol, CurrencyCode } from "$app/utils/cur
 
 import { NavigationButton } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Radio } from "$app/components/ui/Radio";
 
 type BundleProduct = CardProduct & {
   is_quantity_enabled: boolean;
@@ -70,24 +73,16 @@ export const MarketingEmailStatus = ({
         <strong>
           Your product bundle is ready. Would you like to send an email about this offer to existing customers?
         </strong>
-        <fieldset>
-          <label>
-            <input
-              type="radio"
-              checked={!sendToAllCustomers}
-              onChange={(evt) => setSendToAllCustomers(!evt.target.checked)}
-            />
+        <Fieldset>
+          <Label>
+            <Radio checked={!sendToAllCustomers} onChange={(evt) => setSendToAllCustomers(!evt.target.checked)} />
             Customers who have purchased at least one product in the bundle
-          </label>
-          <label>
-            <input
-              type="radio"
-              checked={sendToAllCustomers}
-              onChange={(evt) => setSendToAllCustomers(evt.target.checked)}
-            />
+          </Label>
+          <Label>
+            <Radio checked={sendToAllCustomers} onChange={(evt) => setSendToAllCustomers(evt.target.checked)} />
             All customers
-          </label>
-        </fieldset>
+          </Label>
+        </Fieldset>
         <NavigationButton
           color="primary"
           href={Routes.new_email_path(queryParams)}

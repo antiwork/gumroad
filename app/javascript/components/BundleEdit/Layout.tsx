@@ -1,3 +1,4 @@
+import { Link as LinkIcon } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
@@ -7,13 +8,12 @@ import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Preview } from "$app/components/Preview";
 import { PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -151,8 +151,8 @@ export const BundleEditLayout = ({
                 copyTooltip="Copy product URL"
                 tooltipPosition={isDesktop ? "left" : "bottom"}
               >
-                <Button>
-                  <Icon name="link" />
+                <Button size="icon">
+                  <LinkIcon className="size-5" />
                 </Button>
               </CopyToClipboard>
             </>

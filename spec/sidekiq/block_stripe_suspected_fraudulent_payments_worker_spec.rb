@@ -58,8 +58,8 @@ describe BlockStripeSuspectedFraudulentPaymentsWorker do
     end
 
     context "when there is an error" do
-      it "notifies Bugsnag" do
-        expect(Bugsnag).to receive(:notify).exactly(:once)
+      it "notifies error tracker" do
+        expect(ErrorNotifier).to receive(:notify).exactly(:once)
         described_class.new.perform(@payload["conversation_id"], @payload["email_from"], nil)
       end
     end

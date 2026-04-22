@@ -1,3 +1,4 @@
+import { Archive, DotsHorizontalRounded, Search, Trash } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import { produce } from "immer";
 import * as React from "react";
@@ -13,7 +14,6 @@ import { writeQueryParams } from "$app/utils/url";
 
 import { Button } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -22,10 +22,18 @@ import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
-import { Card as UICard, CardContent } from "$app/components/ui/Card";
+import { CardContent, Card as UICard } from "$app/components/ui/Card";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
-import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
+import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
+import { Select as FormSelect } from "$app/components/ui/Select";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useGlobalEventListener } from "$app/components/useGlobalEventListener";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
@@ -90,9 +98,9 @@ export const Card = ({
       </ProductCardFigure>
       <ProductCardHeader>
         {purchase.download_url ? (
-          <a href={purchase.download_url} className="stretched-link" aria-label={name}>
+          <StretchedLink href={purchase.download_url} aria-label={name}>
             <h3 itemProp="name">{name}</h3>
-          </a>
+          </StretchedLink>
         ) : (
           <h3 itemProp="name">{name}</h3>
         )}
@@ -109,20 +117,20 @@ export const Card = ({
         </div>
         <div className="p-4">
           <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-            <PopoverTrigger aria-label="Open product action menu">
-              <Icon name="three-dots" />
+            <PopoverTrigger aria-label="Open product action menu" className="relative">
+              <DotsHorizontalRounded className="size-5" />
             </PopoverTrigger>
             <PopoverContent className="border-0 p-0 shadow-none" usePortal>
-              <div role="menu">
-                <div role="menuitem" onClick={toggleArchived}>
-                  <Icon name="archive" />
-                  &ensp;{purchase.is_archived ? "Unarchive" : "Archive"}
-                </div>
-                <div className="danger" role="menuitem" onClick={() => onDelete()}>
-                  <Icon name="trash2" />
-                  &ensp;Delete permanently
-                </div>
-              </div>
+              <Menu>
+                <MenuItem onClick={toggleArchived}>
+                  <Archive className="size-5" />
+                  {purchase.is_archived ? "Unarchive" : "Archive"}
+                </MenuItem>
+                <MenuItem variant="danger" onClick={() => onDelete()}>
+                  <Trash className="size-5" />
+                  Delete permanently
+                </MenuItem>
+              </Menu>
             </PopoverContent>
           </Popover>
         </div>
@@ -436,9 +444,9 @@ export default function LibraryPage() {
               {isDesktop || mobileFiltersExpanded ? (
                 <>
                   <CardContent>
-                    <div className="input input-wrapper product-search__wrapper grow">
-                      <Icon name="solid-search" />
-                      <input
+                    <InputGroup className="grow">
+                      <Search className="size-5 text-muted" />
+                      <Input
                         className="search-products"
                         placeholder="Search products"
                         value={enteredQuery}
@@ -446,16 +454,16 @@ export default function LibraryPage() {
                         onBlur={handleSearchBlur}
                         onKeyDown={handleSearchKeyDown}
                       />
-                    </div>
+                    </InputGroup>
                   </CardContent>
                   <CardContent className="sort">
-                    <fieldset className="grow basis-0">
-                      <legend>
-                        <label className="filter-header" htmlFor={sortUid}>
+                    <Fieldset className="grow basis-0">
+                      <FieldsetTitle>
+                        <Label className="filter-header" htmlFor={sortUid}>
                           Sort by
-                        </label>
-                      </legend>
-                      <select
+                        </Label>
+                      </FieldsetTitle>
+                      <FormSelect
                         id={sortUid}
                         value={state.search.sort}
                         onChange={(e) =>
@@ -467,15 +475,15 @@ export default function LibraryPage() {
                       >
                         <option value="recently_updated">Recently Updated</option>
                         <option value="purchase_date">Purchase Date</option>
-                      </select>
-                    </fieldset>
+                      </FormSelect>
+                    </Fieldset>
                   </CardContent>
                   {bundles.length > 0 ? (
                     <CardContent>
-                      <fieldset className="grow basis-0">
-                        <legend>
-                          <label htmlFor={bundlesUid}>Bundles</label>
-                        </legend>
+                      <Fieldset className="grow basis-0">
+                        <FieldsetTitle>
+                          <Label htmlFor={bundlesUid}>Bundles</Label>
+                        </FieldsetTitle>
                         <Select
                           inputId={bundlesUid}
                           instanceId={bundlesUid}
@@ -490,28 +498,28 @@ export default function LibraryPage() {
                           isMulti
                           isClearable
                         />
-                      </fieldset>
+                      </Fieldset>
                     </CardContent>
                   ) : null}
                   <CardContent className="creator">
-                    <fieldset role="group" className="grow basis-0">
-                      <legend className="filter-header">Creator</legend>
-                      <label>
+                    <Fieldset role="group" className="grow basis-0">
+                      <FieldsetTitle className="filter-header">Creator</FieldsetTitle>
+                      <Label className="w-full">
                         All Creators
-                        <input
-                          type="checkbox"
+                        <Checkbox
+                          wrapperClassName="ml-auto"
                           checked={state.search.creators.length === 0}
                           onClick={() => dispatch({ type: "update-search", search: { creators: [] } })}
                           readOnly
                         />
-                      </label>
+                      </Label>
                       {(showingAllCreators ? creatorsWithProductCounts : creatorsWithProductCounts.slice(0, 5)).map(
                         (creator) => (
-                          <label key={creator.id}>
+                          <Label key={creator.id} className="w-full">
                             {creator.name}
                             <span className="shrink-0 text-muted">{`(${creator.count})`}</span>
-                            <input
-                              type="checkbox"
+                            <Checkbox
+                              wrapperClassName="ml-auto"
                               checked={state.search.creators.includes(creator.id)}
                               onClick={() =>
                                 dispatch({
@@ -525,7 +533,7 @@ export default function LibraryPage() {
                               }
                               readOnly
                             />
-                          </label>
+                          </Label>
                         ),
                       )}
                       <div>
@@ -538,15 +546,14 @@ export default function LibraryPage() {
                           </button>
                         ) : null}
                       </div>
-                    </fieldset>
+                    </Fieldset>
                   </CardContent>
                   {archivedCount > 0 ? (
                     <CardContent className="archived">
-                      <fieldset role="group" className="grow basis-0">
-                        <label className="filter-archived">
+                      <Fieldset role="group" className="grow basis-0">
+                        <Label className="justify-between">
                           Show archived only
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={state.search.showArchivedOnly}
                             readOnly
                             onClick={() =>
@@ -556,8 +563,8 @@ export default function LibraryPage() {
                               })
                             }
                           />
-                        </label>
-                      </fieldset>
+                        </Label>
+                      </Fieldset>
                     </CardContent>
                   ) : null}
                 </>

@@ -20,16 +20,18 @@ class Api::V2::UsersController < Api::V2::BaseController
   def ifttt_sale_trigger
     limit = params[:limit] || 50
 
+    sales = current_resource_owner.sales
+      .successful_or_preorder_authorization_successful
+      .includes(:link, :purchaser)
+
     sales = if params[:after].present?
-      current_resource_owner.sales.successful_or_preorder_authorization_successful.where(
-        "created_at >= ?", Time.zone.at(params[:after].to_i)
-      ).order("created_at ASC").limit(limit)
+      sales.where("created_at >= ?", Time.zone.at(params[:after].to_i))
+           .order("created_at ASC").limit(limit)
     elsif params[:before].present?
-      current_resource_owner.sales.successful_or_preorder_authorization_successful.where(
-        "created_at <= ?", Time.zone.at(params[:before].to_i)
-      ).order("created_at DESC").limit(limit)
+      sales.where("created_at <= ?", Time.zone.at(params[:before].to_i))
+           .order("created_at DESC").limit(limit)
     else
-      current_resource_owner.sales.successful_or_preorder_authorization_successful.order("created_at DESC").limit(limit)
+      sales.order("created_at DESC").limit(limit)
     end
 
     sales = sales.map(&:as_json_for_ifttt)

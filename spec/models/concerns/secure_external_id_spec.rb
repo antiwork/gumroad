@@ -77,6 +77,12 @@ RSpec.describe SecureExternalId do
       expect(test_class.find_by_secure_external_id("invalid base64!", scope: "test")).to be_nil
     end
 
+    it "returns nil for tokens with invalid UTF-8 encoding" do
+      # Simulate a token that decodes to bytes with invalid UTF-8 sequences
+      invalid_utf8_token = Base64.urlsafe_encode64("{\"v\":\"1\",\"d\":\"|Y\xB8\"}")
+      expect(test_class.find_by_secure_external_id(invalid_utf8_token, scope: "test")).to be_nil
+    end
+
     it "returns nil for wrong model name" do
       other_class = Class.new do
         include SecureExternalId

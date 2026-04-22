@@ -1298,67 +1298,17 @@ describe SalesTaxCalculator do
     end
 
     describe "Mexico VAT" do
-      let!(:standard_tax_rate) { create(:zip_tax_rate, country: "MX", state: nil, zip_code: nil, combined_rate: 0.16, is_seller_responsible: false) }
-      let!(:epublication_tax_rate) { create(:zip_tax_rate, country: "MX", state: nil, zip_code: nil, combined_rate: 0.00, is_seller_responsible: false, is_epublication_rate: true) }
+      it "does not assess VAT in Mexico" do
+        create(:zip_tax_rate, country: "MX", state: nil, zip_code: nil, combined_rate: 0.16, is_seller_responsible: false)
+        product = create(:product, user: @seller)
 
-      context "when collect_tax_mx feature flag is off" do
-        it "does not assess VAT in Mexico" do
-          product = create(:product, user: @seller)
+        expected_sales_tax = SalesTaxCalculation.zero_tax(100)
 
-          expected_sales_tax = SalesTaxCalculation.zero_tax(100)
+        actual_sales_tax = SalesTaxCalculator.new(product:,
+                                                  price_cents: 100,
+                                                  buyer_location: { country: "MX" }).calculate
 
-          actual_sales_tax = SalesTaxCalculator.new(product:,
-                                                    price_cents: 100,
-                                                    buyer_location: { country: "MX" }).calculate
-
-          compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
-        end
-      end
-
-      context "when collect_tax_mx feature flag is on" do
-        before do
-          Feature.activate(:collect_tax_mx)
-        end
-
-        it "assesses VAT in Mexico" do
-          product = create(:product, user: @seller)
-
-          expected_sales_tax = SalesTaxCalculation.new(price_cents: 100,
-                                                       tax_cents: 16,
-                                                       zip_tax_rate: standard_tax_rate)
-
-          actual_sales_tax = SalesTaxCalculator.new(product:,
-                                                    price_cents: 100,
-                                                    buyer_location: { country: "MX" }).calculate
-
-          compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
-        end
-
-        it "applies zero rate for e-publications" do
-          product = create(:product, user: @seller, is_epublication: true)
-
-          expected_sales_tax = SalesTaxCalculation.new(price_cents: 100,
-                                                       tax_cents: 0,
-                                                       zip_tax_rate: epublication_tax_rate)
-
-          actual_sales_tax = SalesTaxCalculator.new(product:,
-                                                    price_cents: 100,
-                                                    buyer_location: { country: "MX" }).calculate
-
-          compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
-        end
-
-        it "does not assess VAT for physical products" do
-          product = create(:physical_product, user: @seller)
-
-          expected_sales_tax = SalesTaxCalculation.zero_tax(100)
-
-          actual_sales_tax = SalesTaxCalculator.new(product:,
-                                                    price_cents: 100,
-                                                    buyer_location: { country: "MX" }).calculate
-
-          compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
-        end
+        compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
       end
     end
 

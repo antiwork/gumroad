@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf, Calendar, CheckCircle, Clock, Cog } from "@boxicons/react";
 import { Link, router } from "@inertiajs/react";
 import classNames from "classnames";
 import * as React from "react";
@@ -8,7 +9,6 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
@@ -16,17 +16,21 @@ import { ExportPayoutsPopover } from "$app/components/Payouts/ExportPayoutsPopov
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
-import { Tabs, Tab } from "$app/components/ui/Tabs";
+import { Select } from "$app/components/ui/Select";
+import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
 
 const INSTANT_PAYOUT_FEE_PERCENTAGE = 0.03;
-const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 1000;
+const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10000;
 const MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 999900;
 
 type StripeConnectAccount = { payout_method_type: "stripe_connect"; stripe_connect_account_id: string };
@@ -259,7 +263,6 @@ export type PayoutsProps = {
   processing_payout_periods_data: PayoutPeriodData[];
   payouts_status: "paused" | "payable";
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
-  payouts_paused_for_reason: string | null;
   past_payout_period_data: PayoutPeriodData[];
   instant_payout: {
     payable_amount_cents: number;
@@ -276,15 +279,20 @@ export type PayoutsProps = {
   show_instant_payouts_notice: boolean;
   pagination: PaginationProps;
   tax_center_enabled: boolean;
+  scheduled_payout: {
+    action: "refund" | "payout" | "hold";
+    status: "pending" | "flagged" | "held" | "executed";
+    scheduled_at: string;
+    payout_amount_cents: number | null;
+  } | null;
 };
 
-// TODO: move BankAccount|PaypalAccount out of CurrentPayoutsDataAndPaymentMethodWithUserPayable
-export type CurrentPayoutsDataAndPaymentMethodWithUserPayable = CurrentPeriodPayoutData &
-  (NoPayoutAccount | BankAccount | PaypalAccount | StripeConnectAccount);
+export type PaymentMethod = NoPayoutAccount | BankAccount | PaypalAccount | StripeConnectAccount;
+type LegacyPaymentMethod = LegacyNotAvailableAccount | BankAccount | PaypalAccount | StripeConnectAccount;
 
-// TODO: move BankAccount|PaypalAccount out of PastPayoutsDataAndPaymentMethod
-export type PastPayoutsDataAndPaymentMethod = PastPeriodPayoutsData &
-  (LegacyNotAvailableAccount | BankAccount | PaypalAccount | StripeConnectAccount);
+export type CurrentPayoutsDataAndPaymentMethodWithUserPayable = CurrentPeriodPayoutData & PaymentMethod;
+
+export type PastPayoutsDataAndPaymentMethod = PastPeriodPayoutsData & LegacyPaymentMethod;
 
 type PayoutPeriodData = CurrentPayoutsDataAndPaymentMethodWithUserPayable | PastPayoutsDataAndPaymentMethod;
 const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) => {
@@ -347,12 +355,13 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         {payoutPeriodData.status === "completed" && payoutPeriodData.payment_external_id ? (
           <WithTooltip position="top" tip="Export">
             <Button
+              size="icon"
               color="primary"
               disabled={isCSVDownloadInProgress}
               onClick={handleRequestPayoutCSV}
               aria-label="Export"
             >
-              <Icon name="download" />
+              <ArrowInDownSquareHalf className="size-5" />
             </Button>
           </WithTooltip>
         ) : null}
@@ -386,7 +395,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                     </a>
                   </h4>
                   {payoutPeriodData.discover_sales_count > 0 ? (
-                    <small>
+                    <small className="block text-muted">
                       on {payoutPeriodData.discover_sales_count}{" "}
                       {payoutPeriodData.discover_sales_count === 1 ? "sale" : "sales"}
                     </small>
@@ -405,7 +414,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
                     </a>
                   </h4>
                   {payoutPeriodData.direct_sales_count > 0 ? (
-                    <small>
+                    <small className="block text-muted">
                       on {payoutPeriodData.direct_sales_count}{" "}
                       {payoutPeriodData.direct_sales_count === 1 ? "sale" : "sales"}
                     </small>
@@ -579,7 +588,11 @@ const PeriodBankAccount = ({
   <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacer-2)" }}>
     <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
       {bankAccount.arrival_date ? (
-        <Icon name={bankAccount.status === "completed" ? "solid-check-circle" : "outline-clock"} />
+        bankAccount.status === "completed" ? (
+          <CheckCircle pack="filled" className="size-5" />
+        ) : (
+          <Clock className="size-5" />
+        )
       ) : null}
       <h4>
         {bankAccount.arrival_date ? (
@@ -648,7 +661,6 @@ const Payouts = ({
   processing_payout_periods_data,
   payouts_status,
   payouts_paused_by,
-  payouts_paused_for_reason,
   past_payout_period_data,
   instant_payout,
   show_instant_payouts_notice,
@@ -706,7 +718,7 @@ const Payouts = ({
 
   const settingsAction = loggedInUser.policies.settings_payments_user.show ? (
     <NavigationButton href={Routes.settings_payments_path()}>
-      <Icon name="gear-fill" />
+      <Cog pack="filled" className="size-5" />
       Settings
     </NavigationButton>
   ) : null;
@@ -765,7 +777,7 @@ const Payouts = ({
                 <a href={Routes.support_index_path()}>Contact us for an instant payout</a>
               ) : (
                 <Button
-                  small
+                  size="sm"
                   color="primary"
                   aria-label="Get paid now"
                   onClick={() => setIsInstantPayoutModalOpen(true)}
@@ -792,11 +804,11 @@ const Payouts = ({
                 bank account within 30 minutes, though some payouts may take longer to be credited.
               </p>
 
-              <fieldset>
-                <label htmlFor="instant-payout-date">Pay out balance up to</label>
-                <div className="input cursor-pointer">
-                  <Icon name="calendar-all" />
-                  <select
+              <Fieldset>
+                <Label htmlFor="instant-payout-date">Pay out balance up to</Label>
+                <InputGroup className="cursor-pointer">
+                  <Calendar className="size-5" />
+                  <Select
                     id="instant-payout-date"
                     value={instantPayoutId}
                     onChange={(e) => setInstantPayoutId(e.target.value)}
@@ -810,12 +822,11 @@ const Payouts = ({
                         })}
                       </option>
                     ))}
-                  </select>
-                  <Icon name="outline-cheveron-down" />
-                </div>
-              </fieldset>
-              <fieldset>
-                <legend>Payout details</legend>
+                  </Select>
+                </InputGroup>
+              </Fieldset>
+              <Fieldset>
+                <FieldsetTitle>Payout details</FieldsetTitle>
                 <div className="rounded-sm border border-border bg-background not-first:border-t">
                   <div className="grid gap-4 p-4">
                     <div className="grid grid-flow-col justify-between gap-4">
@@ -863,7 +874,7 @@ const Payouts = ({
                     your balance into multiple payouts.
                   </Alert>
                 ) : null}
-              </fieldset>
+              </Fieldset>
             </Modal>
           </Alert>
         ) : null}
@@ -871,14 +882,11 @@ const Payouts = ({
           <Alert role="status" variant="warning">
             {payouts_paused_by === "stripe" ? (
               <strong>
-                Your payouts are currently paused by our payment processor. Please check your{" "}
+                Your payouts are currently paused by Stripe. Please check your{" "}
                 <a href="/settings/payments">Payment Settings</a> for any verification requirements.
               </strong>
             ) : payouts_paused_by === "admin" ? (
-              <strong>
-                Your payouts have been paused by Gumroad admin.
-                {payouts_paused_for_reason ? ` Reason for pause: ${payouts_paused_for_reason}` : null}
-              </strong>
+              <strong>Your payouts have been paused by Gumroad.</strong>
             ) : payouts_paused_by === "system" ? (
               <strong>
                 Your payouts have been automatically paused for a security review and will be resumed once the review

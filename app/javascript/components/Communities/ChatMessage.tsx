@@ -1,3 +1,4 @@
+import { Pencil, Trash } from "@boxicons/react";
 import cx from "classnames";
 import React from "react";
 
@@ -7,9 +8,9 @@ import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Textarea } from "$app/components/ui/Textarea";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -172,7 +173,7 @@ export const ChatMessage = ({
                     onClick={handleEdit}
                     aria-label="Edit message"
                   >
-                    <Icon name="pencil" />
+                    <Pencil className="size-5" />
                   </button>
                 </WithTooltip>
                 <div className="flex border-r dark:border-[rgb(var(--parent-color)/var(--border-alpha))]" />
@@ -184,7 +185,7 @@ export const ChatMessage = ({
                 onClick={() => setDeleteConfirmation({ deleting: false })}
                 aria-label="Delete message"
               >
-                <Icon name="trash2" />
+                <Trash className="size-5" />
               </button>
             </WithTooltip>
           </div>
@@ -293,7 +294,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
 
   return (
     <div className="relative overflow-hidden rounded-md border focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] focus-within:outline-solid dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
-      <textarea
+      <Textarea
         ref={textareaRef}
         placeholder="Edit message"
         className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-hidden"
@@ -319,11 +320,11 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
           scrollToEndOfTextarea();
         }}
       >
-        <Button small onClick={onCancel} disabled={isSaving}>
+        <Button size="sm" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
         <Button
-          small
+          size="sm"
           color="accent"
           onClick={asyncVoid(async () => await onSave(editedContent.trim()))}
           disabled={isSaving}

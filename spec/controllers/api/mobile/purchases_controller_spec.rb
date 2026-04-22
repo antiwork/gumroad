@@ -112,6 +112,16 @@ describe Api::Mobile::PurchasesController do
       expect(response.parsed_body[:products][0][:thumbnail_url]).to eq(thumbnail.url)
     end
 
+    it "falls back to asset preview for thumbnail url when no thumbnail exists" do
+      product = create(:product, user: @user)
+      asset_preview = create(:asset_preview, link: product)
+      create(:purchase_with_balance, link: product, purchaser: @purchaser, seller: @user)
+
+      get :index, params: @params
+
+      expect(response.parsed_body[:products][0][:thumbnail_url]).to eq(asset_preview.url)
+    end
+
     it "displays subscription products" do
       # Alive Subscription
       subscription = create(:subscription, link: @subscription_product, user: @purchaser)
@@ -133,9 +143,9 @@ describe Api::Mobile::PurchasesController do
       # Both subscriptions should appear in the response
 
       get :index, params: @params
-      expect(response.parsed_body).to eq({ success: true,
-                                           products: [subscription_purchase.json_data_for_mobile, dead_subscription_purchase.json_data_for_mobile],
-                                           user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+      expect(response.parsed_body).to include({ success: true,
+                                                products: [dead_subscription_purchase.json_data_for_mobile, subscription_purchase.json_data_for_mobile],
+                                                user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
     end
 
     it "does not return unsuccessful purchases" do
@@ -152,9 +162,9 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
-        products: purchases[1..2].sort_by(&:created_at).map { |purchase| purchase.json_data_for_mobile },
+        products: purchases[1..2].sort_by { -_1.id }.map { |purchase| purchase.json_data_for_mobile },
         user_id: @purchaser.external_id
       }.as_json(api_scopes: ["mobile_api"]))
     end
@@ -167,7 +177,7 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
         products: [],
         user_id: @purchaser.external_id
@@ -179,7 +189,7 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
         products: [],
         user_id: @purchaser.external_id
@@ -193,7 +203,7 @@ describe Api::Mobile::PurchasesController do
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
+      expect(response.parsed_body).to include({
         success: true,
         products: [archived_purchase.json_data_for_mobile],
         user_id: @purchaser.external_id
@@ -212,18 +222,24 @@ describe Api::Mobile::PurchasesController do
       expect(response.body).to be_blank
     end
 
-    it "responds with an empty list on error" do
-      allow_any_instance_of(Purchase).to receive(:json_data_for_mobile).and_raise(StandardError.new("error"))
-      create(:purchase, purchaser: @purchaser)
-      expect(Bugsnag).to receive(:notify).once
+    it "returns pagination metadata" do
+      create(:purchase_with_balance, link: @mobile_friendly_pdf_product, purchaser: @purchaser, seller: @user)
 
       get :index, params: @params
 
-      expect(response.parsed_body).to eq({
-        success: true,
-        products: [],
-        user_id: @purchaser.external_id
-      }.as_json)
+      expect(response.parsed_body["meta"]["pagination"].keys).to match_array(%w[count items last next page pages prev])
+    end
+
+    it "applies default pagination when no pagination params are provided" do
+      products = create_list(:product, 3, user: @user)
+      products.each do |product|
+        create(:purchase, link: product, purchaser: @purchaser)
+      end
+
+      get :index, params: @params
+
+      expect(response.parsed_body[:success]).to be true
+      expect(response.parsed_body[:products].size).to eq(3)
     end
 
     describe "show all products" do
@@ -243,10 +259,10 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at)
-                                                       .map { |purchase| purchase.json_data_for_mobile }.compact,
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }
+                                                            .map { |purchase| purchase.json_data_for_mobile }.compact,
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
 
       it "includes mobile unfriendly products" do
@@ -265,9 +281,9 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at).map(&:json_data_for_mobile).compact,
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }.map(&:json_data_for_mobile).compact,
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
 
       it "includes preorder products", :vcr do
@@ -296,10 +312,10 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at)
-                                                  .map { |purchase| purchase.json_data_for_mobile }.compact,
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }
+                                                       .map { |purchase| purchase.json_data_for_mobile }.compact,
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
 
       it "paginates results when pagination params are given" do
@@ -311,9 +327,9 @@ describe Api::Mobile::PurchasesController do
 
         get :index, params: @params.merge(page: 1, per_page: 2)
 
-        expect(response.parsed_body).to eq({ success: true,
-                                             products: purchases.sort_by(&:created_at).map(&:json_data_for_mobile).compact.first(2),
-                                             user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+        expect(response.parsed_body).to include({ success: true,
+                                                  products: purchases.sort_by { -_1.id }.map(&:json_data_for_mobile).compact.first(2),
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
     end
   end
@@ -440,6 +456,26 @@ describe Api::Mobile::PurchasesController do
     end
   end
 
+  describe "DELETE destroy" do
+    it "marks a purchase as deleted by buyer" do
+      purchase = create(:purchase_with_balance, purchaser: @purchaser)
+
+      delete :destroy, params: @params.merge(id: purchase.external_id)
+
+      expect(response.parsed_body).to eq({ success: true, product: purchase.reload.json_data_for_mobile }.as_json)
+      expect(purchase.reload.is_deleted_by_buyer).to eq(true)
+    end
+
+    it "returns 404 for a purchase that doesn't belong to the purchaser" do
+      purchase = create(:purchase_with_balance, purchaser: create(:user))
+
+      delete :destroy, params: @params.merge(id: purchase.external_id)
+
+      expect(response).to have_http_status :not_found
+      expect(response.parsed_body).to eq({ success: false, message: "Could not find purchase" }.as_json)
+    end
+  end
+
   describe "purchase_attributes" do
     it "returns details for a successful product" do
       purchase = create(:purchase, purchaser: @purchaser)
@@ -486,12 +522,11 @@ describe Api::Mobile::PurchasesController do
     end
   end
 
-  describe "GET search", :elasticsearch_wait_for_refresh do
+  describe "GET search" do
     it "returns purchases for a given user" do
       purchase_1 = create(:purchase, purchaser: @purchaser)
       purchase_2 = create(:purchase, purchaser: @purchaser)
       create(:purchase)
-      index_model_records(Purchase)
 
       get :search, params: @params
 
@@ -507,7 +542,6 @@ describe Api::Mobile::PurchasesController do
       create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_1))
       create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
       create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
-      index_model_records(Purchase)
 
       get :search, params: @params
 
@@ -527,7 +561,6 @@ describe Api::Mobile::PurchasesController do
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_1))
         create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
         create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
-        index_model_records(Purchase)
 
         get :search, params: @params.merge(seller: seller_1.external_id)
 
@@ -552,7 +585,6 @@ describe Api::Mobile::PurchasesController do
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_1), is_archived: true)
         purchase_2 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
         purchase_3 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
-        index_model_records(Purchase)
 
         get :search, params: @params.merge(archived: "true")
 
@@ -571,14 +603,80 @@ describe Api::Mobile::PurchasesController do
       end
     end
 
+    describe "filter by purchase_ids" do
+      it "returns purchases for the specified purchase IDs" do
+        purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        purchase_2 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+
+        get :search, params: @params.merge(purchase_ids: [ObfuscateIds.encrypt(purchase_1.id), ObfuscateIds.encrypt(purchase_2.id)])
+
+        expect(response).to match_json_schema("api/mobile/purchases")
+        expect(response.parsed_body[:purchases].size).to eq(2)
+        expect(response.parsed_body[:purchases].pluck(:purchase_id)).to match_array([purchase_1.external_id, purchase_2.external_id])
+      end
+
+      it "returns no purchases when all purchase IDs are invalid" do
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+
+        get :search, params: @params.merge(purchase_ids: ["invalid_id_1", "invalid_id_2"])
+
+        expect(response).to match_json_schema("api/mobile/purchases")
+        expect(response.parsed_body[:purchases]).to be_empty
+      end
+
+      it "returns purchases for a single purchase ID" do
+        purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: create(:named_user)))
+
+        get :search, params: @params.merge(purchase_ids: ObfuscateIds.encrypt(purchase_1.id))
+
+        expect(response).to match_json_schema("api/mobile/purchases")
+        expect(response.parsed_body[:purchases].size).to eq(1)
+        expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_1.external_id)
+      end
+    end
+
+    it "returns correct pagination count when purchases have multiple url redirects" do
+      seller = create(:named_user, name: "Duplicated Seller")
+      create(:purchase, purchaser: @purchaser, seller: seller, link: create(:product, user: seller))
+      create(:purchase, purchaser: @purchaser, seller: seller, link: create(:product, user: seller))
+      newest_purchase = create(:purchase, purchaser: @purchaser, seller: seller, link: create(:product, user: seller))
+      create_list(:url_redirect, 5, purchase: newest_purchase)
+
+      get :search, params: @params.merge(items: 3, q: "Duplicated")
+
+      expect(response.parsed_body[:purchases].size).to eq(3)
+      expect(response.parsed_body[:meta][:pagination][:count]).to eq(3)
+    end
+
+    it "excludes purchases deleted by buyer" do
+      purchase = create(:purchase, purchaser: @purchaser)
+      create(:purchase, purchaser: @purchaser, is_deleted_by_buyer: true)
+
+      get :search, params: @params
+
+      expect(response.parsed_body[:purchases].size).to eq(1)
+      expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase.external_id)
+    end
+
+    it "excludes expired rental purchases" do
+      purchase = create(:purchase, purchaser: @purchaser)
+      rental_purchase = create(:purchase, purchaser: @purchaser)
+      rental_purchase.update_columns(rental_expired: true)
+
+      get :search, params: @params
+
+      expect(response.parsed_body[:purchases].size).to eq(1)
+      expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase.external_id)
+    end
+
     describe "query by product details" do
-      it "returns purchases for a given user matching creator description" do
+      it "returns purchases matching product name or seller name" do
         seller_1 = create(:named_user, name: "Daniel")
         seller_2 = create(:named_user, name: "Julia")
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_1, name: "Profit & Loss"))
-        purchase_2 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
-        purchase_3 = create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2, description: "classic"))
-        index_model_records(Purchase)
+        create(:purchase, purchaser: @purchaser, link: create(:product, user: seller_2))
 
         get :search, params: @params.merge(q: "daniel")
         expect(response).to match_json_schema("api/mobile/purchases")
@@ -591,36 +689,15 @@ describe Api::Mobile::PurchasesController do
         expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_1.external_id)
 
         get :search, params: @params.merge(q: "julia")
-        expect(response.parsed_body[:purchases].size).to eq(2)
-        expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_3.external_id)
-        expect(response.parsed_body[:purchases][1][:purchase_id]).to eq(purchase_2.external_id)
-
-        get :search, params: @params.merge(q: "classic")
         expect(response.parsed_body[:purchases].size).to eq(1)
-        expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_3.external_id)
       end
     end
 
     describe "ordering" do
-      it "returns purchases for a given user sorted by the requested order" do
+      it "returns purchases sorted by the requested order" do
         purchase_1 = create(:purchase, purchaser: @purchaser, link: create(:product, name: "money money money cash"))
         purchase_2 = create(:purchase, purchaser: @purchaser, link: create(:product, name: "money cash cash cash"))
-        index_model_records(Purchase)
 
-        # by default, the score is the most important
-        get :search, params: @params.merge(q: "money")
-        expect(response).to match_json_schema("api/mobile/purchases")
-        expect(response.parsed_body).to include(success: true, user_id: @purchaser.external_id)
-        expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_1.external_id)
-        expect(response.parsed_body[:purchases][1][:purchase_id]).to eq(purchase_2.external_id)
-
-        get :search, params: @params.merge(q: "cash")
-        expect(response).to match_json_schema("api/mobile/purchases")
-        expect(response.parsed_body).to include(success: true, user_id: @purchaser.external_id)
-        expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_2.external_id)
-        expect(response.parsed_body[:purchases][1][:purchase_id]).to eq(purchase_1.external_id)
-
-        # specifically setting a date order works
         get :search, params: @params.merge(order: "date-asc")
         expect(response).to match_json_schema("api/mobile/purchases")
         expect(response.parsed_body).to include(success: true, user_id: @purchaser.external_id)
@@ -633,6 +710,15 @@ describe Api::Mobile::PurchasesController do
         expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_2.external_id)
         expect(response.parsed_body[:purchases][1][:purchase_id]).to eq(purchase_1.external_id)
       end
+
+      it "defaults to date-desc ordering" do
+        purchase_1 = create(:purchase, purchaser: @purchaser)
+        purchase_2 = create(:purchase, purchaser: @purchaser)
+
+        get :search, params: @params
+        expect(response.parsed_body[:purchases][0][:purchase_id]).to eq(purchase_2.external_id)
+        expect(response.parsed_body[:purchases][1][:purchase_id]).to eq(purchase_1.external_id)
+      end
     end
 
     it_behaves_like "a paginated API" do
@@ -640,7 +726,6 @@ describe Api::Mobile::PurchasesController do
         @action = :search
         @response_key_name = "purchases"
         @records = create_list(:purchase, 2, purchaser: @purchaser)
-        index_model_records(Purchase)
       end
     end
   end

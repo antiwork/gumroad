@@ -9,7 +9,7 @@ module EmailDeliveryObserver::HandleCustomerEmailInfo
       @metadata = metadata
     end
 
-    def bugsnag_meta_data
+    def sentry_context
       { debug: metadata }
     end
   end
@@ -23,7 +23,7 @@ module EmailDeliveryObserver::HandleCustomerEmailInfo
     email_info = find_or_initialize_customer_email_info(**message_info.attributes)
     email_info.mark_sent!
   rescue InvalidHeaderError => e
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
   end
 
   private

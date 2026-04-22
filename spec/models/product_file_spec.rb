@@ -490,6 +490,18 @@ describe ProductFile do
       expect(file.hls_playlist).to include("attachments/0000134abcdefghhijkl354sfdg/chapter+2/hls/hls_480p_.m3u8")
     end
 
+    it "returns nil when the S3 playlist object does not exist" do
+      s3_object = double("s3_object")
+      allow(s3_object).to receive(:get).and_raise(Aws::S3::Errors::NoSuchKey.new(nil, "The specified key does not exist."))
+      s3_bucket = double("s3_bucket")
+      allow(s3_bucket).to receive(:object).and_return(s3_object)
+      s3_resource = double("s3_resource")
+      allow(s3_resource).to receive(:bucket).and_return(s3_bucket)
+      allow(Aws::S3::Resource).to receive(:new).and_return(s3_resource)
+
+      expect(@file_1.hls_playlist).to be_nil
+    end
+
     it "escapes the newlines in the filename" do
       file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/12345/abcd12345/original/YouTube + Marketing Is Powerful\n.mp4", is_transcoded_for_hls: true)
       @multifile_product.product_files << file
@@ -979,26 +991,6 @@ describe ProductFile do
   end
 
   describe "callbacks" do
-    describe "#reset_moderated_by_iffy_flag" do
-      let(:product) { create(:product, moderated_by_iffy: true) }
-
-      context "when an image product file is created" do
-        it "resets moderated_by_iffy flag on the associated product" do
-          expect do
-            create(:product_file, link: product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/kFDzu.png")
-          end.to change { product.reload.moderated_by_iffy }.from(true).to(false)
-        end
-      end
-
-      context "when a non-image product file is created" do
-        it "does not reset moderated_by_iffy flag on the associated product" do
-          expect do
-            create(:product_file, link: product)
-          end.to_not change { product.reload.moderated_by_iffy }
-        end
-      end
-    end
-
     describe "#stamp_existing_pdfs_if_needed" do
       let(:file) { create(:pdf_product_file) }
       let(:purchase) { create(:purchase, seller: file.user, link: file.link) }
@@ -1019,6 +1011,62 @@ describe ProductFile do
           file.update!(pdf_stamp_enabled: false)
           expect(StampPdfForPurchaseJob).not_to have_enqueued_sidekiq_job(purchase.id)
         end
+      end
+    end
+  end
+
+  describe "#signed_url" do
+    let(:product_file) { create(:product_file) }
+
+    it "returns nil when the S3 object does not exist" do
+      allow_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename)
+        .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+      expect(product_file.signed_url).to be_nil
+    end
+
+    it "returns the url for external links" do
+      product_file.update!(filetype: "link", url: "https://example.com/file.zip")
+      expect(product_file.signed_url).to eq("https://example.com/file.zip")
+    end
+  end
+
+  describe "subtitle file S3 NotFound handling" do
+    let(:product_file) { create(:product_file) }
+    let(:english_srt_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/english.srt" }
+    let(:missing_srt_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/missing.srt" }
+    let(:subtitle_file_en) { create(:subtitle_file, language: "English", url: english_srt_url, product_file:) }
+    let(:subtitle_file_missing) { create(:subtitle_file, language: "Missing", url: missing_srt_url, product_file:) }
+
+    before do
+      allow_any_instance_of(SignedUrlHelper).to(
+        receive(:signed_download_url_for_s3_key_and_filename)
+          .with(subtitle_file_en.s3_key, subtitle_file_en.s3_filename, is_video: true).and_return(english_srt_url))
+      allow_any_instance_of(SignedUrlHelper).to(
+        receive(:signed_download_url_for_s3_key_and_filename)
+          .with(subtitle_file_missing.s3_key, subtitle_file_missing.s3_filename, is_video: true)
+          .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found")))
+    end
+
+    describe "#as_json" do
+      it "excludes subtitle files whose S3 object does not exist" do
+        json = product_file.as_json
+        subtitle_languages = json[:subtitle_files].map { |sf| sf[:language] }
+        expect(subtitle_languages).to eq(["English"])
+      end
+    end
+
+    describe "#subtitle_files_urls" do
+      it "excludes subtitle files whose S3 object does not exist" do
+        result = product_file.subtitle_files_urls
+        expect(result).to eq([{ file: english_srt_url, label: "English", kind: "captions" }])
+      end
+    end
+
+    describe "#subtitle_files_for_mobile" do
+      it "excludes subtitle files whose S3 object does not exist" do
+        result = product_file.subtitle_files_for_mobile
+        expect(result).to eq([{ url: english_srt_url, language: "English" }])
       end
     end
   end

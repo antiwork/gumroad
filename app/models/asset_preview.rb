@@ -9,7 +9,6 @@ class AssetPreview < ApplicationRecord
   RETINA_DISPLAY_WIDTH = (DEFAULT_DISPLAY_WIDTH * 1.5).to_i
 
   after_commit :invalidate_product_cache
-  after_create :reset_moderated_by_iffy_flag
 
   # Update updated_at of product to regenerate the sitemap in RefreshSitemapMonthlyWorker
   belongs_to :link, touch: true, optional: true
@@ -79,9 +78,13 @@ class AssetPreview < ApplicationRecord
     oembed && oembed["info"]["height"].to_i
   end
 
+  IMAGE_PROCESSING_TIMEOUT_SECONDS = 30
+
   def retina_variant
     return unless file.attached?
-    file.variant(resize_to_limit: [retina_width, nil]).processed
+    Timeout.timeout(IMAGE_PROCESSING_TIMEOUT_SECONDS) do
+      file.variant(resize_to_limit: [retina_width, nil]).processed
+    end
   end
 
   def display_type
@@ -176,6 +179,7 @@ class AssetPreview < ApplicationRecord
     new_url = Addressable::URI.escape(new_url) unless URI::ABS_URI.match?(new_url)
     new_uri = URI.parse(new_url)
     raise URI::InvalidURIError.new("URL '#{new_url}' is not a web url") unless new_uri.scheme.in?(["http", "https"])
+    raise URI::InvalidURIError.new("URL must include a valid host") if new_uri.host.blank?
     new_url = new_uri.to_s
     embeddable = OEmbedFinder.embeddable_from_url(new_url)
 
@@ -216,7 +220,7 @@ class AssetPreview < ApplicationRecord
     def url_or_file
       return if deleted?
 
-      errors.add(:base, "Could not process your preview, please try again.") unless valid_file_type?
+      errors.add(:base, "Cover must be an image (JPEG, PNG, GIF) or a video.") unless valid_file_type?
     end
 
     def max_preview_count
@@ -260,10 +264,6 @@ class AssetPreview < ApplicationRecord
 
     def invalidate_product_cache
       link.invalidate_cache if link.present?
-    end
-
-    def reset_moderated_by_iffy_flag
-      link&.update_attribute(:moderated_by_iffy, false)
     end
 
     def safe_url?(url)

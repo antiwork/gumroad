@@ -14,7 +14,7 @@ class Integrations::DiscordIntegrationService < Integrations::BaseIntegrationSer
           purchase.live_purchase_integrations.find_by(integration:).mark_deleted!
         rescue Discordrb::Errors::NoPermission
           if gumroad_role_higher_than_member_role?(integration.server_id, discord_user_id)
-            Bugsnag.notify("Received a Discord permissions error for something other than role position - purchase id #{purchase.id} - server id #{integration.server_id} - discord user id #{discord_user_id}")
+            ErrorNotifier.notify("Received a Discord permissions error for something other than role position - purchase id #{purchase.id} - server id #{integration.server_id} - discord user id #{discord_user_id}")
             raise
           else
             ContactingCreatorMailer.unremovable_discord_member(discord_user_id, integration.server_name, purchase.id).deliver_later(queue: "critical")

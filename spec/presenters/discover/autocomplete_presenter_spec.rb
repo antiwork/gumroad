@@ -147,6 +147,24 @@ describe Discover::AutocompletePresenter do
       expect(result[:recent_searches]).to eq(["user search"])
     end
 
+    context "when both user and browser_guid are nil" do
+      let(:query) { "" }
+
+      it "returns top products without querying page views" do
+        result = described_class.new(query:, user: nil, browser_guid: nil).props
+
+        expect(result[:products]).to contain_exactly(
+          {
+            name: "Test Product",
+            url: a_string_matching(/\/#{product.unique_permalink}\?autocomplete=true&layout=discover&recommended_by=search/),
+            seller_name: "gumbo",
+            thumbnail_url: nil,
+          },
+        )
+        expect(result[:viewed]).to be(false)
+      end
+    end
+
     it "finds searches by browser_guid when user is nil" do
       other_guid = SecureRandom.uuid
       create(:discover_search_suggestion, discover_search: create(:discover_search, user: nil, browser_guid:, query: "browser search"))

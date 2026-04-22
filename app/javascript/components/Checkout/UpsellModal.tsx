@@ -3,6 +3,7 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { type CartState, type CartItem, getDiscountedPrice, type Upsell } from "$app/components/Checkout/cartState";
 import { computeOptionPrice, OptionRadioButton, type Option } from "$app/components/Product/ConfigurationSelector";
+import { Tabs } from "$app/components/ui/Tabs";
 
 export type OfferedUpsell = Upsell & { item: CartItem; offeredOption: Option };
 
@@ -24,7 +25,7 @@ export const UpsellModal = ({
     <>
       <div className="flex flex-col gap-4">
         <h4 dangerouslySetInnerHTML={{ __html: upsell.description }} />
-        <div className="radio-buttons" role="radiogroup">
+        <Tabs variant="buttons" role="radiogroup">
           <OptionRadioButton
             selected
             priceCents={product.price_cents + computeOptionPrice(offeredOption, item.recurrence)}
@@ -36,7 +37,7 @@ export const UpsellModal = ({
             recurrence={item.recurrence}
             product={product}
           />
-        </div>
+        </Tabs>
       </div>
       <footer style={{ display: "grid", gap: "var(--spacer-4)", gridTemplateColumns: "1fr 1fr" }}>
         <Button onClick={decline}>Don't upgrade</Button>

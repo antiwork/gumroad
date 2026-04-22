@@ -17,7 +17,7 @@ class DisputeEvidence::GenerateRefundPolicyImageService
   def perform
     binary_data = generate_screenshot
     unless binary_data
-      Bugsnag.notify("DisputeEvidence::GenerateRefundPolicyImageService: Could not generate screenshot for url #{url}")
+      ErrorNotifier.notify("DisputeEvidence::GenerateRefundPolicyImageService: Could not generate screenshot for url #{url}")
       return
     end
 

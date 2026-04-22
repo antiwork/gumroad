@@ -34,19 +34,5 @@ describe Admin::CommentsController do
       end
     end
 
-    describe "from an external source" do
-      it "creates a comment with a valid token" do
-        expect do
-          post :create, params: { auth_token: GlobalConfig.get("IFFY_TOKEN"), comment: comment_attrs.merge(author_name: "iffy") }
-        end.to change { Comment.count }.by(1)
-        expect(Comment.last.content).to eq(comment_attrs[:content])
-      end
-
-      it "does not create a comment with an invalid token" do
-        expect do
-          post :create, params: { comment: comment_attrs }
-        end.to_not change { Comment.count }
-      end
-    end
   end
 end

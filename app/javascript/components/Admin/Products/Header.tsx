@@ -1,3 +1,4 @@
+import { ArrowUpRightSquare } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -5,7 +6,7 @@ import DateTimeWithRelativeTooltip from "$app/components/Admin/DateTimeWithRelat
 import { type Product } from "$app/components/Admin/Products/Product";
 import AdminProductStats from "$app/components/Admin/Products/Stats";
 import { buttonVariants } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
+import { InlineList } from "$app/components/ui/InlineList";
 
 import coverPlaceholder from "$assets/images/cover_placeholder.png";
 
@@ -35,12 +36,12 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
             <Link href={Routes.admin_product_path(product.external_id)}>{product.name}</Link>
           )}
           <a href={product.long_url} target="_blank" rel="noreferrer noopener">
-            <Icon name="arrow-up-right-square" />
+            <ArrowUpRightSquare className="size-5" />
           </a>
         </h2>
 
         <div>
-          <ul className="inline">
+          <InlineList>
             <li>
               <DateTimeWithRelativeTooltip date={product.created_at} utc />
             </li>
@@ -48,7 +49,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
               <Link href={Routes.admin_user_path(product.user.external_id)}>{product.user.name}</Link>
             </li>
             <AdminProductStats product_external_id={product.external_id} />
-          </ul>
+          </InlineList>
         </div>
       </div>
     </div>
@@ -75,7 +76,7 @@ const AdminUsersProductsHeader = ({ product, isCurrentUrl }: Props) => (
       {product.alive_product_files.map((file) => (
         <a
           key={file.external_id}
-          href={Routes.admin_access_product_file_admin_product_path(product.unique_permalink, file.external_id)}
+          href={Routes.admin_access_product_file_admin_product_path(product.external_id, file.external_id)}
           className={buttonVariants({ size: "sm" })}
           target="_blank"
           rel="noreferrer noopener"

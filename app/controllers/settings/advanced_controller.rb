@@ -17,7 +17,7 @@ class Settings::AdvancedController < Settings::BaseController
         return redirect_to settings_advanced_path, alert: "The email #{@invalid_blocked_email} cannot be blocked as it is invalid."
       end
     rescue => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       logger.error "Couldn't block customer emails: #{e.message}"
       return redirect_to settings_advanced_path, alert: "Sorry, something went wrong. Please try again."
     end
@@ -25,7 +25,7 @@ class Settings::AdvancedController < Settings::BaseController
     begin
       current_seller.with_lock { current_seller.update(advanced_params) }
     rescue => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       return redirect_to settings_advanced_path, alert: "Something broke. We're looking into what happened. Sorry about this!"
     end
 

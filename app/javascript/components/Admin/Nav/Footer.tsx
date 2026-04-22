@@ -1,3 +1,4 @@
+import { ArrowRight } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
@@ -5,10 +6,11 @@ import { cast } from "ts-safe-cast";
 import { CurrentUser } from "$app/types/user";
 import { assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 
 type ResponseData = {
   redirect_to: string;
@@ -50,27 +52,33 @@ const AdminNavFooter = () => {
 
   return (
     <DashboardNavProfilePopover user={loggedInUser}>
-      <div role="menu" className="flex flex-col border-0! shadow-none! dark:border!">
+      <Menu className="flex flex-col border-0! shadow-none! dark:border!">
         {current_user.impersonated_user ? (
           <>
-            <a role="menuitem" href={Routes.root_url()}>
-              <img className="user-avatar" src={current_user.impersonated_user.avatar_url} alt="Your avatar" />
-              <span>{current_user.impersonated_user.name}</span>
-            </a>
+            <MenuItem asChild>
+              <a href={Routes.root_url()}>
+                <Avatar src={current_user.impersonated_user.avatar_url} alt="Your avatar" />
+                <span>{current_user.impersonated_user.name}</span>
+              </a>
+            </MenuItem>
             <hr className="my-2" />
           </>
         ) : null}
-        <Link role="menuitem" href={Routes.logout_url()} method="delete" className="all-unset">
-          <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
-          Logout
-        </Link>
+        <MenuItem asChild>
+          <Link href={Routes.logout_url()} method="delete" className="all-unset">
+            <ArrowRight pack="filled" className="mx-1 size-5" />
+            Logout
+          </Link>
+        </MenuItem>
         {loggedInUser?.isImpersonating ? (
-          <a role="menuitem" href="#" onClick={handleUnbecome} className="w-full">
-            <Icon name="box-arrow-in-right-fill" className="mr-3 ml-1" />
-            Unbecome
-          </a>
+          <MenuItem asChild>
+            <a href="#" onClick={handleUnbecome} className="w-full">
+              <ArrowRight pack="filled" className="mx-1 size-5" />
+              Unbecome
+            </a>
+          </MenuItem>
         ) : null}
-      </div>
+      </Menu>
     </DashboardNavProfilePopover>
   );
 };

@@ -32,7 +32,7 @@ class OauthApplication < Doorkeeper::Application
     transaction do
       access_grants.where(revoked_at: nil).update_all(revoked_at: Time.current)
       access_tokens.where(revoked_at: nil).update_all(revoked_at: Time.current)
-      resource_subscriptions.alive.each(&:mark_deleted!)
+      resource_subscriptions.alive.update_all(deleted_at: Time.current)
       update!(deleted_at: Time.current)
     end
   end
@@ -68,7 +68,7 @@ class OauthApplication < Doorkeeper::Application
 
   def revoke_access_for(user)
     Doorkeeper::AccessToken.revoke_all_for(id, user)
-    resource_subscriptions.where(user:).alive.each(&:mark_deleted!)
+    resource_subscriptions.where(user:).alive.update_all(deleted_at: Time.current)
   end
 
   def icon_url

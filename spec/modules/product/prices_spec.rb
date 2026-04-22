@@ -37,6 +37,20 @@ describe Product::Prices do
     end
   end
 
+  describe "#suggested_price_greater_than_price" do
+    it "skips validation when the default price is missing" do
+      product = create(:product)
+      product.prices.destroy_all
+      product.reload
+      product.customizable_price = true
+      product.suggested_price_cents = 100
+
+      expect(product.default_price_cents).to be_nil
+      expect { product.valid? }.not_to raise_error
+      expect(product.errors[:base]).not_to include("The suggested price you entered was too low.")
+    end
+  end
+
   describe "#price_cents=" do
     it "writes to the price_cents column if product is not persisted" do
       product = build(:product)
@@ -75,6 +89,18 @@ describe Product::Prices do
           product.price_cents = 200
         end.to change { product.reload.price_cents }.from(100).to(200)
       end.to change { second_price.reload.price_cents }.from(100).to(200)
+    end
+
+    it "updates the rental price for a rent_only product" do
+      product = create(:product, price_cents: 100, rental_price_cents: 500, purchase_type: :rent_only)
+
+      expect(product.default_price).to be_is_rental
+      expect(product.default_price_cents).to eq(500)
+
+      product.price_cents = 750
+
+      expect(product.default_price_cents).to eq(750)
+      expect(product.default_price).to be_is_rental
     end
 
     it "updates the price for the corresponding currency" do
@@ -245,6 +271,18 @@ describe Product::Prices do
       let(:product) { create(:product, price_cents: 5_00, rental_price_cents: 2_00, purchase_type: :buy_and_rent) }
 
       it "ignores the rent price" do
+        expect(product.available_price_cents).to match_array([5_00])
+      end
+    end
+
+    context "for rent_only products" do
+      let(:product) { create(:product, rental_price_cents: 2_00, purchase_type: :rent_only) }
+
+      it "returns the updated rental price after a price change" do
+        expect(product.available_price_cents).to match_array([2_00])
+
+        product.update!(price_cents: 5_00)
+
         expect(product.available_price_cents).to match_array([5_00])
       end
     end

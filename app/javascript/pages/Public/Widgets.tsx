@@ -1,9 +1,11 @@
+import { Link } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import React from "react";
 import ReactDOMServer from "react-dom/server";
 import { cast } from "ts-safe-cast";
 
 import { usePersistentExternalScript } from "$app/hooks/usePersistentExternalScript";
+import { classNames } from "$app/utils/classNames";
 import { buildOverlayCodeToCopy, buildEmbedCodeToCopy } from "$app/utils/widgetCodeToCopyBuilders";
 
 import { Button } from "$app/components/Button";
@@ -16,7 +18,12 @@ import { ProductSelect, Product } from "$app/components/Developer/ProductSelect"
 import { Tab, Tabs } from "$app/components/Developer/Tabs";
 import { useHasChanged } from "$app/components/Developer/useHasChanged";
 import { DomainSettingsProvider, useDomains } from "$app/components/DomainSettings";
-import { Icon } from "$app/components/Icons";
+import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { FormSection } from "$app/components/ui/FormSection";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
+import { Switch } from "$app/components/ui/Switch";
+import { Textarea } from "$app/components/ui/Textarea";
 
 type WidgetsPageProps = {
   default_product: Product;
@@ -54,17 +61,20 @@ export default function PublicWidgets() {
   return (
     <Layout currentPage="widgets">
       <form>
-        <section className="p-4! md:p-8!">
-          <header>
-            <h3>Share your product</h3>
-            <p>
-              You can easily bring the Gumroad purchase page right into your site, without directing your buyers
-              elsewhere.{" "}
-              <a href="/help/article/44-build-gumroad-into-your-website" target="_blank" rel="noreferrer">
-                Learn more
-              </a>
-            </p>
-          </header>
+        <FormSection
+          header={
+            <>
+              <h3>Share your product</h3>
+              <p>
+                You can easily bring the Gumroad purchase page right into your site, without directing your buyers
+                elsewhere.{" "}
+                <a href="/help/article/44-build-gumroad-into-your-website" target="_blank" rel="noreferrer">
+                  Learn more
+                </a>
+              </p>
+            </>
+          }
+        >
           <div>
             <Widgets
               display_product_select={props.display_product_select}
@@ -73,51 +83,54 @@ export default function PublicWidgets() {
               default_product={props.default_product}
             />
           </div>
-        </section>
+        </FormSection>
         {currentSeller ? (
-          <section className="p-4! md:p-8!">
-            <header>
-              <h3>Subscribe form</h3>
-              <p>
-                Share your subscribe form on any website or blog using an embed or URL.{" "}
-                <a href="/help/article/170-audience" target="_blank" rel="noreferrer">
-                  Learn more
-                </a>
-              </p>
-            </header>
-            <fieldset>
-              <legend>
-                <label htmlFor={copyButtonUID}>Share your subscribe page and grow your audience</label>
-              </legend>
+          <FormSection
+            header={
+              <>
+                <h3>Subscribe form</h3>
+                <p>
+                  Share your subscribe form on any website or blog using an embed or URL.{" "}
+                  <a href="/help/article/170-audience" target="_blank" rel="noreferrer">
+                    Learn more
+                  </a>
+                </p>
+              </>
+            }
+          >
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={copyButtonUID}>Share your subscribe page and grow your audience</Label>
+              </FieldsetTitle>
               <CopyToClipboard
                 text={Routes.custom_domain_subscribe_url({ host: currentSeller.subdomain })}
                 copyTooltip="Copy link"
                 tooltipPosition="bottom"
               >
                 <Button id={copyButtonUID} color="primary">
-                  <Icon name="link" />
+                  <Link className="size-5" />
                   Copy link
                 </Button>
               </CopyToClipboard>
-            </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={FOLLOW_FORM_EMBED_INPUT_ID}>Test your subscribe form with your email</label>
-              </legend>
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={FOLLOW_FORM_EMBED_INPUT_ID}>Test your subscribe form with your email</Label>
+              </FieldsetTitle>
               <FollowFormEmbed sellerId={currentSeller.id} preview />
-            </fieldset>
-            <fieldset>
-              <legend>
-                <label htmlFor={followFormEmbedUID}>Subscribe form embed code</label>
+            </Fieldset>
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={followFormEmbedUID}>Subscribe form embed code</Label>
                 <CopyToClipboard text={followFormEmbedHTML} copyTooltip="Copy to Clipboard" tooltipPosition="top">
                   <button type="button" className="font-normal underline">
                     Copy embed code
                   </button>
                 </CopyToClipboard>
-              </legend>
-              <textarea id={followFormEmbedUID} value={followFormEmbedHTML} readOnly />
-            </fieldset>
-          </section>
+              </FieldsetTitle>
+              <Textarea id={followFormEmbedUID} value={followFormEmbedHTML} readOnly />
+            </Fieldset>
+          </FormSection>
         ) : null}
       </form>
     </Layout>
@@ -150,8 +163,7 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
       <div
         role="tabpanel"
         id={overlayTabpanelUID}
-        className="grid gap-6 rounded-sm border bg-background p-4"
-        hidden={selectedTab !== "overlay"}
+        className={classNames("grid gap-6 rounded-sm border bg-background p-4", selectedTab !== "overlay" && "hidden")}
       >
         {display_product_select ? productSelect : null}
         <OverlayPanel selectedProduct={selectedProduct} />
@@ -159,8 +171,7 @@ const Widgets = ({ display_product_select, products, affiliated_products, defaul
       <div
         role="tabpanel"
         id={embedTabpanelUID}
-        className="grid gap-6 rounded-sm border bg-background p-4"
-        hidden={selectedTab !== "embed"}
+        className={classNames("grid gap-6 rounded-sm border bg-background p-4", selectedTab !== "embed" && "hidden")}
       >
         {display_product_select ? productSelect : null}
         <EmbedPanel selectedProduct={selectedProduct} />
@@ -201,22 +212,21 @@ const OverlayPanel = ({ selectedProduct }: PanelProps) => {
   return (
     <>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacer-5)" }}>
-        <fieldset style={{ flexGrow: 1 }}>
-          <legend>
-            <label htmlFor={buttonTextUID}>Button text</label>
-          </legend>
-          <input
+        <Fieldset style={{ flexGrow: 1 }}>
+          <FieldsetTitle>
+            <Label htmlFor={buttonTextUID}>Button text</Label>
+          </FieldsetTitle>
+          <Input
             id={buttonTextUID}
             type="text"
-            placeholder="Buy on"
             value={buttonText}
             onChange={(evt) => setButtonText(evt.target.value)}
           />
-        </fieldset>
-        <fieldset>
-          <legend>
-            <label htmlFor={overlayPreviewUID}>Button Preview</label>
-          </legend>
+        </Fieldset>
+        <Fieldset>
+          <FieldsetTitle>
+            <Label htmlFor={overlayPreviewUID}>Button Preview</Label>
+          </FieldsetTitle>
           {!hasChanged ? (
             <a
               id={overlayPreviewUID}
@@ -228,15 +238,12 @@ const OverlayPanel = ({ selectedProduct }: PanelProps) => {
               <span>{buttonText || "Buy on"}</span>
             </a>
           ) : null}
-        </fieldset>
+        </Fieldset>
       </div>
       <CodeContainer codeToCopy={codeToCopy} />
-      <fieldset className="grid gap-4">
-        <label>
-          <input type="checkbox" checked={isWanted} onChange={(e) => setIsWanted(e.target.checked)} role="switch" />
-          Send directly to checkout page
-        </label>
-      </fieldset>
+      <Fieldset className="grid gap-4">
+        <Switch label="Send directly to checkout page" checked={isWanted} onChange={(e) => setIsWanted(e.target.checked)} />
+      </Fieldset>
     </>
   );
 };

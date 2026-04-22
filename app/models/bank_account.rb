@@ -85,7 +85,7 @@ class BankAccount < ApplicationRecord
 
       external_account.available_payout_methods.include?("instant")
     rescue Stripe::StripeError => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       false
     end
   end

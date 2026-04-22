@@ -3,6 +3,8 @@ import { cast } from "ts-safe-cast";
 
 import { useLazyPaginatedFetch } from "$app/hooks/useLazyFetch";
 
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+
 import AdminProductPurchasesContent from "./Content";
 import { type ProductPurchase } from "./Purchase";
 
@@ -42,10 +44,10 @@ const AdminProductPurchases = ({
   return (
     <>
       <hr />
-      <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary>
+      <Details open={open} onToggle={setOpen}>
+        <DetailsToggle>
           <h3>{isAffiliateUser ? "Affiliate purchases" : "Purchases"}</h3>
-        </summary>
+        </DetailsToggle>
         <AdminProductPurchasesContent
           purchases={purchases}
           isLoading={isLoading}
@@ -53,7 +55,7 @@ const AdminProductPurchases = ({
           onLoadMore={() => void fetchNextPage()}
           productExternalId={productExternalId}
         />
-      </details>
+      </Details>
     </>
   );
 };

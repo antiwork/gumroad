@@ -36,9 +36,9 @@ class MillionDollarMilestoneCheckWorker
       end
 
       if user.update(million_dollar_announcement_sent: true)
-        SlackMessageWorker.perform_async("awards", "Gumroad Awards", message, "hotpink")
+        InternalNotificationWorker.perform_async("awards", "Gumroad Awards", message, "hotpink")
       else
-        Bugsnag.notify("Failed to send Slack notification for million dollar milestone", user_id: user.id)
+        ErrorNotifier.notify("Failed to send Slack notification for million dollar milestone", user_id: user.id)
       end
     end
   end

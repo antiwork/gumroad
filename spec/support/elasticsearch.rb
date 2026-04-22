@@ -44,11 +44,16 @@ end
 class ElasticsearchSetup
   def self.recreate_index(model)
     model.__elasticsearch__.delete_index!(force: true)
-    while model.__elasticsearch__.create_index!.nil?
+
+    10.times do
+      return if create_index(model)
+
       puts "Waiting to recreate ES index '#{model.index_name}' ..."
       model.__elasticsearch__.delete_index!(force: true)
       sleep 0.1
     end
+
+    raise "Failed to recreate ES index '#{model.index_name}'"
   end
 
   def self.prepare_test_environment
@@ -102,5 +107,17 @@ class ElasticsearchSetup
       end
       model.__elasticsearch__.refresh_index!
     end
+  end
+
+  def self.create_index(model)
+    model.__elasticsearch__.create_index! || index_exists?(model)
+  rescue Elasticsearch::Transport::Transport::Errors::BadRequest => e
+    raise unless e.message.include?("resource_already_exists_exception")
+
+    index_exists?(model)
+  end
+
+  def self.index_exists?(model)
+    EsClient.indices.exists?(index: model.index_name)
   end
 end

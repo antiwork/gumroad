@@ -89,50 +89,25 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
     end
 
-    iffy_url = Rails.env.production? ? "https://api.iffy.com/api/v1/users" : "http://localhost:3000/api/v1/users"
-
-    begin
-      if user.suspended?
-        render json: {
-          success: true,
-          status: "Suspended",
-          updated_at: user.comments.where(comment_type: [Comment::COMMENT_TYPE_SUSPENSION_NOTE, Comment::COMMENT_TYPE_SUSPENDED]).order(created_at: :desc).first&.created_at,
-          appeal_url: nil
-        }
-        return
-      end
-
-      response = HTTParty.get(
-        "#{iffy_url}?email=#{CGI.escape(params[:email])}",
-        headers: {
-          "Authorization" => "Bearer #{GlobalConfig.get("IFFY_API_KEY")}"
-        }
-      )
-
-      if response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?
-        user_data = response.parsed_response["data"].first
-        render json: {
-          success: true,
-          status: user_data["actionStatus"],
-          updated_at: user_data["actionStatusCreatedAt"],
-          appeal_url: user_data["appealUrl"]
-        }
-      else
-        render json: {
-          success: true,
-          status: "Compliant",
-          updated_at: nil,
-          appeal_url: nil
-        }
-      end
-    rescue HTTParty::Error, Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, Errno::ECONNREFUSED, SocketError => e
-      Bugsnag.notify(e)
-
-      render json: {
-        success: false,
-        error_message: "Failed to retrieve suspension information"
-      }, status: :service_unavailable
+    status = if user.suspended?
+      "Suspended"
+    elsif user.flagged?
+      "Flagged"
+    else
+      "Compliant"
     end
+
+    last_status_comment = user.comments
+      .where(comment_type: [Comment::COMMENT_TYPE_SUSPENSION_NOTE, Comment::COMMENT_TYPE_SUSPENDED, Comment::COMMENT_TYPE_FLAGGED, Comment::COMMENT_TYPE_COMPLIANT])
+      .order(created_at: :desc)
+      .first
+
+    render json: {
+      success: true,
+      status: status,
+      updated_at: last_status_comment&.created_at,
+      appeal_url: nil
+    }
   end
 
   SEND_RESET_PASSWORD_INSTRUCTIONS_OPENAPI = {
@@ -335,12 +310,148 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     if user.present?
       user.two_factor_authentication_enabled = params[:enabled]
       if user.save
+        user.totp_credential&.destroy unless user.two_factor_authentication_enabled?
         render json: { success: true, message: "Two-factor authentication #{user.two_factor_authentication_enabled? ? "enabled" : "disabled"}." }
       else
         render json: { success: false, error_message: user.errors.full_messages.join(", ") }, status: :unprocessable_entity
       end
     else
       render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+    end
+  end
+
+  CREATE_COMMENT_OPENAPI = {
+    summary: "Create a comment on a user",
+    description: "Add a note-type comment to a user's record in Gumroad admin",
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: "object",
+            properties: {
+              email: { type: "string", description: "Email address of the user" },
+              content: { type: "string", description: "Comment content (max 10,000 characters)" },
+              idempotency_key: { type: "string", description: "Client-generated UUID to prevent duplicate comments on retry" }
+            },
+            required: ["email", "content", "idempotency_key"]
+          }
+        }
+      }
+    },
+    security: [{ bearer: [] }],
+    responses: {
+      '200': {
+        description: "Comment created successfully",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: true },
+                comment: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    author_name: { type: "string" },
+                    content: { type: "string" },
+                    comment_type: { type: "string" },
+                    created_at: { type: "string", format: "date-time" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      '400': {
+        description: "Missing required parameters",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                error_message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      '409': {
+        description: "Idempotency key reused with different content",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                error_message: { type: "string" }
+              }
+            }
+          }
+        }
+      },
+      '422': {
+        description: "User not found or validation error",
+        content: {
+          'application/json': {
+            schema: {
+              type: "object",
+              properties: {
+                success: { const: false },
+                error_message: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }.freeze
+  def create_comment
+    if params[:email].blank?
+      return render json: { success: false, error_message: "'email' parameter is required" }, status: :bad_request
+    end
+    if params[:content].blank?
+      return render json: { success: false, error_message: "'content' parameter is required" }, status: :bad_request
+    end
+    if params[:idempotency_key].blank?
+      return render json: { success: false, error_message: "'idempotency_key' parameter is required" }, status: :bad_request
+    end
+
+    user = User.alive.by_email(params[:email]).first
+    if user.blank?
+      return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
+    end
+
+    normalized_content = Comment.normalize_content(params[:content])
+
+    existing = user.comments.find_by(idempotency_key: params[:idempotency_key])
+    if existing
+      if existing.content != normalized_content
+        return render json: { success: false, error_message: "Idempotency key already used with different content" }, status: :conflict
+      end
+      return render json: { success: true, comment: HelperUserInfoService.serialize_comment(existing) }
+    end
+
+    comment = user.comments.new(
+      content: params[:content],
+      comment_type: Comment::COMMENT_TYPE_NOTE,
+      author_id: GUMROAD_ADMIN_ID,
+      idempotency_key: params[:idempotency_key]
+    )
+
+    if comment.save
+      render json: { success: true, comment: HelperUserInfoService.serialize_comment(comment) }
+    else
+      render json: { success: false, error_message: comment.errors.full_messages.join(", ") }, status: :unprocessable_entity
+    end
+  rescue ActiveRecord::RecordNotUnique
+    existing = user.comments.find_by!(idempotency_key: params[:idempotency_key])
+    if existing.content != normalized_content
+      render json: { success: false, error_message: "Idempotency key already used with different content" }, status: :conflict
+    else
+      render json: { success: true, comment: HelperUserInfoService.serialize_comment(existing) }
     end
   end
 
@@ -424,56 +535,24 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
     end
 
-    iffy_url = Rails.env.production? ? "https://api.iffy.com/api/v1" : "http://localhost:3000/api/v1"
-
-    begin
-      response = HTTParty.get(
-        "#{iffy_url}/users?email=#{CGI.escape(params[:email])}",
-        headers: {
-          "Authorization" => "Bearer #{GlobalConfig.get("IFFY_API_KEY")}"
-        }
-      )
-
-      if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
-        error_message = response.parsed_response.is_a?(Hash) ? response.parsed_response["error"]&.[]("message") || "Failed to find user" : "Failed to find user"
-        return render json: { success: false, error_message: error_message }, status: :unprocessable_entity
-      end
-
-      user_data = response.parsed_response["data"].first
-      user_id = user_data["id"]
-
-      response = HTTParty.post(
-        "#{iffy_url}/users/#{user_id}/create_appeal",
-        headers: {
-          "Authorization" => "Bearer #{GlobalConfig.get("IFFY_API_KEY")}",
-          "Content-Type" => "application/json"
-        },
-        body: {
-          text: params[:reason]
-        }.to_json
-      )
-
-      if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
-        error_message = response.parsed_response.dig("error", "message") || "Failed to create appeal"
-        return render json: { success: false, error_message: }, status: :unprocessable_entity
-      end
-
-      appeal_data = response.parsed_response["data"]
-      appeal_id = appeal_data["id"]
-      appeal_url = appeal_data["appealUrl"]
-
-      render json: {
-        success: true,
-        id: appeal_id,
-        appeal_url: appeal_url
-      }
-    rescue HTTParty::Error, Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, Errno::ECONNREFUSED, SocketError => e
-      Bugsnag.notify(e)
-
-      render json: {
-        success: false,
-        error_message: "Failed to create appeal"
-      }, status: :service_unavailable
+    if !user.suspended? && !user.flagged?
+      return render json: { success: false, error_message: "User is not suspended or flagged" }, status: :unprocessable_entity
     end
+
+    comment = user.comments.new(
+      content: "Appeal submitted: #{params[:reason]}",
+      author_name: ContentModeration::ModerateRecordService::AUTHOR_NAME,
+      comment_type: Comment::COMMENT_TYPE_NOTE
+    )
+
+    unless comment.save
+      return render json: { success: false, error_message: comment.errors.full_messages.join(", ") }, status: :unprocessable_entity
+    end
+
+    render json: {
+      success: true,
+      id: comment.id,
+      appeal_url: nil
+    }
   end
 end

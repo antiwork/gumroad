@@ -23,7 +23,8 @@ describe ProductPresenter::Card do
               id: creator.external_id,
               name: "Testy",
               profile_url: creator.profile_url(recommended_by: "discover"),
-              avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png")
+              avatar_url: ActionController::Base.helpers.asset_url("gumroad-default-avatar-5.png"),
+              is_verified: false,
             },
             description: product.plaintext_description.truncate(100),
             ratings: { count: 0, average: 0 },
@@ -74,6 +75,28 @@ describe ProductPresenter::Card do
         result = described_class.new(product:).for_web(compute_description: false)
 
         expect(result).not_to have_key(:description)
+      end
+
+      context "when compute_inventory is false" do
+        let(:product) { create(:product, unique_permalink: "test", name: "hello", user: creator, max_purchase_count: 10) }
+
+        it "sets quantity_remaining to nil and is_sales_limited to false" do
+          result = described_class.new(product:).for_web(compute_inventory: false)
+
+          expect(result[:quantity_remaining]).to be_nil
+          expect(result[:is_sales_limited]).to eq(false)
+        end
+      end
+
+      context "when compute_inventory is true (default)" do
+        let(:product) { create(:product, unique_permalink: "test", name: "hello", user: creator, max_purchase_count: 10) }
+
+        it "computes quantity_remaining and is_sales_limited" do
+          result = described_class.new(product:).for_web(compute_inventory: true)
+
+          expect(result[:quantity_remaining]).to eq(10)
+          expect(result[:is_sales_limited]).to eq(true)
+        end
       end
     end
 

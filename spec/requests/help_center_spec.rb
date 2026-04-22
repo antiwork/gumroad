@@ -38,7 +38,7 @@ describe "Help Center", type: :system, js: true do
       visit "/help"
 
       expect(page).to have_button("Contact support")
-      expect(page).to have_link("Report a bug", href: "https://github.com/antiwork/gumroad/issues/new")
+      expect(page).not_to have_link("Report a bug")
 
       click_on "Contact support"
 
@@ -77,11 +77,11 @@ describe "Help Center", type: :system, js: true do
       sign_in seller
     end
 
-    it "shows the new ticket button and report a bug link" do
+    it "shows the new ticket button" do
       visit "/help"
 
       expect(page).to have_button("New ticket")
-      expect(page).to have_link("Report a bug", href: "https://github.com/antiwork/gumroad/issues/new")
+      expect(page).not_to have_link("Report a bug")
     end
 
     it "opens the new ticket modal when the new ticket parameter is present" do

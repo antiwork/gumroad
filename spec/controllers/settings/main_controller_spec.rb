@@ -49,8 +49,9 @@ describe Settings::MainController, type: :controller, inertia: true do
       expect(seller.reload.unconfirmed_email).to eq("hello@example.com")
     end
 
-    it "returns error message when StandardError is raised" do
+    it "returns error message and notifies Sentry when StandardError is raised" do
       allow_any_instance_of(User).to receive(:save!).and_raise(StandardError)
+      expect(ErrorNotifier).to receive(:notify).with(an_instance_of(StandardError))
       put :update, params: { user: user_params.merge(email: "hello@example.com") }
       expect(response).to redirect_to(settings_main_path)
       expect(response).to have_http_status :found
@@ -81,6 +82,15 @@ describe Settings::MainController, type: :controller, inertia: true do
       expect(response).to redirect_to(settings_main_path)
       expect(response).to have_http_status :found
       expect(flash[:alert]).to eq("Email is invalid")
+    end
+
+    it "does not notify Sentry when updating email to one that already exists" do
+      create(:user, email: "existing@example.com")
+      expect(ErrorNotifier).not_to receive(:notify)
+      put :update, params: { user: user_params.merge(email: "existing@example.com") }
+      expect(response).to redirect_to(settings_main_path)
+      expect(response).to have_http_status :found
+      expect(flash[:alert]).to eq("An account already exists with this email.")
     end
 
     describe "email changing" do

@@ -3,6 +3,9 @@ import * as React from "react";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { ProfileSection } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Label } from "$app/components/ui/Label";
+import { Switch } from "$app/components/ui/Switch";
 
 export const ProfileSectionsEditor = ({
   sectionIds,
@@ -22,7 +25,7 @@ export const ProfileSectionsEditor = ({
   };
 
   return (
-    <section className="p-8!">
+    <section className="grid gap-8 border-t border-border p-4 md:p-8">
       <header>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2>Profile</h2>
@@ -33,14 +36,12 @@ export const ProfileSectionsEditor = ({
         Choose the sections where you want this product to be displayed on your profile.
       </header>
       {profileSections.length ? (
-        <fieldset>
+        <Fieldset>
           {profileSections.map((section) => {
             const items = section.product_names.slice(0, 2).join(", ");
             return (
-              <label key={section.id}>
-                <input
-                  type="checkbox"
-                  role="switch"
+              <Label key={section.id}>
+                <Switch
                   checked={sectionIds.includes(section.id)}
                   onChange={(evt) =>
                     onChange(
@@ -51,16 +52,16 @@ export const ProfileSectionsEditor = ({
                 <div>
                   {sectionName(section)}
                   <br />
-                  <small>
+                  <FieldsetDescription>
                     {section.product_names.length > 2
                       ? `${items}, and ${section.product_names.length - 2} ${section.product_names.length - 2 === 1 ? " other" : " others"}`
                       : items}
-                  </small>
+                  </FieldsetDescription>
                 </div>
-              </label>
+              </Label>
             );
           })}
-        </fieldset>
+        </Fieldset>
       ) : (
         <Alert role="status" variant="info">
           You currently have no sections in your profile to display this,{" "}

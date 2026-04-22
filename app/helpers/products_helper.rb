@@ -101,7 +101,7 @@ module ProductsHelper
     if collection.elasticsearch_key?(key)
       collection.elasticsearch_sorted_and_paginated_by(key:, direction:, page:, per_page:, user_id:)
     else
-      pagination, products = pagy(collection.sorted_by(key:, direction:, user_id:).order(created_at: :desc), limit: per_page, page:)
+      pagination, products = pagy(collection.sorted_by(key:, direction:, user_id:).order(created_at: :desc), limit: per_page, page:, overflow: :last_page)
       [PagyPresenter.new(pagination).props, products]
     end
   end

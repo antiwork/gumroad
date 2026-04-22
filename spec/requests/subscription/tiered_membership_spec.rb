@@ -91,20 +91,19 @@ describe "Tiered Membership Spec", type: :system, js: true do
     end
 
     context "when the price has changed" do
-      it "charges the pre-existing price" do
-        old_price_cents = @original_tier_quarterly_price.price_cents
-        @original_tier_quarterly_price.update!(price_cents: old_price_cents + 500)
+      it "charges the current price" do
+        @original_tier_quarterly_price.update!(price_cents: 10_99)
 
         visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
-        expect(page).to have_text "You'll be charged US$5.99"
+        expect(page).to have_text "You'll be charged US$10.99"
 
         click_on "Restart membership"
         wait_for_ajax
 
         expect(page).to have_alert(text: "Membership restarted")
         expect(@subscription.reload.purchases.successful.count).to eq 2
-        expect(@subscription.purchases.last.displayed_price_cents).to eq old_price_cents
+        expect(@subscription.purchases.last.displayed_price_cents).to eq 10_99
       end
     end
 

@@ -61,8 +61,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Cancel"
       end
+      click_on "Cancel"
 
       expect(page).not_to have_alert(text: "Product deleted!")
 
@@ -70,8 +70,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
 
       expect(page).to have_alert(text: "Product deleted!")
     end
@@ -85,8 +85,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Cancel"
       end
+      click_on "Cancel"
 
       expect(page).not_to have_alert(text: "Product deleted!")
 
@@ -94,8 +94,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
 
       expect(page).to have_alert(text: "Product deleted!")
     end
@@ -490,7 +490,6 @@ describe "Products Page Scenario", type: :system, js: true do
       product = create(:product, user: seller, name: "Chicken", unique_permalink: "chicken")
       visit(products_path)
 
-      expect(page).to have_field("Search products", visible: false)
       table = find(:table, "Products").find("tbody")
       expect(table).to have_selector(:table_row, count: 2)
       expect(page).to have_selector("[aria-label='Pagination']")
@@ -554,8 +553,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
       expect(page).to have_alert(text: "Product deleted!")
     end
 
@@ -573,8 +572,8 @@ describe "Products Page Scenario", type: :system, js: true do
         select_disclosure "Open product action menu" do
           click_on "Delete"
         end
-        click_on "Confirm"
       end
+      click_on "Confirm"
       expect(page).to have_alert(text: "Product deleted!")
     end
   end

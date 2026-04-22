@@ -7,6 +7,8 @@ import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PopoverClose } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Checkbox } from "$app/components/ui/Checkbox";
+import { Label } from "$app/components/ui/Label";
 
 export const ExportSubscribersPopover = () => {
   const [loading, setLoading] = React.useState(false);
@@ -49,40 +51,37 @@ export const ExportSubscribersPopover = () => {
       <p className="mb-4">This will download a CSV file with one row per subscriber.</p>
 
       <div className="mb-4 flex flex-col gap-2">
-        <label className="font-medium">
-          <input type="checkbox" checked={allSelected} onChange={selectAll} />
+        <Label className="font-medium">
+          <Checkbox checked={allSelected} onChange={selectAll} />
           All Subscribers
-        </label>
-        <label>
-          <input
-            type="checkbox"
+        </Label>
+        <Label>
+          <Checkbox
             checked={followers}
             onChange={(evt) => {
               setFollowers(evt.target.checked);
             }}
           />
           Followers
-        </label>
-        <label>
-          <input
-            type="checkbox"
+        </Label>
+        <Label>
+          <Checkbox
             checked={customers}
             onChange={(evt) => {
               setCustomers(evt.target.checked);
             }}
           />
           Customers
-        </label>
-        <label>
-          <input
-            type="checkbox"
+        </Label>
+        <Label>
+          <Checkbox
             checked={affiliates}
             onChange={(evt) => {
               setAffiliates(evt.target.checked);
             }}
           />
           Affiliates
-        </label>
+        </Label>
       </div>
       <div className="grid">
         <PopoverClose asChild>

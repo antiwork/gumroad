@@ -1,3 +1,4 @@
+import { AlertShield } from "@boxicons/react";
 import { usePage, router } from "@inertiajs/react";
 import * as React from "react";
 import { GroupBase, SelectInstance } from "react-select";
@@ -21,13 +22,13 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
-import { Icon } from "$app/components/Icons";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Option, Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { Alert } from "$app/components/ui/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
@@ -158,7 +159,6 @@ const AddTeamMembersSection = ({
             id={emailUID}
             type="text"
             ref={emailFieldRef}
-            placeholder="Team member's email"
             className="required"
             value={teamInvitation.email}
             onChange={(evt) => {
@@ -178,7 +178,6 @@ const AddTeamMembersSection = ({
             options={options.filter((o) => o.id !== "owner")}
             isMulti={false}
             isClearable={false}
-            placeholder="Choose a role"
             value={options.find((o) => o.id === teamInvitation.role) ?? null}
             onChange={(evt) => {
               if (evt !== null) {
@@ -305,8 +304,7 @@ const TeamMembersSection = ({
             <TableRow key={`${memberInfo.type}-${memberInfo.id}`}>
               <TableCell>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-4)" }}>
-                  <img
-                    className="user-avatar"
+                  <Avatar
                     style={{ width: "var(--spacer-6)" }}
                     src={memberInfo.avatar_url}
                     alt={`Avatar of ${memberInfo.name}`}
@@ -314,17 +312,18 @@ const TeamMembersSection = ({
                   <div style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}>
                     <div>
                       {memberInfo.name}
-                      <small>{memberInfo.email}</small>
+                      <small className="block">{memberInfo.email}</small>
                     </div>
                     {memberInfo.is_expired ? (
                       <WithTooltip
                         tip="Invitation has expired. You can resend the invitation from the member's menu options."
                         position="top"
                       >
-                        <Icon
-                          name="solid-shield-exclamation"
+                        <AlertShield
+                          pack="filled"
                           style={{ color: "rgb(var(--warning))" }}
                           aria-label="Invitation has expired. You can resend the invitation from the member's menu options."
+                          className="size-5"
                         />
                       </WithTooltip>
                     ) : null}

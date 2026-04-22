@@ -58,6 +58,7 @@
   --spacing-product-page: 75.25rem;
   --grid-cols-sidebar: 1fr 3fr;
 
+  --logo: url("~images/logo.svg");
   --loading-spinner: url("~images/loading-rainbow.svg");
   --product-cover-placeholder: url("~images/placeholders/product-cover.png");
 }
@@ -70,6 +71,14 @@
     * {
       border-color: var(--color-border);
     }
+  }
+
+  body:not(.mac) *::-webkit-scrollbar {
+    @apply w-3 bg-active-bg;
+  }
+
+  body:not(.mac) *::-webkit-scrollbar-thumb {
+    @apply rounded-lg bg-muted;
   }
 }
 
@@ -90,6 +99,17 @@
   animation-timeline: view();
   animation-range: entry exit;
   animation-fill-mode: forwards;
+}
+
+.jwplayer {
+  position: absolute !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* So that the `jwplayer` time tooltip isn't squished */
+.jwplayer .jw-time-tip {
+  min-width: max-content;
 }
 
 @keyframes parallax-scroll {
@@ -120,4 +140,26 @@
   100% {
     transform: translateX(-50%);
   }
+}
+
+/* Reset Tiptap's default grab cursor on draggable React node views */
+.ProseMirror .react-renderer[draggable] {
+  @apply cursor-auto;
+}
+
+/* Chrome-specific workaround to prevent highlighting the br ProseMirror creates in empty figure captions */
+.ProseMirror[contenteditable="true"] figure br::selection {
+  @apply bg-transparent;
+}
+
+/* Tiptap placeholder plugin */
+.ProseMirror p.is-editor-empty:first-child::before,
+.ProseMirror .node-image.is-empty .figcaption::before {
+  content: attr(data-placeholder);
+  @apply pointer-events-none float-left h-0 text-muted;
+}
+
+/* Unset max-width for Rack::MiniProfiler results to (expectedly) expand beyond the narrow parent container */
+.profiler-results * {
+  max-width: unset;
 }

@@ -38,7 +38,7 @@ class Link < ApplicationRecord
             29 => :is_unpublished_by_admin,
             30 => :community_chat_enabled,
             31 => :DEPRECATED_excluded_from_mobile_app_discover,
-            32 => :moderated_by_iffy,
+            32 => :DEPRECATED_moderated_by_iffy,
             33 => :hide_sold_out_variants,
             :column => "flags",
             :flag_query_mode => :bit_operator,
@@ -48,7 +48,7 @@ class Link < ApplicationRecord
           Product::Validations, Product::Caching, Product::NativeTypeTemplates, Product::Recommendations,
           Product::Prices, Product::Shipping, Product::Searchable, Product::Tags, Product::Taxonomies,
           Product::ReviewStat, Product::Utils, Product::StructuredData, ActionView::Helpers::SanitizeHelper,
-          ActionView::Helpers::NumberHelper, Mongoable, TimestampScopes, ExternalId,
+          ActionView::Helpers::NumberHelper, TimestampScopes, ExternalId,
           WithFileProperties, JsonData, Deletable, WithProductFiles, WithCdnUrl, MaxPurchaseCount,
           Integrations, Product::StaffPicked, RichContents, Product::Sorting, Product::CreationLimit
 
@@ -208,8 +208,11 @@ class Link < ApplicationRecord
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
   validate :default_offer_code_must_be_valid
+  validate :content_moderation_check, if: -> { publishing? || (persisted? && published? && (name_changed? || description_changed?)) }
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
+
+  attr_accessor :publishing
 
   before_save :downcase_filetype
   before_save :remove_xml_tags
@@ -218,11 +221,15 @@ class Link < ApplicationRecord
   after_update :create_licenses_for_existing_customers,
                if: ->(link) { link.saved_change_to_is_licensed? && link.is_licensed? }
   after_update :delete_unused_prices, if: :saved_change_to_purchase_type?
-  after_update :reset_moderated_by_iffy_flag, if: :saved_change_to_description?
-  after_save :queue_iffy_ingest_job_if_unpublished_by_admin
 
   enum subscription_duration: %i[monthly yearly quarterly biannually every_two_years]
   enum purchase_type: %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
+
+  def purchase_type=(value)
+    super(value)
+  rescue ArgumentError
+    super(:buy_only)
+  end
   enum free_trial_duration_unit: %i[week month]
 
   attr_json_data_accessor :excluded_sales_tax_regions, default: -> { [] }
@@ -402,7 +409,6 @@ class Link < ApplicationRecord
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
-
     if auto_transcode_videos?
       transcode_videos!
     else
@@ -412,7 +418,12 @@ class Link < ApplicationRecord
     self.purchase_disabled_at = nil
     self.deleted_at = nil
     self.draft = false
-    save!
+    self.publishing = true
+    begin
+      save!
+    ensure
+      self.publishing = false
+    end
 
     user.direct_affiliates.alive.apply_to_all_products.each do |affiliate|
       unless affiliate.products.include?(self)
@@ -420,6 +431,10 @@ class Link < ApplicationRecord
         AffiliateMailer.notify_direct_affiliate_of_new_product(affiliate.id, id).deliver_later
       end
     end
+  end
+
+  def publishing?
+    !!publishing
   end
 
   def unpublish!(is_unpublished_by_admin: false)
@@ -551,15 +566,9 @@ class Link < ApplicationRecord
   end
 
   def social_share_text
-    if user.twitter_handle.present?
-      return "I pre-ordered #{name} from @#{user.twitter_handle} on @Gumroad" if is_in_preorder_state
+    return "I pre-ordered #{name} on @Gumroad" if is_in_preorder_state
 
-      "I got #{name} from @#{user.twitter_handle} on @Gumroad"
-    else
-      return "I pre-ordered #{name} on @Gumroad" if is_in_preorder_state
-
-      "I got #{name} on @Gumroad"
-    end
+    "I got #{name} on @Gumroad"
   end
 
   def self.human_attribute_name(attr, _)
@@ -611,10 +620,18 @@ class Link < ApplicationRecord
   end
 
   def options
-    if skus_enabled
-      skus.not_is_default_sku.alive.map(&:to_option_for_product)
+    if skus_enabled?
+      skus_alive_not_default.map(&:to_option_for_product)
     elsif variant_categories_alive.any?
-      variants.where(variant_category: variant_categories_alive.first).in_order.alive.map(&:to_option)
+      first_category = variant_categories_alive.first
+      if alive_variants.loaded?
+        alive_variants
+          .select { |v| v.variant_category_id == first_category.id }
+          .sort_by { |v| [v.position_in_category.nil? ? 0 : 1, v.position_in_category.to_i, v.created_at] }
+          .map(&:to_option)
+      else
+        variants.where(variant_category: first_category).in_order.alive.map(&:to_option)
+      end
     else
       []
     end
@@ -1042,7 +1059,7 @@ class Link < ApplicationRecord
     attrs[:options] = options
     attrs[:option] = attrs[:options].find { |o| o[:id] == params[:option] } || (native_type != NATIVE_TYPE_COFFEE ? attrs[:options].find { |o| o[:quantity_left] != 0 } : nil)
     variant = attrs[:option] ? Variant.find_by_external_id(attrs[:option][:id]) : nil
-    prices = (is_tiered_membership ? variant : self).prices.is_buy.alive
+    prices = (is_tiered_membership && variant ? variant : self).prices.is_buy.alive
     recurrence = is_recurring_billing ? prices.find { |price| price.recurrence == params[:recurrence] } || prices.find { |price| price.recurrence == default_price_recurrence.recurrence } : nil
     attrs[:recurrence] = recurrence&.recurrence
     attrs[:pay_in_installments] = !!params[:pay_in_installments] && allow_installment_plan?
@@ -1054,6 +1071,7 @@ class Link < ApplicationRecord
     attrs[:price] = currency["min_price"] if purchasing_power_parity_enabled? && attrs[:price] != 0 && attrs[:price] < currency["min_price"]
     attrs[:quantity] = params[:quantity].to_i if params[:quantity].present?
     attrs[:call_start_time] = native_type == NATIVE_TYPE_CALL ? params[:call_start_time] : nil
+    attrs[:force_new_subscription] = !!params[:force_new_subscription] && is_recurring_billing
     attrs
   end
 
@@ -1061,6 +1079,7 @@ class Link < ApplicationRecord
     {
       google_analytics_id: user.google_analytics_id,
       facebook_pixel_id: user.facebook_pixel_id,
+      tiktok_pixel_id: user.tiktok_pixel_id,
       free_sales: !user.skip_free_sale_analytics?,
     }
   end
@@ -1244,6 +1263,8 @@ class Link < ApplicationRecord
 
     def default_offer_code_must_be_valid
       return unless default_offer_code.present?
+      return if being_marked_as_deleted?
+      return unless new_record? || default_offer_code_id_changed?
 
       if !user.offer_codes.alive.where(id: default_offer_code.id).exists?
         errors.add(:default_offer_code, "must belong to your offer codes")
@@ -1315,6 +1336,7 @@ class Link < ApplicationRecord
 
     def alive_category_variants_presence
       return if deleted_at.present?
+      return if archived?
 
       has_alive_categories_without_variants = variant_categories.alive.left_joins(:alive_variants).where(base_variants: { id: nil }).exists?
 
@@ -1324,6 +1346,10 @@ class Link < ApplicationRecord
     end
 
     def valid_tier_version_structure
+      return if deleted_at.present?
+      return if archived?
+      return if purchase_disabled_at.present? && purchase_disabled_at_changed?
+
       if variant_categories.alive.size != 1
         errors.add(:base, "Memberships should only have one Tier version category.")
         raise LinkInvalid, "Memberships should only have one Tier version category."
@@ -1394,13 +1420,12 @@ class Link < ApplicationRecord
       end
     end
 
-    def reset_moderated_by_iffy_flag
-      update_attribute(:moderated_by_iffy, false)
-    end
+    def content_moderation_check
+      return if user&.vip_creator?
 
-    def queue_iffy_ingest_job_if_unpublished_by_admin
-      return unless is_unpublished_by_admin? && !saved_change_to_is_unpublished_by_admin?
+      result = ContentModeration::ModerateRecordService.check(self, :product)
+      return if result.passed
 
-      Iffy::Product::IngestJob.perform_async(id)
+      errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")
     end
 end

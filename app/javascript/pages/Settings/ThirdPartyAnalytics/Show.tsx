@@ -1,20 +1,21 @@
+import { ChevronDown, ChevronUp, CodeAlt, Plus, Trash } from "@boxicons/react";
 import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
 
-import { ThirdPartyAnalytics, Snippet, SNIPPET_LOCATIONS } from "$app/data/third_party_analytics";
+import { Snippet, SNIPPET_LOCATIONS, ThirdPartyAnalytics } from "$app/data/third_party_analytics";
 import { SettingPage } from "$app/parsers/settings";
 
 import { Button } from "$app/components/Button";
-import { Details } from "$app/components/Details";
 import { Dropdown } from "$app/components/Dropdown";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Checkbox } from "$app/components/ui/Checkbox";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
@@ -59,7 +60,7 @@ export default function ThirdPartyAnalyticsPage() {
         })
       }
     >
-      <Icon name="plus" />
+      <Plus className="size-5" />
       Add snippet
     </Button>
   );
@@ -95,27 +96,25 @@ export default function ThirdPartyAnalyticsPage() {
                 Learn more
               </a>
               <div>
-                You can add a Facebook tracking pixel and link your Google Analytics properties to track your visitors.
+                You can add a Facebook or TikTok tracking pixel and link your Google Analytics properties to track your
+                visitors.
               </div>
             </>
           }
         >
-          <Details
-            className="toggle"
-            open={!thirdPartyAnalytics.disable_third_party_analytics}
-            summary={
+          <Details open={!thirdPartyAnalytics.disable_third_party_analytics}>
+            <DetailsToggle chevronPosition="none" className="mb-0">
               <Switch
                 checked={!thirdPartyAnalytics.disable_third_party_analytics}
                 onChange={(evt) => updateThirdPartyAnalytics({ disable_third_party_analytics: !evt.target.checked })}
                 label="Enable third-party analytics services"
               />
-            }
-          >
+            </DetailsToggle>
             <Dropdown className="flex flex-col gap-4">
               <Fieldset>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}googleAnalyticsId`}>Google Analytics Property ID</Label>
-                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                  <a href="/help/article/174-third-party-analytics#Google-Analytics-Ib1dB" target="_blank" rel="noreferrer">
                     Learn more
                   </a>
                 </FieldsetTitle>
@@ -130,7 +129,7 @@ export default function ThirdPartyAnalyticsPage() {
               <Fieldset>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}facebookPixel`}>Facebook Pixel</Label>
-                  <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+                  <a href="/help/article/174-third-party-analytics#Meta-Pixel-Yisi6" target="_blank" rel="noreferrer">
                     Learn more
                   </a>
                 </FieldsetTitle>
@@ -140,6 +139,21 @@ export default function ThirdPartyAnalyticsPage() {
                   placeholder="9127380912836192"
                   value={thirdPartyAnalytics.facebook_pixel_id}
                   onChange={(evt) => updateThirdPartyAnalytics({ facebook_pixel_id: evt.target.value })}
+                />
+              </Fieldset>
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}tiktokPixel`}>TikTok Pixel</Label>
+                  <a href="/help/article/174-third-party-analytics#TikTok-Pixel-zK9mP" target="_blank" rel="noreferrer">
+                    Learn more
+                  </a>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}tiktokPixel`}
+                  type="text"
+                  placeholder="CFH83AJC77UUUGLE2TJG"
+                  value={thirdPartyAnalytics.tiktok_pixel_id}
+                  onChange={(evt) => updateThirdPartyAnalytics({ tiktok_pixel_id: evt.target.value })}
                 />
               </Fieldset>
               <Label>
@@ -153,10 +167,8 @@ export default function ThirdPartyAnalyticsPage() {
           </Details>
         </FormSection>
         <FormSection header={<h2>Domain verification</h2>}>
-          <Details
-            className="toggle"
-            open={thirdPartyAnalytics.enable_verify_domain_third_party_services}
-            summary={
+          <Details open={thirdPartyAnalytics.enable_verify_domain_third_party_services}>
+            <DetailsToggle chevronPosition="none" className="mb-0">
               <Switch
                 checked={thirdPartyAnalytics.enable_verify_domain_third_party_services}
                 onChange={(evt) =>
@@ -164,8 +176,7 @@ export default function ThirdPartyAnalyticsPage() {
                 }
                 label="Verify domain in third-party services"
               />
-            }
-          >
+            </DetailsToggle>
             <Dropdown className="flex flex-col gap-4">
               <Fieldset>
                 <FieldsetTitle>
@@ -192,7 +203,7 @@ export default function ThirdPartyAnalyticsPage() {
             <>
               <h2>Snippets</h2>
               <div>Add custom JavaScript to pages in the checkout flow.</div>
-              <a href="/help/article/174-third-party-analytics" target="_blank" rel="noreferrer">
+              <a href="/help/article/174-third-party-analytics#Snippets-j1elc" target="_blank" rel="noreferrer">
                 Learn more
               </a>
             </>
@@ -259,20 +270,21 @@ const SnippetRow = ({
   return (
     <Row role="listitem">
       <RowContent>
-        <Icon name="code-square" className="type-icon" />
+        <CodeAlt className="type-icon size-5" />
         <div>
           <h4>{snippet.name || "Untitled"}</h4>
-          <ul className="inline">
+          <InlineList>
             <li>{products.find(({ permalink }) => permalink === snippet.product)?.name ?? "All products"}</li>
             <li>{LOCATION_TITLES[snippet.location]}</li>
-          </ul>
+          </InlineList>
         </div>
       </RowContent>
       <RowActions>
-        <Button onClick={() => setExpanded((prevExpanded) => !prevExpanded)} aria-label="Edit snippet">
-          {expanded ? <Icon name="outline-cheveron-up" /> : <Icon name="outline-cheveron-down" />}
+        <Button size="icon" onClick={() => setExpanded((prevExpanded) => !prevExpanded)} aria-label="Edit snippet">
+          {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
         </Button>
         <Button
+          size="icon"
           onClick={() =>
             updateThirdPartyAnalytics({
               snippets: thirdPartyAnalytics.snippets.filter(({ id }) => id !== snippet.id),
@@ -280,7 +292,7 @@ const SnippetRow = ({
           }
           aria-label="Delete snippet"
         >
-          <Icon name="trash2" />
+          <Trash className="size-5" />
         </Button>
       </RowActions>
       {expanded ? (
@@ -325,7 +337,6 @@ const SnippetRow = ({
             <Label htmlFor={`${uid}code`}>Code</Label>
             <Textarea
               id={`${uid}code`}
-              placeholder="Enter your analytics code"
               value={snippet.code}
               onChange={(evt) => updateSnippet({ code: evt.target.value })}
             />

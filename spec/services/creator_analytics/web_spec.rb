@@ -132,5 +132,29 @@ describe CreatorAnalytics::Web do
 
       expect(@service.by_referral).to eq(expected_result)
     end
+
+    it "keeps filters aligned with histogram buckets when midnight is skipped" do
+      user = create(:user, timezone: "Tehran")
+      product = create(:product, user: user)
+      service = described_class.new(user: user, dates: [Date.new(2026, 3, 22)])
+
+      Time.use_zone(user.timezone) do
+        add_page_view(product, Time.zone.parse("2026-03-22 01:15:00").utc, referrer_domain: "google.com")
+        add_page_view(product, Time.zone.parse("2026-03-23 00:15:00").utc, referrer_domain: "t.co")
+        create(:free_purchase, link: product, created_at: Time.zone.parse("2026-03-22 01:15:00").utc, referrer: "https://google.com")
+        create(:free_purchase, link: product, created_at: Time.zone.parse("2026-03-23 00:15:00").utc, referrer: "https://t.co")
+      end
+      ProductPageView.__elasticsearch__.refresh_index!
+      index_model_records(Purchase)
+
+      expect { service.by_referral }.not_to raise_error
+      expect(service.by_referral).to include(
+        by_referral: {
+          views: { product.unique_permalink => { "Google" => [1] } },
+          sales: { product.unique_permalink => { "Google" => [1] } },
+          totals: { product.unique_permalink => { "Google" => [0] } }
+        }
+      )
+    end
   end
 end

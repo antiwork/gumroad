@@ -1,3 +1,4 @@
+import { Link, XCircle } from "@boxicons/react";
 import * as React from "react";
 
 import { getPagedAffiliatedProducts } from "$app/data/affiliated_products";
@@ -9,7 +10,6 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { GlobalAffiliates } from "$app/components/GlobalAffiliates";
-import { Icon } from "$app/components/Icons";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { Search } from "$app/components/Search";
@@ -48,8 +48,8 @@ export type AffiliatedPageProps = {
   affiliated_products: AffiliatedProduct[];
   stats: Stats;
   global_affiliates_data: {
-    global_affiliate_id: number;
-    global_affiliate_sales: string;
+    global_affiliate_id: number | null;
+    global_affiliate_sales: string | null;
     cookie_expiry_days: number;
     affiliate_query_param: string;
   };
@@ -156,7 +156,7 @@ const AffiliatedProductsTable = ({
                 <div className="flex flex-wrap gap-3 lg:justify-end">
                   <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy link" text={affiliatedProduct.url}>
                     <Button>
-                      <Icon name="link" />
+                      <Link className="size-5" />
                       Copy link
                     </Button>
                   </CopyToClipboard>
@@ -244,7 +244,7 @@ const AffiliatedPage = ({
       ctaButton={
         isShowingGlobalAffiliates ? (
           <Button onClick={() => toggleOpen(false)}>
-            <Icon name="x-circle" />
+            <XCircle className="size-5" />
             Close
           </Button>
         ) : (
@@ -260,10 +260,10 @@ const AffiliatedPage = ({
       }
       archivedTabVisible={archivedTabVisible}
     >
-      {isShowingGlobalAffiliates ? (
+      {isShowingGlobalAffiliates && globalAffiliatesData.global_affiliate_id != null ? (
         <GlobalAffiliates
           globalAffiliateId={globalAffiliatesData.global_affiliate_id}
-          totalSales={globalAffiliatesData.global_affiliate_sales}
+          totalSales={globalAffiliatesData.global_affiliate_sales ?? "$0"}
           cookieExpiryDays={globalAffiliatesData.cookie_expiry_days}
           affiliateQueryParam={globalAffiliatesData.affiliate_query_param}
         />

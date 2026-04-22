@@ -1,3 +1,4 @@
+import { X } from "@boxicons/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
 
@@ -9,14 +10,16 @@ import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { PageListLayout } from "$app/components/Download/PageListLayout";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PurchaseArchiveButton } from "$app/components/PurchaseArchiveButton";
 import { Review, ReviewForm } from "$app/components/ReviewForm";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { PageHeader } from "$app/components/ui/PageHeader";
+import { Details, DetailsToggle } from "$app/components/ui/Details";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 export type PurchaseCustomField = {
@@ -89,16 +92,6 @@ export const Layout = ({
   const loggedInUser = useLoggedInUser();
   const [isResendingReceipt, setIsResendingReceipt] = React.useState(false);
   const isDesktop = useIsAboveBreakpoint("lg");
-  const [headerVisible, setHeaderVisible] = React.useState(true);
-  const headerRef = React.useRef<HTMLDivElement | null>(null);
-
-  React.useEffect(() => {
-    const observer = new IntersectionObserver((entries) => setHeaderVisible(entries[0]?.isIntersecting ?? false));
-
-    if (headerRef.current) observer.observe(headerRef.current);
-
-    return () => observer.disconnect();
-  }, [headerRef.current]);
 
   const handleResendReceipt = asyncVoid(async (purchaseId: string) => {
     setIsResendingReceipt(true);
@@ -154,10 +147,10 @@ export const Layout = ({
               {content_unavailability_reason_code === null && purchase.membership ? (
                 purchase.membership.is_installment_plan ? (
                   <CardContent asChild details>
-                    <details>
-                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                    <Details>
+                      <DetailsToggle chevronPosition="right" className="grow">
                         Installment plan
-                      </summary>
+                      </DetailsToggle>
                       {purchase.membership.is_installment_plan_completed ? (
                         "This installment plan has been paid in full."
                       ) : (
@@ -165,14 +158,14 @@ export const Layout = ({
                           Manage
                         </NavigationButton>
                       )}
-                    </details>
+                    </Details>
                   </CardContent>
                 ) : (
                   <CardContent asChild details>
-                    <details>
-                      <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">
+                    <Details>
+                      <DetailsToggle chevronPosition="right" className="grow">
                         Membership
-                      </summary>
+                      </DetailsToggle>
                       <div style={{ display: "grid" }}>
                         {purchase.membership.has_active_subscription ? (
                           <NavigationButton href={Routes.manage_subscription_url(purchase.membership.subscription_id)}>
@@ -186,14 +179,16 @@ export const Layout = ({
                           </NavigationButton>
                         ) : null}
                       </div>
-                    </details>
+                    </Details>
                   </CardContent>
                 )
               ) : null}
               {receiptPurchaseId ? (
                 <CardContent asChild details>
-                  <details>
-                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Receipt</summary>
+                  <Details>
+                    <DetailsToggle chevronPosition="right" className="grow">
+                      Receipt
+                    </DetailsToggle>
                     <div className="flex flex-col gap-4">
                       <NavigationButton
                         href={
@@ -208,18 +203,20 @@ export const Layout = ({
                         {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                       </Button>
                     </div>
-                  </details>
+                  </Details>
                 </CardContent>
               ) : null}
               {loggedInUser !== null ? (
                 <CardContent asChild details>
-                  <details>
-                    <summary className="grow grid-flow-col grid-cols-[1fr_auto] before:col-start-2">Library</summary>
+                  <Details>
+                    <DetailsToggle chevronPosition="right" className="grow">
+                      Library
+                    </DetailsToggle>
                     <div className="flex flex-col gap-4">
                       <PurchaseArchiveButton purchase_id={purchase.id} initial_is_archived={purchase.is_archived} />
                       <PurchaseDeleteButton purchase_id={purchase.id} product_name={purchase.product_name} />
                     </div>
-                  </details>
+                  </Details>
                 </CardContent>
               ) : null}
             </Card>
@@ -245,40 +242,46 @@ export const Layout = ({
   );
 
   return (
-    <>
-      {loggedInUser && !is_mobile_app_web_view ? (
-        <div className="font-size-base grid-row-[-3] text-singleline border-b border-border px-8 py-4">
-          <a style={{ textDecoration: "none" }} href={Routes.library_url()} title="Back to Library">
-            <Icon name="arrow-left" className="mr-1.5" />
-            {headerVisible ? "Back to Library" : null}
-          </a>
-          {!headerVisible ? <strong>{purchase?.product_name}</strong> : null}
-        </div>
-      ) : null}
-      <div className="flex flex-1 flex-col">
-        {is_mobile_app_web_view ? null : (
-          <PageHeader ref={headerRef} title={purchase?.product_name ?? ""} actions={headerActions} />
-        )}
-        {settings || pageList ? (
-          <PageListLayout
-            className="flex-1"
-            pageList={
-              <>
-                {pageList}
-                {isDesktop ? settings : null}
-              </>
-            }
+    <div className="flex flex-1 flex-col">
+      {is_mobile_app_web_view ? null : (
+        <header className="sticky top-0 z-20 flex border-b border-border bg-body text-foreground">
+          {loggedInUser ? (
+            <a
+              href={Routes.library_url()}
+              title="Back to Library"
+              aria-label="Back to Library"
+              className="flex shrink-0 items-center justify-center border-r border-border px-6 no-underline transition-colors hover:bg-active-bg"
+            >
+              <X className="size-6" />
+            </a>
+          ) : null}
+          <div
+            className={`flex min-h-18 min-w-0 flex-1 items-center justify-between gap-2 py-3 pr-4 ${loggedInUser ? "pl-4" : "pl-8"}`}
           >
-            <div className="flex flex-col gap-4">
-              {children}
-              {!isDesktop ? settings : null}
-            </div>
-          </PageListLayout>
-        ) : (
-          <div className="flex flex-1 flex-col gap-4 p-4 md:p-8">{children}</div>
-        )}
-      </div>
-    </>
+            <h1 className="line-clamp-2 hidden! min-w-0 flex-1 text-2xl sm:block!">{purchase?.product_name}</h1>
+            {headerActions ? <div className="flex shrink-0 items-center gap-2">{headerActions}</div> : null}
+          </div>
+        </header>
+      )}
+      {settings || pageList ? (
+        <PageListLayout
+          className="flex-1"
+          pageList={
+            <>
+              {pageList}
+              {isDesktop ? settings : null}
+            </>
+          }
+        >
+          <div className="mx-auto flex max-w-200 flex-col gap-4">
+            {children}
+            {!isDesktop ? settings : null}
+          </div>
+        </PageListLayout>
+      ) : (
+        <div className="flex flex-1 flex-col gap-4 p-4 md:p-8">{children}</div>
+      )}
+    </div>
   );
 };
 
@@ -334,7 +337,7 @@ export const EntityInfo = ({ entityName, creator }: { entityName: string | null;
       {creator ? (
         <CardContent>
           <span style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }} className="grow">
-            {creator.avatar_url ? <img className="user-avatar" src={creator.avatar_url} /> : null}
+            {creator.avatar_url ? <Avatar src={creator.avatar_url} /> : null}
 
             <span>
               By{" "}
@@ -465,17 +468,17 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
           </CardContent>
           <CardContent>
             <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="grid grow gap-4">
-              <fieldset>
-                <input
+              <Fieldset>
+                <Input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Your password"
                 />
-                <small>
+                <FieldsetDescription>
                   You agree to our <a href={terms_page_url}>Terms Of Use</a>.
-                </small>
-              </fieldset>
+                </FieldsetDescription>
+              </Fieldset>
               <Button color="primary" type="submit" disabled={isSubmitting}>
                 {isSubmitting ? "Creating..." : "Create"}
               </Button>

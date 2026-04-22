@@ -52,7 +52,6 @@ const PayPalEmailSection = ({
           <Input
             type="email"
             id={`${uid}-paypal-email`}
-            placeholder="PayPal Email"
             value={paypalEmailAddress || ""}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("paypal_email_address")}

@@ -25,7 +25,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
     context "when cached data exists" do
       let!(:user_with_balance) do
         user = create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago, name: "Test Creator")
-        create(:balance, user:, amount_cents: 5000)
+        create(:balance, user:, amount_cents: 15_000)
         user
       end
 
@@ -44,7 +44,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
 
         expect(page).to have_text(user_with_balance.external_id)
         expect(page).to have_text(user_with_balance.email)
-        expect(page).to have_text("$50")
+        expect(page).to have_text("$150")
       end
 
       it "links to the user's admin page" do
@@ -62,7 +62,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
 
     context "with revenue source badges" do
       let(:user) { create(:user, user_risk_state: "not_reviewed", created_at: 1.year.ago) }
-      let!(:balance) { create(:balance, user:, amount_cents: 5000) }
+      let!(:balance) { create(:balance, user:, amount_cents: 15_000) }
 
       it "shows sales badge when user has sales" do
         product = create(:product, user:)
@@ -106,7 +106,7 @@ describe "Admin::UnreviewedUsersController", type: :system, js: true do
       end
 
       before do
-        create(:balance, user:, amount_cents: 5000)
+        create(:balance, user:, amount_cents: 15_000)
         Admin::UnreviewedUsersService.cache_users_data!
         user.update!(user_risk_state: "compliant")
       end

@@ -921,6 +921,41 @@ describe UrlRedirectsController, inertia: true do
       expect(folder_events.count).to eq(1)
       expect(folder_events.first.folder_id).to eq(folder_id)
     end
+
+    it "triggers archive regeneration and redirects to download page when the S3 object is missing" do
+      entity_archive = @url_redirect.product_files_archives.new(product_files_archive_state: "ready")
+      entity_archive.set_url_if_not_present
+      entity_archive.save!
+
+      allow(controller).to(
+        receive(:signed_download_url_for_s3_key_and_filename)
+          .with(entity_archive.s3_key, entity_archive.s3_filename)
+          .and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found")))
+      expect_any_instance_of(ProductFilesArchive).to receive(:generate_zip_archive!)
+
+      get :download_archive, format: :html, params: { id: @token }
+
+      expect(response).to redirect_to(@url_redirect.download_page_url)
+      expect(flash[:warning]).to eq("We are preparing the file for download. Please try again shortly.")
+      expect(entity_archive.reload.product_files_archive_state).to eq("in_progress")
+    end
+
+    context "when accessed via custom domain and S3 object is missing", type: :request do
+      it "redirects to download page without raising UnsafeRedirectError" do
+        entity_archive = @url_redirect.product_files_archives.new(product_files_archive_state: "ready")
+        entity_archive.set_url_if_not_present
+        entity_archive.save!
+        custom_domain = create(:custom_domain, user: @product.user)
+
+        allow_any_instance_of(ProductFilesArchive).to receive(:generate_zip_archive!)
+        allow_any_instance_of(UrlRedirectsController).to receive(:signed_download_url_for_s3_key_and_filename).and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+        get url_redirect_download_archive_path(@token),
+            headers: { "HOST" => custom_domain.domain }
+
+        expect(response).to redirect_to(@url_redirect.download_page_url)
+      end
+    end
   end
 
   describe "GET download_product_files" do
@@ -953,6 +988,44 @@ describe UrlRedirectsController, inertia: true do
       expect(response).to redirect_to("https://example.com/file.srt")
     end
 
+    context "when the S3 object is missing" do
+      it "returns a 404 JSON error for JSON requests" do
+        file = create(:product_file, link: @product)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+        get :download_product_files, format: :json, params: { product_file_ids: [file.external_id], id: @token }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["error"]).to eq("The file is no longer available.")
+      end
+
+      it "redirects to the download page with a warning for HTML requests" do
+        file = create(:product_file, link: @product)
+        url_redirect = UrlRedirect.find_by(token: @token)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+        get :download_product_files, format: :html, params: { id: @token, product_file_ids: [file.external_id] }
+
+        expect(response).to redirect_to(url_redirect.download_page_url)
+        expect(flash[:warning]).to eq("The file is no longer available. Please contact the seller.")
+      end
+
+      context "when accessed via custom domain", type: :request do
+        it "redirects to download page without raising UnsafeRedirectError" do
+          file = create(:product_file, link: @product)
+          url_redirect = UrlRedirect.find_by(token: @token)
+          custom_domain = create(:custom_domain, user: @product.user)
+
+          allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).and_raise(Aws::S3::Errors::NotFound.new(nil, "Not Found"))
+
+          get url_redirect_download_product_files_path(url_redirect.token, product_file_ids: [file.external_id]),
+              headers: { "HOST" => custom_domain.domain }
+
+          expect(response).to redirect_to(url_redirect.download_page_url)
+        end
+      end
+    end
+
     context "when a PDF must be stamped and stamped file is missing" do
       it "shows alert, enqueues job (critical, notify=true), and redirects to download page" do
         product_file = create(:readable_document, link: @product, pdf_stamp_enabled: true)
@@ -965,6 +1038,19 @@ describe UrlRedirectsController, inertia: true do
         expect(response).to redirect_to(url_redirect.download_page_url)
         expect(flash[:warning]).to eq("We are preparing the file for download. You will receive an email when it is ready.")
         expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(url_redirect.purchase_id, true).on("critical")
+      end
+
+      context "when accessed via custom domain", type: :request do
+        it "redirects to download page without raising UnsafeRedirectError" do
+          product_file = create(:readable_document, link: @product, pdf_stamp_enabled: true)
+          url_redirect = UrlRedirect.find_by(token: @token)
+          custom_domain = create(:custom_domain, user: @product.user)
+
+          get url_redirect_download_product_files_path(url_redirect.token, product_file_ids: [product_file.external_id]),
+              headers: { "HOST" => custom_domain.domain }
+
+          expect(response).to redirect_to(url_redirect.download_page_url)
+        end
       end
     end
   end
@@ -1572,6 +1658,156 @@ describe UrlRedirectsController, inertia: true do
       expect(event.platform).to eq Platform::WEB
     end
 
+    context "when file_external_id belongs to a different product" do
+      let(:other_product) { create(:product_with_pdf_file) }
+      let(:other_file) { other_product.product_files.alive.last }
+
+      it "returns not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: other_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("File not found")
+      end
+    end
+
+    context "when file_external_id is missing" do
+      it "returns not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("File not found")
+      end
+    end
+
+    context "when file_external_id is invalid" do
+      it "returns not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: "nonexistent", email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("File not found")
+      end
+    end
+
+    context "when the file is not eligible for Kindle" do
+      before do
+        product_file.update!(size: Link::MAX_ALLOWED_FILE_SIZE_FOR_SEND_TO_KINDLE + 1)
+      end
+
+      it "returns unprocessable entity" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["error"]).to eq("This file cannot be sent to Kindle")
+      end
+    end
+
+    context "when purchase is refunded" do
+      before do
+        purchase.update!(stripe_refunded: true)
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
+    context "when purchase has chargeback" do
+      before do
+        purchase.update!(chargeback_date: Time.current)
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
+    context "when access is revoked" do
+      before do
+        purchase.update!(is_access_revoked: true)
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
+    context "when a different user is signed in" do
+      before do
+        purchase.update!(purchaser: create(:user))
+        sign_in create(:user)
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
+    context "when identity is not verified" do
+      before do
+        url_redirect.update!(has_been_seen: true)
+        purchase.update!(purchaser: create(:user), ip_address: "1.2.3.4")
+      end
+
+      it "returns JSON not found" do
+        expect do
+          post :send_to_kindle, params: {
+            id: url_redirect.token, file_external_id: product_file.external_id, email: "dude@kindle.com"
+          }
+        end.to_not change { ConsumptionEvent.count }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body["success"]).to be(false)
+      end
+    end
+
     describe "invalid kindle emails" do
       it "cannot create a user with a bad kindle email address" do
         expect do
@@ -1769,6 +2005,15 @@ describe UrlRedirectsController, inertia: true do
       end.to change { @url_redirect.purchase.reload.purchaser }.to(user)
 
       expect(response).to redirect_to("/r/#{@token}")
+    end
+
+    it "redirects to root path when next param is missing" do
+      user = create(:user)
+
+      sign_in user
+      post :change_purchaser, params: { id: @token, email: @url_redirect.purchase.email }
+
+      expect(response).to redirect_to(root_path)
     end
 
     it "redirects to the check_purchaser page if the email is incorrect" do

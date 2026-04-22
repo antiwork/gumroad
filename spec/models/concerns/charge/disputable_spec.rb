@@ -325,6 +325,11 @@ describe Charge::Disputable, :vcr do
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
       end
 
+      it "calls block_buyer_based_on_chargeback_count! for each purchase" do
+        expect_any_instance_of(Purchase).to receive(:block_buyer_based_on_chargeback_count!)
+        Purchase.handle_charge_event(event)
+      end
+
       describe "purchase involves an affiliate" do
         let(:merchant_account) { create(:merchant_account, user: seller) }
         let(:affiliate_user) { create(:affiliate_user) }
@@ -896,8 +901,8 @@ describe Charge::Disputable, :vcr do
             @p.save!
           end
 
-          it "bugsnag notifies the occurrence" do
-            expect(Bugsnag).to receive(:notify).with("Invalid charge event received for successful Purchase #{@p.external_id} - " \
+          it "notifies error tracker" do
+            expect(ErrorNotifier).to receive(:notify).with("Invalid charge event received for successful Purchase #{@p.external_id} - " \
                                                      "received reversal won notification with ID #{@e.charge_event_id} but was not disputed.")
             Purchase.handle_charge_event(@e)
           end

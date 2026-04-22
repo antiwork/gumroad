@@ -1,15 +1,16 @@
+import { Star } from "@boxicons/react";
 import * as React from "react";
 
 import { CardProduct, Ratings } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 
-import { Icon } from "$app/components/Icons";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
-import { ProductCard, ProductCardFigure, ProductCardHeader, ProductCardFooter } from "$app/components/ui/ProductCard";
+import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 
 export const Card = ({
   product,
@@ -28,16 +29,17 @@ export const Card = ({
     </ProductCardFigure>
     {product.quantity_remaining != null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
     <ProductCardHeader>
-      <a href={product.url} className="stretched-link">
+      <StretchedLink href={product.url}>
         <h4 itemProp="name" className="line-clamp-4 lg:text-xl">
           {product.name}
         </h4>
-      </a>
+      </StretchedLink>
       {product.seller ? (
         <AuthorByline
           name={product.seller.name}
           profileUrl={product.seller.profile_url}
           avatarUrl={product.seller.avatar_url ?? undefined}
+          isTopCreator={product.seller.is_verified}
         />
       ) : null}
       {product.ratings?.count ? <Rating ratings={product.ratings} /> : null}
@@ -71,7 +73,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
     {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}
     <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">
       <ProductCardHeader className="lg:border-b-0 lg:p-0">
-        <a href={product.url} className="stretched-link" draggable="false">
+        <StretchedLink href={product.url} draggable="false">
           {big ? (
             <h2 itemProp="name" className="line-clamp-3 gap-3">
               {product.name}
@@ -81,7 +83,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
               {product.name}
             </h3>
           )}
-        </a>
+        </StretchedLink>
         <small className={classNames("hidden truncate text-muted lg:block", big && "lg:line-clamp-4")}>
           {product.description}
         </small>
@@ -90,6 +92,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
             name={product.seller.name}
             profileUrl={product.seller.profile_url}
             avatarUrl={product.seller.avatar_url ?? undefined}
+            isTopCreator={product.seller.is_verified}
           />
         ) : null}
       </ProductCardHeader>
@@ -122,7 +125,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
 
 const Rating = ({ ratings, style }: { ratings: Ratings; style?: React.CSSProperties }) => (
   <div className="flex shrink-0 items-center gap-1" aria-label="Rating" style={style}>
-    <Icon name="solid-star" />
+    <Star pack="filled" className="size-5" />
     <span className="rating-average">{ratings.average.toFixed(1)}</span>
     <span title={`${ratings.average} ${ratings.average === 1 ? "rating" : "ratings"}`}>
       {`(${formatOrderOfMagnitude(ratings.count, 1)})`}

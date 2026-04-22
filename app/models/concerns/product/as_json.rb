@@ -79,6 +79,7 @@ module Product::AsJson
       cached_default_price_cents = default_price_cents
 
       ppp_factors = purchasing_power_parity_enabled? ? options[:preloaded_ppp_factors] || PurchasingPowerParityService.new.get_all_countries_factors(user) : nil
+      slim = options[:slim]
 
       json = as_json(original: true, only: keep).merge!(
         "id" => external_id,
@@ -97,6 +98,16 @@ module Product::AsJson
         "custom_summary" => custom_summary,
         "is_tiered_membership" => is_tiered_membership?,
         "recurrences" => is_tiered_membership? ? prices.alive.is_buy.map(&:recurrence).uniq : nil,
+        "covers" => display_asset_previews.as_json,
+        "main_cover_id" => main_preview&.guid,
+        "bundle_products" => is_bundle? ? bundle_products.select(&:alive?).sort_by(&:position).map do |bp|
+          {
+            product_id: bp.product.external_id,
+            variant_id: bp.variant&.external_id,
+            quantity: bp.quantity,
+            position: bp.position,
+          }
+        end : [],
         "variants" => variant_categories_alive.map do |cat|
           {
             title: cat.title,
@@ -107,7 +118,9 @@ module Product::AsJson
                 is_pay_what_you_want: variant.customizable_price?,
                 recurrence_prices: is_tiered_membership? ? variant.recurrence_price_values : nil,
                 url: nil, # Deprecated
-              }
+              }.tap do |option|
+                option[:rich_content] = variant.rich_content_json unless slim
+              end
             end.map do
               ppp_factors.blank? ? _1 :
                 _1.merge({
@@ -121,6 +134,28 @@ module Product::AsJson
         end
       )
 
+      unless slim
+        json.merge!(
+          "rich_content" => rich_content_json,
+          "has_same_rich_content_for_all_variants" => has_same_rich_content_for_all_variants?,
+          "files" => ordered_alive_product_files.filter_map do |f|
+            begin
+              {
+                id: f.external_id,
+                name: f.display_name,
+                size: f.size,
+                url: f.signed_url,
+                filetype: f.filetype,
+                filegroup: f.filegroup,
+              }
+            rescue Aws::S3::Errors::NotFound => e
+              Rails.logger.warn("Skipping product file #{f.id} with missing S3 object: #{e.message}")
+              nil
+            end
+          end
+        )
+      end
+
       if preorder_link.present?
         json.merge!(
           "is_preorder" => true,
@@ -133,7 +168,7 @@ module Product::AsJson
         json["purchasing_power_parity_prices"] = compute_ppp_prices(cached_default_price_cents, ppp_factors, currency)
       end
 
-      if options[:api_scopes].include?("view_sales")
+      if (options[:api_scopes] & %w[view_sales account]).present?
         json["custom_delivery_url"] = nil # Deprecated
         json["sales_count"] = successful_sales_count
         json["sales_usd_cents"] = total_usd_cents
@@ -158,7 +193,7 @@ module Product::AsJson
         creator_profile_picture_url: user.avatar_url,
         creator_profile_url: user.profile_url,
         preview_url: preview_oembed_thumbnail_url || preview_url || "",
-        thumbnail_url: thumbnail&.alive&.url.presence,
+        thumbnail_url: thumbnail_or_cover_url,
         preview_oembed_url: mobile_oembed_url,
         preview_height: preview_height_for_mobile,
         preview_width: preview_width_for_mobile,

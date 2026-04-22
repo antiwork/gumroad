@@ -11,7 +11,7 @@ class LinksController < ApplicationController
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
 
-  skip_before_action :check_suspended, only: %i[index show edit destroy increment_views track_user_action]
+
 
   PUBLIC_ACTIONS = %i[show search increment_views track_user_action cart_items_count].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
@@ -32,31 +32,14 @@ class LinksController < ApplicationController
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
 
-  layout "inertia", only: [:index, :new, :show, :cart_items_count]
+  layout "inertia", only: %i[index new show cart_items_count edit]
 
   def index
     authorize Link
 
     set_meta_tag(title: "Products")
 
-    render inertia: "Products/Index", props: {
-      archived_products_count: -> { products_page_presenter.page_props[:archived_products_count] },
-      can_create_product: -> { products_page_presenter.page_props[:can_create_product] },
-      products_data: -> {
-        {
-          products: products_page_presenter.products_table_props[:products],
-          pagination: products_page_presenter.products_table_props[:products_pagination],
-          sort: products_page_presenter.products_sort,
-        }
-      },
-      memberships_data: -> {
-        {
-          memberships: products_page_presenter.memberships_table_props[:memberships],
-          pagination: products_page_presenter.memberships_table_props[:memberships_pagination],
-          sort: products_page_presenter.memberships_sort,
-        }
-      },
-    }
+    render inertia: "Products/Index", props: products_page_presenter.page_props
   end
 
   def new
@@ -194,12 +177,14 @@ class LinksController < ApplicationController
   end
 
   def cart_items_count
+    cart = Cart.fetch_by(user: logged_in_user, browser_guid: cookies[:_gumroad_guid])
     render inertia: "Products/CartItemsCount", props: {
-      cart: CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid]).cart_props
+      cart_items_count: cart&.cart_products&.alive&.count || 0
     }
   end
 
   def search
+    format_search_params!
     search_params = params
     in_section = search_params[:user_id].present?
     if in_section
@@ -304,12 +289,13 @@ class LinksController < ApplicationController
     fetch_product_by_unique_permalink
     authorize @product
 
-    redirect_to edit_bundle_product_path(@product.external_id) if @product.is_bundle?
+    return redirect_to edit_bundle_product_path(@product.external_id) if @product.is_bundle?
 
     set_meta_tag(title: @product.name)
 
     ai_generated = params[:ai_generated] == "true"
-    @presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
+    presenter = ProductPresenter.new(product: @product, pundit_user:, ai_generated:)
+    render inertia: "Products/Edit", props: presenter.edit_props
   end
 
   def update
@@ -462,7 +448,7 @@ class LinksController < ApplicationController
     rescue Link::LinkInvalid, ActiveRecord::RecordInvalid
       return render json: { success: false, error_message: @product.errors.full_messages[0] }
     rescue => e
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
       return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
     end
 
@@ -799,7 +785,7 @@ class LinksController < ApplicationController
         thumbnail.file.analyze
         thumbnail.save!
       rescue => e
-        Bugsnag.notify(e)
+        ErrorNotifier.notify(e)
       end
     end
 
@@ -831,7 +817,7 @@ class LinksController < ApplicationController
           rich_content.save!
         end
       rescue => e
-        Bugsnag.notify(e)
+        ErrorNotifier.notify(e)
       end
     end
 end

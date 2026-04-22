@@ -10,6 +10,7 @@ require "capybara/rspec"
 require "rspec/rails"
 require "paper_trail/frameworks/rspec"
 require "pundit/rspec"
+require "faker"
 Dir.glob(Rails.root.join("spec", "support", "**", "*.rb")).each { |f| require f }
 
 JsonMatchers.schema_root = "spec/support/schemas"
@@ -103,7 +104,6 @@ def configure_vcr
     config.filter_sensitive_data("<IOS_CREATOR_APP_APPLE_LOGIN_IDENTIFIER>") { GlobalConfig.get("IOS_CREATOR_APP_APPLE_LOGIN_IDENTIFIER") }
     config.filter_sensitive_data("<GOOGLE_CLIENT_ID>") { GlobalConfig.get("GOOGLE_CLIENT_ID") }
     config.filter_sensitive_data("<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>") { GlobalConfig.get("RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID") }
-    config.filter_sensitive_data("<SLACK_WEBHOOK_URL>") { GlobalConfig.get("SLACK_WEBHOOK_URL") }
     config.filter_sensitive_data("<CLOUDFRONT_KEYPAIR_ID>") { GlobalConfig.get("CLOUDFRONT_KEYPAIR_ID") }
 
     # Filter EasyPost API key (Base64-encoded for Basic Auth headers)
@@ -118,6 +118,78 @@ configure_vcr
 def prepare_mysql
   ActiveRecord::Base.connection.execute("SET SESSION information_schema_stats_expiry = 0")
 end
+
+DB_CORRUPTION_PATTERN = /SAVEPOINT.*does not exist|Lost connection|gone away/i
+BROWSER_CORRUPTION_PATTERN = /unpack1|no such window|invalid session id/i
+
+def reset_db_connection(example)
+  return unless example.exception&.message&.match?(DB_CORRUPTION_PATTERN)
+
+  Rails.logger.warn("[RSpec retry] DB corruption detected: #{example.exception.message}. Reconnecting.")
+  pool = ActiveRecord::Base.connection_pool
+  pool.disconnect!
+  prepare_mysql
+rescue StandardError => e
+  Rails.logger.warn("[RSpec retry] Pool disconnect failed: #{e.class}: #{e.message}")
+end
+
+def browser_session_corrupted?(exception)
+  return false unless exception
+  return true if exception.is_a?(Selenium::WebDriver::Error::NoSuchWindowError)
+  return true if exception.is_a?(Selenium::WebDriver::Error::InvalidSessionIdError)
+  return true if exception.is_a?(Errno::ECONNREFUSED)
+  return true if exception.is_a?(NoMethodError) && exception.message.include?("unpack1")
+
+  msg = exception.message
+  msg = "#{msg} #{exception.cause.message}" if exception.cause
+  msg.match?(BROWSER_CORRUPTION_PATTERN)
+end
+
+def force_browser_restart!
+  return unless Capybara.current_session.driver.is_a?(Capybara::Selenium::Driver)
+
+  begin
+    Capybara.current_session.driver.quit
+  rescue StandardError
+    nil
+  end
+  Capybara.reset_sessions!
+rescue StandardError => e
+  Rails.logger.warn("[RSpec] Browser restart failed: #{e.class}: #{e.message}")
+end
+
+def reset_browser_session(example)
+  return unless browser_session_corrupted?(example.exception)
+
+  Rails.logger.warn("[RSpec retry] Browser session corrupted: #{example.exception.class}: #{example.exception.message}. Restarting driver.")
+  force_browser_restart!
+end
+
+# Harden teardown_fixtures so that a corrupted SAVEPOINT doesn't skip pool
+# unlock and connection cleanup. Without this, a single SAVEPOINT failure
+# poisons every subsequent retry because lock_thread is never reset and
+# clear_active_connections! is never called.
+module ResilientFixtureTeardown
+  def teardown_fixtures
+    if run_in_transaction?
+      ActiveSupport::Notifications.unsubscribe(@connection_subscriber) if @connection_subscriber
+      @fixture_connections.each do |connection|
+        connection.rollback_transaction if connection.transaction_open?
+      rescue StandardError => e
+        Rails.logger.warn("[RSpec] fixture rollback failed: #{e.message}")
+      ensure
+        connection.pool.lock_thread = false
+      end
+      @fixture_connections.clear
+      teardown_shared_connection_pool
+    else
+      ActiveRecord::FixtureSet.reset_cache
+    end
+
+    ActiveRecord::Base.connection_handler.clear_active_connections!(:all)
+  end
+end
+ActiveRecord::TestFixtures.prepend(ResilientFixtureTeardown) if BUILDING_ON_CI
 
 RSpec.configure do |config|
   config.include Capybara::DSL
@@ -142,7 +214,12 @@ RSpec.configure do |config|
     # show exception that triggers a retry if verbose_retry is set to true
     config.display_try_failure_messages = true
     config.default_retry_count = 3
+    config.retry_callback = proc do |example|
+      reset_db_connection(example)
+      reset_browser_session(example)
+    end
   end
+
   config.before(:suite) do
     # Disable webmock while cleanup, see also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
@@ -222,13 +299,25 @@ RSpec.configure do |config|
     ].each do |feature|
       Feature.activate(feature)
     end
-    @request&.host = DOMAIN # @request only valid for controller specs.
+    @request.host = DOMAIN if @request.respond_to?(:host=) # @request only valid for controller specs.
     PostSendgridApi.mails.clear
   end
 
   config.after(:each) do |example|
     capture_state_on_failure(example)
-    Capybara.reset_sessions!
+    begin
+      Capybara.reset_sessions!
+    rescue Selenium::WebDriver::Error::NoSuchWindowError,
+           Selenium::WebDriver::Error::InvalidSessionIdError,
+           Errno::ECONNREFUSED => e
+      Rails.logger.warn("[RSpec] Browser session corrupted during reset: #{e.class}: #{e.message}. Restarting driver.")
+      force_browser_restart!
+    rescue NoMethodError => e
+      raise unless e.message.include?("unpack1")
+
+      Rails.logger.warn("[RSpec] Browser session corrupted during reset: #{e.class}: #{e.message}. Restarting driver.")
+      force_browser_restart!
+    end
     WebMock.allow_net_connect!
   end
 
@@ -286,7 +375,7 @@ RSpec.configure do |config|
   config.around(:each, :shipping) do |example|
     vcr_turned_on do
       only_matching_vcr_request_from(["easypost", "taxjar"]) do
-        VCR.use_cassette("ShippingScenarios/#{example.description}") do
+        VCR.use_cassette("ShippingScenarios/#{example.description}", allow_playback_repeats: example.metadata[:js]) do
           # Debug flaky specs.
           puts "*" * 100
           puts example.full_description
@@ -303,7 +392,7 @@ RSpec.configure do |config|
   config.around(:each, :taxjar) do |example|
     vcr_turned_on do
       only_matching_vcr_request_from(["taxjar"]) do
-        VCR.use_cassette("Taxjar/#{example.description}") do
+        VCR.use_cassette("Taxjar/#{example.description}", allow_playback_repeats: example.metadata[:js]) do
           example.run
         end
       end
@@ -439,15 +528,20 @@ def vcr_turned_on
 end
 
 def only_matching_vcr_request_from(hosts)
+  hooks = VCR.request_ignorer.hooks[:ignore_request]
+
   VCR.configure do |c|
     c.ignore_request do |request|
       !hosts.any? { |host| request.uri.match?(host) }
     end
   end
 
+  added_hook = hooks.last
+
   begin
     yield
   ensure
+    hooks.delete(added_hook)
     configure_vcr
   end
 end
@@ -457,10 +551,6 @@ def stub_pwned_password_check
 end
 
 def stub_webmock
-  WebMock.stub_request(:post, "https://notify.bugsnag.com/")
-  WebMock.stub_request(:post, "https://sessions.bugsnag.com/")
-  WebMock.stub_request(:post, %r{iffy-live\.gumroad\.com/people/buyer_info})
-      .with(body: "{\"require_zip\": false}", headers: { status: %w[200 OK], content_type: "application/json" })
   stub_pwned_password_check
 end
 

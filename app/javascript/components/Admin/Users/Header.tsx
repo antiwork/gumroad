@@ -1,3 +1,4 @@
+import { Copy } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import React from "react";
 
@@ -8,7 +9,8 @@ import BlockedUserTooltip from "$app/components/Admin/Users/BlockedUserTooltip";
 import AdminUserStats from "$app/components/Admin/Users/Stats";
 import type { User } from "$app/components/Admin/Users/User";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
-import { Icon } from "$app/components/Icons";
+import { Avatar } from "$app/components/ui/Avatar";
+import { InlineList } from "$app/components/ui/InlineList";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 type HeaderProps = {
@@ -26,14 +28,14 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
-        <img src={user.avatar_url} className="user-avatar" style={{ width: "var(--form-element-height)" }} alt="" />
+        <Avatar src={user.avatar_url} style={{ width: "var(--form-element-height)" }} alt="" />
         <div className="grid gap-2">
           <h2>
             <Link href={adminUserUrl} className={classNames({ active: url === adminUserUrl })}>
               {displayName}
             </Link>
           </h2>
-          <ul className="inline">
+          <InlineList>
             <li>
               <DateTimeWithRelativeTooltip date={user.created_at} />
             </li>
@@ -48,7 +50,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
               <li className="space-x-1">
                 <span>Email: {user.form_email}</span>
                 <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy email" text={user.form_email}>
-                  <Icon name="outline-duplicate" />
+                  <Copy className="size-5" />
                 </CopyToClipboard>
                 <BlockedUserTooltip user={user} position="bottom" />
               </li>
@@ -57,7 +59,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
               <li className="space-x-1">
                 <span>Support email: {user.support_email}</span>
                 <CopyToClipboard tooltipPosition="bottom" copyTooltip="Copy support email" text={user.support_email}>
-                  <Icon name="outline-duplicate" />
+                  <Copy className="size-5" />
                 </CopyToClipboard>
               </li>
             ) : null}
@@ -74,7 +76,7 @@ const Header = ({ user, isAffiliateUser = false, url }: HeaderProps) => {
             <li>
               <Link href={Routes.admin_user_payouts_url(user.external_id)}>Payouts</Link>
             </li>
-          </ul>
+          </InlineList>
 
           <AdminUserStats user_external_id={user.external_id} />
         </div>

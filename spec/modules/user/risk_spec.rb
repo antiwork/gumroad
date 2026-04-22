@@ -14,34 +14,63 @@ describe User::Risk do
     end
   end
 
-  describe "#log_suspension_time_to_mongo", :sidekiq_inline do
-    let(:user) { create(:user) }
-    let(:collection) { MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME] }
+  describe "suspension state machine callback" do
+    before { Feature.activate(:account_suspended_email) }
 
-    it "writes suspension data to mongo collection" do
-      freeze_time do
-        user.log_suspension_time_to_mongo
-
-        record = collection.find("user_id" => user.id).first
-        expect(record).to be_present
-        expect(record["user_id"]).to eq(user.id)
-        expect(record["suspended_at"]).to eq(Time.current.to_s)
-      end
-    end
-  end
-
-  describe ".refund_queue", :sidekiq_inline do
-    it "returns users suspended for fraud with positive unpaid balances" do
+    it "sends suspension email when suspended for TOS violation" do
       user = create(:user)
-      create(:balance, user: user, amount_cents: 5000, state: "unpaid")
+      user.flag_for_tos_violation!(author_name: "admin", bulk: true)
+
+      expect do
+        user.suspend_for_tos_violation!(author_name: "admin")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(user.id)
+    end
+
+    it "sends suspension email when suspended for fraud" do
+      user = create(:user)
       user.flag_for_fraud!(author_name: "admin")
-      user.suspend_for_fraud!(author_name: "admin")
 
-      result = User.refund_queue
+      expect do
+        user.suspend_for_fraud!(author_name: "admin")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :account_suspended).with(user.id)
+    end
 
-      expect(result.to_a).to eq([user])
+    it "skips the generic suspension email when called with skip_generic_suspension_email" do
+      user = create(:user)
+      user.flag_for_tos_violation!(author_name: "admin", bulk: true)
+
+      expect do
+        user.suspend_for_tos_violation!(author_name: "admin", skip_generic_suspension_email: true)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :account_suspended)
+    end
+
+    it "does not send the generic suspension email when the feature flag is inactive" do
+      Feature.deactivate(:account_suspended_email)
+      user = create(:user)
+      user.flag_for_tos_violation!(author_name: "admin", bulk: true)
+
+      expect do
+        user.suspend_for_tos_violation!(author_name: "admin")
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :account_suspended)
     end
   end
+
+  describe "#suspend_due_to_stripe_risk" do
+    let(:user) { create(:user) }
+
+    before { Feature.activate(:account_suspended_email) }
+
+    it "sends the Stripe-risk-specific email and not the generic suspension email" do
+      expect do
+        user.suspend_due_to_stripe_risk
+      end.to have_enqueued_mail(ContactingCreatorMailer, :suspended_due_to_stripe_risk).with(user.id).once
+
+      expect do
+        create(:user).suspend_due_to_stripe_risk
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :account_suspended)
+    end
+  end
+
 
   describe "#suspend_sellers_other_accounts" do
     let(:transition) { double("transition", args: []) }

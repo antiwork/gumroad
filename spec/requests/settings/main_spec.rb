@@ -17,7 +17,7 @@ describe("Main Settings Scenario", type: :system, js: true) do
       expect(page).to have_tab_button "Settings"
       expect(page).to have_tab_button "Profile"
       expect(page).to have_tab_button "Payments"
-      expect(page).to have_tab_button "Password"
+      expect(page).to have_tab_button "Password and authentication"
       expect(page).to have_tab_button "Advanced"
     end
   end
@@ -92,7 +92,7 @@ describe("Main Settings Scenario", type: :system, js: true) do
 
     it "disables the form" do
       visit settings_main_path
-      expect(page).not_to have_link("Password")
+      expect(page).not_to have_link("Password and authentication")
       expect(page).not_to have_button("Update settings")
       expect(page).not_to have_selector(".js-invalidate-active-sessions-trigger", text: "Sign out from all active sessions")
     end

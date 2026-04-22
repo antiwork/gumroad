@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-require "omniauth-facebook"
-require "omniauth-twitter"
+require "omniauth-apple"
 require "omniauth-google-oauth2"
 
 # Use this hook to configure devise mailer, warden hooks and so forth.
@@ -220,7 +219,7 @@ Devise.setup do |config|
 
   # When set to false, does not sign a user in automatically after their password is
   # reset. Defaults to true, so a user is signed in automatically after a reset.
-  # config.sign_in_after_reset_password = true
+  config.sign_in_after_reset_password = false
 
   # ==> Configuration for :encryptable
   # Allow you to use another hashing or encryption algorithm besides bcrypt (default).
@@ -265,23 +264,6 @@ Devise.setup do |config|
   # up on your models and hooks.
   # config.omniauth :github, 'APP_ID', 'APP_SECRET', scope: 'user,public_repo'
 
-  config.omniauth :facebook,
-                  FACEBOOK_APP_ID,
-                  FACEBOOK_APP_SECRET,
-                  scope: "email,pages_manage_ads,pages_manage_metadata,pages_read_engagement,pages_read_user_content",
-                  info_fields: "name,email,verified,gender,link",
-                  client_options: {
-                    site: "https://graph.facebook.com/#{FACEBOOK_API_VERSION}",
-                    authorize_url: "https://www.facebook.com/#{FACEBOOK_API_VERSION}/dialog/oauth"
-                  },
-                  token_params: {
-                    parse: :json
-                  }
-
-  config.omniauth :twitter,
-                  TWITTER_APP_ID,
-                  TWITTER_APP_SECRET
-
   config.omniauth :stripe_connect,
                   STRIPE_CONNECT_CLIENT_ID,
                   STRIPE_SECRET,
@@ -291,6 +273,15 @@ Devise.setup do |config|
                   GOOGLE_CLIENT_ID,
                   GOOGLE_CLIENT_SECRET,
                   scope: "email,profile"
+
+  config.omniauth :apple,
+                  APPLE_CLIENT_ID,
+                  "",
+                  scope: "email name",
+                  team_id: APPLE_TEAM_ID,
+                  key_id: APPLE_KEY_ID,
+                  pem: APPLE_PRIVATE_KEY,
+                  provider_ignores_state: true
 
   # ==> Warden configuration
   # If you want to use other strategies, that are not supported by Devise, or

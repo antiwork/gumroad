@@ -1,3 +1,4 @@
+import { Pencil, Trash } from "@boxicons/react";
 import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
@@ -5,7 +6,6 @@ import { Workflow } from "$app/types/workflow";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -24,7 +24,11 @@ const WorkflowList = ({ workflows }: WorkflowListProps) => {
   const canManageWorkflow = !!loggedInUser?.policies.workflow.create;
   const newWorkflowButton = (
     <Button asChild color="accent">
-      <Link href={Routes.new_workflow_path()} inert={!canManageWorkflow || undefined}>
+      <Link
+        href={Routes.new_workflow_path()}
+        inert={!canManageWorkflow || undefined}
+        className={!canManageWorkflow ? "opacity-30" : undefined}
+      >
         New workflow
       </Link>
     </Button>
@@ -125,19 +129,27 @@ const WorkflowRow = ({
     <div className="flex items-center">
       <h3 style={{ marginRight: "auto" }}>{workflow.name}</h3>
       <div style={{ display: "flex", gap: "var(--spacer-4)", alignItems: "center" }}>
-        {workflow.published ? <small>Published</small> : <small>Unpublished</small>}
+        {workflow.published ? <small className="block">Published</small> : <small className="block">Unpublished</small>}
         <div className="flex flex-wrap gap-2">
-          <Button asChild>
+          <Button asChild size="icon">
             <Link
               href={Routes.edit_workflow_path(workflow.external_id)}
               aria-label="Edit workflow"
               inert={!canManageWorkflow || undefined}
+              className={!canManageWorkflow ? "opacity-30" : undefined}
             >
-              <Icon name="pencil" />
+              <Pencil className="size-5" />
             </Link>
           </Button>
-          <Button color="danger" outline aria-label="Delete workflow" disabled={!canManageWorkflow} onClick={onDelete}>
-            <Icon name="trash2" />
+          <Button
+            size="icon"
+            color="danger"
+            outline
+            aria-label="Delete workflow"
+            disabled={!canManageWorkflow}
+            onClick={onDelete}
+          >
+            <Trash className="size-5" />
           </Button>
         </div>
       </div>
@@ -190,7 +202,11 @@ const WorkflowRow = ({
       <Placeholder>
         <h4>
           No emails yet,{" "}
-          <Link href={Routes.workflow_emails_path(workflow.external_id)} inert={!canManageWorkflow || undefined}>
+          <Link
+            href={Routes.workflow_emails_path(workflow.external_id)}
+            inert={!canManageWorkflow || undefined}
+            className={!canManageWorkflow ? "opacity-30" : undefined}
+          >
             add one
           </Link>
         </h4>

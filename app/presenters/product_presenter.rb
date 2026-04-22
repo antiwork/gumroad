@@ -43,8 +43,8 @@ class ProductPresenter
   end
 
   ASSOCIATIONS_FOR_CARD = ProductPresenter::Card::ASSOCIATIONS
-  def self.card_for_web(product:, request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true)
-    ProductPresenter::Card.new(product:).for_web(request:, recommended_by:, recommender_model_name:, target:, show_seller:, affiliate_id:, query:, offer_code:, compute_description:)
+  def self.card_for_web(product:, request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true, compute_inventory: true)
+    ProductPresenter::Card.new(product:).for_web(request:, recommended_by:, recommender_model_name:, target:, show_seller:, affiliate_id:, query:, offer_code:, compute_description:, compute_inventory:)
   end
 
   def self.card_for_email(product:)
@@ -264,6 +264,7 @@ class ProductPresenter
         fine_print: product.user.refund_policy.fine_print,
       },
       cancellation_discounts_enabled: Feature.active?(:cancellation_discounts, product.user),
+      dropbox_api_key: DROPBOX_PICKER_API_KEY,
       ai_generated:,
     }
   end

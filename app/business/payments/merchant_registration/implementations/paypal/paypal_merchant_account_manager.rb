@@ -26,7 +26,7 @@ class PaypalMerchantAccountManager
     if post_partner_referral_success?
       partner_referral_success_response_data
     else
-      notify_bugsnag_partner_referral_error
+      notify_partner_referral_error
       partner_referral_failure_response_data
     end
   end
@@ -89,9 +89,9 @@ class PaypalMerchantAccountManager
         return "There was an error connecting your PayPal account with Gumroad." unless merchant_account.save
       end
 
-      oauth_integration = parsed_response["oauth_integrations"][0]
+      oauth_integration = parsed_response.dig("oauth_integrations", 0)
 
-      if parsed_response["primary_email_confirmed"] && parsed_response["payments_receivable"] &&
+      if oauth_integration && parsed_response["primary_email_confirmed"] && parsed_response["payments_receivable"] &&
           oauth_integration["integration_type"] == "OAUTH_THIRD_PARTY" &&
           oauth_integration["integration_method"] == "PAYPAL"
         oauth_integration["oauth_third_party"][0]["partner_client_id"] == PAYPAL_PARTNER_CLIENT_ID
@@ -180,15 +180,16 @@ class PaypalMerchantAccountManager
       end
     end
 
-    def notify_bugsnag_partner_referral_error
+    def notify_partner_referral_error
       return if %w[INTERNAL_SERVICE_ERROR PERMISSION_DENIED CONNECTION_ERROR].include?(response_error_name)
 
-      notify_bugsnag
+      notify_error
     end
 
-    def notify_bugsnag
-      Bugsnag.notify(request: response.request,
-                     response:)
+    def notify_error
+      ErrorNotifier.notify("PayPal partner referral error",
+                           request: response.request,
+                           response:)
     end
 
     def handle_merchant_account_updated_event(paypal_event)

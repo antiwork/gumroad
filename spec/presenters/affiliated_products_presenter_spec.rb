@@ -270,10 +270,11 @@ describe AffiliatedProductsPresenter do
         expect(pagination[:pages]).to eq(2)
       end
 
-      it "raises an error if out of range" do
-        expect do
-          described_class.new(affiliate_user, page: 3).affiliated_products_page_props
-        end.to raise_error(Pagy::OverflowError)
+      it "returns the last page if out of range" do
+        props = described_class.new(affiliate_user, page: 3).affiliated_products_page_props
+        pagination = props[:pagination]
+        expect(pagination[:page]).to eq(2)
+        expect(pagination[:pages]).to eq(2)
       end
     end
 
@@ -521,6 +522,21 @@ describe AffiliatedProductsPresenter do
                                                                  url: direct_affiliate_one.referral_url_for_product(creator_one_product_two)
                                                                })
       end
+    end
+  end
+
+  describe "#affiliated_products_page_props when the global affiliate has been deleted" do
+    it "returns nil for global affiliate fields without raising" do
+      user = create(:affiliate_user)
+      user.global_affiliate.update!(deleted_at: Time.current)
+      user.reload
+
+      props = described_class.new(user).affiliated_products_page_props
+
+      expect(props[:global_affiliates_data][:global_affiliate_id]).to be_nil
+      expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
+      expect(props[:global_affiliates_data][:cookie_expiry_days]).to eq GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS
+      expect(props[:global_affiliates_data][:affiliate_query_param]).to eq Affiliate::SHORT_QUERY_PARAM
     end
   end
 

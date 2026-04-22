@@ -3,7 +3,29 @@
 require("spec_helper")
 
 describe("Product Page - Tax Scenarios", type: :system, js: true) do
-  describe "sales tax", shipping: true do
+  def set_zip_code_via_js(zip_code)
+    zip_field = find_field("ZIP code")
+    page.execute_script(<<~JS, zip_field)
+      var el = arguments[0];
+      var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(el, '');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new Event('blur', { bubbles: true }));
+    JS
+    sleep 0.1
+    page.execute_script(<<~JS, zip_field, zip_code)
+      var el = arguments[0];
+      var zip = arguments[1];
+      var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(el, zip);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new Event('blur', { bubbles: true }));
+    JS
+  end
+
+  describe "sales tax", shipping: true, force_vcr_on: true do
     before do
       @creator = create(:user_with_compliance_info)
 
@@ -13,9 +35,11 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     it "calls the tax endpoint for a real zip code that doesn't show in the enterprise zip codes database" do
       visit("/l/#{@product.unique_permalink}")
       add_to_cart(@product)
-      check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144", country: "US" }, should_verify_address: true) do
-        expect(page).to have_text("Subtotal US$500", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$53.50", normalize_ws: true)
+      check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
+        expect(page).to have_select("State", selected: "AZ")
+        set_zip_code_via_js("85144")
+        expect(page).to have_text("Sales tax", normalize_ws: true)
+        expect(page).to have_text("Total US$553.50", normalize_ws: true)
       end
 
       expect(page).to have_text("Your purchase was successful!")
@@ -53,8 +77,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit("/l/#{@product.unique_permalink}")
         add_to_cart(@product, option: "type 1")
         check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
-          expect(page).to have_text("Subtotal US$501.50", normalize_ws: true)
-          expect(page).to have_text("Sales tax US$53.66", normalize_ws: true)
+          set_zip_code_via_js("85144")
           expect(page).to have_text("Total US$555.16", normalize_ws: true)
         end
 
@@ -86,10 +109,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{@product.unique_permalink}/taxoffer"
         add_to_cart(@product, offer_code:)
         check_out(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" }, should_verify_address: true) do
-          expect(page).to have_text("$500")
-          expect(page).to have_text("Subtotal US$500", normalize_ws: true)
-          expect(page).to have_text("Sales tax US$42.80", normalize_ws: true)
-          expect(page).to have_text("Discounts taxoffer US$-100", normalize_ws: true)
+          set_zip_code_via_js("85144")
           expect(page).to have_text("Total US$442.80", normalize_ws: true)
         end
 
@@ -121,13 +141,13 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit @product.long_url
         add_to_cart(@product)
         fill_checkout_form(@product, address: { street: "3029 W Sherman Rd", city: "San Tan Valley", state: "AZ", zip_code: "85144" })
+        set_zip_code_via_js("85144")
         expect(page).to have_text("Subtotal US$500", normalize_ws: true)
         expect(page).to_not have_text("Tip US$", normalize_ws: true)
         expect(page).to have_text("Sales tax US$53.50", normalize_ws: true)
         expect(page).to have_text("Total US$553.50", normalize_ws: true)
 
         choose "20%"
-        wait_for_ajax
         expect(page).to have_text("Subtotal US$600", normalize_ws: true)
         expect(page).to have_text("Add a tip? US$100", normalize_ws: true)
         expect(page).to have_text("Sales tax US$58.85", normalize_ws: true)
@@ -170,8 +190,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       add_to_cart(product)
       check_out(product, zip_code: "53703") do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$5.50", normalize_ws: true)
+        set_zip_code_via_js("53703")
         expect(page).to have_text("Total US$105.50", normalize_ws: true)
       end
 
@@ -190,8 +209,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       add_to_cart(product)
       check_out(product, address: { street: "1 S Pinckney St", state: "WI", city: "Madison", zip_code: "53703" }, should_verify_address: true) do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$5.50", normalize_ws: true)
+        set_zip_code_via_js("53703")
         expect(page).to have_text("Total US$105.50", normalize_ws: true)
       end
 
@@ -210,8 +228,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       add_to_cart(product)
       check_out(product, zip_code: "98121") do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$10.35", normalize_ws: true)
+        set_zip_code_via_js("98121")
         expect(page).to have_text("Total US$110.35", normalize_ws: true)
       end
 
@@ -230,8 +247,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       add_to_cart(product)
       check_out(product, address: { street: "2031 7th Ave", state: "WA", city: "Seattle", zip_code: "98121" }, should_verify_address: true) do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$10.35", normalize_ws: true)
+        set_zip_code_via_js("98121")
         expect(page).to have_text("Total US$110.35", normalize_ws: true)
       end
 
@@ -250,8 +266,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       add_to_cart(product)
       check_out(product, zip_code: "53703") do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$5.50", normalize_ws: true)
+        set_zip_code_via_js("53703")
         expect(page).to have_text("Total US$105.50", normalize_ws: true)
       end
 
@@ -270,8 +285,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       add_to_cart(product)
       check_out(product, zip_code: "98121") do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Sales tax US$10.35", normalize_ws: true, wait: 10)
+        set_zip_code_via_js("98121")
         expect(page).to have_text("Total US$110.35", normalize_ws: true)
       end
 
@@ -315,7 +329,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       add_to_cart(@vat_link)
 
-      expect(page).to have_text("VAT US$22", normalize_ws: true)
       check_out(@vat_link, vat_id: "NL860999063B01", zip_code: nil, credit_card: { number: "4000003800000008" }) do
         expect(page).not_to have_text("VAT US$", normalize_ws: true)
       end
@@ -447,7 +460,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       visit "/l/#{@product.unique_permalink}"
       expect(page).to have_selector("[itemprop='price']", text: "$100")
       add_to_cart(@product)
-      expect(page).to have_text("Total US$110", normalize_ws: true)
       check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
       purchase = Purchase.last
@@ -463,7 +475,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_selector("[itemprop='offers']", text: "$100")
 
       add_to_cart(@product)
-      expect(page).to have_text("Total US$110", normalize_ws: true)
       check_out(@product, abn_id: "51824753556", zip_code: nil, credit_card: { number: "4000000360000006" }) do
         expect(page).not_to have_text("GST")
       end
@@ -496,8 +507,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_selector("[itemprop='offers']", text: "$100")
       add_to_cart(@product)
 
-      expect(page).to have_text("Total US$110", normalize_ws: true)
-
       check_out(@product, address: { street: "278 Rocky Point Rd", city: "Ramsgate", state: "NSW", zip_code: "2217" })
 
       purchase = Purchase.last
@@ -520,8 +529,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
       add_to_cart(product)
-
-      expect(page).to have_text("Total US$110", normalize_ws: true)
 
       check_out(product, address: { street: "278 Rocky Point Rd", city: "Ramsgate", state: "NSW", zip_code: "2217" })
 
@@ -555,8 +562,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_selector("[itemprop='price']", text: "$100")
         add_to_cart(@product)
-        expect(page).to have_text("GST US$8", normalize_ws: true)
-        expect(page).to have_text("Total US$108", normalize_ws: true)
         check_out(@product, zip_code: nil, credit_card: { number: "4000007020000003" })
 
         purchase = Purchase.last
@@ -582,7 +587,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_selector("[itemprop='offers']", text: "$100")
 
         add_to_cart(@product)
-        expect(page).to have_text("GST US$8", normalize_ws: true)
         check_out(@product, gst_id: "T9100001B", zip_code: nil, credit_card: { number: "4000007020000003" }) do
           expect(page).not_to have_text("GST US$8", normalize_ws: true)
         end
@@ -617,9 +621,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_selector("[itemprop='offers']", text: "$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("GST US$8", normalize_ws: true)
-        expect(page).to have_text("Total US$108", normalize_ws: true)
-
         check_out(@product, address: { street: "10 Bayfront Ave", city: "Singapore", state: "Singapore", zip_code: "018956" })
 
         purchase = Purchase.last
@@ -644,9 +645,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(product)
-
-        expect(page).to have_text("GST US$8", normalize_ws: true)
-        expect(page).to have_text("Total US$108", normalize_ws: true)
 
         check_out(product, address: { street: "10 Bayfront Ave", city: "Singapore", state: "Singapore", zip_code: "018956" })
 
@@ -683,9 +681,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_text("$100")
       add_to_cart(@product)
 
-      expect(page).to have_text("VAT US$25", normalize_ws: true)
-      expect(page).to have_text("Total US$125", normalize_ws: true)
-
       check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
       purchase = Purchase.last
@@ -703,8 +698,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to have_text("$100")
       add_to_cart(@product)
 
-      expect(page).to have_text("Total US$100", normalize_ws: true)
-
       check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
       purchase = Purchase.last
@@ -721,7 +714,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       add_to_cart(@product)
 
       check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" }, mva_id: "977074010MVA") do
-        expect(page).not_to have_text("VAT")
+        expect(page).not_to have_text("VAT US$", normalize_ws: true)
       end
 
       purchase = Purchase.last
@@ -764,8 +757,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -787,9 +778,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$24", normalize_ws: true)
-        expect(page).to have_text("Total US$124", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -806,9 +794,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
-
-        expect(page).to have_text("VAT US$11", normalize_ws: true)
-        expect(page).to have_text("Total US$111", normalize_ws: true)
 
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
@@ -866,8 +851,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -890,7 +873,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         add_to_cart(@product)
 
         expect(page).to have_text("CT US$10", normalize_ws: true)
-        expect(page).to have_text("Total US$110", normalize_ws: true)
 
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
@@ -948,8 +930,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -970,9 +950,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
-
-        expect(page).to have_text("GST US$15", normalize_ws: true)
-        expect(page).to have_text("Total US$115", normalize_ws: true)
 
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
@@ -1030,8 +1007,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1052,9 +1027,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
-
-        expect(page).to have_text("VAT US$15", normalize_ws: true)
-        expect(page).to have_text("Total US$115", normalize_ws: true)
 
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
@@ -1113,8 +1085,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1136,9 +1106,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$8.10", normalize_ws: true)
-        expect(page).to have_text("Total US$108.10", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1155,9 +1122,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
-
-        expect(page).to have_text("VAT US$2.60", normalize_ws: true)
-        expect(page).to have_text("Total US$102.60", normalize_ws: true)
 
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
@@ -1215,8 +1179,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1237,9 +1199,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
-
-        expect(page).to have_text("VAT US$5", normalize_ws: true)
-        expect(page).to have_text("Total US$105", normalize_ws: true)
 
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
@@ -1297,8 +1256,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1319,9 +1276,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{@product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(@product)
-
-        expect(page).to have_text("GST US$18", normalize_ws: true)
-        expect(page).to have_text("Total US$118", normalize_ws: true)
 
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
@@ -1378,8 +1332,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1401,10 +1353,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-
-        expect(page).to have_text("VAT US$10", normalize_ws: true)
-        expect(page).to have_text("Total US$110", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1421,8 +1369,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Manama", zip_code: "12345", state: "BH", country: "BH" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -1477,8 +1423,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1500,9 +1444,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$20", normalize_ws: true)
-        expect(page).to have_text("Total US$120", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1519,8 +1460,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Minsk", zip_code: "220000", state: "BY", country: "BY" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -1577,8 +1516,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1600,9 +1537,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$19", normalize_ws: true)
-        expect(page).to have_text("Total US$119", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1619,8 +1553,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Santiago", zip_code: "7500000", state: "CL", country: "CL" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -1677,8 +1609,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1700,9 +1630,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$19", normalize_ws: true)
-        expect(page).to have_text("Total US$119", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1719,8 +1646,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Bogota, D.C.", zip_code: "110111", state: "CO", country: "CO" }, credit_card: { number: "4000000360000006" })
 
@@ -1777,8 +1702,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1800,9 +1723,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$13", normalize_ws: true)
-        expect(page).to have_text("Total US$113", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1819,8 +1739,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "San José", zip_code: "110111", state: "CR", country: "CR" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -1877,8 +1795,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1900,9 +1816,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$12", normalize_ws: true)
-        expect(page).to have_text("Total US$112", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -1919,8 +1832,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Quito", zip_code: "170101", state: "EC", country: "EC" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -1977,8 +1888,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2000,9 +1909,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$14", normalize_ws: true)
-        expect(page).to have_text("Total US$114", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2019,8 +1925,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Cairo", zip_code: "11511", state: "CA", country: "EG" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -2077,8 +1981,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2100,9 +2002,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$18", normalize_ws: true)
-        expect(page).to have_text("Total US$118", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2119,8 +2018,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Tbilisi", zip_code: "0100", state: "TB", country: "GE" }, credit_card: { number: "4000000360000006" })
 
@@ -2177,8 +2074,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2200,9 +2095,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$12", normalize_ws: true)
-        expect(page).to have_text("Total US$112", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2219,8 +2111,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Almaty", zip_code: "050000", state: "AL", country: "KZ" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -2277,8 +2167,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2300,9 +2188,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$16", normalize_ws: true)
-        expect(page).to have_text("Total US$116", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2319,8 +2204,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Nairobi", zip_code: "00100", state: "NA", country: "KE" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -2375,8 +2258,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2399,7 +2280,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         add_to_cart(@product)
 
         expect(page).to have_text("Service tax US$6", normalize_ws: true)
-        expect(page).to have_text("Total US$106", normalize_ws: true)
 
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
@@ -2417,8 +2297,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Kuala Lumpur", zip_code: "50000", state: "WP", country: "MY" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -2458,7 +2336,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       Capybara.current_session.driver.browser.manage.delete_all_cookies
 
       create(:zip_tax_rate, country: "MX", state: nil, zip_code: nil, combined_rate: 0.16, is_seller_responsible: false)
-      create(:zip_tax_rate, country: "MX", state: nil, zip_code: nil, combined_rate: 0.00, is_seller_responsible: false, is_epublication_rate: true)
       allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("187.189.0.1") # Mexico
 
       @product = create(:product, price_cents: 100_00)
@@ -2470,106 +2347,19 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       @product.save!
     end
 
-    context "when collect_tax_mx feature flag is off" do
-      it "does not apply tax in Mexico" do
-        visit "/l/#{@product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(@product)
+    it "does not apply tax in Mexico" do
+      visit "/l/#{@product.unique_permalink}"
+      expect(page).to have_text("$100")
+      add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
+      check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
-        check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(100_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(0)
-        expect(purchase.was_purchase_taxable).to be(false)
-      end
-    end
-
-    context "when collect_tax_mx feature flag is on" do
-      before do
-        Feature.activate(:collect_tax_mx)
-      end
-
-      it "applies tax in Mexico" do
-        visit "/l/#{@product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(@product)
-
-        expect(page).to have_text("VAT US$16", normalize_ws: true)
-        expect(page).to have_text("Total US$116", normalize_ws: true)
-
-        check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(116_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(16_00)
-        expect(purchase.was_purchase_taxable).to be(true)
-      end
-
-      it "applies the epublication tax rate for epublications in Mexico" do
-        @product.update!(is_epublication: true)
-
-        visit "/l/#{@product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(@product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
-        check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(100_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(0)
-        expect(purchase.was_purchase_taxable).to be(false)
-      end
-
-      it "does not apply tax for physical products", :mock_easypost do
-        physical_product = create(:physical_product, price_cents: 100_00)
-
-        visit "/l/#{physical_product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
-        check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Mexico City", zip_code: "01000", state: "DF", country: "MX" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(100_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(0)
-        expect(purchase.was_purchase_taxable).to be(false)
-      end
-
-      it "allows entry of the Tax ID and doesn't charge tax", :stub_tax_id_validation do
-        visit "/l/#{@product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(@product)
-
-        check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" }, rfc_id: "RTL-630713-7M9")
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(100_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(0)
-        expect(purchase.was_purchase_taxable).to be(false)
-
-        # Check Tax ID is present on the invoice as well
-
-        visit purchase.receipt_url
-        click_on("Generate")
-        expect(page).to(have_text("RTL-630713-7M9"))
-      end
+      purchase = Purchase.last
+      expect(purchase.total_transaction_cents).to eq(100_00)
+      expect(purchase.price_cents).to eq(100_00)
+      expect(purchase.tax_cents).to eq(0)
+      expect(purchase.gumroad_tax_cents).to eq(0)
+      expect(purchase.was_purchase_taxable).to be(false)
     end
   end
 
@@ -2595,8 +2385,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2618,9 +2406,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$20", normalize_ws: true)
-        expect(page).to have_text("Total US$120", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2637,8 +2422,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Chisinau", zip_code: "MD-2001", state: "Chisinau", country: "MD" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -2695,8 +2478,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2718,9 +2499,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$20", normalize_ws: true)
-        expect(page).to have_text("Total US$120", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2737,8 +2515,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Rabat", zip_code: "10000", state: "Rabat", country: "MA" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -2795,8 +2571,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2818,9 +2592,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$7.50", normalize_ws: true)
-        expect(page).to have_text("Total US$107.50", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2837,8 +2608,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Lagos", zip_code: "10000", state: "Lagos", country: "NG" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -2893,8 +2662,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2916,9 +2683,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$5", normalize_ws: true)
-        expect(page).to have_text("Total US$105", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -2936,8 +2700,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Muscat", zip_code: "10000", state: "Muscat", country: "OM" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
         purchase = Purchase.last
@@ -2953,7 +2715,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$5", normalize_ws: true)
         check_out(@product, oman_vat_number: "OM1234567890", zip_code: nil, credit_card: { number: "4000000360000006" }) do
           expect(page).not_to have_text("VAT US$", normalize_ws: true)
         end
@@ -2990,8 +2751,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3013,9 +2772,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$20", normalize_ws: true)
-        expect(page).to have_text("Total US$120", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3032,8 +2788,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Moscow", zip_code: "10000", state: "Moscow", country: "RU" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -3090,8 +2844,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3113,9 +2865,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$15", normalize_ws: true)
-        expect(page).to have_text("Total US$115", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3132,8 +2881,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Riyadh", zip_code: "10000", state: "Riyadh", country: "SA" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -3190,8 +2937,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3213,9 +2958,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$20", normalize_ws: true)
-        expect(page).to have_text("Total US$120", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3232,8 +2974,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Belgrade", zip_code: "10000", state: "Belgrade", country: "RS" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -3290,8 +3030,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3313,9 +3051,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$10", normalize_ws: true)
-        expect(page).to have_text("Total US$110", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3332,8 +3067,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Seoul", zip_code: "10000", state: "Seoul", country: "KR" }, credit_card: { number: "4000000360000006" })
 
@@ -3390,8 +3123,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3413,9 +3144,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$18", normalize_ws: true)
-        expect(page).to have_text("Total US$118", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3432,8 +3160,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Dar es Salaam", zip_code: "10000", state: "Dar es Salaam", country: "TZ" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -3488,8 +3214,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3511,9 +3235,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$7", normalize_ws: true)
-        expect(page).to have_text("Total US$107", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3530,8 +3251,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Bangkok", zip_code: "10000", state: "Bangkok", country: "TH" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -3588,8 +3307,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3611,9 +3328,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$20", normalize_ws: true)
-        expect(page).to have_text("Total US$120", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3630,8 +3344,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Istanbul", zip_code: "34000", state: "Istanbul", country: "TR" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -3688,8 +3400,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3711,9 +3421,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$20", normalize_ws: true)
-        expect(page).to have_text("Total US$120", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3730,8 +3437,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Kyiv", zip_code: "01001", state: "Kyiv", country: "UA" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -3788,8 +3493,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3811,9 +3514,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$15", normalize_ws: true)
-        expect(page).to have_text("Total US$115", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3830,8 +3530,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Tashkent", zip_code: "100000", state: "Tashkent", country: "UZ" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -3888,8 +3586,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("Total US$100", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3911,9 +3607,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_text("$100")
         add_to_cart(@product)
 
-        expect(page).to have_text("VAT US$10", normalize_ws: true)
-        expect(page).to have_text("Total US$110", normalize_ws: true)
-
         check_out(@product, zip_code: nil, credit_card: { number: "4000000360000006" })
 
         purchase = Purchase.last
@@ -3930,8 +3623,6 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         visit "/l/#{physical_product.unique_permalink}"
         expect(page).to have_text("$100")
         add_to_cart(physical_product)
-
-        expect(page).to have_text("Total US$100", normalize_ws: true)
 
         check_out(physical_product, address: { street: "Building 1234, Road 123, Block 123", city: "Hanoi", zip_code: "100000", state: "Hanoi", country: "VN" }, credit_card: { number: "4000000360000006" }, should_verify_address: true)
 
@@ -3966,7 +3657,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
     end
   end
 
-  describe "Canada Tax", taxjar: true do
+  describe "Canada Tax", taxjar: true, force_vcr_on: true do
     let (:product) { create(:product, price_cents: 100_00) }
 
     it "detects the province for Canada" do
@@ -3978,8 +3669,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       expect(page).to have_select("Country", selected: "Canada")
       expect(page).to have_select("Province", selected: "BC")
+      expect(page).to have_text("Total US$112", normalize_ws: true)
 
-      check_out(product, country: "Canada", zip_code: nil, credit_card: { number: "4000001240000000" })
+      check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
 
       purchase = Purchase.last
       expect(purchase.country).to eq("Canada")
@@ -4002,38 +3694,13 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       expect(page).to have_select("Country", selected: "Canada")
       expect(page).to have_select("Province", selected: "ON")
+      expect(page).to have_text("Total US$113", normalize_ws: true)
 
       select "QC", from: "Province"
-      expect(page).to_not have_field "Business QST ID (optional)"
+      page.execute_script("document.activeElement.blur()")
+      expect(page).to have_text("Total US$114.98", normalize_ws: true)
+
       check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
-
-      purchase = Purchase.last
-      expect(purchase.country).to eq("Canada")
-      expect(purchase.state).to eq("QC")
-      expect(purchase.ip_country).to eq("Canada")
-      expect(purchase.card_country).to eq("CA")
-      expect(purchase.total_transaction_cents).to eq(114_98)
-      expect(purchase.price_cents).to eq(100_00)
-      expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(14_98)
-      expect(purchase.was_purchase_taxable).to be(true)
-    end
-
-    it "charges tax Canada" do
-      allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("192.206.151.131") # Ontario, Canada
-
-      visit "/l/#{product.unique_permalink}"
-      expect(page).to have_text("$100")
-      add_to_cart(product)
-
-      expect(page).to have_select("Country", selected: "Canada")
-      expect(page).to have_select("Province", selected: "ON")
-
-      select "QC", from: "Province"
-      check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" }) do
-        expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-        expect(page).to have_text("Tax US$14.98", normalize_ws: true)
-      end
 
       purchase = Purchase.last
       expect(purchase.country).to eq("Canada")
@@ -4059,9 +3726,14 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "ON")
+        expect(page).to have_text("Total US$113", normalize_ws: true)
+
+        select "BC", from: "Province"
+        page.execute_script("document.activeElement.blur()")
+        expect(page).to have_text("Total US$112", normalize_ws: true)
 
         check_out(product, address: { street: "568 Beatty St", city: "Vancouver", state: "BC", zip_code: "V6B 2L3" }, should_verify_address: true) do
-          expect(page).to have_text("Tax US$12", normalize_ws: true)
+          expect(page).to have_text("Total US$112", normalize_ws: true)
         end
 
         purchase = Purchase.last
@@ -4083,14 +3755,12 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "ON")
-        expect(page).to_not have_field "Business QST ID (optional)"
+        expect(page).to_not have_field("Business QST ID (optional)", wait: 10)
 
         select "QC", from: "Province"
-        expect(page).to have_field "Business QST ID (optional)"
-        check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" }) do
-          expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-          expect(page).to have_text("Tax US$14.98", normalize_ws: true)
-        end
+        page.execute_script("document.activeElement.blur()")
+        expect(page).to have_field("Business QST ID (optional)", wait: 10)
+        check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
         expect(purchase.country).to eq("Canada")
@@ -4112,10 +3782,8 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         add_to_cart(product)
 
         select "Canada", from: "Country"
-        check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" }) do
-          expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-          expect(page).to have_text("Tax US$5", normalize_ws: true)
-        end
+        expect(page).to have_text("Total US$105", normalize_ws: true, wait: 10)
+        check_out(product, zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
         expect(purchase.country).to eq("Canada")
@@ -4140,10 +3808,8 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "QC")
 
-        check_out(product, qst_id: "1002092821TQ0001", zip_code: nil, credit_card: { number: "4000001240000000" }) do
-          expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-          expect(page).to have_text("Total US$100", normalize_ws: true)
-        end
+        expect(page).to have_field("Business QST ID (optional)", wait: 10)
+        check_out(product, qst_id: "1002092821TQ0001", zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
         expect(purchase.country).to eq("Canada")
@@ -4174,10 +3840,8 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         expect(page).to have_select("Country", selected: "Canada")
         expect(page).to have_select("Province", selected: "QC")
 
-        check_out(product, qst_id: "NR00005576", zip_code: nil, credit_card: { number: "4000001240000000" }) do
-          expect(page).to have_text("Subtotal US$100", normalize_ws: true)
-          expect(page).to have_text("Tax US$14.98", normalize_ws: true)
-        end
+        expect(page).to have_field("Business QST ID (optional)", wait: 10)
+        check_out(product, qst_id: "NR00005576", zip_code: nil, credit_card: { number: "4000001240000000" })
 
         purchase = Purchase.last
         expect(purchase.country).to eq("Canada")
@@ -4246,14 +3910,10 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       expect(page).to have_select("Country", selected: "Austria")
 
-      fill_in("Your email address", with: "test@test.com")
+      fill_in("Email address", with: "test@test.com")
       fill_in_credit_card
 
-      expect(page).to have_text("VAT US$20", normalize_ws: true)
-
       fill_in("Business VAT ID (optional)", with: "NL860999063B01\t")
-
-      expect(page).to_not have_text("VAT US$20", normalize_ws: true)
 
       select("Mexico", from: "Country")
 

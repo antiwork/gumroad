@@ -215,6 +215,37 @@ describe StripeChargeProcessor, :vcr do
         expect(charge.fee_currency).to eq(stripe_charge.balance_transaction.fee_details.first.currency)
       end
     end
+
+    describe "when Stripe::BalanceTransaction.retrieve raises Stripe::InvalidRequestError" do
+      it "returns a charge with nil balance transaction data" do
+        mock_charge = Stripe::Charge.construct_from(
+          id: "ch_test_123",
+          status: "succeeded",
+          refunded: false,
+          dispute: nil,
+          amount: 100,
+          currency: "usd",
+          destination: nil,
+          transfer_data: nil,
+          transfer_group: nil,
+          balance_transaction: "txn_test_123",
+          application_fee: nil,
+          payment_method: "pm_test_123",
+          payment_method_details: nil,
+          outcome: nil
+        )
+
+        allow(Stripe::Charge).to receive(:retrieve).and_return(mock_charge)
+        allow(Stripe::BalanceTransaction).to receive(:retrieve)
+          .and_raise(Stripe::InvalidRequestError.new("No such balance transaction: 'txn_test_123'", "id"))
+
+        charge = subject.get_charge("ch_test_123")
+
+        expect(charge).to be_a(BaseProcessorCharge)
+        expect(charge.id).to eq("ch_test_123")
+        expect(charge.fee).to be_nil
+      end
+    end
   end
 
   describe "#search_charge" do

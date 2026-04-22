@@ -25,7 +25,7 @@ class AdminMailer < ApplicationMailer
     @purchase = Purchase.find(last_refunded_purchase_id)
     @product = @purchase.link
 
-    mail subject: "#{SUBJECT_PREFIX}Low balance for creator - #{@user.name} (#{@user.balance_formatted(via: :elasticsearch)})",
+    mail subject: "#{SUBJECT_PREFIX}Low balance for creator - #{@user.name} (#{@user.balance_formatted})",
          to: RISK_EMAIL
   end
 end

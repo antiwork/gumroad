@@ -1,10 +1,13 @@
+import { CheckCircle } from "@boxicons/react";
 import * as React from "react";
 
 import { updateWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 
 export const WishlistEditor = ({
@@ -47,32 +50,31 @@ export const WishlistEditor = ({
     <Sheet open onOpenChange={close}>
       <SheetHeader>{newName || "Untitled"}</SheetHeader>
       {isDiscoverable ? (
-        <small className="mt-1 text-muted">
-          <Icon name="solid-check-circle" /> Discoverable
+        <small className="mt-1 block text-muted">
+          <CheckCircle pack="filled" className="size-5" /> Discoverable
         </small>
       ) : null}
 
-      <fieldset>
-        <label htmlFor={`${uid}-name`}>Name</label>
-        <input
+      <Fieldset>
+        <Label htmlFor={`${uid}-name`}>Name</Label>
+        <Input
           id={`${uid}-name`}
           type="text"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onBlur={() => void update()}
         />
-      </fieldset>
-      <fieldset>
-        <label htmlFor={`${uid}-description`}>Description</label>
-        <input
+      </Fieldset>
+      <Fieldset>
+        <Label htmlFor={`${uid}-description`}>Description</Label>
+        <Input
           id={`${uid}-description`}
           type="text"
           value={newDescription}
-          placeholder="Describe your wishlist"
           onChange={(e) => setNewDescription(e.target.value)}
           onBlur={() => void update()}
         />
-      </fieldset>
+      </Fieldset>
     </Sheet>
   );
 };

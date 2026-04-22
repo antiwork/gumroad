@@ -2,6 +2,10 @@ import * as React from "react";
 
 import { NumberInput } from "$app/components/NumberInput";
 import { ToggleSettingRow } from "$app/components/SettingRow";
+import { Fieldset } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
+import { InputGroup } from "$app/components/ui/InputGroup";
+import { Label } from "$app/components/ui/Label";
 
 const DEFAULT_NUMBER_OF_INSTALLMENTS = 2;
 
@@ -39,18 +43,16 @@ export const InstallmentPlanEditor = ({
       onChange={onAllowInstallmentPaymentsChange}
       label="Allow customers to pay in installments"
       dropdown={
-        <fieldset>
+        <Fieldset>
           <NumberInput value={numberOfInstallments} onChange={(value) => onNumberOfInstallmentsChange(value || 0)}>
             {(props) => (
-              <div className="input">
-                <input {...props} type="number" min={2} aria-label="Number of installments" />
-                <label>
-                  <span>equal monthly payments</span>
-                </label>
-              </div>
+              <InputGroup>
+                <Input {...props} type="number" min={2} aria-label="Number of installments" />
+                <Label>equal monthly payments</Label>
+              </InputGroup>
             )}
           </NumberInput>
-        </fieldset>
+        </Fieldset>
       }
     />
   );

@@ -4,8 +4,6 @@ class Admin::UsersController < Admin::BaseController
   include Admin::FetchUser
   include MassTransferPurchases
 
-  skip_before_action :require_admin!, if: :request_from_iffy?, only: %i[suspend_for_fraud_from_iffy mark_compliant_from_iffy flag_for_explicit_nsfw_tos_violation_from_iffy]
-
   before_action :fetch_user, except: %i[block_ip_address]
 
   def show
@@ -29,10 +27,20 @@ class Admin::UsersController < Admin::BaseController
 
   def verify
     @user.verified = !@user.verified
-    @user.save!
+    begin
+      @user.save!
+    rescue => e
+      return render json: { success: false, message: e.message }
+    end
+    if @user.verified
+      begin
+        CreatorMailer.top_creator_announcement(user_id: @user.id).deliver_later
+      rescue => e
+        ErrorNotifier.notify(e)
+        Rails.logger.error("Failed to enqueue top_creator_announcement for user #{@user.id}: #{e.message}")
+      end
+    end
     render json: { success: true }
-  rescue => e
-    render json: { success: false, message: e.message }
   end
 
   def enable
@@ -112,13 +120,6 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: transfer[:success], message: transfer[:message] }, status: transfer[:status]
   end
 
-  def mark_compliant_from_iffy
-    @user.mark_compliant!(author_name: "iffy")
-    render json: { success: true }
-  rescue => e
-    render json: { success: false, message: e.message }
-  end
-
   def suspend_for_fraud
     unless @user.suspended?
       @user.suspend_for_fraud!(author_id: current_user.id)
@@ -131,25 +132,20 @@ class Admin::UsersController < Admin::BaseController
           content: suspension_note
         )
       end
+      create_scheduled_payout_if_requested
     end
     render json: { success: true }
   rescue => e
     render json: { success: false, message: e.message }
   end
 
-  def suspend_for_fraud_from_iffy
-    @user.flag_for_fraud!(author_name: "iffy") unless @user.flagged_for_fraud? || @user.on_probation? || @user.suspended?
-    @user.suspend_for_fraud!(author_name: "iffy") unless @user.suspended?
-    render json: { success: true }
-  rescue => e
-    render json: { success: false, message: e.message }
-  end
+  def schedule_payout
+    return render json: { success: false, message: "User is not suspended." }, status: :unprocessable_content unless @user.suspended?
 
-  def flag_for_explicit_nsfw_tos_violation_from_iffy
-    @user.flag_for_explicit_nsfw_tos_violation!(author_name: "iffy") unless @user.flagged_for_explicit_nsfw?
+    create_scheduled_payout_if_requested
     render json: { success: true }
   rescue => e
-    render json: { success: false, message: e.message }
+    render json: { success: false, message: e.message }, status: :unprocessable_content
   end
 
   def flag_for_fraud
@@ -209,6 +205,25 @@ class Admin::UsersController < Admin::BaseController
   end
 
   private
+    def create_scheduled_payout_if_requested
+      sp_params = params.dig(:scheduled_payout)
+      return if sp_params.blank? || sp_params[:action].blank?
+
+      scheduled_payout = @user.scheduled_payouts.create!(
+        action: sp_params[:action],
+        delay_days: sp_params[:delay_days].presence || 21,
+        payout_amount_cents: @user.unpaid_balance_cents,
+        created_by: current_user
+      )
+
+      @user.comments.create!(
+        author_id: current_user.id,
+        author_name: current_user.name,
+        comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+        content: "Scheduled #{scheduled_payout.action} for #{scheduled_payout.scheduled_at.to_fs(:formatted_date_full_month)} (#{scheduled_payout.delay_days} day delay)"
+      )
+    end
+
     def mass_transfer_purchases_params
       params.require(:mass_transfer_purchases).permit(:new_email)
     end

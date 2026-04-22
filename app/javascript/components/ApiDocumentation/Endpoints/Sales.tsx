@@ -4,6 +4,17 @@ import CodeSnippet from "$app/components/ui/CodeSnippet";
 
 import { ApiEndpoint } from "../ApiEndpoint";
 import { ApiParameter, ApiParameters } from "../ApiParameters";
+import { ApiResponseFields, renderFields } from "../ApiResponseFields";
+import { SALE_FIELDS } from "../responseFieldDefinitions";
+
+const SaleResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "sale", type: "object", description: "The sale object", children: SALE_FIELDS },
+    ])}
+  </ApiResponseFields>
+);
 
 export const GetSales = () => (
   <ApiEndpoint
@@ -23,11 +34,21 @@ export const GetSales = () => (
       <ApiParameter name="product_id" description="(optional) - Filter sales by this product" />
       <ApiParameter name="email" description="(optional) - Filter sales by this email" />
       <ApiParameter name="order_id" description="(optional) - Filter sales by this Order ID" />
+      <ApiParameter name="name" description="(optional) - Filter sales by customer name" />
+      <ApiParameter name="license_key" description="(optional) - Filter sales by license key" />
       <ApiParameter
         name="page_key"
         description="(optional) - A key representing a page of results. It is given in the response as `next_page_key`."
       />
     </ApiParameters>
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        { name: "next_page_url", type: "string", description: "URL for the next page of results" },
+        { name: "next_page_key", type: "string", description: "Key to pass as page_key for the next page" },
+        { name: "sales", type: "array", description: "Array of sale objects", children: SALE_FIELDS },
+      ])}
+    </ApiResponseFields>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/sales \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -35,6 +56,8 @@ export const GetSales = () => (
   -d "after=2020-09-03" \\
   -d "product_id=bfi_30HLgGWL8H2wo_Gzlg==" \\
   -d "email=calvin@gumroad.com" \\
+  -d "name=Calvin" \\
+  -d "license_key=83DB262A-C19D3B06-A5235A6B-8C079166" \\
   -X GET`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">
@@ -100,6 +123,7 @@ export const GetSales = () => (
       "license_key": "83DB262A-C19D3B06-A5235A6B-8C079166",
       "license_id": "bEtKQ3Zu9SgNopem0-ZywA==",
       "license_disabled": false,
+      "license_uses": 3,
       "affiliate": {
         "email": "affiliate@example.com",
         "amount": "$2.50"
@@ -118,6 +142,7 @@ export const GetSale = () => (
     path="/sales/:id"
     description="Retrieves the details of a sale by this user. Available with the 'view_sales' scope."
   >
+    <SaleResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/sales/FO8TXN-dvxYabdavG97Y-Q== \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -183,6 +208,7 @@ export const GetSale = () => (
     "license_key": "83DB262A-C19D3B06-A5235A6B-8C079166",
     "license_id": "bEtKQ3Zu9SgNopem0-ZywA==",
     "license_disabled": false,
+    "license_uses": 3,
     "affiliate": {
       "email": "affiliate@example.com",
       "amount": "$2.50"
@@ -207,6 +233,7 @@ export const MarkSaleAsShipped = () => (
     <ApiParameters>
       <ApiParameter name="tracking_url" description="(optional)" />
     </ApiParameters>
+    <SaleResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/sales/A-m3CDDC5dlrSdKZp0RFhA==/mark_as_shipped \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -277,6 +304,7 @@ export const MarkSaleAsShipped = () => (
     "license_key": "740A36FE-80134D88-9998290C-1B30910C",
     "license_id": "mN7CdHiwHaR9FlxKvF-n-g==",
     "license_disabled": false,
+    "license_uses": 3,
     "sku_id": "6Oo2MGSSagZU5naeWaDaNQ==",
     "sku_external_id": "6Oo2MGSS1gaU5a5eWaDaNQ==",
     "affiliate": {
@@ -302,6 +330,7 @@ export const RefundSale = () => (
         description="(optional) - Amount in cents (in currency of the sale) to be refunded. If set, issue partial refund by this amount. If not set, issue full refund. You can issue multiple partial refunds per sale until it is fully refunded."
       />
     </ApiParameters>
+    <SaleResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/sales/A-m3CDDC5dlrSdKZp0RFhA==/refund \\
   -d "access_token=ACCESS_TOKEN" \\

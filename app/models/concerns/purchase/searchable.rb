@@ -148,6 +148,7 @@ module Purchase::Searchable
       "card_visual" => "paypal_email",
       "subscription_id" => "subscription_id",
       "license_serial" => "license_serial",
+      "purchaser_id" => "purchaser_id",
     }
 
     def search_field_value(field_name)

@@ -93,9 +93,8 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
     visit edit_link_path(product.unique_permalink) + "/content"
 
-    select_disclosure "Upload files" do
-      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
-    end
+    select_disclosure "Upload files"
+    attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
 
     expect(page).to have_embed(name: "Alice's Adventures in Wonderland")
     wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
@@ -202,17 +201,16 @@ describe("Product Edit Scenario", type: :system, js: true) do
       click_on "Upsell"
     end
 
-    # The product itself should be listed but disabled, variants listed with icon
     within_modal do
       find(:combo_box, "Product").click
       product_option = find("[role='option']", text: "Sample product", exact_text: true)
-      expect(product_option).not_to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(product_option["aria-disabled"]).to eq("true")
 
       variant1_option = find("[role='option']", text: "Sample product (#{variant1.name})")
-      expect(variant1_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(variant1_option["aria-disabled"]).to eq("false")
 
       variant2_option = find("[role='option']", text: "Sample product (#{variant2.name})")
-      expect(variant2_option).to have_selector("span.icon.icon-arrow-right-reply"); # icon for variant
+      expect(variant2_option["aria-disabled"]).to eq("false")
     end
 
     discount_amount_cents = 100
@@ -449,6 +447,32 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
     save_change
     expect(product.reload.installment_plan).to be_nil
+  end
+
+  it "allows enabling installment plans for free products with paid variants" do
+    product.installment_plan&.destroy!
+    variant_category = create(:variant_category, link: product, title: "Tier")
+    create(:variant, variant_category: variant_category, name: "Free", price_difference_cents: 0)
+    create(:variant, variant_category: variant_category, name: "Pro", price_difference_cents: 1000)
+
+    visit edit_link_path(product.unique_permalink)
+
+    within_section "Pricing" do
+      fill_in "Amount", with: 0
+    end
+
+    save_change
+    product.reload
+    expect(product.customizable_price).to be false
+
+    within_section "Pricing" do
+      expect(page).to have_unchecked_field("Allow customers to pay what they want", disabled: false)
+      check "Allow customers to pay in installments"
+      fill_in "Number of installments", with: 2
+    end
+
+    save_change
+    expect(product.reload.installment_plan.number_of_installments).to eq(2)
   end
 
   it "allows user to update custom permalink and limit product sales" do
@@ -1176,5 +1200,29 @@ describe("Product Edit Scenario", type: :system, js: true) do
     product.reload
     expect(product.community_chat_enabled?).to be(false)
     expect(product.active_community).to be_nil
+  end
+
+  it "navigates between edit tabs" do
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_text(product.name)
+
+    click_on "Content"
+    expect(page).to have_current_path(%r{/edit/content})
+
+    click_on "Receipt"
+    expect(page).to have_current_path(%r{/edit/receipt})
+
+    click_on "Product"
+    expect(page).to have_current_path(%r{/edit\z})
+  end
+
+  it "loads edit sub-routes directly" do
+    visit "/products/#{product.unique_permalink}/edit/content"
+    expect(page).to have_current_path(%r{/edit/content})
+    expect(page).to have_text(product.name)
+
+    visit "/products/#{product.unique_permalink}/edit/receipt"
+    expect(page).to have_current_path(%r{/edit/receipt})
+    expect(page).to have_text(product.name)
   end
 end

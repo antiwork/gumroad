@@ -42,7 +42,7 @@ class SaveInstallmentService
       @error = e.message
     rescue => e
       @error ||= e.message
-      Bugsnag.notify(e)
+      ErrorNotifier.notify(e)
     end
 
     error.nil?

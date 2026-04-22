@@ -58,8 +58,7 @@
 #
 # @example Admin controller with preloading
 #   def index
-#     @users = User.refund_queue
-#                  .includes(:payments)
+#     @users = User.includes(:payments)
 #                  .with_blocked_attributes_for(:form_email, :form_email_domain)
 #   end
 #

@@ -68,7 +68,7 @@ class Admin::PurchasePresenter
                        quantity: purchase.quantity,
                        refunds: purchase.refunds.map do |refund|
                          {
-                           user: refund.user ? { external_id: refund.user.external_id, name: refund.user.name } : nil,
+                           user: refund.user ? { external_id: refund.user.external_id, name: refund.user.display_name } : nil,
                            status: refund.status.capitalize,
                            created_at: refund.created_at,
                          }
@@ -85,9 +85,9 @@ class Admin::PurchasePresenter
                        subscription: purchase.subscription ? {
                          id: purchase.subscription.id,
                          external_id: purchase.subscription.external_id,
-                         cancelled_at: purchase.subscription.cancelled_at,
                          cancelled_by_buyer: purchase.subscription.cancelled_by_buyer,
-                         ended_at: purchase.subscription.ended_at,
+                         user_requested_cancellation_at: purchase.subscription.user_requested_cancellation_at,
+                         ended_at: purchase.subscription.cancelled_at || purchase.subscription.ended_at,
                          failed_at: purchase.subscription.failed_at,
                        } : nil,
                        email_info: email_info_text,

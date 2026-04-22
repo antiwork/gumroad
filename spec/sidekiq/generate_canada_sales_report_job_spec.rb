@@ -110,7 +110,7 @@ describe GenerateCanadaSalesReportJob do
 
       described_class.new.perform(month, year)
 
-      expect(SlackMessageWorker).to have_enqueued_sidekiq_job("payments", "Canada Sales Fees Reporting", anything, "green")
+      expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Canada Sales Fees Reporting", anything, "green")
 
       temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
       @s3_object.get(response_target: temp_file)

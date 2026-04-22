@@ -1,8 +1,9 @@
+import { FileDetail } from "@boxicons/react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
+import { InlineList } from "$app/components/ui/InlineList";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
@@ -19,11 +20,11 @@ export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
         return (
           <Row key={post.id} role="listitem">
             <RowContent>
-              <Icon name="file-earmark-medical-fill" className="type-icon" />
+              <FileDetail pack="filled" className="type-icon size-5" />
               <div>
                 <div>
                   <h4>{post.name}</h4>
-                  <ul className="inline">
+                  <InlineList>
                     <li>
                       {actionAt.toLocaleDateString(userAgentInfo.locale, {
                         month: "long",
@@ -32,7 +33,7 @@ export const DownloadPagePostList = ({ posts }: { posts: Post[] }) => {
                       })}
                     </li>
                     <li>{formatDistanceToNow(actionAt)} ago</li>
-                  </ul>
+                  </InlineList>
                 </div>
               </div>
             </RowContent>

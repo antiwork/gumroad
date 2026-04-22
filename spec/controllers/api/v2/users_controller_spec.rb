@@ -64,6 +64,15 @@ describe Api::V2::UsersController do
       expect(response.parsed_body["user"]["url"]).to be_present
       expect(response.parsed_body["user"]["email"]).to be_present
       expect(response.parsed_body["user"]["profile_url"]).to be_present
+      expect(response.parsed_body["user"]["profile_picture_url"]).to be_present
+      expect(response.parsed_body["user"]["display_name"]).to be_present
+    end
+
+    it "grants full access with the account scope" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "account")
+      get @action, params: { access_token: token.token }
+      expect(response).to be_successful
+      expect(response.parsed_body["user"]["email"]).to eq(@user.form_email)
       expect(response.parsed_body["user"]["display_name"]).to be_present
     end
   end
@@ -107,6 +116,15 @@ describe Api::V2::UsersController do
           data: @user.sales.successful_or_preorder_authorization_successful
             .where("created_at <= ?", Time.zone.at(@params[:before].to_i)).order("created_at DESC").limit(50).map(&:as_json_for_ifttt)
         }.to_json))
+      end
+
+      it "eager loads associations for multiple sales" do
+        create_list(:purchase, 3, link: @product, seller: @user)
+
+        get @action, params: @params
+
+        expect(response).to be_successful
+        expect(response.parsed_body["data"].length).to eq(4)
       end
     end
   end

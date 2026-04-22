@@ -1,3 +1,4 @@
+import { BookmarkX, DotsHorizontalRounded } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import React from "react";
 import { cast } from "ts-safe-cast";
@@ -5,10 +6,11 @@ import { cast } from "ts-safe-cast";
 import { unfollowWishlist } from "$app/data/wishlists";
 import { assertResponseError } from "$app/utils/request";
 
-import { Icon } from "$app/components/Icons";
 import { Layout } from "$app/components/Library/Layout";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Avatar } from "$app/components/ui/Avatar";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
@@ -68,7 +70,7 @@ export default function WishlistsFollowingPage() {
                       <h4>{wishlist.name}</h4>
                     </a>
                     <a href={wishlist.url} target="_blank" rel="noreferrer">
-                      <small>{wishlist.url}</small>
+                      <small className="block">{wishlist.url}</small>
                     </a>
                   </TableCell>
                   <TableCell>{wishlist.product_count}</TableCell>
@@ -77,7 +79,7 @@ export default function WishlistsFollowingPage() {
                       href={wishlist.creator.profile_url}
                       style={{ display: "flex", alignItems: "center", gap: "var(--spacer-2)" }}
                     >
-                      <img className="user-avatar" src={wishlist.creator.avatar_url} />
+                      <Avatar src={wishlist.creator.avatar_url} />
                       <span>{wishlist.creator.name}</span>
                     </a>
                   </TableCell>
@@ -85,14 +87,14 @@ export default function WishlistsFollowingPage() {
                     <div className="flex flex-wrap gap-3 lg:justify-end">
                       <Popover>
                         <PopoverTrigger aria-label="Actions">
-                          <Icon name="three-dots" />
+                          <DotsHorizontalRounded className="size-5" />
                         </PopoverTrigger>
                         <PopoverContent className="border-0 p-0 shadow-none">
-                          <div role="menu">
-                            <div role="menuitem" className="danger" onClick={() => void destroy(wishlist)}>
-                              <Icon name="bookmark-x" /> Unfollow
-                            </div>
-                          </div>
+                          <Menu>
+                            <MenuItem variant="danger" onClick={() => void destroy(wishlist)}>
+                              <BookmarkX className="size-5" /> Unfollow
+                            </MenuItem>
+                          </Menu>
                         </PopoverContent>
                       </Popover>
                     </div>

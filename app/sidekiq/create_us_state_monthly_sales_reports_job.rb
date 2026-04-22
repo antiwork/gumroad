@@ -149,7 +149,7 @@ class CreateUsStateMonthlySalesReportsJob
         rescue Taxjar::Error::UnprocessableEntity => e
           Rails.logger.info("CreateUSStateSalesReportsJob: Purchase with external ID #{purchase.external_id} was already created as a TaxJar transaction. #{e.class}: #{e.message}")
         rescue Taxjar::Error::BadRequest => e
-          Bugsnag.notify(e)
+          ErrorNotifier.notify(e)
           Rails.logger.info("CreateUSStateSalesReportsJob: Failed to create TaxJar transaction for purchase with external ID #{purchase.external_id}. #{e.class}: #{e.message}")
         end
 
@@ -164,7 +164,7 @@ class CreateUsStateMonthlySalesReportsJob
       s3_object.upload_file(temp_file)
       s3_signed_url = s3_object.presigned_url(:get, expires_in: 1.week.to_i).to_s
 
-      SlackMessageWorker.perform_async("payments", "US Sales Tax Reporting", "#{subdivision.name} reports for #{year}-#{month} are ready:\nGumroad format: #{s3_signed_url}", "green")
+      InternalNotificationWorker.perform_async("payments", "US Sales Tax Reporting", "#{subdivision.name} reports for #{year}-#{month} are ready:\nGumroad format: #{s3_signed_url}", "green")
     ensure
       temp_file.close
     end

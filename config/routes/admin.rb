@@ -52,10 +52,8 @@ namespace :admin do
       post :invalidate_active_sessions
       post :disable_paypal_sales
       post :mark_compliant
-      post :mark_compliant_from_iffy
       post :suspend_for_fraud
-      post :suspend_for_fraud_from_iffy
-      post :flag_for_explicit_nsfw_tos_violation_from_iffy
+      post :schedule_payout
       post :suspend_for_tos_violation
       post :put_on_probation
       post :flag_for_fraud
@@ -73,7 +71,6 @@ namespace :admin do
   resource :block_email_domains, only: [:show, :update]
   resource :unblock_email_domains, only: [:show, :update]
   resource :suspend_users, only: [:show, :update]
-  resource :refund_queue, only: [:show]
   resources :unreviewed_users, only: [:index]
 
   resources :affiliates, only: [:index, :show], param: :external_id, defaults: { format: "html" }
@@ -135,6 +132,14 @@ namespace :admin do
   resources :merchant_accounts, only: [:show], param: :external_id do
     member do
       get :live_attributes
+    end
+  end
+
+  # Scheduled Payouts
+  resources :scheduled_payouts, only: [:index], param: :external_id do
+    member do
+      post :execute
+      post :cancel
     end
   end
 

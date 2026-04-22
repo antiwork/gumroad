@@ -779,6 +779,100 @@ const b = 2;</code></pre>
         expect(@installment.errors.full_messages.to_sentence).to eq("You have to confirm your email address before you can do that.")
       end
     end
+
+    context "content moderation" do
+      it "blocks publishing when ContentModeration::ModerateRecordService.check fails" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["policy violation"])
+        )
+
+        expect { @installment.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(@installment.reload.published_at).to be(nil)
+        expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
+      end
+
+      it "skips the content moderation check for VIP creators" do
+        allow_any_instance_of(User).to receive(:vip_creator?).and_return(true)
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        @installment.publish!
+
+        expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
+      end
+
+      it "publishes successfully when the content moderation check passes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        @installment.publish!
+
+        expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
+      end
+
+      it "clears the publishing flag after publish! completes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        @installment.publish!
+
+        expect(@installment.publishing?).to eq(false)
+      end
+
+      it "clears the publishing flag even when publish! raises" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["bad"])
+        )
+
+        expect { @installment.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(@installment.publishing?).to eq(false)
+      end
+
+      context "when editing an already-published post" do
+        before do
+          allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+          )
+          @installment.publish!
+        end
+
+        it "re-checks moderation when the name changes" do
+          expect(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in name"])
+          )
+
+          @installment.name = "New bad name"
+          expect(@installment.save).to eq(false)
+          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in name")
+        end
+
+        it "re-checks moderation when the message changes" do
+          expect(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in message"])
+          )
+
+          @installment.message = "<p>New bad body</p>"
+          expect(@installment.save).to eq(false)
+          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in message")
+        end
+
+        it "does not re-check moderation when unrelated attributes change" do
+          expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+          @installment.shown_on_profile = !@installment.shown_on_profile
+          @installment.save!
+        end
+      end
+
+      context "when editing a draft post" do
+        it "does not run moderation on name/message edits" do
+          expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+          @installment.update!(name: "Still a draft", message: "<p>Still drafting</p>")
+        end
+      end
+    end
   end
 
   describe "#is_affiliate_product_post?" do
@@ -988,28 +1082,6 @@ const b = 2;</code></pre>
     end
   end
 
-  describe "#trigger_iffy_ingest" do
-    let!(:installment) { create(:installment, name: "Original Name", message: "Original Message") }
-
-    it "does not trigger an iffy ingest job if neither name nor message have changed" do
-      expect do
-        installment.update!(published_at: Time.current)
-      end.not_to change { Iffy::Post::IngestJob.jobs.size }
-    end
-
-    it "triggers an iffy ingest job if the name has changed" do
-      expect do
-        installment.update!(name: "New Name")
-      end.to change { Iffy::Post::IngestJob.jobs.size }.by(1)
-    end
-
-    it "triggers an iffy ingest job if the message has changed" do
-      expect do
-        installment.update!(message: "New Message")
-      end.to change { Iffy::Post::IngestJob.jobs.size }.by(1)
-    end
-  end
-
   describe "#featured_image_url" do
     let(:installment) { create(:installment) }
 
@@ -1121,6 +1193,68 @@ const b = 2;</code></pre>
     it "truncates to 200 characters with word boundaries" do
       installment.message = "a " * 105
       expect(installment.message_snippet).to eq("a " * 98 + "a...")
+    end
+  end
+
+  describe "#delivery_due?" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:membership_product, user: seller) }
+    let(:workflow) { create(:product_workflow, seller:, link: product, published_at: 1.day.ago) }
+    let(:installment) { create(:workflow_installment, workflow:, link: product, published_at: 1.day.ago) }
+    let(:purchase) { create(:membership_purchase, link: product, created_at: 30.days.ago) }
+    let(:subscription) { purchase.subscription }
+
+    context "when installment is not a workflow installment" do
+      let(:installment) { create(:installment, link: product, published_at: 1.day.ago) }
+
+      it "returns true" do
+        expect(installment.delivery_due?(purchase)).to be true
+      end
+    end
+
+    context "when subscription has not been resubscribed" do
+      it "returns true" do
+        expect(installment.delivery_due?(purchase)).to be true
+      end
+    end
+
+    context "when subscription has been resubscribed" do
+      let(:deactivated_at) { 10.days.ago }
+      let(:resubscribed_at) { 2.days.ago }
+
+      before do
+        subscription.update!(deactivated_at: nil)
+        create(:subscription_event, subscription:, event_type: :deactivated, occurred_at: deactivated_at)
+        create(:subscription_event, subscription:, event_type: :restarted, occurred_at: resubscribed_at)
+      end
+
+      context "when delivery time has passed" do
+        before do
+          installment.installment_rule.update!(delayed_delivery_time: 1.day.to_i)
+        end
+
+        it "returns true" do
+          expect(installment.delivery_due?(purchase)).to be true
+        end
+      end
+
+      context "when delivery time has not passed" do
+        before do
+          installment.installment_rule.update!(delayed_delivery_time: 60.days.to_i)
+        end
+
+        it "returns false" do
+          expect(installment.delivery_due?(purchase)).to be false
+        end
+      end
+    end
+
+    context "when purchase has no subscription" do
+      let(:purchase) { create(:purchase, link: product, created_at: 30.days.ago) }
+
+      it "returns true" do
+        expect(installment.delivery_due?(purchase)).to be true
+      end
     end
   end
 end

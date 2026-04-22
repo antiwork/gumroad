@@ -22,6 +22,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     ratings,
     seller_refund_policy_enabled,
     seller_refund_policy,
+    seller,
   } = useProductEditContext();
 
   const url = useProductUrl();
@@ -49,6 +50,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
       name: currentSeller.name ?? "",
       avatar_url: currentSeller.avatarUrl,
       profile_url: Routes.root_url({ host: currentSeller.subdomain }),
+      is_verified: seller.is_verified,
     },
     collaborating_user: product.collaborating_user,
     covers: product.covers,
@@ -128,6 +130,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     analytics: {
       google_analytics_id: null,
       facebook_pixel_id: null,
+      tiktok_pixel_id: null,
       free_sales: false,
     },
     has_third_party_analytics: false,
@@ -159,7 +162,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         avatar_url: currentSeller.avatarUrl,
         name: currentSeller.name ?? "",
         subdomain: currentSeller.subdomain,
-        twitter_handle: "",
+        is_verified: seller.is_verified,
       }}
       hideFollowForm
     >

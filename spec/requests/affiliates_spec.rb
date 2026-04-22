@@ -17,7 +17,7 @@ describe "Affiliates", type: :system, js: true do
     expect(page).to have_selector("[role='status']", text: "$20 off will be applied at checkout (Code FREE)")
     expect(page).to have_selector("[itemprop='price']", text: "$20 $0")
     click_on "I want this!"
-    fill_in("Your email address", with: "test@gumroad.com")
+    fill_in("Email address", with: "test@gumroad.com")
     click_on "Get"
     expect(page).to have_alert(text: "Your purchase was successful!")
   end
@@ -53,6 +53,18 @@ describe "Affiliates", type: :system, js: true do
     ]
     expect(page).to have_current_path("#{affiliates_path}?column=affiliate_user_name&sort=asc")
     expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
+  end
+
+  it "auto-focuses search input when opening search popover" do
+    seller = create(:user)
+    product = create(:product, user: seller, price_cents: 2000)
+    create(:direct_affiliate, seller:, products: [product])
+
+    sign_in seller
+    visit affiliates_path
+
+    select_disclosure "Toggle Search"
+    expect(page).to have_field("Search", focused: true)
   end
 
   it "allows filtering for affiliates" do
@@ -444,7 +456,6 @@ describe "Affiliates", type: :system, js: true do
 
         link = find_link("Add affiliate", inert: true)
         link.hover
-        expect(link[:style]).to eq "pointer-events: none; cursor: not-allowed; opacity: 0.3;"
         expect(link).to have_tooltip(text: "Affiliates with Brazilian Stripe accounts are not supported.")
       end
     end
@@ -912,7 +923,7 @@ describe "Affiliates", type: :system, js: true do
       visit settings_password_path
 
       menu_items = all("a[role='tab']")
-      expected_items = %w[Settings Payments Password Advanced]
+      expected_items = ["Settings", "Payments", "Password and authentication", "Advanced"]
       expect(menu_items.collect(&:text)).to include(*expected_items)
     end
   end

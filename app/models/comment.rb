@@ -66,6 +66,10 @@ class Comment < ApplicationRecord
     end
   end
 
+  def self.normalize_content(text)
+    text.strip.gsub(/(\R){3,}/, '\1\1')
+  end
+
   private
     def commentable_object_exists
       obj_exists = case commentable_type
@@ -84,13 +88,13 @@ class Comment < ApplicationRecord
 
     def content_cannot_contain_adult_keywords
       return if author&.is_team_member?
-      return if !author && author_name == "iffy"
+      return if !author && author_name == ContentModeration::ModerateRecordService::AUTHOR_NAME
 
       errors.add(:base, "Adult keywords are not allowed") if AdultKeywordDetector.adult?(content)
     end
 
     def trim_extra_newlines
-      self.content = content.strip.gsub(/(\R){3,}/, '\1\1')
+      self.content = self.class.normalize_content(content)
     end
 
     def notify_seller_of_new_comment

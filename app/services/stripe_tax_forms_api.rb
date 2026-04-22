@@ -25,7 +25,7 @@ class StripeTaxFormsApi
 
     pdf
   rescue HTTParty::Error => e
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     nil
   end
 
@@ -40,13 +40,14 @@ class StripeTaxFormsApi
       response = Stripe.raw_request(:get, "/v1/tax/forms", params, opts)
       Stripe.deserialize(response.http_body).auto_paging_each do |tax_form|
         year = tax_form[tax_form.type].reporting_year
+        next if tax_forms[year].present? || tax_form[:corrected_by].present?
         tax_forms[year] = tax_form
       end
 
       tax_forms
     end
   rescue Stripe::StripeError => e
-    Bugsnag.notify(e)
+    ErrorNotifier.notify(e)
     {}
   end
 

@@ -2,6 +2,7 @@
 
 class TaxCenterController < Sellers::BaseController
   layout "inertia", only: [:index]
+
   before_action :ensure_tax_center_enabled
 
   def index
@@ -42,13 +43,16 @@ class TaxCenterController < Sellers::BaseController
       send_file pdf_tempfile.path, filename:, type: "application/pdf", disposition: "attachment"
       pdf_tempfile.close
     else
+      tax_form_download_url = current_seller.tax_form_1099_download_url(year:)
+      return redirect_to tax_form_download_url, allow_other_host: true if tax_form_download_url.present?
+
       redirect_to tax_center_path(year:), alert: error_message
     end
   end
 
   private
     def ensure_tax_center_enabled
-      return if Feature.active?(:tax_center, current_seller)
+      return if current_seller.tax_center_enabled?
 
       redirect_to dashboard_path, alert: "Tax center is not enabled for your account."
     end

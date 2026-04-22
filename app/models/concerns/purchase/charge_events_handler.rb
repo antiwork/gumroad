@@ -10,7 +10,7 @@ module Purchase::ChargeEventsHandler
       chargeable = Charge::Chargeable.find_by_stripe_event(event)
 
       if chargeable.nil?
-        Bugsnag.notify("Could not find a Chargeable on Gumroad for Stripe Charge ID: #{event.charge_id}, " \
+        ErrorNotifier.notify("Could not find a Chargeable on Gumroad for Stripe Charge ID: #{event.charge_id}, " \
                   "charge reference: #{event.charge_reference} for event id: #{event.charge_event_id}.")
         return
       end
@@ -43,7 +43,7 @@ module Purchase::ChargeEventsHandler
 
   def handle_event_settlement_declined!(event)
     unless charged_purchases.any?(&:successful?)
-      Bugsnag.notify("Invalid charge event received for failed #{self.class.name} #{external_id} - " \
+      ErrorNotifier.notify("Invalid charge event received for failed #{self.class.name} #{external_id} - " \
                       "received settlement declined notification with ID #{event.charge_event_id}")
       return
     end

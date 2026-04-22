@@ -12,8 +12,129 @@ describe Product::StructuredData do
         product.update!(native_type: "digital")
       end
 
-      it "returns an empty hash" do
-        expect(product.structured_data).to eq({})
+      context "without reviews" do
+        it "returns an empty hash" do
+          expect(product.structured_data).to eq({})
+        end
+      end
+
+      context "with reviews disabled" do
+        before do
+          product.display_product_reviews = false
+          product.save!
+          create(:product_review_stat, link: product, reviews_count: 5, average_rating: 4.5,
+                                       ratings_of_five_count: 4, ratings_of_four_count: 1)
+        end
+
+        it "returns an empty hash" do
+          expect(product.structured_data).to eq({})
+        end
+      end
+
+      context "with reviews enabled and reviews present" do
+        before do
+          product.display_product_reviews = true
+          product.save!
+          create(:product_review_stat, link: product, reviews_count: 12, average_rating: 4.8,
+                                       ratings_of_five_count: 10, ratings_of_four_count: 2)
+        end
+
+        it "returns a Product schema" do
+          data = product.structured_data
+
+          expect(data["@context"]).to eq("https://schema.org")
+          expect(data["@type"]).to eq("Product")
+        end
+
+        it "includes the product name" do
+          expect(product.structured_data["name"]).to eq("My Great Book")
+        end
+
+        it "includes the product URL" do
+          expect(product.structured_data["url"]).to eq(product.long_url)
+        end
+
+        it "includes aggregateRating" do
+          rating = product.structured_data["aggregateRating"]
+
+          expect(rating["@type"]).to eq("AggregateRating")
+          expect(rating["ratingValue"]).to eq(4.8)
+          expect(rating["reviewCount"]).to eq(12)
+          expect(rating["bestRating"]).to eq(5)
+          expect(rating["worstRating"]).to eq(1)
+        end
+
+        it "includes an offer with price" do
+          offer = product.structured_data["offers"]
+
+          expect(offer["@type"]).to eq("Offer")
+          expect(offer["priceCurrency"]).to eq("USD")
+          expect(offer["price"]).to eq(product.price_cents / 100.0)
+          expect(offer["availability"]).to eq(Product::StructuredData::AVAILABILITY_IN_STOCK)
+          expect(offer["url"]).to eq(product.long_url)
+        end
+
+        context "when the product is pay-what-you-want with no minimum" do
+          before do
+            product.price_cents = 0
+            product.customizable_price = true
+            product.save!
+          end
+
+          it "includes price as 0 in the offer" do
+            offer = product.structured_data["offers"]
+
+            expect(offer["price"]).to eq(0.0)
+          end
+        end
+
+        context "when the product is buy-and-rent" do
+          before do
+            product.update!(price_cents: 500, purchase_type: :buy_and_rent, rental_price_cents: 300)
+          end
+
+          it "uses the lower rental price in the offer" do
+            offer = product.structured_data["offers"]
+
+            expect(offer["price"]).to eq(3.0)
+          end
+        end
+
+        context "when the product is a subscription with multiple recurrences" do
+          let(:product) { create(:subscription_product, user:, name: "My Great Book", price_cents: 500) }
+
+          before do
+            create(:price, link: product, recurrence: BasePrice::Recurrence::YEARLY, price_cents: 4000)
+            product.reload
+          end
+
+          it "uses the lowest recurrence price in the offer" do
+            offer = product.structured_data["offers"]
+
+            expect(offer["price"]).to eq(5.0)
+          end
+        end
+
+        context "when the product has a sales limit with remaining stock" do
+          before do
+            product.update!(max_purchase_count: 10)
+          end
+
+          it "sets availability to LimitedAvailability" do
+            expect(product.structured_data["offers"]["availability"]).to eq(Product::StructuredData::AVAILABILITY_LIMITED)
+          end
+        end
+
+        context "when the product is sold out" do
+          before do
+            product.update!(max_purchase_count: 10)
+            allow(product).to receive(:remaining_for_sale_count).and_return(0)
+          end
+
+          it "sets availability to SoldOut" do
+            expect(product.structured_data["offers"]["availability"]).to eq(Product::StructuredData::AVAILABILITY_SOLD_OUT)
+          end
+        end
       end
     end
 
@@ -33,6 +154,16 @@ describe Product::StructuredData do
         data = product.structured_data
 
         expect(data["name"]).to eq("My Great Book")
+      end
+
+      it "includes an offer" do
+        offer = product.structured_data["offers"]
+
+        expect(offer["@type"]).to eq("Offer")
+        expect(offer["priceCurrency"]).to eq("USD")
+        expect(offer["price"]).to eq(product.price_cents / 100.0)
+        expect(offer["availability"]).to eq(Product::StructuredData::AVAILABILITY_IN_STOCK)
+        expect(offer["url"]).to eq(product.long_url)
       end
 
       it "includes the author information" do
@@ -115,6 +246,40 @@ describe Product::StructuredData do
 
             expect(data["description"]).to eq("This is bold text")
           end
+        end
+      end
+
+      context "with reviews enabled and reviews present" do
+        before do
+          product.display_product_reviews = true
+          product.save!
+          create(:product_review_stat, link: product, reviews_count: 8, average_rating: 4.3,
+                                       ratings_of_five_count: 5, ratings_of_four_count: 3)
+        end
+
+        it "includes aggregateRating in the Book schema" do
+          rating = product.structured_data["aggregateRating"]
+
+          expect(rating["@type"]).to eq("AggregateRating")
+          expect(rating["ratingValue"]).to eq(4.3)
+          expect(rating["reviewCount"]).to eq(8)
+        end
+
+        it "keeps the Book type" do
+          expect(product.structured_data["@type"]).to eq("Book")
+        end
+      end
+
+      context "with reviews disabled" do
+        before do
+          product.display_product_reviews = false
+          product.save!
+          create(:product_review_stat, link: product, reviews_count: 8, average_rating: 4.3,
+                                       ratings_of_five_count: 5, ratings_of_four_count: 3)
+        end
+
+        it "does not include aggregateRating" do
+          expect(product.structured_data).not_to have_key("aggregateRating")
         end
       end
 

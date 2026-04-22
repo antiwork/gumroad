@@ -1,11 +1,49 @@
+import { ArrowDown, ArrowUp, ChevronLeft, DotsVerticalRounded, Trash } from "@boxicons/react";
+import { Slot } from "@radix-ui/react-slot";
 import { Editor } from "@tiptap/core";
 import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
+import { classNames } from "$app/utils/classNames";
 
 import { Button } from "$app/components/Button";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
+
+const SelectedContext = React.createContext(false);
+
+export const NodeActionsWrapper = ({
+  selected = false,
+  isEditable = true,
+  asChild,
+  className,
+  children,
+  ...rest
+}: {
+  selected?: boolean;
+  isEditable?: boolean;
+  asChild?: boolean;
+} & React.HTMLAttributes<HTMLDivElement>) => {
+  const Component = asChild ? Slot : "div";
+  return (
+    <SelectedContext.Provider value={selected}>
+      <Component
+        className={classNames(
+          isEditable && [
+            "relative before:absolute before:[inset:0_100%_0_-3rem] before:content-['']",
+            "[&:hover>[data-actions-menu]]:lg:block",
+            "[&:has([data-child-area]:hover)>[data-actions-menu]]:lg:hidden",
+          ],
+          selected && "relative rounded outline-2 outline-accent [&_*::selection]:bg-transparent",
+          className,
+        )}
+        {...rest}
+      >
+        {children}
+      </Component>
+    </SelectedContext.Provider>
+  );
+};
 
 export const NodeActionsMenu = ({
   editor,
@@ -16,57 +54,56 @@ export const NodeActionsMenu = ({
 }) => {
   const [open, setOpen] = React.useState(false);
   const [selectedActionIndex, setSelectedActionIndex] = React.useState<number | null>(null);
+  const selected = React.useContext(SelectedContext);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <div className="actions-menu">
+      <div
+        data-actions-menu
+        className={classNames(
+          "absolute bottom-4 left-0 z-1 text-base lg:top-6 lg:bottom-auto lg:-left-2 lg:-translate-x-full",
+          !selected && !open && "lg:hidden",
+        )}
+      >
         <PopoverAnchor>
           <PopoverTrigger aria-label="Actions" data-drag-handle draggable asChild>
-            <Button small color="filled">
-              <Icon name="outline-drag" />
+            <Button size="sm" color="filled" className="cursor-move">
+              <DotsVerticalRounded pack="filled" className="size-5" />
             </Button>
           </PopoverTrigger>
         </PopoverAnchor>
-        <PopoverContent
-          sideOffset={4}
-          className="border-0 p-0 shadow-none"
-          onInteractOutside={(e) => e.preventDefault()}
-        >
-          <div role="menu">
+        <PopoverContent usePortal sideOffset={4} className="border-0 p-0 shadow-none">
+          <Menu>
             {actions && selectedActionIndex !== null ? (
               <>
-                <div onClick={() => setSelectedActionIndex(null)} role="menuitem">
-                  <Icon name="outline-cheveron-left" />
+                <MenuItem onClick={() => setSelectedActionIndex(null)}>
+                  <ChevronLeft className="size-5" />
                   <span>Back</span>
-                </div>
+                </MenuItem>
                 {assertDefined(actions[selectedActionIndex]).menu(() => setOpen(false))}
               </>
             ) : (
               <>
-                <div onClick={() => editor.commands.moveNodeUp()} role="menuitem">
-                  <Icon name="arrow-up" />
+                <MenuItem onClick={() => editor.commands.moveNodeUp()}>
+                  <ArrowUp className="size-5" />
                   <span>Move up</span>
-                </div>
-                <div onClick={() => editor.commands.moveNodeDown()} role="menuitem">
-                  <Icon name="arrow-down" />
+                </MenuItem>
+                <MenuItem onClick={() => editor.commands.moveNodeDown()}>
+                  <ArrowDown className="size-5" />
                   <span>Move down</span>
-                </div>
+                </MenuItem>
                 {actions?.map(({ item }, index) => (
-                  <div key={index} onClick={() => setSelectedActionIndex(index)} role="menuitem">
+                  <MenuItem key={index} onClick={() => setSelectedActionIndex(index)}>
                     {item()}
-                  </div>
+                  </MenuItem>
                 ))}
-                <div
-                  style={{ color: "rgb(var(--danger))" }}
-                  onClick={() => editor.commands.deleteSelection()}
-                  role="menuitem"
-                >
-                  <Icon name="trash2" />
+                <MenuItem variant="danger" onClick={() => editor.commands.deleteSelection()}>
+                  <Trash className="size-5" />
                   <span>Delete</span>
-                </div>
+                </MenuItem>
               </>
             )}
-          </div>
+          </Menu>
         </PopoverContent>
       </div>
     </Popover>

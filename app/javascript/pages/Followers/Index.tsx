@@ -1,3 +1,4 @@
+import { ArrowInDownSquareHalf, Link } from "@boxicons/react";
 import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import { cast } from "ts-safe-cast";
@@ -7,7 +8,6 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { EmailsLayout } from "$app/components/EmailsPage/Layout";
 import { ExportSubscribersPopover } from "$app/components/Followers/ExportSubscribersPopover";
-import { Icon } from "$app/components/Icons";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -45,6 +45,9 @@ export default function FollowersPage() {
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [selectedFollowerId, setSelectedFollowerId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState(email);
+  const hasSearchableContent = followers.length > 0 || searchQuery.length > 0;
+  const isSearchVisible = React.useRef(hasSearchableContent);
+  isSearchVisible.current ||= hasSearchableContent;
   const selectedFollower = followers.find((follower) => follower.id === selectedFollowerId);
 
   const updateSearch = useDebouncedCallback((email: string) => {
@@ -88,15 +91,15 @@ export default function FollowersPage() {
       selectedTab="subscribers"
       actions={
         <>
-          {(followers.length > 0 || searchQuery.length > 0) && (
+          {isSearchVisible.current ? (
             <Search onSearch={setSearchQuery} value={searchQuery} placeholder="Search followers" />
-          )}
+          ) : null}
           <Popover>
             <PopoverAnchor>
               <WithTooltip tip="Export" position="bottom">
                 <PopoverTrigger aria-label="Export" asChild>
-                  <Button>
-                    <Icon aria-label="Download" name="download" />
+                  <Button size="icon">
+                    <ArrowInDownSquareHalf aria-label="Download" className="size-5" />
                   </Button>
                 </PopoverTrigger>
               </WithTooltip>
@@ -112,7 +115,7 @@ export default function FollowersPage() {
               text={Routes.custom_domain_subscribe_url({ host: currentSeller.subdomain })}
             >
               <Button>
-                <Icon name="link" />
+                <Link className="size-5" />
                 Share subscribe page
               </Button>
             </CopyToClipboard>

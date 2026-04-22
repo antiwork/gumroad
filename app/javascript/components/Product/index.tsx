@@ -1,3 +1,4 @@
+import { Star } from "@boxicons/react";
 import { EditorContent } from "@tiptap/react";
 import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
@@ -30,26 +31,25 @@ import {
   CartItem,
   CartItemEnd,
   CartItemFooter,
+  CartItemList,
   CartItemMain,
   CartItemMedia,
   CartItemTitle,
-  CartItemList,
 } from "$app/components/CartItemList";
-import { Icon } from "$app/components/Icons";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import {
-  Option,
-  ConfigurationSelector,
-  Rental,
-  Recurrences,
-  PriceSelection,
   applySelection,
-  PurchasingPowerParityDetails,
+  ConfigurationSelector,
   ConfigurationSelectorHandle,
   getMaxQuantity,
+  Option,
+  PriceSelection,
+  PurchasingPowerParityDetails,
+  Recurrences,
+  Rental,
 } from "$app/components/Product/ConfigurationSelector";
 import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { CtaButton } from "$app/components/Product/CtaButton";
@@ -57,12 +57,13 @@ import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExp
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { ShareSection } from "$app/components/Product/ShareSection";
+import { SubscriptionChoiceModal } from "$app/components/Product/SubscriptionChoiceModal";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
 import { RatingStars } from "$app/components/RatingStars";
 import { Review as ReviewComponent } from "$app/components/Review";
-import { ReviewForm, Review as FormReview } from "$app/components/ReviewForm";
+import { Review as FormReview, ReviewForm } from "$app/components/ReviewForm";
 import { useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
@@ -76,7 +77,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 
-export type Seller = { id: string; name: string; avatar_url: string; profile_url: string };
+export type Seller = { id: string; name: string; avatar_url: string; profile_url: string; is_verified: boolean };
 
 type RefundPolicy = {
   title: string;
@@ -257,6 +258,8 @@ export const Product = ({
   disableAnalytics?: boolean;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);
+  const [checkoutUrlForModal, setCheckoutUrlForModal] = React.useState<string | null>(null);
+  const loggedInUser = useLoggedInUser();
   const descriptionEditor = useRichTextEditor({
     // delay initialization to avoid errors in SSR
     initialValue: pageLoaded ? product.description_html : null,
@@ -336,6 +339,7 @@ export const Product = ({
       name={product.seller.name}
       profileUrl={product.seller.profile_url}
       avatarUrl={product.seller.avatar_url}
+      isTopCreator={product.seller.is_verified}
     />
   ) : null;
 
@@ -425,7 +429,7 @@ export const Product = ({
                       </CartItemTitle>
                       {bundleProduct.ratings ? (
                         <div className="line-clamp-1 flex shrink-0 items-center gap-1" aria-label="Rating">
-                          <Icon name="solid-star" />
+                          <Star pack="filled" className="size-5" />
                           {`${bundleProduct.ratings.average.toFixed(1)} (${bundleProduct.ratings.count})`}
                         </div>
                       ) : null}
@@ -579,7 +583,19 @@ export const Product = ({
             label={ctaLabel}
             showInstallmentPlanNotes
             onClick={(e) => {
-              if (!validate()) e.preventDefault();
+              if (!validate()) {
+                e.preventDefault();
+                return;
+              }
+              if (
+                loggedInUser &&
+                purchase &&
+                (purchase.membership || purchase.subscription_has_lapsed) &&
+                product.is_recurring_billing
+              ) {
+                e.preventDefault();
+                setCheckoutUrlForModal(e.currentTarget.href);
+              }
             }}
           />
           {product.sales_count !== null ? (
@@ -627,6 +643,13 @@ export const Product = ({
         </section>
         {product.ratings ? <Reviews ratings={product.ratings} productId={product.id} seller={product.seller} /> : null}
       </section>
+      {purchase && (purchase.membership || purchase.subscription_has_lapsed) && product.is_recurring_billing ? (
+        <SubscriptionChoiceModal
+          purchase={purchase}
+          checkoutUrl={checkoutUrlForModal ?? ""}
+          onClose={() => setCheckoutUrlForModal(null)}
+        />
+      ) : null}
     </article>
   );
 };
@@ -736,7 +759,11 @@ export const RatingsHistogramRow = ({ rating, percentage }: { rating: number; pe
   return (
     <>
       <div>{label}</div>
-      <meter aria-label={label} value={percentage / 100} />
+      <meter
+        aria-label={label}
+        value={percentage / 100}
+        className="h-[1lh] w-full appearance-none rounded border border-border bg-none [&::-moz-meter-bar]:rounded [&::-moz-meter-bar]:[background:var(--color-accent)] [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded [&::-webkit-meter-optimum-value]:[background:var(--color-accent)]"
+      />
       <div>{formattedPercentage}</div>
     </>
   );
@@ -778,12 +805,12 @@ const Reviews = ({
       <header className="flex items-center justify-between">
         <h3>Ratings</h3>
         <div className="flex shrink-0 items-center gap-1">
-          <Icon name="solid-star" />
+          <Star pack="filled" className="size-5" />
           <div className="rating-average">{ratings.average}</div>(
           {`${formatOrderOfMagnitude(ratings.count, 1)} ${ratings.count === 1 ? "rating" : "ratings"}`})
         </div>
       </header>
-      <div itemProp="aggregateRating" itemType="https://schema.org/AggregateRating" itemScope hidden>
+      <div itemProp="aggregateRating" itemType="https://schema.org/AggregateRating" itemScope className="hidden">
         <div itemProp="reviewCount">{ratings.count}</div>
         <div itemProp="ratingValue">{ratings.average}</div>
       </div>
@@ -836,9 +863,9 @@ const Review = ({
 );
 
 export const RatingsSummary = ({ ratings, className }: { ratings: Ratings; className?: string }) => (
-  <div className={classNames("flex shrink-0 items-center gap-1", className)}>
+  <div className={classNames("flex shrink-0 items-center", className)}>
     <RatingStars rating={ratings.average} />
-    <span className="rating-number">
+    <span className="rating-number ml-1">
       {ratings.count} {ratings.count === 1 ? "rating" : "ratings"}
     </span>
   </div>

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::SalesController < Api::V2::BaseController
+  include CurrencyHelper
   before_action(only: [:index, :show]) { doorkeeper_authorize! :view_sales }
   before_action(only: [:mark_as_shipped]) { doorkeeper_authorize! :mark_sales_as_shipped }
   before_action(only: [:refund]) { doorkeeper_authorize! :refund_sales, :edit_sales }
@@ -23,6 +24,8 @@ class Api::V2::SalesController < Api::V2::BaseController
     end
 
     email = params[:email].present? ? params[:email].strip : nil
+    name = params[:name].present? ? params[:name].strip : nil
+    license_key = params[:license_key].present? ? params[:license_key].strip : nil
 
     if params[:product_id].present?
       product_id = ObfuscateIds.decrypt(params[:product_id])
@@ -40,7 +43,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     end
 
     if params[:page] # DEPRECATED
-      filtered_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, root_scope: current_resource_owner.sales)
+      filtered_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, root_scope: current_resource_owner.sales)
       begin
         timeout_s = ($redis.get(RedisKey.api_v2_sales_deprecated_pagination_query_timeout) || 15).to_i
         WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
@@ -68,7 +71,7 @@ class Api::V2::SalesController < Api::V2::BaseController
       where_page_data = ["created_at <= ? and id < ?", last_purchase_created_at, last_purchase_id]
     end
 
-    paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:)
+    paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
     subquery_filters = ->(query) {
       query.where(seller_id: current_resource_owner.id).where(where_page_data).order(created_at: :desc, id: :desc).limit(RESULTS_PER_PAGE + 1)
     }
@@ -111,7 +114,7 @@ class Api::V2::SalesController < Api::V2::BaseController
       return error_with_sale(purchase)
     end
 
-    amount = params[:amount_cents].to_i / 100.0 if params[:amount_cents].present?
+    amount = params[:amount_cents].to_i / unit_scaling_factor(purchase.displayed_price_currency_type).to_f if params[:amount_cents].present?
 
     if purchase.refund!(refunding_user_id: current_resource_owner.id, amount:)
       success_with_sale(purchase.as_json(version: 2))
@@ -137,13 +140,15 @@ class Api::V2::SalesController < Api::V2::BaseController
       error_with_object(:sale, sale)
     end
 
-    def filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, root_scope: Purchase)
+    def filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name: nil, license_key: nil, root_scope: Purchase)
       sales = root_scope
       sales = sales.where("created_at >= ?", start_date) if start_date
       sales = sales.where("created_at < ?", end_date) if end_date
       sales = sales.where(email:) if email.present?
       sales = sales.where(link_id: product_id) if product_id.present?
       sales = sales.where(id: purchase_id) if purchase_id.present?
+      sales = sales.where("full_name LIKE ?", "%#{Purchase.sanitize_sql_like(name)}%") if name.present?
+      sales = sales.where(id: License.where(serial: license_key.upcase).select(:purchase_id)) if license_key.present?
       sales.order(created_at: :desc, id: :desc)
     end
 
