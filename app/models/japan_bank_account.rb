@@ -14,10 +14,6 @@ class JapanBankAccount < BankAccount
   ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{4,8}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
-  # \p{Katakana} misses the script-Common marks ー (U+30FC) and ・ (U+30FB), which appear in real
-  # names and must be allowed explicitly. U+FF65-U+FF9F covers half-width katakana. U+3000 is the
-  # full-width space used between katakana names; ASCII space is only valid in the Latin variant
-  # because Stripe rejects it inside katakana.
   KATAKANA_NAME_FORMAT_REGEX = /\A[\p{Katakana}ー・\uFF65-\uFF9F\u3000]+\z/
   private_constant :KATAKANA_NAME_FORMAT_REGEX
 
@@ -31,8 +27,6 @@ class JapanBankAccount < BankAccount
   validate :validate_bank_code
   validate :validate_branch_code
   validate :validate_account_number
-  # `if:` lets the inherited presence validator own blank input; `unless: :deleted?` lets
-  # pre-validator invalid names still be soft-deleted.
   validate :validate_account_holder_full_name,
            if: -> { account_holder_full_name.present? },
            unless: :deleted?

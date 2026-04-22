@@ -4,18 +4,11 @@ class HandleNewBankAccountWorker
   include Sidekiq::Job
   sidekiq_options retry: 10, queue: :default
 
-  # Only the worker raises on unknown sync failures; inline callers (webhook path) ignore the
-  # return so an unclassified Stripe error can't trigger a retry of the whole webhook event.
-  # Recording a single admin breadcrumb is deferred to `sidekiq_retries_exhausted` so a transient
-  # Stripe outage doesn't paper the user's admin profile with one note per retry.
   sidekiq_retries_exhausted do |msg, _exception|
     bank_account_id = msg["args"].first
     bank_account = BankAccount.find_by(id: bank_account_id)
     next unless bank_account
 
-    # The Stripe exception class/message isn't preserved through Sidekiq's retry mechanism
-    # (the worker re-raises a generic RuntimeError), so callers needing root cause look in
-    # Sentry — the sync method called ErrorNotifier.notify on every failed attempt.
     content = "Stripe bank sync failed and exhausted Sidekiq retries for bank_account_id=" \
               "#{bank_account_id}. See Sentry for the underlying Stripe error."
     begin

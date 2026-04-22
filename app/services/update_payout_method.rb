@@ -119,11 +119,6 @@ class UpdatePayoutMethod
   end
 
   def process
-    # Card creation hits Stripe — do it before acquiring the user row lock so the DB lock doesn't
-    # span external I/O that can be slow under API degradation. Snapshot the active bank id before
-    # prep so we can detect a concurrent payout-method change that committed while our Stripe call
-    # was in flight — otherwise a slow card request could overtake a later-submitted fast request
-    # and silently overwrite its result.
     credit_card = nil
     baseline_active_bank_id = nil
     if params[:card]
@@ -132,11 +127,6 @@ class UpdatePayoutMethod
       return error if error
     end
 
-    # `with_lock` serializes concurrent payout-method changes so overlapping requests can't each
-    # mark the same old bank deleted and save a new row, leaving multiple alive rows. The block
-    # returns its value rather than using `return`, which would roll back the transaction on
-    # non-local exit in Rails 7+. Sidekiq enqueues are wrapped in `after_commit` so their workers
-    # can't race the transaction and observe pre-commit or rolled-back state.
     user.with_lock do
       if credit_card
         if user.active_bank_account&.id != baseline_active_bank_id
@@ -161,7 +151,6 @@ class UpdatePayoutMethod
         (params[:bank_account][:account_holder_full_name].present? || params[:bank_account][:account_number].present?)
     end
 
-    # Returns [credit_card, nil] on success, [nil, error_hash] on failure.
     def prepare_credit_card
       chargeable = ChargeProcessor.get_chargeable_for_params(params[:card], nil)
       return [nil, { error: :check_card_information_prompt }] if chargeable.nil?
@@ -222,9 +211,6 @@ class UpdatePayoutMethod
       return { success: true } if current_active.blank? || current_active.is_a?(CardBankAccount)
 
       if current_active.account_holder_full_name == params[:bank_account][:account_holder_full_name]
-        # Name unchanged. If the stored value itself is invalid (e.g. a pre-validator record),
-        # surface that so creators can't silently re-submit bad data. Scoped to the name key so
-        # an unrelated latent failure (e.g. bank_code) doesn't get reported from this path.
         current_active.valid?
         return bank_account_error_for_attribute(current_active, :account_holder_full_name) if current_active.errors[:account_holder_full_name].any?
         return { success: true }
@@ -272,7 +258,6 @@ class UpdatePayoutMethod
       assert_single_alive_bank_account!
     end
 
-    # Asserts post-condition to surface pre-existing multi-alive corruption loudly instead of deepening it.
     def assert_single_alive_bank_account!
       alive_count = user.bank_accounts.alive.count
       raise "Invariant violation: expected 1 alive bank account for user #{user.id}, found #{alive_count}" if alive_count != 1

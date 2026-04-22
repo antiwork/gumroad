@@ -932,7 +932,6 @@ const BankAccountSection = ({
     }
   }, []);
 
-  // Avoid flashing a red error on page load for creators whose stored name predates this validator.
   const [holderNameTouched, setHolderNameTouched] = React.useState(false);
   const jpHolderNameClientError = (() => {
     if (user.country_code !== "JP") return null;

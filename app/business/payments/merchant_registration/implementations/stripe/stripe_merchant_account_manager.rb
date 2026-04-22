@@ -253,12 +253,6 @@ module StripeMerchantAccountManager
     end
   end
 
-  # Returns a symbol; never raises for Stripe errors. Only :stripe_unknown_error triggers a
-  # Sidekiq retry in the worker — deterministic 4xx outcomes are terminal. Inline callers (webhook)
-  # ignore the return so a Stripe error can't cascade into redelivery of the whole webhook event.
-  #
-  # Outcomes: :synced, :noop_metadata_match, :invalid_account_holder_name, :invalid_bank_account,
-  # :stripe_invalid_request, :stripe_unknown_error.
   def self.update_bank_account(user, passphrase:)
     validate_for_update(user)
 
@@ -290,22 +284,15 @@ module StripeMerchantAccountManager
       return :invalid_bank_account
     end
 
-    # InvalidRequestError is a deterministic HTTP 400; retrying produces the same response and
-    # just spams Sentry / admin breadcrumbs. Treat unclassified ones as terminal.
     ErrorNotifier.notify(e)
     :stripe_invalid_request
   rescue Stripe::StripeError => e
-    # Umbrella catch so transient errors (APIConnection/RateLimit/CardError) don't escape into the
-    # webhook path; retry is the worker's responsibility. Breadcrumb recording is deferred to the
-    # worker's retries-exhausted callback — otherwise each Sidekiq retry spams an identical note.
     Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating bank account #{bank_account&.id} for stripe account #{stripe_account&.inspect}"
     ErrorNotifier.notify(e)
     :stripe_unknown_error
   end
 
   private_class_method
-  # Must never raise — an add_payout_note failure here would escape the surrounding rescue and
-  # leak a non-Stripe exception into the webhook caller, breaking the symbol contract.
   def self.record_bank_sync_failure_note(user, error)
     code = error.respond_to?(:code) ? error.code : nil
     user.add_payout_note(content: "Stripe bank sync failed: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")
@@ -810,8 +797,6 @@ module StripeMerchantAccountManager
         fields_needed.delete_if { |field_needed| field_needed[0] == UserComplianceInfoFields::BANK_ACCOUNT }
       elsif card_account_needs_syncing
         result = update_bank_account(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
-        # The worker only uses this record to reload the user, then syncs whichever bank is active
-        # when it runs. Capture once so a concurrent soft-delete can't nil out a second lookup.
         active_bank_account = user.active_bank_account
         if result == :stripe_unknown_error && active_bank_account
           HandleNewBankAccountWorker.perform_in(5.seconds, active_bank_account.id)
