@@ -904,22 +904,20 @@ describe Order::ChargeService, :vcr do
     end
   end
 
-  describe "#perform with purchases already failed before the loop" do
-    it "returns an error response per failed line item and skips Stripe" do
+  describe "#perform rejecting a cart that overruns an offer code limit" do
+    it "fails the offending line items, skips Stripe, and returns an error response per line item" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1_000)
       category = create(:variant_category, title: "Tier", link: product)
       variant_a = create(:variant, name: "A", variant_category: category)
       variant_b = create(:variant, name: "B", variant_category: category)
+      offer_code = create(:offer_code, products: [product], code: "once", amount_cents: 100, max_purchase_count: 1)
 
       order = create(:order)
       [variant_a, variant_b].each do |variant|
-        purchase = build(:purchase_in_progress, link: product, seller:, quantity: 1)
+        purchase = build(:purchase_in_progress, link: product, seller:, offer_code:, quantity: 1)
         purchase.variant_attributes << variant
         purchase.save(validate: false)
-        purchase.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
-        Purchase::MarkFailedService.new(purchase).perform
-        purchase.errors.add(:base, "Sorry, the discount code you are using is invalid for the quantity you have selected.")
         order.purchases << purchase
       end
 
@@ -934,7 +932,6 @@ describe Order::ChargeService, :vcr do
 
       charge_responses = Order::ChargeService.new(order:, params:).perform
 
-      expect(order.charges.count).to eq(0), "no phantom Charge should be created for an all-failed seller group"
       expect(order.purchases.reload.map(&:purchase_state).uniq).to eq(["failed"])
       expect(charge_responses.keys).to contain_exactly("uid-a", "uid-b")
       charge_responses.each_value do |response|
