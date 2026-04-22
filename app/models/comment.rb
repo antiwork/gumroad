@@ -88,7 +88,7 @@ class Comment < ApplicationRecord
 
     def content_cannot_contain_adult_keywords
       return if author&.is_team_member?
-      return if !author && (author_name == ContentModeration::ModerateRecordService::AUTHOR_NAME || author_name == "iffy")
+      return if !author && author_name == ContentModeration::ModerateRecordService::AUTHOR_NAME
 
       errors.add(:base, "Adult keywords are not allowed") if AdultKeywordDetector.adult?(content)
     end

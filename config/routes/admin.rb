@@ -52,11 +52,8 @@ namespace :admin do
       post :invalidate_active_sessions
       post :disable_paypal_sales
       post :mark_compliant
-      post :mark_compliant_from_iffy
       post :suspend_for_fraud
-      post :suspend_for_fraud_from_iffy
       post :schedule_payout
-      post :flag_for_explicit_nsfw_tos_violation_from_iffy
       post :suspend_for_tos_violation
       post :put_on_probation
       post :flag_for_fraud
