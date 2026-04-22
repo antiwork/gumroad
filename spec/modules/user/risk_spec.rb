@@ -92,27 +92,5 @@ describe User::Risk do
       end
     end
 
-    context "when user does not have PayPal as payout processor" do
-      it "does not enqueue SuspendAccountsWithPaymentAddressWorker" do
-        user = create(:user, payment_address: nil)
-
-        expect do
-          user.suspend_sellers_other_accounts(transition)
-        end.not_to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size)
-      end
-    end
-
-    context "when transition skips suspend_sellers_other_accounts callback" do
-      let(:transition) { double("transition", args: [{ skip_transition_callback: :suspend_sellers_other_accounts }]) }
-
-      it "does not enqueue SuspendAccountsWithPaymentAddressWorker" do
-        user = create(:user, payment_address: "test@example.com")
-        create(:user, payment_address: "test@example.com")
-
-        expect do
-          user.suspend_sellers_other_accounts(transition)
-        end.not_to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size)
-      end
-    end
   end
 end

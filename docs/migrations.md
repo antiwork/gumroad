@@ -70,16 +70,16 @@ cd nomad/production && ./start_generic_web.sh
 
 This will output an URL. Open the URL and note the client IP address from the hostname:
 
-![Untitled](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/c3806a61-90ab-45e7-b5d9-2b25f1dff077/Untitled.png)
+![Generic web URL showing client IP in hostname](./images/migrations/generic-web-url-client-ip.png)
 
 SSH into the server and open the Rails console as follows:
 
 ```bash
-INSTANCE_IP=10.1.x.x COMMAND="screen -adrAR" ./console.sh
+INSTANCE_IP=10.1.x.x COMMAND="screen -adR" ./console.sh
 bundle exec rails c
 ```
 
-This will stay running even if your connection is interrupted or if somebody deploys to production in between. If you get disconnected, run the same `INSTANCE_IP=10.1.x.x COMMAND="screen -adrAR" ./console.sh` command again to reconnect to the terminal.
+This will stay running even if your connection is interrupted or if somebody deploys to production in between. If you get disconnected, run the same `INSTANCE_IP=10.1.x.x COMMAND="screen -adR" ./console.sh` command again to reconnect to the terminal.
 
 Once the task is finished running, you can stop the `web_server_generic` instance as follows:
 
