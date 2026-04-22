@@ -272,6 +272,18 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "includes invoice_url in the response" do
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]["invoice_url"]).to eq(
+          Rails.application.routes.url_helpers.new_purchase_invoice_url(
+            @purchase.external_id,
+            email: @purchase.email,
+            host: UrlService.domain_with_protocol
+          )
+        )
+      end
+
       it "includes license_uses in the response for a purchase with a license key" do
         @product.update!(is_licensed: true)
         purchase_with_license = create(:purchase, :with_license, purchaser: @purchaser, link: @product)

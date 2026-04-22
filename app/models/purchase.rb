@@ -686,6 +686,7 @@ class Purchase < ApplicationRecord
       can_revoke_access: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).revoke_access? : nil,
       can_undo_revoke_access: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).undo_revoke_access? : nil,
       can_update: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).update? : nil,
+      invoice_url: (invoice_url if version == 2 && has_invoice?),
       upsell: upsell_purchase&.as_json,
       paypal_refund_expired: paypal_refund_expired?
     ).delete_if { |_, v| v.nil? }
