@@ -208,7 +208,17 @@ const CustomerDetailPage = ({
         showTitleOnMobile
         title={
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/customers" aria-label="Back to customers" className="mr-4 hidden no-underline sm:inline">
+            <Link
+              href="/customers"
+              aria-label="Back to customers"
+              className="mr-4 hidden no-underline sm:inline"
+              onClick={(e) => {
+                if (window.history.length <= 1) return;
+                if (document.referrer && new URL(document.referrer).origin !== window.location.origin) return;
+                e.preventDefault();
+                window.history.back();
+              }}
+            >
               ←
             </Link>
             {customer.product.name}
@@ -693,12 +703,15 @@ const CustomerDetailPage = ({
         ) : null}
         {commission ? (
           <div className="break-inside-avoid">
-            <CommissionSection commission={commission} onChange={(commission) => {
-              updateCustomer({ commission });
-              if (commission.status === "completed") {
-                void getCharges(customer.id, customer.email).then(setCharges);
-              }
-            }} />
+            <CommissionSection
+              commission={commission}
+              onChange={(commission) => {
+                updateCustomer({ commission });
+                if (commission.status === "completed") {
+                  void getCharges(customer.id, customer.email).then(setCharges);
+                }
+              }}
+            />
           </div>
         ) : null}
         {emails.length !== 0 ? (
@@ -765,20 +778,23 @@ const CustomerDetailPage = ({
           </Card>
         ) : null}
         <div className="break-inside-avoid">
-          <Deferred data={["missed_posts"]} fallback={
-            <Card asChild>
-              <section>
-                <CardContent asChild>
-                  <header>
-                    <h3 className="grow">Send missed posts</h3>
-                  </header>
-                </CardContent>
-                <CardContent>
-                  <LoadingSpinner className="mx-auto size-8" />
-                </CardContent>
-              </section>
-            </Card>
-          }>
+          <Deferred
+            data={["missed_posts"]}
+            fallback={
+              <Card asChild>
+                <section>
+                  <CardContent asChild>
+                    <header>
+                      <h3 className="grow">Send missed posts</h3>
+                    </header>
+                  </CardContent>
+                  <CardContent>
+                    <LoadingSpinner className="mx-auto size-8" />
+                  </CardContent>
+                </section>
+              </Card>
+            }
+          >
             {missedPosts.length !== 0 ? (
               <Card asChild>
                 <section>
@@ -811,7 +827,10 @@ const CustomerDetailPage = ({
                   {shownMissedPosts < missedPosts.length ? (
                     <CardContent asChild>
                       <section>
-                        <Button onClick={() => setShownMissedPosts((prev) => prev + PAGE_SIZE)} className="grow basis-0">
+                        <Button
+                          onClick={() => setShownMissedPosts((prev) => prev + PAGE_SIZE)}
+                          className="grow basis-0"
+                        >
                           Show more
                         </Button>
                       </section>

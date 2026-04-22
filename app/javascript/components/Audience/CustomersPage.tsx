@@ -1,5 +1,5 @@
 import { ArrowInDownSquareHalf, MenuFilter, Truck } from "@boxicons/react";
-import { router } from "@inertiajs/react";
+import { router, useRemember } from "@inertiajs/react";
 import cx from "classnames";
 import { lightFormat, subMonths } from "date-fns";
 import { format } from "date-fns-tz";
@@ -72,26 +72,27 @@ const CustomersPage = ({
   const currentSeller = useCurrentSeller();
   const userAgentInfo = useUserAgentInfo();
 
-  const [{ customers, pagination, count }, setState] = React.useState<{
+  const [{ customers, pagination, count }, setState] = useRemember<{
     customers: Customer[];
     pagination: PaginationProps | null;
     count: number;
-  }>(initialState);
+  }>(initialState, "CustomersPage:state");
   const [isLoading, setIsLoading] = React.useState(false);
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
 
   const uid = React.useId();
 
-  const [includedItems, setIncludedItems] = React.useState<Item[]>(
+  const [includedItems, setIncludedItems] = useRemember<Item[]>(
     product_id ? [{ type: "product", id: product_id }] : [],
+    "CustomersPage:includedItems",
   );
-  const [excludedItems, setExcludedItems] = React.useState<Item[]>([]);
+  const [excludedItems, setExcludedItems] = useRemember<Item[]>([], "CustomersPage:excludedItems");
 
-  const [query, setQuery] = React.useState<Query>(() => {
-    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-    return {
+  const initialUrlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const [query, setQuery] = useRemember<Query>(
+    {
       page: 1,
-      query: urlParams?.get("query") ?? urlParams?.get("email") ?? null,
+      query: initialUrlParams?.get("query") ?? initialUrlParams?.get("email") ?? null,
       sort: { key: "created_at", direction: "desc" },
       products: [],
       variants: [],
@@ -103,8 +104,9 @@ const CustomersPage = ({
       createdBefore: null,
       country: null,
       activeCustomersOnly: false,
-    };
-  });
+    },
+    "CustomersPage:query",
+  );
   const updateQuery = (update: Partial<Query>) => setQuery((prevQuery) => ({ ...prevQuery, ...update }));
   const {
     query: searchQuery,
