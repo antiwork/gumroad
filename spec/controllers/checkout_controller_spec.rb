@@ -52,6 +52,23 @@ describe CheckoutController, type: :controller, inertia: true do
       )
     end
 
+    it "renders successfully with multiple cart products" do
+      browser_guid = SecureRandom.uuid
+      cookies[:_gumroad_guid] = browser_guid
+      cart = create(:cart, :guest, browser_guid: browser_guid)
+
+      5.times do
+        product = create(:product)
+        create(:cart_product, cart:, product:)
+      end
+
+      get :show
+
+      expect(response).to be_successful
+      expect(inertia.component).to eq("Checkout/Show")
+      expect(inertia.props.dig(:cart, :items)&.size).to eq(5)
+    end
+
     describe "process_cart_id_param check" do
       let(:user) { create(:user) }
       let(:cart) { create(:cart, user:) }

@@ -19,7 +19,7 @@ class CheckoutPresenter
   end
 
   def checkout_props(params:, browser_guid:)
-    geo = GeoIp.lookup(@ip)
+    geo = geo_data
     detected_country = geo.try(:country_name)
     country = logged_in_user&.country || detected_country
     detected_state = geo.try(:region_name) if [Compliance::Countries::USA, Compliance::Countries::CAN].any? { |country| country.common_name == detected_country }
@@ -95,7 +95,7 @@ class CheckoutPresenter
             }
           )
         end,
-        ppp_details: product.ppp_details(@ip),
+        ppp_details: ppp_details_for(product),
         upsell: product.available_upsell.present? ? {
           id: product.available_upsell.external_id,
           text: product.available_upsell.text,
@@ -286,6 +286,28 @@ class CheckoutPresenter
         ca_provinces: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first),
         recaptcha_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"),
         paypal_client_id: PAYPAL_PARTNER_CLIENT_ID,
+      }
+    end
+
+    def geo_data
+      return @geo if defined?(@geo)
+
+      @geo = GeoIp.lookup(@ip)
+    end
+
+    def ppp_details_for(product)
+      return unless product.purchasing_power_parity_enabled?
+
+      geo = geo_data
+      return if geo.blank?
+
+      ppp_factor = PurchasingPowerParityService.new.get_factor(geo.country_code, product.user)
+      return unless ppp_factor < 1
+
+      {
+        country: geo.country_name,
+        factor: ppp_factor,
+        minimum_price: product.currency["min_price"],
       }
     end
 
