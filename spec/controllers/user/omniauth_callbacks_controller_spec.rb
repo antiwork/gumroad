@@ -112,6 +112,8 @@ describe User::OmniauthCallbacksController do
       it "allows admin user to log in" do
         admin = create(:admin_user)
         create(:merchant_account_stripe_connect, user: admin, charge_processor_merchant_id: stripe_uid)
+        stripe_account = Stripe::Account.construct_from(id: stripe_uid, country: "US", object: "account")
+        allow(Stripe::Account).to receive(:retrieve).with(stripe_uid).and_return(stripe_account)
 
         post :stripe_connect
 
