@@ -419,6 +419,59 @@ describe Link, :vcr do
       end
     end
 
+    describe "content moderation on edits to a published product" do
+      let(:product) { create(:product, purchase_disabled_at: Time.current) }
+
+      before do
+        allow(product).to receive(:enforce_shipping_destinations_presence!).and_return(true)
+        allow(product).to receive(:enforce_user_email_confirmation!).and_return(true)
+        allow(product).to receive(:enforce_merchant_account_exits_for_new_users!).and_return(true)
+        allow(product).to receive(:enable_transcode_videos_on_purchase!).and_return(true)
+        allow(product).to receive(:auto_transcode_videos?).and_return(false)
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+        product.publish!
+      end
+
+      it "re-checks moderation when the name changes" do
+        expect(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in name"])
+        )
+
+        product.name = "New bad name"
+        expect(product.save).to eq(false)
+        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in name")
+      end
+
+      it "re-checks moderation when the description changes" do
+        expect(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in description"])
+        )
+
+        product.description = "<p>New bad body</p>"
+        expect(product.save).to eq(false)
+        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in description")
+      end
+
+      it "does not re-check moderation when unrelated attributes change" do
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        product.price_cents = product.price_cents + 100
+        product.save!
+      end
+    end
+
+    describe "content moderation on edits to a draft product" do
+      let(:product) { create(:product, draft: true) }
+
+      it "does not run moderation on name/description edits" do
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        product.update!(name: "Still a draft", description: "<p>Still drafting</p>")
+      end
+    end
+
     describe "initialize_suggested_amount_if_needed!" do
       let(:seller) { create(:user, :eligible_for_service_products) }
       let(:product) { build(:product, user: seller, price_cents: 200) }
