@@ -9232,7 +9232,16 @@ describe StripeMerchantAccountManager, :vcr do
   end
 
   describe ".handle_stripe_info_requirements" do
-    let(:user) { create(:named_user) }
+    let(:active_bank_account) { instance_double(CardBankAccount, id: 123, stripe_connect_account_id: nil) }
+    let(:requested_scope) { double(find_each: nil, where: double(present?: false), last: nil) }
+    let(:user_compliance_info_requests) { double(requested: requested_scope) }
+    let(:user) do
+      instance_double(
+        User,
+        account_active?: true,
+        user_compliance_info_requests:
+      )
+    end
     let(:merchant_account) do
       instance_double(
         MerchantAccount,
@@ -9242,7 +9251,6 @@ describe StripeMerchantAccountManager, :vcr do
       )
     end
     let(:merchant_account_relation) { double(last: merchant_account) }
-    let(:bank_account) { create(:card_bank_account, user:, stripe_connect_account_id: nil, stripe_external_account_id: nil) }
     let(:stripe_account) do
       {
         "id" => "acct_123",
@@ -9258,10 +9266,10 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     before do
-      bank_account
       allow(MerchantAccount).to receive(:where).and_return(merchant_account_relation)
       allow(described_class).to receive(:update_bank_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_return(:stripe_unknown_error)
-      allow(user).to receive(:active_bank_account).and_return(bank_account, bank_account, bank_account, nil)
+      allow(active_bank_account).to receive(:is_a?) { |klass| klass == CardBankAccount }
+      allow(user).to receive(:active_bank_account).and_return(active_bank_account, active_bank_account, active_bank_account, nil, nil)
     end
 
     it "captures the active bank once before enqueueing the retry worker" do
@@ -9269,7 +9277,7 @@ describe StripeMerchantAccountManager, :vcr do
         described_class.send(:handle_stripe_info_requirements, "evt_123", stripe_account, {})
       end.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
 
-      expect(HandleNewBankAccountWorker.jobs.last["args"]).to eq([bank_account.id])
+      expect(HandleNewBankAccountWorker.jobs.last["args"]).to eq([active_bank_account.id])
     end
   end
 
