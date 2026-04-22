@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe ContentModeration::Strategies::ClassifierStrategy do
+RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
   let(:text) { "text to moderate" }
   let(:image_urls) { ["https://cdn.example.com/1.png"] }
   let(:client) { instance_double(OpenAI::Client) }

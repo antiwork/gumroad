@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe ContentModeration::Strategies::PromptStrategy do
+RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
   let(:client) { instance_double(OpenAI::Client) }
 
   before do

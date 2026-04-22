@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe ContentModeration::Strategies::BlocklistStrategy do
+RSpec.describe ContentModeration::Strategies::BlocklistStrategy, :vcr do
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
     allow(File).to receive(:exist?).and_call_original

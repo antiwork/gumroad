@@ -208,7 +208,7 @@ class Link < ApplicationRecord
   validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
   validate :quantity_enabled_state_is_allowed
   validate :default_offer_code_must_be_valid
-  validate :content_moderation_check, if: -> { publishing? || (published? && (name_changed? || description_changed?)) }
+  validate :content_moderation_check, if: -> { publishing? || (persisted? && published? && (name_changed? || description_changed?)) }
 
   validates_associated :installment_plan, message: -> (link, _) { link.installment_plan.errors.full_messages.first }
 

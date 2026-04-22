@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-RSpec.describe ContentModeration::ModerateRecordService do
+RSpec.describe ContentModeration::ModerateRecordService, :vcr do
   let(:strategy_result) { Struct.new(:status, :reasoning, keyword_init: true) }
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, name: "Test", description: "Clean description") }
