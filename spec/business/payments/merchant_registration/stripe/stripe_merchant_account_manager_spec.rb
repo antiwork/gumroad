@@ -9279,6 +9279,15 @@ describe StripeMerchantAccountManager, :vcr do
 
       expect(HandleNewBankAccountWorker.jobs.last["args"]).to eq([active_bank_account.id])
     end
+
+    it "captures the active bank once before reading card sync state" do
+      allow(described_class).to receive(:update_bank_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_return(:synced)
+      allow(user).to receive(:active_bank_account).and_return(active_bank_account, nil, nil)
+
+      expect do
+        described_class.send(:handle_stripe_info_requirements, "evt_123", stripe_account, {})
+      end.not_to raise_error
+    end
   end
 
   describe ".handle_stripe_event" do

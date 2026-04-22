@@ -49,6 +49,19 @@ describe UpdatePayoutMethod do
             expect(result[:error]).to eq(:bank_account_error)
           end.not_to change { HandleNewBankAccountWorker.jobs.size }
         end
+
+        it "does not enqueue HandleNewBankAccountWorker when the submitted name differs only by surrounding whitespace" do
+          params = ActionController::Parameters.new(
+            bank_account: { type: JapanBankAccount.name, account_holder_full_name: "Japanese Creator " }
+          )
+
+          expect do
+            result = described_class.new(user_params: params, seller: user).process
+            expect(result).to eq(success: true)
+          end.not_to change { HandleNewBankAccountWorker.jobs.size }
+
+          expect(bank_account.reload.account_holder_full_name).to eq("Japanese Creator")
+        end
       end
 
       context "when the seller is in a country that does NOT sync holder name to Stripe" do
@@ -111,6 +124,15 @@ describe UpdatePayoutMethod do
         expect(prepared_credit_card).to receive(:destroy!)
 
         expect(service.process).to eq(error: :concurrent_payout_method_change)
+      end
+
+      it "discards the prepared credit card when an exception escapes after card preparation" do
+        allow(user).to receive(:active_bank_account).and_return(existing_bank_account, existing_bank_account)
+        allow(service).to receive(:process_card_params).with(prepared_credit_card).and_raise("boom")
+
+        expect(prepared_credit_card).to receive(:destroy!)
+
+        expect { service.process }.to raise_error(RuntimeError, "boom")
       end
     end
   end

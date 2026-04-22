@@ -142,6 +142,9 @@ class UpdatePayoutMethod
         { success: true }
       end
     end
+  rescue
+    discard_prepared_credit_card!(credit_card) if credit_card
+    raise
   end
 
   private
@@ -210,7 +213,8 @@ class UpdatePayoutMethod
       current_active = user.active_bank_account
       return { success: true } if current_active.blank? || current_active.is_a?(CardBankAccount)
 
-      if current_active.account_holder_full_name == params[:bank_account][:account_holder_full_name]
+      submitted_holder_name = params[:bank_account][:account_holder_full_name].to_s.strip
+      if current_active.account_holder_full_name == submitted_holder_name
         current_active.valid?
         return bank_account_error_for_attribute(current_active, :account_holder_full_name) if current_active.errors[:account_holder_full_name].any?
         return { success: true }

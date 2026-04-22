@@ -789,8 +789,9 @@ module StripeMerchantAccountManager
     is_charges_disabled = !stripe_account["charges_enabled"]
     charges_newly_disabled = stripe_account["charges_enabled"] == false && stripe_previous_attributes["charges_enabled"] == true
 
-    if user.active_bank_account.is_a?(CardBankAccount)
-      card_account_needs_syncing = user.active_bank_account.stripe_connect_account_id.blank?
+    active_bank_account = user.active_bank_account
+    if active_bank_account.is_a?(CardBankAccount)
+      card_account_needs_syncing = active_bank_account.stripe_connect_account_id.blank?
 
       if is_charges_disabled
         # Ignore request for card bank account until charges become enabled
