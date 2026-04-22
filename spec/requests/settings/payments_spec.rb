@@ -657,12 +657,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         visit settings_payments_path
 
         choose "Individual"
-        fill_in "Street address", with: "P.O. Box 123, Smith street"
+        find_field("Address", match: :first).set("P.O. Box 123, Smith street")
         expect do
           click_on "Update settings"
           expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
         end.to_not change { @user.alive_user_compliance_info.reload.street_address }
-        fill_in "Street address", with: "123, Smith street"
+        find_field("Address", match: :first).set("123, Smith street")
         expect do
           click_on "Update settings"
           wait_for_ajax
@@ -689,7 +689,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(page).to have_alert(text: "Thanks! You're all set.")
           sleep 0.5 # Since the previous Alerts takes time to disappear, checking alert returns early before the api call is complete
         end.to change { @user.alive_user_compliance_info.reload.business_street_address }.to("123 North street")
-        fill_in "Street address", with: "po box 123 smith street"
+        find(:css, "input[id$='creator-street-address']").set("po box 123 smith street")
         expect do
           click_on "Update settings"
           expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
