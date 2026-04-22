@@ -6,7 +6,7 @@ class User < ApplicationRecord
 
   has_paper_trail
   has_one_time_password
-  include Flipper::Identifier, FlagShihTzu, CurrencyHelper, Mongoable, JsonData, Deletable, MoneyBalance,
+  include Flipper::Identifier, FlagShihTzu, CurrencyHelper, JsonData, Deletable, MoneyBalance,
           DeviseInternal, PayoutSchedule, SocialGoogle, SocialApple, SocialGoogleMobile,
           StripeConnect, Stats, PaymentStats, FeatureStatus, Risk, Compliance, Validations, Taxation, PingNotification,
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
@@ -307,7 +307,6 @@ class User < ApplicationRecord
   after_commit :move_purchases_to_new_email, on: :update, if: :email_previously_changed?
   after_commit :make_affiliate_of_the_matching_approved_affiliate_requests, on: [:create, :update], if: ->(user) { user.confirmed_at_previously_changed? && user.confirmed? }
   after_commit :generate_subscribe_preview, on: [:create, :update], if: :should_subscribe_preview_be_regenerated?
-  after_create :insert_null_chargeback_state
 
   state_machine(:user_risk_state, initial: :not_reviewed) do
     before_transition any => %i[flagged_for_fraud flagged_for_tos_violation suspended_for_fraud suspended_for_tos_violation],
@@ -321,7 +320,6 @@ class User < ApplicationRecord
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :suspend_sellers_other_accounts
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :block_seller_ip!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :delete_custom_domain!
-    after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :log_suspension_time_to_mongo
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :send_suspension_email
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation flagged_for_fraud flagged_for_tos_violation],
                      :do => :add_to_gmail_abuse_filter
@@ -725,10 +723,6 @@ class User < ApplicationRecord
   def generate_subscribe_preview
     raise "User must be persisted to generate a subscribe preview" unless persisted?
     GenerateSubscribePreviewJob.perform_async(id)
-  end
-
-  def insert_null_chargeback_state
-    Mongoer.async_write("user_risk_state", { "user_id" => id.to_s, "chargeback_state" => nil })
   end
 
   def minimum_payout_amount_cents

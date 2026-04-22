@@ -48,7 +48,7 @@ class Link < ApplicationRecord
           Product::Validations, Product::Caching, Product::NativeTypeTemplates, Product::Recommendations,
           Product::Prices, Product::Shipping, Product::Searchable, Product::Tags, Product::Taxonomies,
           Product::ReviewStat, Product::Utils, Product::StructuredData, ActionView::Helpers::SanitizeHelper,
-          ActionView::Helpers::NumberHelper, Mongoable, TimestampScopes, ExternalId,
+          ActionView::Helpers::NumberHelper, TimestampScopes, ExternalId,
           WithFileProperties, JsonData, Deletable, WithProductFiles, WithCdnUrl, MaxPurchaseCount,
           Integrations, Product::StaffPicked, RichContents, Product::Sorting, Product::CreationLimit
 

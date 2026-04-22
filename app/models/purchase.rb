@@ -4,7 +4,7 @@ class Purchase < ApplicationRecord
   has_paper_trail
 
   include Rails.application.routes.url_helpers
-  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, Mongoable, PurchaseErrorCode,
+  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, PurchaseErrorCode,
           ExternalId, JsonData, TimestampScopes, Accounting, Blockable, CardCountrySource, Targeting,
           Refundable, Reviews, PingNotification, Searchable, Risk,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
@@ -348,7 +348,6 @@ class Purchase < ApplicationRecord
   before_create :toggle_off_can_contact_if_buyer_has_unsubscribed
 
   before_save :assign_default_rental_expired
-  before_save :to_mongo
   before_save :truncate_referrer
 
   after_commit :attach_credit_card_to_purchaser,

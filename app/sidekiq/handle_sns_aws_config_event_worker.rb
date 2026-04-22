@@ -2,7 +2,7 @@
 
 class HandleSnsAwsConfigEventWorker
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :mongo
+  sidekiq_options retry: 5, queue: :default
 
   MESSAGE_TYPES_TO_IGNORE = %w[
     ConfigurationSnapshotDeliveryStarted

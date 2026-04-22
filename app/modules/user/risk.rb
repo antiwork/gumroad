@@ -8,7 +8,6 @@ module User::Risk
   INCREMENTAL_ENQUEUE_BALANCE = 100_00
   PROBATION_WITH_REMINDER_DAYS = 30
   PROBATION_REVIEW_DAYS = 2
-  MAX_REFUND_QUEUE_SIZE = 100000
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
 
   def enable_refunds!
@@ -65,10 +64,6 @@ module User::Risk
     return unless Feature.active?(:account_suspended_email)
 
     ContactingCreatorMailer.account_suspended(id).deliver_later
-  end
-
-  def log_suspension_time_to_mongo
-    Mongoer.async_write(MongoCollections::USER_SUSPENSION_TIME, "user_id" => id, "suspended_at" => Time.current.to_s)
   end
 
   def disable_links_and_tell_chat
@@ -239,18 +234,5 @@ module User::Risk
   end
 
   class_methods do
-    def refund_queue(from_date = 30.days.ago)
-      user_ids = MONGO_DATABASE[MongoCollections::USER_SUSPENSION_TIME]
-        .find(suspended_at: { "$gte": from_date.utc.to_s })
-        .limit(MAX_REFUND_QUEUE_SIZE)
-        .map { |record| record["user_id"] }
-
-      User.where(id: user_ids, user_risk_state: "suspended_for_fraud")
-        .joins(:balances)
-        .merge(Balance.unpaid)
-        .group(:user_id)
-        .having("SUM(amount_cents) > 0")
-        .order(updated_at: :desc, id: :desc)
-    end
   end
 end

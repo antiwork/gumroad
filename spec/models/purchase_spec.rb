@@ -1200,14 +1200,6 @@ describe Purchase, :vcr do
     end
   end
 
-  describe "mongoable" do
-    it "puts purchase in mongo on creation" do
-      @purchase = build(:purchase)
-      @purchase.save
-
-      expect(SaveToMongoWorker).to have_enqueued_sidekiq_job("Purchase", anything)
-    end
-  end
 
   describe "affiliate_merchant_account" do
     describe "purchase is on a Gumroad merchant account" do

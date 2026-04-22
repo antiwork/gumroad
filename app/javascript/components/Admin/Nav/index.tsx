@@ -1,4 +1,4 @@
-import { BarChartBig, Calendar, DollarCircle, Envelope, EnvelopeOpen, Flag, LightBulb, Shield, User } from "@boxicons/react";
+import { BarChartBig, Calendar, Envelope, EnvelopeOpen, Flag, LightBulb, Shield, User } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
@@ -44,12 +44,6 @@ const Nav = () => {
           text="Features"
           icon={<Flag pack="filled" className="size-5" />}
           href={Routes.admin_flipper_ui_url(routeParams)}
-        />
-        <InertiaNavLink
-          text="Refund queue"
-          icon={<DollarCircle pack="filled" className="size-5" />}
-          href={Routes.admin_refund_queue_url(routeParams)}
-          component={Link}
         />
         <InertiaNavLink
           text="Sales reports"
