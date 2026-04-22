@@ -375,7 +375,7 @@ describe Link, :vcr do
       end
 
       it "blocks publishing when ContentModeration::ModerateRecordService.check fails" do
-        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product, text_only: true).and_return(
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
           ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["policy violation"])
         )
 
@@ -392,7 +392,7 @@ describe Link, :vcr do
       end
 
       it "publishes successfully when the content moderation check passes" do
-        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product, text_only: true).and_return(
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
           ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
         )
 

@@ -782,7 +782,7 @@ const b = 2;</code></pre>
 
     context "content moderation" do
       it "blocks publishing when ContentModeration::ModerateRecordService.check fails" do
-        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post, text_only: true).and_return(
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
           ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["policy violation"])
         )
 
@@ -801,7 +801,7 @@ const b = 2;</code></pre>
       end
 
       it "publishes successfully when the content moderation check passes" do
-        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post, text_only: true).and_return(
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
           ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
         )
 
