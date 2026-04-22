@@ -138,6 +138,13 @@ const CustomerDetailPage = ({
   const userAgentInfo = useUserAgentInfo();
   const currentSeller = useCurrentSeller();
 
+  const [canGoBackToCustomers] = React.useState(() => {
+    if (typeof window === "undefined") return false;
+    const flag = window.sessionStorage.getItem("CustomersPage:canGoBack") === "1";
+    if (flag) window.sessionStorage.removeItem("CustomersPage:canGoBack");
+    return flag;
+  });
+
   const [customer, setCustomer] = React.useState(initialCustomer);
   const updateCustomer = (update: Partial<Customer>) => setCustomer((prev) => ({ ...prev, ...update }));
 
@@ -213,8 +220,7 @@ const CustomerDetailPage = ({
               aria-label="Back to customers"
               className="mr-4 hidden no-underline sm:inline"
               onClick={(e) => {
-                if (window.history.length <= 1) return;
-                if (document.referrer && new URL(document.referrer).origin !== window.location.origin) return;
+                if (!canGoBackToCustomers) return;
                 e.preventDefault();
                 window.history.back();
               }}

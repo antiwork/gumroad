@@ -249,7 +249,7 @@ describe "Sales page", type: :system, js: true do
         toggle_disclosure "Filter"
         fill_in "Paid more than", with: "2"
         expect(page).to have_nth_table_row_record(1, "Customer 3")
-        expect(page).to have_selector(:table_row, count: 1)
+        within(find("tbody")) { expect(page).to have_selector(:table_row, count: 1) }
 
         find(:table_row, { "Name" => "Customer 3" }).click
         expect(page).to have_current_path(customer_sale_path(purchase3.external_id))
@@ -258,7 +258,7 @@ describe "Sales page", type: :system, js: true do
 
         expect(page).to have_current_path(customers_path)
         expect(page).to have_nth_table_row_record(1, "Customer 3")
-        expect(page).to have_selector(:table_row, count: 1)
+        within(find("tbody")) { expect(page).to have_selector(:table_row, count: 1) }
         toggle_disclosure "Filter"
         expect(page).to have_field("Paid more than", with: "2")
       end

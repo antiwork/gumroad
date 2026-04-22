@@ -72,11 +72,12 @@ const CustomersPage = ({
   const currentSeller = useCurrentSeller();
   const userAgentInfo = useUserAgentInfo();
 
+  const sellerKey = currentSeller?.id ?? "anonymous";
   const [{ customers, pagination, count }, setState] = useRemember<{
     customers: Customer[];
     pagination: PaginationProps | null;
     count: number;
-  }>(initialState, "CustomersPage:state");
+  }>(initialState, `CustomersPage:state:${sellerKey}`);
   const [isLoading, setIsLoading] = React.useState(false);
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
 
@@ -84,9 +85,9 @@ const CustomersPage = ({
 
   const [includedItems, setIncludedItems] = useRemember<Item[]>(
     product_id ? [{ type: "product", id: product_id }] : [],
-    "CustomersPage:includedItems",
+    `CustomersPage:includedItems:${sellerKey}`,
   );
-  const [excludedItems, setExcludedItems] = useRemember<Item[]>([], "CustomersPage:excludedItems");
+  const [excludedItems, setExcludedItems] = useRemember<Item[]>([], `CustomersPage:excludedItems:${sellerKey}`);
 
   const initialUrlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const [query, setQuery] = useRemember<Query>(
@@ -105,7 +106,7 @@ const CustomersPage = ({
       country: null,
       activeCustomersOnly: false,
     },
-    "CustomersPage:query",
+    `CustomersPage:query:${sellerKey}`,
   );
   const updateQuery = (update: Partial<Query>) => setQuery((prevQuery) => ({ ...prevQuery, ...update }));
   const {
@@ -395,6 +396,7 @@ const CustomersPage = ({
                     <TableRow
                       key={customer.id}
                       onClick={() => {
+                        window.sessionStorage.setItem("CustomersPage:canGoBack", "1");
                         router.visit(Routes.customer_sale_path(customer.id));
                       }}
                       style={{ cursor: "pointer" }}
