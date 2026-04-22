@@ -66,14 +66,26 @@ class ScheduledPayout < ApplicationRecord
 
     if process_payout
       begin
-        payments = PayoutUsersService.new(
-          date_string: Date.yesterday.to_s,
-          processor_type: user.current_payout_processor,
-          user_ids: user.id
-        ).process
-        payment = payments.last
-        if payment.blank? || payment.failed?
-          raise "Payout failed: #{payment&.errors&.full_messages&.first || "Payment was not sent."}"
+        payment, payment_errors = Payouts.create_payment(
+          Date.yesterday.to_s,
+          user.current_payout_processor,
+          user
+        )
+
+        if payment.blank?
+          error_detail = if payment_errors.present?
+            payment_errors.join(", ")
+          else
+            "No payable balance available"
+          end
+          raise "Payout failed: #{error_detail}"
+        end
+
+        payout_processor = PayoutProcessorType.get(user.current_payout_processor)
+        payout_processor.process_payments([payment])
+
+        if payment.reload.failed?
+          raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
         end
       rescue => e
         update!(status: "pending", executed_at: nil)
