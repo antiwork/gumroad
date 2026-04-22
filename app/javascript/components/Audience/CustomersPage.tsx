@@ -55,6 +55,39 @@ export type CustomerPageProps = {
 
 const year = new Date().getFullYear();
 
+const FILTERS_STORAGE_KEY = "gumroad-customers-page-filters";
+
+type Item = { type: "product"; id: string } | { type: "variant"; id: string; productId: string };
+
+type StoredFilters = {
+  query: Query;
+  includedItems: Item[];
+  excludedItems: Item[];
+};
+
+const loadStoredFilters = (): StoredFilters | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(FILTERS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredFilters;
+    if (parsed.query.createdAfter) parsed.query.createdAfter = new Date(parsed.query.createdAfter);
+    if (parsed.query.createdBefore) parsed.query.createdBefore = new Date(parsed.query.createdBefore);
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const saveStoredFilters = (filters: StoredFilters) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+  } catch {
+    // sessionStorage may be unavailable (e.g. private mode); ignore.
+  }
+};
+
 const formatPrice = (priceCents: number, currencyType: CurrencyCode, recurrence?: RecurrenceId | null) =>
   `${formatPriceCentsWithCurrencySymbol(currencyType, priceCents, { symbolFormat: "long" })}${
     recurrence ? ` ${recurrenceLabels[recurrence]}` : ""
@@ -82,29 +115,41 @@ const CustomersPage = ({
 
   const uid = React.useId();
 
-  const [includedItems, setIncludedItems] = React.useState<Item[]>(
-    product_id ? [{ type: "product", id: product_id }] : [],
-  );
-  const [excludedItems, setExcludedItems] = React.useState<Item[]>([]);
+  // Load persisted filters when navigating back from e.g. the sale detail page.
+  // Only restore when no product_id is specified in props (which represents an
+  // explicit entry point that should override saved filters) and no explicit
+  // search query is supplied in the URL.
+  const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const urlSearchQuery = urlParams?.get("query") ?? urlParams?.get("email") ?? null;
+  const storedFilters = !product_id && urlSearchQuery === null ? loadStoredFilters() : null;
 
-  const [query, setQuery] = React.useState<Query>(() => {
-    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-    return {
-      page: 1,
-      query: urlParams?.get("query") ?? urlParams?.get("email") ?? null,
-      sort: { key: "created_at", direction: "desc" },
-      products: [],
-      variants: [],
-      excludedProducts: [],
-      excludedVariants: [],
-      minimumAmount: null,
-      maximumAmount: null,
-      createdAfter: null,
-      createdBefore: null,
-      country: null,
-      activeCustomersOnly: false,
-    };
-  });
+  const [includedItems, setIncludedItems] = React.useState<Item[]>(
+    storedFilters?.includedItems ?? (product_id ? [{ type: "product", id: product_id }] : []),
+  );
+  const [excludedItems, setExcludedItems] = React.useState<Item[]>(storedFilters?.excludedItems ?? []);
+
+  const [query, setQuery] = React.useState<Query>(
+    () =>
+      storedFilters?.query ?? {
+        page: 1,
+        query: urlSearchQuery,
+        sort: { key: "created_at", direction: "desc" },
+        products: [],
+        variants: [],
+        excludedProducts: [],
+        excludedVariants: [],
+        minimumAmount: null,
+        maximumAmount: null,
+        createdAfter: null,
+        createdBefore: null,
+        country: null,
+        activeCustomersOnly: false,
+      },
+  );
+
+  React.useEffect(() => {
+    saveStoredFilters({ query, includedItems, excludedItems });
+  }, [query, includedItems, excludedItems]);
   const updateQuery = (update: Partial<Query>) => setQuery((prevQuery) => ({ ...prevQuery, ...update }));
   const {
     query: searchQuery,
@@ -509,8 +554,6 @@ const CustomersPage = ({
     </div>
   );
 };
-
-type Item = { type: "product"; id: string } | { type: "variant"; id: string; productId: string };
 
 const ProductSelect = ({
   label,
