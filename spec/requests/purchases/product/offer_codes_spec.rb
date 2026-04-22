@@ -201,7 +201,11 @@ describe("Offer-code usage from product page", type: :system, js: true) do
       visit "#{product.long_url}/#{offer_code.code}"
       add_to_cart(product, offer_code:)
       offer_code.mark_deleted!
-      check_out(product, error: "Sorry, the discount code you wish to use is invalid.")
+      check_out(
+        product,
+        error: "Sorry, the discount code you wish to use is invalid.",
+        failed_purchase_count: 0
+      )
       wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) { Cart.alive.where(email: "test@gumroad.com").exists? }
       visit checkout_path
       expect(page).to_not have_selector("[aria-label='Discount code']", text: offer_code.code)

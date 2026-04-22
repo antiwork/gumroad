@@ -145,7 +145,7 @@ module CheckoutHelpers
     end
   end
 
-  def check_out(product, error: nil, email: "test@gumroad.com", is_free: false, gift: nil, sca: nil, should_verify_address: false, cart_item_count: 1, logged_in_user: nil, **params, &block)
+  def check_out(product, error: nil, email: "test@gumroad.com", is_free: false, gift: nil, sca: nil, should_verify_address: false, cart_item_count: 1, logged_in_user: nil, failed_purchase_count: nil, **params, &block)
     fill_checkout_form(product, email:, is_free:, logged_in_user:, gift:, **params)
 
     block.call if block_given?
@@ -190,7 +190,7 @@ module CheckoutHelpers
         end
       end
     end.to change { product.preorder_link.present? ? product.sales.preorder_authorization_successful.count : product.sales.successful.count }.by(error.blank? && logged_in_user&.id != product.user.id && (product.not_free_trial_enabled || gift.present?) ? cart_item_count : 0)
-      .and change { product.preorder_link.present? ? product.sales.preorder_authorization_failed.count : product.sales.failed.count }.by(error.present? && error != true ? 1 : 0)
+      .and change { product.preorder_link.present? ? product.sales.preorder_authorization_failed.count : product.sales.failed.count }.by(failed_purchase_count.nil? ? (error.present? && error != true ? 1 : 0) : failed_purchase_count)
       .and change { product&.subscriptions&.count }.by(error.blank? && product.is_recurring_billing ? 1 : 0)
   end
 end
