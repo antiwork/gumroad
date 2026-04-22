@@ -60,7 +60,6 @@ const BlockEmailsSection = ({ blockedEmails, setBlockedEmails }: Props) => {
         </FieldsetTitle>
         <Textarea
           id={uid}
-          placeholder={["name@example.com", "name@example.net", "name@example.org"].join("\n")}
           rows={4}
           value={blockedEmails}
           onChange={(e) => setBlockedEmails(e.target.value)}

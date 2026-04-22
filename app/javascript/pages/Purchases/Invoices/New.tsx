@@ -95,7 +95,6 @@ const PurchaseNewInvoicePage = () => {
                 <Label htmlFor="full_name">Full name</Label>
                 <Input
                   id="full_name"
-                  placeholder="Full name"
                   type="text"
                   value={form.data.address_fields.full_name}
                   onChange={(e) => form.setData("address_fields.full_name", e.target.value)}
@@ -119,7 +118,6 @@ const PurchaseNewInvoicePage = () => {
                 <Input
                   id="street_address"
                   type="text"
-                  placeholder="Street address"
                   value={form.data.address_fields.street_address}
                   onChange={(e) => form.setData("address_fields.street_address", e.target.value)}
                 />
@@ -130,7 +128,6 @@ const PurchaseNewInvoicePage = () => {
                   <Input
                     id="city"
                     type="text"
-                    placeholder="City"
                     value={form.data.address_fields.city}
                     onChange={(e) => form.setData("address_fields.city", e.target.value)}
                   />
@@ -140,7 +137,6 @@ const PurchaseNewInvoicePage = () => {
                   <Input
                     id="state"
                     type="text"
-                    placeholder="State"
                     value={form.data.address_fields.state}
                     onChange={(e) => form.setData("address_fields.state", e.target.value)}
                   />
@@ -150,7 +146,6 @@ const PurchaseNewInvoicePage = () => {
                   <Input
                     id="zip_code"
                     type="text"
-                    placeholder="ZIP code"
                     value={form.data.address_fields.zip_code}
                     onChange={(e) => form.setData("address_fields.zip_code", e.target.value)}
                   />
@@ -178,7 +173,6 @@ const PurchaseNewInvoicePage = () => {
                 <Textarea
                   id="additional_notes"
                   name="additional_notes"
-                  placeholder="Enter anything else you'd like to appear on your invoice (Optional)"
                   value={form.data.additional_notes}
                   onChange={(e) => form.setData("additional_notes", e.target.value)}
                 />

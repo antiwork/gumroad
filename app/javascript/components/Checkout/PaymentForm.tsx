@@ -162,7 +162,6 @@ const StateInput = () => {
           id={`${uid}state`}
           type="text"
           aria-invalid={errors.has("state")}
-          placeholder={stateLabel}
           disabled={isProcessing(state)}
           value={state.state}
           onChange={(e) => dispatch({ type: "set-value", state: e.target.value })}
@@ -187,7 +186,6 @@ const ZipCodeInput = () => {
         id={`${uid}zipCode`}
         type="text"
         aria-invalid={errors.has("zipCode")}
-        placeholder={label}
         value={state.zipCode}
         onChange={(e) => dispatch({ type: "set-value", zipCode: e.target.value })}
         disabled={isProcessing(state)}
@@ -344,7 +342,6 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
                     aria-invalid={errors.has("email")}
                     value={state.email}
                     onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
-                    placeholder="Your email address"
                     disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
                     onBlur={checkForEmailTypos}
                   />
@@ -368,7 +365,6 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
                 id={`${uid}fullName`}
                 type="text"
                 aria-invalid={errors.has("fullName")}
-                placeholder="Full name"
                 value={state.fullName}
                 onChange={(e) => dispatch({ type: "set-value", fullName: e.target.value })}
                 disabled={isProcessing(state)}
@@ -396,7 +392,6 @@ const SharedInputs = ({ className }: { className?: string | undefined }) => {
               <Input
                 id={`${uid}vatId`}
                 type="text"
-                placeholder={vatLabel}
                 value={state.vatId}
                 onChange={(e) => dispatch({ type: "set-value", vatId: e.target.value })}
                 disabled={isProcessing(state)}
@@ -517,7 +512,6 @@ const CustomerDetails = ({ className }: { className?: string }) => {
                   id={`${uid}fullName`}
                   type="text"
                   aria-invalid={errors.has("fullName")}
-                  placeholder="Full name"
                   disabled={isProcessing(state)}
                   value={state.fullName}
                   onChange={(e) => dispatch({ type: "set-value", fullName: e.target.value })}
@@ -531,7 +525,6 @@ const CustomerDetails = ({ className }: { className?: string }) => {
                   id={`${uid}address`}
                   type="text"
                   aria-invalid={errors.has("address")}
-                  placeholder="Street address"
                   disabled={isProcessing(state)}
                   value={state.address}
                   onChange={(e) => dispatch({ type: "set-value", address: e.target.value })}
@@ -546,7 +539,6 @@ const CustomerDetails = ({ className }: { className?: string }) => {
                     id={`${uid}city`}
                     type="text"
                     aria-invalid={errors.has("city")}
-                    placeholder="City"
                     disabled={isProcessing(state)}
                     value={state.city}
                     onChange={(e) => dispatch({ type: "set-value", city: e.target.value })}

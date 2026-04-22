@@ -362,7 +362,6 @@ export default function MainPage() {
                       maxLength={3000}
                       rows={10}
                       value={form.data.user.seller_refund_policy.fine_print || ""}
-                      placeholder="Describe your refund policy"
                       disabled={isFormDisabled}
                       onChange={(e) =>
                         updateUserSettings({

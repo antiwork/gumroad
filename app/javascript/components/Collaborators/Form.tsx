@@ -197,7 +197,6 @@ const CollaboratorForm = ({
                 id="email"
                 type="email"
                 value={form.data.email}
-                placeholder="Collaborator's Gumroad account email"
                 onChange={(evt) => {
                   form.setData("email", evt.target.value.trim());
                   form.clearErrors("email");

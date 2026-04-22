@@ -71,7 +71,6 @@ export const WishlistEditor = ({
           id={`${uid}-description`}
           type="text"
           value={newDescription}
-          placeholder="Describe your wishlist"
           onChange={(e) => setNewDescription(e.target.value)}
           onBlur={() => void update()}
         />

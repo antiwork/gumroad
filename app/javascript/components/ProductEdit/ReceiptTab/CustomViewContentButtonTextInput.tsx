@@ -20,7 +20,6 @@ export const CustomViewContentButtonTextInput = ({
       <Input
         id={uid}
         type="text"
-        placeholder="View content"
         value={value ?? ""}
         onChange={(evt) => onChange(evt.target.value)}
         maxLength={maxLength}
