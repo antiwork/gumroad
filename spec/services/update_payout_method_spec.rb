@@ -93,5 +93,25 @@ describe UpdatePayoutMethod do
         end
       end
     end
+
+    describe "switching to card payouts" do
+      let(:user) { create(:named_user) }
+      let!(:existing_bank_account) { create(:ach_account, user:) }
+      let(:concurrent_bank_account) { instance_double(BankAccount, id: existing_bank_account.id + 1) }
+      let(:prepared_credit_card) { instance_double(CreditCard, destroy!: true) }
+      let(:params) { ActionController::Parameters.new(card: { token: "tok_123" }) }
+      subject(:service) { described_class.new(user_params: params, seller: user) }
+
+      before do
+        allow(service).to receive(:prepare_credit_card).and_return([prepared_credit_card, nil])
+        allow(user).to receive(:active_bank_account).and_return(existing_bank_account, concurrent_bank_account)
+      end
+
+      it "discards the prepared credit card when a concurrent payout-method change wins the race" do
+        expect(prepared_credit_card).to receive(:destroy!)
+
+        expect(service.process).to eq(error: :concurrent_payout_method_change)
+      end
+    end
   end
 end

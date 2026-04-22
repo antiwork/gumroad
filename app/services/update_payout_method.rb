@@ -140,6 +140,7 @@ class UpdatePayoutMethod
     user.with_lock do
       if credit_card
         if user.active_bank_account&.id != baseline_active_bank_id
+          discard_prepared_credit_card!(credit_card)
           next { error: :concurrent_payout_method_change }
         end
         process_card_params(credit_card)
@@ -169,6 +170,10 @@ class UpdatePayoutMethod
       return [nil, { error: :credit_card_error, data: credit_card.errors.full_messages.to_sentence }] if credit_card.errors.present?
 
       [credit_card, nil]
+    end
+
+    def discard_prepared_credit_card!(credit_card)
+      credit_card.destroy!
     end
 
     def process_card_params(credit_card)

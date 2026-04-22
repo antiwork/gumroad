@@ -341,7 +341,7 @@ module StripeMerchantAccountManager
     bank_account.stripe_connect_account_id = stripe_account.id
     bank_account.stripe_external_account_id = stripe_external_account.id
     bank_account.stripe_fingerprint = stripe_external_account.fingerprint
-    bank_account.save!
+    bank_account.save!(validate: false)
 
     CheckPaymentAddressWorker.perform_async(bank_account.user_id)
   end
@@ -810,12 +810,13 @@ module StripeMerchantAccountManager
         fields_needed.delete_if { |field_needed| field_needed[0] == UserComplianceInfoFields::BANK_ACCOUNT }
       elsif card_account_needs_syncing
         result = update_bank_account(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
-        # The worker re-reads active_bank_account at execution time, so the retry targets whichever
-        # bank is current then — not necessarily the one this webhook attempted.
-        if result == :stripe_unknown_error && user.active_bank_account
-          HandleNewBankAccountWorker.perform_in(5.seconds, user.active_bank_account.id)
+        # The worker only uses this record to reload the user, then syncs whichever bank is active
+        # when it runs. Capture once so a concurrent soft-delete can't nil out a second lookup.
+        active_bank_account = user.active_bank_account
+        if result == :stripe_unknown_error && active_bank_account
+          HandleNewBankAccountWorker.perform_in(5.seconds, active_bank_account.id)
         end
-        if user.active_bank_account.stripe_connect_account_id.present?
+        if active_bank_account&.stripe_connect_account_id.present?
           fields_needed.delete_if { |field_needed| field_needed[0] == UserComplianceInfoFields::BANK_ACCOUNT }
         end
       end
