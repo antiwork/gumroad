@@ -43,14 +43,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     end
 
     if params[:page] # DEPRECATED
-      if name.present? || license_key.present?
-        sales, additional_response = search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page: @page)
-        return if performed?
-
-        return success_with_object(:sales, sales.as_json(version: 2), additional_response)
-      end
-
-      filtered_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, root_scope: current_resource_owner.sales)
+      filtered_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, root_scope: current_resource_owner.sales)
       begin
         timeout_s = ($redis.get(RedisKey.api_v2_sales_deprecated_pagination_query_timeout) || 15).to_i
         WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
@@ -69,13 +62,6 @@ class Api::V2::SalesController < Api::V2::BaseController
       return
     end
 
-    if name.present? || license_key.present?
-      sales, additional_response = search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page_key: params[:page_key])
-      return if performed?
-
-      return success_with_object(:sales, sales.as_json(version: 2), additional_response)
-    end
-
     if params[:page_key].present?
       begin
         last_purchase_created_at, last_purchase_id = decode_page_key(params[:page_key])
@@ -85,7 +71,7 @@ class Api::V2::SalesController < Api::V2::BaseController
       where_page_data = ["created_at <= ? and id < ?", last_purchase_created_at, last_purchase_id]
     end
 
-    paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:)
+    paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
     subquery_filters = ->(query) {
       query.where(seller_id: current_resource_owner.id).where(where_page_data).order(created_at: :desc, id: :desc).limit(RESULTS_PER_PAGE + 1)
     }
@@ -154,93 +140,16 @@ class Api::V2::SalesController < Api::V2::BaseController
       error_with_object(:sale, sale)
     end
 
-    def filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, root_scope: Purchase)
+    def filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name: nil, license_key: nil, root_scope: Purchase)
       sales = root_scope
       sales = sales.where("created_at >= ?", start_date) if start_date
       sales = sales.where("created_at < ?", end_date) if end_date
       sales = sales.where(email:) if email.present?
       sales = sales.where(link_id: product_id) if product_id.present?
       sales = sales.where(id: purchase_id) if purchase_id.present?
+      sales = sales.where("full_name LIKE ?", "%#{Purchase.sanitize_sql_like(name)}%") if name.present?
+      sales = sales.where(id: License.where(serial: license_key.upcase).select(:purchase_id)) if license_key.present?
       sales.order(created_at: :desc, id: :desc)
-    end
-
-    def search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page: nil, page_key: nil)
-      current_page = page || 1
-      current_page_key = page_key
-
-      current_page.times do |page_number|
-        sales, additional_response = perform_search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page_key: current_page_key)
-        return [sales, additional_response] if page_number == current_page - 1
-        return [[], {}] if additional_response[:next_page_key].blank?
-
-        current_page_key = additional_response[:next_page_key]
-      end
-    end
-
-    def perform_search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page_key: nil)
-      search_after = nil
-      if page_key.present?
-        last_purchase_created_at, last_purchase_id = decode_page_key(page_key)
-        search_after = [last_purchase_created_at.iso8601(6), last_purchase_id]
-      end
-
-      sales = []
-
-      loop do
-        search_results = PurchaseSearchService.search(search_sales_options(
-          start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, search_after:
-        ))
-        batch_ids = search_results.records.ids
-        break if batch_ids.empty?
-
-        filtered_batch_sales = filter_sales(
-          start_date:,
-          end_date:,
-          email:,
-          product_id:,
-          purchase_id:,
-          root_scope: current_resource_owner.sales.where(id: batch_ids)
-        ).for_sales_api.in_order_of(:id, batch_ids).to_a
-        sales.concat(filtered_batch_sales)
-        break if sales.size > RESULTS_PER_PAGE
-
-        hits = search_results.response.dig("hits", "hits") || []
-        break if hits.size < RESULTS_PER_PAGE + 1
-
-        search_after = hits.last["sort"]
-      end
-
-      has_next_page = sales.size > RESULTS_PER_PAGE
-      sales = sales.first(RESULTS_PER_PAGE)
-      additional_response = has_next_page ? pagination_info(sales.last) : {}
-
-      [sales, additional_response]
-    rescue ArgumentError
-      error_400("Invalid page_key.")
-      [[], {}]
-    end
-
-    def search_sales_options(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, search_after: nil)
-      {
-        seller: current_resource_owner,
-        full_name_query: name,
-        license_key:,
-        product: product_id,
-        id: purchase_id,
-        email:,
-        created_on_or_after: start_date,
-        created_before: end_date,
-        state: Purchase::ALL_SUCCESS_STATES_EXCEPT_PREORDER_AUTH_AND_GIFT,
-        exclude_refunded_except_subscriptions: true,
-        exclude_unreversed_chargedback: true,
-        exclude_non_original_subscription_purchases: true,
-        exclude_deactivated_subscriptions: true,
-        exclude_bundle_product_purchases: true,
-        exclude_commission_completion_purchases: true,
-        size: RESULTS_PER_PAGE + 1,
-        search_after:,
-        sort: [{ created_at: :desc }, { id: :desc }],
-      }.compact
     end
 
     def set_page # DEPRECATED

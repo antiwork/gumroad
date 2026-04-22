@@ -149,27 +149,11 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
-      it "filters sales by customer name when name is specified" do
-        matching_product = create(:product, user: @seller)
-        matching_purchase = create(:purchase, purchaser: @purchaser, link: matching_product, full_name: "Ada Lovelace")
-        create(:purchase, purchaser: @purchaser, link: @product, full_name: "Ada Lovelace")
-        create(:purchase, purchaser: @purchaser, link: matching_product, full_name: "Grace Hopper")
-        index_model_records(Purchase)
-
-        get :index, params: @params.merge(name: "Ada Lovelace", product_id: matching_product.external_id)
-
-        expect(response.parsed_body).to eq({
-          success: true,
-          sales: [matching_purchase.as_json(version: 2)]
-        }.as_json)
-      end
-
-      it "filters sales by partial customer name when name is specified" do
+      it "filters sales by customer name (case-insensitive, partial match) when name is specified" do
         matching_purchase = create(:purchase, purchaser: @purchaser, link: @product, full_name: "Ada Lovelace")
         create(:purchase, purchaser: @purchaser, link: @product, full_name: "Grace Hopper")
-        index_model_records(Purchase)
 
-        get :index, params: @params.merge(name: "Ada")
+        get :index, params: @params.merge(name: "ada")
 
         expect(response.parsed_body).to eq({
           success: true,
@@ -182,7 +166,6 @@ describe Api::V2::SalesController do
         matching_purchase.create_license!(link: @product, serial: "12345678-12345678-12345678-12345678")
         other_purchase = create(:purchase, purchaser: @purchaser, link: @product)
         other_purchase.create_license!(link: @product, serial: "87654321-87654321-87654321-87654321")
-        index_model_records(Purchase)
 
         get :index, params: @params.merge(license_key: matching_purchase.license.serial.downcase)
 
