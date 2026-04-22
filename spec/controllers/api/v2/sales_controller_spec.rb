@@ -162,10 +162,11 @@ describe Api::V2::SalesController do
       end
 
       it "filters sales by license key when license_key is specified" do
+        @product.update!(is_licensed: true)
         matching_purchase = create(:purchase, purchaser: @purchaser, link: @product)
-        matching_purchase.create_license!(link: @product, serial: "12345678-12345678-12345678-12345678")
+        matching_purchase.create_license!
         other_purchase = create(:purchase, purchaser: @purchaser, link: @product)
-        other_purchase.create_license!(link: @product, serial: "87654321-87654321-87654321-87654321")
+        other_purchase.create_license!
 
         get :index, params: @params.merge(license_key: matching_purchase.license.serial.downcase)
 
