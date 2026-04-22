@@ -81,5 +81,28 @@ describe OfferCodesController do
                                            },
                                          })
     end
+
+    it "treats duplicate line items for the same product as a combined quantity" do
+      offer_code.update_attribute(:max_purchase_count, 1)
+      get :compute_discount, params: {
+        code: offer_code.code,
+        products: {
+          "line-item-1" => {
+            permalink: product.unique_permalink,
+            quantity: 1
+          },
+          "line-item-2" => {
+            permalink: product.unique_permalink,
+            quantity: 1
+          }
+        }
+      }
+
+      expect(response.parsed_body).to eq({
+                                           "error_message" => "Sorry, the discount code you are using is invalid for the quantity you have selected.",
+                                           "error_code" => "insufficient_times_of_use",
+                                           "valid" => false
+                                         })
+    end
   end
 end

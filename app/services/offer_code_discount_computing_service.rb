@@ -1,6 +1,22 @@
 # frozen_string_literal: true
 
 class OfferCodeDiscountComputingService
+  ERROR_MESSAGES_BY_CODE = {
+    insufficient_times_of_use: "Sorry, the discount code you are using is invalid for the quantity you have selected.",
+    sold_out: "Sorry, the discount code you wish to use has expired.",
+    invalid_offer: "Sorry, the discount code you wish to use is invalid.",
+    inactive: "Sorry, the discount code you wish to use is inactive.",
+    unmet_minimum_purchase_quantity: "Sorry, the discount code you wish to use has an unmet minimum quantity.",
+  }.freeze
+
+  PURCHASE_ERROR_CODES_BY_CODE = {
+    insufficient_times_of_use: PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY,
+    sold_out: PurchaseErrorCode::OFFER_CODE_SOLD_OUT,
+    invalid_offer: PurchaseErrorCode::OFFER_CODE_INVALID,
+    inactive: PurchaseErrorCode::OFFER_CODE_INACTIVE,
+    unmet_minimum_purchase_quantity: PurchaseErrorCode::OFFER_CODE_INSUFFICIENT_QUANTITY,
+  }.freeze
+
   # While computing it rejects the product if quantity of the product is greater
   # than the quantity left for the offer_code for e.g. Suppose seller adds a
   # universal offer code which has 4 quantity left and a user adds three products
@@ -16,11 +32,19 @@ class OfferCodeDiscountComputingService
     @products = products
   end
 
+  def self.error_message_for(error_code)
+    ERROR_MESSAGES_BY_CODE.fetch(error_code)
+  end
+
+  def self.purchase_error_code_for(error_code)
+    PURCHASE_ERROR_CODES_BY_CODE.fetch(error_code)
+  end
+
   def process
     products_data = {}
 
     links.each do |link|
-      purchase_quantity = products[link.unique_permalink][:quantity].to_i
+      purchase_quantity = normalized_products[link.unique_permalink][:quantity]
       offer_code = find_applicable_offer_code_for(link)
 
       next unless offer_code
@@ -44,10 +68,24 @@ class OfferCodeDiscountComputingService
   private
     attr_reader :code, :products
 
+    def normalized_products
+      @_normalized_products ||= begin
+        product_entries = products.respond_to?(:values) ? products.values : []
+
+        product_entries.each_with_object({}) do |product, memo|
+          permalink = product[:permalink] || product["permalink"]
+          next if permalink.blank?
+
+          memo[permalink] ||= { permalink:, quantity: 0 }
+          memo[permalink][:quantity] += (product[:quantity] || product["quantity"]).to_i
+        end
+      end
+    end
+
     def links
       @_links ||= Link.visible
         .includes({ available_cross_sells: :product })
-        .where(unique_permalink: products.values.map { it[:permalink] })
+        .where(unique_permalink: normalized_products.keys)
     end
 
     def offer_codes

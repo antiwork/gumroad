@@ -113,8 +113,8 @@ export const Checkout = ({
     const discount = await computeOfferDiscount({
       code,
       products: Object.fromEntries(
-        cart.items.map((item) => [
-          item.product.permalink,
+        cart.items.map((item, index) => [
+          `${item.product.permalink}:${index}`,
           { permalink: item.product.permalink, quantity: item.quantity },
         ]),
       ),

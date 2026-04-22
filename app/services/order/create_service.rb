@@ -30,13 +30,23 @@ class Order::CreateService
     order = Order.new(purchaser: buyer)
     purchase_responses = {}
     cart_items = line_items.map { _1.slice(:permalink, :price_cents) }
+    products_by_permalink = Link
+      .where(unique_permalink: line_items.pluck(:permalink))
+      .index_by(&:unique_permalink)
+    invalid_discount_code_responses = build_invalid_discount_code_responses(line_items, products_by_permalink)
 
     line_items.each do |line_item_params|
-      product = Link.find_by(unique_permalink: line_item_params[:permalink])
+      product = products_by_permalink[line_item_params[:permalink]]
       line_item_uid = line_item_params[:uid]
 
       if product.nil?
         purchase_responses[line_item_uid] = error_response("Product not found")
+        next
+      end
+
+      if invalid_discount_code_responses.key?(line_item_uid)
+        purchase_responses[line_item_uid] = invalid_discount_code_responses[line_item_uid]
+        track_offer_code_failure(offer_codes, line_item_uid, product, line_item_params)
         next
       end
 
@@ -61,10 +71,7 @@ class Order::CreateService
 
         if error
           purchase_responses[line_item_uid] = error_response(error, purchase:)
-          if line_item_params[:discount_code].present?
-            offer_codes[line_item_params[:discount_code]] ||= {}
-            offer_codes[line_item_params[:discount_code]][product.unique_permalink] = { permalink: product.unique_permalink, quantity: line_item_params[:quantity], discount_code: line_item_params[:discount_code] }
-          end
+          track_offer_code_failure(offer_codes, line_item_uid, product, line_item_params)
         end
 
         if purchase&.persisted?
@@ -95,6 +102,45 @@ class Order::CreateService
   end
 
   private
+    def build_invalid_discount_code_responses(line_items, products_by_permalink)
+      line_items
+        .select { _1[:discount_code].present? && products_by_permalink[_1[:permalink]].present? }
+        .group_by { _1[:discount_code] }
+        .each_with_object({}) do |(discount_code, discounted_line_items), responses|
+          result = OfferCodeDiscountComputingService.new(
+            discount_code,
+            discounted_line_items.each_with_object({}) do |line_item, products|
+              products[line_item[:uid]] = {
+                permalink: line_item[:permalink],
+                quantity: line_item[:quantity],
+              }
+            end
+          ).process
+          next if result[:error_code].blank?
+
+          response = error_response(
+            OfferCodeDiscountComputingService.error_message_for(result[:error_code])
+          ).merge(
+            error_code: OfferCodeDiscountComputingService.purchase_error_code_for(result[:error_code])
+          )
+
+          discounted_line_items.each do |line_item|
+            responses[line_item[:uid]] = response
+          end
+        end
+    end
+
+    def track_offer_code_failure(offer_codes, line_item_uid, product, line_item_params)
+      return if line_item_params[:discount_code].blank?
+
+      offer_codes[line_item_params[:discount_code]] ||= {}
+      offer_codes[line_item_params[:discount_code]][line_item_uid] = {
+        permalink: product.unique_permalink,
+        quantity: line_item_params[:quantity],
+        discount_code: line_item_params[:discount_code],
+      }
+    end
+
     def build_purchase_params(product, purchase_params)
       purchase_params = purchase_params.to_hash.symbolize_keys
 

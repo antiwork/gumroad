@@ -21,9 +21,9 @@ class Order::ConfirmService
       if error
         if purchase.offer_code.present?
           offer_codes[purchase.offer_code.code] ||= {}
-          offer_codes[purchase.offer_code.code][purchase.link.unique_permalink] = { permalink: purchase.link.unique_permalink,
-                                                                                    quantity: purchase.quantity,
-                                                                                    discount_code: purchase.offer_code.code }
+          offer_codes[purchase.offer_code.code][purchase.id] = { permalink: purchase.link.unique_permalink,
+                                                                 quantity: purchase.quantity,
+                                                                 discount_code: purchase.offer_code.code }
         end
         purchase_responses[purchase.id] = error_response(error, purchase:)
       else

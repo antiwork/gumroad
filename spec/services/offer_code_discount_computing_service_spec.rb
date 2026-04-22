@@ -178,6 +178,20 @@ describe OfferCodeDiscountComputingService do
     expect(result[:error_code]).to eq(:insufficient_times_of_use)
   end
 
+  it "aggregates duplicate line items for the same product before enforcing the usage limit" do
+    offer_code.update_attribute(:max_purchase_count, 2)
+    result = OfferCodeDiscountComputingService.new(
+      offer_code.code,
+      {
+        "line-item-1" => { quantity: "1", permalink: product.unique_permalink },
+        "line-item-2" => { quantity: "2", permalink: product.unique_permalink },
+      }
+    ).process
+
+    expect(result[:products_data]).to eq({})
+    expect(result[:error_code]).to eq(:insufficient_times_of_use)
+  end
+
   context "when offer code is not yet valid" do
     before do
       offer_code.update!(valid_at: 1.years.from_now)

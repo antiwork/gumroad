@@ -122,7 +122,7 @@ describe Order::CreateService, :vcr do
     end
 
     it_behaves_like "order association with cart post checkout" do
-      let(:user) { create(:buyer_user) }
+      let(:user) { create(:user) }
       let(:sign_in_user_action) { @signed_in = true }
       let(:call_action) { Order::CreateService.new(params:, buyer: @signed_in ? user : nil).perform }
       let(:browser_guid) { "123" }
@@ -164,6 +164,57 @@ describe Order::CreateService, :vcr do
                                                                     error_message: "Product not found",
                                                                     name: nil,
                                                                     error_code: nil)
+    end
+
+    it "rejects all duplicate line items that overuse the same offer code before creating purchases" do
+      variant_category = create(:variant_category, link: product_1, title: "Edition")
+      variant_1 = create(:variant, variant_category:, name: "Red")
+      variant_2 = create(:variant, variant_category:, name: "Blue")
+      offer_code = create(
+        :offer_code,
+        user: seller_1,
+        products: [product_1],
+        amount_percentage: 25,
+        amount_cents: nil,
+        currency_type: product_1.price_currency_type,
+        max_purchase_count: 1
+      )
+      params[:line_items] = [
+        {
+          uid: "unique-id-0",
+          permalink: product_1.unique_permalink,
+          perceived_price_cents: product_1.price_cents,
+          quantity: 1,
+          discount_code: offer_code.code,
+          variants: [variant_1.external_id]
+        },
+        {
+          uid: "unique-id-1",
+          permalink: product_1.unique_permalink,
+          perceived_price_cents: product_1.price_cents,
+          quantity: 1,
+          discount_code: offer_code.code,
+          variants: [variant_2.external_id]
+        }
+      ]
+
+      expect(Purchase::CreateService).not_to receive(:new)
+
+      order, purchase_responses, offer_codes = Order::CreateService.new(params:).perform
+
+      expect(order).not_to be_persisted
+      expect(Purchase.count).to eq(0)
+      expect(purchase_responses["unique-id-0"]).to include(
+        success: false,
+        error_message: "Sorry, the discount code you are using is invalid for the quantity you have selected.",
+        error_code: "exceeding_offer_code_quantity"
+      )
+      expect(purchase_responses["unique-id-1"]).to include(
+        success: false,
+        error_message: "Sorry, the discount code you are using is invalid for the quantity you have selected.",
+        error_code: "exceeding_offer_code_quantity"
+      )
+      expect(offer_codes).to eq([])
     end
 
     it "creates an order along with the associated purchases in progress when merchant account is a Brazilian Stripe Connect account" do
