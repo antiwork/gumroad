@@ -97,7 +97,7 @@ export const AffiliateForm = ({
                     <Input
                       type="text"
                       autoComplete="off"
-                      placeholder="Commission"
+                      aria-label="Commission"
                       disabled={processing || !applyToAllProducts}
                       {...inputProps}
                     />
@@ -140,7 +140,7 @@ export const AffiliateForm = ({
                     <Input
                       type="text"
                       autoComplete="off"
-                      placeholder="Commission"
+                      aria-label="Commission"
                       disabled={processing || !product.enabled}
                       {...inputProps}
                     />

@@ -69,7 +69,6 @@ const NotificationEndpointSection = ({
         </FieldsetTitle>
         <InputGroup>
           <Input
-            placeholder="Ping endpoint"
             type="url"
             id={uid}
             value={pingEndpoint}

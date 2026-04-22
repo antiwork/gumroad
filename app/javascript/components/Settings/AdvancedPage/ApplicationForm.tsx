@@ -176,7 +176,6 @@ const ApplicationForm = ({ application }: { application?: Application }) => {
         <Input
           id={`${uid}-name`}
           ref={nameRef}
-          placeholder="Name"
           type="text"
           value={name.value}
           onChange={(e) => setName({ value: e.target.value })}

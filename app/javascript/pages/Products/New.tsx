@@ -356,7 +356,6 @@ const NewProductPage = () => {
                 <Input
                   id={`name-${formUID}`}
                   type="text"
-                  placeholder="Name of product"
                   value={form.data.link.name}
                   onChange={(e) => form.setData("link.name", e.target.value)}
                   aria-invalid={!!errors["link.name"]}
@@ -420,7 +419,6 @@ const NewProductPage = () => {
                     type="text"
                     inputMode="decimal"
                     maxLength={10}
-                    placeholder="Price your product"
                     value={form.data.link.price_range}
                     onChange={(e) => {
                       let newValue = e.target.value;

@@ -460,7 +460,6 @@ const AccountDetailsSection = ({
               </FieldsetTitle>
               <Input
                 id={`${uid}-business-legal-name`}
-                placeholder="Acme"
                 required={complianceInfo.is_business}
                 value={complianceInfo.business_name || ""}
                 disabled={isFormDisabled}
@@ -516,7 +515,6 @@ const AccountDetailsSection = ({
                 <Input
                   id={`${uid}-business-name-kanji`}
                   type="text"
-                  placeholder="Legal Business Name (Kanji)"
                   value={complianceInfo.business_name_kanji || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("business_name_kanji")}
@@ -767,7 +765,6 @@ const AccountDetailsSection = ({
             <Input
               id={`${uid}-creator-first-name`}
               type="text"
-              placeholder="First name"
               value={complianceInfo.first_name || ""}
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("first_name")}
@@ -783,7 +780,6 @@ const AccountDetailsSection = ({
             <Input
               id={`${uid}-creator-last-name`}
               type="text"
-              placeholder="Last name"
               value={complianceInfo.last_name || ""}
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("last_name")}
@@ -800,7 +796,6 @@ const AccountDetailsSection = ({
             <Input
               id={`${uid}-creator-job-title`}
               type="text"
-              placeholder="CEO"
               value={complianceInfo.job_title || ""}
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("job_title")}
@@ -819,7 +814,6 @@ const AccountDetailsSection = ({
                 <Input
                   id={`${uid}-creator-first-name-kanji`}
                   type="text"
-                  placeholder="First name (Kanji)"
                   value={complianceInfo.first_name_kanji || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("first_name_kanji")}
@@ -834,7 +828,6 @@ const AccountDetailsSection = ({
                 <Input
                   id={`${uid}-creator-last-name-kanji`}
                   type="text"
-                  placeholder="Last name (Kanji)"
                   value={complianceInfo.last_name_kanji || ""}
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("last_name_kanji")}
@@ -960,7 +953,6 @@ const AccountDetailsSection = ({
             <Input
               id={`${uid}-creator-street-address`}
               type="text"
-              placeholder="Street address"
               required
               value={complianceInfo.street_address || ""}
               disabled={isFormDisabled}
@@ -1031,7 +1023,6 @@ const AccountDetailsSection = ({
             <Input
               id={`${uid}-creator-city`}
               type="text"
-              placeholder="City"
               value={complianceInfo.city || ""}
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("city")}
@@ -1056,7 +1047,6 @@ const AccountDetailsSection = ({
             <Input
               id={`${uid}-creator-zip-code`}
               type="text"
-              placeholder={complianceInfo.country === "US" ? "ZIP code" : "Postal code"}
               value={complianceInfo.zip_code || ""}
               disabled={isFormDisabled}
               aria-invalid={errorFieldNames.has("zip_code")}
@@ -1094,7 +1084,6 @@ const AccountDetailsSection = ({
         <Input
           id={`${uid}-creator-phone`}
           type="tel"
-          placeholder="Phone number"
           value={complianceInfo.phone || ""}
           disabled={isFormDisabled}
           aria-invalid={errorFieldNames.has("phone")}

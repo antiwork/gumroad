@@ -169,12 +169,14 @@ describe("Product Edit Integrations edit - Discord", type: :system, js: true) do
           expect(page).to have_button "Disconnect Discord"
 
           click_on "Add version"
-          fill_in "Version name", with: "Files"
+          within version_rows.last do
+            fill_in "Name", with: "Files"
+          end
 
           click_on "Add version"
           within version_rows[0] do
             within version_option_rows[0] do
-              fill_in "Version name", with: "New Version"
+              fill_in "Name", with: "New Version"
               check "Enable access to Discord server", allow_label_click: true
             end
           end

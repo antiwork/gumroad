@@ -18,7 +18,6 @@ export const CustomSummaryInput = ({
       <Input
         id={uid}
         type="text"
-        placeholder="You'll get..."
         value={value ?? ""}
         onChange={(evt) => onChange(evt.target.value)}
       />

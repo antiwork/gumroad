@@ -6276,7 +6276,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
           click_on "Opt-in to backtaxes collection"
 
-          expect(page).to have_field("Type your full name to opt-in", placeholder: "Full name")
+          expect(page).to have_field("Type your full name to opt-in")
         end
       end
     end
