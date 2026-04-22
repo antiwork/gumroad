@@ -14,7 +14,7 @@ class License < ApplicationRecord
   belongs_to :imported_customer, optional: true
 
   before_validation :generate_serial, on: :create
-  after_commit :update_purchase_search_index, on: [:create, :update]
+  after_commit :update_purchase_search_index, on: :update
 
   has_flags 1 => :DEPRECATED_is_pregenerated,
             :column => "flags",

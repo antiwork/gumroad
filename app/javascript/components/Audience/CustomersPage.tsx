@@ -24,6 +24,7 @@ import { Select } from "$app/components/Select";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
@@ -320,7 +321,7 @@ const CustomersPage = ({
                   <CardContent>
                     <Fieldset className="grow basis-0">
                       <Label htmlFor={`${uid}-minimum-license-uses`}>License used more than</Label>
-                      <input
+                      <Input
                         id={`${uid}-minimum-license-uses`}
                         type="number"
                         min={0}

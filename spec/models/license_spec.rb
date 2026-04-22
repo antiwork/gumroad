@@ -94,7 +94,7 @@ describe License do
           "fields" => ["license_uses"]
         )
       )
-      license.increment!(:uses)
+      license.update!(uses: license.uses + 1)
     end
 
     it "enqueues a purchase re-index when serial changes" do
