@@ -4,7 +4,7 @@ class SentEmailInfo < ApplicationRecord
   validates_presence_of :key
 
   def self.key_exists?(key)
-    where(key:).exists?
+    unscoped.where(key:).exists?
   end
 
   def self.set_key!(key)

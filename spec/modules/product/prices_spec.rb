@@ -37,6 +37,20 @@ describe Product::Prices do
     end
   end
 
+  describe "#suggested_price_greater_than_price" do
+    it "skips validation when the default price is missing" do
+      product = create(:product)
+      product.prices.destroy_all
+      product.reload
+      product.customizable_price = true
+      product.suggested_price_cents = 100
+
+      expect(product.default_price_cents).to be_nil
+      expect { product.valid? }.not_to raise_error
+      expect(product.errors[:base]).not_to include("The suggested price you entered was too low.")
+    end
+  end
+
   describe "#price_cents=" do
     it "writes to the price_cents column if product is not persisted" do
       product = build(:product)

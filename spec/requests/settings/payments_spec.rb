@@ -657,12 +657,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         visit settings_payments_path
 
         choose "Individual"
-        fill_in "Street address", with: "P.O. Box 123, Smith street"
+        find_field("Address", match: :first).set("P.O. Box 123, Smith street")
         expect do
           click_on "Update settings"
           expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
         end.to_not change { @user.alive_user_compliance_info.reload.street_address }
-        fill_in "Street address", with: "123, Smith street"
+        find_field("Address", match: :first).set("123, Smith street")
         expect do
           click_on "Update settings"
           wait_for_ajax
@@ -689,7 +689,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(page).to have_alert(text: "Thanks! You're all set.")
           sleep 0.5 # Since the previous Alerts takes time to disappear, checking alert returns early before the api call is complete
         end.to change { @user.alive_user_compliance_info.reload.business_street_address }.to("123 North street")
-        fill_in "Street address", with: "po box 123 smith street"
+        find(:css, "input[id$='creator-street-address']").set("po box 123 smith street")
         expect do
           click_on "Update settings"
           expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
@@ -5180,8 +5180,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1901", from: "Year")
 
         fill_in("Pay to the order of", with: "El Salvadorian Creator")
-        fill_in("IBAN", with: "SV44BCIE12345678901234567890")
-        fill_in("Confirm IBAN", with: "SV44BCIE12345678901234567890")
+        fill_in("Account number", with: "12345678901234")
+        fill_in("Confirm account number", with: "12345678901234")
         fill_in("SWIFT / BIC Code", with: "AAAASVS1XXX")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
@@ -5199,7 +5199,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.zip_code).to eq("1101")
         expect(compliance_info.phone).to eq("+50368765432")
         expect(compliance_info.birthday).to eq(Date.new(1901, 1, 1))
-        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("SV44BCIE12345678901234567890")
+        expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("12345678901234")
         expect(@user.reload.active_bank_account.routing_number).to eq("AAAASVS1XXX")
       end
     end
@@ -6276,7 +6276,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
           click_on "Opt-in to backtaxes collection"
 
-          expect(page).to have_field("Type your full name to opt-in", placeholder: "Full name")
+          expect(page).to have_field("Type your full name to opt-in")
         end
       end
     end

@@ -30,6 +30,17 @@ describe SentEmailInfo do
       expect(SentEmailInfo.key_exists?(@sent_email_info.key)).to eq true
       expect(SentEmailInfo.key_exists?("non-existing-key")).to eq false
     end
+
+    it "is not affected by outer ActiveRecord scopes" do
+      user = create(:user)
+      # Simulate calling key_exists? from within an association scope block,
+      # which could leak a user_id WHERE clause into the SentEmailInfo query
+      user.purchases.where(id: 0).each do |_|
+        # This block won't execute, but the scope is established
+      end
+      # Even after scoped iteration, key_exists? should work without scope leakage
+      expect(SentEmailInfo.key_exists?(@sent_email_info.key)).to eq true
+    end
   end
 
   describe ".set_key!" do

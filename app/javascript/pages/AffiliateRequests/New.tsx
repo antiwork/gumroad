@@ -97,7 +97,6 @@ const AffiliateRequestsNew = () => {
                     id={nameUID}
                     type="text"
                     required
-                    placeholder="Name"
                     value={data.affiliate_request.name}
                     onChange={(event) => setData("affiliate_request.name", event.target.value)}
                   />
@@ -112,7 +111,6 @@ const AffiliateRequestsNew = () => {
                     id={emailUID}
                     type="email"
                     required
-                    placeholder="Email"
                     value={data.affiliate_request.email}
                     onChange={(event) => setData("affiliate_request.email", event.target.value)}
                   />

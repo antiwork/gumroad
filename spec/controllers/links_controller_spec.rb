@@ -336,6 +336,17 @@ describe LinksController, :vcr, inertia: true do
         let(:response_status) { 204 }
       end
 
+      it "returns the existing validation error when suggested price is set but the default price record is missing" do
+        @product.prices.destroy_all
+        @product.update_column(:customizable_price, true)
+
+        put :update, params: @params.merge(suggested_price: "10", customizable_price: true), as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["error_message"]).to eq("Default price cents can't be blank")
+        expect(@product.reload.suggested_price_cents).to be_nil
+      end
+
       context "when user email is empty" do
         before do
           seller.email = ""
@@ -4279,6 +4290,28 @@ describe LinksController, :vcr, inertia: true do
 
       def product_json(product, target, query = request.params["query"])
         ProductPresenter.card_for_web(product:, request: @request, recommended_by: @recommended_by, show_seller: !@on_profile, target:, query:).as_json
+      end
+
+      it "accepts a string ids param when searching by user" do
+        Link.__elasticsearch__.create_index!(force: true)
+        creator = create(:compliant_user, username: "creatordudey", name: "Creator Dudey")
+        section = create(:seller_profile_products_section, seller: creator)
+        product = create(:product, name: "Top quality weasel", user: creator)
+        other_product = create(:product, name: "First product", user: creator)
+        section.update!(shown_products: [other_product, product].map { _1.id })
+        Link.import(force: true, refresh: true)
+
+        @recommended_by = nil
+        @on_profile = true
+
+        get :search, params: {
+          user_id: creator.external_id,
+          section_id: section.external_id,
+          ids: product.external_id
+        }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["products"]).to eq([product_json(product, "profile")])
       end
 
       describe "Setting and ordering" do

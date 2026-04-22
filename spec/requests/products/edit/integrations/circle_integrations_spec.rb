@@ -125,12 +125,14 @@ describe("Product Edit Integrations edit - Circle", :without_circle_rate_limit, 
               select("Tests", from: "Select a space group")
 
               click_on("Add version")
-              fill_in "Version name", with: "Files"
+              within version_rows.last do
+                fill_in "Name", with: "Files"
+              end
 
               click_on("Add version")
               within version_rows[0] do
                 within version_option_rows[0] do
-                  fill_in "Version name", with: "New Version"
+                  fill_in "Name", with: "New Version"
                   check "Enable access to Circle community", allow_label_click: true
                 end
               end

@@ -632,7 +632,6 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   id={`${uid}name`}
                   value={file.display_name}
                   onChange={(evt) => updateFile({ display_name: evt.target.value })}
-                  placeholder="Name"
                 />
               </Fieldset>
 
@@ -646,7 +645,6 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                   maxLength={65_535}
                   value={file.description ?? ""}
                   onChange={(evt) => updateFile({ description: evt.target.value })}
-                  placeholder="Description"
                 />
               </Fieldset>
 
@@ -660,7 +658,6 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
                     id={`${uid}isbn`}
                     value={file.isbn ?? ""}
                     onChange={(evt) => updateFile({ isbn: evt.target.value })}
-                    placeholder="ISBN"
                   />
                 </Fieldset>
               ) : null}

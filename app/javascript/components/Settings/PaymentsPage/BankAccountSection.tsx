@@ -942,7 +942,6 @@ const BankAccountSection = ({
           </FieldsetTitle>
           <Input
             id={`${uid}-account-holder-full-name`}
-            placeholder="Full name of account holder"
             value={bankAccount?.account_holder_full_name || ""}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("account_holder_full_name")}
@@ -2096,6 +2095,22 @@ const BankAccountSection = ({
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                   />
                 </Fieldset>
+              ) : user.country_code === "SV" ? (
+                <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
+                  </FieldsetTitle>
+                  <Input
+                    type="text"
+                    id={`${uid}-bank-code`}
+                    placeholder="AAAASVS1XXX"
+                    maxLength={11}
+                    required
+                    disabled={isFormDisabled}
+                    aria-invalid={errorFieldNames.has("bank_code")}
+                    onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
+                  />
+                </Fieldset>
               ) : null}
               {user.country_supports_iban ? (
                 <>
@@ -2204,22 +2219,6 @@ const BankAccountSection = ({
                         type="text"
                         id={`${uid}-bank-code`}
                         placeholder="AAAAKZKZXXX"
-                        maxLength={11}
-                        required
-                        disabled={isFormDisabled}
-                        aria-invalid={errorFieldNames.has("bank_code")}
-                        onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
-                      />
-                    </Fieldset>
-                  ) : user.country_code === "SV" ? (
-                    <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
-                      <FieldsetTitle>
-                        <Label htmlFor={`${uid}-bank-code`}>SWIFT / BIC Code</Label>
-                      </FieldsetTitle>
-                      <Input
-                        type="text"
-                        id={`${uid}-bank-code`}
-                        placeholder="AAAASVS1XXX"
                         maxLength={11}
                         required
                         disabled={isFormDisabled}
@@ -2391,7 +2390,7 @@ const BankAccountSection = ({
                   <Fieldset state={errorFieldNames.has("account_number") ? "danger" : undefined}>
                     <FieldsetTitle>
                       <Label htmlFor={`${uid}-account-number`}>
-                        {user.country_code && ["US", "MX", "AR", "PE"].includes(user.country_code)
+                        {user.country_code && ["US", "MX", "AR", "PE", "SV"].includes(user.country_code)
                           ? "Account number"
                           : "Account #"}
                       </Label>
@@ -2409,7 +2408,7 @@ const BankAccountSection = ({
                   <Fieldset state={errorFieldNames.has("account_number_confirmation") ? "danger" : undefined}>
                     <FieldsetTitle>
                       <Label htmlFor={`${uid}-confirm-account-number`}>
-                        {user.country_code && ["US", "MX", "AR", "PE"].includes(user.country_code)
+                        {user.country_code && ["US", "MX", "AR", "PE", "SV"].includes(user.country_code)
                           ? "Confirm account number"
                           : "Confirm account #"}
                       </Label>

@@ -19,15 +19,12 @@ class CreatorAnalytics::Churn::ElasticsearchFetcher
 
     query = base_query
     query[:bool][:must] << { exists: { field: "subscription_cancelled_at" } }
-    query[:bool][:filter] << {
-      range: {
-        subscription_cancelled_at: {
-          time_zone: date_window.timezone_id,
-          gte: date_window.start_date.to_s,
-          lte: date_window.end_date.to_s
-        }
-      }
-    }
+    query[:bool][:filter] << CreatorAnalytics::DateQuery.day_range(
+      field: :subscription_cancelled_at,
+      start_date: date_window.start_date,
+      end_date: date_window.end_date,
+      timezone: seller.timezone
+    )
 
     sources = composite_sources(field: "subscription_cancelled_at")
     aggs = {
@@ -51,15 +48,12 @@ class CreatorAnalytics::Churn::ElasticsearchFetcher
     return {} if product_ids.empty?
 
     query = base_query
-    query[:bool][:filter] << {
-      range: {
-        created_at: {
-          time_zone: date_window.timezone_id,
-          gte: date_window.start_date.to_s,
-          lte: date_window.end_date.to_s
-        }
-      }
-    }
+    query[:bool][:filter] << CreatorAnalytics::DateQuery.day_range(
+      field: :created_at,
+      start_date: date_window.start_date,
+      end_date: date_window.end_date,
+      timezone: seller.timezone
+    )
 
     sources = composite_sources(field: "created_at")
     aggs = {
@@ -79,11 +73,11 @@ class CreatorAnalytics::Churn::ElasticsearchFetcher
     return {} if product_ids.empty?
 
     query = base_query
-    start_boundary = date_window.start_date.to_s
-    query[:bool][:filter] << { range: { created_at: { lt: start_boundary, time_zone: date_window.timezone_id } } }
+    start_boundary = CreatorAnalytics::DateQuery.day_start(date_window.start_date, timezone: seller.timezone).iso8601
+    query[:bool][:filter] << { range: { created_at: { lt: start_boundary } } }
     query[:bool][:should] ||= []
     query[:bool][:should] << { bool: { must_not: { exists: { field: "subscription_deactivated_at" } } } }
-    query[:bool][:should] << { range: { subscription_deactivated_at: { time_zone: date_window.timezone_id, gt: start_boundary } } }
+    query[:bool][:should] << { range: { subscription_deactivated_at: { gt: start_boundary } } }
     query[:bool][:minimum_should_match] = 1
 
     sources = [

@@ -130,7 +130,6 @@ const LookupLayout = ({ children, title, type }: {
               <Label htmlFor="email">What email address did you use?</Label>
               <Input
                 id="email"
-                placeholder="Email address"
                 type="text"
                 value={email.value}
                 onChange={(evt) => setEmail({ value: evt.target.value })}

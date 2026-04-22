@@ -292,7 +292,6 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
             <Input
               id={`title-${uid}`}
               type="text"
-              placeholder="Title"
               value={data.utm_link.title}
               ref={titleRef}
               onChange={(e) => setData("utm_link.title", e.target.value)}
@@ -308,7 +307,6 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
             <Select
               inputId={`destination-${uid}`}
               instanceId={`destination-${uid}`}
-              placeholder="Select where you want to send your audience"
               options={context.destination_options}
               value={destination}
               isMulti={false}
@@ -383,7 +381,6 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               </FieldsetTitle>
               <UtmFieldSelect
                 id={`${uid}-source`}
-                placeholder="newsletter"
                 baseOptionValues={context.utm_fields_values.sources}
                 value={data.utm_link.utm_source}
                 onChange={(value) => setData("utm_link.utm_source", value)}
@@ -400,7 +397,6 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               </FieldsetTitle>
               <UtmFieldSelect
                 id={`${uid}-medium`}
-                placeholder="email"
                 baseOptionValues={context.utm_fields_values.mediums}
                 value={data.utm_link.utm_medium}
                 onChange={(value) => setData("utm_link.utm_medium", value)}
@@ -418,7 +414,6 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
             </FieldsetTitle>
             <UtmFieldSelect
               id={`${uid}-campaign`}
-              placeholder="new-course-launch"
               baseOptionValues={context.utm_fields_values.campaigns}
               value={data.utm_link.utm_campaign}
               onChange={(value) => setData("utm_link.utm_campaign", value)}
@@ -435,7 +430,6 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
             </FieldsetTitle>
             <UtmFieldSelect
               id={`${uid}-term`}
-              placeholder="photo-editing"
               baseOptionValues={context.utm_fields_values.terms}
               value={data.utm_link.utm_term}
               onChange={(value) => setData("utm_link.utm_term", value)}
@@ -452,7 +446,6 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
             </FieldsetTitle>
             <UtmFieldSelect
               id={`${uid}-content`}
-              placeholder="video-ad"
               baseOptionValues={context.utm_fields_values.contents}
               value={data.utm_link.utm_content}
               onChange={(value) => setData("utm_link.utm_content", value)}
@@ -498,7 +491,7 @@ const UtmFieldSelect = ({
   onChange,
 }: {
   id: string;
-  placeholder: string;
+  placeholder?: string;
   baseOptionValues: string[];
   value: string | null;
   onChange: (value: string | null) => void;

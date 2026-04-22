@@ -159,7 +159,6 @@ const AddTeamMembersSection = ({
             id={emailUID}
             type="text"
             ref={emailFieldRef}
-            placeholder="Team member's email"
             className="required"
             value={teamInvitation.email}
             onChange={(evt) => {
@@ -179,7 +178,6 @@ const AddTeamMembersSection = ({
             options={options.filter((o) => o.id !== "owner")}
             isMulti={false}
             isClearable={false}
-            placeholder="Choose a role"
             value={options.find((o) => o.id === teamInvitation.role) ?? null}
             onChange={(evt) => {
               if (evt !== null) {

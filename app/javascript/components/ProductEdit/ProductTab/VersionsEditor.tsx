@@ -162,7 +162,6 @@ const VersionEditor = ({
                   id={`${uid}-name`}
                   type="text"
                   value={version.name}
-                  placeholder="Version name"
                   onChange={(evt) => updateVersion({ name: evt.target.value })}
                 />
                 <a href={url} target="_blank" rel="noreferrer">

@@ -33,7 +33,7 @@ describe("ProductMoreOptionScenario", type: :system, js: true) do
 
       click_on "Add version"
       within version_rows.last do
-        fill_in "Version name", with: "M"
+        fill_in "Name", with: "M"
       end
 
       expect do
@@ -65,7 +65,7 @@ describe("ProductMoreOptionScenario", type: :system, js: true) do
 
       click_on "Add version"
       within version_rows.last do
-        fill_in "Version name", with: "99%"
+        fill_in "Name", with: "99%"
       end
 
       save_change

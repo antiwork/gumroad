@@ -366,7 +366,7 @@ module Product::Searchable
       search_options[:query][:bool][:must] << params[:search] if params[:search]
 
       if (params[:ids].present? || params[:section].is_a?(SellerProfileSection)) && params[:sort] == ProductSortKey::PAGE_LAYOUT
-        product_ids = params[:ids] || params[:section].shown_products
+        product_ids = Array(params[:ids] || params[:section].shown_products)
         search_options[:query][:bool][:should] ||= []
         product_ids.each_with_index do |id, i|
           search_options[:query][:bool][:should] << { term: { _id: { value: id, boost: product_ids.size - i } } }

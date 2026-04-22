@@ -241,6 +241,27 @@ describe "Sales page", type: :system, js: true do
         expect(page).to have_nth_table_row_record(1, "Customer 2")
         expect(page).to have_nth_table_row_record(2, "Customer 3")
       end
+
+      it "preserves filter state after navigating to a sale and back" do
+        login_as seller
+        visit customers_path
+
+        toggle_disclosure "Filter"
+        fill_in "Paid more than", with: "2"
+        expect(page).to have_nth_table_row_record(1, "Customer 3")
+        within(find("tbody")) { expect(page).to have_selector(:table_row, count: 1) }
+
+        find(:table_row, { "Name" => "Customer 3" }).click
+        expect(page).to have_current_path(customer_sale_path(purchase3.external_id))
+
+        find("a[aria-label='Back to customers']").click
+
+        expect(page).to have_current_path(customers_path)
+        expect(page).to have_nth_table_row_record(1, "Customer 3")
+        within(find("tbody")) { expect(page).to have_selector(:table_row, count: 1) }
+        toggle_disclosure "Filter"
+        expect(page).to have_field("Paid more than", with: "2")
+      end
     end
 
     describe "exporting" do
