@@ -105,6 +105,37 @@ describe UpdatePayoutMethod do
           expect(user.active_bank_account).to eq(existing_bank_account)
         end
       end
+
+      context "when the user already has multiple alive bank accounts" do
+        let!(:orphaned_bank_account) { create(:ach_account, user:) }
+
+        it "does not block the replacement and reports the inconsistency" do
+          params = ActionController::Parameters.new(
+            bank_account: {
+              type: AchAccount.name,
+              account_holder_full_name: "Named User",
+              account_number: "123456789",
+              account_number_confirmation: "123456789",
+              routing_number: "110000000",
+            }
+          )
+
+          allow(ErrorNotifier).to receive(:notify)
+          allow(Rails.logger).to receive(:error)
+
+          result = described_class.new(user_params: params, seller: user).process
+
+          expect(result).to eq(success: true)
+          expect(user.bank_accounts.alive.count).to eq(2)
+          expect(ErrorNotifier).to have_received(:notify).with(
+            "Unexpected alive bank account count after payout method update",
+            user_id: user.id,
+            alive_count: 2,
+            alive_bank_account_ids: match_array(user.bank_accounts.alive.pluck(:id)),
+            new_bank_account_id: user.bank_accounts.order(:id).last.id
+          )
+        end
+      end
     end
 
     describe "switching to card payouts" do

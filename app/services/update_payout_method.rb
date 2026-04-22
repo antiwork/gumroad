@@ -253,18 +253,26 @@ class UpdatePayoutMethod
     def replace_active_bank_account_with_validated_delete!(new_bank_account)
       user.active_bank_account&.mark_deleted!
       new_bank_account.save!
-      assert_single_alive_bank_account!
+      notify_if_unexpected_alive_bank_accounts(new_bank_account)
     end
 
     def replace_active_bank_account_with_unvalidated_delete!(new_bank_account)
       user.active_bank_account&.mark_deleted(validate: false)
       new_bank_account.save!
-      assert_single_alive_bank_account!
+      notify_if_unexpected_alive_bank_accounts(new_bank_account)
     end
 
-    def assert_single_alive_bank_account!
-      alive_count = user.bank_accounts.alive.count
-      raise "Invariant violation: expected 1 alive bank account for user #{user.id}, found #{alive_count}" if alive_count != 1
+    def notify_if_unexpected_alive_bank_accounts(new_bank_account)
+      alive_bank_account_ids = user.bank_accounts.alive.pluck(:id)
+      return if alive_bank_account_ids.one?
+
+      message = "Unexpected alive bank account count after payout method update"
+      Rails.logger.error("#{message} for user #{user.id}: #{alive_bank_account_ids.join(', ')}")
+      ErrorNotifier.notify(message,
+                           user_id: user.id,
+                           alive_count: alive_bank_account_ids.count,
+                           alive_bank_account_ids:,
+                           new_bank_account_id: new_bank_account.id)
     end
 
     def bank_account_error_for(record)
