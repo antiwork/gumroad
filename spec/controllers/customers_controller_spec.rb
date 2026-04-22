@@ -104,21 +104,37 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(customer_ids[response]).to match_array([purchases.third.external_id, purchases.fourth.external_id])
     end
 
-    it "filters by minimum license uses" do
-      customer_ids = -> (res) { res.parsed_body.deep_symbolize_keys[:customers].map { _1[:id] } }
+    describe "minimum license uses filter" do
+      before do
+        purchases.first.license.update!(uses: 10)
+        purchases.second.license.update!(uses: 5)
+        purchases.third.license.update!(uses: 1)
+        index_model_records(Purchase)
+      end
 
-      purchases.first.license.update!(uses: 10)
-      purchases.second.license.update!(uses: 5)
-      purchases.third.license.update!(uses: 1)
-      index_model_records(Purchase)
+      let(:customer_ids) { -> (res) { res.parsed_body.deep_symbolize_keys[:customers].map { _1[:id] } } }
 
-      get :paged, params: { page: 1, minimum_license_uses: 4 }
-      expect(response).to be_successful
-      expect(customer_ids[response]).to match_array([purchases.first.external_id, purchases.second.external_id])
+      context "when the :license_uses_sales_filter feature is active for the seller" do
+        before { Feature.activate_user(:license_uses_sales_filter, seller) }
 
-      get :paged, params: { page: 1, minimum_license_uses: 9 }
-      expect(response).to be_successful
-      expect(customer_ids[response]).to match_array([purchases.first.external_id])
+        it "filters by minimum license uses" do
+          get :paged, params: { page: 1, minimum_license_uses: 4 }
+          expect(response).to be_successful
+          expect(customer_ids[response]).to match_array([purchases.first.external_id, purchases.second.external_id])
+
+          get :paged, params: { page: 1, minimum_license_uses: 9 }
+          expect(response).to be_successful
+          expect(customer_ids[response]).to match_array([purchases.first.external_id])
+        end
+      end
+
+      context "when the :license_uses_sales_filter feature is inactive for the seller" do
+        it "ignores the minimum_license_uses param" do
+          get :paged, params: { page: 1, minimum_license_uses: 9 }
+          expect(response).to be_successful
+          expect(customer_ids[response]).to match_array(purchases.map(&:external_id))
+        end
+      end
     end
   end
 

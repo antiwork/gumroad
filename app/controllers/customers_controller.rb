@@ -60,7 +60,7 @@ class CustomersController < Sellers::BaseController
       created_before: params[:created_before],
       country: params[:country],
       active_customers_only: ActiveModel::Type::Boolean.new.cast(params[:active_customers_only]),
-      minimum_license_uses: params[:minimum_license_uses],
+      minimum_license_uses: Feature.active?(:license_uses_sales_filter, current_seller) ? params[:minimum_license_uses] : nil,
     )
     customers_presenter = CustomersPresenter.new(
       pundit_user:,

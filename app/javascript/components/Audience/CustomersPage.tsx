@@ -52,6 +52,7 @@ export type CustomerPageProps = {
   countries: string[];
   can_ping: boolean;
   show_refund_fee_notice: boolean;
+  license_uses_filter_enabled: boolean;
 };
 
 const year = new Date().getFullYear();
@@ -68,6 +69,7 @@ const CustomersPage = ({
   countries,
   can_ping,
   show_refund_fee_notice,
+  license_uses_filter_enabled,
   ...initialState
 }: CustomerPageProps) => {
   const currentSeller = useCurrentSeller();
@@ -318,26 +320,28 @@ const CustomersPage = ({
                       </FormSelect>
                     </Fieldset>
                   </CardContent>
-                  <CardContent>
-                    <Fieldset className="grow basis-0">
-                      <Label htmlFor={`${uid}-minimum-license-uses`}>License used more than</Label>
-                      <Input
-                        id={`${uid}-minimum-license-uses`}
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={minimumLicenseUses ?? ""}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          updateQuery({
-                            minimumLicenseUses: value === "" ? null : Math.max(0, Number.parseInt(value, 10) || 0),
-                          });
-                        }}
-                        placeholder="0"
-                      />
-                      <FieldsetDescription>Number of times the license has been used.</FieldsetDescription>
-                    </Fieldset>
-                  </CardContent>
+                  {license_uses_filter_enabled ? (
+                    <CardContent>
+                      <Fieldset className="grow basis-0">
+                        <Label htmlFor={`${uid}-minimum-license-uses`}>License used more than</Label>
+                        <Input
+                          id={`${uid}-minimum-license-uses`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={minimumLicenseUses ?? ""}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            updateQuery({
+                              minimumLicenseUses: value === "" ? null : Math.max(0, Number.parseInt(value, 10) || 0),
+                            });
+                          }}
+                          placeholder="0"
+                        />
+                        <FieldsetDescription>Number of times the license has been used.</FieldsetDescription>
+                      </Fieldset>
+                    </CardContent>
+                  ) : null}
                   <CardContent>
                     <h4 className="font-bold">
                       <Label htmlFor={`${uid}-active-customers-only`}>Show active customers only</Label>
