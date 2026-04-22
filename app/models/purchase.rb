@@ -354,6 +354,8 @@ class Purchase < ApplicationRecord
   before_save :to_mongo
   before_save :truncate_referrer
 
+  before_destroy :capture_inventory_variant_ids_before_destroy
+
   after_commit :attach_credit_card_to_purchaser,
                on: :update,
                if: -> (purchase) { Feature.active?(:attach_credit_card_to_purchaser) && purchase.previous_changes[:purchaser_id].present? && purchase.purchaser &&
@@ -421,9 +423,22 @@ class Purchase < ApplicationRecord
     apply_inventory_counter_delta!(after_qty - before_qty)
   end
 
+  def capture_inventory_variant_ids_before_destroy
+    @inventory_variant_ids_before_destroy = variant_attribute_ids.dup if counts_towards_inventory?
+  end
+
   def sync_inventory_counter_caches_on_destroy
     return unless counts_towards_inventory?
-    apply_inventory_counter_delta!(-quantity.to_i)
+    cached_variant_ids = @inventory_variant_ids_before_destroy || []
+    delta = -quantity.to_i
+    return if delta.zero?
+
+    if cached_variant_ids.any?
+      BaseVariant.where(id: cached_variant_ids).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{delta}")
+    end
+    if link_id.present?
+      Link.where(id: link_id).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{delta}")
+    end
   end
 
   def inventory_counter_cache_relevant_change?
