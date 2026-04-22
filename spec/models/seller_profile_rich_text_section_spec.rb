@@ -23,28 +23,4 @@ describe SellerProfileRichTextSection do
     expect(section).to_not be_valid
     expect(section.errors.full_messages.to_sentence).to eq "Text is too large"
   end
-
-  describe "iffy ingest" do
-    it "triggers iffy ingest when json_data changes" do
-      section = create(:seller_profile_rich_text_section)
-      expect do
-        section.update!(json_data: {
-                          text: {
-                            content: [
-                              { type: "paragraph", content: [{ text: "Rich content text" }] },
-                              { type: "image", attrs: { src: "https://example.com/image1.jpg" } },
-                              { type: "image", attrs: { src: "https://example.com/image2.jpg" } }
-                            ]
-                          }
-                        })
-      end.to change { Iffy::Profile::IngestJob.jobs.size }.by(1)
-    end
-
-    it "triggers iffy ingest when header changes" do
-      section = create(:seller_profile_rich_text_section)
-      expect do
-        section.update!(header: "New Header")
-      end.to change { Iffy::Profile::IngestJob.jobs.size }.by(1)
-    end
-  end
 end

@@ -56,6 +56,45 @@ describe User::SocialGoogle do
       expect(user).to be_valid
       expect(user.name).to eq("Test User")
     end
+
+    it "retries after a deadlock and returns the created user" do
+      deadlock_data = @data.deep_dup
+      deadlock_data["uid"] = "google-deadlock-retry-uid"
+      deadlock_data["info"]["email"] = "google-deadlock-retry@example.com"
+      deadlock_data["extra"]["raw_info"]["email"] = "google-deadlock-retry@example.com"
+
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+
+      save_attempts = 0
+      allow_any_instance_of(User).to receive(:save!).and_wrap_original do |original, *args|
+        save_attempts += 1
+        raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock" if save_attempts == 1
+
+        original.call(*args)
+      end
+
+      result = User.find_or_create_for_google_oauth2(deadlock_data)
+
+      expect(result).to be_persisted
+      expect(result).to be_valid
+      expect(result.google_uid).to eq(deadlock_data["uid"])
+      expect(save_attempts).to be >= 2
+    end
+
+    it "returns nil and notifies after exhausting deadlock retries" do
+      deadlock_data = @data.deep_dup
+      deadlock_data["uid"] = "google-deadlock-failure-uid"
+      deadlock_data["info"]["email"] = "google-deadlock-failure@example.com"
+      deadlock_data["extra"]["raw_info"]["email"] = "google-deadlock-failure@example.com"
+
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+      allow_any_instance_of(User).to receive(:save!).and_raise(ActiveRecord::Deadlocked, "Deadlock found when trying to get lock")
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::Deadlocked))
+
+      result = User.find_or_create_for_google_oauth2(deadlock_data)
+
+      expect(result).to be_nil
+    end
   end
 
   describe ".google_picture_url", :vcr do

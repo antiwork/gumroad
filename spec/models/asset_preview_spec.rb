@@ -304,21 +304,6 @@ describe AssetPreview, :vcr do
     end
   end
 
-  describe "callbacks" do
-    describe "#reset_moderated_by_iffy_flag" do
-      let(:product) { create(:product, moderated_by_iffy: true) }
-      let(:asset_preview) { create(:asset_preview, link: product) }
-
-      context "when a new asset preview is created" do
-        it "resets moderated_by_iffy flag on the associated product" do
-          expect do
-            create(:asset_preview, link: product)
-          end.to change { product.reload.moderated_by_iffy }.from(true).to(false)
-        end
-      end
-    end
-  end
-
   describe "#image_url?" do
     it "returns true for image assets" do
       image = create(:asset_preview_jpg)

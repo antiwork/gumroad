@@ -6,7 +6,6 @@ class OfferCode < ApplicationRecord
   include FlagShihTzu
   include ExternalId
   include CurrencyHelper
-  include Mongoable
   include Deletable
   include MaxPurchaseCount
   include OfferCode::Sorting
@@ -35,7 +34,6 @@ class OfferCode < ApplicationRecord
   validate :validate_cancellation_discount_product_type
   validate :validate_not_used_as_default_discount
 
-  before_save :to_mongo
 
   after_save :invalidate_product_cache
   after_save :reindex_associated_products

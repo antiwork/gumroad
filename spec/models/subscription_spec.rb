@@ -793,19 +793,6 @@ describe Subscription, :vcr do
       end
     end
 
-    describe "iffy zipcode authorization" do
-      it "does not call iffy on recurring charges", :vcr do
-        user = @subscription.user
-        user.credit_card = CreditCard.create(build(:chargeable))
-        user.save!
-        expect(User::Risk).to_not receive(:contact_iffy_risk_analysis)
-        @subscription.charge!
-        expect(Purchase.count).to eq 2
-        expect(Purchase.first.purchase_state).to eq "successful"
-        expect(Purchase.last.purchase_state).to eq "successful"
-        expect(@subscription.failed_at).to be(nil)
-      end
-    end
 
     describe "physical subscription" do
       before do
@@ -1952,7 +1939,7 @@ describe Subscription, :vcr do
         # calculated
         affiliate_credit_cents: 11, # $5.99 * 200/10,000
       )
-      @original_purchase.seller.mark_compliant!(author_name: "Iffy")
+      @original_purchase.seller.mark_compliant!(author_name: "ContentModeration")
       @original_purchase.purchase_custom_fields.create!(name: "favorite color", type: CustomField::TYPE_TEXT, value: "Blue")
       @original_purchase.create_recommended_purchase_info({
                                                             recommended_link_id: @original_purchase.link_id,

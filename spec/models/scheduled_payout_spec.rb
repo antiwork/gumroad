@@ -171,12 +171,15 @@ describe ScheduledPayout do
     context "when action is payout" do
       let(:scheduled_payout) { create(:scheduled_payout, user: user, action: "payout", scheduled_at: 1.day.ago) }
 
-      it "calls PayoutUsersService to create payout and marks as executed" do
-        payment = instance_double(Payment, failed?: false)
-        service = instance_double(PayoutUsersService, process: [payment])
-        expect(PayoutUsersService).to receive(:new)
-          .with(date_string: Date.yesterday.to_s, processor_type: user.current_payout_processor, user_ids: user.id)
-          .and_return(service)
+      it "creates a payment via Payouts.create_payment and marks as executed" do
+        payment = instance_double(Payment, failed?: false, reload: nil)
+        allow(payment).to receive(:reload).and_return(payment)
+        processor = class_double(StripePayoutProcessor, process_payments: nil)
+        expect(Payouts).to receive(:create_payment)
+          .with(Date.yesterday.to_s, user.current_payout_processor, user)
+          .and_return([payment, nil])
+        expect(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
+        expect(processor).to receive(:process_payments).with([payment])
 
         scheduled_payout.execute!
 
@@ -186,22 +189,32 @@ describe ScheduledPayout do
 
       it "raises if payout fails" do
         payment = instance_double(Payment, failed?: true, errors: double(full_messages: ["Stripe account not found"]))
-        service = instance_double(PayoutUsersService, process: [payment])
-        allow(PayoutUsersService).to receive(:new)
-          .with(date_string: Date.yesterday.to_s, processor_type: user.current_payout_processor, user_ids: user.id)
-          .and_return(service)
+        allow(payment).to receive(:reload).and_return(payment)
+        processor = class_double(StripePayoutProcessor, process_payments: nil)
+        allow(Payouts).to receive(:create_payment)
+          .with(Date.yesterday.to_s, user.current_payout_processor, user)
+          .and_return([payment, nil])
+        allow(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
 
-        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed/)
+        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Stripe account not found/)
         expect(scheduled_payout.reload.status).to eq("pending")
       end
 
       it "raises if no payment is created" do
-        service = instance_double(PayoutUsersService, process: [])
-        allow(PayoutUsersService).to receive(:new)
-          .with(date_string: Date.yesterday.to_s, processor_type: user.current_payout_processor, user_ids: user.id)
-          .and_return(service)
+        allow(Payouts).to receive(:create_payment)
+          .with(Date.yesterday.to_s, user.current_payout_processor, user)
+          .and_return([nil, nil])
 
-        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payment was not sent/)
+        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: No payable balance available/)
+        expect(scheduled_payout.reload.status).to eq("pending")
+      end
+
+      it "raises with payment errors when create_payment returns errors" do
+        allow(Payouts).to receive(:create_payment)
+          .with(Date.yesterday.to_s, user.current_payout_processor, user)
+          .and_return([nil, ["Stripe account not connected"]])
+
+        expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Stripe account not connected/)
         expect(scheduled_payout.reload.status).to eq("pending")
       end
     end
@@ -210,7 +223,7 @@ describe ScheduledPayout do
       let(:scheduled_payout) { create(:scheduled_payout, user: user, action: "payout", scheduled_at: 1.day.ago, payout_amount_cents: 150_000) }
 
       it "flags for review instead of executing" do
-        expect(PayoutUsersService).not_to receive(:new)
+        expect(Payouts).not_to receive(:create_payment)
 
         scheduled_payout.execute!
 

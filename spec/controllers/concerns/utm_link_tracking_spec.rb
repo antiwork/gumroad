@@ -153,7 +153,6 @@ describe UtmLinkTracking, type: :controller do
 
     context "on a post page" do
       before do
-        allow(Iffy::Post::IngestJob).to receive(:perform_async)
         allow(controller).to receive(:custom_domain_view_post_path).and_return("/posts/#{post.slug}")
         request.host = "#{seller.subdomain}"
         request.path = "/posts/#{post.slug}"

@@ -147,6 +147,41 @@ DISABLE_RACK_TIMEOUT="1"
 
 For the new env variables to take effect, you might need to run `bin/spring stop` before running the tests again.
 
+## VCR Cassettes
+
+We use [VCR](https://github.com/vcr/vcr) to record HTTP interactions (Stripe, PayPal, etc.) so specs replay recorded responses instead of hitting real APIs in CI. Cassettes are YAML files under `spec/support/fixtures/vcr_cassettes/`.
+
+### When to regenerate cassettes
+
+If your code change causes a spec to follow a **new HTTP code path** (e.g., removing a guard clause that previously short-circuited before an API call, changing request parameters, or adding a new external call), the existing cassette won't cover the new interaction. You need to regenerate it.
+
+### How to regenerate
+
+1. Make your code change
+2. Run the affected spec locally:
+   ```bash
+   DISABLE_SPRING=1 bin/rspec spec/path/to_spec.rb
+   ```
+3. VCR automatically records new HTTP interactions into `.yml` cassette files
+4. `git add` the new or updated cassettes under `spec/support/fixtures/vcr_cassettes/`
+5. Commit them with your PR
+
+### Rules
+
+- **Do not stub external API calls to work around missing cassettes.** Run the spec locally to record the real interaction.
+- **Do not share cassettes across test files.** Scope them to specific tests to avoid collisions.
+- **Delete stale cassettes** when the test or endpoint they cover no longer exists.
+- If the spec needs real API credentials to record, see the deployment repo for credential setup.
+
+### Common scenarios
+
+| Scenario | What to do |
+|----------|------------|
+| Removed a guard clause (e.g., admin login block) | Test now reaches an API call it didn't before. Run locally to record new cassette. |
+| Changed API parameters | Old cassette won't match. Delete it, run locally to re-record. |
+| New test in an existing `:vcr` describe block | Just run locally. VCR auto-records. |
+| Test passes locally but fails in CI with VCR error | You forgot to commit the cassette file. |
+
 ## Previewing Emails
 
 You can preview emails locally at [/rails/mailers](https://gumroad.dev/rails/mailers)

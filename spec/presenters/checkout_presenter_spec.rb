@@ -294,6 +294,32 @@ describe CheckoutPresenter do
       expect(@instance.checkout_props(params:, browser_guid:)[:add_products].sole[:product][:id]).to eq alive_product.product.external_id
     end
 
+    it "keeps per-product query growth bounded when rendering a large wishlist" do
+      wishlist = create(:wishlist)
+      params = { wishlist: wishlist.external_id, recommended_by: "discover" }
+
+      count_queries = ->(&block) do
+        queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          next if payload[:cached]
+          next if payload[:name]&.match?(/SCHEMA|TRANSACTION/)
+          queries << payload[:sql] if payload[:sql].present?
+        end
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+        queries
+      end
+
+      add_wishlist_product = -> { create(:wishlist_product, wishlist:, product: create(:product)) }
+
+      3.times { add_wishlist_product.call }
+      baseline = count_queries.call { @instance.checkout_props(params:, browser_guid:) }.size
+
+      7.times { add_wishlist_product.call }
+      grown = count_queries.call { @instance.checkout_props(params:, browser_guid:) }.size
+
+      expect((grown - baseline) / 7.0).to be < 15
+    end
+
     context "when gifting a wishlist product" do
       let(:user) { create(:user, name: "Jane Gumroad") }
       let(:wishlist) { create(:wishlist, user:) }

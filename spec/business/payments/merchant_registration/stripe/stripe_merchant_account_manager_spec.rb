@@ -9208,6 +9208,88 @@ describe StripeMerchantAccountManager, :vcr do
     end
   end
 
+  describe ".save_stripe_bank_account_info" do
+    let(:user) { create(:named_user) }
+    let(:bank_account) { create(:japan_bank_account, user:) }
+    let(:stripe_external_account) { double(id: "ba_123", fingerprint: "fingerprint_123") }
+    let(:stripe_account) { double(id: "acct_123", external_accounts: [stripe_external_account]) }
+
+    before do
+      bank_account.update_columns(account_holder_full_name: "ハルナ マサシ")
+    end
+
+    it "persists Stripe metadata without revalidating a legacy invalid holder name" do
+      expect(bank_account).not_to be_valid
+
+      expect do
+        described_class.send(:save_stripe_bank_account_info, bank_account, stripe_account)
+      end.to change { CheckPaymentAddressWorker.jobs.size }.by(1)
+
+      expect(bank_account.reload.stripe_connect_account_id).to eq("acct_123")
+      expect(bank_account.stripe_external_account_id).to eq("ba_123")
+      expect(bank_account.stripe_fingerprint).to eq("fingerprint_123")
+    end
+  end
+
+  describe ".handle_stripe_info_requirements" do
+    let(:active_bank_account) { instance_double(CardBankAccount, id: 123, stripe_connect_account_id: nil) }
+    let(:requested_scope) { double(find_each: nil, where: double(present?: false), last: nil) }
+    let(:user_compliance_info_requests) { double(requested: requested_scope) }
+    let(:user) do
+      instance_double(
+        User,
+        account_active?: true,
+        user_compliance_info_requests:
+      )
+    end
+    let(:merchant_account) do
+      instance_double(
+        MerchantAccount,
+        alive?: true,
+        charge_processor_alive?: true,
+        user:
+      )
+    end
+    let(:merchant_account_relation) { double(last: merchant_account) }
+    let(:stripe_account) do
+      {
+        "id" => "acct_123",
+        "business_type" => "individual",
+        "individual" => {},
+        "requirements" => {
+          "currently_due" => [],
+          "eventually_due" => [],
+          "past_due" => []
+        },
+        "charges_enabled" => true
+      }
+    end
+
+    before do
+      allow(MerchantAccount).to receive(:where).and_return(merchant_account_relation)
+      allow(described_class).to receive(:update_bank_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_return(:stripe_unknown_error)
+      allow(active_bank_account).to receive(:is_a?) { |klass| klass == CardBankAccount }
+      allow(user).to receive(:active_bank_account).and_return(active_bank_account, active_bank_account, active_bank_account, nil, nil)
+    end
+
+    it "captures the active bank once before enqueueing the retry worker" do
+      expect do
+        described_class.send(:handle_stripe_info_requirements, "evt_123", stripe_account, {})
+      end.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
+
+      expect(HandleNewBankAccountWorker.jobs.last["args"]).to eq([active_bank_account.id])
+    end
+
+    it "captures the active bank once before reading card sync state" do
+      allow(described_class).to receive(:update_bank_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_return(:synced)
+      allow(user).to receive(:active_bank_account).and_return(active_bank_account, nil, nil)
+
+      expect do
+        described_class.send(:handle_stripe_info_requirements, "evt_123", stripe_account, {})
+      end.not_to raise_error
+    end
+  end
+
   describe ".handle_stripe_event" do
     before do
       create(:user_compliance_info, user:)
@@ -9697,8 +9779,8 @@ describe StripeMerchantAccountManager, :vcr do
             end
 
             it "does not email the creator if they are suspended" do
-              user.flag_for_fraud!(author_name: "iffy")
-              user.suspend_for_fraud!(author_name: "iffy")
+              user.flag_for_fraud!(author_name: "ContentModeration")
+              user.suspend_for_fraud!(author_name: "ContentModeration")
 
               expect do
                 described_class.handle_stripe_event(stripe_event)

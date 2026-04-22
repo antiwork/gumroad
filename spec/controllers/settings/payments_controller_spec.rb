@@ -848,6 +848,23 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end
       end
 
+      describe "concurrent payout method change" do
+        let(:params) { { card: { token: "tok_123" } } }
+        let(:service) { instance_double(UpdatePayoutMethod, process: { error: :concurrent_payout_method_change }) }
+
+        before do
+          allow(UpdatePayoutMethod).to receive(:new).and_return(service)
+        end
+
+        it "shows a retry message" do
+          put :update, params: params
+
+          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to include("Another change was submitted at the same time. Please try again.")
+        end
+      end
+
       describe "account number and repeated account number don't match" do
         let(:params) do
           {
@@ -1402,7 +1419,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
     end
 
     before do
-      seller.mark_compliant!(author_name: "Iffy")
+      seller.mark_compliant!(author_name: "ContentModeration")
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
       create(:payment_completed, user: seller)
     end

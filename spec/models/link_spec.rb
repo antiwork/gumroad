@@ -362,43 +362,113 @@ describe Link, :vcr do
       end
     end
 
-    describe "reset_moderated_by_iffy_flag" do
-      let(:product) { create(:product, moderated_by_iffy: true) }
 
-      context "when the product is alive" do
-        it "resets the moderated_by_iffy flag when description changes" do
-          expect do
-            product.update!(description: "New description")
-          end.to change { product.reload.moderated_by_iffy }.from(true).to(false)
-        end
+    describe "content moderation on publish" do
+      let(:product) { create(:product, purchase_disabled_at: Time.current) }
 
-        it "does not reset the moderated_by_iffy flag when other attributes change" do
-          expect do
-            product.update!(price_cents: 1000)
-          end.not_to change { product.reload.moderated_by_iffy }
-        end
+      before do
+        allow(product).to receive(:enforce_shipping_destinations_presence!).and_return(true)
+        allow(product).to receive(:enforce_user_email_confirmation!).and_return(true)
+        allow(product).to receive(:enforce_merchant_account_exits_for_new_users!).and_return(true)
+        allow(product).to receive(:enable_transcode_videos_on_purchase!).and_return(true)
+        allow(product).to receive(:auto_transcode_videos?).and_return(false)
+      end
+
+      it "blocks publishing when ContentModeration::ModerateRecordService.check fails" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["policy violation"])
+        )
+
+        expect { product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(product.reload.purchase_disabled_at).not_to be(nil)
+        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
+      end
+
+      it "skips the content moderation check for VIP creators" do
+        allow_any_instance_of(User).to receive(:vip_creator?).and_return(true)
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        expect { product.publish! }.to change { product.reload.purchase_disabled_at }.to(nil)
+      end
+
+      it "publishes successfully when the content moderation check passes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        expect { product.publish! }.to change { product.reload.purchase_disabled_at }.to(nil)
+      end
+
+      it "clears the publishing flag after publish! completes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        product.publish!
+
+        expect(product.publishing?).to eq(false)
+      end
+
+      it "clears the publishing flag even when publish! raises" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["bad"])
+        )
+
+        expect { product.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(product.publishing?).to eq(false)
       end
     end
 
-    describe "queue_iffy_ingest_job_if_unpublished_by_admin" do
-      let(:product) { create(:product) }
+    describe "content moderation on edits to a published product" do
+      let(:product) { create(:product, purchase_disabled_at: Time.current) }
 
-      it "enqueues an Iffy::Product::IngestJob when the product has changed and was already unpublished by admin" do
-        product.update!(is_unpublished_by_admin: true)
-        product.update!(description: "New description")
-        expect(Iffy::Product::IngestJob).to have_enqueued_sidekiq_job(product.id)
+      before do
+        allow(product).to receive(:enforce_shipping_destinations_presence!).and_return(true)
+        allow(product).to receive(:enforce_user_email_confirmation!).and_return(true)
+        allow(product).to receive(:enforce_merchant_account_exits_for_new_users!).and_return(true)
+        allow(product).to receive(:enable_transcode_videos_on_purchase!).and_return(true)
+        allow(product).to receive(:auto_transcode_videos?).and_return(false)
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+        product.publish!
       end
 
-      it "does not enqueue an Iffy::Product::IngestJob when the product is only unpublished by admin" do
-        expect do
-          product.unpublish!(is_unpublished_by_admin: true)
-        end.not_to change { Iffy::Product::IngestJob.jobs.size }
+      it "re-checks moderation when the name changes" do
+        expect(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in name"])
+        )
+
+        product.name = "New bad name"
+        expect(product.save).to eq(false)
+        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in name")
       end
 
-      it "does not enqueue an Iffy::Product::IngestJob when the product is not unpublished by admin" do
-        expect do
-          product.update!(description: "New description")
-        end.not_to change { Iffy::Product::IngestJob.jobs.size }
+      it "re-checks moderation when the description changes" do
+        expect(ContentModeration::ModerateRecordService).to receive(:check).with(product, :product).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in description"])
+        )
+
+        product.description = "<p>New bad body</p>"
+        expect(product.save).to eq(false)
+        expect(product.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in description")
+      end
+
+      it "does not re-check moderation when unrelated attributes change" do
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        product.price_cents = product.price_cents + 100
+        product.save!
+      end
+    end
+
+    describe "content moderation on edits to a draft product" do
+      let(:product) { create(:product, draft: true) }
+
+      it "does not run moderation on name/description edits" do
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        product.update!(name: "Still a draft", description: "<p>Still drafting</p>")
       end
     end
 
@@ -818,6 +888,7 @@ describe Link, :vcr do
           expect(@product.errors.full_messages.to_sentence).to eq("Bundles must have at least one product.")
         end
       end
+
 
       context "when the seller has universal affiliates" do
         it "associates those affiliates with the product and notifies them" do

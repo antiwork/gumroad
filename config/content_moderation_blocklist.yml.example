@@ -1,0 +1,3 @@
+blocklist:
+  - example-banned-word
+  - another-banned-phrase

@@ -34,6 +34,8 @@ export const GetSales = () => (
       <ApiParameter name="product_id" description="(optional) - Filter sales by this product" />
       <ApiParameter name="email" description="(optional) - Filter sales by this email" />
       <ApiParameter name="order_id" description="(optional) - Filter sales by this Order ID" />
+      <ApiParameter name="name" description="(optional) - Filter sales by customer name" />
+      <ApiParameter name="license_key" description="(optional) - Filter sales by license key" />
       <ApiParameter
         name="page_key"
         description="(optional) - A key representing a page of results. It is given in the response as `next_page_key`."
@@ -54,6 +56,8 @@ export const GetSales = () => (
   -d "after=2020-09-03" \\
   -d "product_id=bfi_30HLgGWL8H2wo_Gzlg==" \\
   -d "email=calvin@gumroad.com" \\
+  -d "name=Calvin" \\
+  -d "license_key=83DB262A-C19D3B06-A5235A6B-8C079166" \\
   -X GET`}
     </CodeSnippet>
     <CodeSnippet caption="Example response:">

@@ -2,7 +2,7 @@
 
 class LogResendEventJob
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :mongo
+  sidekiq_options retry: 5, queue: :low
 
   def perform(event_json)
     resend_event_info = ResendEventInfo.new(event_json)

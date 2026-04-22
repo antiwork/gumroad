@@ -217,35 +217,4 @@ describe RichContent do
     end
   end
 
-  describe "callbacks" do
-    describe "#reset_moderated_by_iffy_flag" do
-      let(:product) { create(:product, moderated_by_iffy: true) }
-      let(:rich_content) { create(:rich_content, entity: product) }
-
-      context "when description is changed" do
-        it "resets moderated_by_iffy flag on the associated product" do
-          expect do
-            rich_content.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Updated content" }] }])
-          end.to change { product.reload.moderated_by_iffy }.from(true).to(false)
-        end
-      end
-
-      context "when description is not changed" do
-        it "does not reset moderated_by_iffy flag on the associated product" do
-          expect do
-            rich_content.update!(updated_at: Time.current)
-          end.not_to change { product.reload.moderated_by_iffy }
-        end
-      end
-
-      context "when rich_content is not alive" do
-        it "does not reset moderated_by_iffy flag on the associated product" do
-          rich_content.update!(deleted_at: Time.current)
-          expect do
-            rich_content.update!(description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Updated content" }] }])
-          end.not_to change { product.reload.moderated_by_iffy }
-        end
-      end
-    end
-  end
 end

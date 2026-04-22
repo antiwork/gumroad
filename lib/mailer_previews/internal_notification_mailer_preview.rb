@@ -12,8 +12,8 @@ class InternalNotificationMailerPreview < ActionMailer::Preview
   def risk_notification
     InternalNotificationMailer.notify(
       room_name: "risk",
-      sender: "Iffy Risk Review",
-      message_text: "New high-risk seller flagged: user #12345 (example@example.com). 3 chargebacks in 7 days, $2,400 total volume. Review at https://iffy.gumroad.com",
+      sender: "Content Moderation",
+      message_text: "Content moderation blocked publish: Product ##{12345} (Example) - OpenAI moderation flagged: sexual (score: 0.95, threshold: 0.8)",
     )
   end
 

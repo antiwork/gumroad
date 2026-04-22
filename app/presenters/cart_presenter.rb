@@ -14,6 +14,19 @@ class CartPresenter
     return if cart.nil?
 
     cart_products = cart.cart_products.alive.joins(:product).merge(Link.not_archived).order(created_at: :desc)
+      .preload(
+        :option,
+        :affiliate,
+        { accepted_offer: :offer_code },
+        { product: [
+          :user,
+          :thumbnail,
+          :installment_plan,
+          :variant_categories_alive,
+          :alive_variants,
+          { available_upsell: :seller },
+        ] }
+      ).load
 
     {
       email: cart.email.presence,

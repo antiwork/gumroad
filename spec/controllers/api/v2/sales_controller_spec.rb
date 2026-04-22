@@ -149,6 +149,33 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "filters sales by customer name (case-insensitive, partial match) when name is specified" do
+        matching_purchase = create(:purchase, purchaser: @purchaser, link: @product, full_name: "Ada Lovelace")
+        create(:purchase, purchaser: @purchaser, link: @product, full_name: "Grace Hopper")
+
+        get :index, params: @params.merge(name: "ada")
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          sales: [matching_purchase.as_json(version: 2)]
+        }.as_json)
+      end
+
+      it "filters sales by license key when license_key is specified" do
+        @product.update!(is_licensed: true)
+        matching_purchase = create(:purchase, purchaser: @purchaser, link: @product)
+        matching_purchase.create_license!
+        other_purchase = create(:purchase, purchaser: @purchaser, link: @product)
+        other_purchase.create_license!
+
+        get :index, params: @params.merge(license_key: matching_purchase.license.serial.downcase)
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          sales: [matching_purchase.as_json(version: 2)]
+        }.as_json)
+      end
+
       it "returns a 400 error if date format is incorrect" do
         @params.merge!(after: "394293")
         get :index, params: @params

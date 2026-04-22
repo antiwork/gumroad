@@ -146,6 +146,37 @@ describe CartPresenter do
       end
     end
 
+    context "with many cart items" do
+      let(:cart) { create(:cart, user:) }
+      let(:seller) { create(:user) }
+
+      def count_queries(&block)
+        queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          next if payload[:cached]
+          next if payload[:name]&.match?(/SCHEMA|TRANSACTION/)
+          queries << payload[:sql] if payload[:sql].present?
+        end
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+        queries
+      end
+
+      def add_cart_product!
+        product = create(:product, user: seller)
+        create(:cart_product, cart:, product:)
+      end
+
+      it "keeps per-product query growth bounded" do
+        3.times { add_cart_product! }
+        baseline = count_queries { described_class.new(logged_in_user: user, ip:, browser_guid:).cart_props }.size
+
+        7.times { add_cart_product! }
+        grown = count_queries { described_class.new(logged_in_user: user, ip:, browser_guid:).cart_props }.size
+
+        expect((grown - baseline) / 7.0).to be < 15
+      end
+    end
+
     context "with discount codes and offers" do
       context "when the user has accepeted an upsell" do
         let(:discount_codes) do

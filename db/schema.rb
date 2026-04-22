@@ -2578,6 +2578,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_23_000000) do
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
     t.string "tiktok_pixel_id"
+    t.string "twitter_handle"
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"

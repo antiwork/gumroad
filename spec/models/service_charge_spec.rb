@@ -83,14 +83,6 @@ describe ServiceCharge, :vcr do
     end
   end
 
-  describe "mongoable" do
-    it "puts service_charge in mongo on creation" do
-      @service_charge = build(:service_charge)
-      @service_charge.save
-
-      expect(SaveToMongoWorker).to have_enqueued_sidekiq_job("ServiceCharge", anything)
-    end
-  end
 
   describe "#mark_successful" do
     it "marks the service_charge as successful" do

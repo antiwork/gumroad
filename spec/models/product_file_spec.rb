@@ -991,26 +991,6 @@ describe ProductFile do
   end
 
   describe "callbacks" do
-    describe "#reset_moderated_by_iffy_flag" do
-      let(:product) { create(:product, moderated_by_iffy: true) }
-
-      context "when an image product file is created" do
-        it "resets moderated_by_iffy flag on the associated product" do
-          expect do
-            create(:product_file, link: product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/kFDzu.png")
-          end.to change { product.reload.moderated_by_iffy }.from(true).to(false)
-        end
-      end
-
-      context "when a non-image product file is created" do
-        it "does not reset moderated_by_iffy flag on the associated product" do
-          expect do
-            create(:product_file, link: product)
-          end.to_not change { product.reload.moderated_by_iffy }
-        end
-      end
-    end
-
     describe "#stamp_existing_pdfs_if_needed" do
       let(:file) { create(:pdf_product_file) }
       let(:purchase) { create(:purchase, seller: file.user, link: file.link) }

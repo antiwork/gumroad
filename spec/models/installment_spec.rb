@@ -779,6 +779,100 @@ const b = 2;</code></pre>
         expect(@installment.errors.full_messages.to_sentence).to eq("You have to confirm your email address before you can do that.")
       end
     end
+
+    context "content moderation" do
+      it "blocks publishing when ContentModeration::ModerateRecordService.check fails" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["policy violation"])
+        )
+
+        expect { @installment.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(@installment.reload.published_at).to be(nil)
+        expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: policy violation")
+      end
+
+      it "skips the content moderation check for VIP creators" do
+        allow_any_instance_of(User).to receive(:vip_creator?).and_return(true)
+        expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+        @installment.publish!
+
+        expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
+      end
+
+      it "publishes successfully when the content moderation check passes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        @installment.publish!
+
+        expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
+      end
+
+      it "clears the publishing flag after publish! completes" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+        )
+
+        @installment.publish!
+
+        expect(@installment.publishing?).to eq(false)
+      end
+
+      it "clears the publishing flag even when publish! raises" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check).and_return(
+          ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["bad"])
+        )
+
+        expect { @installment.publish! }.to raise_error(ActiveRecord::RecordInvalid)
+        expect(@installment.publishing?).to eq(false)
+      end
+
+      context "when editing an already-published post" do
+        before do
+          allow(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: true, reasons: [])
+          )
+          @installment.publish!
+        end
+
+        it "re-checks moderation when the name changes" do
+          expect(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in name"])
+          )
+
+          @installment.name = "New bad name"
+          expect(@installment.save).to eq(false)
+          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in name")
+        end
+
+        it "re-checks moderation when the message changes" do
+          expect(ContentModeration::ModerateRecordService).to receive(:check).with(@installment, :post).and_return(
+            ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["blocked term in message"])
+          )
+
+          @installment.message = "<p>New bad body</p>"
+          expect(@installment.save).to eq(false)
+          expect(@installment.errors.full_messages.to_sentence).to include("Content moderation failed: blocked term in message")
+        end
+
+        it "does not re-check moderation when unrelated attributes change" do
+          expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+          @installment.shown_on_profile = !@installment.shown_on_profile
+          @installment.save!
+        end
+      end
+
+      context "when editing a draft post" do
+        it "does not run moderation on name/message edits" do
+          expect(ContentModeration::ModerateRecordService).not_to receive(:check)
+
+          @installment.update!(name: "Still a draft", message: "<p>Still drafting</p>")
+        end
+      end
+    end
   end
 
   describe "#is_affiliate_product_post?" do
@@ -985,28 +1079,6 @@ const b = 2;</code></pre>
                                                                                                                                       product_post, # Published 3 days ago
                                                                                                                                       seller_post, # Published 6 days ago
                                                                                                                                     ])
-    end
-  end
-
-  describe "#trigger_iffy_ingest" do
-    let!(:installment) { create(:installment, name: "Original Name", message: "Original Message") }
-
-    it "does not trigger an iffy ingest job if neither name nor message have changed" do
-      expect do
-        installment.update!(published_at: Time.current)
-      end.not_to change { Iffy::Post::IngestJob.jobs.size }
-    end
-
-    it "triggers an iffy ingest job if the name has changed" do
-      expect do
-        installment.update!(name: "New Name")
-      end.to change { Iffy::Post::IngestJob.jobs.size }.by(1)
-    end
-
-    it "triggers an iffy ingest job if the message has changed" do
-      expect do
-        installment.update!(message: "New Message")
-      end.to change { Iffy::Post::IngestJob.jobs.size }.by(1)
     end
   end
 

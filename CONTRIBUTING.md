@@ -45,6 +45,7 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 - Use factories for test data instead of creating objects directly
 - Tests must fail when the fix is reverted. If the test passes without the application code change, it is invalid.
 - Scope VCR cassettes to specific test files. Sharing cassettes across tests causes collisions where tests read incorrect cached responses.
+- When your code change causes a spec to follow a new HTTP code path (e.g., removing a guard clause, adding a new API call), run the spec locally to regenerate VCR cassettes. Do not stub external APIs to work around missing cassettes. See [VCR Cassettes](#vcr-cassettes) in docs/testing.md.
 - Don't start Rspec test names with "should". See https://www.betterspecs.org/#should
 - Use `@example.com` for emails in tests
 - Use `example.com`, `example.org`, and `example.net` as custom domains or request hosts in tests.
@@ -96,6 +97,7 @@ Do not push code with failing tests. CI is not a substitute for local verificati
 
 - When creating financial records (receipts, sales), copy the specific values (amount, currency, percentage) at the time of purchase instead of referencing mutable data like a `DiscountCode` ID. This ensures historical records remain accurate if the original object is edited or deleted.
 - Do not use database-level foreign key constraints (`add_foreign_key`). Avoiding hard constraints simplifies data migration and sharding operations at scale.
+- **Do not add, remove, or rename columns on the `users` or `purchases` tables.** These tables are too large for schema changes. Migrations that alter their schema will block deployments. If you need new data associated with users or purchases, create a new table and reference it. This also applies to adding or removing indexes on these tables.
 - Do not use dynamic string interpolation for Tailwind class names (e.g., `` `text-${color}` ``). Tailwind scanners cannot detect these during build. Use full class names or a lookup map.
 - Prefer re-using deprecated boolean flags (https://github.com/pboling/flag_shih_tzu) instead of creating new ones. Deprecated flags are named `DEPRECATED_<something>`. To re-use this flag you'll first need to reset the values for it on staging and production and then rename the flag to the new name. You can reset the flag like this:
   ```ruby
