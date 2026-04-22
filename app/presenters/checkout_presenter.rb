@@ -242,12 +242,25 @@ class CheckoutPresenter
 
     def checkout_wishlist_props(params:)
       return {} if params[:wishlist].blank?
-      wishlist = Wishlist.alive.includes(wishlist_products: [:product, :variant]).find_by_external_id(params[:wishlist])
+      wishlist = Wishlist.alive.find_by_external_id(params[:wishlist])
       return {} if wishlist.blank?
 
+      wishlist_products = wishlist.alive_wishlist_products.available_to_buy.preload(
+        :variant,
+        product: [
+          :user,
+          :thumbnail,
+          :installment_plan,
+          :variant_categories_alive,
+          :alive_variants,
+          { available_upsell: :seller },
+        ]
+      )
+      affiliate_id = wishlist.user.global_affiliate.external_id_numeric.to_s
+
       {
-        add_products: wishlist.alive_wishlist_products.available_to_buy.map do |wishlist_product|
-          checkout_wishlist_product(wishlist_product, params.reverse_merge(affiliate_id: wishlist_product.wishlist.user.global_affiliate.external_id_numeric.to_s))
+        add_products: wishlist_products.map do |wishlist_product|
+          checkout_wishlist_product(wishlist_product, params.reverse_merge(affiliate_id:))
         end
       }
     end
