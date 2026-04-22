@@ -14,6 +14,20 @@ class Order::ChargeService
   def perform
     Purchase.validate_offer_code_usage_across_line_items(order.purchases)
 
+    # Build charge_responses for purchases already failed before the seller loop
+    # (e.g. rejected by `validate_offer_code_usage_across_line_items`) so they get
+    # a per-line-item error response even when the ensure block filters them out.
+    order.purchases.select(&:failed?).each do |purchase|
+      line_item = params[:line_items].find do |li|
+        purchase.link.unique_permalink == li[:permalink] &&
+          (li[:variants].blank? || purchase.variant_attributes.first&.external_id == li[:variants]&.first)
+      end
+      next if line_item.nil?
+      line_item_uid = line_item[:uid]
+      next if charge_responses[line_item_uid].present?
+      charge_responses[line_item_uid] = error_response(purchase.errors.first&.message || "Sorry, something went wrong. Please try again.", purchase:)
+    end
+
     # We need to make off session charges if there are products from more than one seller
     # In such case we create a reusable payment method before initiating the order from front-end
     off_session = order.purchases.non_free.pluck(:seller_id).uniq.count > 1
@@ -90,11 +104,12 @@ class Order::ChargeService
       Rails.logger.error("Error charging order (#{order.id}):: #{e.class} => #{e.message} => #{e.backtrace}")
     ensure
       # Ensure all purchases of the charge are transitioned to a terminal state
-      # and each line item has a response. Pass the full seller group so pre-failed
-      # line items (e.g. rejected by `validate_offer_code_usage_across_line_items`)
-      # also get an error response in `charge_responses`. Already-processed line
-      # items are skipped via the `charge_responses[uid].present?` guard inside.
-      ensure_all_purchases_processed(seller_purchases)
+      # and each line item has a response. Pre-failed purchases (e.g. rejected by
+      # `validate_offer_code_usage_across_line_items`) already have responses built
+      # upfront, so filter to in-progress purchases here to avoid re-matching line
+      # items for already-processed purchases whose variant attributes may have
+      # been mutated during processing.
+      ensure_all_purchases_processed(non_free_seller_purchases || seller_purchases.select(&:in_progress?))
     end
 
     charge_responses
