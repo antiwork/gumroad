@@ -47,22 +47,27 @@ class License < ApplicationRecord
     save!
   end
 
+  def increment!(attribute, by = 1, touch: nil)
+    super.tap do
+      enqueue_purchase_search_index_update(["license_uses"]) if attribute.to_s == "uses"
+    end
+  end
+
   private
     def update_purchase_search_index
-      return if purchase_id.blank?
-      changed_tracked_columns = previous_changes.keys & %w[uses serial]
-      return if changed_tracked_columns.blank?
-
       fields = []
-      fields << "license_serial" if changed_tracked_columns.include?("serial")
-      fields << "license_uses" if changed_tracked_columns.include?("uses")
-      return if fields.blank?
+      fields << "license_serial" if previous_changes.key?("serial")
+      fields << "license_uses" if previous_changes.key?("uses")
+      enqueue_purchase_search_index_update(fields)
+    end
 
-      options = {
+    def enqueue_purchase_search_index_update(fields)
+      return if purchase_id.blank? || fields.blank?
+
+      ElasticsearchIndexerWorker.perform_in(2.seconds, "update", {
         "record_id" => purchase_id,
         "class_name" => "Purchase",
         "fields" => fields
-      }
-      ElasticsearchIndexerWorker.perform_in(2.seconds, "update", options)
+      })
     end
 end
