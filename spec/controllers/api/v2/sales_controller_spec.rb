@@ -149,6 +149,36 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "filters sales by customer name when query is specified" do
+        matching_product = create(:product, user: @seller)
+        matching_purchase = create(:purchase, purchaser: @purchaser, link: matching_product, full_name: "Ada Lovelace")
+        create(:purchase, purchaser: @purchaser, link: @product, full_name: "Ada Lovelace")
+        create(:purchase, purchaser: @purchaser, link: matching_product, full_name: "Grace Hopper")
+        index_model_records(Purchase)
+
+        get :index, params: @params.merge(query: "Ada Lovelace", product_id: matching_product.external_id)
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          sales: [matching_purchase.as_json(version: 2)]
+        }.as_json)
+      end
+
+      it "filters sales by license key when query is specified" do
+        matching_purchase = create(:purchase, purchaser: @purchaser, link: @product)
+        matching_purchase.create_license!(link: @product, serial: "12345678-12345678-12345678-12345678")
+        other_purchase = create(:purchase, purchaser: @purchaser, link: @product)
+        other_purchase.create_license!(link: @product, serial: "87654321-87654321-87654321-87654321")
+        index_model_records(Purchase)
+
+        get :index, params: @params.merge(query: matching_purchase.license.serial.downcase)
+
+        expect(response.parsed_body).to eq({
+          success: true,
+          sales: [matching_purchase.as_json(version: 2)]
+        }.as_json)
+      end
+
       it "returns a 400 error if date format is incorrect" do
         @params.merge!(after: "394293")
         get :index, params: @params

@@ -55,6 +55,7 @@ class PurchaseSearchService
     # Most useful defaults to have when using this service in console
     from: 0,
     size: 5,
+    search_after: nil,
     sort: nil, # usually: [ { created_at: :desc }, { id: :desc } ],
     _source: false,
     aggs: {},
@@ -480,6 +481,7 @@ class PurchaseSearchService
       [
         :from,
         :size,
+        :search_after,
         :sort,
         :_source,
         :aggs,

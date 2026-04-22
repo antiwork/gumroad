@@ -24,6 +24,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     end
 
     email = params[:email].present? ? params[:email].strip : nil
+    query = params[:query].present? ? params[:query].strip : nil
 
     if params[:product_id].present?
       product_id = ObfuscateIds.decrypt(params[:product_id])
@@ -41,6 +42,13 @@ class Api::V2::SalesController < Api::V2::BaseController
     end
 
     if params[:page] # DEPRECATED
+      if query.present?
+        sales, additional_response = search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page: @page)
+        return if performed?
+
+        return success_with_object(:sales, sales.as_json(version: 2), additional_response)
+      end
+
       filtered_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, root_scope: current_resource_owner.sales)
       begin
         timeout_s = ($redis.get(RedisKey.api_v2_sales_deprecated_pagination_query_timeout) || 15).to_i
@@ -58,6 +66,13 @@ class Api::V2::SalesController < Api::V2::BaseController
         error_400("The 'page' parameter is deprecated. Please use 'page_key' instead: https://gumroad.com/api#sales")
       end
       return
+    end
+
+    if query.present?
+      sales, additional_response = search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page_key: params[:page_key])
+      return if performed?
+
+      return success_with_object(:sales, sales.as_json(version: 2), additional_response)
     end
 
     if params[:page_key].present?
@@ -146,6 +161,84 @@ class Api::V2::SalesController < Api::V2::BaseController
       sales = sales.where(link_id: product_id) if product_id.present?
       sales = sales.where(id: purchase_id) if purchase_id.present?
       sales.order(created_at: :desc, id: :desc)
+    end
+
+    def search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page: nil, page_key: nil)
+      current_page = page || 1
+      current_page_key = page_key
+
+      current_page.times do |page_number|
+        sales, additional_response = perform_search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page_key: current_page_key)
+        return [sales, additional_response] if page_number == current_page - 1
+        return [[], {}] if additional_response[:next_page_key].blank?
+
+        current_page_key = additional_response[:next_page_key]
+      end
+    end
+
+    def perform_search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page_key: nil)
+      search_after = nil
+      if page_key.present?
+        last_purchase_created_at, last_purchase_id = decode_page_key(page_key)
+        search_after = [last_purchase_created_at.iso8601(6), last_purchase_id]
+      end
+
+      sales = []
+
+      loop do
+        search_results = PurchaseSearchService.search(search_sales_options(
+          start_date:, end_date:, email:, product_id:, purchase_id:, query:, search_after:
+        ))
+        batch_ids = search_results.records.ids
+        break if batch_ids.empty?
+
+        filtered_batch_sales = filter_sales(
+          start_date:,
+          end_date:,
+          email:,
+          product_id:,
+          purchase_id:,
+          root_scope: current_resource_owner.sales.where(id: batch_ids)
+        ).for_sales_api.in_order_of(:id, batch_ids).to_a
+        sales.concat(filtered_batch_sales)
+        break if sales.size > RESULTS_PER_PAGE
+
+        hits = search_results.response.dig("hits", "hits") || []
+        break if hits.size < RESULTS_PER_PAGE + 1
+
+        search_after = hits.last["sort"]
+      end
+
+      has_next_page = sales.size > RESULTS_PER_PAGE
+      sales = sales.first(RESULTS_PER_PAGE)
+      additional_response = has_next_page ? pagination_info(sales.last) : {}
+
+      [sales, additional_response]
+    rescue ArgumentError
+      error_400("Invalid page_key.")
+      [[], {}]
+    end
+
+    def search_sales_options(start_date:, end_date:, email:, product_id:, purchase_id:, query:, search_after: nil)
+      {
+        seller: current_resource_owner,
+        seller_query: query,
+        product: product_id,
+        id: purchase_id,
+        email:,
+        created_on_or_after: start_date,
+        created_before: end_date,
+        state: Purchase::ALL_SUCCESS_STATES_EXCEPT_PREORDER_AUTH_AND_GIFT,
+        exclude_refunded_except_subscriptions: true,
+        exclude_unreversed_chargedback: true,
+        exclude_non_original_subscription_purchases: true,
+        exclude_deactivated_subscriptions: true,
+        exclude_bundle_product_purchases: true,
+        exclude_commission_completion_purchases: true,
+        size: RESULTS_PER_PAGE + 1,
+        search_after:,
+        sort: [{ created_at: :desc }, { id: :desc }],
+      }.compact
     end
 
     def set_page # DEPRECATED
