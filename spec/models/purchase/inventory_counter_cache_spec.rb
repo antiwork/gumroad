@@ -177,7 +177,7 @@ describe "Purchase inventory counter cache" do
       it "does not count a recurring installment payment" do
         installment_product = create(:product, :with_installment_plan)
         sub = create(:subscription, link: installment_product, is_installment_plan: true)
-        original = create(:installment_plan_purchase, subscription: sub, link: installment_product, purchase_state: "successful")
+        create(:installment_plan_purchase, subscription: sub, link: installment_product, purchase_state: "successful")
         recurring = create(:recurring_installment_plan_purchase, subscription: sub, link: installment_product, purchase_state: "successful")
         expect(recurring.counts_towards_inventory?).to eq(false)
       end
