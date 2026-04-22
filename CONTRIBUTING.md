@@ -14,7 +14,7 @@ Explain the reasoning behind your changes, not just the change itself. Describe 
 - Include an AI disclosure
 - Self-review (comment) on your code
 - Break up big 1k+ line PRs into smaller PRs (100 loc)
-- Include video of before/after with light/dark mode and mobile/desktop experiences represented.
+- **Must**: Include a video for every PR. For user-facing changes, show before/after with light/dark mode and mobile/desktop. For non-user-facing changes, record a short walkthrough of the relevant existing functionality to demonstrate understanding and confirm nothing broke.
 - Include updates to any tests, especially end-to-end tests!
 - Deploy the app to a preview URL and include QA steps
 
@@ -24,7 +24,7 @@ Non-trivial PRs should follow this structure:
 
 - **What** — What this PR does. Concrete changes, not a list of files.
 - **Why** — Why this change exists and why this approach was chosen over alternatives.
-- **Before/After** — Screenshots or video for UI/CSS changes only. Include desktop and mobile, light and dark mode.
+- **Before/After** — Video is required for all PRs. For user-facing changes, show before/after with desktop and mobile, light and dark mode. For non-user-facing changes, include a short video walking through the relevant existing functionality.
 - **Test Results** — Screenshot of tests passing locally.
 
 End with an AI disclosure after a `---` separator. Name the specific model (e.g., "Claude Opus 4.6") and list the prompts given to the agent.
