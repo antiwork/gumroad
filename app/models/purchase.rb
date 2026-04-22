@@ -363,6 +363,93 @@ class Purchase < ApplicationRecord
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
 
+  after_commit :sync_inventory_counter_caches, on: [:create, :update]
+  after_commit :sync_inventory_counter_caches_on_destroy, on: :destroy
+
+  COUNTS_TOWARDS_INVENTORY_STATES = %w[preorder_authorization_successful in_progress successful not_charged].freeze
+
+  def counts_towards_inventory?
+    Purchase.counts_towards_inventory_for?(
+      purchase_state:,
+      flags:,
+      subscription_id:,
+      subscription_deactivated_at: subscription_id.present? ? subscription&.deactivated_at : nil,
+    )
+  end
+
+  def self.counts_towards_inventory_for?(purchase_state:, flags:, subscription_id:, subscription_deactivated_at:)
+    return false unless COUNTS_TOWARDS_INVENTORY_STATES.include?(purchase_state)
+
+    raw_flags = flags.to_i
+    additional_contribution_bit = flag_mapping["flags"][:is_additional_contribution]
+    original_sub_bit = flag_mapping["flags"][:is_original_subscription_purchase]
+    gift_receiver_bit = flag_mapping["flags"][:is_gift_receiver_purchase]
+    archived_original_bit = flag_mapping["flags"][:is_archived_original_subscription_purchase]
+
+    return false if raw_flags & additional_contribution_bit != 0
+    return false if raw_flags & archived_original_bit != 0
+
+    if subscription_id.present?
+      is_original = raw_flags & original_sub_bit != 0
+      is_gift_receiver = raw_flags & gift_receiver_bit != 0
+      return false unless is_original || is_gift_receiver
+      return false if subscription_deactivated_at.present?
+    end
+
+    true
+  end
+
+  def apply_inventory_counter_delta!(delta)
+    return if delta.to_i.zero?
+    signed_delta = delta.to_i
+    variant_ids = variant_attribute_ids
+    if variant_ids.any?
+      BaseVariant.where(id: variant_ids).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{signed_delta}")
+    end
+    if link_id.present?
+      Link.where(id: link_id).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{signed_delta}")
+    end
+  end
+
+  def sync_inventory_counter_caches
+    return unless inventory_counter_cache_relevant_change?
+
+    before_qty = pre_save_inventory_counted_quantity
+    after_qty = counts_towards_inventory? ? quantity.to_i : 0
+    apply_inventory_counter_delta!(after_qty - before_qty)
+  end
+
+  def sync_inventory_counter_caches_on_destroy
+    return unless counts_towards_inventory?
+    apply_inventory_counter_delta!(-quantity.to_i)
+  end
+
+  def inventory_counter_cache_relevant_change?
+    previously_new_record? ||
+      saved_change_to_purchase_state? ||
+      saved_change_to_flags? ||
+      saved_change_to_subscription_id? ||
+      saved_change_to_quantity?
+  end
+
+  def pre_save_inventory_counted_quantity
+    return 0 if previously_new_record?
+
+    prev_state = saved_change_to_purchase_state&.first || purchase_state
+    prev_flags = saved_change_to_flags&.first || flags
+    prev_subscription_id = saved_change_to_subscription_id&.first || subscription_id
+    prev_quantity = saved_change_to_quantity&.first || quantity
+    prev_subscription_deactivated_at = prev_subscription_id.present? ? Subscription.where(id: prev_subscription_id).pick(:deactivated_at) : nil
+
+    counted = Purchase.counts_towards_inventory_for?(
+      purchase_state: prev_state,
+      flags: prev_flags,
+      subscription_id: prev_subscription_id,
+      subscription_deactivated_at: prev_subscription_deactivated_at,
+    )
+    counted ? prev_quantity.to_i : 0
+  end
+
   # Entities that store the product price, tax information and transaction price
 
   # price_cents - Price cents is the cost of the product as seen by the seller, including Gumroad fees.
