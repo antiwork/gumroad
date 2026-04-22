@@ -51,6 +51,8 @@ class PurchaseSearchService
     # Fulltext search
     seller_query: nil, # String
     buyer_query: nil, # String
+    full_name_query: nil, # String - fulltext search on full_name only
+    license_key: nil, # String - exact match on license_serial
     # Native ES params
     # Most useful defaults to have when using this service in console
     from: 0,
@@ -149,6 +151,8 @@ class PurchaseSearchService
       build_body_recommended
       ### Fulltext search
       build_body_fulltext_search
+      build_body_full_name_search
+      build_body_license_key
       build_body_native_params
     end
 
@@ -463,6 +467,22 @@ class PurchaseSearchService
           should: shoulds,
         }
       }
+    end
+
+    def build_body_full_name_search
+      return if @options[:full_name_query].blank?
+
+      @body[:query][:bool][:must] << {
+        multi_match: {
+          query: @options[:full_name_query].strip.downcase,
+          fields: ["full_name"],
+        }
+      }
+    end
+
+    def build_body_license_key
+      return if @options[:license_key].blank?
+      @body[:query][:bool][:filter] << { term: { "license_serial" => @options[:license_key].strip.upcase } }
     end
 
     def build_body_buyer_search

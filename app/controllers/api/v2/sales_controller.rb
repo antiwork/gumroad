@@ -24,7 +24,8 @@ class Api::V2::SalesController < Api::V2::BaseController
     end
 
     email = params[:email].present? ? params[:email].strip : nil
-    query = params[:query].present? ? params[:query].strip : nil
+    name = params[:name].present? ? params[:name].strip : nil
+    license_key = params[:license_key].present? ? params[:license_key].strip : nil
 
     if params[:product_id].present?
       product_id = ObfuscateIds.decrypt(params[:product_id])
@@ -42,8 +43,8 @@ class Api::V2::SalesController < Api::V2::BaseController
     end
 
     if params[:page] # DEPRECATED
-      if query.present?
-        sales, additional_response = search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page: @page)
+      if name.present? || license_key.present?
+        sales, additional_response = search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page: @page)
         return if performed?
 
         return success_with_object(:sales, sales.as_json(version: 2), additional_response)
@@ -68,8 +69,8 @@ class Api::V2::SalesController < Api::V2::BaseController
       return
     end
 
-    if query.present?
-      sales, additional_response = search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page_key: params[:page_key])
+    if name.present? || license_key.present?
+      sales, additional_response = search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page_key: params[:page_key])
       return if performed?
 
       return success_with_object(:sales, sales.as_json(version: 2), additional_response)
@@ -163,12 +164,12 @@ class Api::V2::SalesController < Api::V2::BaseController
       sales.order(created_at: :desc, id: :desc)
     end
 
-    def search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page: nil, page_key: nil)
+    def search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page: nil, page_key: nil)
       current_page = page || 1
       current_page_key = page_key
 
       current_page.times do |page_number|
-        sales, additional_response = perform_search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page_key: current_page_key)
+        sales, additional_response = perform_search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page_key: current_page_key)
         return [sales, additional_response] if page_number == current_page - 1
         return [[], {}] if additional_response[:next_page_key].blank?
 
@@ -176,7 +177,7 @@ class Api::V2::SalesController < Api::V2::BaseController
       end
     end
 
-    def perform_search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, query:, page_key: nil)
+    def perform_search_sales_page(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, page_key: nil)
       search_after = nil
       if page_key.present?
         last_purchase_created_at, last_purchase_id = decode_page_key(page_key)
@@ -187,7 +188,7 @@ class Api::V2::SalesController < Api::V2::BaseController
 
       loop do
         search_results = PurchaseSearchService.search(search_sales_options(
-          start_date:, end_date:, email:, product_id:, purchase_id:, query:, search_after:
+          start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, search_after:
         ))
         batch_ids = search_results.records.ids
         break if batch_ids.empty?
@@ -219,10 +220,11 @@ class Api::V2::SalesController < Api::V2::BaseController
       [[], {}]
     end
 
-    def search_sales_options(start_date:, end_date:, email:, product_id:, purchase_id:, query:, search_after: nil)
+    def search_sales_options(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, search_after: nil)
       {
         seller: current_resource_owner,
-        seller_query: query,
+        full_name_query: name,
+        license_key:,
         product: product_id,
         id: purchase_id,
         email:,
