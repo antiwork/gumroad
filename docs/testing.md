@@ -72,7 +72,7 @@ For Linux:
 ```bash
 $ wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
 $ sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
-$ sudo sudo apt-get update
+$ sudo apt-get update
 $ sudo apt-get install google-chrome-stable
 ```
 
@@ -81,7 +81,7 @@ $ sudo apt-get install google-chrome-stable
 For macOS, you need to install XQuartz to run the request specs.
 
 ```bash
-$ brew install XQuartz
+$ brew install xquartz
 ```
 
 ### Reproduce Buildkite test failures locally
@@ -243,7 +243,7 @@ Used for Payouts. No sandbox sales/transactions will show up here as Braintree d
 
 We currently rely on IPN messages for:
 
-- Chargebacks and reveresed chargebacks
+- Chargebacks and reversed chargebacks
 - Payouts completion notification, which also contains the payouts fee information.
 
 #### Viewing IPN messages
@@ -258,7 +258,7 @@ We currently rely on IPN messages for:
 
 ### PayPal setting and other comments
 
-- No operation apart form payouts currently goes through the Gumroad PayPal app itself. We use user credentials w/ their classic API offerings to perform payouts.
+- No operation apart from payouts currently goes through the Gumroad PayPal app itself. We use user credentials w/ their classic API offerings to perform payouts.
 - Create and manage new sandbox accounts in the <https://developer.paypal.com> site. Use shared PayPal credentials or get an account created from someone who has payments admin access.
 
 #### PayPal portal and IPN message encoding settings
@@ -334,7 +334,7 @@ To overcome this:
 ```ruby
 # Run this in a rails console
 purchase = Purchase.last
-BlockedObject.browser_guid.active.find_by(purchase.browser_guid).destroy
+BlockedObject.browser_guid.active.find_by(guid: purchase.browser_guid).destroy
 purchase.destroy
 ```
 
