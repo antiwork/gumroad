@@ -3,7 +3,7 @@
 class ContentModeration::Strategies::ClassifierStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
   OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
-  MAX_IMAGES_PER_REQUEST = 1
+  MAX_IMAGES_TO_MODERATE = 5
 
   DEFAULT_THRESHOLDS = {
     "harassment" => 0.8,
@@ -32,31 +32,31 @@ class ContentModeration::Strategies::ClassifierStrategy
     api_key = GlobalConfig.get("OPENAI_ACCESS_TOKEN")
     return Result.new(status: "compliant", reasoning: []) if api_key.blank?
 
-    client = OpenAI::Client.new(access_token: api_key, request_timeout: OPENAI_REQUEST_TIMEOUT_IN_SECONDS)
-
-    input = build_input
-    response = client.moderations(parameters: { model: "omni-moderation-latest", input: input })
-
-    result = response.dig("results", 0)
-    return Result.new(status: "compliant", reasoning: []) if result.nil?
-
+    @client = OpenAI::Client.new(access_token: api_key, request_timeout: OPENAI_REQUEST_TIMEOUT_IN_SECONDS)
     thresholds = load_thresholds
-    category_scores = result["category_scores"] || {}
+
     flagged_categories = []
 
-    category_scores.each do |category, score|
-      threshold = thresholds[category]
-      next if threshold.nil?
+    if @text.present?
+      scores = moderate([{ type: "text", text: @text }])
+      flagged_categories.concat(collect_flagged(scores, thresholds)) if scores
+    end
 
-      if score >= threshold
-        flagged_categories << "#{category} (score: #{score.round(3)}, threshold: #{threshold})"
-      end
+    moderated_count = 0
+    @image_urls.shuffle.each do |url|
+      break if moderated_count >= MAX_IMAGES_TO_MODERATE
+
+      scores = moderate([{ type: "image_url", image_url: { url: url } }], skip_url: url)
+      next if scores.nil?
+
+      moderated_count += 1
+      flagged_categories.concat(collect_flagged(scores, thresholds))
     end
 
     if flagged_categories.any?
       Result.new(
         status: "flagged",
-        reasoning: flagged_categories.map { |cat| "OpenAI moderation flagged: #{cat}" }
+        reasoning: flagged_categories.uniq.map { |cat| "OpenAI moderation flagged: #{cat}" }
       )
     else
       Result.new(status: "compliant", reasoning: [])
@@ -67,13 +67,24 @@ class ContentModeration::Strategies::ClassifierStrategy
   end
 
   private
-    def build_input
-      parts = []
-      parts << { type: "text", text: @text } if @text.present?
-      @image_urls.sample(MAX_IMAGES_PER_REQUEST).each do |url|
-        parts << { type: "image_url", image_url: { url: url } }
+    def moderate(input, skip_url: nil)
+      response = @client.moderations(parameters: { model: "omni-moderation-latest", input: input })
+      response.dig("results", 0, "category_scores") || {}
+    rescue Faraday::BadRequestError => e
+      raise if skip_url.nil?
+      body = e.response&.dig(:body).to_s
+      Rails.logger.warn("ContentModeration::ClassifierStrategy skipping unmoderatable image URL=#{skip_url} error=#{body[0..500]}")
+      nil
+    end
+
+    def collect_flagged(category_scores, thresholds)
+      category_scores.filter_map do |category, score|
+        threshold = thresholds[category]
+        next if threshold.nil?
+        next unless score >= threshold
+
+        "#{category} (score: #{score.round(3)}, threshold: #{threshold})"
       end
-      parts
     end
 
     def load_thresholds
