@@ -4193,8 +4193,10 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
       end
 
-      it "does not allow saving a P.O. Box address" do
+      it "does not allow saving an individual P.O. Box address" do
         visit settings_payments_path
+
+        choose "Individual"
 
         find_field("Address", match: :first).set("P.O. Box 123, High street")
 
@@ -4202,6 +4204,41 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           click_on "Update settings"
           expect(page).to have_status(text: "We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
         end.to_not change { @user.alive_user_compliance_info.reload.street_address }
+      end
+
+      it "does not allow saving a business P.O. Box address" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "ghanaian")
+        fill_in("Last name", with: "creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Accra")
+        fill_in("Phone number", with: "302213850")
+        fill_in("Postal code", with: "00233")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        choose "Business"
+
+        fill_in "Legal business name", with: "Acme"
+        select("LLC", from: "Type")
+        find_field("Address", match: :first).set("PO Box 123 High street")
+        find_field("City", match: :first).set("Accra")
+        find_field("Postal code", match: :first).set("00233")
+        fill_in "Business phone number", with: "302213850"
+        fill_in "Company tax ID", with: "000000000"
+
+        fill_in("Pay to the order of", with: "ghanaian creator")
+        fill_in("Bank code", with: "022112")
+        fill_in("Account #", with: "000123456789")
+        fill_in("Confirm account #", with: "000123456789")
+
+        expect do
+          click_on "Update settings"
+          expect(page).to have_status(text: "We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+        end.to_not change { @user.alive_user_compliance_info.reload.business_street_address }
       end
     end
 

@@ -217,10 +217,6 @@ export default function PaymentsPage() {
 
   const isStreetAddressPOBox = (input: string) => {
     return input
-      // Removes all non-alphanumeric characters (excluding underscores).
-      // The 'g' flag allows to match globally and the 'u' flag treats
-      // the pattern as a sequence of Unicode code points (as mandated by
-      // the 'require-unicode-regexp' ESLint rule).
       .replace(/[^\w]*/gu, "")
       .toLocaleLowerCase()
       .includes("pobox");
