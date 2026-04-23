@@ -53,8 +53,17 @@ class Subscription::RestartAtCheckoutService
     end
 
     def use_existing_card?
+      return false if new_payment_method_params_present?
+
       card_data_handling_mode = CardParamsHelper.get_card_data_handling_mode(params)
       card_data_handling_mode.blank? || card_data_handling_mode == :reuse
+    end
+
+    def new_payment_method_params_present?
+      params[:stripe_payment_method_id].present? ||
+        params[:stripe_customer_id].present? ||
+        params[:stripe_setup_intent_id].present? ||
+        params[:paypal_order_id].present?
     end
 
     def adapt_result(result)
