@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 class UpdateUserComplianceInfo
+  COUNTRIES_REQUIRING_PHYSICAL_ADDRESS = {
+    "US" => "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.",
+    "GH" => "We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.",
+  }.freeze
+
   attr_reader :compliance_params, :user
 
   def initialize(compliance_params:, user:)
@@ -10,6 +15,9 @@ class UpdateUserComplianceInfo
 
   def process
     if compliance_params.present?
+      po_box_error = po_box_error_message
+      return { success: false, error_message: po_box_error } if po_box_error.present?
+
       old_compliance_info = user.fetch_or_build_user_compliance_info
       saved, new_compliance_info = old_compliance_info.dup_and_save do |new_compliance_info|
         # if the following fields are submitted and are blank, we don't clear the field for the user
@@ -76,4 +84,45 @@ class UpdateUserComplianceInfo
 
     { success: true }
   end
+
+  private
+    def po_box_error_message
+      country_code = address_country_code
+      return if country_code.blank?
+
+      address = if business_account?
+        submitted_or_existing_field(:business_street_address)
+      else
+        submitted_or_existing_field(:street_address)
+      end
+      return if address.blank?
+      return unless COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.key?(country_code)
+      return unless po_box_address?(address)
+
+      COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.fetch(country_code)
+    end
+
+    def address_country_code
+      if business_account?
+        country = submitted_or_existing_field(:business_country) || submitted_or_existing_field(:country)
+        Compliance::Countries.find_by_name(country)&.alpha2 || country
+      else
+        country = submitted_or_existing_field(:country)
+        Compliance::Countries.find_by_name(country)&.alpha2 || country
+      end
+    end
+
+    def business_account?
+      return user.fetch_or_build_user_compliance_info.is_business? if compliance_params[:is_business].nil?
+
+      ActiveModel::Type::Boolean.new.cast(compliance_params[:is_business])
+    end
+
+    def submitted_or_existing_field(field)
+      compliance_params[field].presence || user.fetch_or_build_user_compliance_info.public_send(field)
+    end
+
+    def po_box_address?(address)
+      address.gsub(/[^\w]/, "").downcase.include?("pobox")
+    end
 end

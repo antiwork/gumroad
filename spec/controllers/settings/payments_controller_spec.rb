@@ -749,6 +749,46 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       end
     end
 
+    describe "P.O. Box validation" do
+      before do
+        compliance_info = user.alive_user_compliance_info
+        compliance_info.dup_and_save! do |new_compliance_info|
+          new_compliance_info.country = "Ghana"
+        end
+      end
+
+      it "rejects an individual Ghana address that uses a P.O. Box" do
+        expect do
+          put :update, params: { user: params.merge(street_address: "P.O. Box 123, High street") }
+        end.to_not change { user.reload.alive_user_compliance_info.street_address }
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+      end
+
+      it "rejects a business Ghana address that uses a P.O. Box" do
+        expect do
+          put :update, params: {
+            user: params.merge(
+              is_business: "on",
+              business_country: "Ghana",
+              business_street_address: "PO Box 456",
+              business_city: "Accra",
+              business_state: "",
+              business_zip_code: "00233",
+              business_type: UserComplianceInfo::BusinessTypes::LLC,
+              business_tax_id: "123-123-123"
+            )
+          }
+        end.to_not change { user.reload.alive_user_compliance_info.business_street_address }
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+      end
+    end
+
     describe "ach account" do
       let(:user) { create(:user) }
       before do

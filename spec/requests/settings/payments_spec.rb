@@ -4192,6 +4192,17 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.reload.active_bank_account.routing_number).to eq("022112")
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
       end
+
+      it "does not allow saving a P.O. Box address" do
+        visit settings_payments_path
+
+        find_field("Address", match: :first).set("P.O. Box 123, High street")
+
+        expect do
+          click_on "Update settings"
+          expect(page).to have_status(text: "We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+        end.to_not change { @user.alive_user_compliance_info.reload.street_address }
+      end
     end
 
     describe "Jamaican creator" do
