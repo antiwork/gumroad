@@ -80,7 +80,7 @@ class Api::V2::BaseController < ApplicationController
     end
 
     def request_from_cli?
-      request.user_agent&.match?(/gumroad-cli/i)
+      request.user_agent&.match?(/\Agumroad-cli\//i)
     end
 
     def next_page_url(page_key)
