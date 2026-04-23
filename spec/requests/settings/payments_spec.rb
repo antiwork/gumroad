@@ -4193,6 +4193,53 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
       end
 
+      it "allows saving unrelated changes when a legacy individual P.O. Box address is unchanged" do
+        allow_any_instance_of(User).to receive(:can_setup_paypal_payouts?).and_return(true)
+        @user.update!(payment_address: "ghanaian@example.com")
+        @user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
+          new_compliance_info.first_name = "ghanaian"
+          new_compliance_info.last_name = "creator"
+          new_compliance_info.street_address = "PO Box 99, Accra"
+          new_compliance_info.city = "Accra"
+          new_compliance_info.phone = "+233302213850"
+          new_compliance_info.zip_code = "00233"
+          new_compliance_info.birthday = Date.new(1980, 1, 1)
+        end
+
+        visit settings_payments_path
+
+        fill_in("First name", with: "newfirst")
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.reload.alive_user_compliance_info.first_name).to eq("newfirst")
+        expect(@user.alive_user_compliance_info.street_address).to eq("PO Box 99, Accra")
+      end
+
+      it "allows saving unrelated changes when a hidden legacy business P.O. Box address is unchanged for an individual" do
+        allow_any_instance_of(User).to receive(:can_setup_paypal_payouts?).and_return(true)
+        @user.update!(payment_address: "ghanaian@example.com")
+        @user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
+          new_compliance_info.first_name = "ghanaian"
+          new_compliance_info.last_name = "creator"
+          new_compliance_info.street_address = "address_full_match"
+          new_compliance_info.business_street_address = "PO Box 77, Accra"
+          new_compliance_info.city = "Accra"
+          new_compliance_info.phone = "+233302213850"
+          new_compliance_info.zip_code = "00233"
+          new_compliance_info.birthday = Date.new(1980, 1, 1)
+        end
+
+        visit settings_payments_path
+
+        fill_in("First name", with: "newfirst")
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.reload.alive_user_compliance_info.first_name).to eq("newfirst")
+        expect(@user.alive_user_compliance_info.business_street_address).to eq("PO Box 77, Accra")
+      end
+
       it "does not allow saving an individual P.O. Box address" do
         visit settings_payments_path
 

@@ -91,14 +91,15 @@ class UpdateUserComplianceInfo
 
   private
     def po_box_error_message
-      ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS.each do |address_field, country_fields|
-        address = compliance_params[address_field].presence
-        next if address.blank?
+      ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS.each_key do |address_field|
+        next unless should_validate_po_box_for?(address_field)
 
-        country_code = country_code_for(*country_fields)
+        address = compliance_params[address_field].presence
+        next unless po_box_address?(address)
+
+        country_code = effective_country_code_for(address_field)
         next if country_code.blank?
         next unless COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.key?(country_code)
-        next unless po_box_address?(address)
 
         return COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.fetch(country_code)
       end
@@ -106,19 +107,66 @@ class UpdateUserComplianceInfo
       nil
     end
 
-    def country_code_for(*fields)
-      country = fields.filter_map { |field| submitted_or_existing_field(field) }.first
+    def should_validate_po_box_for?(address_field)
+      address = compliance_params[address_field].presence
+      return false if address.blank?
+      return false unless address_field_active?(address_field)
+
+      address_changed?(address_field) || country_changed_for?(address_field) || business_mode_changed?
+    end
+
+    def address_field_active?(address_field)
+      address_field == :street_address || effective_is_business?
+    end
+
+    def address_changed?(address_field)
+      compliance_params[address_field].to_s != current_compliance_info.public_send(address_field).to_s
+    end
+
+    def country_changed_for?(address_field)
+      effective_country_code_for(address_field) != current_country_code_for(address_field)
+    end
+
+    def effective_country_code_for(address_field)
+      country_code_for(
+        ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS.fetch(address_field).filter_map { |field| effective_country_value_for(field) }.first
+      )
+    end
+
+    def current_country_code_for(address_field)
+      country_code_for(
+        ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS.fetch(address_field).filter_map { |field| current_compliance_info.public_send(field) }.first
+      )
+    end
+
+    def country_code_for(country)
       return if country.blank?
 
       Compliance::Countries.find_by_name(country)&.alpha2 || country
     end
 
-    def submitted_or_existing_field(field)
-      compliance_params[field].presence || current_compliance_info.public_send(field)
+    def effective_country_value_for(field)
+      if field == :country && compliance_params[:country].present? && effective_is_business?
+        Compliance::Countries.mapping[compliance_params[:country]]
+      elsif field == :business_country && compliance_params[:business_country].present? && effective_is_business?
+        Compliance::Countries.mapping[compliance_params[:business_country]]
+      else
+        current_compliance_info.public_send(field)
+      end
     end
 
     def po_box_address?(address)
       address.gsub(/[^\w]/, "").downcase.include?("pobox")
+    end
+
+    def business_mode_changed?
+      effective_is_business? != current_compliance_info.is_business?
+    end
+
+    def effective_is_business?
+      return current_compliance_info.is_business? if compliance_params[:is_business].nil?
+
+      ActiveModel::Type::Boolean.new.cast(compliance_params[:is_business])
     end
 
     def current_compliance_info

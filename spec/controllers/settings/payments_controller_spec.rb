@@ -767,17 +767,50 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
       end
 
-      it "allows unrelated partial updates when a legacy Ghana P.O. Box address already exists" do
+      it "allows unrelated full-form updates when a legacy Ghana P.O. Box address is unchanged" do
         user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
           new_compliance_info.street_address = "PO Box 99, Accra"
         end
 
         expect do
-          put :update, params: { user: { first_name: "newfirst", last_name: "newlast" } }
+          put :update, params: {
+            user: params.merge(
+              first_name: "newfirst",
+              last_name: "newlast",
+              is_business: false,
+              country: "GH",
+              street_address: "PO Box 99, Accra"
+            )
+          }
         end.to change { user.reload.alive_user_compliance_info.first_name }.to("newfirst")
 
         expect(user.reload.alive_user_compliance_info.last_name).to eq("newlast")
         expect(user.alive_user_compliance_info.street_address).to eq("PO Box 99, Accra")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
+      end
+
+      it "allows unrelated full-form updates when a hidden legacy Ghana business P.O. Box is unchanged for an individual" do
+        user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
+          new_compliance_info.business_street_address = "PO Box 77, Accra"
+        end
+
+        expect do
+          put :update, params: {
+            user: params.merge(
+              first_name: "newfirst",
+              last_name: "newlast",
+              is_business: false,
+              country: "GH",
+              business_street_address: "PO Box 77, Accra",
+              business_country: "GH"
+            )
+          }
+        end.to change { user.reload.alive_user_compliance_info.first_name }.to("newfirst")
+
+        expect(user.reload.alive_user_compliance_info.last_name).to eq("newlast")
+        expect(user.alive_user_compliance_info.business_street_address).to eq("PO Box 77, Accra")
         expect(response).to redirect_to(settings_payments_path)
         expect(response).to have_http_status :see_other
         expect(flash[:notice]).to eq("Thanks! You're all set.")
@@ -822,6 +855,16 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end.to_not change { user.reload.alive_user_compliance_info.street_address }
 
         expect(user.reload.alive_user_compliance_info.business_street_address).to be_nil
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+      end
+
+      it "rejects a Ghana beneficiary P.O. Box when the submitted country would not be persisted" do
+        expect do
+          put :update, params: { user: { country: "FR", street_address: "PO Box 999" } }
+        end.to_not change { user.reload.alive_user_compliance_info.street_address }
+
         expect(response).to redirect_to(settings_payments_path)
         expect(response).to have_http_status :found
         expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")

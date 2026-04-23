@@ -529,6 +529,15 @@ export default function PaymentsPage() {
   };
 
   const validateComplianceInfoFields = () => {
+    const streetAddressValidationContextChanged =
+      form.data.user.street_address !== props.compliance_info.street_address ||
+      form.data.user.country !== props.compliance_info.country ||
+      form.data.user.is_business !== props.compliance_info.is_business;
+    const businessStreetAddressValidationContextChanged =
+      form.data.user.business_street_address !== props.compliance_info.business_street_address ||
+      form.data.user.business_country !== props.compliance_info.business_country ||
+      form.data.user.is_business !== props.compliance_info.is_business;
+
     if (!form.data.user.first_name) {
       markFieldInvalid("first_name");
     }
@@ -582,7 +591,8 @@ export default function PaymentsPage() {
       );
     } else if (
       !form.data.user.street_address ||
-      (form.data.user.country !== null &&
+      (streetAddressValidationContextChanged &&
+        form.data.user.country !== null &&
         isPhysicalAddressRequiredAndPOBox(cast(form.data.user.country), form.data.user.street_address))
     ) {
       markFieldInvalid("street_address");
@@ -693,7 +703,8 @@ export default function PaymentsPage() {
         }
       } else if (
         !form.data.user.business_street_address ||
-        (form.data.user.business_country !== null &&
+        (businessStreetAddressValidationContextChanged &&
+          form.data.user.business_country !== null &&
           isPhysicalAddressRequiredAndPOBox(cast(form.data.user.business_country), form.data.user.business_street_address))
       ) {
         markFieldInvalid("business_street_address");
