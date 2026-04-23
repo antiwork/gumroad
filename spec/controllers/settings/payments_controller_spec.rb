@@ -767,6 +767,22 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
       end
 
+      it "allows unrelated partial updates when a legacy Ghana P.O. Box address already exists" do
+        user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
+          new_compliance_info.street_address = "PO Box 99, Accra"
+        end
+
+        expect do
+          put :update, params: { user: { first_name: "newfirst", last_name: "newlast" } }
+        end.to change { user.reload.alive_user_compliance_info.first_name }.to("newfirst")
+
+        expect(user.reload.alive_user_compliance_info.last_name).to eq("newlast")
+        expect(user.alive_user_compliance_info.street_address).to eq("PO Box 99, Accra")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
+      end
+
       it "rejects a business Ghana address that uses a P.O. Box" do
         expect do
           put :update, params: {
@@ -783,6 +799,29 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           }
         end.to_not change { user.reload.alive_user_compliance_info.business_street_address }
 
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+      end
+
+      it "rejects a submitted beneficiary Ghana P.O. Box even when the business address is valid" do
+        expect do
+          put :update, params: {
+            user: params.merge(
+              is_business: "on",
+              street_address: "PO Box 789",
+              business_country: "Ghana",
+              business_street_address: "12 Independence Ave",
+              business_city: "Accra",
+              business_state: "",
+              business_zip_code: "00233",
+              business_type: UserComplianceInfo::BusinessTypes::LLC,
+              business_tax_id: "123-123-123"
+            )
+          }
+        end.to_not change { user.reload.alive_user_compliance_info.street_address }
+
+        expect(user.reload.alive_user_compliance_info.business_street_address).to be_nil
         expect(response).to redirect_to(settings_payments_path)
         expect(response).to have_http_status :found
         expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")

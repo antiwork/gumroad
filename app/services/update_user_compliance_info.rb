@@ -5,6 +5,10 @@ class UpdateUserComplianceInfo
     "US" => "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.",
     "GH" => "We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.",
   }.freeze
+  ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS = {
+    street_address: [:country],
+    business_street_address: [:business_country, :country],
+  }.freeze
 
   attr_reader :compliance_params, :user
 
@@ -18,7 +22,7 @@ class UpdateUserComplianceInfo
       po_box_error = po_box_error_message
       return { success: false, error_message: po_box_error } if po_box_error.present?
 
-      old_compliance_info = user.fetch_or_build_user_compliance_info
+      old_compliance_info = current_compliance_info
       saved, new_compliance_info = old_compliance_info.dup_and_save do |new_compliance_info|
         # if the following fields are submitted and are blank, we don't clear the field for the user
         new_compliance_info.first_name =              compliance_params[:first_name]              if compliance_params[:first_name].present?
@@ -87,42 +91,37 @@ class UpdateUserComplianceInfo
 
   private
     def po_box_error_message
-      country_code = address_country_code
-      return if country_code.blank?
+      ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS.each do |address_field, country_fields|
+        address = compliance_params[address_field].presence
+        next if address.blank?
 
-      address = if business_account?
-        submitted_or_existing_field(:business_street_address)
-      else
-        submitted_or_existing_field(:street_address)
+        country_code = country_code_for(*country_fields)
+        next if country_code.blank?
+        next unless COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.key?(country_code)
+        next unless po_box_address?(address)
+
+        return COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.fetch(country_code)
       end
-      return if address.blank?
-      return unless COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.key?(country_code)
-      return unless po_box_address?(address)
 
-      COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.fetch(country_code)
+      nil
     end
 
-    def address_country_code
-      if business_account?
-        country = submitted_or_existing_field(:business_country) || submitted_or_existing_field(:country)
-        Compliance::Countries.find_by_name(country)&.alpha2 || country
-      else
-        country = submitted_or_existing_field(:country)
-        Compliance::Countries.find_by_name(country)&.alpha2 || country
-      end
-    end
+    def country_code_for(*fields)
+      country = fields.filter_map { |field| submitted_or_existing_field(field) }.first
+      return if country.blank?
 
-    def business_account?
-      return user.fetch_or_build_user_compliance_info.is_business? if compliance_params[:is_business].nil?
-
-      ActiveModel::Type::Boolean.new.cast(compliance_params[:is_business])
+      Compliance::Countries.find_by_name(country)&.alpha2 || country
     end
 
     def submitted_or_existing_field(field)
-      compliance_params[field].presence || user.fetch_or_build_user_compliance_info.public_send(field)
+      compliance_params[field].presence || current_compliance_info.public_send(field)
     end
 
     def po_box_address?(address)
       address.gsub(/[^\w]/, "").downcase.include?("pobox")
+    end
+
+    def current_compliance_info
+      @current_compliance_info ||= user.fetch_or_build_user_compliance_info
     end
 end
