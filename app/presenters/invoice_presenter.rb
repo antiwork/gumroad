@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 class InvoicePresenter
-  def initialize(chargeable, address_fields: {}, additional_notes: nil, business_vat_id: nil)
+  def initialize(chargeable, address_fields: {}, additional_notes: nil, business_vat_id: nil, buyer: nil)
     @chargeable = chargeable
     @address_fields = address_fields
     @additional_notes = additional_notes
     @business_vat_id = business_vat_id
+    @buyer = buyer
   end
 
   def invoice_generation_form_data_props
@@ -25,7 +26,7 @@ class InvoicePresenter
   end
 
   def form_info
-    @_form_info ||= InvoicePresenter::FormInfo.new(chargeable)
+    @_form_info ||= InvoicePresenter::FormInfo.new(chargeable, buyer:)
   end
 
   def order_info
@@ -41,5 +42,5 @@ class InvoicePresenter
   end
 
   private
-    attr_reader :business_vat_id, :chargeable, :address_fields, :additional_notes
+    attr_reader :business_vat_id, :chargeable, :address_fields, :additional_notes, :buyer
 end

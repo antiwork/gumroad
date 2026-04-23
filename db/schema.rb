@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_21_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_22_000000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -318,6 +318,23 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_21_000000) do
     t.integer "base_variant_id"
     t.index ["base_variant_id"], name: "index_purchases_variants_on_variant_id"
     t.index ["purchase_id"], name: "index_purchases_variants_on_purchase_id"
+  end
+
+  create_table "billing_details", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "purchaser_id", null: false
+    t.string "full_name", null: false
+    t.string "business_name"
+    t.string "business_id"
+    t.string "street_address", null: false
+    t.string "city", null: false
+    t.string "state"
+    t.string "zip_code", null: false
+    t.string "country_code", limit: 2, null: false
+    t.text "additional_notes"
+    t.boolean "auto_email_invoice_enabled", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["purchaser_id"], name: "index_billing_details_on_purchaser_id", unique: true
   end
 
   create_table "blocked_customer_objects", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
