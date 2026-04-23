@@ -12,8 +12,6 @@ class Order::ChargeService
   end
 
   def perform
-    rejected_by_offer_code_limit = Purchase.validate_offer_code_usage_across_line_items(order.purchases)
-
     # We need to make off session charges if there are products from more than one seller
     # In such case we create a reusable payment method before initiating the order from front-end
     off_session = order.purchases.non_free.pluck(:seller_id).uniq.count > 1
@@ -23,11 +21,19 @@ class Order::ChargeService
     # i.e. one charge per seller
     # Exclude purchases that already have a payment intent (e.g. subscription restarts
     # requiring SCA — they are confirmed later via Order::ConfirmService)
-    purchases_by_seller = order.purchases.reject { _1.processor_payment_intent.present? }.group_by(&:seller_id)
+    chargeable_purchases = order.purchases.reject { _1.processor_payment_intent.present? }
+    rejected_by_offer_code_limit = Purchase.validate_offer_code_usage_across_line_items(chargeable_purchases)
+    purchases_by_seller = chargeable_purchases.group_by(&:seller_id)
 
     purchases_by_seller.each do |seller_id, seller_purchases|
       self.charge_intent = nil
       self.setup_intent = nil
+
+      # Every purchase in this seller group has already reached a terminal state
+      # (e.g. rejected by `validate_offer_code_usage_across_line_items`) — skip
+      # creating a Charge record that would have no Stripe activity attached.
+      next if seller_purchases.none?(&:in_progress?)
+
       charge = order.charges.create!(seller_id:)
       seller_purchases.each do |purchase|
         # Skip purchases rejected by `Purchase.validate_offer_code_usage_across_line_items`.
