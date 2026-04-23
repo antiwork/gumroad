@@ -54,6 +54,25 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(result.reasoning).to eq([])
   end
 
+  it "sends at most one image to the OpenAI moderation API" do
+    many_image_urls = [
+      "https://cdn.example.com/1.png",
+      "https://cdn.example.com/2.png",
+      "https://cdn.example.com/3.png",
+    ]
+    captured_parameters = nil
+    allow(client).to receive(:moderations) do |parameters:|
+      captured_parameters = parameters
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    described_class.new(text:, image_urls: many_image_urls).perform
+
+    image_parts = captured_parameters[:input].select { |part| part[:type] == "image_url" }
+    expect(image_parts.size).to eq(1)
+    expect(many_image_urls).to include(image_parts.first[:image_url][:url])
+  end
+
   it "logs and re-raises when the OpenAI request fails" do
     allow(client).to receive(:moderations).and_raise(StandardError, "API failure")
 
