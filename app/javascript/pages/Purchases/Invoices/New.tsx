@@ -56,12 +56,15 @@ const PurchaseNewInvoicePage = () => {
   const { supplier_info, seller_info, order_info, countries } = form_metadata;
 
   const form = useForm(form_data);
+  const initialCountryCode = form_data.address_fields.country_code;
   const showStateField = !form.data.address_fields.country_code || form.data.address_fields.country_code === "US";
   const showBusinessIdField =
     form_metadata.display_vat_id ||
     form_metadata.business_id_country_codes.includes(form.data.address_fields.country_code);
   const businessIdLabel =
-    form_metadata.business_id_labels[form.data.address_fields.country_code] ?? form_metadata.vat_id_label;
+    form_metadata.display_vat_id && form.data.address_fields.country_code === initialCountryCode
+      ? form_metadata.vat_id_label
+      : (form_metadata.business_id_labels[form.data.address_fields.country_code] ?? form_metadata.vat_id_label);
 
   const validateFields = () =>
     Object.entries(form.data.address_fields).reduce((isValid, [key, value]) => {

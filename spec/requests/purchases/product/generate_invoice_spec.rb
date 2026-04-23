@@ -129,6 +129,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -162,6 +163,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -198,6 +200,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -233,6 +236,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -264,6 +268,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -294,6 +299,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -325,6 +331,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -357,6 +364,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -389,6 +397,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -735,6 +744,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -765,6 +775,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -793,6 +804,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -824,6 +836,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
@@ -857,6 +870,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       click_on "Download"
+      wait_for_ajax
 
       invoice_url = find_link("here")[:href]
 
