@@ -60,9 +60,10 @@ class ContentModeration::Strategies::ClassifierStrategy
     else
       Result.new(status: "compliant", reasoning: [])
     end
-  rescue StandardError => e
-    Rails.logger.error("ContentModeration::ClassifierStrategy error: #{e.message}")
-    raise
+  rescue Faraday::Error, Net::OpenTimeout, Net::ReadTimeout, OpenAI::Error => e
+    Rails.logger.error("ContentModeration::ClassifierStrategy error: #{e.class}: #{e.message}")
+    ErrorNotifier.notify(e)
+    Result.new(status: "compliant", reasoning: [])
   end
 
   private

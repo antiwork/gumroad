@@ -130,12 +130,14 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       end
     end
 
-    it "propagates errors raised by AI strategies" do
+    it "returns compliant when AI strategies raise errors" do
       classifier = instance_double(ContentModeration::Strategies::ClassifierStrategy)
       allow(classifier).to receive(:perform).and_raise(StandardError, "OpenAI down")
       allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(classifier)
 
-      expect { described_class.check(product, :product) }.to raise_error(StandardError, "OpenAI down")
+      result = described_class.check(product, :product)
+
+      expect(result.passed).to be true
     end
 
     context "for posts" do

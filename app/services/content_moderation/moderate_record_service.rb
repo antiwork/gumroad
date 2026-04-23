@@ -71,7 +71,13 @@ class ContentModeration::ModerateRecordService
         end
       end
 
-      threads.map(&:value)
+      threads.map do |t|
+        t.value
+      rescue StandardError => e
+        Rails.logger.error("ContentModeration strategy thread error: #{e.class}: #{e.message}")
+        ErrorNotifier.notify(e)
+        ContentModeration::Strategies::ClassifierStrategy::Result.new(status: "compliant", reasoning: [])
+      end
     end
 
     def leave_admin_comment(reasons)
