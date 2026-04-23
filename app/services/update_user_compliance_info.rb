@@ -94,7 +94,7 @@ class UpdateUserComplianceInfo
       ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS.each_key do |address_field|
         next unless should_validate_po_box_for?(address_field)
 
-        address = compliance_params[address_field].presence
+        address = address_for_validation(address_field)
         next unless po_box_address?(address)
 
         country_code = effective_country_code_for(address_field)
@@ -108,19 +108,35 @@ class UpdateUserComplianceInfo
     end
 
     def should_validate_po_box_for?(address_field)
-      address = compliance_params[address_field].presence
+      address = address_for_validation(address_field)
       return false if address.blank?
-      return false unless address_field_active?(address_field)
 
-      address_changed?(address_field) || country_changed_for?(address_field) || business_mode_changed?
+      address_changed?(address_field) || validation_context_changed_for?(address_field)
     end
 
-    def address_field_active?(address_field)
-      address_field == :street_address || effective_is_business?
+    def address_for_validation(address_field)
+      compliance_params[address_field].presence || stored_address_for_validation(address_field)
     end
 
     def address_changed?(address_field)
-      compliance_params[address_field].to_s != current_compliance_info.public_send(address_field).to_s
+      compliance_params[address_field].present? &&
+        compliance_params[address_field].to_s != current_compliance_info.public_send(address_field).to_s
+    end
+
+    def stored_address_for_validation(address_field)
+      return unless validation_context_changed_for?(address_field)
+
+      current_compliance_info.public_send(address_field).presence
+    end
+
+    def validation_context_changed_for?(address_field)
+      country_changed_for?(address_field) || business_mode_changed_for?(address_field)
+    end
+
+    def business_mode_changed_for?(address_field)
+      return business_mode_changed? if address_field == :street_address
+
+      business_mode_activating? if address_field == :business_street_address
     end
 
     def country_changed_for?(address_field)
@@ -158,6 +174,10 @@ class UpdateUserComplianceInfo
 
     def business_mode_changed?
       effective_is_business? != current_compliance_info.is_business?
+    end
+
+    def business_mode_activating?
+      !current_compliance_info.is_business? && effective_is_business?
     end
 
     def effective_is_business?

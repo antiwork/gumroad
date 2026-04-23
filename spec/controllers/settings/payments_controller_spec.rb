@@ -893,6 +893,46 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(response).to have_http_status :found
         expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
       end
+
+      it "rejects toggling business mode on when a legacy Ghana beneficiary P.O. Box remains on file" do
+        user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
+          new_compliance_info.street_address = "PO Box 11, Accra"
+        end
+
+        expect do
+          put :update, params: { user: { is_business: "on" } }
+        end.to_not change { user.reload.alive_user_compliance_info.is_business }
+
+        expect(user.reload.alive_user_compliance_info.street_address).to eq("PO Box 11, Accra")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+      end
+
+      it "rejects planting a Ghana business P.O. Box while business mode is off" do
+        expect do
+          put :update, params: { user: { is_business: false, business_street_address: "PO Box 1" } }
+        end.to_not change { user.reload.alive_user_compliance_info.business_street_address }
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+      end
+
+      it "rejects toggling business mode on when a dormant Ghana business P.O. Box remains on file" do
+        user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
+          new_compliance_info.business_street_address = "PO Box 22, Accra"
+        end
+
+        expect do
+          put :update, params: { user: { is_business: "on" } }
+        end.to_not change { user.reload.alive_user_compliance_info.is_business }
+
+        expect(user.reload.alive_user_compliance_info.business_street_address).to eq("PO Box 22, Accra")
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+      end
     end
 
     describe "ach account" do
