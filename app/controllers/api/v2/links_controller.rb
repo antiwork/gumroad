@@ -151,6 +151,8 @@ class Api::V2::LinksController < Api::V2::BaseController
       @product.json_data["custom_summary"] = params[:custom_summary]
     end
 
+    @product.created_via_cli = true if request_from_cli?
+
     ActiveRecord::Base.transaction do
       @product.save!
       @product.set_template_properties_if_needed

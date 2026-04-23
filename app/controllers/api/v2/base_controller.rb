@@ -70,12 +70,16 @@ class Api::V2::BaseController < ApplicationController
     end
 
     def mark_cli_user
-      return unless request.user_agent&.match?(/gumroad-cli/i)
+      return unless request_from_cli?
       return if current_resource_owner.has_used_cli?
 
       current_resource_owner.update_column(:flags, current_resource_owner.flags | User.flag_mapping["flags"][:has_used_cli])
     rescue => e
       Rails.logger.error("Failed to mark CLI user: #{e.message}")
+    end
+
+    def request_from_cli?
+      request.user_agent&.match?(/gumroad-cli/i)
     end
 
     def next_page_url(page_key)
