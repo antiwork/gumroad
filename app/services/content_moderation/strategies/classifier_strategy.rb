@@ -3,6 +3,7 @@
 class ContentModeration::Strategies::ClassifierStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
   OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
+  MAX_IMAGES_PER_REQUEST = 1
 
   DEFAULT_THRESHOLDS = {
     "harassment" => 0.8,
@@ -69,7 +70,7 @@ class ContentModeration::Strategies::ClassifierStrategy
     def build_input
       parts = []
       parts << { type: "text", text: @text } if @text.present?
-      @image_urls.sample(5).each do |url|
+      @image_urls.sample(MAX_IMAGES_PER_REQUEST).each do |url|
         parts << { type: "image_url", image_url: { url: url } }
       end
       parts

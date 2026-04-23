@@ -375,19 +375,19 @@ describe User::OmniauthCallbacksController do
 
     context "linking account" do
       it "links google account to existing account", :vcr do
-        @user = create(:user, email: "pdragunas@example.com")
+        user = create(:user, email: "pdragunas@example.com")
 
-        OmniAuth.config.mock_auth[:google] = OmniAuth::AuthHash.new fetch_json("google")
-        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:google]
-        allow(controller).to receive(:current_user).and_return(@user)
+        OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new fetch_json("google")
+        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:google_oauth2]
+        allow(controller).to receive(:current_user).and_return(user)
 
         post :google_oauth2
 
-        @user.reload
+        user.reload
 
-        expect(@user.name).to eq "Paulius Dragunas"
-        expect(@user.email).to eq "pdragunas@example.com"
-        expect(@user.google_uid).to eq "101656774483284362141"
+        expect(user.name).to eq "Paulius Dragunas"
+        expect(user.email).to eq "pdragunas@example.com"
+        expect(user.google_uid).to eq "101656774483284362141"
       end
     end
 

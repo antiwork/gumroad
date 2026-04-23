@@ -6428,4 +6428,49 @@ describe Purchase, :vcr do
       end
     end
   end
+
+  describe ".validate_offer_code_usage_across_line_items" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 1_000) }
+
+    def build_in_progress_purchase(offer_code:)
+      purchase = build(:purchase_in_progress, link: product, seller:, offer_code:, quantity: 1)
+      purchase.save(validate: false)
+      purchase
+    end
+
+    it "fails every line item when the cart collectively exceeds max_purchase_count" do
+      offer_code = create(:offer_code, products: [product], code: "once", amount_cents: 100, max_purchase_count: 1)
+      purchases = [build_in_progress_purchase(offer_code:), build_in_progress_purchase(offer_code:)]
+
+      Purchase.validate_offer_code_usage_across_line_items(purchases)
+
+      purchases.each do |purchase|
+        expect(purchase.reload.purchase_state).to eq "failed"
+        expect(purchase.error_code).to eq PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
+        expect(purchase.errors[:base].first).to match(/quantity you have selected/)
+      end
+    end
+
+    it "leaves line items alone when the cart fits within max_purchase_count" do
+      offer_code = create(:offer_code, products: [product], code: "plenty", amount_cents: 100, max_purchase_count: 5)
+      purchases = [build_in_progress_purchase(offer_code:), build_in_progress_purchase(offer_code:)]
+
+      Purchase.validate_offer_code_usage_across_line_items(purchases)
+
+      purchases.each do |purchase|
+        expect(purchase.reload.purchase_state).to eq "in_progress"
+        expect(purchase.error_code).to be_nil
+      end
+    end
+
+    it "skips single-line carts (already handled by per-purchase validation)" do
+      offer_code = create(:offer_code, products: [product], code: "single", amount_cents: 100, max_purchase_count: 1)
+      purchase = build_in_progress_purchase(offer_code:)
+
+      Purchase.validate_offer_code_usage_across_line_items([purchase])
+
+      expect(purchase.reload.purchase_state).to eq "in_progress"
+    end
+  end
 end

@@ -39,7 +39,8 @@ module Purchase::Blockable
                          PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT,
                          PurchaseErrorCode::BLOCKED_CHARGE_PROCESSOR_FINGERPRINT,
                          PurchaseErrorCode::BLOCKED_CUSTOMER_EMAIL_ADDRESS,
-                         PurchaseErrorCode::BLOCKED_CUSTOMER_CHARGE_PROCESSOR_FINGERPRINT]
+                         PurchaseErrorCode::BLOCKED_CUSTOMER_CHARGE_PROCESSOR_FINGERPRINT,
+                         PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY]
   private_constant :IGNORED_ERROR_CODES
 
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5

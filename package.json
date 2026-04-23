@@ -110,7 +110,7 @@
     "svgo": "^3.0.2",
     "tailwindcss": "^4.1.14",
     "terser-webpack-plugin": "^5.3.6",
-    "typescript": "~5.5.0",
+    "typescript": "~6.0",
     "typescript-eslint": "^8.0.0",
     "webpack": "^5.75.0",
     "webpack-assets-manifest": "^5.0.6",

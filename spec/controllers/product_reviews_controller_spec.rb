@@ -128,6 +128,49 @@ describe ProductReviewsController do
       end
     end
 
+    context "when purchaser is suspended" do
+      it "rejects review creation from a suspended user" do
+        purchaser.update!(user_risk_state: "suspended_for_fraud")
+        put :set, params: valid_params
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to eq("Sorry, you are not authorized to review this product.")
+        expect(purchase.reload.product_review).to be_nil
+      end
+
+      it "rejects review edits from a suspended user" do
+        review = create(:product_review, purchase: purchase, rating: 3)
+        purchaser.update!(user_risk_state: "suspended_for_tos_violation")
+        put :set, params: valid_params.merge(rating: 1)
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(review.reload.rating).to eq(3)
+      end
+
+      it "allows review creation after user is unsuspended" do
+        purchaser.update!(user_risk_state: "suspended_for_fraud")
+        purchaser.update!(user_risk_state: "compliant")
+        put :set, params: valid_params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(purchase.reload.product_review.rating).to eq(4)
+      end
+
+      it "allows reviews from guest purchases with no linked user" do
+        guest_purchase = create(:purchase, link: product, purchaser: nil, created_at: 2.years.ago)
+        put :set, params: {
+          link_id: product.unique_permalink,
+          purchase_id: guest_purchase.external_id,
+          purchase_email_digest: guest_purchase.email_digest,
+          rating: 5,
+          message: "Guest review"
+        }
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(guest_purchase.reload.product_review.rating).to eq(5)
+      end
+    end
+
     context "when seller has reviews disabled after 1 year" do
       before { product.user.update!(disable_reviews_after_year: true) }
 

@@ -9,15 +9,15 @@ describe User::SocialGoogle do
 
   describe ".find_or_create_for_google_oauth2" do
     before do
-      @dataCopy1 = @data.deep_dup
-      @dataCopy1["uid"] = "12345"
-      @dataCopy1["info"]["email"] = "paulius@example.com"
-      @dataCopy1["extra"]["raw_info"]["email"] = "paulius@example.com"
+      @data_copy1 = @data.deep_dup
+      @data_copy1["uid"] = "12345"
+      @data_copy1["info"]["email"] = "paulius@example.com"
+      @data_copy1["extra"]["raw_info"]["email"] = "paulius@example.com"
 
-      @dataCopy2 = @data.deep_dup
-      @dataCopy2["uid"] = "111111"
-      @dataCopy2["info"]["email"] = "spongebob@example.com"
-      @dataCopy2["extra"]["raw_info"]["email"] = "spongebob@example.com"
+      @data_copy2 = @data.deep_dup
+      @data_copy2["uid"] = "111111"
+      @data_copy2["info"]["email"] = "spongebob@example.com"
+      @data_copy2["extra"]["raw_info"]["email"] = "spongebob@example.com"
     end
 
     it "creates a new user if one does not exist with the corresponding google uid or email" do
@@ -28,21 +28,21 @@ describe User::SocialGoogle do
     end
 
     it "finds a user using google's uid payload" do
-      createdUser = create(:user, google_uid: @dataCopy1["uid"])
-      foundUser = User.find_or_create_for_google_oauth2(@dataCopy1)
+      created_user = create(:user, google_uid: @data_copy1["uid"])
+      found_user = User.find_or_create_for_google_oauth2(@data_copy1)
 
-      expect(foundUser.id).to eq(createdUser.id)
-      expect(createdUser.reload.email).to eq(foundUser.email)
-      expect(createdUser.reload.email).to eq(@dataCopy1["info"]["email"])
+      expect(found_user.id).to eq(created_user.id)
+      expect(created_user.reload.email).to eq(found_user.email)
+      expect(created_user.reload.email).to eq(@data_copy1["info"]["email"])
     end
 
     it "finds a user using email when google's uid is missing and fills in uid" do
-      createdUser = create(:user, email: @dataCopy2["info"]["email"])
-      foundUser = User.find_or_create_for_google_oauth2(@dataCopy2)
+      created_user = create(:user, email: @data_copy2["info"]["email"])
+      found_user = User.find_or_create_for_google_oauth2(@data_copy2)
 
-      expect(createdUser.google_uid).to eq(nil)
-      expect(createdUser.reload.google_uid).to eq(foundUser.google_uid)
-      expect(createdUser.reload.google_uid).to eq(@dataCopy2["uid"])
+      expect(created_user.google_uid).to eq(nil)
+      expect(created_user.reload.google_uid).to eq(found_user.google_uid)
+      expect(created_user.reload.google_uid).to eq(@data_copy2["uid"])
     end
 
     it "creates user with sanitized name when name contains colons" do
@@ -177,7 +177,7 @@ describe User::SocialGoogle do
     end
 
     describe "already has name" do
-      it "does not not set a name if one already exists" do
+      it "does not set a name if one already exists" do
         @user = create(:user, name: "Spongebob")
         expect { User.query_google(@user, @data) }.to_not change { @user.reload.name }
       end

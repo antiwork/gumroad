@@ -138,6 +138,17 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
     end
   end
 
+  describe "GET paged when Elasticsearch times out" do
+    it "returns 504" do
+      allow(PurchaseSearchService).to receive(:search).and_raise(Faraday::TimeoutError)
+
+      get :paged, params: { page: 1 }
+
+      expect(response).to have_http_status(:gateway_timeout)
+      expect(response.parsed_body).to eq("success" => false, "error" => "request timed out")
+    end
+  end
+
   describe "GET charges" do
     before do
       @product = create(:product, user: seller)
