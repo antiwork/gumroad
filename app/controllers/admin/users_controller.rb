@@ -196,6 +196,20 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: false, message: e.message }, status: :unprocessable_content
   end
 
+  def gdpr_erase
+    result = GdprDataErasureService.new(@user, performed_by: current_user).perform!
+
+    if result[:success]
+      render json: {
+        success: true,
+        message: "GDPR erasure complete. External cleanup still needed: Helper/Supabase, Gmail, Stripe.",
+        summary: result[:summary]
+      }
+    else
+      render json: { success: false, message: result[:error] }
+    end
+  end
+
   def toggle_adult_products
     @user.all_adult_products = !@user.all_adult_products
     @user.save!
