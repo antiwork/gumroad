@@ -869,6 +869,30 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(response).to have_http_status :found
         expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
       end
+
+      it "rejects a Ghana beneficiary P.O. Box when the submitted country cannot be mapped" do
+        expect do
+          put :update, params: { user: { is_business: "on", country: "Ghana", street_address: "PO Box 999" } }
+        end.to_not change { user.reload.alive_user_compliance_info.street_address }
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+      end
+
+      it "rejects a Ghana business beneficiary P.O. Box when is_business is omitted" do
+        user.alive_user_compliance_info.dup_and_save! do |new_compliance_info|
+          new_compliance_info.is_business = true
+        end
+
+        expect do
+          put :update, params: { user: { country: "FR", street_address: "PO Box 5" } }
+        end.to_not change { user.reload.alive_user_compliance_info.street_address }
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(response).to have_http_status :found
+        expect(session[:inertia_errors][:base]).to include("We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.")
+      end
     end
 
     describe "ach account" do

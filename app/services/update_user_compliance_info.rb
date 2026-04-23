@@ -146,13 +146,10 @@ class UpdateUserComplianceInfo
     end
 
     def effective_country_value_for(field)
-      if field == :country && compliance_params[:country].present? && effective_is_business?
-        Compliance::Countries.mapping[compliance_params[:country]]
-      elsif field == :business_country && compliance_params[:business_country].present? && effective_is_business?
-        Compliance::Countries.mapping[compliance_params[:business_country]]
-      else
-        current_compliance_info.public_send(field)
-      end
+      current_country = current_compliance_info.public_send(field)
+      return current_country unless submitted_country_will_be_persisted?(field)
+
+      Compliance::Countries.mapping[compliance_params[field]].presence || current_country
     end
 
     def po_box_address?(address)
@@ -171,5 +168,9 @@ class UpdateUserComplianceInfo
 
     def current_compliance_info
       @current_compliance_info ||= user.fetch_or_build_user_compliance_info
+    end
+
+    def submitted_country_will_be_persisted?(field)
+      compliance_params[field].present? && compliance_params[:is_business]
     end
 end
