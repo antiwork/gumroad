@@ -766,6 +766,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
+      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -796,6 +797,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
+      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -860,6 +862,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
+      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do

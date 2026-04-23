@@ -275,6 +275,8 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
           end
 
           it "keeps the business id for broader supported countries without refunding tax" do
+            allow_any_instance_of(RegionalVatIdValidationService).to receive(:process).and_return(false)
+
             post :create, params: payload.deep_merge(address_fields: { country_code: "DE" }).merge(vat_id: "DE123456789", purchase_id: @purchase.external_id, email: @purchase.email)
 
             expect(response).to redirect_to(new_purchase_invoice_path(@purchase.external_id, email: @purchase.email))
