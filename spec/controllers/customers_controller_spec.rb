@@ -130,9 +130,13 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
 
       context "when the :license_uses_sales_filter feature is inactive for the seller" do
         it "ignores the minimum_license_uses param" do
+          get :paged, params: { page: 1 }
+          expect(response).to be_successful
+          expected_customer_ids = customer_ids[response]
+
           get :paged, params: { page: 1, minimum_license_uses: 9 }
           expect(response).to be_successful
-          expect(customer_ids[response]).to match_array(purchases.map(&:external_id))
+          expect(customer_ids[response]).to eq(expected_customer_ids)
         end
       end
     end
