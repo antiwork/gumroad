@@ -67,7 +67,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..") do
@@ -122,7 +121,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -156,7 +154,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -191,7 +188,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -229,7 +225,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -262,7 +257,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -293,7 +287,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -324,7 +317,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -357,7 +349,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -390,7 +381,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -423,7 +413,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -456,7 +445,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -489,7 +477,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -522,7 +509,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -555,7 +541,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -588,7 +573,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -621,7 +605,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -652,7 +635,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -683,7 +665,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -714,7 +695,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -745,7 +725,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -777,7 +756,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -807,7 +785,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -837,7 +814,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -871,7 +847,6 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       fill_in("Full name", with: "Wonderful Alice")
       fill_in("Street address", with: "Crooked St.")
       fill_in("City", with: "Wonderland")
-      fill_in("State", with: "CA")
       fill_in("ZIP code", with: "12345")
 
       within find("h5", text: "Supplier").first(:xpath, ".//..//..") do
@@ -895,6 +870,163 @@ describe("Generate invoice for purchase", type: :system, js: true) do
         expect(pdf_text).to have_content(purchase.seller.email)
         expect(pdf_text).to have_content("Products supplied by Gumroad.")
       end
+    end
+
+    it "hides the State field for non-US countries and renders a clean PDF address" do
+      purchase = create(:purchase, link: @product)
+
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
+
+      fill_in("Full name", with: "Wonderful Alice")
+      fill_in("Street address", with: "Crooked St.")
+      fill_in("City", with: "Berlin")
+      fill_in("ZIP code", with: "10115")
+      select "Germany", from: "Country"
+
+      expect(page).not_to have_field("State")
+
+      click_on "Download"
+      wait_for_ajax
+
+      invoice_url = find_link("here")[:href]
+      reader = PDF::Reader.new(URI.open(invoice_url))
+      pdf_text = reader.page(1).text.squish
+
+      expect(pdf_text).to include("Wonderful Alice")
+      expect(pdf_text).to include("Berlin, 10115")
+      expect(pdf_text).to include("Germany")
+      expect(pdf_text).not_to match(/Berlin,\s+,/)
+    end
+
+    it "shows the State field until a non-US country is selected" do
+      purchase = create(:purchase, link: @product)
+
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
+
+      expect(page).to have_field("State")
+
+      select "Germany", from: "Country"
+      expect(page).not_to have_field("State")
+
+      select "United States", from: "Country"
+      expect(page).to have_field("State")
+    end
+
+    it "renders the optional business name on the generated invoice PDF" do
+      purchase = create(:physical_purchase, link: @physical_product)
+
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
+
+      fill_in("Full name", with: "Wonderful Alice")
+      fill_in("Business name", with: "Acme Corp GmbH")
+      fill_in("Street address", with: "Crooked St.")
+      fill_in("City", with: "Wonderland")
+      fill_in("State", with: "CA")
+      fill_in("ZIP code", with: "12345")
+
+      within find("h5", text: "Invoice").first(:xpath, ".//..") do
+        expect(page).to have_content("Acme Corp GmbH")
+      end
+
+      click_on "Download"
+      wait_for_ajax
+
+      invoice_url = find_link("here")[:href]
+      reader = PDF::Reader.new(URI.open(invoice_url))
+      pdf_text = reader.page(1).text.squish
+
+      expect(pdf_text).to include("Wonderful Alice")
+      expect(pdf_text).to include("Acme Corp GmbH")
+      expect(pdf_text).to include("Crooked St.")
+      expect(pdf_text.index("Acme Corp GmbH")).to be > pdf_text.index("Wonderful Alice")
+      expect(pdf_text.index("Acme Corp GmbH")).to be < pdf_text.index("Crooked St.")
+    end
+
+    it "omits the business name from the PDF when the field is left blank" do
+      purchase = create(:physical_purchase, link: @physical_product)
+
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
+
+      fill_in("Full name", with: "Wonderful Alice")
+      fill_in("Street address", with: "Crooked St.")
+      fill_in("City", with: "Wonderland")
+      fill_in("State", with: "CA")
+      fill_in("ZIP code", with: "12345")
+
+      click_on "Download"
+      wait_for_ajax
+
+      invoice_url = find_link("here")[:href]
+      reader = PDF::Reader.new(URI.open(invoice_url))
+      pdf_text = reader.page(1).text.squish
+
+      expect(pdf_text).to include("Wonderful Alice")
+      expect(pdf_text).to include("Crooked St.")
+      expect(pdf_text).not_to include("Acme Corp GmbH")
+    end
+
+    it "reveals the Business/VAT ID field when the buyer selects an EU country on a non-Gumroad-taxed charge" do
+      purchase = create(:physical_purchase, link: @physical_product)
+
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
+
+      expect(page).not_to have_field("VAT ID")
+
+      select "Germany", from: "Country"
+      expect(page).to have_field("VAT ID")
+
+      fill_in("Full name", with: "Wonderful Alice")
+      fill_in("VAT ID", with: "DE123456789")
+      fill_in("Street address", with: "Crooked St.")
+      fill_in("City", with: "Berlin")
+      fill_in("ZIP code", with: "10115")
+
+      click_on "Download"
+      wait_for_ajax
+
+      invoice_url = find_link("here")[:href]
+      reader = PDF::Reader.new(URI.open(invoice_url))
+      pdf_text = reader.page(1).text.squish
+
+      expect(pdf_text).to include("DE123456789")
+      expect(pdf_text).not_to include("VAT has also been refunded")
+    end
+
+    it "keeps the Business/VAT ID field hidden when the selected country is outside the broader list" do
+      purchase = create(:physical_purchase, link: @physical_product)
+
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
+
+      expect(page).not_to have_field("VAT ID")
+
+      select "Tanzania", from: "Country"
+      expect(page).not_to have_field("VAT ID")
+      expect(page).not_to have_field("Business VAT ID (Optional)")
+    end
+
+    it "updates the Business/VAT ID field label based on the selected invoice country" do
+      purchase = create(
+        :purchase,
+        link: @product,
+        country: "Australia",
+        gumroad_tax_cents: 100,
+        was_purchase_taxable: true
+      )
+      purchase.create_purchase_sales_tax_info!(country_code: Compliance::Countries::AUS.alpha2)
+
+      visit new_purchase_invoice_path(purchase.external_id, email: purchase.email)
+
+      expect(page).to have_field("Business ABN ID (Optional)")
+
+      select "Germany", from: "Country"
+      expect(page).to have_field("VAT ID")
+      expect(page).not_to have_field("Business ABN ID (Optional)")
+
+      select "Brazil", from: "Country"
+      expect(page).to have_field("CNPJ")
+
+      select "Canada", from: "Country"
+      expect(page).to have_field("GST/HST")
     end
   end
 end

@@ -107,6 +107,44 @@ describe InvoicePresenter::FormInfo do
       end
     end
 
+    describe "#business_id_country_codes" do
+      it "includes all 27 EU member states" do
+        eu_country_codes = %w[AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE]
+        expect(presenter.business_id_country_codes).to include(*eu_country_codes)
+      end
+
+      it "includes the United Kingdom" do
+        expect(presenter.business_id_country_codes).to include("GB")
+      end
+
+      it "does not include the United States" do
+        expect(presenter.business_id_country_codes).not_to include("US")
+      end
+    end
+
+    describe "#business_id_labels" do
+      it "maps EU member states to VAT ID" do
+        labels = presenter.business_id_labels
+        %w[DE FR IT ES NL BE IE].each do |code|
+          expect(labels[code]).to eq("VAT ID")
+        end
+      end
+
+      it "maps non-EU jurisdictions to their local label" do
+        labels = presenter.business_id_labels
+        expect(labels["GB"]).to eq("GB VAT")
+        expect(labels["AU"]).to eq("ABN")
+        expect(labels["BR"]).to eq("CNPJ")
+        expect(labels["MX"]).to eq("RFC")
+        expect(labels["JP"]).to eq("Consumption tax")
+        expect(labels["CA"]).to eq("GST/HST")
+      end
+
+      it "does not include countries outside the business-ID scope" do
+        expect(presenter.business_id_labels).not_to have_key("US")
+      end
+    end
+
     describe "#data" do
       let(:product) { create(:physical_product, user: seller) }
       let(:address_fields) do
@@ -135,6 +173,7 @@ describe InvoicePresenter::FormInfo do
         end
         expect(form_data[:address_fields][:country_code]).to eq("US")
         expect(form_data[:email]).to eq(purchase.email)
+        expect(form_data[:business_name]).to eq("")
         expect(form_data[:vat_id]).to eq("")
         expect(form_data[:additional_notes]).to eq("")
       end

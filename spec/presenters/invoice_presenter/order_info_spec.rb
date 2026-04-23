@@ -139,6 +139,32 @@ describe InvoicePresenter::OrderInfo do
           )
         end
       end
+
+      context "when business_name is provided" do
+        let(:presenter) { described_class.new(chargeable, address_fields:, additional_notes:, business_vat_id:, business_name: "Acme Corp") }
+
+        it "inserts the business name in the To block after the full name" do
+          expect(presenter.pdf_attributes).to include(
+            {
+              label: "To",
+              value: "Customer Name<br>Acme Corp<br>1234 Main St<br>City, State, 12345<br>United States"
+            }
+          )
+        end
+      end
+
+      context "when business_name is blank" do
+        let(:presenter) { described_class.new(chargeable, address_fields:, additional_notes:, business_vat_id:, business_name: "  ") }
+
+        it "omits the business name from the To block" do
+          expect(presenter.pdf_attributes).to include(
+            {
+              label: "To",
+              value: "Customer Name<br>1234 Main St<br>City, State, 12345<br>United States"
+            }
+          )
+        end
+      end
     end
 
     describe "#form_attributes" do

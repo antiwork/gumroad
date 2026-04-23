@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 class InvoicePresenter
-  def initialize(chargeable, address_fields: {}, additional_notes: nil, business_vat_id: nil)
+  def initialize(chargeable, address_fields: {}, additional_notes: nil, business_vat_id: nil, business_name: nil)
     @chargeable = chargeable
     @address_fields = address_fields
     @additional_notes = additional_notes
     @business_vat_id = business_vat_id
+    @business_name = business_name
   end
 
   def invoice_generation_form_data_props
@@ -17,6 +18,8 @@ class InvoicePresenter
       heading: form_info.heading,
       display_vat_id: form_info.display_vat_id?,
       vat_id_label: form_info.vat_id_label,
+      business_id_country_codes: form_info.business_id_country_codes,
+      business_id_labels: form_info.business_id_labels,
       supplier_info: { heading: supplier_info.heading, attributes: supplier_info.attributes },
       seller_info: { heading: seller_info.heading, attributes: seller_info.attributes },
       order_info: { heading: order_info.heading, form_attributes: order_info.form_attributes, invoice_date_attribute: order_info.invoice_date_attribute },
@@ -29,7 +32,7 @@ class InvoicePresenter
   end
 
   def order_info
-    @_order_info ||= InvoicePresenter::OrderInfo.new(chargeable, address_fields:, additional_notes:, business_vat_id:)
+    @_order_info ||= InvoicePresenter::OrderInfo.new(chargeable, address_fields:, additional_notes:, business_vat_id:, business_name:)
   end
 
   def supplier_info
@@ -41,5 +44,5 @@ class InvoicePresenter
   end
 
   private
-    attr_reader :business_vat_id, :chargeable, :address_fields, :additional_notes
+    attr_reader :business_vat_id, :business_name, :chargeable, :address_fields, :additional_notes
 end

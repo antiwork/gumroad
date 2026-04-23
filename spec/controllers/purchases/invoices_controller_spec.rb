@@ -170,6 +170,17 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(pdf_text).not_to include("Additional notes")
           end
 
+          it "generates a PDF invoice with the submitted business name" do
+            post :create, params: payload.merge(business_name: "Acme Corp")
+
+            reader = PDF::Reader.new(StringIO.new(@generated_pdf))
+            pdf_text = reader.page(1).text.squish
+
+            expect(pdf_text).to include("Sri Raghavan")
+            expect(pdf_text).to include("Acme Corp")
+            expect(pdf_text.index("Acme Corp")).to be > pdf_text.index("Sri Raghavan")
+          end
+
           it "generates a PDF invoice with the purchase and payload details for non-US country" do
             post :create, params: payload.deep_merge(address_fields: { country_code: "JP" })
 
@@ -182,9 +193,9 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(pdf_text).to include("Sri Raghavan")
             expect(pdf_text).to include("367 Hermann St")
             expect(pdf_text).to include("San Francisco")
-            expect(pdf_text).to include("CA")
             expect(pdf_text).to include("94103")
             expect(pdf_text).to include("Japan")
+            expect(pdf_text).not_to match(/San Francisco,\s*CA/)
             expect(pdf_text).to include(purchase.email)
             expect(pdf_text).to include(purchase.link.name)
             expect(pdf_text).to include(purchase.formatted_non_refunded_total_transaction_amount)
@@ -209,9 +220,9 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(pdf_text).to include("Sri Raghavan")
             expect(pdf_text).to include("367 Hermann St")
             expect(pdf_text).to include("San Francisco")
-            expect(pdf_text).to include("CA")
             expect(pdf_text).to include("94103")
             expect(pdf_text).to include("Australia")
+            expect(pdf_text).not_to match(/San Francisco,\s*CA/)
             expect(pdf_text).to include(purchase.email)
             expect(pdf_text).to include(purchase.link.name)
             expect(pdf_text).to include(purchase.formatted_non_refunded_total_transaction_amount)
@@ -259,6 +270,18 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(flash[:notice]).to eq("The invoice will be downloaded automatically.")
             expect(session["invoice_file_url_#{@purchase.external_id}"]).to eq(@s3_obj_public_url)
             expect(Refund.last).to eq nil
+          end
+
+          it "keeps the business id for broader supported countries without refunding tax" do
+            post :create, params: payload.deep_merge(address_fields: { country_code: "DE" }).merge(vat_id: "DE123456789", purchase_id: @purchase.external_id, email: @purchase.email)
+
+            expect(response).to redirect_to(new_purchase_invoice_path(@purchase.external_id, email: @purchase.email))
+            expect(flash[:notice]).to eq("The invoice will be downloaded automatically.")
+            expect(session["invoice_file_url_#{@purchase.external_id}"]).to eq(@s3_obj_public_url)
+            expect(Refund.last).to eq nil
+
+            reader = PDF::Reader.new(StringIO.new(@generated_pdf))
+            expect(reader.page(1).text.squish).to include("DE123456789")
           end
 
           it "refunds tax for a valid ABN id" do
