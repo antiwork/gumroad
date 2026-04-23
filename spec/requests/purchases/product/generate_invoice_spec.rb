@@ -1006,7 +1006,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       pdf_text = reader.page(1).text.squish
 
       expect(pdf_text).to include("DE123456789")
-      expect(pdf_text).not_to include("VAT has also been refunded")
+      expect(pdf_text).not_to include("Reverse Charge - You are required to account for the VAT")
     end
 
     it "keeps the Business/VAT ID field hidden when the selected country is outside the broader list" do

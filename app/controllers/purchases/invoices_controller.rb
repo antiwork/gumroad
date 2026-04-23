@@ -34,12 +34,16 @@ class Purchases::InvoicesController < ApplicationController
       elsif submitted_vat_id && InvoicePresenter::FormInfo::BUSINESS_ID_COUNTRY_CODES.include?(selected_country_code)
         submitted_vat_id
       end
+    business_vat_id_country_code = selected_country_code if business_vat_id.present? && refundable_vat_id.blank?
+    show_reverse_charge_note = refundable_vat_id.present? if business_vat_id.present?
 
     invoice_presenter = InvoicePresenter.new(
       @chargeable,
       address_fields:,
       additional_notes: invoice_params[:additional_notes]&.strip,
       business_vat_id:,
+      business_vat_id_country_code:,
+      show_reverse_charge_note:,
       business_name: invoice_params[:business_name]&.strip.presence
     )
 

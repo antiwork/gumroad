@@ -276,6 +276,8 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
 
           it "keeps the business id for broader supported countries without refunding tax" do
             allow_any_instance_of(RegionalVatIdValidationService).to receive(:process).and_return(false)
+            purchase_sales_tax_info = PurchaseSalesTaxInfo.new(country_code: Compliance::Countries::AUS.alpha2)
+            @purchase.update!(purchase_sales_tax_info:)
 
             post :create, params: payload.deep_merge(address_fields: { country_code: "DE" }).merge(vat_id: "DE123456789", purchase_id: @purchase.external_id, email: @purchase.email)
 
@@ -285,7 +287,12 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
             expect(Refund.last).to eq nil
 
             reader = PDF::Reader.new(StringIO.new(@generated_pdf))
-            expect(reader.page(1).text.squish).to include("DE123456789")
+            pdf_text = reader.page(1).text.squish
+
+            expect(pdf_text).to include("DE123456789")
+            expect(pdf_text).to include("VAT ID")
+            expect(pdf_text).not_to include("ABN ID")
+            expect(pdf_text).not_to include("Reverse Charge - You are required to account for the GST")
           end
 
           it "refunds tax for a valid ABN id" do
