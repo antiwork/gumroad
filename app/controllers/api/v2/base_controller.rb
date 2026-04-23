@@ -73,7 +73,8 @@ class Api::V2::BaseController < ApplicationController
       return unless request_from_cli?
       return if current_resource_owner.has_used_cli?
 
-      current_resource_owner.update_column(:flags, current_resource_owner.flags | User.flag_mapping["flags"][:has_used_cli])
+      mask = User.flag_mapping["flags"][:has_used_cli]
+      User.where(id: current_resource_owner.id).where("flags & ? = 0", mask).update_all(["flags = flags | ?", mask])
     rescue => e
       Rails.logger.error("Failed to mark CLI user: #{e.message}")
     end
