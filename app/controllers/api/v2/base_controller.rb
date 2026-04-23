@@ -65,6 +65,17 @@ class Api::V2::BaseController < ApplicationController
       return unless doorkeeper_token.present?
 
       Rails.logger.info("api v2 user:#{current_resource_owner.id} token:#{doorkeeper_token.id} in #{params[:controller]}##{params[:action]}")
+
+      mark_cli_user
+    end
+
+    def mark_cli_user
+      return unless request.user_agent&.match?(/gumroad-cli/i)
+      return if current_resource_owner.has_used_cli?
+
+      current_resource_owner.update_column(:flags, current_resource_owner.flags | User.flag_mapping["flags"][:has_used_cli])
+    rescue => e
+      Rails.logger.error("Failed to mark CLI user: #{e.message}")
     end
 
     def next_page_url(page_key)
