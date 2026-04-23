@@ -865,6 +865,23 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end
       end
 
+      describe "when Stripe raises an API error while updating the payout method" do
+        let(:params) { { card: { token: "tok_123" } } }
+
+        before do
+          allow(ChargeProcessor).to receive(:get_chargeable_for_params).and_return(double("chargeable"))
+          allow(CreditCard).to receive(:create).and_raise(Stripe::APIError.new("An unknown error occurred"))
+        end
+
+        it "redirects with the Stripe error instead of raising" do
+          put :update, params: params
+
+          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to eq(["An unknown error occurred"])
+        end
+      end
+
       describe "account number and repeated account number don't match" do
         let(:params) do
           {

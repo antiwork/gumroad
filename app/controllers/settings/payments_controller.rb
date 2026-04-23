@@ -211,6 +211,9 @@ class Settings::PaymentsController < Settings::BaseController
 
       redirect_with_error(error_message)
       false
+    rescue Stripe::APIError => e
+      redirect_with_error(e.message.presence || "Something went wrong. Please try again.")
+      false
     end
 
     def update_user_compliance_info
