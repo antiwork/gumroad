@@ -107,6 +107,7 @@ describe InvoicePresenter do
           purchase_id: chargeable.external_id_for_invoice,
           address_fields: be_a(Hash),
           email: purchase.email,
+          business_name: "",
           vat_id: "",
           additional_notes: "",
         )
@@ -225,6 +226,7 @@ describe InvoicePresenter do
           purchase_id: chargeable.external_id_for_invoice,
           address_fields: be_a(Hash),
           email: purchase.email,
+          business_name: "",
           vat_id: "",
           additional_notes: "",
         )
