@@ -13,6 +13,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     allow(GlobalConfig).to receive(:get).with("CONTENT_MODERATION_CLASSIFIER_THRESHOLDS").and_return(nil)
     allow(Rails.logger).to receive(:error)
     allow(Rails.logger).to receive(:warn)
+    allow(ErrorNotifier).to receive(:notify)
     allow(OpenAI::Client).to receive(:new).with(access_token: "test-key", request_timeout: 10).and_return(client)
   end
 
@@ -145,6 +146,45 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
 
     expect(result.status).to eq("flagged")
     expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.8)"])
+  end
+
+  it "returns flagged with a retry reason and notifies Sentry when every image URL fails" do
+    image_urls = [
+      "blob:https://gumroad.com/bad-1",
+      "https://cdn.example.com/bad-2.png",
+      "https://cdn.example.com/bad-3.png",
+    ]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    bad_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "image_url_unavailable" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations) do |parameters:|
+      part = parameters[:input].first
+      raise bad_error if part[:type] == "image_url"
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text: "some text", image_urls:).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+    expect(ErrorNotifier).to have_received(:notify).with(
+      "ContentModeration::ClassifierStrategy could not moderate any image",
+      image_url_count: 3,
+      skipped_urls: match_array(image_urls),
+    )
+  end
+
+  it "does not flag unavailability when text exists and image_urls is empty" do
+    allow(client).to receive(:moderations).and_return(
+      "results" => [{ "category_scores" => {} }]
+    )
+
+    result = described_class.new(text: "some text", image_urls: []).perform
+
+    expect(result.status).to eq("compliant")
+    expect(ErrorNotifier).not_to have_received(:notify)
   end
 
   it "logs and re-raises non-image OpenAI errors" do

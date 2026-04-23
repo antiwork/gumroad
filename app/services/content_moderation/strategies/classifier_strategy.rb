@@ -4,6 +4,7 @@ class ContentModeration::Strategies::ClassifierStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
   OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
   MAX_IMAGES_TO_MODERATE = 5
+  UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
 
   DEFAULT_THRESHOLDS = {
     "harassment" => 0.8,
@@ -43,14 +44,27 @@ class ContentModeration::Strategies::ClassifierStrategy
     end
 
     moderated_count = 0
+    skipped_urls = []
     @image_urls.shuffle.each do |url|
       break if moderated_count >= MAX_IMAGES_TO_MODERATE
 
       scores = moderate([{ type: "image_url", image_url: { url: url } }], skip_url: url)
-      next if scores.nil?
+      if scores.nil?
+        skipped_urls << url
+        next
+      end
 
       moderated_count += 1
       flagged_categories.concat(collect_flagged(scores, thresholds))
+    end
+
+    if @image_urls.any? && moderated_count == 0
+      ErrorNotifier.notify(
+        "ContentModeration::ClassifierStrategy could not moderate any image",
+        image_url_count: @image_urls.size,
+        skipped_urls: skipped_urls,
+      )
+      return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON])
     end
 
     if flagged_categories.any?
