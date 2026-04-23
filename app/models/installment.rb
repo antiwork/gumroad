@@ -75,12 +75,13 @@ class Installment < ApplicationRecord
 
   friendly_id :slug_candidates, use: :slugged
 
-  after_save :trigger_iffy_ingest
+  attr_accessor :publishing
 
   validates :name, length: { maximum: 255 }
   validate :message_must_be_provided, :validate_call_to_action_url_and_text, :validate_channel,
            :published_at_cannot_be_in_the_future, :validate_sending_limit_for_sellers
   validate :shown_on_profile_only_for_confirmed_users, if: :shown_on_profile_changed?
+  validate :content_moderation_check, if: -> { publishing? || (persisted? && published? && (name_changed? || message_changed?)) }
 
   has_flags 1 => :is_unpublished_by_admin,
             2 => :DEPRECATED_is_automated_installment,
@@ -607,7 +608,16 @@ class Installment < ApplicationRecord
     transcode_videos!
     self.published_at = published_at.presence || Time.current
     self.workflow_installment_published_once_already = true if workflow.present?
-    save!
+    self.publishing = true
+    begin
+      save!
+    ensure
+      self.publishing = false
+    end
+  end
+
+  def publishing?
+    !!publishing
   end
 
   def unpublish!(is_unpublished_by_admin: false)
@@ -934,9 +944,13 @@ class Installment < ApplicationRecord
       Rails.cache.write(cache_key, cache)
     end
 
-    def trigger_iffy_ingest
-      return unless saved_change_to_name? || saved_change_to_message?
-      Iffy::Post::IngestJob.perform_async(id)
+    def content_moderation_check
+      return if user&.vip_creator?
+
+      result = ContentModeration::ModerateRecordService.check(self, :post)
+      return if result.passed
+
+      errors.add(:base, "Content moderation failed: #{result.reasons.join("; ")}")
     end
 
     def normalize_tag(raw)

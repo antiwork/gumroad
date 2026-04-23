@@ -78,4 +78,58 @@ describe JapanBankAccount do
       expect(jp_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
     end
   end
+
+  describe "#validate_account_holder_full_name" do
+    it "accepts Latin-only names with ASCII spaces" do
+      expect(build(:japan_bank_account, account_holder_full_name: "Japanese Creator")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "Masashi")).to be_valid
+    end
+
+    it "accepts katakana-only names, including prolonged sound mark, middle dot, and full-width space" do
+      expect(build(:japan_bank_account, account_holder_full_name: "ヤマダタロウ")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "コーヒー")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "ジョージ")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "ピーター・パン")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "ハルナ\u3000マサシ")).to be_valid
+    end
+
+    it "accepts half-width katakana names, including voiced and prolonged sound marks" do
+      expect(build(:japan_bank_account, account_holder_full_name: "ﾔﾏﾀﾞ\u3000ﾀﾛｳ")).to be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "ﾋﾟｰﾀｰ")).to be_valid
+    end
+
+    it "rejects katakana mixed with ASCII space (the incident case)" do
+      account = build(:japan_bank_account, account_holder_full_name: "ハルナ マサシ")
+      expect(account).to_not be_valid
+      expect(account.errors[:account_holder_full_name]).to be_present
+    end
+
+    it "rejects scripts outside the two allowed variants" do
+      expect(build(:japan_bank_account, account_holder_full_name: "Haruna マサシ")).to_not be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "春奈 正志")).to_not be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "はるな")).to_not be_valid
+      expect(build(:japan_bank_account, account_holder_full_name: "")).to_not be_valid
+    end
+
+    it "strips leading and trailing whitespace before validating" do
+      account = build(:japan_bank_account, account_holder_full_name: "  Japanese Creator  ")
+      expect(account).to be_valid
+      expect(account.account_holder_full_name).to eq("Japanese Creator")
+    end
+
+    it "does not run on soft-delete so pre-validator invalid names can still be marked deleted" do
+      account = create(:japan_bank_account)
+      account.update_columns(account_holder_full_name: "ハルナ マサシ")
+
+      expect { account.mark_deleted! }.not_to raise_error
+      expect(account.reload.deleted_at).to be_present
+    end
+
+    it "defers to the presence validator for blank input instead of adding a confusing format error" do
+      account = build(:japan_bank_account, account_holder_full_name: "")
+      expect(account).to_not be_valid
+      expect(account.errors[:account_holder_full_name]).to be_present
+      expect(account.errors[:account_holder_full_name].grep(/katakana or Latin/)).to be_empty
+    end
+  end
 end

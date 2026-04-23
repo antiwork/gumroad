@@ -25,7 +25,7 @@ describe BlockSuspendedAccountIpWorker do
     end
 
     it "does nothing if there is a compliant user with same last_sign_in_ip" do
-      @user1.mark_compliant!(author_name: "iffy")
+      @user1.mark_compliant!(author_name: "ContentModeration")
 
       described_class.new.perform(@user.id)
 

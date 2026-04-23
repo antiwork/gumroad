@@ -9,15 +9,15 @@ describe User::SocialGoogle do
 
   describe ".find_or_create_for_google_oauth2" do
     before do
-      @dataCopy1 = @data.deep_dup
-      @dataCopy1["uid"] = "12345"
-      @dataCopy1["info"]["email"] = "paulius@example.com"
-      @dataCopy1["extra"]["raw_info"]["email"] = "paulius@example.com"
+      @data_copy1 = @data.deep_dup
+      @data_copy1["uid"] = "12345"
+      @data_copy1["info"]["email"] = "paulius@example.com"
+      @data_copy1["extra"]["raw_info"]["email"] = "paulius@example.com"
 
-      @dataCopy2 = @data.deep_dup
-      @dataCopy2["uid"] = "111111"
-      @dataCopy2["info"]["email"] = "spongebob@example.com"
-      @dataCopy2["extra"]["raw_info"]["email"] = "spongebob@example.com"
+      @data_copy2 = @data.deep_dup
+      @data_copy2["uid"] = "111111"
+      @data_copy2["info"]["email"] = "spongebob@example.com"
+      @data_copy2["extra"]["raw_info"]["email"] = "spongebob@example.com"
     end
 
     it "creates a new user if one does not exist with the corresponding google uid or email" do
@@ -28,21 +28,21 @@ describe User::SocialGoogle do
     end
 
     it "finds a user using google's uid payload" do
-      createdUser = create(:user, google_uid: @dataCopy1["uid"])
-      foundUser = User.find_or_create_for_google_oauth2(@dataCopy1)
+      created_user = create(:user, google_uid: @data_copy1["uid"])
+      found_user = User.find_or_create_for_google_oauth2(@data_copy1)
 
-      expect(foundUser.id).to eq(createdUser.id)
-      expect(createdUser.reload.email).to eq(foundUser.email)
-      expect(createdUser.reload.email).to eq(@dataCopy1["info"]["email"])
+      expect(found_user.id).to eq(created_user.id)
+      expect(created_user.reload.email).to eq(found_user.email)
+      expect(created_user.reload.email).to eq(@data_copy1["info"]["email"])
     end
 
     it "finds a user using email when google's uid is missing and fills in uid" do
-      createdUser = create(:user, email: @dataCopy2["info"]["email"])
-      foundUser = User.find_or_create_for_google_oauth2(@dataCopy2)
+      created_user = create(:user, email: @data_copy2["info"]["email"])
+      found_user = User.find_or_create_for_google_oauth2(@data_copy2)
 
-      expect(createdUser.google_uid).to eq(nil)
-      expect(createdUser.reload.google_uid).to eq(foundUser.google_uid)
-      expect(createdUser.reload.google_uid).to eq(@dataCopy2["uid"])
+      expect(created_user.google_uid).to eq(nil)
+      expect(created_user.reload.google_uid).to eq(found_user.google_uid)
+      expect(created_user.reload.google_uid).to eq(@data_copy2["uid"])
     end
 
     it "creates user with sanitized name when name contains colons" do
@@ -55,6 +55,45 @@ describe User::SocialGoogle do
       expect(user).to be_persisted
       expect(user).to be_valid
       expect(user.name).to eq("Test User")
+    end
+
+    it "retries after a deadlock and returns the created user" do
+      deadlock_data = @data.deep_dup
+      deadlock_data["uid"] = "google-deadlock-retry-uid"
+      deadlock_data["info"]["email"] = "google-deadlock-retry@example.com"
+      deadlock_data["extra"]["raw_info"]["email"] = "google-deadlock-retry@example.com"
+
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+
+      save_attempts = 0
+      allow_any_instance_of(User).to receive(:save!).and_wrap_original do |original, *args|
+        save_attempts += 1
+        raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock" if save_attempts == 1
+
+        original.call(*args)
+      end
+
+      result = User.find_or_create_for_google_oauth2(deadlock_data)
+
+      expect(result).to be_persisted
+      expect(result).to be_valid
+      expect(result.google_uid).to eq(deadlock_data["uid"])
+      expect(save_attempts).to be >= 2
+    end
+
+    it "returns nil and notifies after exhausting deadlock retries" do
+      deadlock_data = @data.deep_dup
+      deadlock_data["uid"] = "google-deadlock-failure-uid"
+      deadlock_data["info"]["email"] = "google-deadlock-failure@example.com"
+      deadlock_data["extra"]["raw_info"]["email"] = "google-deadlock-failure@example.com"
+
+      allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
+      allow_any_instance_of(User).to receive(:save!).and_raise(ActiveRecord::Deadlocked, "Deadlock found when trying to get lock")
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::Deadlocked))
+
+      result = User.find_or_create_for_google_oauth2(deadlock_data)
+
+      expect(result).to be_nil
     end
   end
 
@@ -138,7 +177,7 @@ describe User::SocialGoogle do
     end
 
     describe "already has name" do
-      it "does not not set a name if one already exists" do
+      it "does not set a name if one already exists" do
         @user = create(:user, name: "Spongebob")
         expect { User.query_google(@user, @data) }.to_not change { @user.reload.name }
       end

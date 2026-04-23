@@ -35,7 +35,6 @@ class ProductFile < ApplicationRecord
   before_validation :set_filegroup
   after_commit :schedule_file_analyze, on: :create
   after_commit :stamp_existing_pdfs_if_needed, on: :update
-  after_create :reset_moderated_by_iffy_flag
 
   has_flags 1 => :is_transcoded_for_hls,
             2 => :is_linked_to_existing_file,
@@ -387,11 +386,6 @@ class ProductFile < ApplicationRecord
       if thumbnail.byte_size > MAXIMUM_THUMBNAIL_FILE_SIZE
         errors.add(:base, "Could not process your thumbnail, please upload an image with size smaller than 5 MB.")
       end
-    end
-
-    def reset_moderated_by_iffy_flag
-      return unless filegroup == "image"
-      link&.update_attribute(:moderated_by_iffy, false)
     end
 
     def stamp_existing_pdfs_if_needed

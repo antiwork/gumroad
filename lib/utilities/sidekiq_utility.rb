@@ -31,7 +31,7 @@ class SidekiqUtility
           process_id == sidekiq_process["identity"]
         end
 
-        ignored_classes = ["HandleSendgridEventJob", "SaveToMongoWorker"]
+        ignored_classes = ["HandleSendgridEventJob"]
 
         if workers.any? && workers.all? { |_, _, work| ignored_classes.include?(JSON.parse(work["payload"])["class"]) }
           Rails.logger.info("[SidekiqUtility] #{ignored_classes.join(", ")} jobs are stuck. Proceeding with instance termination.")

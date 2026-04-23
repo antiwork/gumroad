@@ -1,12 +1,5 @@
-import { FromSchema } from "json-schema-to-ts";
 import { cast } from "ts-safe-cast";
 
-import FeaturedProductSectionSchema from "$app/json_schemas/seller_profile_featured_product_section";
-import PostsSectionSchema from "$app/json_schemas/seller_profile_posts_section";
-import ProductsSectionSchema from "$app/json_schemas/seller_profile_products_section";
-import RichTextSectionSchema from "$app/json_schemas/seller_profile_rich_text_section";
-import SubscribeSectionSchema from "$app/json_schemas/seller_profile_subscribe_section";
-import WishlistsSectionSchema from "$app/json_schemas/seller_profile_wishlists_section";
 import { ProfileSettings, Tab } from "$app/parsers/profile";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -18,33 +11,40 @@ export type Section = {
   hide_header: boolean;
 };
 
-export type ProductsSection = Section & { type: "SellerProfileProductsSection"; shown_products: string[] } & Omit<
-    FromSchema<typeof ProductsSectionSchema>,
-    "shown_products"
-  >;
+export type ProfileSortKey = "page_layout" | "newest" | "highest_rated" | "most_reviewed" | "price_asc" | "price_desc";
 
-export type PostsSection = Section & { type: "SellerProfilePostsSection"; shown_posts: string[] } & Omit<
-    FromSchema<typeof PostsSectionSchema>,
-    "shown_posts"
-  >;
+export type ProductsSection = Section & {
+  type: "SellerProfileProductsSection";
+  shown_products: string[];
+  default_product_sort: ProfileSortKey;
+  show_filters: boolean;
+  add_new_products: boolean;
+};
 
-export type RichTextSection = Section & { type: "SellerProfileRichTextSection" } & FromSchema<
-    typeof RichTextSectionSchema
-  >;
+export type PostsSection = Section & {
+  type: "SellerProfilePostsSection";
+  shown_posts: string[];
+};
 
-export type SubscribeSection = Section & { type: "SellerProfileSubscribeSection" } & FromSchema<
-    typeof SubscribeSectionSchema
-  >;
+export type RichTextSection = Section & {
+  type: "SellerProfileRichTextSection";
+  text: Record<string, unknown>;
+};
+
+export type SubscribeSection = Section & {
+  type: "SellerProfileSubscribeSection";
+  button_label: string;
+};
 
 export type FeaturedProductSection = Section & {
   type: "SellerProfileFeaturedProductSection";
   featured_product_id?: string;
-} & Omit<FromSchema<typeof FeaturedProductSectionSchema>, "featured_product_id">;
+};
 
 export type WishlistsSection = Section & {
   type: "SellerProfileWishlistsSection";
   shown_wishlists: string[];
-} & Omit<FromSchema<typeof WishlistsSectionSchema>, "shown_wishlists">;
+};
 
 export const updateProfileSettings = async (profileSettings: Partial<ProfileSettings> & { tabs?: Tab[] }) => {
   const { background_color, highlight_color, font, profile_picture_blob_id, tabs, ...user } = profileSettings;

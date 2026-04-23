@@ -472,7 +472,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
             before do
               seller.update!(user_risk_state: "not_reviewed")
               Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
-              seller.mark_compliant!(author_name: "iffy")
+              seller.mark_compliant!(author_name: "ContentModeration")
             end
 
             it "shows the payout-skipped notice" do
@@ -484,10 +484,10 @@ describe "Balance Pages Scenario", js: true, type: :system do
 
           context "when the payout was skipped because the account was not compliant" do
             before do
-              seller.flag_for_tos_violation!(author_name: "iffy", bulk: true)
-              seller.suspend_for_tos_violation!(author_name: "iffy", bulk: true)
+              seller.flag_for_tos_violation!(author_name: "ContentModeration", bulk: true)
+              seller.suspend_for_tos_violation!(author_name: "ContentModeration", bulk: true)
               Payouts.is_user_payable(seller, Date.yesterday, add_comment: true, from_admin: false)
-              seller.mark_compliant!(author_name: "iffy")
+              seller.mark_compliant!(author_name: "ContentModeration")
             end
 
             it "shows the payout-skipped notice" do

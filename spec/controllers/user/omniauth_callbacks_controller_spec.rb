@@ -109,13 +109,13 @@ describe User::OmniauthCallbacksController do
 
       include_examples "stripe connect user creation"
 
-      it "does not log in admin user" do
-        create(:merchant_account_stripe_connect, user: create(:admin_user), charge_processor_merchant_id: stripe_uid)
+      it "allows admin user to log in" do
+        admin = create(:admin_user)
+        create(:merchant_account_stripe_connect, user: admin, charge_processor_merchant_id: stripe_uid)
 
         post :stripe_connect
 
-        expect(flash[:alert]).to eq "You're an admin, you can't login with Stripe."
-        expect(response).to redirect_to login_url
+        expect(flash[:alert]).to be_nil
       end
 
       it "does not allow user to login if the account is deleted" do
@@ -230,13 +230,13 @@ describe User::OmniauthCallbacksController do
     end
 
     context "when user is admin" do
-      it "does not allow user to login" do
-        allow(User).to receive(:new).and_return(create(:admin_user))
+      it "allows admin user to log in with Apple" do
+        admin = create(:admin_user)
+        allow(User).to receive(:find_or_create_for_apple_oauth).and_return(admin)
 
         post :apple
 
-        expect(flash[:alert]).to eq "You're an admin, you can't login with Apple."
-        expect(response).to redirect_to login_path
+        expect(flash[:alert]).to be_nil
       end
     end
 
@@ -331,13 +331,13 @@ describe User::OmniauthCallbacksController do
     end
 
     context "when user is admin" do
-      it "does not allow user to login" do
-        allow(User).to receive(:new).and_return(create(:admin_user))
+      it "allows admin user to log in with Google" do
+        admin = create(:admin_user)
+        allow(User).to receive(:find_or_create_for_google_oauth2).and_return(admin)
 
         post :google_oauth2
 
-        expect(flash[:alert]).to eq "You're an admin, you can't login with Google."
-        expect(response).to redirect_to login_path
+        expect(flash[:alert]).to be_nil
       end
     end
 
@@ -375,19 +375,19 @@ describe User::OmniauthCallbacksController do
 
     context "linking account" do
       it "links google account to existing account", :vcr do
-        @user = create(:user, email: "pdragunas@example.com")
+        user = create(:user, email: "pdragunas@example.com")
 
-        OmniAuth.config.mock_auth[:google] = OmniAuth::AuthHash.new fetch_json("google")
-        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:google]
-        allow(controller).to receive(:current_user).and_return(@user)
+        OmniAuth.config.mock_auth[:google_oauth2] = OmniAuth::AuthHash.new fetch_json("google")
+        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:google_oauth2]
+        allow(controller).to receive(:current_user).and_return(user)
 
         post :google_oauth2
 
-        @user.reload
+        user.reload
 
-        expect(@user.name).to eq "Paulius Dragunas"
-        expect(@user.email).to eq "pdragunas@example.com"
-        expect(@user.google_uid).to eq "101656774483284362141"
+        expect(user.name).to eq "Paulius Dragunas"
+        expect(user.email).to eq "pdragunas@example.com"
+        expect(user.google_uid).to eq "101656774483284362141"
       end
     end
 

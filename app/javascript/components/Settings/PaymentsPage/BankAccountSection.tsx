@@ -932,11 +932,25 @@ const BankAccountSection = ({
     }
   }, []);
 
+  const [holderNameTouched, setHolderNameTouched] = React.useState(false);
+  const jpHolderNameClientError = (() => {
+    if (user.country_code !== "JP") return null;
+    if (!holderNameTouched) return null;
+    const name = bankAccount?.account_holder_full_name?.trim() ?? "";
+    if (name === "") return null;
+    const isKatakanaOnly = /^[\p{Script=Katakana}ー・\uFF65-\uFF9F\u3000]+$/u.test(name);
+    const isLatinOnly = /^[A-Za-z ]+$/u.test(name);
+    if (isKatakanaOnly || isLatinOnly) return null;
+    return "Use either katakana or Latin letters — not both. If using katakana, separate names with a full-width space.";
+  })();
+
   return (
     <>
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <section className="grid gap-8">
-        <Fieldset state={errorFieldNames.has("account_holder_full_name") ? "danger" : undefined}>
+        <Fieldset
+          state={errorFieldNames.has("account_holder_full_name") || jpHolderNameClientError ? "danger" : undefined}
+        >
           <FieldsetTitle>
             <Label htmlFor={`${uid}-account-holder-full-name`}>Pay to the order of</Label>
           </FieldsetTitle>
@@ -944,11 +958,17 @@ const BankAccountSection = ({
             id={`${uid}-account-holder-full-name`}
             value={bankAccount?.account_holder_full_name || ""}
             disabled={isFormDisabled}
-            aria-invalid={errorFieldNames.has("account_holder_full_name")}
-            onChange={(evt) => updateBankAccount({ account_holder_full_name: evt.target.value })}
+            aria-invalid={errorFieldNames.has("account_holder_full_name") || Boolean(jpHolderNameClientError)}
+            onChange={(evt) => {
+              setHolderNameTouched(true);
+              updateBankAccount({ account_holder_full_name: evt.target.value });
+            }}
           />
           <FieldsetDescription>
-            {`Must exactly match the name on your bank account${user.country_code === "JP" ? " (Katakana only)" : ""}`}
+            {jpHolderNameClientError ??
+              `Must exactly match the name on your bank account${
+                user.country_code === "JP" ? " (in katakana or Latin letters)" : ""
+              }`}
           </FieldsetDescription>
         </Fieldset>
         <div className="grid gap-2">

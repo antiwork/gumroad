@@ -3,7 +3,6 @@
 class ServiceCharge < ApplicationRecord
   include CurrencyHelper
   include ActionView::Helpers::DateHelper
-  include Mongoable
   include PurchaseErrorCode
   include DiscountCode
   include ExternalId
@@ -55,7 +54,6 @@ class ServiceCharge < ApplicationRecord
     end
   end
 
-  before_save :to_mongo
 
   validates_presence_of :user
   validates_associated :user

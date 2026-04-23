@@ -1200,14 +1200,6 @@ describe Purchase, :vcr do
     end
   end
 
-  describe "mongoable" do
-    it "puts purchase in mongo on creation" do
-      @purchase = build(:purchase)
-      @purchase.save
-
-      expect(SaveToMongoWorker).to have_enqueued_sidekiq_job("Purchase", anything)
-    end
-  end
 
   describe "affiliate_merchant_account" do
     describe "purchase is on a Gumroad merchant account" do
@@ -2552,17 +2544,6 @@ describe Purchase, :vcr do
     it "does nothing for single unit currencies" do
       @p_yen.price_range = "9,99"
       expect(@p_yen.send(:calculate_price_range_cents)).to eq 999
-    end
-  end
-
-  describe "check purchase heuristics after purchase" do
-    it "queue up job to assess risk of purchase after purchase" do
-      user = create(:user)
-      product = create(:product, user:)
-      purchase = create(:purchase, link: product, card_country: "US", ip_address: "110.227.155.107")
-      purchase.send(:check_purchase_heuristics)
-
-      expect(CheckPurchaseHeuristicsWorker).to have_enqueued_sidekiq_job(purchase.id)
     end
   end
 
@@ -4281,57 +4262,6 @@ describe Purchase, :vcr do
     end
   end
 
-  describe "#trigger_iffy_moderation" do
-    let(:purchase) { build(:purchase_in_progress, price_cents: 1000) }
-
-    before { $redis.set(RedisKey.iffy_moderation_probability, "0.5") }
-
-    context "when random number is less than probability" do
-      before do
-        $redis.set(RedisKey.iffy_moderation_probability, "0.5")
-        allow(purchase).to receive(:rand).and_return(0.4)
-      end
-
-      it "enqueues Iffy::Product::IngestJob" do
-        purchase.update_balance_and_mark_successful!
-        expect(Iffy::Product::IngestJob).to have_enqueued_sidekiq_job(purchase.link.id)
-      end
-    end
-
-    it "does not enqueue Iffy::Product::IngestJob when random number is higher than probability" do
-      allow(purchase).to receive(:rand).and_return(0.6)
-      purchase.update_balance_and_mark_successful!
-      expect(Iffy::Product::IngestJob).not_to have_enqueued_sidekiq_job(purchase.link.id)
-    end
-
-    context "when purchase is free" do
-      let(:purchase) { build(:purchase_in_progress, price_cents: 0) }
-
-      it "does not enqueue Iffy::Product::IngestJob" do
-        purchase.update_balance_and_mark_successful!
-        expect(Iffy::Product::IngestJob).not_to have_enqueued_sidekiq_job(purchase.link.id)
-      end
-    end
-
-    context "when iffy_moderation_probability redis key is not set" do
-      before { $redis.del(RedisKey.iffy_moderation_probability) }
-
-      it "uses probability of 0" do
-        allow(purchase).to receive(:rand).and_return(0)
-        purchase.update_balance_and_mark_successful!
-        expect(Iffy::Product::IngestJob).not_to have_enqueued_sidekiq_job(purchase.link.id)
-      end
-    end
-
-    context "when product has already been moderated by iffy" do
-      let(:purchase) { build(:purchase_in_progress, price_cents: 1000, link: create(:product, moderated_by_iffy: true)) }
-
-      it "does not enqueue Iffy::Product::IngestJob" do
-        purchase.update_balance_and_mark_successful!
-        expect(Iffy::Product::IngestJob).not_to have_enqueued_sidekiq_job(purchase.link.id)
-      end
-    end
-  end
 
   describe ".formatted_error_code" do
     it "falls back to purchase.stripe_error_code" do

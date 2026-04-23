@@ -65,7 +65,7 @@ describe PaypalController, :vcr do
       @user = create(:user)
       create(:user_compliance_info, user: @user)
       sign_in(@user)
-      @user.mark_compliant!(author_name: "Iffy")
+      @user.mark_compliant!(author_name: "ContentModeration")
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
       create(:payment_completed, user: @user)
 

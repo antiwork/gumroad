@@ -4,7 +4,7 @@ class Purchase < ApplicationRecord
   has_paper_trail
 
   include Rails.application.routes.url_helpers
-  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, Mongoable, PurchaseErrorCode,
+  include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, PurchaseErrorCode,
           ExternalId, JsonData, TimestampScopes, Accounting, Blockable, CardCountrySource, Targeting,
           Refundable, Reviews, PingNotification, Searchable, Risk,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
@@ -225,8 +225,7 @@ class Purchase < ApplicationRecord
     after_transition any => :failed, :do => :ban_buyer_on_fraud_related_error_code!
     after_transition any => :failed, :do => :suspend_buyer_on_fraudulent_card_decline!
     after_transition any => :failed, :do => :send_failure_email
-    after_transition any => %i[failed successful not_charged], :do => :check_purchase_heuristics
-    after_transition any => %i[failed successful not_charged], :do => :score_product
+
     after_transition any => %i[preorder_authorization_successful successful not_charged preorder_concluded_unsuccessfully], :do => :queue_product_cache_invalidation
     after_transition any => %i[successful preorder_authorization_successful], :do => :touch_variants_if_limited_quantity, unless: lambda { |purchase|
       purchase.not_charged_and_not_free_trial?
@@ -243,9 +242,6 @@ class Purchase < ApplicationRecord
                                                                                                                                  }
     after_transition any => :successful, :do => :block_fraudulent_free_purchases!
     after_transition any => any, :do => :log_transition
-    after_transition any => [:successful, :not_charged, :gift_receiver_purchase_successful], :do => :trigger_iffy_moderation, if: lambda { |purchase|
-      purchase.price_cents > 0 && !purchase.link.moderated_by_iffy
-    }
 
     # normal purchase transitions:
 
@@ -351,7 +347,6 @@ class Purchase < ApplicationRecord
   before_create :toggle_off_can_contact_if_buyer_has_unsubscribed
 
   before_save :assign_default_rental_expired
-  before_save :to_mongo
   before_save :truncate_referrer
 
   before_destroy :capture_inventory_variant_ids_before_destroy
@@ -791,6 +786,7 @@ class Purchase < ApplicationRecord
       can_revoke_access: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).revoke_access? : nil,
       can_undo_revoke_access: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).undo_revoke_access? : nil,
       can_update: pundit_user ? Pundit.policy!(pundit_user, [:audience, self]).update? : nil,
+      invoice_url: (invoice_url if version == 2 && has_invoice?),
       upsell: upsell_purchase&.as_json,
       paypal_refund_expired: paypal_refund_expired?
     ).delete_if { |_, v| v.nil? }
@@ -3754,13 +3750,7 @@ class Purchase < ApplicationRecord
       PostToPingEndpointsWorker.perform_in(5.seconds, id, url_parameters, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
 
-    def score_product
-      ScoreProductWorker.perform_in(5.seconds, link.id) if run_risk_checks?
-    end
 
-    def check_purchase_heuristics
-      CheckPurchaseHeuristicsWorker.perform_in(5.seconds, id) if run_risk_checks?
-    end
 
     def log_transition
       logger.info "Purchase: purchase ID #{id} transitioned to #{purchase_state}"
@@ -3881,10 +3871,6 @@ class Purchase < ApplicationRecord
       self.email = email.downcase
     end
 
-    def run_risk_checks?
-      price_cents > 0 && !not_charged? && charged_using_gumroad_merchant_account?
-    end
-
     def all_workflows
       link.workflows.alive + seller.workflows.alive.seller_or_audience_type
     end
@@ -3899,13 +3885,6 @@ class Purchase < ApplicationRecord
 
     def purchasing_power_parity_factor
       @_purchasing_power_parity_factor ||= PurchasingPowerParityService.new.get_factor(Compliance::Countries.find_by_name(ip_country)&.alpha2, seller)
-    end
-
-    def trigger_iffy_moderation
-      probability = $redis.get(RedisKey.iffy_moderation_probability).to_f || 0.001
-      if rand < probability
-        Iffy::Product::IngestJob.perform_async(link.id)
-      end
     end
 
     def fetch_installment_plan

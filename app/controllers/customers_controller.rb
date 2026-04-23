@@ -3,6 +3,8 @@
 class CustomersController < Sellers::BaseController
   include CurrencyHelper
 
+  rescue_from Faraday::TimeoutError, with: :handle_search_timeout
+
 
   before_action :authorize
   before_action :set_on_page_type
@@ -91,6 +93,14 @@ class CustomersController < Sellers::BaseController
     purchase = current_seller.sales.find_by_external_id!(params[:purchase_id]) if params[:purchase_id].present?
 
     render json: purchase.product_purchases.map { CustomerPresenter.new(purchase: _1).customer(pundit_user:) }
+  end
+
+  def handle_search_timeout
+    if action_name == "paged"
+      render json: { success: false, error: "request timed out" }, status: :gateway_timeout
+    else
+      redirect_back fallback_location: root_path, warning: "Request timed out. Please try again.", status: :see_other
+    end
   end
 
   private

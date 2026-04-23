@@ -89,50 +89,25 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
     end
 
-    iffy_url = Rails.env.production? ? "https://api.iffy.com/api/v1/users" : "http://localhost:3000/api/v1/users"
-
-    begin
-      if user.suspended?
-        render json: {
-          success: true,
-          status: "Suspended",
-          updated_at: user.comments.where(comment_type: [Comment::COMMENT_TYPE_SUSPENSION_NOTE, Comment::COMMENT_TYPE_SUSPENDED]).order(created_at: :desc).first&.created_at,
-          appeal_url: nil
-        }
-        return
-      end
-
-      response = HTTParty.get(
-        "#{iffy_url}?email=#{CGI.escape(params[:email])}",
-        headers: {
-          "Authorization" => "Bearer #{GlobalConfig.get("IFFY_API_KEY")}"
-        }
-      )
-
-      if response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?
-        user_data = response.parsed_response["data"].first
-        render json: {
-          success: true,
-          status: user_data["actionStatus"],
-          updated_at: user_data["actionStatusCreatedAt"],
-          appeal_url: user_data["appealUrl"]
-        }
-      else
-        render json: {
-          success: true,
-          status: "Compliant",
-          updated_at: nil,
-          appeal_url: nil
-        }
-      end
-    rescue HTTParty::Error, Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, Errno::ECONNREFUSED, SocketError => e
-      ErrorNotifier.notify(e)
-
-      render json: {
-        success: false,
-        error_message: "Failed to retrieve suspension information"
-      }, status: :service_unavailable
+    status = if user.suspended?
+      "Suspended"
+    elsif user.flagged?
+      "Flagged"
+    else
+      "Compliant"
     end
+
+    last_status_comment = user.comments
+      .where(comment_type: [Comment::COMMENT_TYPE_SUSPENSION_NOTE, Comment::COMMENT_TYPE_SUSPENDED, Comment::COMMENT_TYPE_FLAGGED, Comment::COMMENT_TYPE_COMPLIANT])
+      .order(created_at: :desc)
+      .first
+
+    render json: {
+      success: true,
+      status: status,
+      updated_at: last_status_comment&.created_at,
+      appeal_url: nil
+    }
   end
 
   SEND_RESET_PASSWORD_INSTRUCTIONS_OPENAPI = {
@@ -560,56 +535,24 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
     end
 
-    iffy_url = Rails.env.production? ? "https://api.iffy.com/api/v1" : "http://localhost:3000/api/v1"
-
-    begin
-      response = HTTParty.get(
-        "#{iffy_url}/users?email=#{CGI.escape(params[:email])}",
-        headers: {
-          "Authorization" => "Bearer #{GlobalConfig.get("IFFY_API_KEY")}"
-        }
-      )
-
-      if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
-        error_message = response.parsed_response.is_a?(Hash) ? response.parsed_response["error"]&.[]("message") || "Failed to find user" : "Failed to find user"
-        return render json: { success: false, error_message: error_message }, status: :unprocessable_entity
-      end
-
-      user_data = response.parsed_response["data"].first
-      user_id = user_data["id"]
-
-      response = HTTParty.post(
-        "#{iffy_url}/users/#{user_id}/create_appeal",
-        headers: {
-          "Authorization" => "Bearer #{GlobalConfig.get("IFFY_API_KEY")}",
-          "Content-Type" => "application/json"
-        },
-        body: {
-          text: params[:reason]
-        }.to_json
-      )
-
-      if !(response.success? && response.parsed_response["data"].present? && !response.parsed_response["data"].empty?)
-        error_message = response.parsed_response.dig("error", "message") || "Failed to create appeal"
-        return render json: { success: false, error_message: }, status: :unprocessable_entity
-      end
-
-      appeal_data = response.parsed_response["data"]
-      appeal_id = appeal_data["id"]
-      appeal_url = appeal_data["appealUrl"]
-
-      render json: {
-        success: true,
-        id: appeal_id,
-        appeal_url: appeal_url
-      }
-    rescue HTTParty::Error, Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, Errno::ECONNREFUSED, SocketError => e
-      ErrorNotifier.notify(e)
-
-      render json: {
-        success: false,
-        error_message: "Failed to create appeal"
-      }, status: :service_unavailable
+    if !user.suspended? && !user.flagged?
+      return render json: { success: false, error_message: "User is not suspended or flagged" }, status: :unprocessable_entity
     end
+
+    comment = user.comments.new(
+      content: "Appeal submitted: #{params[:reason]}",
+      author_name: ContentModeration::ModerateRecordService::AUTHOR_NAME,
+      comment_type: Comment::COMMENT_TYPE_NOTE
+    )
+
+    unless comment.save
+      return render json: { success: false, error_message: comment.errors.full_messages.join(", ") }, status: :unprocessable_entity
+    end
+
+    render json: {
+      success: true,
+      id: comment.id,
+      appeal_url: nil
+    }
   end
 end

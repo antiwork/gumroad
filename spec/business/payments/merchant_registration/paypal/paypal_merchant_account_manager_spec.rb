@@ -136,7 +136,7 @@ describe PaypalMerchantAccountManager, :vcr do
           @merchant_account = create(:merchant_account_paypal,
                                      charge_processor_merchant_id: paypal_event["resource"]["merchant_id"],
                                      user: User.find_by_external_id(paypal_event["resource"]["tracking_id"]))
-          @merchant_account.user.mark_compliant!(author_name: "Iffy")
+          @merchant_account.user.mark_compliant!(author_name: "ContentModeration")
           allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
           create(:payment_completed, user: @merchant_account.user)
         end
@@ -211,7 +211,7 @@ describe PaypalMerchantAccountManager, :vcr do
   describe "#update_merchant_account" do
     it "sends a confirmation email when the paypal connect account is updated" do
       creator = create(:user)
-      creator.mark_compliant!(author_name: "Iffy")
+      creator.mark_compliant!(author_name: "ContentModeration")
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
       create(:payment_completed, user: creator)
       expect(MerchantRegistrationMailer).to receive(:paypal_account_updated).with(creator.id).and_call_original
@@ -236,7 +236,7 @@ describe PaypalMerchantAccountManager, :vcr do
       let(:paypal_merchant_id) { "GSQ5PDPXZCWGW" }
 
       before do
-        creator.mark_compliant!(author_name: "Iffy")
+        creator.mark_compliant!(author_name: "ContentModeration")
         allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
         create(:payment_completed, user: creator)
         allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(
@@ -256,7 +256,7 @@ describe PaypalMerchantAccountManager, :vcr do
 
     it "marks all other paypal merchant accounts of the creator as deleted" do
       creator = create(:user)
-      creator.mark_compliant!(author_name: "Iffy")
+      creator.mark_compliant!(author_name: "ContentModeration")
       allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
       create(:payment_completed, user: creator)
       create(:merchant_account_paypal, user: creator)

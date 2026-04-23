@@ -106,26 +106,17 @@ describe Api::Internal::Helper::UsersController do
     end
 
     context "when user is found but not suspended" do
-      it "returns non-suspended status" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
+      it "returns compliant status" do
         get :user_suspension_info, params: { email: user.email }
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["success"]).to be true
         expect(response.parsed_body["status"]).to eq("Compliant")
-        expect(response.parsed_body["updated_at"]).to be_nil
         expect(response.parsed_body["appeal_url"]).to be_nil
       end
     end
 
-    context "when user is suspended locally" do
+    context "when user is suspended" do
       let(:suspended_user) { create(:tos_user) }
       let(:suspension_comment) { create(:comment, commentable: suspended_user, comment_type: Comment::COMMENT_TYPE_SUSPENDED, created_at: 2.days.ago) }
 
@@ -133,9 +124,7 @@ describe Api::Internal::Helper::UsersController do
         suspension_comment
       end
 
-      it "returns suspended status from local data" do
-        expect(HTTParty).not_to receive(:get)
-
+      it "returns suspended status with details" do
         get :user_suspension_info, params: { email: suspended_user.email }
 
         expect(response).to have_http_status(:success)
@@ -143,69 +132,6 @@ describe Api::Internal::Helper::UsersController do
         expect(response.parsed_body["status"]).to eq("Suspended")
         expect(response.parsed_body["updated_at"]).to eq(suspension_comment.created_at.as_json)
         expect(response.parsed_body["appeal_url"]).to be_nil
-      end
-    end
-
-    context "when user is found and is suspended" do
-      it "returns suspended status with details" do
-        updated_at = Time.current.iso8601
-        appeal_url = "https://appeal.example.com/123"
-
-        user_data = {
-          "actionStatus" => "Suspended",
-          "actionStatusCreatedAt" => updated_at,
-          "appealUrl" => appeal_url
-        }
-
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [user_data] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        get :user_suspension_info, params: { email: user.email }
-
-        expect(response).to have_http_status(:success)
-        expect(response.parsed_body["success"]).to be true
-        expect(response.parsed_body["status"]).to eq("Suspended")
-        expect(response.parsed_body["updated_at"]).to eq(updated_at)
-        expect(response.parsed_body["appeal_url"]).to eq(appeal_url)
-      end
-    end
-
-    context "when api call to iffy fails" do
-      it "returns non-suspended status as default" do
-        failed_response = instance_double(
-          HTTParty::Response,
-          code: 400,
-          success?: false,
-          parsed_response: {}
-        )
-        allow(HTTParty).to receive(:get).and_return(failed_response)
-
-        get :user_suspension_info, params: { email: user.email }
-
-        expect(response).to have_http_status(:success)
-        expect(response.parsed_body["success"]).to be true
-        expect(response.parsed_body["status"]).to eq("Compliant")
-        expect(response.parsed_body["updated_at"]).to be_nil
-        expect(response.parsed_body["appeal_url"]).to be_nil
-      end
-    end
-
-    context "when api call to iffy raises a network error" do
-      it "notifies error tracker and returns an error response" do
-        network_error = HTTParty::Error.new("Connection failed")
-        allow(HTTParty).to receive(:get).and_raise(network_error)
-        expect(ErrorNotifier).to receive(:notify).with(network_error)
-
-        get :user_suspension_info, params: { email: user.email }
-
-        expect(response).to have_http_status(:service_unavailable)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Failed to retrieve suspension information")
       end
     end
   end
@@ -243,148 +169,42 @@ describe Api::Internal::Helper::UsersController do
       end
     end
 
-    context "when user is not found on Iffy" do
-      it "returns an error message" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
+    context "when appeal is successfully created" do
+      before { user.flag_for_tos_violation!(author_name: "ContentModeration", content: "Flagged for testing", bulk: true) }
 
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Failed to find user")
-      end
-    end
-
-    context "when user is found but not suspended" do
-      it "returns appeal creation failed" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [{ "id" => "user123" }] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        failed_response = instance_double(
-          HTTParty::Response,
-          code: 400,
-          success?: false,
-          parsed_response: { "error" => { "message" => "User is not suspended" } }
-        )
-        allow(HTTParty).to receive(:post).and_return(failed_response)
-
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("User is not suspended")
-      end
-    end
-
-    context "when user is found but user is banned" do
-      it "returns appeal creation failed" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [{ "id" => "user123" }] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        failed_response = instance_double(
-          HTTParty::Response,
-          code: 400,
-          success?: false,
-          parsed_response: { "error" => { "message" => "Banned users may not appeal" } }
-        )
-        allow(HTTParty).to receive(:post).and_return(failed_response)
-
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Banned users may not appeal")
-      end
-    end
-
-    context "when user is found but appeal already exists" do
-      it "returns appeal creation failed" do
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [{ "id" => "user123" }] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        failed_response = instance_double(
-          HTTParty::Response,
-          code: 400,
-          success?: false,
-          parsed_response: { "error" => { "message" => "Appeal already exists" } }
-        )
-        allow(HTTParty).to receive(:post).and_return(failed_response)
-
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Appeal already exists")
-      end
-    end
-
-    context "when user is found and appeal creation is successful" do
-      it "returns appeal id and url" do
-        appeal_url = "https://appeal.example.com/123"
-
-        user_data = {
-          "id" => "appeal123",
-          "actionStatus" => "Suspended",
-          "appealUrl" => appeal_url
-        }
-
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => [{ "id" => "user123" }] }
-        )
-        allow(HTTParty).to receive(:get).and_return(successful_response)
-
-        successful_response = instance_double(
-          HTTParty::Response,
-          code: 200,
-          success?: true,
-          parsed_response: { "data" => user_data }
-        )
-        allow(HTTParty).to receive(:post).and_return(successful_response)
-
-        post :create_appeal, params: { email: user.email, reason: "test" }
+      it "creates a comment and returns success" do
+        expect do
+          post :create_appeal, params: { email: user.email, reason: "I believe this was a mistake" }
+        end.to change { Comment.count }.by(1)
 
         expect(response).to have_http_status(:success)
         expect(response.parsed_body["success"]).to be true
-        expect(response.parsed_body["id"]).to eq("appeal123")
-        expect(response.parsed_body["appeal_url"]).to eq(appeal_url)
+        expect(response.parsed_body["id"]).to be_present
+
+        comment = Comment.last
+        expect(comment.content).to eq("Appeal submitted: I believe this was a mistake")
+        expect(comment.author_name).to eq("ContentModeration")
+        expect(comment.commentable).to eq(user)
+      end
+
+      it "bypasses adult keyword validation for appeal comments" do
+        allow(AdultKeywordDetector).to receive(:adult?).and_return(true)
+
+        expect do
+          post :create_appeal, params: { email: user.email, reason: "blocked text" }
+        end.to change { Comment.count }.by(1)
+
+        expect(response).to have_http_status(:success)
       end
     end
 
-    context "when api call to iffy raises a network error" do
-      it "notifies error tracker and returns an error response" do
-        network_error = HTTParty::Error.new("Connection failed")
-        allow(HTTParty).to receive(:get).and_raise(network_error)
-        expect(ErrorNotifier).to receive(:notify).with(network_error)
+    context "when the user is neither suspended nor flagged" do
+      it "returns an error_message response" do
+        post :create_appeal, params: { email: user.email, reason: "Please review" }
 
-        post :create_appeal, params: { email: user.email, reason: "test" }
-
-        expect(response).to have_http_status(:service_unavailable)
+        expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body["success"]).to be false
-        expect(response.parsed_body["error_message"]).to eq("Failed to create appeal")
+        expect(response.parsed_body["error_message"]).to eq("User is not suspended or flagged")
       end
     end
   end

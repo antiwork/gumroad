@@ -4,10 +4,6 @@ require "spec_helper"
 require "shared_examples/authorize_called"
 
 describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, type: :system) do
-  before do
-    allow_any_instance_of(Iffy::Post::IngestService).to receive(:perform).and_return(true)
-  end
-
   describe "emails" do
     let(:seller) { create(:named_seller, timezone: "UTC") }
     let(:buyer) { create(:user) }

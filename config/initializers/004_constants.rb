@@ -61,7 +61,7 @@ DENYLIST = %w[ a about account activate add admin administrator api app apps
                taylorswift taylorswift13 nickiminaj oprah jtimberlake
                theellenshow ellen selenagomez kaka aplusk love recommended_products pay
                _dmarc _domainkey blog cloud-front-static-1 creators
-               customers domains domains-staging files files-3 iffy
+               customers domains domains-staging files files-3 iffy cli
                m production-custom-domain-with-ip production-sample-shop public-files sample-shop
                staging staging-1 staging-2 staging-assets staging-custom-domain-with-ip
                staging-files staging-public-files staging-logs staging-sample-shop staging-static-1

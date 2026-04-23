@@ -715,7 +715,7 @@ describe SettingsPresenter do
         expect(presenter.payments_props).to eq(@base_us_props)
         expect(presenter.payments_props[:paypal_connect][:allow_paypal_connect]).to be false
 
-        seller.mark_compliant!(author_name: "Iffy")
+        seller.mark_compliant!(author_name: "ContentModeration")
         allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
         create(:payment_completed, user: seller)
 
@@ -736,7 +736,7 @@ describe SettingsPresenter do
 
       it "returns correct props when seller has a bank account and a PayPal Connect account", :vcr do
         active_bank_account = create(:ach_account, user: seller)
-        seller.mark_compliant!(author_name: "Iffy")
+        seller.mark_compliant!(author_name: "ContentModeration")
         allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
         create(:payment_completed, user: seller)
         paypal_connect_account = create(:merchant_account_paypal, user: seller, charge_processor_merchant_id: "B66YJBBNCRW6L", charge_processor_verified_at: Time.current)
