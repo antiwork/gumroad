@@ -4197,6 +4197,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         visit settings_payments_path
 
         choose "Individual"
+        fill_in("Phone number", with: "302213850")
 
         find_field("Address", match: :first).set("P.O. Box 123, High street")
 
