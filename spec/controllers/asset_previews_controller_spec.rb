@@ -47,6 +47,15 @@ describe AssetPreviewsController do
       expect(response.parsed_body["error"]).to eq("Could not process your preview, please try again.")
     end
 
+    it "returns a graceful error when preview processing times out" do
+      stub_const("AssetPreviewsController::PREVIEW_PROCESSING_TIMEOUT_SECONDS", 0.001)
+      allow(SsrfFilter).to receive(:get) { sleep 1 }
+      post(:create, params: { link_id: product.unique_permalink, asset_preview: { url: "https://slow-server.example/image.png" }, format: :json })
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["error"]).to eq("Could not process your preview, please try again.")
+    end
+
     it "doesn't add a preview if there are too many previews" do
       stub_const("Link::MAX_PREVIEW_COUNT", 1)
       allow_any_instance_of(AssetPreview).to receive(:analyze_file).and_return(nil)

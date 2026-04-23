@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class AssetPreviewsController < ApplicationController
+  PREVIEW_PROCESSING_TIMEOUT_SECONDS = 60
+
   before_action :find_product
   after_action :verify_authorized
 
@@ -9,13 +11,15 @@ class AssetPreviewsController < ApplicationController
 
     asset_preview = @product.asset_previews.build
 
-    if permitted_params[:signed_blob_id].present?
-      asset_preview.file.attach(permitted_params[:signed_blob_id])
-    else
-      asset_preview.url = permitted_params[:url]
-    end
+    Timeout.timeout(PREVIEW_PROCESSING_TIMEOUT_SECONDS) do
+      if permitted_params[:signed_blob_id].present?
+        asset_preview.file.attach(permitted_params[:signed_blob_id])
+      else
+        asset_preview.url = permitted_params[:url]
+      end
 
-    asset_preview.analyze_file
+      asset_preview.analyze_file
+    end
 
     if asset_preview.save
       render(json: { success: true, asset_previews: @product.display_asset_previews, active_preview_id: asset_preview.guid })
