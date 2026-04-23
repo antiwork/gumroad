@@ -216,19 +216,30 @@ export default function PaymentsPage() {
   }, [errors, clientErrorMessage]);
 
   const isStreetAddressPOBox = (input: string) => {
-    const countryCode: CountryCode = cast(props.user.country_code);
+    return input
+      .replace(/[^\w]*/gu, "")
+      .toLocaleLowerCase()
+      .includes("pobox");
+  };
 
-    return (
-      countryCode === "US" &&
-      input
-        // Removes all non-alphanumeric characters (excluding underscores).
-        // The 'g' flag allows to match globally and the 'u' flag treats
-        // the pattern as a sequence of Unicode code points (as mandated by
-        // the 'require-unicode-regexp' ESLint rule).
-        .replace(/[^\w]*/gu, "")
-        .toLocaleLowerCase()
-        .includes("pobox")
-    );
+  const poBoxAddressErrorMessage = (countryCode: CountryCode) => {
+    if (countryCode === "US") {
+      return "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.";
+    }
+
+    if (countryCode === "GH") {
+      return "We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.";
+    }
+
+    return "We require a valid physical address. We cannot accept a P.O. Box as a valid address.";
+  };
+
+  const countryRequiresPhysicalAddress = (countryCode: CountryCode) => {
+    return ["US", "GH"].includes(countryCode);
+  };
+
+  const isPhysicalAddressRequiredAndPOBox = (countryCode: CountryCode, input: string) => {
+    return countryRequiresPhysicalAddress(countryCode) && isStreetAddressPOBox(input);
   };
 
   const validatePhoneNumber = (input: string | null, country_code: string | null) => {
@@ -518,6 +529,15 @@ export default function PaymentsPage() {
   };
 
   const validateComplianceInfoFields = () => {
+    const streetAddressValidationContextChanged =
+      form.data.user.street_address !== props.compliance_info.street_address ||
+      form.data.user.country !== props.compliance_info.country ||
+      form.data.user.is_business !== props.compliance_info.is_business;
+    const businessStreetAddressValidationContextChanged =
+      form.data.user.business_street_address !== props.compliance_info.business_street_address ||
+      form.data.user.business_country !== props.compliance_info.business_country ||
+      form.data.user.is_business !== props.compliance_info.is_business;
+
     if (!form.data.user.first_name) {
       markFieldInvalid("first_name");
     }
@@ -571,12 +591,14 @@ export default function PaymentsPage() {
       );
     } else if (
       !form.data.user.street_address ||
-      (form.data.user.country === "US" && isStreetAddressPOBox(form.data.user.street_address))
+      (streetAddressValidationContextChanged &&
+        form.data.user.country !== null &&
+        isPhysicalAddressRequiredAndPOBox(cast(form.data.user.country), form.data.user.street_address))
     ) {
       markFieldInvalid("street_address");
       if (form.data.user.street_address) {
         setClientErrorMessage({
-          message: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.",
+          message: poBoxAddressErrorMessage(cast(form.data.user.country)),
         });
       }
     }
@@ -681,12 +703,14 @@ export default function PaymentsPage() {
         }
       } else if (
         !form.data.user.business_street_address ||
-        (form.data.user.business_country === "US" && isStreetAddressPOBox(form.data.user.business_street_address))
+        (businessStreetAddressValidationContextChanged &&
+          form.data.user.business_country !== null &&
+          isPhysicalAddressRequiredAndPOBox(cast(form.data.user.business_country), form.data.user.business_street_address))
       ) {
         markFieldInvalid("business_street_address");
         if (form.data.user.business_street_address) {
           setClientErrorMessage({
-            message: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.",
+            message: poBoxAddressErrorMessage(cast(form.data.user.business_country)),
           });
         }
       }

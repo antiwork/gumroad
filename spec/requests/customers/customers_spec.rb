@@ -262,6 +262,30 @@ describe "Sales page", type: :system, js: true do
         toggle_disclosure "Filter"
         expect(page).to have_field("Paid more than", with: "2")
       end
+
+      it "preserves search query after navigating to a sale and back" do
+        login_as seller
+        visit customers_path
+
+        select_disclosure "Toggle Search" do
+          fill_in "Search sales", with: purchase1.email
+        end
+        wait_for_ajax
+        expect(page).to have_nth_table_row_record(1, "Customer 1")
+        within(find("tbody")) { expect(page).to have_selector(:table_row, count: 1) }
+
+        find(:table_row, { "Name" => "Customer 1" }).click
+        expect(page).to have_current_path(customer_sale_path(purchase1.external_id))
+
+        find("a[aria-label='Back to customers']").click
+
+        expect(page).to have_current_path(customers_path)
+        expect(page).to have_nth_table_row_record(1, "Customer 1")
+        within(find("tbody")) { expect(page).to have_selector(:table_row, count: 1) }
+        select_disclosure "Toggle Search" do
+          expect(page).to have_field("Search sales", with: purchase1.email)
+        end
+      end
     end
 
     describe "exporting" do

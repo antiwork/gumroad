@@ -12,8 +12,12 @@ type SearchProps = {
   placeholder?: string;
 };
 
-export const Search = ({ onSearch, value: initialValue, placeholder = "Search" }: SearchProps) => {
-  const [searchQuery, setSearchQuery] = React.useState(initialValue);
+export const Search = ({ onSearch, value, placeholder = "Search" }: SearchProps) => {
+  const [searchQuery, setSearchQuery] = React.useState(value);
+
+  React.useEffect(() => {
+    setSearchQuery(value);
+  }, [value]);
 
   return (
     <Popover>
