@@ -118,11 +118,11 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
         before { Feature.activate_user(:license_uses_sales_filter, seller) }
 
         it "filters by minimum license uses" do
-          get :paged, params: { page: 1, minimum_license_uses: 4 }
+          get :paged, params: { page: 1, minimum_license_uses: 5 }
           expect(response).to be_successful
           expect(customer_ids[response]).to match_array([purchases.first.external_id, purchases.second.external_id])
 
-          get :paged, params: { page: 1, minimum_license_uses: 9 }
+          get :paged, params: { page: 1, minimum_license_uses: 10 }
           expect(response).to be_successful
           expect(customer_ids[response]).to match_array([purchases.first.external_id])
         end
@@ -134,7 +134,7 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
           expect(response).to be_successful
           expected_customer_ids = customer_ids[response]
 
-          get :paged, params: { page: 1, minimum_license_uses: 9 }
+          get :paged, params: { page: 1, minimum_license_uses: 10 }
           expect(response).to be_successful
           expect(customer_ids[response]).to eq(expected_customer_ids)
         end

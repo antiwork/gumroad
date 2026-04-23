@@ -323,7 +323,7 @@ const CustomersPage = ({
                   {license_uses_filter_enabled ? (
                     <CardContent>
                       <Fieldset className="grow basis-0">
-                        <Label htmlFor={`${uid}-minimum-license-uses`}>License used more than</Label>
+                        <Label htmlFor={`${uid}-minimum-license-uses`}>License used at least</Label>
                         <Input
                           id={`${uid}-minimum-license-uses`}
                           type="number"
@@ -336,7 +336,7 @@ const CustomersPage = ({
                               minimumLicenseUses: value === "" ? null : Math.max(0, Number.parseInt(value, 10) || 0),
                             });
                           }}
-                          placeholder="0"
+                          placeholder="e.g. 5"
                         />
                         <FieldsetDescription>Number of times the license has been used.</FieldsetDescription>
                       </Fieldset>

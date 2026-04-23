@@ -298,12 +298,13 @@ describe PurchaseSearchService do
       purchase_3.license.update!(uses: 10)
       index_model_records(Purchase)
 
-      expect(get_records(license_uses_greater_than: 0)).to match_array([purchase_2, purchase_3])
-      expect(get_records(license_uses_greater_than: 2)).to match_array([purchase_2, purchase_3])
-      expect(get_records(license_uses_greater_than: 5)).to match_array([purchase_3])
-      expect(get_records(license_uses_greater_than: 10)).to match_array([])
+      expect(get_records(license_uses_greater_than_or_equal_to: 0)).to match_array([purchase_1, purchase_2, purchase_3])
+      expect(get_records(license_uses_greater_than_or_equal_to: 1)).to match_array([purchase_2, purchase_3])
+      expect(get_records(license_uses_greater_than_or_equal_to: 3)).to match_array([purchase_2, purchase_3])
+      expect(get_records(license_uses_greater_than_or_equal_to: 10)).to match_array([purchase_3])
+      expect(get_records(license_uses_greater_than_or_equal_to: 11)).to match_array([])
       # Purchases without licenses should not be matched
-      expect(get_records(license_uses_greater_than: 0)).not_to include(purchase_without_license)
+      expect(get_records(license_uses_greater_than_or_equal_to: 0)).not_to include(purchase_without_license)
     end
 
     it "can filter by date ranges" do

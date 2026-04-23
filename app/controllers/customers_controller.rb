@@ -138,7 +138,7 @@ class CustomersController < Sellers::BaseController
 
       if minimum_license_uses.present?
         license_uses_threshold = minimum_license_uses.to_i
-        search_options[:license_uses_greater_than] = license_uses_threshold if license_uses_threshold >= 0
+        search_options[:license_uses_greater_than_or_equal_to] = license_uses_threshold if license_uses_threshold >= 0
       end
 
       if created_after || created_before

@@ -38,7 +38,7 @@ class PurchaseSearchService
     # Ranges
     price_greater_than: nil, # Integer, compared to price_cents
     price_less_than: nil, # Integer, compared to price_cents
-    license_uses_greater_than: nil, # Integer, compared to license_uses
+    license_uses_greater_than_or_equal_to: nil, # Integer, compared to license_uses
     created_after: nil, # Time or valid datetime string
     created_on_or_after: nil, # Time or valid datetime string
     created_before: nil, # Time or valid datetime string
@@ -137,7 +137,7 @@ class PurchaseSearchService
       # Ranges
       build_body_price_greater_than
       build_body_price_less_than
-      build_body_license_uses_greater_than
+      build_body_license_uses_greater_than_or_equal_to
       build_body_created_after
       build_body_created_on_or_after
       build_body_created_before
@@ -373,9 +373,9 @@ class PurchaseSearchService
       @body[:query][:bool][:must] << { range: { "price_cents" => { lt: @options[:price_less_than] } } }
     end
 
-    def build_body_license_uses_greater_than
-      return if @options[:license_uses_greater_than].nil?
-      @body[:query][:bool][:must] << { range: { "license_uses" => { gt: @options[:license_uses_greater_than] } } }
+    def build_body_license_uses_greater_than_or_equal_to
+      return if @options[:license_uses_greater_than_or_equal_to].nil?
+      @body[:query][:bool][:must] << { range: { "license_uses" => { gte: @options[:license_uses_greater_than_or_equal_to] } } }
     end
 
     def build_body_created_after
