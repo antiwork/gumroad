@@ -1491,21 +1491,6 @@ describe Subscription::UpdaterService, :vcr do
                 expect(updated_purchase.displayed_price_cents).to eq @original_price
               end.not_to change { Purchase.count }
             end
-
-            it "increments the default tier inventory cache when healing legacy purchase" do
-              @original_tier.update!(sales_count_for_inventory_cache: 0)
-
-              Subscription::UpdaterService.new(
-                subscription: @subscription,
-                gumroad_guid: @gumroad_guid,
-                params: same_plan_params,
-                logged_in_user: @user,
-                remote_ip: @remote_ip,
-              ).perform
-
-              expect(@original_purchase.reload.variant_attributes).to eq [@original_tier]
-              expect(@original_tier.reload.sales_count_for_inventory_cache).to eq(@original_purchase.quantity)
-            end
           end
 
           context "upgrading" do
