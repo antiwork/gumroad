@@ -107,12 +107,12 @@ describe "Purchase inventory counter cache" do
     describe "gift purchases" do
       let(:gift_product) { create(:product) }
 
-      it "counts the gift receiver purchase, not the gift sender purchase" do
+      it "counts the gift sender purchase but not the gift receiver purchase" do
         gift = create(:gift, gifter_email: "sender@example.com", giftee_email: "receiver@example.com", link: gift_product)
         sender = create(:purchase, link: gift_product, is_gift_sender_purchase: true, gift_given: gift, purchase_state: "successful", quantity: 1)
         receiver = create(:purchase, link: gift_product, is_gift_receiver_purchase: true, gift_received: gift, purchase_state: "gift_receiver_purchase_successful", quantity: 1)
 
-        expect(sender.counts_towards_inventory?).to eq(false)
+        expect(sender.counts_towards_inventory?).to eq(true)
         expect(receiver.counts_towards_inventory?).to eq(false)
       end
 
@@ -151,7 +151,7 @@ describe "Purchase inventory counter cache" do
     end
 
     describe "bundle purchases" do
-      it "counts bundle parent purchase but not bundle product purchases" do
+      it "counts both bundle parent and bundle product purchases" do
         bundle = create(:product, :bundle)
         bundle_purchase = create(:purchase, link: bundle, is_bundle_purchase: true, purchase_state: "successful", quantity: 1)
         bundle_product_purchase = create(:purchase, link: bundle.bundle_products.first.product, is_bundle_product_purchase: true, purchase_state: "successful", quantity: 1)

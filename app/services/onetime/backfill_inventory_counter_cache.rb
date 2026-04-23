@@ -21,7 +21,6 @@ module Onetime
           p.purchase_state IN (#{states_sql})
           AND (p.flags IS NULL OR p.flags & #{flag[:is_additional_contribution]} = 0)
           AND (p.flags & #{flag[:is_archived_original_subscription_purchase]} = 0)
-          AND (p.flags IS NULL OR p.flags & #{flag[:is_gift_sender_purchase]} = 0)
           AND (
             p.subscription_id IS NULL
             OR p.flags & #{flag[:is_original_subscription_purchase]} != 0

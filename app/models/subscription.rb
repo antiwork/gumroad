@@ -1034,7 +1034,6 @@ class Subscription < ApplicationRecord
         AND (p.flags IS NULL OR p.flags & #{flag[:is_additional_contribution]} = 0)
         AND (p.flags & #{flag[:is_archived_original_subscription_purchase]} = 0)
         AND (p.flags & #{flag[:is_original_subscription_purchase]} != 0 OR p.flags & #{flag[:is_gift_receiver_purchase]} != 0)
-        AND (p.flags IS NULL OR p.flags & #{flag[:is_gift_sender_purchase]} = 0)
       SQL
 
       ActiveRecord::Base.connection.execute(<<~SQL.squish)
