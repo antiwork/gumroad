@@ -139,7 +139,13 @@ class Subscription::UpdaterService
           # made by `Subscription#update_current_plan!`
           restore_original_purchase!
           # If purchase is missing tier and user is not upgrading, associate default tier.
-          original_purchase.update!(variant_attributes: [product.default_tier]) if tiered_membership? && original_purchase.variant_attributes.empty?
+          if tiered_membership? && original_purchase.variant_attributes.empty?
+            default_tier = product.default_tier
+            original_purchase.update!(variant_attributes: [default_tier])
+            if original_purchase.counts_towards_inventory? && original_purchase.quantity.to_i > 0
+              BaseVariant.where(id: default_tier.id).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{original_purchase.quantity.to_i}")
+            end
+          end
         end
 
         # Restart subscription if necessary
