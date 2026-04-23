@@ -55,11 +55,6 @@ class Purchase::VariantUpdaterService
       variant.quantity_left ? variant.quantity_left >= quantity : true
     end
 
-    # HABTM changes to `variant_attributes` don't populate `saved_change_to_*`
-    # on Purchase, so the `after_commit :sync_inventory_counter_caches` hook
-    # either skips entirely (when quantity is unchanged) or only applies its
-    # delta to the current variant set — never decrementing removed variants.
-    # Explicitly reconcile the per-variant caches here for the variant diff.
     def sync_inventory_counter_cache_for_variant_swap(before_counted, before_variant_ids, before_quantity)
       after_variant_ids = purchase.variant_attribute_ids
       removed_ids = before_variant_ids - after_variant_ids
@@ -69,14 +64,7 @@ class Purchase::VariantUpdaterService
         BaseVariant.where(id: removed_ids).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache - #{before_quantity}")
       end
 
-      after_counted = purchase.counts_towards_inventory?
-      if after_counted && added_ids.any? && before_quantity > 0
-        # The `after_commit` hook on Purchase already applied a (new_qty - before_qty)
-        # delta to every variant in the current set, including added ones, whenever
-        # `quantity` changed. Top up added variants by `before_quantity` so their
-        # total increment equals the full new quantity. When `quantity` is unchanged
-        # the hook was skipped, but `before_quantity == new_quantity`, so the same
-        # top-up produces the correct +new_quantity.
+      if purchase.counts_towards_inventory? && added_ids.any? && before_quantity > 0
         BaseVariant.where(id: added_ids).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{before_quantity}")
       end
     end
