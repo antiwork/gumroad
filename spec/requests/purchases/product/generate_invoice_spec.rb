@@ -1007,6 +1007,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
 
       expect(pdf_text).to include("DE123456789")
       expect(pdf_text).not_to include("Reverse Charge - You are required to account for the VAT")
+      expect(Refund.where(purchase_id: purchase.id).count).to eq(0)
     end
 
     it "keeps the Business/VAT ID field hidden when the selected country is outside the broader list" do

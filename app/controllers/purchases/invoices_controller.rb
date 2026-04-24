@@ -27,7 +27,8 @@ class Purchases::InvoicesController < ApplicationController
     address_fields[:country] = ISO3166::Country[selected_country_code]&.common_name
 
     submitted_vat_id = invoice_params[:vat_id]&.strip.presence
-    refundable_vat_id = submitted_vat_id if is_vat_id_valid?(submitted_vat_id)
+    refundable_vat_id = nil
+    refundable_vat_id = submitted_vat_id if is_vat_id_valid?(submitted_vat_id) && @chargeable.taxed_by_gumroad?
     business_vat_id =
       if refundable_vat_id
         refundable_vat_id

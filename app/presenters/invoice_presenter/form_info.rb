@@ -17,7 +17,7 @@ class InvoicePresenter::FormInfo
     "NZ" => "GST",
     "ZA" => "VAT vendor",
     "JP" => "Consumption tax",
-    "KR" => "VAT registration",
+    "KR" => "VAT Registration",
     "IN" => "GST",
     "BR" => "CNPJ",
     "MX" => "RFC",
