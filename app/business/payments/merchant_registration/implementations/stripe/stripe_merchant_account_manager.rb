@@ -286,6 +286,10 @@ module StripeMerchantAccountManager
 
     ErrorNotifier.notify(e)
     :stripe_invalid_request
+  rescue Stripe::CardError => e
+    record_bank_sync_failure_note(user, e)
+    ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical")
+    :card_not_supported
   rescue Stripe::StripeError => e
     Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating bank account #{bank_account&.id} for stripe account #{stripe_account&.inspect}"
     ErrorNotifier.notify(e)

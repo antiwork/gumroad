@@ -9143,6 +9143,21 @@ describe StripeMerchantAccountManager, :vcr do
           end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_account_holder_name).with(user.id)
         end
       end
+
+      describe "Stripe rejects the external account with a CardError" do
+        before do
+          expect(Stripe::Account).to receive(:update).and_raise(Stripe::CardError.new("Your card does not support this type of purchase.", "external_account", code: "card_decline_rate_limit_exceeded"))
+        end
+
+        it "emails the creator, records a payout note, and returns :card_not_supported" do
+          result = nil
+          expect do
+            result = subject.update_bank_account(user, passphrase: "1234")
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          expect(result).to eq(:card_not_supported)
+          expect(user.comments.with_type_payout_note.last.content).to include("Stripe bank sync failed")
+        end
+      end
     end
 
     describe "all info provided previously, bank account not changed" do
