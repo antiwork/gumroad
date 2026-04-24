@@ -32,6 +32,7 @@ class ContentModeration::Strategies::PromptStrategy
 
   MODEL = "gpt-4o-mini"
   JUDGE_MODEL = "gpt-4o-mini"
+  SUPPORTED_IMAGE_EXTENSIONS = %w[.png .jpg .jpeg .gif .webp].freeze
 
   def initialize(text:, image_urls: [])
     @text = text
@@ -153,12 +154,26 @@ class ContentModeration::Strategies::PromptStrategy
       )
     end
 
+    def supported_image_url?(url)
+      path = URI.parse(url).path.to_s
+      ext = File.extname(path).downcase
+      SUPPORTED_IMAGE_EXTENSIONS.include?(ext)
+    rescue URI::InvalidURIError
+      false
+    end
+
     def build_messages(rules, skip_images: false)
       user_content = []
       user_content << { type: "text", text: "Content to evaluate:\n\n#{@text.presence || '[no text provided]'}" }
 
       if !skip_images && @image_urls.present?
-        @image_urls.sample(3).each do |url|
+        supported_urls = @image_urls.select { |url| supported_image_url?(url) }
+        if supported_urls.empty? && @image_urls.any?
+          Rails.logger.warn(
+            "ContentModeration::PromptStrategy filtered out all #{@image_urls.size} image URLs (unsupported formats)"
+          )
+        end
+        supported_urls.sample(3).each do |url|
           user_content << { type: "image_url", image_url: { url: url } }
         end
       end

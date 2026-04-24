@@ -143,6 +143,67 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     end
   end
 
+  context "when image URLs have unsupported formats" do
+    it "filters out unsupported image formats before sending to OpenAI" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),
+        json_chat_response(flagged: false, reasoning: "")
+      )
+
+      described_class.new(
+        text: "test",
+        image_urls: ["https://cdn.example.com/photo.png", "https://cdn.example.com/design.psd", "https://cdn.example.com/logo.svg"]
+      ).perform
+
+      adult_call = client.as_null_object
+      expect(client).to have_received(:chat).with(
+        parameters: hash_including(
+          messages: [
+            anything,
+            {
+              role: "user",
+              content: [
+                { type: "text", text: anything },
+                { type: "image_url", image_url: { url: "https://cdn.example.com/photo.png" } },
+              ],
+            },
+          ]
+        )
+      ).at_least(:once)
+    end
+
+    it "evaluates text-only when all image URLs are unsupported" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),
+        json_chat_response(flagged: false, reasoning: "")
+      )
+
+      result = described_class.new(
+        text: "test",
+        image_urls: ["https://cdn.example.com/design.psd", "https://cdn.example.com/file.ai", "https://cdn.example.com/photo.tiff"]
+      ).perform
+
+      expect(result.status).to eq("compliant")
+      expect(Rails.logger).to have_received(:warn).with(
+        /filtered out all 3 image URLs \(unsupported formats\)/
+      )
+    end
+
+    it "passes through supported formats normally" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: false, reasoning: ""),
+        json_chat_response(flagged: false, reasoning: "")
+      )
+
+      described_class.new(
+        text: "test",
+        image_urls: ["https://cdn.example.com/a.jpg", "https://cdn.example.com/b.jpeg", "https://cdn.example.com/c.gif", "https://cdn.example.com/d.webp"]
+      ).perform
+
+      expect(client).to have_received(:chat).at_least(:once)
+    end
+  end
+
   def json_chat_response(payload)
     { "choices" => [{ "message" => { "content" => payload.to_json } }] }
   end
