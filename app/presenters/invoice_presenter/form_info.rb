@@ -32,15 +32,29 @@ class InvoicePresenter::FormInfo
   def data
     billing_detail = buyer&.billing_detail
 
+    address_fields =
+      if billing_detail
+        {
+          full_name: billing_detail.full_name.to_s,
+          street_address: billing_detail.street_address.to_s,
+          city: billing_detail.city.to_s,
+          state: billing_detail.state.to_s,
+          zip_code: billing_detail.zip_code.to_s,
+          country_code: billing_detail.country_code.to_s,
+        }
+      else
+        {
+          full_name: chargeable.full_name&.strip.presence || chargeable.purchaser&.name || "",
+          street_address: chargeable.street_address || "",
+          city: chargeable.city || "",
+          state: chargeable.state_or_from_ip_address || "",
+          zip_code: chargeable.zip_code || "",
+          country_code: Compliance::Countries.find_by_name(chargeable.country)&.alpha2 || "",
+        }
+      end
+
     {
-      address_fields: {
-        full_name: billing_detail&.full_name.presence || chargeable.full_name&.strip.presence || chargeable.purchaser&.name || "",
-        street_address: billing_detail&.street_address.presence || chargeable.street_address || "",
-        city: billing_detail&.city.presence || chargeable.city || "",
-        state: billing_detail&.state.to_s.presence || chargeable.state_or_from_ip_address || "",
-        zip_code: billing_detail&.zip_code.presence || chargeable.zip_code || "",
-        country_code: billing_detail&.country_code.presence || Compliance::Countries.find_by_name(chargeable.country)&.alpha2 || "",
-      },
+      address_fields:,
       email: chargeable.orderable.email,
       business_name: billing_detail&.business_name.to_s,
       vat_id: billing_detail&.business_id.to_s,

@@ -54,10 +54,9 @@ class CustomerMailer < ApplicationMailer
     )
     @email_name = __method__
 
-    buyer = @chargeable.purchaser
-    billing_detail = buyer&.billing_detail
-    return if billing_detail.nil? || !billing_detail.auto_email_invoice_enabled
+    return unless AutoInvoiceEligibility.eligible?(@chargeable)
 
+    billing_detail = @chargeable.purchaser.billing_detail
     pdf_bytes = InvoicePdfGenerator.new(@chargeable, billing_detail:).call
     attachments["invoice-#{@chargeable.external_id_numeric_for_invoice}.pdf"] = pdf_bytes
 
