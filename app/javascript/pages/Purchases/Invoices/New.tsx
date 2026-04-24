@@ -84,7 +84,7 @@ const PurchaseNewInvoicePage = () => {
     <>
       <div>
         <Card asChild>
-          <main className="mx-auto my-4 h-min max-w-md [&>*]:flex-col [&>*]:items-stretch">
+          <main className="mx-auto my-4 max-w-md [&>*]:flex-col [&>*]:items-stretch">
             <CardContent asChild>
               <header className="text-center">
                 <h4 className="grow font-bold">{form_metadata.heading}</h4>

@@ -747,6 +747,41 @@ describe OrdersController, :vcr do
         end
       end
 
+      describe "strong params for reusable Stripe payments" do
+        it "passes stripe_setup_intent_id through to order creation" do
+          order_purchases = double("order_purchases", successful: [])
+          allow(order_purchases).to receive(:each).and_return([])
+          order = double("order", persisted?: false, purchases: order_purchases, send_charge_receipts: nil)
+          create_service = instance_double(Order::CreateService, perform: [order, {}, {}])
+          charge_service = instance_double(Order::ChargeService, perform: {})
+
+          expect(Order::CreateService).to receive(:new).with(
+            buyer: nil,
+            params: hash_including(
+              stripe_payment_method_id: "pm_123",
+              stripe_customer_id: "cus_123",
+              stripe_setup_intent_id: "seti_123"
+            )
+          ).and_return(create_service)
+          allow(Order::ChargeService).to receive(:new).and_return(charge_service)
+
+          post :create, params: {
+            email: "buyer@example.com",
+            stripe_payment_method_id: "pm_123",
+            stripe_customer_id: "cus_123",
+            stripe_setup_intent_id: "seti_123",
+            line_items: [{
+              uid: "unique-id-0",
+              permalink: product_1.unique_permalink,
+              perceived_price_cents: price_1,
+              quantity: 1
+            }]
+          }
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
       describe "single item purchases that require SCA" do
         let(:price) { 10_00 }
         let(:multiple_purchase_params_with_sca) do

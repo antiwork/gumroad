@@ -56,6 +56,11 @@ class ProductReviewsController < ApplicationController
         return
       end
 
+      if purchase.purchaser&.suspended?
+        render json: { success: false, message: "Sorry, you are not authorized to review this product." }
+        return
+      end
+
       if purchase.created_at < 1.year.ago && @product.user.disable_reviews_after_year?
         render json: { success: false, message: "Sorry, something went wrong." }
         return

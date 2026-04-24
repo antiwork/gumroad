@@ -11,6 +11,7 @@ class OfferCode < ApplicationRecord
   include OfferCode::Sorting
 
   has_flags 1 => :is_cancellation_discount,
+            2 => :created_via_cli,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
