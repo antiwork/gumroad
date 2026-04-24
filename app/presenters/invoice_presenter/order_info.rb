@@ -6,7 +6,7 @@ class InvoicePresenter::OrderInfo
 
   attr_reader :charge_info
 
-  def initialize(chargeable, address_fields:, additional_notes:, business_vat_id:, show_reverse_charge_note: nil)
+  def initialize(chargeable, address_fields:, additional_notes:, business_vat_id:, business_name: nil, show_reverse_charge_note: nil)
     @chargeable = chargeable
     @address_fields = address_fields
     @additional_notes = additional_notes
@@ -14,6 +14,7 @@ class InvoicePresenter::OrderInfo
     @payment_info = receipt_presenter.payment_info
     @charge_info  = receipt_presenter.charge_info
     @business_vat_id = business_vat_id
+    @business_name = business_name
     @show_reverse_charge_note = show_reverse_charge_note
   end
 
@@ -76,6 +77,7 @@ class InvoicePresenter::OrderInfo
       label: "To",
       value: safe_join(
         [
+          business_name.presence,
           address_fields[:full_name],
           address_fields[:street_address],
           [address_fields[:city], address_fields[:state], address_fields[:zip_code]].compact.join(", "),
@@ -190,7 +192,7 @@ class InvoicePresenter::OrderInfo
   end
 
   private
-    attr_reader :additional_notes, :business_vat_id, :chargeable, :address_fields, :payment_info, :show_reverse_charge_note
+    attr_reader :additional_notes, :business_vat_id, :business_name, :chargeable, :address_fields, :payment_info, :show_reverse_charge_note
 
     def email_attribute
       {

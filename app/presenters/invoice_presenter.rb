@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 class InvoicePresenter
-  def initialize(chargeable, address_fields: {}, additional_notes: nil, business_vat_id: nil, buyer: nil, show_reverse_charge_note: nil)
+  def initialize(chargeable, address_fields: {}, additional_notes: nil, business_vat_id: nil, business_name: nil, buyer: nil, show_reverse_charge_note: nil)
     @chargeable = chargeable
     @address_fields = address_fields
     @additional_notes = additional_notes
     @business_vat_id = business_vat_id
+    @business_name = business_name
     @buyer = buyer
     @show_reverse_charge_note = show_reverse_charge_note
   end
@@ -31,7 +32,7 @@ class InvoicePresenter
   end
 
   def order_info
-    @_order_info ||= InvoicePresenter::OrderInfo.new(chargeable, address_fields:, additional_notes:, business_vat_id:, show_reverse_charge_note:)
+    @_order_info ||= InvoicePresenter::OrderInfo.new(chargeable, address_fields:, additional_notes:, business_vat_id:, business_name:, show_reverse_charge_note:)
   end
 
   def supplier_info
@@ -43,5 +44,5 @@ class InvoicePresenter
   end
 
   private
-    attr_reader :business_vat_id, :chargeable, :address_fields, :additional_notes, :buyer, :show_reverse_charge_note
+    attr_reader :business_vat_id, :business_name, :chargeable, :address_fields, :additional_notes, :buyer, :show_reverse_charge_note
 end
