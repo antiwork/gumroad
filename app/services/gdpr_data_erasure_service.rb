@@ -11,13 +11,16 @@ class GdprDataErasureService
   def initialize(user, performed_by:)
     @user = user
     @performed_by = performed_by
+    @products_deleted = 0
   end
 
   def perform!
+    original_email = @user.email
+
     ActiveRecord::Base.transaction do
-      deactivate_account!
+      @products_deleted = deactivate_account!
       anonymize_user_pii!
-      anonymize_buyer_purchases!
+      anonymize_buyer_purchases!(original_email)
       remove_profile_assets!
       log_erasure!
     end
@@ -29,9 +32,10 @@ class GdprDataErasureService
   end
 
   private
-
     def deactivate_account!
-      return if @user.deleted?
+      return 0 if @user.deleted?
+
+      products_deleted = @user.links.alive.count
 
       # Skip balance validation for GDPR erasure. We are legally obligated
       # to erase regardless of outstanding balance (Article 17).
@@ -46,12 +50,14 @@ class GdprDataErasureService
       @user.installments.alive.each(&:mark_deleted!)
       @user.user_compliance_infos.alive.each(&:mark_deleted!)
       @user.bank_accounts.alive.each(&:mark_deleted!)
-      @user.cancel_active_subscriptions! if @user.respond_to?(:cancel_active_subscriptions!)
+      @user.send(:cancel_active_subscriptions!)
       @user.invalidate_active_sessions!
 
       if @user.custom_domain&.persisted? && !@user.custom_domain.deleted?
         @user.custom_domain.mark_deleted!
       end
+
+      products_deleted
     end
 
     def anonymize_user_pii!
@@ -90,7 +96,7 @@ class GdprDataErasureService
       )
     end
 
-    def anonymize_buyer_purchases!
+    def anonymize_buyer_purchases!(original_email)
       # Anonymize PII on purchases made as a buyer
       # Keep transaction amounts and dates for tax/legal compliance
       Purchase.where(purchaser_id: @user.id).update_all(
@@ -103,7 +109,9 @@ class GdprDataErasureService
       )
 
       # Anonymize purchases by email (guest purchases)
-      Purchase.where(email: @user.email_was || @user.email).where(purchaser_id: nil).update_all(
+      return if original_email.blank?
+
+      Purchase.where(email: original_email, purchaser_id: nil).update_all(
         full_name: ANONYMIZED_NAME,
         street_address: nil,
         city: nil,
@@ -137,7 +145,7 @@ class GdprDataErasureService
         profile_anonymized: true,
         purchases_anonymized: true,
         account_deactivated: true,
-        products_deleted: @user.links.count,
+        products_deleted: @products_deleted,
         external_cleanup_needed: [
           "Helper/Supabase (customer conversations)",
           "Gmail (correspondence)",
