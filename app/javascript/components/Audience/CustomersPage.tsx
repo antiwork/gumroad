@@ -336,7 +336,7 @@ const CustomersPage = ({
                               minimumLicenseUses: value === "" ? null : Math.max(0, Number.parseInt(value, 10) || 0),
                             });
                           }}
-                          placeholder="e.g. 5"
+                          placeholder="1"
                         />
                         <FieldsetDescription>Number of times the license has been used.</FieldsetDescription>
                       </Fieldset>
