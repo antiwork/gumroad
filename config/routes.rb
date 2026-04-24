@@ -285,7 +285,6 @@ Rails.application.routes.draw do
 
           resources :payouts, only: [:index, :create]
           resources :instant_payouts, only: [:index, :create]
-          resources :openapi, only: :index
         end
 
         namespace :grmc do
