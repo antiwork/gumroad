@@ -3,6 +3,7 @@
 class ContentModeration::Strategies::ClassifierStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
   OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
+  MAX_MODERATION_ATTEMPTS = 3
   MAX_IMAGES_TO_MODERATE = 5
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
 
@@ -82,13 +83,23 @@ class ContentModeration::Strategies::ClassifierStrategy
 
   private
     def moderate(input, skip_url: nil)
-      response = @client.moderations(parameters: { model: "omni-moderation-latest", input: input })
-      response.dig("results", 0, "category_scores") || {}
-    rescue Faraday::BadRequestError => e
-      raise if skip_url.nil?
-      body = e.response&.dig(:body).to_s
-      Rails.logger.warn("ContentModeration::ClassifierStrategy skipping unmoderatable image URL=#{skip_url} error=#{body[0..500]}")
-      nil
+      attempts = 0
+      begin
+        attempts += 1
+        response = @client.moderations(parameters: { model: "omni-moderation-latest", input: input })
+        response.dig("results", 0, "category_scores") || {}
+      rescue Faraday::TimeoutError => e
+        if attempts < MAX_MODERATION_ATTEMPTS
+          Rails.logger.warn("ContentModeration::ClassifierStrategy timeout on attempt #{attempts}/#{MAX_MODERATION_ATTEMPTS}, retrying: #{e.message}")
+          retry
+        end
+        raise
+      rescue Faraday::BadRequestError => e
+        raise if skip_url.nil?
+        body = e.response&.dig(:body).to_s
+        Rails.logger.warn("ContentModeration::ClassifierStrategy skipping unmoderatable image URL=#{skip_url} error=#{body[0..500]}")
+        nil
+      end
     end
 
     def collect_flagged(category_scores, thresholds)
