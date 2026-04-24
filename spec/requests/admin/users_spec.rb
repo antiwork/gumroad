@@ -262,8 +262,7 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
         click_on "GDPR Erase"
       end
 
-      # Success message shows as a JS alert, dismiss it
-      page.driver.browser.switch_to.alert.accept
+      expect(page).to have_text("GDPR erasure complete")
 
       user.reload
       expect(user.name).to eq("[deleted]")

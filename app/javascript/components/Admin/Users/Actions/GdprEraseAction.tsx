@@ -27,8 +27,7 @@ const GdprEraseAction = ({ user: { external_id } }: GdprEraseActionProps) => (
       "This action CANNOT be undone. Are you sure?"
     }
     done="Erased"
-    success_message="GDPR erasure complete. External cleanup still needed."
-    show_message_in_alert={true}
+    success_message="GDPR erasure complete. External cleanup still needed: Helper/Supabase, Gmail, Stripe."
     color="danger"
   />
 );
