@@ -65,3 +65,4 @@ test-branch-creation.log
 .vercel
 .claude/worktrees/
 autoresearch.*
+.codex/
