@@ -78,8 +78,8 @@ class InvoicePresenter::OrderInfo
       label: "To",
       value: safe_join(
         [
-          business_name.presence,
           address_fields[:full_name],
+          business_name.presence,
           address_fields[:street_address],
           [address_fields[:city], address_fields[:state], address_fields[:zip_code]].reject(&:blank?).join(", "),
           address_fields[:country]

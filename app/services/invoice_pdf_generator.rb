@@ -16,6 +16,7 @@ class InvoicePdfGenerator
       address_fields:,
       additional_notes: @billing_detail.additional_notes.to_s.strip.presence,
       business_vat_id: @billing_detail.business_id.presence,
+      business_vat_id_country_code: @billing_detail.country_code,
       business_name: @billing_detail.business_name.presence,
       buyer: @billing_detail.purchaser,
       show_reverse_charge_note: false
