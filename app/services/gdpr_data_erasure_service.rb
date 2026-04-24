@@ -21,7 +21,8 @@ class GdprDataErasureService
     ActiveRecord::Base.transaction do
       @products_deleted = deactivate_account!
       anonymized_email = anonymize_user_pii!
-      anonymize_alive_cart!(anonymized_email)
+      delete_device_records!
+      anonymize_carts!(anonymized_email)
       anonymize_credit_cards!(credit_card_ids)
       anonymize_buyer_purchases!(anonymized_email:, original_email:)
       log_erasure!
@@ -102,12 +103,16 @@ class GdprDataErasureService
       anonymized_email
     end
 
-    def anonymize_alive_cart!(anonymized_email)
-      @user.reload_alive_cart&.update_columns(
+    def anonymize_carts!(anonymized_email)
+      @user.carts.update_all(
         email: anonymized_email,
         ip_address: nil,
         browser_guid: nil,
       )
+    end
+
+    def delete_device_records!
+      @user.devices.destroy_all
     end
 
     def anonymize_credit_cards!(credit_card_ids)

@@ -68,8 +68,10 @@ describe GdprDataErasureService do
       expect(purchase.browser_guid).to be_nil
     end
 
-    it "anonymizes the user's alive cart and credit card records" do
-      cart = create(:cart, user:, email: user.email, ip_address: "127.0.0.1", browser_guid: "browser-guid")
+    it "anonymizes all of the user's carts and credit card records" do
+      historical_cart = create(:cart, user:, email: user.email, ip_address: "127.0.0.2", browser_guid: "historical-browser-guid")
+      historical_cart.mark_deleted!
+      alive_cart = create(:cart, user:, email: user.email, ip_address: "127.0.0.1", browser_guid: "browser-guid")
       credit_card = CreditCard.create!(
         visual: "**** **** **** 4242",
         card_type: "visa",
@@ -84,9 +86,11 @@ describe GdprDataErasureService do
 
       described_class.new(user, performed_by: admin).perform!
 
-      expect(cart.reload.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
-      expect(cart.ip_address).to be_nil
-      expect(cart.browser_guid).to be_nil
+      [alive_cart, historical_cart].each do |cart|
+        expect(cart.reload.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
+        expect(cart.ip_address).to be_nil
+        expect(cart.browser_guid).to be_nil
+      end
 
       expect(credit_card.reload.card_type).to eq(GdprDataErasureService::ANONYMIZED_VALUE)
       expect(credit_card.visual).to eq(GdprDataErasureService::ANONYMIZED_VALUE)
@@ -94,6 +98,18 @@ describe GdprDataErasureService do
       expect(credit_card.expiry_year).to be_nil
       expect(credit_card.stripe_customer_id).to be_nil
       expect(credit_card.processor_payment_method_id).to be_nil
+    end
+
+    it "deletes the user's device records" do
+      ios_device = create(:device, user:, token: "ios-device-token")
+      android_device = create(:android_device, user:, token: "android-device-token")
+      other_user_device = create(:device, token: "other-user-device-token")
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(Device.exists?(ios_device.id)).to eq(false)
+      expect(Device.exists?(android_device.id)).to eq(false)
+      expect(Device.exists?(other_user_device.id)).to eq(true)
     end
 
     it "invokes the private subscription cancellation helper during erasure" do
