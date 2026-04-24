@@ -78,7 +78,7 @@ describe("Generate invoice for purchase", type: :system, js: true) do
       end
 
       within find("h5", text: "Invoice").first(:xpath, ".//..") do
-        expect(page).to have_content "Wonderful Alice Crooked St. Wonderland, CA 12345 United States", normalize_ws: true
+        expect(page).to have_content "Wonderful Alice Crooked St. Wonderland, CA, 12345 United States", normalize_ws: true
         expect(page).not_to have_content("Additional notes")
       end
 
