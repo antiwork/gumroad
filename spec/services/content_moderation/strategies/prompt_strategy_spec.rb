@@ -204,6 +204,54 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     end
   end
 
+  context "when OpenAI times out" do
+    it "returns compliant when a preset evaluation times out" do
+      allow(client).to receive(:chat).and_raise(Faraday::TimeoutError)
+
+      result = described_class.new(text: "moderate me", image_urls: ["https://cdn.example.com/1.png"]).perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.reasoning).to eq([])
+      expect(Rails.logger).to have_received(:warn).with(/preset timeout on adult_content.*Faraday::TimeoutError/)
+    end
+
+    it "returns compliant when a Net::ReadTimeout occurs" do
+      allow(client).to receive(:chat).and_raise(Net::ReadTimeout)
+
+      result = described_class.new(text: "moderate me").perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.reasoning).to eq([])
+      expect(Rails.logger).to have_received(:warn).with(/preset timeout on adult_content.*Net::ReadTimeout/)
+    end
+
+    it "skips the flagged result when the uncertainty check times out" do
+      call_count = 0
+      allow(client).to receive(:chat) do |_kwargs|
+        call_count += 1
+        case call_count
+        when 1 then json_chat_response(flagged: true, reasoning: "looks explicit")
+        when 2 then raise Faraday::TimeoutError
+        else json_chat_response(flagged: false, reasoning: "")
+        end
+      end
+
+      result = described_class.new(text: "moderate me").perform
+
+      expect(result.status).to eq("compliant")
+      expect(Rails.logger).to have_received(:warn).with(/uncertainty check timeout.*Faraday::TimeoutError/)
+    end
+
+    it "returns compliant when a Faraday::ConnectionFailed occurs" do
+      allow(client).to receive(:chat).and_raise(Faraday::ConnectionFailed, "connection refused")
+
+      result = described_class.new(text: "moderate me").perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.reasoning).to eq([])
+    end
+  end
+
   def json_chat_response(payload)
     { "choices" => [{ "message" => { "content" => payload.to_json } }] }
   end
