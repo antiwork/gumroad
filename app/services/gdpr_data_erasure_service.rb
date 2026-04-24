@@ -33,6 +33,8 @@ class GdprDataErasureService
     def deactivate_account!
       return if @user.deleted?
 
+      # Skip balance validation for GDPR erasure. We are legally obligated
+      # to erase regardless of outstanding balance (Article 17).
       @user.update!(
         deleted_at: Time.current,
         username: nil,
@@ -40,11 +42,11 @@ class GdprDataErasureService
         payouts_paused_internally: true,
       )
 
-      @user.links.each(&:delete!)
+      @user.links.alive.each(&:delete!)
       @user.installments.alive.each(&:mark_deleted!)
       @user.user_compliance_infos.alive.each(&:mark_deleted!)
       @user.bank_accounts.alive.each(&:mark_deleted!)
-      @user.cancel_active_subscriptions!
+      @user.cancel_active_subscriptions! if @user.respond_to?(:cancel_active_subscriptions!)
       @user.invalidate_active_sessions!
 
       if @user.custom_domain&.persisted? && !@user.custom_domain.deleted?
@@ -121,7 +123,7 @@ class GdprDataErasureService
       @user.comments.create!(
         author_id: @performed_by.id,
         author_name: @performed_by.name || @performed_by.email,
-        comment_type: "gdpr_erasure",
+        comment_type: Comment::COMMENT_TYPE_NOTE,
         content: "GDPR data erasure performed. User PII anonymized, account deactivated. " \
                  "Transaction records retained per Article 17(3)(b). " \
                  "External cleanup required: Helper/Supabase, Gmail, Stripe."

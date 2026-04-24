@@ -50,7 +50,8 @@ describe GdprDataErasureService do
       described_class.new(user, performed_by: admin).perform!
 
       comment = user.comments.last
-      expect(comment.comment_type).to eq("gdpr_erasure")
+      expect(comment.comment_type).to eq(Comment::COMMENT_TYPE_NOTE)
+      expect(comment.content).to include("GDPR data erasure performed")
       expect(comment.content).to include("GDPR data erasure performed")
     end
 

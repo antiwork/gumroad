@@ -250,7 +250,6 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       expect(page).to have_text("block created")
     end
   end
-end
 
   describe "GDPR data erasure" do
     let!(:product) { create(:product, user: user) }
@@ -279,3 +278,4 @@ end
       expect(product.reload.deleted?).to eq(true)
     end
   end
+end
