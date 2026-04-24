@@ -81,7 +81,8 @@ class Purchases::InvoicesController < ApplicationController
     end
 
     def new_invoice_presenter
-      @_new_invoice_presenter ||= InvoicePresenter.new(@chargeable, buyer: logged_in_user)
+      buyer = logged_in_user if logged_in_user && logged_in_user.id == @chargeable.purchaser&.id
+      @_new_invoice_presenter ||= InvoicePresenter.new(@chargeable, buyer:)
     end
 
     def invoice_params

@@ -17,15 +17,8 @@ class SendChargeReceiptJob
 
     charge.with_lock do
       CustomerMailer.receipt(nil, charge.id).deliver_now
+      SendAutoInvoiceEmailJob.perform_async(nil, charge.id) if AutoInvoiceEligibility.eligible?(charge.purchaser)
       charge.update!(receipt_sent: true)
     end
-
-    SendAutoInvoiceEmailJob.perform_async(nil, charge.id) if auto_invoice_eligible?(charge)
   end
-
-  private
-    def auto_invoice_eligible?(charge)
-      billing_detail = charge.purchaser&.billing_detail
-      billing_detail.present? && billing_detail.auto_email_invoice_enabled
-    end
 end

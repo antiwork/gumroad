@@ -147,11 +147,11 @@ class SettingsPresenter
         zip_code: billing_detail&.zip_code || "",
         country_code: billing_detail&.country_code || "",
         additional_notes: billing_detail&.additional_notes || "",
-        auto_email_invoice_enabled: billing_detail.nil? ? true : billing_detail.auto_email_invoice_enabled,
+        auto_email_invoice_enabled: billing_detail.nil? || billing_detail.auto_email_invoice_enabled,
       },
       countries: Compliance::Countries.for_select.to_h,
-      business_id_country_codes: InvoicePresenter::FormInfo::BUSINESS_ID_COUNTRY_CODES,
-      business_id_labels: InvoicePresenter::FormInfo::BUSINESS_ID_LABELS,
+      business_id_country_codes: BusinessIdLabels::COUNTRY_CODES,
+      business_id_labels: BusinessIdLabels::LABELS,
     }
   end
 

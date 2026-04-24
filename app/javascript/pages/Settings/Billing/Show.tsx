@@ -47,6 +47,14 @@ export default function BillingSettingsPage() {
   const update = (patch: Partial<BillingDetail>) =>
     form.setData("billing_detail", { ...form.data.billing_detail, ...patch });
 
+  const changeCountry = (country_code: string) => {
+    update({
+      country_code,
+      state: country_code === "US" ? form.data.billing_detail.state : "",
+      business_id: props.business_id_country_codes.includes(country_code) ? form.data.billing_detail.business_id : "",
+    });
+  };
+
   const handleSave = () => {
     form.put(Routes.settings_billing_path(), { preserveScroll: true });
   };
@@ -151,7 +159,7 @@ export default function BillingSettingsPage() {
             <Select
               id={`${uid}-country_code`}
               value={form.data.billing_detail.country_code}
-              onChange={(e) => update({ country_code: e.target.value })}
+              onChange={(e) => changeCountry(e.target.value)}
             >
               <option value="">Select country</option>
               {Object.entries(props.countries).map(([code, name]) => (

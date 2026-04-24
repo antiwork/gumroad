@@ -81,11 +81,12 @@ describe Settings::BillingController, type: :controller, inertia: true do
       expect(flash[:notice]).to eq("Your billing details have been saved.")
     end
 
-    it "redirects with an alert when validation fails" do
-      put :update, params: { billing_detail: valid_params[:billing_detail].merge(full_name: "") }
+    it "redirects without persisting when validation fails" do
+      expect do
+        put :update, params: { billing_detail: valid_params[:billing_detail].merge(full_name: "") }
+      end.not_to change(BillingDetail, :count)
 
       expect(response).to redirect_to(settings_billing_path)
-      expect(flash[:alert]).to include("Full name can't be blank")
     end
   end
 end

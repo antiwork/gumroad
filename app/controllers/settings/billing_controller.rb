@@ -8,12 +8,12 @@ class Settings::BillingController < Settings::BaseController
   end
 
   def update
-    billing_detail = current_seller.billing_detail || current_seller.build_billing_detail
+    billing_detail = BillingDetail.find_or_initialize_by(purchaser_id: current_seller.id)
 
     if billing_detail.update(billing_detail_params)
       redirect_to settings_billing_path, status: :see_other, notice: "Your billing details have been saved."
     else
-      redirect_to settings_billing_path, alert: billing_detail.errors.full_messages.to_sentence
+      redirect_to settings_billing_path, inertia: inertia_errors(billing_detail)
     end
   end
 
