@@ -65,8 +65,9 @@ describe User::Risk do
         user.suspend_due_to_stripe_risk
       end.to have_enqueued_mail(ContactingCreatorMailer, :suspended_due_to_stripe_risk).with(user.id).once
 
+      another_user = create(:user)
       expect do
-        create(:user).suspend_due_to_stripe_risk
+        another_user.suspend_due_to_stripe_risk
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :account_suspended)
     end
   end
@@ -90,5 +91,6 @@ describe User::Risk do
         end.to change(SuspendAccountsWithPaymentAddressWorker.jobs, :size).from(1).to(0)
       end
     end
+
   end
 end

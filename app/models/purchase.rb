@@ -900,6 +900,32 @@ class Purchase < ApplicationRecord
     self.class.purchase_info(url_redirect, link, self).merge!(variants_displayable: variants_list)
   end
 
+  # Fails line items in a cart that individually pass `validate_offer_code` but
+  # collectively exceed the same offer code's `max_purchase_count`. Single-line carts
+  # are skipped because `before_create :validate_offer_code` already handles them.
+  # Returns the array of purchases it marked failed so the caller can route error
+  # responses for them through `Order::ChargeService#ensure_all_purchases_processed`.
+  def self.validate_offer_code_usage_across_line_items(purchases)
+    rejected = []
+    purchases
+      .select { |p| p.offer_code_id && p.in_progress? && p.errors.empty? }
+      .group_by(&:offer_code_id)
+      .each do |_, code_purchases|
+        next if code_purchases.size < 2
+        offer_code = code_purchases.first.offer_code
+        next if offer_code&.max_purchase_count.nil?
+        next if code_purchases.sum(&:quantity) <= offer_code.quantity_left
+
+        code_purchases.each do |purchase|
+          purchase.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
+          Purchase::MarkFailedService.new(purchase).perform
+          purchase.errors.add(:base, "Sorry, the discount code you are using is invalid for the quantity you have selected.")
+          rejected << purchase
+        end
+      end
+    rejected
+  end
+
   def self.purchase_response(url_redirect, link, purchase = nil)
     extra_purchase_notice = nil
     if link.is_in_preorder_state

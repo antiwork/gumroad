@@ -47,6 +47,29 @@ class CustomerMailer < ApplicationMailer
     )
   end
 
+  def auto_invoice(purchase_id = nil, charge_id = nil)
+    @chargeable = Charge::Chargeable.find_by_purchase_or_charge!(
+      purchase: Purchase.find_by(id: purchase_id),
+      charge: Charge.find_by(id: charge_id)
+    )
+    @email_name = __method__
+
+    return unless AutoInvoiceEligibility.eligible?(@chargeable)
+
+    billing_detail = @chargeable.purchaser.billing_detail
+    pdf_bytes = InvoicePdfGenerator.new(@chargeable, billing_detail:).call
+    attachments["invoice-#{@chargeable.external_id_numeric_for_invoice}.pdf"] = pdf_bytes
+
+    mail(
+      to: @chargeable.orderable.email,
+      from: from_email_address_with_name(@chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
+      reply_to: @chargeable.support_email,
+      subject: "Your invoice from #{@chargeable.seller.name_or_username}",
+      template_name: "auto_invoice",
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @chargeable.seller)
+    )
+  end
+
   def preorder_receipt(preorder_id, link_id = nil, email = nil)
     @email_name = __method__
     if preorder_id.present?

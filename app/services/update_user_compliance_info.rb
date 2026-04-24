@@ -1,6 +1,15 @@
 # frozen_string_literal: true
 
 class UpdateUserComplianceInfo
+  COUNTRIES_REQUIRING_PHYSICAL_ADDRESS = {
+    "US" => "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.",
+    "GH" => "We require a valid physical address in Ghana. We cannot accept a P.O. Box as a valid address.",
+  }.freeze
+  ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS = {
+    street_address: [:country],
+    business_street_address: [:business_country, :country],
+  }.freeze
+
   attr_reader :compliance_params, :user
 
   def initialize(compliance_params:, user:)
@@ -10,7 +19,10 @@ class UpdateUserComplianceInfo
 
   def process
     if compliance_params.present?
-      old_compliance_info = user.fetch_or_build_user_compliance_info
+      po_box_error = po_box_error_message
+      return { success: false, error_message: po_box_error } if po_box_error.present?
+
+      old_compliance_info = current_compliance_info
       saved, new_compliance_info = old_compliance_info.dup_and_save do |new_compliance_info|
         # if the following fields are submitted and are blank, we don't clear the field for the user
         new_compliance_info.first_name =              compliance_params[:first_name]              if compliance_params[:first_name].present?
@@ -76,4 +88,109 @@ class UpdateUserComplianceInfo
 
     { success: true }
   end
+
+  private
+    def po_box_error_message
+      ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS.each_key do |address_field|
+        next unless should_validate_po_box_for?(address_field)
+
+        address = address_for_validation(address_field)
+        next unless po_box_address?(address)
+
+        country_code = effective_country_code_for(address_field)
+        next if country_code.blank?
+        next unless COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.key?(country_code)
+
+        return COUNTRIES_REQUIRING_PHYSICAL_ADDRESS.fetch(country_code)
+      end
+
+      nil
+    end
+
+    def should_validate_po_box_for?(address_field)
+      address = address_for_validation(address_field)
+      return false if address.blank?
+
+      address_changed?(address_field) || validation_context_changed_for?(address_field)
+    end
+
+    def address_for_validation(address_field)
+      compliance_params[address_field].presence || stored_address_for_validation(address_field)
+    end
+
+    def address_changed?(address_field)
+      compliance_params[address_field].present? &&
+        compliance_params[address_field].to_s != current_compliance_info.public_send(address_field).to_s
+    end
+
+    def stored_address_for_validation(address_field)
+      return unless validation_context_changed_for?(address_field)
+
+      current_compliance_info.public_send(address_field).presence
+    end
+
+    def validation_context_changed_for?(address_field)
+      country_changed_for?(address_field) || business_mode_changed_for?(address_field)
+    end
+
+    def business_mode_changed_for?(address_field)
+      return business_mode_changed? if address_field == :street_address
+
+      business_mode_activating? if address_field == :business_street_address
+    end
+
+    def country_changed_for?(address_field)
+      effective_country_code_for(address_field) != current_country_code_for(address_field)
+    end
+
+    def effective_country_code_for(address_field)
+      country_code_for(
+        ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS.fetch(address_field).filter_map { |field| effective_country_value_for(field) }.first
+      )
+    end
+
+    def current_country_code_for(address_field)
+      country_code_for(
+        ADDRESS_FIELDS_AND_COUNTRY_FALLBACKS.fetch(address_field).filter_map { |field| current_compliance_info.public_send(field) }.first
+      )
+    end
+
+    def country_code_for(country)
+      return if country.blank?
+
+      Compliance::Countries.find_by_name(country)&.alpha2 || country
+    end
+
+    def effective_country_value_for(field)
+      current_country = current_compliance_info.public_send(field)
+      return current_country unless submitted_country_will_be_persisted?(field)
+
+      Compliance::Countries.mapping[compliance_params[field]].presence || current_country
+    end
+
+    def po_box_address?(address)
+      address.gsub(/[^\w]/, "").downcase.include?("pobox")
+    end
+
+    def business_mode_changed?
+      effective_is_business? != current_compliance_info.is_business?
+    end
+
+    def business_mode_activating?
+      !current_compliance_info.is_business? && effective_is_business?
+    end
+
+    def effective_is_business?
+      return current_compliance_info.is_business? if compliance_params[:is_business].nil?
+
+      ActiveModel::Type::Boolean.new.cast(compliance_params[:is_business])
+    end
+
+    def current_compliance_info
+      @current_compliance_info ||= user.fetch_or_build_user_compliance_info
+    end
+
+    def submitted_country_will_be_persisted?(field)
+      compliance_params[field].present? && compliance_params[:is_business]
+    end
 end

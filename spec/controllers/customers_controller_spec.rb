@@ -103,6 +103,18 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(customer_ids[response]).to match_array([purchases.third.external_id, purchases.fourth.external_id])
     end
+
+  end
+
+  describe "GET paged when Elasticsearch times out" do
+    it "returns 504" do
+      allow(PurchaseSearchService).to receive(:search).and_raise(Faraday::TimeoutError)
+
+      get :paged, params: { page: 1 }
+
+      expect(response).to have_http_status(:gateway_timeout)
+      expect(response.parsed_body).to eq("success" => false, "error" => "request timed out")
+    end
   end
 
   describe "GET charges" do

@@ -12,6 +12,7 @@ class SettingsPresenter
     profile
     team
     payments
+    billing
     authorized_applications
     password
     third_party_analytics
@@ -30,7 +31,7 @@ class SettingsPresenter
       case page
       when "main", "payments", "password", "third_party_analytics", "advanced"
         Pundit.policy!(pundit_user, [:settings, page.to_sym, seller]).show?
-      when "profile"
+      when "profile", "billing"
         Pundit.policy!(pundit_user, [:settings, page.to_sym]).show?
       when "team"
         Pundit.policy!(pundit_user, [:settings, :team, seller]).show?
@@ -129,6 +130,28 @@ class SettingsPresenter
   def profile_props
     {
       settings_pages: pages
+    }
+  end
+
+  def billing_props
+    billing_detail = seller.billing_detail
+    {
+      settings_pages: pages,
+      billing_detail: {
+        full_name: billing_detail&.full_name || seller.name.to_s,
+        business_name: billing_detail&.business_name || "",
+        business_id: billing_detail&.business_id || "",
+        street_address: billing_detail&.street_address || "",
+        city: billing_detail&.city || "",
+        state: billing_detail&.state || "",
+        zip_code: billing_detail&.zip_code || "",
+        country_code: billing_detail&.country_code || "",
+        additional_notes: billing_detail&.additional_notes || "",
+        auto_email_invoice_enabled: billing_detail.nil? || billing_detail.auto_email_invoice_enabled,
+      },
+      countries: Compliance::Countries.for_select.to_h,
+      business_id_country_codes: BusinessIdLabels::COUNTRY_CODES,
+      business_id_labels: BusinessIdLabels::LABELS,
     }
   end
 

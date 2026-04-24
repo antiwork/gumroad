@@ -6,7 +6,7 @@ class InvoicePresenter::OrderInfo
 
   attr_reader :charge_info
 
-  def initialize(chargeable, address_fields:, additional_notes:, business_vat_id:, business_vat_id_country_code: nil, show_reverse_charge_note: nil, business_name: nil)
+  def initialize(chargeable, address_fields:, additional_notes:, business_vat_id:, business_vat_id_country_code: nil, business_name: nil, show_reverse_charge_note: nil)
     @chargeable = chargeable
     @address_fields = address_fields
     @additional_notes = additional_notes
@@ -15,8 +15,8 @@ class InvoicePresenter::OrderInfo
     @charge_info  = receipt_presenter.charge_info
     @business_vat_id = business_vat_id
     @business_vat_id_country_code = business_vat_id_country_code
-    @show_reverse_charge_note = show_reverse_charge_note
     @business_name = business_name
+    @show_reverse_charge_note = show_reverse_charge_note
   end
 
   def heading
@@ -78,8 +78,8 @@ class InvoicePresenter::OrderInfo
       label: "To",
       value: safe_join(
         [
-          address_fields[:full_name],
           business_name.presence,
+          address_fields[:full_name],
           address_fields[:street_address],
           [address_fields[:city], address_fields[:state], address_fields[:zip_code]].reject(&:blank?).join(", "),
           address_fields[:country]
@@ -135,7 +135,7 @@ class InvoicePresenter::OrderInfo
   end
 
   private
-    attr_reader :additional_notes, :business_vat_id, :business_vat_id_country_code, :show_reverse_charge_note, :business_name, :chargeable, :address_fields, :payment_info
+    attr_reader :additional_notes, :business_vat_id, :business_vat_id_country_code, :business_name, :show_reverse_charge_note, :chargeable, :address_fields, :payment_info
 
     def purchase_sales_tax_info
       chargeable.purchase_sales_tax_info

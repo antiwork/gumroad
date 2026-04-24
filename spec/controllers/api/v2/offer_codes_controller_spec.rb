@@ -88,6 +88,15 @@ describe Api::V2::OfferCodesController do
         expect(offer_code.products).to match_array(@product)
       end
 
+      it "marks offer codes created from the CLI" do
+        request.user_agent = "gumroad-cli/1.0"
+
+        post @action, params: @params.merge(offer_type: "cents")
+
+        expect(@product.reload.offer_codes.alive.count).to eq 1
+        expect(@product.offer_codes.alive.first.created_via_cli?).to be true
+      end
+
       it "creates a new percent offer code" do
         post @action, params: @params.merge(offer_type: "percent")
 

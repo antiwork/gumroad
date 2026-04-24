@@ -3,6 +3,7 @@ export type SettingPage =
   | "profile"
   | "team"
   | "payments"
+  | "billing"
   | "authorized_applications"
   | "password"
   | "third_party_analytics"

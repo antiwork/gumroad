@@ -112,7 +112,7 @@ class OrdersController < ApplicationController
         :friend, :locale, :plugins, :save_card, :card_data_handling_mode, :card_data_handling_error,
         :card_country, :card_country_source, :wallet_type, :cc_zipcode, :vat_id, :email, :tax_country_election,
         :save_shipping_address, :card_expiry_month, :card_expiry_year, :stripe_status, :visual,
-        :billing_agreement_id, :paypal_order_id, :stripe_payment_method_id, :stripe_customer_id, :stripe_error,
+        :billing_agreement_id, :paypal_order_id, :stripe_payment_method_id, :stripe_customer_id, :stripe_setup_intent_id, :stripe_error,
         :braintree_transient_customer_store_key, :braintree_device_data, :use_existing_card, :paymentToken,
         :url_parameters, :is_gift, :giftee_email, :giftee_id, :gift_note, :referrer,
         purchase: [:full_name, :street_address, :city, :state, :zip_code, :country],

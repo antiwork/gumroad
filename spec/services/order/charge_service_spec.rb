@@ -903,4 +903,42 @@ describe Order::ChargeService, :vcr do
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount_type]).to eq("maximum")
     end
   end
+
+  describe "#perform rejecting a cart that overruns an offer code limit" do
+    it "fails the offending line items, skips Stripe, and returns an error response per line item" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1_000)
+      category = create(:variant_category, title: "Tier", link: product)
+      variant_a = create(:variant, name: "A", variant_category: category)
+      variant_b = create(:variant, name: "B", variant_category: category)
+      offer_code = create(:offer_code, products: [product], code: "once", amount_cents: 100, max_purchase_count: 1)
+
+      order = create(:order)
+      [variant_a, variant_b].each do |variant|
+        purchase = build(:purchase_in_progress, link: product, seller:, offer_code:, quantity: 1)
+        purchase.variant_attributes << variant
+        purchase.save(validate: false)
+        order.purchases << purchase
+      end
+
+      params = {
+        line_items: [
+          { uid: "uid-a", permalink: product.unique_permalink, variants: [variant_a.external_id] },
+          { uid: "uid-b", permalink: product.unique_permalink, variants: [variant_b.external_id] },
+        ]
+      }
+
+      expect(Stripe::PaymentIntent).not_to receive(:create)
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      expect(order.purchases.reload.map(&:purchase_state).uniq).to eq(["failed"])
+      expect(charge_responses.keys).to contain_exactly("uid-a", "uid-b")
+      charge_responses.each_value do |response|
+        expect(response[:success]).to eq(false)
+        expect(response[:error_message]).to match(/quantity you have selected/)
+        expect(response[:error_code]).to eq(PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY)
+      end
+    end
+  end
 end
