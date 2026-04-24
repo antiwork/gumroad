@@ -23,7 +23,7 @@ class GdprDataErasureService
       anonymized_email = anonymize_user_pii!
       anonymize_alive_cart!(anonymized_email)
       anonymize_credit_cards!(credit_card_ids)
-      anonymize_buyer_purchases!(original_email)
+      anonymize_buyer_purchases!(anonymized_email:, original_email:)
       log_erasure!
     end
 
@@ -133,28 +133,34 @@ class GdprDataErasureService
       )
     end
 
-    def anonymize_buyer_purchases!(original_email)
+    def anonymize_buyer_purchases!(anonymized_email:, original_email:)
       # Anonymize PII on purchases made as a buyer
       # Keep transaction amounts and dates for tax/legal compliance
       Purchase.where(purchaser_id: @user.id).update_all(
+        email: anonymized_email,
         full_name: ANONYMIZED_NAME,
         street_address: nil,
         city: nil,
         state: nil,
         zip_code: nil,
         country: nil,
+        ip_address: nil,
+        browser_guid: nil,
       )
 
       # Anonymize purchases by email (guest purchases)
       return if original_email.blank?
 
       Purchase.where(email: original_email, purchaser_id: nil).update_all(
+        email: anonymized_email,
         full_name: ANONYMIZED_NAME,
         street_address: nil,
         city: nil,
         state: nil,
         zip_code: nil,
         country: nil,
+        ip_address: nil,
+        browser_guid: nil,
       )
     end
 

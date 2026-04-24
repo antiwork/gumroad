@@ -27,23 +27,45 @@ describe GdprDataErasureService do
     end
 
     it "anonymizes buyer purchases" do
-      purchase = create(:free_purchase, purchaser: user, full_name: "John Doe", street_address: "123 Main St")
+      purchase = create(
+        :free_purchase,
+        purchaser: user,
+        email: user.email,
+        full_name: "John Doe",
+        street_address: "123 Main St",
+        ip_address: "127.0.0.1",
+        browser_guid: "buyer-browser-guid",
+      )
 
       described_class.new(user, performed_by: admin).perform!
 
       purchase.reload
+      expect(purchase.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
       expect(purchase.full_name).to eq("[deleted]")
       expect(purchase.street_address).to be_nil
+      expect(purchase.ip_address).to be_nil
+      expect(purchase.browser_guid).to be_nil
     end
 
     it "anonymizes guest purchases using the original email address" do
-      purchase = create(:free_purchase, purchaser: nil, email: user.email, full_name: "John Doe", street_address: "123 Main St")
+      purchase = create(
+        :free_purchase,
+        purchaser: nil,
+        email: user.email,
+        full_name: "John Doe",
+        street_address: "123 Main St",
+        ip_address: "127.0.0.1",
+        browser_guid: "guest-browser-guid",
+      )
 
       described_class.new(user, performed_by: admin).perform!
 
       purchase.reload
+      expect(purchase.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
       expect(purchase.full_name).to eq("[deleted]")
       expect(purchase.street_address).to be_nil
+      expect(purchase.ip_address).to be_nil
+      expect(purchase.browser_guid).to be_nil
     end
 
     it "anonymizes the user's alive cart and credit card records" do
