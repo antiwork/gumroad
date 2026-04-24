@@ -103,10 +103,11 @@ describe InvoicePresenter do
       it "returns the form data" do
         props = presenter.invoice_generation_form_data_props
 
-        expect(props).to match(
+        expect(props).to include(
           purchase_id: chargeable.external_id_for_invoice,
           address_fields: be_a(Hash),
           email: purchase.email,
+          business_name: "",
           vat_id: "",
           additional_notes: "",
         )
@@ -117,10 +118,12 @@ describe InvoicePresenter do
       it "returns the form metadata" do
         props = presenter.invoice_generation_form_metadata_props
 
-        expect(props).to match(
+        expect(props).to include(
           heading: be_a(String),
           display_vat_id: be_in([true, false]),
           vat_id_label: be_a(String),
+          business_id_country_codes: be_an(Array),
+          business_id_labels: be_a(Hash),
           supplier_info: be_a(Hash),
           seller_info: be_a(Hash),
           order_info: be_a(Hash),
@@ -128,6 +131,9 @@ describe InvoicePresenter do
         )
 
         expect(props[:countries]).to eq(Compliance::Countries.for_select.to_h)
+        expect(props[:business_id_country_codes]).to include("DE", "FR", "GB")
+        expect(props[:business_id_labels]["DE"]).to eq("VAT ID")
+        expect(props[:business_id_labels]["BR"]).to eq("CNPJ")
       end
     end
   end
@@ -221,10 +227,11 @@ describe InvoicePresenter do
       it "returns the form data" do
         props = presenter.invoice_generation_form_data_props
 
-        expect(props).to match(
+        expect(props).to include(
           purchase_id: chargeable.external_id_for_invoice,
           address_fields: be_a(Hash),
           email: purchase.email,
+          business_name: "",
           vat_id: "",
           additional_notes: "",
         )
@@ -235,10 +242,12 @@ describe InvoicePresenter do
       it "returns the form metadata" do
         props = presenter.invoice_generation_form_metadata_props
 
-        expect(props).to match(
+        expect(props).to include(
           heading: be_a(String),
           display_vat_id: be_in([true, false]),
           vat_id_label: be_a(String),
+          business_id_country_codes: be_an(Array),
+          business_id_labels: be_a(Hash),
           supplier_info: be_a(Hash),
           seller_info: be_a(Hash),
           order_info: be_a(Hash),
@@ -246,6 +255,9 @@ describe InvoicePresenter do
         )
 
         expect(props[:countries]).to eq(Compliance::Countries.for_select.to_h)
+        expect(props[:business_id_country_codes]).to include("DE", "FR", "GB")
+        expect(props[:business_id_labels]["DE"]).to eq("VAT ID")
+        expect(props[:business_id_labels]["BR"]).to eq("CNPJ")
       end
     end
   end

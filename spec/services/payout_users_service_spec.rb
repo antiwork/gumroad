@@ -127,7 +127,7 @@ describe PayoutUsersService, :vcr do
 
     include_examples "PayoutUsersService#process specs"
 
-    it "does not process cross-border payouts immediately and schedules for 25 hours later" do
+    it "does not process cross-border payouts immediately and schedules for 25 hours later", :freeze_time do
       allow_any_instance_of(UserComplianceInfo).to receive(:legal_entity_country_code).and_return("TH")
       expect(StripePayoutProcessor).not_to receive(:process_payments)
 

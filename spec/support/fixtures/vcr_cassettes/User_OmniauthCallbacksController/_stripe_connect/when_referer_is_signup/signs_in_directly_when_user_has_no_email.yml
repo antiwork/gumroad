@@ -14,14 +14,13 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_FWKLmX7uoWkTaa","request_duration_ms":886}}'
+      - '{"last_request_metrics":{"request_id":"req_FWKLmX7uoWkTaa","request_duration_ms":1}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
-      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"x86_64-linux","engine":"ruby","publisher":"stripe","uname":"Linux
-        version 6.14.0-33-generic (buildd@lcy02-amd64-026) (x86_64-linux-gnu-gcc-13
-        (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, GNU ld (GNU Binutils for Ubuntu) 2.42)
-        #33~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep 19 17:02:30 UTC 2","hostname":"hsc-desk"}'
+      - '{"bindings_version":"12.5.0","lang":"ruby","lang_version":"3.4.3 p32 (2025-04-14)","platform":"arm64-darwin25","engine":"ruby","publisher":"stripe","uname":"Darwin
+        GumClaws-Mini 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:49:24 PST
+        2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8132 arm64","hostname":"GumClaws-Mini"}'
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -34,11 +33,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Sat, 01 Nov 2025 19:00:47 GMT
+      - Fri, 24 Apr 2026 15:05:37 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '6699'
+      - '6754'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -56,11 +55,14 @@ http_interactions:
       - no-cache, no-store
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
-        img-src 'self'; script-src 'self' 'report-<RPUSH_CONSUMER_FCM_FIREBASE_PROJECT_ID>';
-        style-src 'self'; worker-src 'none'; upgrade-insecure-requests; report-uri
-        https://q.stripe.com/csp-violation?q=XM2gL-jSTEX7Joh2OEplMLD9hts4M7lzv_RRu_kpwLuL2h_s6khJQtJA1x0da5j61LAgwQuksHUJGgUC
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=k2TLUBn7_B9MZ5b5rCaE9vU6pIvGnv3oIzHLa0jcc7pgC11HaMpz6w_ycAlqsKfNGmVvvG8Both2u5Tx
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=k2TLUBn7_B9MZ5b5rCaE9vU6pIvGnv3oIzHLa0jcc7pgC11HaMpz6w_ycAlqsKfNGmVvvG8Both2u5Tx&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=k2TLUBn7_B9MZ5b5rCaE9vU6pIvGnv3oIzHLa0jcc7pgC11HaMpz6w_ycAlqsKfNGmVvvG8Both2u5Tx&t=1"
       Request-Id:
-      - req_S3j4aoa2OzNQKJ
+      - req_IGR0dv67sBdq0S
       Stripe-Account:
       - acct_1SOb0DEwFhlcVS6d
       Stripe-Version:
@@ -72,7 +74,7 @@ http_interactions:
       X-Stripe-Routing-Context-Priority-Tier:
       - api-testmode
       X-Wc:
-      - ABGHIJ
+      - 3c3
       Strict-Transport-Security:
       - max-age=63072000; includeSubDomains; preload
     body:
@@ -88,6 +90,7 @@ http_interactions:
             "minority_owned_business_designation": null,
             "name": null,
             "product_description": null,
+            "specified_commercial_transactions_act_url": null,
             "support_address": null,
             "support_email": null,
             "support_phone": null,
@@ -325,5 +328,5 @@ http_interactions:
           },
           "type": "standard"
         }
-  recorded_at: Sat, 01 Nov 2025 19:00:48 GMT
+  recorded_at: Fri, 24 Apr 2026 15:05:37 GMT
 recorded_with: VCR 6.2.0

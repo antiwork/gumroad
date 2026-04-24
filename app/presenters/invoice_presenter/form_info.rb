@@ -1,8 +1,12 @@
 # frozen_string_literal: true
 
 class InvoicePresenter::FormInfo
-  def initialize(chargeable)
+  BUSINESS_ID_LABELS = BusinessIdLabels::LABELS
+  BUSINESS_ID_COUNTRY_CODES = BusinessIdLabels::COUNTRY_CODES
+
+  def initialize(chargeable, buyer: nil)
     @chargeable = chargeable
+    @buyer = buyer
   end
 
   def heading
@@ -11,6 +15,14 @@ class InvoicePresenter::FormInfo
 
   def display_vat_id?
     chargeable.taxed_by_gumroad? && !chargeable.purchase_sales_tax_info&.business_vat_id
+  end
+
+  def business_id_country_codes
+    BUSINESS_ID_COUNTRY_CODES
+  end
+
+  def business_id_labels
+    BUSINESS_ID_LABELS
   end
 
   def vat_id_label
@@ -29,21 +41,38 @@ class InvoicePresenter::FormInfo
   end
 
   def data
+    billing_detail = buyer&.billing_detail
+
+    address_fields =
+      if billing_detail
+        {
+          full_name: billing_detail.full_name.to_s,
+          street_address: billing_detail.street_address.to_s,
+          city: billing_detail.city.to_s,
+          state: billing_detail.state.to_s,
+          zip_code: billing_detail.zip_code.to_s,
+          country_code: billing_detail.country_code.to_s,
+        }
+      else
+        {
+          full_name: chargeable.full_name&.strip.presence || chargeable.purchaser&.name || "",
+          street_address: chargeable.street_address || "",
+          city: chargeable.city || "",
+          state: chargeable.state_or_from_ip_address || "",
+          zip_code: chargeable.zip_code || "",
+          country_code: Compliance::Countries.find_by_name(chargeable.country)&.alpha2 || "",
+        }
+      end
+
     {
-      address_fields: {
-        full_name: chargeable.full_name&.strip.presence || chargeable.purchaser&.name || "",
-        street_address: chargeable.street_address || "",
-        city: chargeable.city || "",
-        state: chargeable.state_or_from_ip_address || "",
-        zip_code: chargeable.zip_code || "",
-        country_code: Compliance::Countries.find_by_name(chargeable.country)&.alpha2 || "",
-      },
+      address_fields:,
       email: chargeable.orderable.email,
-      vat_id: "",
-      additional_notes: "",
+      business_name: billing_detail&.business_name.to_s,
+      vat_id: billing_detail&.business_id.to_s,
+      additional_notes: billing_detail&.additional_notes.to_s,
     }
   end
 
   private
-    attr_reader :chargeable
+    attr_reader :chargeable, :buyer
 end

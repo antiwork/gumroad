@@ -28,6 +28,7 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
 
     offer_code.user = @product.user
     offer_code.products << @product unless params[:universal] == "true"
+    offer_code.created_via_cli = true if request_from_cli?
 
     if offer_code.save
       success_with_offer_code(offer_code)
