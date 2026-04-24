@@ -138,6 +138,28 @@ describe UpdatePayoutMethod do
       end
     end
 
+    describe "when account number exceeds maximum length" do
+      let(:user) { create(:named_user) }
+
+      it "returns an error without attempting RSA encryption" do
+        oversized_number = "1" * 201
+        params = ActionController::Parameters.new(
+          bank_account: {
+            type: AchAccount.name,
+            account_holder_full_name: "Named User",
+            account_number: oversized_number,
+            account_number_confirmation: oversized_number,
+            routing_number: "110000000",
+          }
+        )
+
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result[:error]).to eq(:bank_account_error)
+        expect(result[:data]).to eq("Account number is too long")
+      end
+    end
+
     describe "switching to card payouts" do
       let(:user) { create(:named_user) }
       let!(:existing_bank_account) { create(:ach_account, user:) }
