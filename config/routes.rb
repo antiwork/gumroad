@@ -1146,6 +1146,19 @@ Rails.application.routes.draw do
 
     resources :profile_sections, only: [:create, :update, :destroy]
 
+    put "/product_reviews/set", to: "product_reviews#set", format: :json
+    resources :product_reviews, only: [:index, :show]
+    resources :product_review_responses, only: [:update, :destroy], format: :json
+    resources :product_review_videos, only: [] do
+      scope module: :product_review_videos do
+        resource :stream, only: [:show]
+        resources :streaming_urls, only: [:index]
+      end
+    end
+    namespace :product_review_videos do
+      resource :upload_context, only: [:show]
+    end
+
     get "/", to: "users#show"
   end
 
