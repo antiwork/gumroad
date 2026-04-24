@@ -446,6 +446,103 @@ jobs:
           docker volume rm $(docker volume ls -q -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
           docker network rm ${{ env.COMPOSE_PROJECT_NAME }}_default 2>/dev/null || true
 
+  test_confidence:
+    name: Test Confidence
+    runs-on: ubicloud-standard-2
+    needs: [test_fast, test_slow]
+    if: always() && (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository)
+    outputs:
+      score: ${{ steps.score.outputs.confidence }}
+      status: ${{ steps.score.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Compute confidence score
+        id: score
+        env:
+          FAST_TOTAL: 20
+          SLOW_TOTAL: 65
+        run: |
+          chmod +x .github/scripts/test-confidence.sh
+
+          # Count passed shards from job outcomes
+          FAST_PASSED=0
+          SLOW_PASSED=0
+
+          # Parse needs context for pass/fail counts
+          FAST_RESULT="${{ needs.test_fast.result }}"
+          SLOW_RESULT="${{ needs.test_slow.result }}"
+
+          if [ "$FAST_RESULT" = "success" ]; then
+            FAST_PASSED=$FAST_TOTAL
+          else
+            # When the matrix partially fails, the job result is 'failure'
+            # but individual shards may have passed. We count all as failed
+            # for simplicity since GitHub doesn't expose per-matrix outcomes.
+            FAST_PASSED=0
+          fi
+
+          if [ "$SLOW_RESULT" = "success" ]; then
+            SLOW_PASSED=$SLOW_TOTAL
+          else
+            SLOW_PASSED=0
+          fi
+
+          SCORE=$(bash .github/scripts/test-confidence.sh $FAST_TOTAL $FAST_PASSED $SLOW_TOTAL $SLOW_PASSED)
+
+          if [ "$SCORE" -eq 100 ]; then
+            STATUS="passing"
+          elif [ "$SCORE" -eq 99 ]; then
+            STATUS="neutral"
+          else
+            STATUS="failing"
+          fi
+
+          echo "confidence=$SCORE" >> $GITHUB_OUTPUT
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "🎯 Test Confidence: $SCORE% ($STATUS)"
+          echo "   Fast tests: $FAST_RESULT ($FAST_PASSED/$FAST_TOTAL passed)"
+          echo "   Slow tests: $SLOW_RESULT ($SLOW_PASSED/$SLOW_TOTAL passed)"
+
+      - name: Post confidence to PR
+        if: github.event_name == 'pull_request_target'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const score = '${{ steps.score.outputs.confidence }}';
+            const status = '${{ steps.score.outputs.status }}';
+            const emoji = score == '100' ? '🟢' : score == '99' ? '🟡' : '🔴';
+            const body = `## ${emoji} Test Confidence: ${score}%\n\n` +
+              `**Status:** ${status}\n` +
+              `- Fast tests: ${{ needs.test_fast.result }}\n` +
+              `- Slow tests: ${{ needs.test_slow.result }}\n\n` +
+              (score == '100' ? '✅ All test shards passed.' :
+               score == '99' ? '⚠️ Very close to passing. Minor issues detected.' :
+               `❌ Confidence below threshold. Score: ${score}/100.`);
+
+            // Find and update existing comment or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const botComment = comments.find(c => c.body.includes('Test Confidence:'));
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
+
   unblock_deployment_from_buildkite:
     name: Unblock deployment from Buildkite
     runs-on: ubicloud-standard-2
