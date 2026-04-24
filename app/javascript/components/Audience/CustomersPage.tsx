@@ -323,7 +323,7 @@ const CustomersPage = ({
                   {license_uses_filter_enabled ? (
                     <CardContent>
                       <Fieldset className="grow basis-0">
-                        <Label htmlFor={`${uid}-minimum-license-uses`}>License used at least</Label>
+                        <Label htmlFor={`${uid}-minimum-license-uses`}>Minimum license uses</Label>
                         <Input
                           id={`${uid}-minimum-license-uses`}
                           type="number"
