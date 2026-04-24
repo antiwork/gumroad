@@ -16,14 +16,18 @@ class GdprDataErasureService
 
   def perform!
     original_email = @user.email
+    credit_card_ids = credit_card_ids_for_erasure
 
     ActiveRecord::Base.transaction do
       @products_deleted = deactivate_account!
-      anonymize_user_pii!
+      anonymized_email = anonymize_user_pii!
+      anonymize_alive_cart!(anonymized_email)
+      anonymize_credit_cards!(credit_card_ids)
       anonymize_buyer_purchases!(original_email)
-      remove_profile_assets!
       log_erasure!
     end
+
+    remove_profile_assets!
 
     { success: true, summary: erasure_summary }
   rescue => e
@@ -94,6 +98,39 @@ class GdprDataErasureService
         notification_endpoint: nil,
         otp_secret_key: nil,
       )
+
+      anonymized_email
+    end
+
+    def anonymize_alive_cart!(anonymized_email)
+      @user.reload_alive_cart&.update_columns(
+        email: anonymized_email,
+        ip_address: nil,
+        browser_guid: nil,
+      )
+    end
+
+    def anonymize_credit_cards!(credit_card_ids)
+      return if credit_card_ids.empty?
+
+      CreditCard.where(id: credit_card_ids).update_all(
+        card_type: ANONYMIZED_VALUE,
+        expiry_month: nil,
+        expiry_year: nil,
+        stripe_customer_id: nil,
+        visual: ANONYMIZED_VALUE,
+        stripe_fingerprint: nil,
+        card_country: nil,
+        stripe_card_id: nil,
+        card_bin: nil,
+        card_data_handling_mode: nil,
+        braintree_customer_id: nil,
+        funding_type: nil,
+        paypal_billing_agreement_id: nil,
+        processor_payment_method_id: nil,
+        json_data: nil,
+        updated_at: Time.current,
+      )
     end
 
     def anonymize_buyer_purchases!(original_email)
@@ -125,6 +162,15 @@ class GdprDataErasureService
       @user.avatar&.purge if @user.respond_to?(:avatar) && @user.avatar&.attached?
     rescue => e
       Rails.logger.warn("GDPR: Failed to purge avatar for user #{@user.id}: #{e.message}")
+    end
+
+    def credit_card_ids_for_erasure
+      [
+        @user.credit_card_id,
+        @user.purchases.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id),
+        @user.subscriptions.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id),
+        @user.bank_accounts.where.not(credit_card_id: nil).distinct.pluck(:credit_card_id),
+      ].flatten.compact.uniq
     end
 
     def log_erasure!

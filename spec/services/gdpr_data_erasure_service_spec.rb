@@ -46,6 +46,34 @@ describe GdprDataErasureService do
       expect(purchase.street_address).to be_nil
     end
 
+    it "anonymizes the user's alive cart and credit card records" do
+      cart = create(:cart, user:, email: user.email, ip_address: "127.0.0.1", browser_guid: "browser-guid")
+      credit_card = CreditCard.create!(
+        visual: "**** **** **** 4242",
+        card_type: "visa",
+        expiry_month: 12,
+        expiry_year: 2030,
+        stripe_customer_id: "cus_123",
+        stripe_fingerprint: "fp_123",
+        processor_payment_method_id: "pm_123",
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      )
+      user.update!(credit_card:)
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(cart.reload.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
+      expect(cart.ip_address).to be_nil
+      expect(cart.browser_guid).to be_nil
+
+      expect(credit_card.reload.card_type).to eq(GdprDataErasureService::ANONYMIZED_VALUE)
+      expect(credit_card.visual).to eq(GdprDataErasureService::ANONYMIZED_VALUE)
+      expect(credit_card.expiry_month).to be_nil
+      expect(credit_card.expiry_year).to be_nil
+      expect(credit_card.stripe_customer_id).to be_nil
+      expect(credit_card.processor_payment_method_id).to be_nil
+    end
+
     it "invokes the private subscription cancellation helper during erasure" do
       expect(user).to receive(:cancel_active_subscriptions!)
 
@@ -86,6 +114,17 @@ describe GdprDataErasureService do
 
       expect(result[:summary][:external_cleanup_needed]).to include("Helper/Supabase (customer conversations)")
       expect(result[:summary][:external_cleanup_needed]).to include("Stripe (customer data)")
+    end
+
+    it "skips profile asset removal when transactional erasure work fails" do
+      service = described_class.new(user, performed_by: admin)
+      allow(service).to receive(:remove_profile_assets!)
+      allow(service).to receive(:log_erasure!).and_raise(StandardError, "boom")
+
+      result = service.perform!
+
+      expect(result[:success]).to eq(false)
+      expect(service).not_to have_received(:remove_profile_assets!)
     end
   end
 end
