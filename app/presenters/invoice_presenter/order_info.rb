@@ -196,8 +196,6 @@ class InvoicePresenter::OrderInfo
         "IRD ID"
       elsif purchase_sales_tax_info&.country_code == Compliance::Countries::JPN.alpha2
         "CN ID"
-      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::VNM.alpha2
-        "CN ID"
       elsif purchase_sales_tax_info&.country_code == Compliance::Countries::SGP.alpha2 ||
             purchase_sales_tax_info&.country_code == Compliance::Countries::IND.alpha2
         "GST ID"

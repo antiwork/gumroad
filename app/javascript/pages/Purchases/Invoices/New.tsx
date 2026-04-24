@@ -256,8 +256,9 @@ const PurchaseNewInvoicePage = () => {
                   <span
                     style={{ opacity: form.data.address_fields.city.length ? undefined : "var(--disabled-opacity)" }}
                   >
-                    {`${form.data.address_fields.city || "San Francisco"}${showStateField ? "," : ""}`}
-                  </span>{" "}
+                    {form.data.address_fields.city || "San Francisco"}
+                  </span>
+                  {", "}
                   {showStateField ? (
                     <>
                       <span
@@ -266,7 +267,8 @@ const PurchaseNewInvoicePage = () => {
                         }}
                       >
                         {form.data.address_fields.state || "CA"}
-                      </span>{" "}
+                      </span>
+                      {", "}
                     </>
                   ) : null}
                   <span

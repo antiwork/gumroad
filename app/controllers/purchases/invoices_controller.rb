@@ -28,7 +28,7 @@ class Purchases::InvoicesController < ApplicationController
 
     submitted_vat_id = invoice_params[:vat_id]&.strip.presence
     refundable_vat_id = nil
-    refundable_vat_id = submitted_vat_id if is_vat_id_valid?(submitted_vat_id) && @chargeable.taxed_by_gumroad?
+    refundable_vat_id = submitted_vat_id if @chargeable.taxed_by_gumroad? && is_vat_id_valid?(submitted_vat_id)
     business_vat_id =
       if refundable_vat_id
         refundable_vat_id
