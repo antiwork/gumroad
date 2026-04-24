@@ -56,6 +56,7 @@ const PurchaseNewInvoicePage = () => {
 
   const validateFields = () =>
     Object.entries(form.data.address_fields).reduce((isValid, [key, value]) => {
+      if (key === "state" && form.data.address_fields.country_code !== "US") return isValid;
       if (!value.trim()) {
         form.setError(`address_fields.${key}`, "Setting error message for highlighting the field in UI");
         return false;
