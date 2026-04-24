@@ -6,7 +6,7 @@ class InvoicePresenter::OrderInfo
 
   attr_reader :charge_info
 
-  def initialize(chargeable, address_fields:, additional_notes:, business_vat_id:)
+  def initialize(chargeable, address_fields:, additional_notes:, business_vat_id:, show_reverse_charge_note: nil)
     @chargeable = chargeable
     @address_fields = address_fields
     @additional_notes = additional_notes
@@ -14,6 +14,7 @@ class InvoicePresenter::OrderInfo
     @payment_info = receipt_presenter.payment_info
     @charge_info  = receipt_presenter.charge_info
     @business_vat_id = business_vat_id
+    @show_reverse_charge_note = show_reverse_charge_note
   end
 
   def heading
@@ -165,7 +166,7 @@ class InvoicePresenter::OrderInfo
   end
 
   def business_vat_id_note
-    return if business_vat_id_attribute.blank?
+    return if business_vat_id_attribute.blank? || show_reverse_charge_note == false
 
     value = \
       if Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(chargeable.purchase_sales_tax_info&.country_code) ||
@@ -189,7 +190,7 @@ class InvoicePresenter::OrderInfo
   end
 
   private
-    attr_reader :additional_notes, :business_vat_id, :chargeable, :address_fields, :payment_info
+    attr_reader :additional_notes, :business_vat_id, :chargeable, :address_fields, :payment_info, :show_reverse_charge_note
 
     def email_attribute
       {

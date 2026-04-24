@@ -47,6 +47,9 @@ export default function BillingSettingsPage() {
   const update = (patch: Partial<BillingDetail>) =>
     form.setData("billing_detail", { ...form.data.billing_detail, ...patch });
 
+  const fieldState = (name: keyof BillingDetail) =>
+    form.errors[`billing_detail.${name}`] ? ("danger" as const) : undefined;
+
   const changeCountry = (country_code: string) => {
     update({
       country_code,
@@ -60,25 +63,20 @@ export default function BillingSettingsPage() {
   };
 
   return (
-    <SettingsLayout
-      currentPage="billing"
-      pages={props.settings_pages}
-      onSave={handleSave}
-      canUpdate={!form.processing}
-    >
+    <SettingsLayout currentPage="billing" pages={props.settings_pages} onSave={handleSave} canUpdate={!form.processing}>
       <form>
         <FormSection
           header={
             <>
               <h2>Billing details</h2>
               <div>
-                Stored once and used to pre-fill your invoices. Businesses need the legal company name and VAT / business
-                ID to be able to book the invoice into their accounting system.
+                Stored once and used to pre-fill your invoices. Businesses need the legal company name and VAT /
+                business ID to be able to book the invoice into their accounting system.
               </div>
             </>
           }
         >
-          <Fieldset>
+          <Fieldset state={fieldState("full_name")}>
             <FieldsetTitle>
               <Label htmlFor={`${uid}-full_name`}>Full name</Label>
             </FieldsetTitle>
@@ -102,7 +100,7 @@ export default function BillingSettingsPage() {
             />
           </Fieldset>
 
-          <Fieldset>
+          <Fieldset state={fieldState("street_address")}>
             <FieldsetTitle>
               <Label htmlFor={`${uid}-street_address`}>Street address</Label>
             </FieldsetTitle>
@@ -121,7 +119,7 @@ export default function BillingSettingsPage() {
               gridTemplateColumns: isUsAddress ? "2fr 1fr 1fr" : "1fr 1fr",
             }}
           >
-            <Fieldset>
+            <Fieldset state={fieldState("city")}>
               <Label htmlFor={`${uid}-city`}>City</Label>
               <Input
                 id={`${uid}-city`}
@@ -132,7 +130,7 @@ export default function BillingSettingsPage() {
             </Fieldset>
 
             {isUsAddress ? (
-              <Fieldset>
+              <Fieldset state={fieldState("state")}>
                 <Label htmlFor={`${uid}-state`}>State</Label>
                 <Input
                   id={`${uid}-state`}
@@ -143,7 +141,7 @@ export default function BillingSettingsPage() {
               </Fieldset>
             ) : null}
 
-            <Fieldset>
+            <Fieldset state={fieldState("zip_code")}>
               <Label htmlFor={`${uid}-zip_code`}>ZIP code</Label>
               <Input
                 id={`${uid}-zip_code`}
@@ -154,7 +152,7 @@ export default function BillingSettingsPage() {
             </Fieldset>
           </div>
 
-          <Fieldset>
+          <Fieldset state={fieldState("country_code")}>
             <Label htmlFor={`${uid}-country_code`}>Country</Label>
             <Select
               id={`${uid}-country_code`}

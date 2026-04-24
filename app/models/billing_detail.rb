@@ -17,7 +17,7 @@ class BillingDetail < ApplicationRecord
       full_name:,
       street_address:,
       city:,
-      state: state.to_s,
+      state: state.presence,
       zip_code:,
       country_code:,
     }

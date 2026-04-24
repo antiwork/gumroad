@@ -16,7 +16,8 @@ class InvoicePdfGenerator
       address_fields:,
       additional_notes: @billing_detail.additional_notes.to_s.strip.presence,
       business_vat_id: @billing_detail.business_id.presence,
-      buyer: @billing_detail.purchaser
+      buyer: @billing_detail.purchaser,
+      show_reverse_charge_note: false
     )
 
     invoice_html = ApplicationController.render(
