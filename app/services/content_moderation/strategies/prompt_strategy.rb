@@ -90,6 +90,9 @@ class ContentModeration::Strategies::PromptStrategy
         status: parsed["flagged"] ? "flagged" : "compliant",
         reasoning: parsed["reasoning"].to_s,
       }
+    rescue Faraday::BadRequestError => e
+      notify_openai_rejection(e, stage: "preset:#{preset[:name]}", images_sent: !preset[:skip_images])
+      { status: "compliant", reasoning: "" }
     rescue StandardError => e
       Rails.logger.error("ContentModeration::PromptStrategy preset evaluation error: #{e.message}")
       raise
@@ -118,9 +121,36 @@ class ContentModeration::Strategies::PromptStrategy
       parsed = JSON.parse(content)
 
       !parsed["uncertain"]
+    rescue Faraday::BadRequestError => e
+      notify_openai_rejection(e, stage: "uncertainty_check", images_sent: false)
+      false
     rescue StandardError => e
       Rails.logger.error("ContentModeration::PromptStrategy uncertainty check error: #{e.message}")
       raise
+    end
+
+    def notify_openai_rejection(error, stage:, images_sent:)
+      body = error.response&.dig(:body)
+      error_payload = body.is_a?(Hash) ? body["error"] : nil
+      error_message = error_payload.is_a?(Hash) ? error_payload["message"].to_s : body.to_s
+      error_code    = error_payload.is_a?(Hash) ? error_payload["code"] : nil
+      error_param   = error_payload.is_a?(Hash) ? error_payload["param"] : nil
+
+      Rails.logger.warn(
+        "ContentModeration::PromptStrategy OpenAI 400 on #{stage} (code=#{error_code}): #{error_message[0, 500]}"
+      )
+
+      ErrorNotifier.notify(
+        "ContentModeration::PromptStrategy OpenAI rejected input",
+        stage: stage,
+        model: MODEL,
+        openai_error_code: error_code,
+        openai_error_param: error_param,
+        openai_error_message: error_message[0, 1000],
+        text_length: @text.to_s.length,
+        image_url_count: @image_urls.size,
+        image_urls_sent: images_sent ? @image_urls.first(20) : [],
+      )
     end
 
     def build_messages(rules, skip_images: false)
