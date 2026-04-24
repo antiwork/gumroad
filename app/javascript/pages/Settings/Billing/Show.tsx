@@ -69,10 +69,7 @@ export default function BillingSettingsPage() {
           header={
             <>
               <h2>Billing details</h2>
-              <div>
-                Stored once and used to pre-fill your invoices. Businesses need the legal company name and VAT /
-                business ID to be able to book the invoice into their accounting system.
-              </div>
+              <div>Stored once and used to pre-fill your invoices.</div>
             </>
           }
         >
@@ -198,7 +195,7 @@ export default function BillingSettingsPage() {
           <Switch
             checked={form.data.billing_detail.auto_email_invoice_enabled}
             onChange={(e) => update({ auto_email_invoice_enabled: e.target.checked })}
-            label="Email me a VAT-compliant invoice PDF with every purchase receipt"
+            label="Email me an invoice PDF with every purchase receipt"
           />
         </FormSection>
       </form>

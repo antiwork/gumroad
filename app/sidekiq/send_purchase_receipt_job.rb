@@ -16,6 +16,5 @@ class SendPurchaseReceiptJob
     return if purchase.is_bundle_product_purchase?
 
     CustomerMailer.receipt(purchase_id).deliver_now
-    SendAutoInvoiceEmailJob.perform_async(purchase.id, nil) if AutoInvoiceEligibility.eligible?(purchase)
   end
 end
