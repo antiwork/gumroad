@@ -1,0 +1,117 @@
+name: Test Subset
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_files:
+        description: 'Comma-separated list of test files to run'
+        required: true
+        type: string
+      pr_number:
+        description: 'PR number for tracking'
+        required: true
+        type: string
+      run_name:
+        description: 'Run name for webhook matching'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build images
+    runs-on: ubicloud-standard-4
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Pull test image
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: docker pull "gumroadteam/web:test-${{ github.sha }}"
+
+  test:
+    name: ${{ inputs.run_name || format('tc-pr-{0}', inputs.pr_number) }}
+    runs-on: ubicloud-standard-4
+    needs: build
+    env:
+      COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_subset
+      WEB_REPO: gumroadteam/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 120
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Start services and pull test image
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            docker compose -f docker/docker-compose-test-and-ci.yml up -d
+            docker pull "$WEB_REPO:test-${{ github.sha }}"
+
+      - name: Wait for services
+        run: |
+          docker compose -f docker/docker-compose-test-and-ci.yml exec -T db mysqladmin ping --wait=30 -uroot -ppassword || true
+          sleep 5
+
+      - name: Run test subset
+        run: |
+          TEST_FILES="${{ inputs.test_files }}"
+          # Convert comma-separated to space-separated for rspec
+          TEST_FILES_SPACED=$(echo "$TEST_FILES" | tr ',' ' ')
+
+          docker run --rm \
+            --network ${COMPOSE_PROJECT_NAME}_default \
+            -e RAILS_ENV=test \
+            -e CI=true \
+            -e DATABASE_HOST=db \
+            -e REDIS_URL=redis://redis:6379/0 \
+            -e MEMCACHE_SERVERS=memcached:11211 \
+            -e ELASTICSEARCH_URL=http://opensearch:9200 \
+            "$WEB_REPO:test-${{ github.sha }}" \
+            /usr/local/bin/gosu app bundle exec rspec \
+              --format json --out /tmp/test-results.json \
+              --format progress \
+              $TEST_FILES_SPACED
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-confidence-results
+          path: /tmp/test-results.json
+          if-no-files-found: ignore
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true
+          docker rm -f $(docker ps -aq -f name=${{ env.COMPOSE_PROJECT_NAME }}) 2>/dev/null || true
