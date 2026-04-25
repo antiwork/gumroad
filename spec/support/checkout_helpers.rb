@@ -66,36 +66,29 @@ module CheckoutHelpers
       fill_in "A personalized message (optional)", with: gift[:note]
     end
 
-    fill_in "Business VAT ID (optional)", with: vat_id if vat_id.present?
-    fill_in "Business ABN ID (optional)", with: abn_id if abn_id.present?
-    fill_in "Business MVA ID (optional)", with: mva_id if mva_id.present?
-    fill_in "Business GST ID (optional)", with: gst_id if gst_id.present?
-    fill_in "Business QST ID (optional)", with: qst_id if qst_id.present?
-    fill_in "Business CN ID (optional)", with: cn_id if cn_id.present?
-    fill_in "Business IRD ID (optional)", with: ird_id if ird_id.present?
-    fill_in "Business SST ID (optional)", with: sst_id if sst_id.present?
-    fill_in "Business VSK ID (optional)", with: vsk_id if vsk_id.present?
-    fill_in "Business TRN ID (optional)", with: trn_id if trn_id.present?
-    fill_in "Business UNP ID (optional)", with: unp_id if unp_id.present?
-    fill_in "Business RUT ID (optional)", with: rut_id if rut_id.present?
-    fill_in "Business NIT ID (optional)", with: nit_id if nit_id.present?
-    fill_in "Business CPJ ID (optional)", with: cpj_id if cpj_id.present?
-    fill_in "Business RUC ID (optional)", with: ruc_id if ruc_id.present?
-    fill_in "Business TN ID (optional)", with: tn_id if tn_id.present?
-    fill_in "Business TIN ID (optional)", with: tin_id if tin_id.present?
-    fill_in "Business RFC ID (optional)", with: rfc_id if rfc_id.present?
-    fill_in "Business INN ID (optional)", with: inn_id if inn_id.present?
-    fill_in "Business PIB ID (optional)", with: pib_id if pib_id.present?
-    fill_in "Business BRN ID (optional)", with: brn_id if brn_id.present?
-    fill_in "Business VKN ID (optional)", with: vkn_id if vkn_id.present?
-    fill_in "Business EDRPOU ID (optional)", with: edrpou_id if edrpou_id.present?
-    fill_in "Business MST ID (optional)", with: mst_id if mst_id.present?
-    fill_in "Business KRA PIN (optional)", with: kra_pin_id if kra_pin_id.present?
-    fill_in "Business FIRS TIN (optional)", with: firs_tin_id if firs_tin_id.present?
-    fill_in "Business TRA TIN (optional)", with: tra_tin if tra_tin.present?
-    fill_in "Business VAT Number (optional)", with: oman_vat_number if oman_vat_number.present?
+    if country.present?
+      select country, from: "Country"
+      wait_for_checkout_surcharges_loaded
+    end
 
-    select country, from: "Country" if country.present?
+    tax_id_fields = [
+      ["Business VAT ID (optional)", vat_id], ["Business ABN ID (optional)", abn_id],
+      ["Business MVA ID (optional)", mva_id], ["Business GST ID (optional)", gst_id],
+      ["Business QST ID (optional)", qst_id], ["Business CN ID (optional)", cn_id],
+      ["Business IRD ID (optional)", ird_id], ["Business SST ID (optional)", sst_id],
+      ["Business VSK ID (optional)", vsk_id], ["Business TRN ID (optional)", trn_id],
+      ["Business UNP ID (optional)", unp_id], ["Business RUT ID (optional)", rut_id],
+      ["Business NIT ID (optional)", nit_id], ["Business CPJ ID (optional)", cpj_id],
+      ["Business RUC ID (optional)", ruc_id], ["Business TN ID (optional)", tn_id],
+      ["Business TIN ID (optional)", tin_id], ["Business RFC ID (optional)", rfc_id],
+      ["Business INN ID (optional)", inn_id], ["Business PIB ID (optional)", pib_id],
+      ["Business BRN ID (optional)", brn_id], ["Business VKN ID (optional)", vkn_id],
+      ["Business EDRPOU ID (optional)", edrpou_id], ["Business MST ID (optional)", mst_id],
+      ["Business KRA PIN (optional)", kra_pin_id], ["Business FIRS TIN (optional)", firs_tin_id],
+      ["Business TRA TIN (optional)", tra_tin], ["Business VAT Number (optional)", oman_vat_number],
+    ]
+    tax_id_filled = tax_id_fields.any? { |label, value| value.present? && (fill_in(label, with: value); true) }
+    wait_for_checkout_surcharges_loaded if tax_id_filled
 
     if address.present? || product.is_physical || product.require_shipping?
       address = {} if address.nil?
@@ -114,8 +107,12 @@ module CheckoutHelpers
       end
 
       fill_in country_value == "US" ? "ZIP code" : "Postal", with: address[:zip_code] || "94107"
+      wait_for_checkout_surcharges_loaded
     else
-      fill_in "ZIP code", with: zip_code if zip_code.present? && !is_free
+      if zip_code.present? && !is_free
+        fill_in "ZIP code", with: zip_code
+        wait_for_checkout_surcharges_loaded
+      end
     end
 
     if offer_code.present?
