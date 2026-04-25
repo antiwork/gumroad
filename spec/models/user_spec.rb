@@ -770,19 +770,19 @@ describe User, :vcr do
 
     context "when user can be deactivated" do
       it "deactivates the user" do
-        delete_at = Time.current
+        freeze_time do
+          delete_at = Time.current
 
-        travel_to(delete_at) do
           return_value = @user.reload.deactivate!
           expect(return_value).to be_truthy
-        end
 
-        expect(@user.reload.read_attribute(:username)).to be_nil
-        expect(@user.deleted_at.to_i).to eq(delete_at.to_i)
-        expect(@product.reload.deleted_at.to_i).to eq(delete_at.to_i)
-        expect(@installment.reload.deleted_at.to_i).to eq(delete_at.to_i)
-        expect(@user.user_compliance_infos.pluck(:deleted_at).map(&:to_i)).to eq([delete_at.to_i, delete_at.to_i])
-        expect(@bank_account.reload.deleted_at.to_i).to eq(delete_at.to_i)
+          expect(@user.reload.read_attribute(:username)).to be_nil
+          expect(@user.deleted_at.to_i).to eq(delete_at.to_i)
+          expect(@product.reload.deleted_at.to_i).to eq(delete_at.to_i)
+          expect(@installment.reload.deleted_at.to_i).to eq(delete_at.to_i)
+          expect(@user.user_compliance_infos.pluck(:deleted_at).map(&:to_i)).to eq([delete_at.to_i, delete_at.to_i])
+          expect(@bank_account.reload.deleted_at.to_i).to eq(delete_at.to_i)
+        end
       end
 
       it "invalidates all the active sessions" do

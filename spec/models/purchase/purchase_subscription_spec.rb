@@ -23,8 +23,9 @@ describe "PurchaseSubscription", :vcr do
         ]
         @product = create(:membership_product_with_preset_tiered_pricing, recurrence_price_values: tier_prices)
         @seller = @product.user
+        @merchant_account = create(:merchant_account, user: @seller)
         @buyer = create(:user)
-        @purchase = create(:membership_purchase, link: @product, seller: @seller, subscription: @subscription, price_cents: 200, purchase_state: "in_progress")
+        @purchase = create(:membership_purchase, link: @product, seller: @seller, subscription: @subscription, price_cents: 200, purchase_state: "in_progress", merchant_account: @merchant_account)
         @subscription = @purchase.subscription
         @buyer = @purchase.purchaser
       end
@@ -58,10 +59,10 @@ describe "PurchaseSubscription", :vcr do
               freeze_time do
                 payment_option = @subscription.last_payment_option
                 payment_option.update!(price: @product.prices.find_by(recurrence: "quarterly"))
-                reminder_time = 3.months.from_now - BasePrice::Recurrence::RECURRENCE_TO_RENEWAL_REMINDER_EMAIL_DAYS["quarterly"]
 
                 @purchase.update_balance_and_mark_successful!
 
+                reminder_time = @subscription.reload.send_renewal_reminder_at
                 expect(RecurringChargeReminderWorker).to have_enqueued_sidekiq_job(@subscription.id).at(reminder_time)
               end
             end
@@ -70,10 +71,10 @@ describe "PurchaseSubscription", :vcr do
               freeze_time do
                 payment_option = @subscription.last_payment_option
                 payment_option.update!(price: @product.prices.find_by(recurrence: "biannually"))
-                reminder_time = 6.months.from_now - BasePrice::Recurrence::RECURRENCE_TO_RENEWAL_REMINDER_EMAIL_DAYS["biannually"]
 
                 @purchase.update_balance_and_mark_successful!
 
+                reminder_time = @subscription.reload.send_renewal_reminder_at
                 expect(RecurringChargeReminderWorker).to have_enqueued_sidekiq_job(@subscription.id).at(reminder_time)
               end
             end
@@ -82,10 +83,10 @@ describe "PurchaseSubscription", :vcr do
               freeze_time do
                 payment_option = @subscription.last_payment_option
                 payment_option.update!(price: @product.prices.find_by(recurrence: "yearly"))
-                reminder_time = 1.year.from_now - BasePrice::Recurrence::RECURRENCE_TO_RENEWAL_REMINDER_EMAIL_DAYS["yearly"]
 
                 @purchase.update_balance_and_mark_successful!
 
+                reminder_time = @subscription.reload.send_renewal_reminder_at
                 expect(RecurringChargeReminderWorker).to have_enqueued_sidekiq_job(@subscription.id).at(reminder_time)
               end
             end
@@ -94,10 +95,10 @@ describe "PurchaseSubscription", :vcr do
               freeze_time do
                 payment_option = @subscription.last_payment_option
                 payment_option.update!(price: @product.prices.find_by(recurrence: "every_two_years"))
-                reminder_time = 2.years.from_now - BasePrice::Recurrence::RECURRENCE_TO_RENEWAL_REMINDER_EMAIL_DAYS["every_two_years"]
 
                 @purchase.update_balance_and_mark_successful!
 
+                reminder_time = @subscription.reload.send_renewal_reminder_at
                 expect(RecurringChargeReminderWorker).to have_enqueued_sidekiq_job(@subscription.id).at(reminder_time)
               end
             end
@@ -106,10 +107,10 @@ describe "PurchaseSubscription", :vcr do
               freeze_time do
                 payment_option = @subscription.last_payment_option
                 payment_option.update!(price: @product.prices.find_by(recurrence: "monthly"))
-                reminder_time = 1.month.from_now - BasePrice::Recurrence::RECURRENCE_TO_RENEWAL_REMINDER_EMAIL_DAYS["monthly"]
 
                 @purchase.update_balance_and_mark_successful!
 
+                reminder_time = @subscription.reload.send_renewal_reminder_at
                 expect(RecurringChargeReminderWorker).to have_enqueued_sidekiq_job(@subscription.id).at(reminder_time)
               end
             end
