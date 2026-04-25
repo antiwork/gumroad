@@ -78,7 +78,11 @@ class CreatorHomePresenter
       tax_forms = []
       show_1099_download_notice = seller.user_tax_forms.for_year(Time.current.prev_year.year).exists?
     else
-      tax_forms = (Time.current.year.downto(seller.created_at.year)).each_with_object({}) do |year, hash|
+      # Limit to the last 4 tax years to avoid expensive per-year eligibility
+      # queries that can cause request timeouts for long-lived accounts.
+      max_tax_form_years = 4
+      oldest_year = [seller.created_at.year, Time.current.year - max_tax_form_years + 1].max
+      tax_forms = (Time.current.year.downto(oldest_year)).each_with_object({}) do |year, hash|
         url = seller.eligible_for_1099?(year) ? seller.tax_form_1099_download_url(year: year) : nil
         hash[year] = url if url.present?
       end
