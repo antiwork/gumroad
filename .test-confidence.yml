@@ -1,0 +1,7 @@
+# Test Confidence configuration
+threshold: 0.9999
+paths:
+  "app/billing/**": 0.99999
+  "app/payments/**": 0.99999
+  "app/models/purchase.rb": 0.99999
+  "docs/**": 0.95
