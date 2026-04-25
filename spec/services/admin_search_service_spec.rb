@@ -4,6 +4,11 @@ require "spec_helper"
 
 describe AdminSearchService do
   describe "#search_purchases" do
+    it "wraps queries in a max execution time timeout" do
+      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: AdminSearchService::MAX_QUERY_EXECUTION_SECONDS).and_call_original
+      AdminSearchService.new.search_purchases(query: "test@example.com")
+    end
+
     it "returns no Purchases if query is invalid" do
       purchases = AdminSearchService.new.search_purchases(query: "invalidquery")
 

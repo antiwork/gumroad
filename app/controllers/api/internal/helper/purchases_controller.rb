@@ -68,6 +68,8 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
     render json: { success: true, message: "Purchase found", purchase: purchase_json }
   rescue AdminSearchService::InvalidDateError
     render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
+  rescue WithMaxExecutionTime::QueryTimeoutError
+    render json: { success: false, message: "Search timed out. Please narrow your search criteria." }, status: :request_timeout
   end
 
   def resend_receipt_by_number
