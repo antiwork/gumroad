@@ -91,6 +91,17 @@ describe ThumbnailsController, :vcr do
       end
     end
 
+    it "returns an error when thumbnail analysis times out" do
+      allow_any_instance_of(ActiveStorage::Blob).to receive(:analyze).and_raise(Timeout::Error)
+
+      expect do
+        post(:create, params: { link_id: product.unique_permalink, thumbnail: { signed_blob_id: blob.signed_id }, format: :json })
+      end.not_to change { Thumbnail.count }
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq({ "success" => false, "error" => "Thumbnail processing took too long, please try again with a smaller image." })
+    end
+
     it "returns an error when the file is not found in storage" do
       allow_any_instance_of(ActiveStorage::Blob).to receive(:analyze).and_raise(ActiveStorage::FileNotFoundError)
 
