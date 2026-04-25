@@ -206,3 +206,4 @@ describe "Purchase inventory counter cache" do
     end
   end
 end
+
