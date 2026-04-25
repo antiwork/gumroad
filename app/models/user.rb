@@ -1244,3 +1244,5 @@ class User < ApplicationRecord
       value.present? && value.to_s == value.to_i.to_s
     end
 end
+
+# Test confidence AI ranking integration test
