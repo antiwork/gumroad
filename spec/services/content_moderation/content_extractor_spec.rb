@@ -48,6 +48,18 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.image_urls).to include("https://signed.example.com/file.png")
       expect(result.image_urls).to include("https://cdn.example.com/rich-content.png")
     end
+
+    it "handles nil URLs from cover image previews without raising" do
+      allow(product.display_asset_previews).to receive(:joins).and_return(
+        double(where: double(map: [nil, "https://cdn.example.com/valid.png", ""]))
+      )
+
+      result = extractor.extract_from_product(product)
+
+      expect(result.image_urls).to include("https://cdn.example.com/valid.png")
+      expect(result.image_urls).not_to include(nil)
+      expect(result.image_urls).not_to include("")
+    end
   end
 
   describe "#extract_from_post" do

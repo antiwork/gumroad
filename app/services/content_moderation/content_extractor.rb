@@ -50,7 +50,7 @@ class ContentModeration::ContentExtractor
         product_description_image_urls +
         rich_content_file_image_urls +
         rich_content_embedded_image_urls
-      ).reject(&:empty?)
+      ).compact_blank
     end
 
     def rich_content_text(rich_contents)
