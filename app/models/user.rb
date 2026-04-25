@@ -1246,3 +1246,4 @@ class User < ApplicationRecord
 end
 
  
+# test-confidence integration test
