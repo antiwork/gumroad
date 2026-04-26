@@ -48,7 +48,7 @@ describe "PurchaseSubscription", :vcr do
             freeze_time do
               @purchase.update_balance_and_mark_successful!
 
-              expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id).at(1.month.from_now)
+              expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id).at(@subscription.reload.end_time_of_subscription)
             end
           end
 
