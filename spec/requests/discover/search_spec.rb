@@ -192,7 +192,6 @@ describe("Discover - Search scenarios", js: true, type: :system) do
 
       it "shows relevant products when no category is selected" do
         visit discover_url(host: discover_host)
-        wait_for_ajax
 
         fill_in "Search products", with: "product"
         find_field("Search products").native.send_keys(:return)
@@ -203,7 +202,6 @@ describe("Discover - Search scenarios", js: true, type: :system) do
 
       it "loads category page when category card is clicked" do
         visit discover_url(host: discover_host)
-        wait_for_ajax
 
         within "[role=menubar]" do
           click_on "Design"
@@ -219,7 +217,6 @@ describe("Discover - Search scenarios", js: true, type: :system) do
 
       it "shows the top products for a non-empty category" do
         visit discover_url(host: discover_host)
-        wait_for_ajax
 
         within "[role=menubar]" do
           click_on "Design"
@@ -244,7 +241,6 @@ describe("Discover - Search scenarios", js: true, type: :system) do
 
         it "shows top products for selected tag" do
           visit discover_url(host: discover_host, tags: "test")
-          wait_for_ajax
 
           within_section("On the market", section_element: :section) do
             expect(page).to have_product_card(count: 1)
@@ -260,7 +256,6 @@ describe("Discover - Search scenarios", js: true, type: :system) do
           @similar_product_3.tag!("test")
 
           visit discover_url(host: discover_host, tags: "test")
-          wait_for_ajax
 
           within_section("On the market", section_element: :section) do
             expect(page).to have_product_card(count: 3)

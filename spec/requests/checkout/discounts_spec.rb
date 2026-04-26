@@ -826,7 +826,6 @@ describe("Checkout discounts page", type: :system, js: true) do
       within find("[aria-label='Pagination']") do
         expect(find_button("1")["aria-current"]).to eq("page")
         click_on "2"
-        wait_for_ajax
         expect(find_button("1")["aria-current"]).to be_nil
         expect(find_button("2")["aria-current"]).to eq("page")
         expect(page).to have_current_path(checkout_discounts_path({ page: 2 }))
@@ -863,7 +862,6 @@ describe("Checkout discounts page", type: :system, js: true) do
       within find("[aria-label='Pagination']") do
         expect(find_button("1")["aria-current"]).to eq("page")
         click_on "2"
-        wait_for_ajax
         expect(find_button("1")["aria-current"]).to be_nil
         expect(find_button("2")["aria-current"]).to eq("page")
         page.go_back

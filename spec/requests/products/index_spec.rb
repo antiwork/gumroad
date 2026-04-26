@@ -359,7 +359,6 @@ describe "Products Page Scenario", type: :system, js: true do
 
       # Page 2
       click_on "Next"
-      wait_for_ajax
 
       expect(page).not_to have_nth_table_row_record(1, membership3.name, exact_text: false)
       expect(page).to have_nth_table_row_record(1, membership2.name, exact_text: false)
@@ -372,7 +371,6 @@ describe "Products Page Scenario", type: :system, js: true do
 
       # Page 3
       click_on "3"
-      wait_for_ajax
 
       expect(page).not_to have_nth_table_row_record(1, membership3.name, exact_text: false)
       expect(page).not_to have_nth_table_row_record(1, membership2.name, exact_text: false)
@@ -405,13 +403,11 @@ describe "Products Page Scenario", type: :system, js: true do
 
       # Page 2
       click_on "Next"
-      wait_for_ajax
 
       expect(page).to have_selector(:table_row, { "Name" => products[1].name })
 
       # Page 15
       click_on "15"
-      wait_for_ajax
 
       expect(page).to have_selector(:table_row, { "Name" => products[14].name })
       expect(page).to have_button("7", exact: true)
@@ -421,13 +417,11 @@ describe "Products Page Scenario", type: :system, js: true do
 
       # Page 14
       click_on "Previous"
-      wait_for_ajax
 
       expect(page).to have_selector(:table_row, { "Name" => products[13].name })
 
       # Page 7
       click_on "7"
-      wait_for_ajax
 
       expect(page).to have_selector(:table_row, { "Name" => products[6].name })
       expect(page).to have_button("3", exact: true)

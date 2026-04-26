@@ -77,7 +77,6 @@ describe("Discover", js: true, type: :system) do
           expect(page).to have_product_card(count: 1)
           find_product_card(@similar_product_1).click
         end
-        wait_for_ajax
         expect(page).to have_current_path(/^\/l\/#{@similar_product_1.unique_permalink}\?layout=discover&recommended_by=discover/)
       end
     end
@@ -99,7 +98,6 @@ describe("Discover", js: true, type: :system) do
         Link.import(refresh: true, force: true)
 
         visit discover_url(host: discover_host, query: "gumstein")
-        wait_for_ajax
 
         expect(page).to have_product_card(count: 5)
 
@@ -107,11 +105,9 @@ describe("Discover", js: true, type: :system) do
 
         # test single word term
         check "action (2)"
-        wait_for_ajax
         expect(page).to have_product_card(count: 2)
 
         uncheck "action (2)"
-        wait_for_ajax
         expect(page).to have_product_card(count: 5)
 
         within "[role=menubar]" do
@@ -120,20 +116,17 @@ describe("Discover", js: true, type: :system) do
 
         # test multi word term
         check "multi word tag (1)"
-        wait_for_ajax
         within_section "On the market" do
           expect(page).to have_product_card(count: 1)
         end
 
         # test many multi word tags
         check "another tag (1)"
-        wait_for_ajax
         within_section "On the market" do
           expect(page).to have_product_card(count: 1)
         end
 
         uncheck "another tag (1)"
-        wait_for_ajax
         uncheck "multi word tag (1)"
 
         within_section "On the market" do
@@ -155,7 +148,6 @@ describe("Discover", js: true, type: :system) do
         Link.__elasticsearch__.refresh_index!
 
         visit discover_url(host: discover_host, tags: "action,book", query: @product.name.split(" ")[0])
-        wait_for_ajax
 
         expect(page).to have_product_card(count: 1)
         select_disclosure "Tags" do
@@ -177,7 +169,6 @@ describe("Discover", js: true, type: :system) do
     it "displays top wishlists when there are no recommended products" do
       login_as @buyer
       visit discover_url(host: discover_host)
-      wait_for_ajax
 
       expect(page).not_to have_text("Recommended")
       expect(page).to have_text("Featured products")
@@ -209,7 +200,6 @@ describe("Discover", js: true, type: :system) do
 
       login_as @buyer
       visit discover_url(host: discover_host)
-      wait_for_ajax
 
       within_section "Wishlists you might like", section_element: :section do
         expect_product_cards_in_order([related_wishlist, *wishlists.first(3)])
@@ -219,13 +209,11 @@ describe("Discover", js: true, type: :system) do
     it "allows users to follow and unfollow a wishlist from the discover page" do
       login_as @buyer
       visit discover_url(host: discover_host)
-      wait_for_ajax
 
       within_section "Wishlists you might like", section_element: :section do
         wishlist_card = find_product_card(wishlists.first)
         within wishlist_card do
           click_on "Follow"
-          wait_for_ajax
           expect(page).to have_button("Unfollow")
         end
       end
@@ -355,7 +343,6 @@ describe("Discover", js: true, type: :system) do
         expect(page).to_not have_product_card(text: "product 40")
 
         click_button "Load more"
-        wait_for_ajax
         expect(page).to have_product_card(count: 45)
         expect(page).to have_product_card(text: "product 37")
         expect(page).to have_product_card(text: "product 38")
@@ -364,7 +351,6 @@ describe("Discover", js: true, type: :system) do
         expect(page).to_not have_product_card(text: "product 46")
 
         click_button "Load more"
-        wait_for_ajax
         expect(page).to have_product_card(count: 54)
         expect(page).to have_product_card(text: "product 46")
         expect(page).to have_product_card(text: "product 54")

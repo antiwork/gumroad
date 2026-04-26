@@ -100,28 +100,22 @@ describe("Product panel on creator profile - Sort/Filter", type: :system, js: tr
       visit("/#{@creator.username}")
       toggle_disclosure "Contains"
       check "pdf (1)"
-      wait_for_ajax
       expect(page).to have_product_card(count: 1)
       expect(page).to have_product_card(text: "Digital Product A")
 
       check "zip (2)"
-      wait_for_ajax
       # filetype filters are additive, e.g. if both PDF + ZIP are selected we should be
       # seeing A (PDF) and B, C (ZIP)
       expect_product_cards_in_order([@a, @b, @c])
 
       uncheck "zip (2)"
-      wait_for_ajax
       uncheck "pdf (1)"
-      wait_for_ajax
 
       check "mp3 (1)"
-      wait_for_ajax
       expect(page).to have_product_card(count: 1)
       expect(page).to have_product_card(text: "Digital Subscription C")
 
       uncheck "mp3 (1)"
-      wait_for_ajax
       expect_product_cards_in_order([@a, @b, @c, @d, @e, @f, @g, @h, @i])
     end
   end
@@ -161,7 +155,6 @@ describe("Product panel on creator profile - Sort/Filter", type: :system, js: tr
     expect_product_cards_in_order([@a, @b, @c, @d, @e, @f, @g, @h, @i])
     toggle_disclosure "Tags"
     check "audio (3)"
-    wait_for_ajax
     expect_product_cards_in_order([@a, @d, @e])
     fill_in "Search products", with: "digital\n"
     sleep 2 # because there's an explicit delay in the javascript handler

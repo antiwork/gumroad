@@ -51,7 +51,6 @@ describe("Product Edit - Publishing Scenario", type: :system, js: true) do
     end
 
     it "allows user to mark their product as adult" do
-      wait_for_ajax
       select_tab "Share"
       check "This product contains content meant only for adults, including the preview"
       expect do
@@ -60,7 +59,6 @@ describe("Product Edit - Publishing Scenario", type: :system, js: true) do
     end
 
     it "allows user to toggle product review display on their product" do
-      wait_for_ajax
       select_tab "Share"
       uncheck "Display your product's 1-5 star rating to prospective customers"
       expect(page).not_to have_text("Ratings")

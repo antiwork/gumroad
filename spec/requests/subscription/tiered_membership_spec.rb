@@ -28,23 +28,18 @@ describe "Tiered Membership Spec", type: :system, js: true do
     visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
     choose "Second Tier"
-    wait_for_ajax
     expect(page).to have_text "You'll be charged US$6.55"
 
     choose "Tier 3"
-    wait_for_ajax
     expect(page).not_to have_text "You'll be charged"
 
     choose "First Tier"
-    wait_for_ajax
     expect(page).not_to have_text "You'll be charged"
 
     select("Yearly", from: "Recurrence")
-    wait_for_ajax
     expect(page).to have_text "You'll be charged US$6.05"
 
     select("Monthly", from: "Recurrence")
-    wait_for_ajax
     expect(page).not_to have_text "You'll be charged"
   end
 
@@ -180,23 +175,18 @@ describe "Tiered Membership Spec", type: :system, js: true do
       visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
       choose "Second Tier"
-      wait_for_ajax
       expect(page).to have_text "You'll be charged US$10.50"
 
       choose "Tier 3"
-      wait_for_ajax
       expect(page).to have_text "You'll be charged US$4"
 
       choose "First Tier"
-      wait_for_ajax
       expect(page).to have_text "You'll be charged US$5.99"
 
       select("Yearly", from: "Recurrence")
-      wait_for_ajax
       expect(page).to have_text "You'll be charged US$10"
 
       select("Monthly", from: "Recurrence")
-      wait_for_ajax
       expect(page).to have_text "You'll be charged US$3"
     end
 

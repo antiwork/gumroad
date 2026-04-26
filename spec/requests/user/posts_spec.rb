@@ -585,7 +585,6 @@ describe("Posts on seller profile", type: :system, js: true) do
           end
 
           click_on "Load more comments"
-          wait_for_ajax
           expect(page).to have_selector("article", count: 8)
           within all("article")[2] do
             expect(page).to have_text(another_comment.content)

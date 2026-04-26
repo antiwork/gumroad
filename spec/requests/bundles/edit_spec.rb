@@ -267,7 +267,6 @@ describe("Bundle edit page", type: :system, js: true) do
 
     it "loads more products when scrolled to the bottom" do
       visit edit_bundle_content_path(bundle.external_id)
-      wait_for_ajax
       expect(page).to_not have_selector("[role='progressbar']")
       expect(page).to_not have_field("Product 8")
       scroll_to find_field("Product 7")

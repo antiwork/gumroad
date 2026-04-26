@@ -33,7 +33,6 @@ describe "UTM links", :js, type: :system do
 
         visit dashboard_utm_links_path
 
-        wait_for_ajax
         expect(page).to have_table_row({ "Link" => utm_link.title, "Source" => utm_link.utm_source, "Medium" => utm_link.utm_medium, "Campaign" => utm_link.utm_campaign, "Destination" => "Profile page", "Clicks" => "3", "Revenue" => "$10", "Conversion" => "33.33%" })
 
         within find(:table_row, { "Link" => utm_link.title }) do
@@ -53,7 +52,6 @@ describe "UTM links", :js, type: :system do
         it "shows the selected UTM link details" do
           visit dashboard_utm_links_path
 
-          wait_for_ajax
           find(:table_row, { "Link" => utm_link.title, "Clicks" => "3", "Conversion" => "66.67%" }).click
           wait_for_ajax
           within_modal utm_link.title do
@@ -767,7 +765,6 @@ describe "UTM links", :js, type: :system do
       login_as(seller)
 
       visit dashboard_utm_links_path
-      wait_for_ajax
       find(:table_row, { "Link" => utm_link.title, "Clicks" => "1", "Revenue" => "$10", "Conversion" => "100%" }).click
       within_section "Statistics" do
         expect(page).to have_text("Clicks 1", normalize_ws: true)
@@ -864,7 +861,6 @@ describe "UTM links", :js, type: :system do
       create(:seller_profile, seller: seller2, json_data: { tabs: [{ name: "Tab", sections: [seller2_section.id] }] })
 
       visit seller1_utm_link.short_url
-      wait_for_ajax
       seller1_utm_link_visit = seller1_utm_link.utm_link_visits.last
       click_on "Product 1 by Seller 1"
       click_on "Add to cart"

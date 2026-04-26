@@ -536,7 +536,6 @@ describe("Product Edit Scenario", type: :system, js: true) do
     context "without any tier members subscribed" do
       it "does not display a text count" do
         visit edit_link_path(@product.unique_permalink)
-        wait_for_ajax
         expect(page).to_not have_text("0 supporters")
       end
     end
@@ -551,7 +550,6 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
       it "shows singular supporter version with count" do
         visit edit_link_path(@product.unique_permalink)
-        wait_for_ajax
         expect(page).to have_text("1 supporter")
       end
     end
@@ -569,7 +567,6 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
       it "shows pluralized supporter version with count" do
         visit edit_link_path(@product.unique_permalink)
-        wait_for_ajax
         expect(page).to have_text("2 supporters")
       end
     end
@@ -645,31 +642,26 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
     it "doesn't show the option to show supporter count for non-membership products" do
       visit "/products/#{@non_membership_product.unique_permalink}/edit"
-      wait_for_ajax
       expect(page).not_to have_text("Publicly show the number of members on your product page")
     end
 
     it "shows the option to show sales count for non-membership products" do
       visit "/products/#{@non_membership_product.unique_permalink}/edit"
-      wait_for_ajax
       expect(page).to have_text("Publicly show the number of sales on your product page")
     end
 
     it "shows the option to show supporter count for membership products" do
       visit "/products/#{@membership_product.unique_permalink}/edit"
-      wait_for_ajax
       expect(page).to have_text("Publicly show the number of members on your product page")
     end
 
     it "doesn't show the option to show sales count for membership products" do
       visit "/products/#{@membership_product.unique_permalink}/edit"
-      wait_for_ajax
       expect(page).not_to have_text("Publicly show the number of sales on your product page")
     end
 
     it "doesn't show the option to change currency code for membership products" do
       visit "/products/#{@membership_product.unique_permalink}/edit"
-      wait_for_ajax
       expect(page).not_to have_select("Currency", visible: :all)
     end
   end

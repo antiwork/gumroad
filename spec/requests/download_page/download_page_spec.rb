@@ -998,7 +998,6 @@ describe("Download Page", type: :system, js: true) do
       expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Page 1")
 
       click_on "Page 2"
-      wait_for_ajax
 
       expect(page).to have_text("Content for page 2")
       expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Page 2")
@@ -1009,7 +1008,6 @@ describe("Download Page", type: :system, js: true) do
       expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Page 2")
 
       click_on "Next"
-      wait_for_ajax
 
       expect(page).to have_text("Content for page 3")
       expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Page 3")
@@ -1037,7 +1035,6 @@ describe("Download Page", type: :system, js: true) do
         expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Page 1")
 
         click_on "Page 2"
-        wait_for_ajax
 
         expect(page).to have_text("Content for page 2")
         expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Page 2")

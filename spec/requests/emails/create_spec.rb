@@ -27,9 +27,7 @@ describe("Email Creation Flow", :js, type: :system) do
 
     visit emails_path
 
-    wait_for_ajax
     click_on "New email", match: :first
-    wait_for_ajax
 
     expect(page).to have_content("New email")
     # Ensure that the "Everyone" audience type is selected by default
@@ -38,7 +36,6 @@ describe("Email Creation Flow", :js, type: :system) do
 
     # It updates the audience count when the audience type is changed
     choose "Customers only"
-    wait_for_ajax
     expect(page).to have_text("Audience 2 / 3", normalize_ws: true)
 
     # It shows the correct options for bought/not bought filters and updates the audience count when those are changed
@@ -48,7 +45,6 @@ describe("Email Creation Flow", :js, type: :system) do
     wait_for_ajax
     expect(page).to have_text("Audience 2 / 3", normalize_ws: true)
     select_combo_box_option "Another product", from: "Has not yet bought"
-    wait_for_ajax
     expect(page).to have_text("Audience 1 / 3", normalize_ws: true)
 
     fill_in "Paid more than", with: "1"
@@ -64,7 +60,6 @@ describe("Email Creation Flow", :js, type: :system) do
     end
 
     select "Canada", from: "From"
-    wait_for_ajax
     expect(page).to have_text("Audience 0 / 3", normalize_ws: true)
 
     expect(page).to have_checked_field("Allow comments")
@@ -360,10 +355,8 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(page).to have_unchecked_field("All products")
 
     # Ensure that the updated audience count is correct
-    wait_for_ajax
     expect(page).to have_text("Audience 0 / 3", normalize_ws: true)
     check "All products"
-    wait_for_ajax
     expect(page).to have_text("Audience 1 / 3", normalize_ws: true)
 
     # Check presence of other filters and make some changes
@@ -472,7 +465,6 @@ describe("Email Creation Flow", :js, type: :system) do
     create(:purchase, link: product)
 
     visit "#{emails_path}/new?product=#{product.unique_permalink}"
-    wait_for_ajax
 
     expect(page).to have_radio_button("Customers only", checked: true)
     find(:combo_box, "Bought").click
@@ -857,7 +849,6 @@ describe("Email Creation Flow", :js, type: :system) do
     # Duplicate the email
     find(:table_row, text: "Hello").click
     click_on "Duplicate"
-    wait_for_ajax
     expect(page).to have_current_path("#{emails_path}/new?copy_from=#{Installment.last.external_id}")
 
     # Ensure that it auto-populates the fields

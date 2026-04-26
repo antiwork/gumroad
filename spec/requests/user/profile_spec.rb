@@ -55,7 +55,6 @@ describe "User profile page", type: :system, js: true do
         create(:variant, variant_category: category, price_difference_cents: 50, deleted_at: 1.hour.ago)
 
         visit "/#{creator.username}"
-        wait_for_ajax
 
         within find_product_card(product) do
           expect(page).to have_selector("[itemprop='price']", text: "$4.50")

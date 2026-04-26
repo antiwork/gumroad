@@ -28,23 +28,18 @@ describe "Tiered Membership Free Trial Spec", type: :system, js: true do
       visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
       choose "Second Tier"
-      wait_for_ajax
       expect(page).not_to have_text "You'll be charged"
 
       choose "Tier 3"
-      wait_for_ajax
       expect(page).not_to have_text "You'll be charged"
 
       choose "First Tier"
-      wait_for_ajax
       expect(page).not_to have_text "You'll be charged"
 
       select("Yearly", from: "Recurrence")
-      wait_for_ajax
       expect(page).not_to have_text "You'll be charged"
 
       select("Monthly", from: "Recurrence")
-      wait_for_ajax
       expect(page).not_to have_text "You'll be charged"
     end
 

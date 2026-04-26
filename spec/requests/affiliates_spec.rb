@@ -131,7 +131,6 @@ describe "Affiliates", type: :system, js: true do
       ]
 
       click_on "2"
-      wait_for_ajax
 
       expect(page).to have_button("Previous")
       expect(page).to have_button("Next")
@@ -142,7 +141,6 @@ describe "Affiliates", type: :system, js: true do
       expect(page).to_not have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       click_on "3"
-      wait_for_ajax
 
       expect(page).to have_button("Previous")
       expect(page).to have_button("Next", disabled: true)
@@ -153,7 +151,6 @@ describe "Affiliates", type: :system, js: true do
       expect(page).to_not have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       click_on "1"
-      wait_for_ajax
 
       expect(page).to have_table "Affiliates", with_rows: [
         { "Name" => "Jane Affiliate", "Product" => product.name, "Commission" => "3%" },
@@ -174,7 +171,6 @@ describe "Affiliates", type: :system, js: true do
       expect(page).to_not have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
       click_on "2"
-      wait_for_ajax
       expect(page).to have_table "Affiliate", with_rows: [
         { "Name" => "Jim Affiliate", "Product" => product.name, "Commission" => "3%" },
       ]
@@ -277,7 +273,6 @@ describe "Affiliates", type: :system, js: true do
 
       it "creates a new affiliate for all eligible products" do
         visit affiliates_path
-        wait_for_ajax
 
         click_on "Add affiliate"
 
@@ -336,7 +331,6 @@ describe "Affiliates", type: :system, js: true do
 
       it "creates a new affiliate for one specific enabled product" do
         visit affiliates_path
-        wait_for_ajax
 
         click_on "Add affiliate"
 
@@ -383,7 +377,6 @@ describe "Affiliates", type: :system, js: true do
 
       it "creates a new affiliate for specific enabled products" do
         visit affiliates_path
-        wait_for_ajax
 
         click_on "Add affiliate"
 
@@ -400,7 +393,6 @@ describe "Affiliates", type: :system, js: true do
           fill_in "https://link.com", with: "http://google.com/"
         end
         click_on "Add affiliate"
-        wait_for_ajax
 
         # Show the most recently updated affiliate as the first row
         expect(page).to have_table "Affiliates", with_rows: [
@@ -431,7 +423,6 @@ describe "Affiliates", type: :system, js: true do
 
       it "displays an error message if the user is already an affiliate with the same settings" do
         visit affiliates_path
-        wait_for_ajax
 
         click_on "Add affiliate"
 
@@ -536,7 +527,6 @@ describe "Affiliates", type: :system, js: true do
 
       visit affiliates_path
       click_on "2"
-      wait_for_ajax
 
       click_on "Edit"
 
@@ -853,7 +843,6 @@ describe "Affiliates", type: :system, js: true do
       within find("[aria-label='Pagination']") do
         expect(find_button("1")["aria-current"]).to eq("page")
         click_on "2"
-        wait_for_ajax
 
         expect(find_button("1")["aria-current"]).to be_nil
         expect(find_button("2")["aria-current"]).to eq("page")
@@ -894,7 +883,6 @@ describe "Affiliates", type: :system, js: true do
         expect(find_button("1")["aria-current"]).to eq("page")
 
         click_on "2"
-        wait_for_ajax
 
         expect(find_button("1")["aria-current"]).to be_nil
         expect(find_button("2")["aria-current"]).to eq("page")
