@@ -37,7 +37,11 @@ module Purchase::Risk
 
   private
     def vague_error_message
-      record = is_gift_receiver_purchase ? gift_received.gifter_purchase : self
+      record = if is_gift_receiver_purchase
+        gift_received&.gifter_purchase || self
+      else
+        self
+      end
       if record.free_purchase?
         "The transaction could not complete."
       else

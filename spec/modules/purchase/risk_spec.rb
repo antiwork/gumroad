@@ -336,6 +336,17 @@ describe Purchase::Risk do
             end.to change { gifter_purchase.error_code }.from(nil).to(PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
              .and change { gifter_purchase.errors.full_messages.to_sentence }.from("").to(vague_purchase_error_notice)
           end
+
+          it "returns error without raising when gifter_purchase is not yet persisted on the gift" do
+            gift.update_column(:gifter_purchase_id, nil)
+            gift.reload
+            BlockedObject.block!(BLOCKED_OBJECT_TYPES[:email_domain], "giftee.com", nil)
+
+            expect do
+              giftee_purchase.check_for_fraud
+            end.to change { giftee_purchase.error_code }.from(nil).to(PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+             .and change { giftee_purchase.errors.full_messages.to_sentence }.from("").to("The transaction could not complete.")
+          end
         end
       end
 
