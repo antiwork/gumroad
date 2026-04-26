@@ -53,7 +53,12 @@ class Api::V2::FilesController < Api::V2::BaseController
 
     return error_400("invalid key") unless key.start_with?(s3_key_prefix)
 
-    parts = Array(params[:parts]).map { |p| { part_number: p[:part_number].to_i, etag: p[:etag].to_s } }
+    raw_parts = Array(params[:parts])
+    unless raw_parts.all? { |p| p.respond_to?(:[]) && !p[:part_number].is_a?(Array) && !p[:etag].is_a?(Array) }
+      return error_400("each part must have scalar part_number and etag values")
+    end
+
+    parts = raw_parts.map { |p| { part_number: p[:part_number].to_i, etag: p[:etag].to_s } }
 
     Aws::S3::Client.new.complete_multipart_upload(
       bucket: S3_BUCKET,
