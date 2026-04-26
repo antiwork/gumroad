@@ -28,7 +28,6 @@ describe "Admin::LinksController Scenario", type: :system, js: true do
     toggle_disclosure("Purchases")
     wait_for_ajax
     click_on("Load more")
-    wait_for_ajax
     expect(page).to_not have_text("Load more")
     expect(page).to have_text("$2", count: 25)
 

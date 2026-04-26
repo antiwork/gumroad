@@ -25,7 +25,6 @@ describe("Top creator badge on Discover and Product pages", js: true, type: :sys
     index_model_records(Link)
 
     visit discover_url(host: discover_host, query: "Creator")
-    wait_for_ajax
 
     # Top creator badge visible on the top creator's product card
     top_card = find_product_card(top_creator_product)

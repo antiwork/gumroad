@@ -36,7 +36,6 @@ describe("Black Friday 2025", js: true, type: :system) do
       index_model_records(Link)
 
       visit discover_url(host: discover_host)
-      wait_for_ajax
 
       expect(page).to have_selector("header img[alt='Black Friday']")
       expect(page).to have_text("Snag creator-made deals")
@@ -58,7 +57,6 @@ describe("Black Friday 2025", js: true, type: :system) do
       index_model_records(Link)
 
       visit blackfriday_url(host: discover_host)
-      wait_for_ajax
 
       expect(page).to have_selector("header img[alt='Black Friday']")
       expect(page).to have_text("Snag creator-made deals")
@@ -74,7 +72,6 @@ describe("Black Friday 2025", js: true, type: :system) do
       index_model_records(Link)
 
       visit discover_url(host: discover_host)
-      wait_for_ajax
 
       expect(page).not_to have_selector("header img[alt='Black Friday']")
       expect(page).not_to have_text("Snag creator-made deals")
@@ -97,7 +94,6 @@ describe("Black Friday 2025", js: true, type: :system) do
 
       # Visit the blackfriday URL before offer code association
       visit blackfriday_url(host: discover_host)
-      wait_for_ajax
 
       expect(page).not_to have_product_card(text: "Black Friday Special Product")
 
@@ -113,7 +109,6 @@ describe("Black Friday 2025", js: true, type: :system) do
       index_model_records(Link)
       index_model_records(Purchase)
       visit blackfriday_url(host: discover_host)
-      wait_for_ajax
 
       expect(page).not_to have_section("Featured products")
 

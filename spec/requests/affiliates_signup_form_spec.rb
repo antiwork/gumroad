@@ -162,7 +162,6 @@ describe "Affiliate Signup Form", type: :system, js: true do
       affiliate_user = create(:named_user)
       expect do
         visit "/affiliates/onboarding" # react route
-        wait_for_ajax
 
         click_on("Add affiliate")
         expect(page).to have_text("New Affiliate")

@@ -71,7 +71,6 @@ describe("Rentals from product page", type: :system, js: true) do
     it "allows the product to be rented for free with an offer code that would only make rental free" do
       offer_code = create(:offer_code, products: [@product], amount_cents: 200)
       visit URI::DEFAULT_PARSER.escape("/l/#{@product.unique_permalink}/#{offer_code.code}")
-      wait_for_ajax
 
       add_to_cart(@product, rent: true, offer_code:)
       check_out(@product, is_free: true)
@@ -87,7 +86,6 @@ describe("Rentals from product page", type: :system, js: true) do
 
       offer_code = create(:offer_code, products: [@product], amount_cents: 200)
       visit URI::DEFAULT_PARSER.escape("/l/#{@product.unique_permalink}/#{offer_code.code}")
-      wait_for_ajax
 
       add_to_cart(@product, rent: true, pwyw_price: 0, offer_code:)
       check_out(@product, is_free: true)
@@ -122,7 +120,6 @@ describe("Rentals from product page", type: :system, js: true) do
         create(:zip_tax_rate, country: "IT", zip_code: nil, state: nil,
                               combined_rate: 1, is_seller_responsible: false)
         visit "/l/#{@product.unique_permalink}"
-        wait_for_ajax
         add_to_cart(@product)
         wait_for_ajax
 

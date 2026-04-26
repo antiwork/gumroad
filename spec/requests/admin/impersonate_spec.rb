@@ -35,7 +35,6 @@ describe "Impersonate", type: :system, js: true do
     wait_for_ajax
 
     visit settings_main_path
-    wait_for_ajax
     within_section "User details", section_element: :section do
       expect(page).to have_input_labelled "Email", with: seller.email
     end

@@ -59,7 +59,6 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
 
     it "allows other users to be able to load results" do
       visit "/#{@creator.username}?sort=price_asc"
-      wait_for_ajax
 
       expect(page).to have_product_card(count: 9)
       expect(page).to have_product_card(@a)

@@ -259,7 +259,6 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
 
     visit "/library"
-    wait_for_ajax
     expect(page).to have_product_card(purchase3.link)
     expect(page).to have_status(text: "You have 2 archived purchases. Click here to view")
   end
