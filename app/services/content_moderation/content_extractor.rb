@@ -34,8 +34,10 @@ class ContentModeration::ContentExtractor
       rich_contents = product.alive_rich_contents
 
       rich_content_file_image_urls = rich_contents.flat_map do |rich_content|
-        ProductFile.where(id: rich_content.embedded_product_file_ids_in_order, filegroup: "image").map do
-          signed_download_url_for_s3_key_and_filename(_1.s3_key, _1.s3_filename, expires_in: 1.hour)
+        ProductFile.where(id: rich_content.embedded_product_file_ids_in_order, filegroup: "image").filter_map do |product_file|
+          signed_download_url_for_s3_key_and_filename(product_file.s3_key, product_file.s3_filename, expires_in: 1.hour)
+        rescue Aws::S3::Errors::NotFound
+          nil
         end
       end
 
