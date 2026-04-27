@@ -288,7 +288,11 @@ Rails.application.routes.draw do
         end
 
         namespace :admin do
-          resources :purchases, only: [:show]
+          resources :purchases, only: [:show] do
+            member do
+              post :refund
+            end
+          end
 
           resources :licenses, only: [] do
             collection do
