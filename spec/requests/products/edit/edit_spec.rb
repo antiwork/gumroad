@@ -681,6 +681,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
     it "shows eligibility notice until dismissed and success notice if recommendable product" do
       expect(product.recommendable?).to be(false)
       visit edit_link_path(product.unique_permalink) + "/share"
+      expect(page).to have_status(text: "To appear on Gumroad Discover, make sure to meet all the")
       expect(page).not_to have_status(text: "#{product.name} is listed on Gumroad Discover.")
 
       click_on "Close"

@@ -23,6 +23,8 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       el.dispatchEvent(new Event('change', { bubbles: true }));
       el.dispatchEvent(new Event('blur', { bubbles: true }));
     JS
+    # Wait for the debounced surcharge recalculation to complete
+    wait_for_checkout_surcharges_loaded
   end
 
   describe "sales tax", shipping: true, force_vcr_on: true do

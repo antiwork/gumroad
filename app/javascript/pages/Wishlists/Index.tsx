@@ -74,6 +74,7 @@ export default function WishlistsPage() {
                       </span>
                     }
                     position="top"
+                    className="shrink-0"
                   >
                     <InfoCircle className="size-5" />
                   </WithTooltip>

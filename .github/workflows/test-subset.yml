@@ -16,9 +16,17 @@ on:
         required: false
         type: string
         default: ''
+      commit_sha:
+        description: 'PR head commit SHA to test against (uses github.sha if empty)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
+
+env:
+  TEST_SHA: ${{ inputs.commit_sha || github.sha }}
 
 jobs:
   build:
@@ -26,6 +34,8 @@ jobs:
     runs-on: ubicloud-standard-4
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha || github.sha }}
 
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
@@ -44,7 +54,7 @@ jobs:
           timeout_minutes: 5
           max_attempts: 3
           retry_wait_seconds: 5
-          command: docker pull "gumroadteam/web:test-${{ github.sha }}"
+          command: docker pull "gumroadteam/web:test-${{ env.TEST_SHA }}"
 
   test:
     name: ${{ inputs.run_name || format('tc-pr-{0}', inputs.pr_number) }}
@@ -55,6 +65,8 @@ jobs:
       WEB_REPO: gumroadteam/web
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TEST_SHA }}
 
       - name: Login to Docker Hub
         uses: nick-fields/retry@v3
@@ -74,7 +86,7 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 5
           command: |
-            docker pull --quiet $WEB_REPO:test-${{ github.sha }} &
+            docker pull --quiet $WEB_REPO:test-${{ env.TEST_SHA }} &
             PULL_PID=$!
             docker compose -f docker/docker-compose-test-and-ci.yml up -d
             COMPOSE_EXIT=$?
@@ -91,7 +103,7 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 5
           command: |
-            IMG=$WEB_REPO:test-${{ github.sha }}
+            IMG=$WEB_REPO:test-${{ env.TEST_SHA }}
             NET=${{ env.COMPOSE_PROJECT_NAME }}_default
             docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh db_test 3306 &
             docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh elasticsearch 9200 &
@@ -107,7 +119,7 @@ jobs:
           command: |
             docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
               -e RAILS_ENV=test \
-              $WEB_REPO:test-${{ github.sha }} \
+              $WEB_REPO:test-${{ env.TEST_SHA }} \
               bundle exec rake db:prepare
 
       - name: Run test subset
@@ -120,7 +132,7 @@ jobs:
             -e RUBY_YJIT_ENABLE=1 \
             -e CI=true \
             -e IN_DOCKER=true \
-            $WEB_REPO:test-${{ github.sha }} \
+            $WEB_REPO:test-${{ env.TEST_SHA }} \
             /usr/local/bin/gosu app bundle exec rspec \
               --format progress \
               --tag ~skip \

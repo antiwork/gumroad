@@ -326,6 +326,7 @@ describe "Tiered Membership Offer code Spec", type: :system, js: true do
           visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 
           choose "Second Tier"
+          wait_for_ajax
 
           # shows the prorated price to be charged today
           expect(page).to have_text "You'll be charged US$6.82"

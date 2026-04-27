@@ -83,11 +83,22 @@ describe Exports::Payouts::Annual, :vcr do
   end
 
   private
+    def csv_safe(value)
+      return value if value.nil?
+      str = value.to_s
+      return value if str.empty?
+      first = str[0]
+      if first == '+' || first == '-'
+        return value if str[1..]&.match?(/\A\d+\.?\d*\z/)
+      end
+      %w[= @ | % \r \t + -].include?(first) ? "'#{value}" : value
+    end
+
     def sale_summary(sale)
       CSV.parse([
         "Sale",
         sale.succeeded_at.to_date.to_s,
-        sale.external_id,
+        csv_safe(sale.external_id),
         sale.link.name,
         sale.full_name,
         sale.purchaser_email_or_email,

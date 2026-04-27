@@ -501,14 +501,14 @@ describe("Checkout upsells page", type: :system, js: true) do
       find(:table_row, { "Upsell" => "Upsell 1" }).click
       click_on "Edit"
 
-      fill_in "Name", with: "Complete course upsell"
-      fill_in "Offer text", with: "Enhance your learning experience"
-      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
-
       choose "Replace the version selected with another version of the same product"
 
       select_combo_box_option search: "Product 1", from: "Apply to this product"
       select_combo_box_option search: "Untitled 2", from: "Version to offer for Untitled 1"
+
+      fill_in "Name", with: "Complete course upsell", fill_options: { clear: :backspace }
+      fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+      fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
       click_on "Save"
 
@@ -658,14 +658,14 @@ describe("Checkout upsells page", type: :system, js: true) do
 
     expect(find_field("Name").value).to eq("Upsell 1 (copy)")
 
-    fill_in "Name", with: "Complete course upsell"
-    fill_in "Offer text", with: "Enhance your learning experience"
-    fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including..."
-
     choose "Replace the version selected with another version of the same product"
 
     select_combo_box_option search: "Product 1", from: "Apply to this product"
     select_combo_box_option search: "Untitled 2", from: "Version to offer for Untitled 1"
+
+    fill_in "Name", with: "Complete course upsell", fill_options: { clear: :backspace }
+    fill_in "Offer text", with: "Enhance your learning experience", fill_options: { clear: :backspace }
+    fill_in "Offer description", with: "You'll enjoy a range of exclusive features, including...", fill_options: { clear: :backspace }
 
     click_on "Save"
 

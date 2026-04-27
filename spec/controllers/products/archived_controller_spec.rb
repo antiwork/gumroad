@@ -149,5 +149,23 @@ describe Products::ArchivedController, inertia: true do
       expect(response.parsed_body).to eq({ "success" => true, "archived_products_count" => seller.archived_products_count })
       expect(membership.reload.archived?).to be(false)
     end
+
+    context "when unarchiving would violate validation" do
+      let(:eligible_seller) { create(:user, :eligible_for_service_products) }
+      let!(:archived_coffee) { create(:product, user: eligible_seller, native_type: Link::NATIVE_TYPE_COFFEE, archived: true) }
+      let!(:active_coffee) { create(:product, user: eligible_seller, native_type: Link::NATIVE_TYPE_COFFEE) }
+
+      before do
+        sign_in eligible_seller
+      end
+
+      it "returns validation error" do
+        delete :destroy, params: { id: archived_coffee.unique_permalink }, as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ "success" => false, "errors" => ["You can only have one coffee product."] })
+        expect(archived_coffee.reload.archived?).to be(true)
+      end
+    end
   end
 end

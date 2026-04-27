@@ -271,11 +271,9 @@ describe("Library Scenario", type: :system, js: true) do
     variant_2 = create(:variant, variant_category: category, name: "VariantTwo")
     index_model_records(Link)
 
-    purchase_1 = create(:purchase, link: products[0], created_at: 50.minutes.ago, purchaser: @user)
-    purchase_1.variant_attributes << variant_1
+    purchase_1 = create(:purchase, link: products[0], created_at: 50.minutes.ago, purchaser: @user, variant_attributes: [variant_1])
     purchase_2 = create(:purchase, link: products[1], created_at: 40.minutes.ago, purchaser: @user)
-    purchase_3 = create(:purchase, link: products[0], created_at: 30.minutes.ago, purchaser: @user)
-    purchase_3.variant_attributes << variant_2
+    purchase_3 = create(:purchase, link: products[0], created_at: 30.minutes.ago, purchaser: @user, variant_attributes: [variant_2])
 
     visit "/library"
     expect(page).to have_product_card(count: 3)

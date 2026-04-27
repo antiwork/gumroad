@@ -205,7 +205,7 @@ class Link < ApplicationRecord
   validate :published_bundle_must_have_at_least_one_product, on: :update
   validate :user_is_eligible_for_service_products, on: :create, if: :is_service?
   validate :commission_price_is_valid, if: -> { native_type == Link::NATIVE_TYPE_COMMISSION }
-  validate :one_coffee_per_user, on: :create, if: -> { native_type == Link::NATIVE_TYPE_COFFEE }
+  validate :one_coffee_per_user, if: -> { native_type == Link::NATIVE_TYPE_COFFEE && (new_record? || (archived_changed? && !archived?)) }
   validate :quantity_enabled_state_is_allowed
   validate :default_offer_code_must_be_valid
   validate :content_moderation_check, if: -> { publishing? || (persisted? && published? && (name_changed? || description_changed?)) }

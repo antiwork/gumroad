@@ -1152,7 +1152,7 @@ const EmailSection = ({
                 className="grow"
               />
               <div className="flex w-full gap-2">
-                <Button onClick={() => setIsEditing(false)} disabled={isLoading} className="flex-1">
+                <Button onClick={() => { setEmail(currentEmail); setIsEditing(false); }} disabled={isLoading} className="flex-1">
                   Cancel
                 </Button>
                 <Button color="primary" onClick={() => void handleSave()} disabled={isLoading} className="flex-1">
