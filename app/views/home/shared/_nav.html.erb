@@ -68,8 +68,8 @@
       if signed_in?
         nav_link("Dashboard", dashboard_url(host: DOMAIN), category: "button", context: "primary")
       else
-        nav_link("Log in", new_user_session_path, category: "button") +
-        nav_link("Start selling", new_user_registration_path, category: "button", context: "primary")
+        nav_link("Log in", login_path, category: "button") +
+        nav_link("Start selling", signup_path, category: "button", context: "primary")
       end
     end
   end

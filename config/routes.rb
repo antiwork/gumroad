@@ -343,6 +343,12 @@ Rails.application.routes.draw do
     # /robots.txt
     get "/robots.:format" => "robots#index"
 
+    # Redirect Devise's default auth paths to our custom routes.
+    # Must be defined before devise_for so they match first, preventing Devise's
+    # require_no_authentication filter from showing "You are already signed in." flash.
+    get "/users/sign_in", to: redirect("/login")
+    get "/users/sign_up", to: redirect("/signup")
+
     # users (logins/signups and other goodies)
     devise_for(:users,
                controllers: {
