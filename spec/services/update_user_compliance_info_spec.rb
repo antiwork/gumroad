@@ -41,5 +41,16 @@ describe UpdateUserComplianceInfo do
         expect(result[:error_message]).to eq("Individual tax id is too long")
       end
     end
+
+    context "when individual_tax_id is valid but ssn_last_four exceeds maximum length" do
+      it "returns an error before assigning either value" do
+        params = ActionController::Parameters.new(individual_tax_id: "123456789", ssn_last_four: "1" * 201)
+
+        result = described_class.new(compliance_params: params, user: user).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Individual tax id is too long")
+      end
+    end
   end
 end

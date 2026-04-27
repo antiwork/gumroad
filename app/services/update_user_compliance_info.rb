@@ -18,20 +18,22 @@ class UpdateUserComplianceInfo
   end
 
   MAX_ENCRYPTED_FIELD_LENGTH = 200
+  ENCRYPTED_FIELD_LABELS = {
+    individual_tax_id: "Individual tax id",
+    ssn_last_four: "Individual tax id",
+    business_tax_id: "Business tax id",
+  }.freeze
 
   def process
     if compliance_params.present?
       po_box_error = po_box_error_message
       return { success: false, error_message: po_box_error } if po_box_error.present?
 
-      tax_id_fields = {
-        individual_tax_id: compliance_params[:individual_tax_id].presence || compliance_params[:ssn_last_four].presence,
-        business_tax_id: compliance_params[:business_tax_id].presence,
-      }
-      tax_id_fields.each do |field, value|
+      ENCRYPTED_FIELD_LABELS.each do |field, label|
+        value = compliance_params[field]
         next if value.blank?
         if value.to_s.length > MAX_ENCRYPTED_FIELD_LENGTH
-          return { success: false, error_message: "#{field.to_s.humanize} is too long" }
+          return { success: false, error_message: "#{label} is too long" }
         end
       end
 
