@@ -2934,5 +2934,114 @@ describe Subscription::UpdaterService, :vcr do
         expect(result[:error_message]).to eq("This installment plan has already been completed and cannot be restarted.")
       end
     end
+
+    context "inventory counter cache" do
+      before :each do
+        setup_subscription
+        @gumroad_guid = "abc123"
+        @remote_ip = "11.22.33.44"
+        travel_to(@originally_subscribed_at + 1.month)
+      end
+
+      it "does not drift link or variant cache on a non-immediate downgrade" do
+        product = @product.reload
+        original_tier = @original_tier.reload
+        lower_tier = @lower_tier.reload
+
+        link_before = product.sales_count_for_inventory_cache.to_i
+        original_tier_before = original_tier.sales_count_for_inventory_cache.to_i
+        lower_tier_before = lower_tier.sales_count_for_inventory_cache.to_i
+
+        params = {
+          price_id: @quarterly_product_price.external_id,
+          variants: [@lower_tier.external_id],
+          quantity: 1,
+          use_existing_card: true,
+          perceived_price_cents: @lower_tier_quarterly_price.price_cents,
+          perceived_upgrade_price_cents: 0,
+        }
+
+        result = Subscription::UpdaterService.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params:,
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+        expect(result[:success]).to eq(true)
+
+        expect(product.reload.sales_count_for_inventory_cache.to_i).to eq(link_before)
+        expect(original_tier.reload.sales_count_for_inventory_cache.to_i).to eq(original_tier_before)
+        expect(lower_tier.reload.sales_count_for_inventory_cache.to_i).to eq(lower_tier_before)
+      end
+
+      it "credits the new variant on an immediate tier upgrade and decrements the previous tier" do
+        product = @product.reload
+        original_tier = @original_tier.reload
+        new_tier = @new_tier.reload
+
+        link_before = product.sales_count_for_inventory_cache.to_i
+        original_tier_before = original_tier.sales_count_for_inventory_cache.to_i
+        new_tier_before = new_tier.sales_count_for_inventory_cache.to_i
+
+        params = {
+          price_id: @quarterly_product_price.external_id,
+          variants: [@new_tier.external_id],
+          quantity: 1,
+          use_existing_card: true,
+          perceived_price_cents: @new_tier_quarterly_price.price_cents,
+          perceived_upgrade_price_cents: @new_tier_quarterly_upgrade_cost_after_one_month,
+        }
+
+        result = Subscription::UpdaterService.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params:,
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+        expect(result[:success]).to eq(true)
+
+        expect(product.reload.sales_count_for_inventory_cache.to_i).to eq(link_before)
+        expect(original_tier.reload.sales_count_for_inventory_cache.to_i).to eq(original_tier_before - 1)
+        expect(new_tier.reload.sales_count_for_inventory_cache.to_i).to eq(new_tier_before + 1)
+      end
+
+      it "does not double-count when resubscribing with a tier change" do
+        travel_to(@originally_subscribed_at + 4.months)
+        @subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true)
+        @subscription.deactivate!
+
+        product = @product.reload
+        original_tier = @original_tier.reload
+        new_tier = @new_tier.reload
+
+        link_after_deactivate = product.sales_count_for_inventory_cache.to_i
+        original_tier_after_deactivate = original_tier.sales_count_for_inventory_cache.to_i
+        new_tier_after_deactivate = new_tier.sales_count_for_inventory_cache.to_i
+
+        params = {
+          price_id: @quarterly_product_price.external_id,
+          variants: [@new_tier.external_id],
+          quantity: 1,
+          use_existing_card: true,
+          perceived_price_cents: @new_tier_quarterly_price.price_cents,
+          perceived_upgrade_price_cents: @new_tier_quarterly_price.price_cents,
+        }
+
+        result = Subscription::UpdaterService.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params:,
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+        expect(result[:success]).to eq(true)
+
+        expect(product.reload.sales_count_for_inventory_cache.to_i).to eq(link_after_deactivate + 1)
+        expect(original_tier.reload.sales_count_for_inventory_cache.to_i).to eq(original_tier_after_deactivate)
+        expect(new_tier.reload.sales_count_for_inventory_cache.to_i).to eq(new_tier_after_deactivate + 1)
+      end
+    end
   end
 end

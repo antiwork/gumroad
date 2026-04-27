@@ -1028,12 +1028,15 @@ class Subscription < ApplicationRecord
 
       flag = Purchase.flag_mapping["flags"]
       counting_states_sql = Purchase::COUNTS_TOWARDS_INVENTORY_STATES.map { |s| ActiveRecord::Base.connection.quote(s) }.join(",")
+      pending_ids = Purchase.inventory_pending_create_commit_ids.to_a
+      pending_clause = pending_ids.any? ? "AND p.id NOT IN (#{pending_ids.map(&:to_i).join(",")})" : ""
       qualifying_purchase_conditions = <<~SQL.squish
         p.subscription_id = #{id.to_i}
         AND p.purchase_state IN (#{counting_states_sql})
         AND (p.flags IS NULL OR p.flags & #{flag[:is_additional_contribution]} = 0)
         AND (p.flags & #{flag[:is_archived_original_subscription_purchase]} = 0)
         AND (p.flags & #{flag[:is_original_subscription_purchase]} != 0 OR p.flags & #{flag[:is_gift_receiver_purchase]} != 0)
+        #{pending_clause}
       SQL
 
       ActiveRecord::Base.connection.execute(<<~SQL.squish)
