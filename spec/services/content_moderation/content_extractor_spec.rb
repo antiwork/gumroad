@@ -60,8 +60,9 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.image_urls).to include("https://cdn.example.com/valid.png")
       expect(result.image_urls).not_to include(nil)
       expect(result.image_urls).not_to include("")
+    end
 
-context "when a product file's S3 object is missing" do
+    context "when a product file's S3 object is missing" do
       before do
         missing_file = double(s3_key: "images/missing.png", s3_filename: "missing.png")
         valid_file = double(s3_key: "images/file.png", s3_filename: "file.png")

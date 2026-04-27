@@ -275,10 +275,20 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(Rails.logger).to have_received(:warn).with(/ServerError on attempt 2\/3, retrying/).once
   end
 
-  it "gives up after MAX_MODERATION_ATTEMPTS server errors and re-raises" do
+  it "returns flagged with unavailable reason after MAX_MODERATION_ATTEMPTS server errors" do
     allow(client).to receive(:moderations).and_raise(Faraday::ServerError, "500 Internal Server Error")
+    allow(ErrorNotifier).to receive(:notify)
 
-    expect { described_class.new(text:, image_urls: []).perform }.to raise_error(Faraday::ServerError)
+    result = described_class.new(text:, image_urls: []).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
     expect(client).to have_received(:moderations).exactly(described_class::MAX_MODERATION_ATTEMPTS).times
+    expect(ErrorNotifier).to have_received(:notify).with(
+      instance_of(Faraday::ServerError),
+      attempts: described_class::MAX_MODERATION_ATTEMPTS,
+      input_type: "text",
+      skip_url: nil,
+    )
   end
 end
