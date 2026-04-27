@@ -419,8 +419,13 @@ class Link < ApplicationRecord
     self.deleted_at = nil
     self.draft = false
     self.publishing = true
+    deadlock_retries = 0
     begin
       save!
+    rescue ActiveRecord::Deadlocked
+      deadlock_retries += 1
+      retry if deadlock_retries <= 2
+      raise
     ensure
       self.publishing = false
     end
