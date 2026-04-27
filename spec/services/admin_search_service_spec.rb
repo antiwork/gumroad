@@ -4,9 +4,10 @@ require "spec_helper"
 
 describe AdminSearchService do
   describe "#search_purchases" do
-    it "wraps queries in a max execution time timeout" do
-      expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: AdminSearchService::MAX_QUERY_EXECUTION_SECONDS).and_call_original
-      AdminSearchService.new.search_purchases(query: "test@example.com")
+    it "adds a max execution time optimizer hint to the returned relation" do
+      purchases = AdminSearchService.new.search_purchases(query: "test@example.com")
+
+      expect(purchases.to_sql).to include("MAX_EXECUTION_TIME(#{AdminSearchService::MAX_QUERY_EXECUTION_SECONDS * 1000})")
     end
 
     it "returns no Purchases if query is invalid" do

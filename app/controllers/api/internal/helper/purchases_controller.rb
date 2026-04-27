@@ -69,7 +69,11 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   rescue AdminSearchService::InvalidDateError
     render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
   rescue WithMaxExecutionTime::QueryTimeoutError
-    render json: { success: false, message: "Search timed out. Please narrow your search criteria." }, status: :request_timeout
+    render_search_timeout
+  rescue ActiveRecord::StatementInvalid => e
+    raise unless WithMaxExecutionTime.query_timeout_error?(e)
+
+    render_search_timeout
   end
 
   def resend_receipt_by_number
@@ -175,6 +179,10 @@ class Api::Internal::Helper::PurchasesController < Api::Internal::Helper::BaseCo
   end
 
   private
+    def render_search_timeout
+      render json: { success: false, message: "Search timed out. Please narrow your search criteria." }, status: :request_timeout
+    end
+
     def fetch_last_purchase
       @purchase = Purchase.where(email: params[:email]).order(created_at: :desc).first
       e404_json unless @purchase

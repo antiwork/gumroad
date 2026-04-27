@@ -331,18 +331,6 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
       end
     end
 
-    context "when the search query times out" do
-      it "returns a timeout error" do
-        allow_any_instance_of(AdminSearchService).to receive(:search_purchases).and_raise(WithMaxExecutionTime::QueryTimeoutError)
-
-        post :search, params: { email: "slow@example.com" }
-
-        expect(response).to have_http_status(:request_timeout)
-        expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["message"]).to eq("Search timed out. Please narrow your search criteria.")
-      end
-    end
-
     context "when searching by charge amount" do
       it "returns purchase data if found" do
         purchase = create(:purchase, price_cents: 1000)
@@ -433,6 +421,24 @@ describe Api::Internal::Helper::PurchasesController, :vcr do
       post :search, params: params
 
       expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe "POST search timeout" do
+    before do
+      request.headers["Authorization"] = "Bearer #{GlobalConfig.get("HELPER_TOOLS_TOKEN")}"
+    end
+
+    it "returns a timeout error" do
+      allow_any_instance_of(AdminSearchService)
+        .to receive(:search_purchases)
+        .and_raise(ActiveRecord::StatementInvalid.new("Mysql2::Error: maximum statement execution time exceeded"))
+
+      post :search, params: { email: "slow@example.com" }
+
+      expect(response).to have_http_status(:request_timeout)
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["message"]).to eq("Search timed out. Please narrow your search criteria.")
     end
   end
 

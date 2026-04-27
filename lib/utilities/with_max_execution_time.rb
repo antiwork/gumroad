@@ -4,6 +4,12 @@ module WithMaxExecutionTime
   # NOTE: Rails >= 6.0.0.rc1 supports Optimizer hints. Consider using them instead if available.
 
   class QueryTimeoutError < Timeout::Error; end
+  QUERY_TIMEOUT_MESSAGE = "maximum statement execution time exceeded"
+  private_constant :QUERY_TIMEOUT_MESSAGE
+
+  def self.query_timeout_error?(error)
+    error.message.include?(QUERY_TIMEOUT_MESSAGE)
+  end
 
   def self.timeout_queries(seconds:)
     connection = ActiveRecord::Base.connection
@@ -12,7 +18,7 @@ module WithMaxExecutionTime
     connection.execute("set max_execution_time = #{max_execution_time}")
     yield
   rescue ActiveRecord::StatementInvalid => e
-    if e.message.include?("maximum statement execution time exceeded")
+    if query_timeout_error?(e)
       raise QueryTimeoutError.new(e.message)
     else
       raise

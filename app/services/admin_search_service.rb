@@ -4,11 +4,12 @@ class AdminSearchService
   class InvalidDateError < StandardError; end
 
   MAX_QUERY_EXECUTION_SECONDS = 15
+  MAX_QUERY_EXECUTION_MILLISECONDS = MAX_QUERY_EXECUTION_SECONDS * 1000
+  private_constant :MAX_QUERY_EXECUTION_MILLISECONDS
 
   def search_purchases(query: nil, email: nil, product_title_query: nil, purchase_status: nil, creator_email: nil, license_key: nil, transaction_date: nil, last_4: nil, card_type: nil, price: nil, expiry_date: nil, limit: nil)
-    WithMaxExecutionTime.timeout_queries(seconds: MAX_QUERY_EXECUTION_SECONDS) do
-      execute_search(query:, email:, product_title_query:, purchase_status:, creator_email:, license_key:, transaction_date:, last_4:, card_type:, price:, expiry_date:, limit:)
-    end
+    execute_search(query:, email:, product_title_query:, purchase_status:, creator_email:, license_key:, transaction_date:, last_4:, card_type:, price:, expiry_date:, limit:)
+      .optimizer_hints("MAX_EXECUTION_TIME(#{MAX_QUERY_EXECUTION_MILLISECONDS})")
   end
 
   private
