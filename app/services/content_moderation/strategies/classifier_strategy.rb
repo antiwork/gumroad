@@ -41,7 +41,10 @@ class ContentModeration::Strategies::ClassifierStrategy
 
     if @text.present?
       scores = moderate([{ type: "text", text: @text }])
-      flagged_categories.concat(collect_flagged(scores, thresholds)) if scores
+      if scores.nil?
+        return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON])
+      end
+      flagged_categories.concat(collect_flagged(scores, thresholds))
     end
 
     moderated_count = 0
@@ -93,7 +96,8 @@ class ContentModeration::Strategies::ClassifierStrategy
           Rails.logger.warn("ContentModeration::ClassifierStrategy error on attempt #{attempts}/#{MAX_MODERATION_ATTEMPTS}, retrying: #{e.message}")
           retry
         end
-        raise
+        Rails.logger.warn("ContentModeration::ClassifierStrategy exhausted #{MAX_MODERATION_ATTEMPTS} attempts: #{e.class} - #{e.message}")
+        nil
       rescue Faraday::BadRequestError => e
         raise if skip_url.nil?
         body = e.response&.dig(:body).to_s
