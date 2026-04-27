@@ -51,6 +51,17 @@ describe "ProductCustomDomainScenario", type: :system, js: true do
     end
   end
 
+  context "when the product has reviews" do
+    let!(:purchase) { create(:purchase, link: product) }
+    let!(:review) { create(:product_review, purchase:, rating: 5, message: "Great product!") }
+
+    it "displays reviews on the product custom domain page" do
+      visit "http://#{custom_domain.domain}:#{port}/"
+      expect(page).to have_text("Ratings")
+      expect(page).to have_text("Great product!")
+    end
+  end
+
   context "when buyer is logged in" do
     let(:buyer) { create(:user) }
     before do

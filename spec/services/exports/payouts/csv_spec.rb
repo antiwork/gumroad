@@ -93,22 +93,22 @@ describe Exports::Payouts::Csv, :vcr do
       parsed_csv = CSV.parse(csv)
       expected = [
         Exports::Payouts::Csv::HEADERS,
-        ["Chargeback", @purchase_to_chargeback.chargeback_date.to_date.to_s, @purchase_to_chargeback.external_id, @purchase_to_chargeback.link.name, @purchase_to_chargeback.full_name, @purchase_to_chargeback.purchaser_email_or_email, "-0.0", "-0.0", "-10.0", "-2.09", "-7.91"],
-        ["Sale", @purchase_to_chargeback.succeeded_at.to_date.to_s, @purchase_to_chargeback.external_id, @purchase_to_chargeback.link.name, @purchase_to_chargeback.full_name, @purchase_to_chargeback.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
+        ["Chargeback", @purchase_to_chargeback.chargeback_date.to_date.to_s, csv_safe(@purchase_to_chargeback.external_id), @purchase_to_chargeback.link.name, @purchase_to_chargeback.full_name, @purchase_to_chargeback.purchaser_email_or_email, "-0.0", "-0.0", "-10.0", "-2.09", "-7.91"],
+        ["Sale", @purchase_to_chargeback.succeeded_at.to_date.to_s, csv_safe(@purchase_to_chargeback.external_id), @purchase_to_chargeback.link.name, @purchase_to_chargeback.full_name, @purchase_to_chargeback.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
         ["Credit", @user_credit.balance.date.to_s, "", "", "", "", "", "", "10.0", "", "10.0"],
-        ["Sale", @regular_purchase.succeeded_at.to_date.to_s, @regular_purchase.external_id, @regular_purchase.link.name, @regular_purchase.full_name, @regular_purchase.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
-        ["Sale", @purchase_with_tax.succeeded_at.to_date.to_s, @purchase_with_tax.external_id, @purchase_with_tax.link.name, @purchase_with_tax.full_name, @purchase_with_tax.purchaser_email_or_email, "2.0", "0.0", "10.0", "2.09", "7.91"],
-        ["Sale", @purchase_with_gumroad_tax.succeeded_at.to_date.to_s, @purchase_with_gumroad_tax.external_id, @purchase_with_gumroad_tax.link.name, @purchase_with_gumroad_tax.full_name, @purchase_with_gumroad_tax.purchaser_email_or_email, "1.8", "0.0", "10.0", "2.09", "7.91"],
-        ["Sale", @purchase_to_refund.succeeded_at.to_date.to_s, @purchase_to_refund.external_id, @purchase_to_refund.link.name, @purchase_to_refund.full_name, @purchase_to_refund.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
-        ["Sale", @purchase_to_refund_partially.succeeded_at.to_date.to_s, @purchase_to_refund_partially.external_id, @purchase_to_refund_partially.link.name, @purchase_to_refund_partially.full_name, @purchase_to_refund_partially.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
-        ["Sale", @purchase_to_refund_from_years_ago.succeeded_at.to_date.to_s, @purchase_to_refund_from_years_ago.external_id, @purchase_to_refund_from_years_ago.link.name, @purchase_to_refund_from_years_ago.full_name, @purchase_to_refund_from_years_ago.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
+        ["Sale", @regular_purchase.succeeded_at.to_date.to_s, csv_safe(@regular_purchase.external_id), @regular_purchase.link.name, @regular_purchase.full_name, @regular_purchase.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
+        ["Sale", @purchase_with_tax.succeeded_at.to_date.to_s, csv_safe(@purchase_with_tax.external_id), @purchase_with_tax.link.name, @purchase_with_tax.full_name, @purchase_with_tax.purchaser_email_or_email, "2.0", "0.0", "10.0", "2.09", "7.91"],
+        ["Sale", @purchase_with_gumroad_tax.succeeded_at.to_date.to_s, csv_safe(@purchase_with_gumroad_tax.external_id), @purchase_with_gumroad_tax.link.name, @purchase_with_gumroad_tax.full_name, @purchase_with_gumroad_tax.purchaser_email_or_email, "1.8", "0.0", "10.0", "2.09", "7.91"],
+        ["Sale", @purchase_to_refund.succeeded_at.to_date.to_s, csv_safe(@purchase_to_refund.external_id), @purchase_to_refund.link.name, @purchase_to_refund.full_name, @purchase_to_refund.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
+        ["Sale", @purchase_to_refund_partially.succeeded_at.to_date.to_s, csv_safe(@purchase_to_refund_partially.external_id), @purchase_to_refund_partially.link.name, @purchase_to_refund_partially.full_name, @purchase_to_refund_partially.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
+        ["Sale", @purchase_to_refund_from_years_ago.succeeded_at.to_date.to_s, csv_safe(@purchase_to_refund_from_years_ago.external_id), @purchase_to_refund_from_years_ago.link.name, @purchase_to_refund_from_years_ago.full_name, @purchase_to_refund_from_years_ago.purchaser_email_or_email, "0.0", "0.0", "10.0", "2.09", "7.91"],
         ["Affiliate Credit", @purchase_with_tax.succeeded_at.to_date.to_s, "", "", "", "", "", "", "0.23", "", "0.23"],
-        ["Credit", @credit_for_dispute_won.balance.date.to_s, @regular_purchase.external_id, "", "", "", "", "", "7.91", "", "7.91"],
-        ["Sale", @paypal_purchase.succeeded_at.to_date.to_s, @paypal_purchase.external_id, @paypal_purchase.link.name, @paypal_purchase.full_name, @paypal_purchase.purchaser_email_or_email, "0.0", "0.0", "10.0", "1.5", "8.5"],
+        ["Credit", @credit_for_dispute_won.balance.date.to_s, csv_safe(@regular_purchase.external_id), "", "", "", "", "", "7.91", "", "7.91"],
+        ["Sale", @paypal_purchase.succeeded_at.to_date.to_s, csv_safe(@paypal_purchase.external_id), @paypal_purchase.link.name, @paypal_purchase.full_name, @paypal_purchase.purchaser_email_or_email, "0.0", "0.0", "10.0", "1.5", "8.5"],
         ["PayPal Connect Affiliate Fees", @paypal_purchase.succeeded_at.to_date.to_s, "", "", "", "", "", "", "-2.0", "", "-2.0"],
-        ["Full Refund", (@purchase_to_refund.succeeded_at + 1.day).to_date.to_s, @purchase_to_refund.external_id, @purchase_to_refund.link.name, @purchase_to_refund.full_name, @purchase_to_refund.purchaser_email_or_email, "-0.0", "-0.0", "-10.0", "-1.5", "-8.5"],
-        ["Partial Refund", (@purchase_to_refund_partially.succeeded_at + 1.day).to_date.to_s, @purchase_to_refund_partially.external_id, @purchase_to_refund_partially.link.name, @purchase_to_refund_partially.full_name, @purchase_to_refund_partially.purchaser_email_or_email, "-0.0", "-0.0", "-3.5", "-0.55", "-2.95"],
-        ["Full Refund", (@purchase_to_refund_from_years_ago.succeeded_at + 1.day).to_date.to_s, @purchase_to_refund_from_years_ago.external_id, @purchase_to_refund_from_years_ago.link.name, @purchase_to_refund_from_years_ago.full_name, @purchase_to_refund_from_years_ago.purchaser_email_or_email, "-0.0", "-0.0", "-10.0", "-1.5", "-8.5"],
+        ["Full Refund", (@purchase_to_refund.succeeded_at + 1.day).to_date.to_s, csv_safe(@purchase_to_refund.external_id), @purchase_to_refund.link.name, @purchase_to_refund.full_name, @purchase_to_refund.purchaser_email_or_email, "-0.0", "-0.0", "-10.0", "-1.5", "-8.5"],
+        ["Partial Refund", (@purchase_to_refund_partially.succeeded_at + 1.day).to_date.to_s, csv_safe(@purchase_to_refund_partially.external_id), @purchase_to_refund_partially.link.name, @purchase_to_refund_partially.full_name, @purchase_to_refund_partially.purchaser_email_or_email, "-0.0", "-0.0", "-3.5", "-0.55", "-2.95"],
+        ["Full Refund", (@purchase_to_refund_from_years_ago.succeeded_at + 1.day).to_date.to_s, csv_safe(@purchase_to_refund_from_years_ago.external_id), @purchase_to_refund_from_years_ago.link.name, @purchase_to_refund_from_years_ago.full_name, @purchase_to_refund_from_years_ago.purchaser_email_or_email, "-0.0", "-0.0", "-10.0", "-1.5", "-8.5"],
         ["PayPal Payouts", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "-6.5", "", "-6.5"],
         ["Payout Fee", @payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "0.92", "-0.92"],
         ["Totals", nil, nil, nil, nil, nil, "3.8", "0.0", "56.14", "11.41", "44.73"]
@@ -163,10 +163,10 @@ describe Exports::Payouts::Csv, :vcr do
       parsed_csv = CSV.parse(csv)
       expect(parsed_csv).to match_array [
         Exports::Payouts::Csv::HEADERS,
-        ["Sale", regular_purchase.succeeded_at.to_date.to_s, regular_purchase.external_id, regular_purchase.link.name, regular_purchase.full_name, regular_purchase.purchaser_email_or_email, "0.0", "0.0", "150.0", "20.15", "129.85"],
-        ["Sale", stripe_connect_purchase.succeeded_at.to_date.to_s, stripe_connect_purchase.external_id, stripe_connect_purchase.link.name, stripe_connect_purchase.full_name, stripe_connect_purchase.purchaser_email_or_email, "0.0", "0.0", "150.0", "15.5", "134.5"],
+        ["Sale", regular_purchase.succeeded_at.to_date.to_s, csv_safe(regular_purchase.external_id), regular_purchase.link.name, regular_purchase.full_name, regular_purchase.purchaser_email_or_email, "0.0", "0.0", "150.0", "20.15", "129.85"],
+        ["Sale", stripe_connect_purchase.succeeded_at.to_date.to_s, csv_safe(stripe_connect_purchase.external_id), stripe_connect_purchase.link.name, stripe_connect_purchase.full_name, stripe_connect_purchase.purchaser_email_or_email, "0.0", "0.0", "150.0", "15.5", "134.5"],
         ["Stripe Connect Affiliate Fees", stripe_connect_purchase.succeeded_at.to_date.to_s, "", "", "", "", "", "", "-4.03", "", "-4.03"],
-        ["Stripe Connect Refund", 10.days.ago.to_date.to_s, stripe_connect_purchase.external_id, stripe_connect_purchase.link.name, stripe_connect_purchase.full_name, stripe_connect_purchase.purchaser_email_or_email, "-0.0", "-0.0", "-75.0", "7.75", "-67.25"],
+        ["Stripe Connect Refund", 10.days.ago.to_date.to_s, csv_safe(stripe_connect_purchase.external_id), stripe_connect_purchase.link.name, stripe_connect_purchase.full_name, stripe_connect_purchase.purchaser_email_or_email, "-0.0", "-0.0", "-75.0", "7.75", "-67.25"],
         ["Stripe Connect Affiliate Fees", 10.days.ago.to_date.to_s, "", "", "", "", "", "", "2.02", "", "2.02"],
         ["Stripe Connect Payouts", payout.payout_period_end_date.to_date.to_s, "", "", "", "", "", "", "-65.24", "", "-65.24"],
         ["Payout Fee", payout.payout_period_end_date.to_s, "", "", "", "", "", "", "", "2.6", "-2.6"],
@@ -222,6 +222,17 @@ describe Exports::Payouts::Csv, :vcr do
         ["Totals", nil, nil, nil, nil, nil, "0.0", "0.0", "3.66", "0.08", "3.58"]
       ]
     end
+  end
+
+  def csv_safe(value)
+    return value if value.nil?
+    str = value.to_s
+    return value if str.empty?
+    first = str[0]
+    if first == '+' || first == '-'
+      return value if str[1..]&.match?(/\A\d+\.?\d*\z/)
+    end
+    %w[= @ | % \r \t + -].include?(first) ? "'#{value}" : value
   end
 
   def create_payout(payout_date, processor_type, user)

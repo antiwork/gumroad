@@ -170,12 +170,11 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     click_on "Insert link"
     within_modal do
       fill_in "Enter URL", with: "https://example.com/link2"
-      send_keys :enter
+      click_on "Add link"
     end
 
     expect(rich_text_editor_input).to have_link("https://example.com/link1", href: "https://example.com/link1")
     expect(rich_text_editor_input).to have_link("https://example.com/link2", href: "https://example.com/link2")
-    sleep 1
     save_change
     expect(@product.reload.description).to have_link("https://example.com/link1", href: "https://example.com/link1")
     expect(@product.description).to have_link("https://example.com/link2", href: "https://example.com/link2")
@@ -317,6 +316,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
     visit("/products/#{@product.unique_permalink}/edit")
 
     within("[aria-label='Description']") do
+      expect(page).to have_link("Gumroad")
       # Need to double click in order to ensure we have the editor input focused first
       find("a").double_click
     end

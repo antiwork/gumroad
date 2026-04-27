@@ -4659,6 +4659,26 @@ describe Link, :vcr do
       end
     end
 
+    context "unarchiving coffee product when another coffee product exists" do
+      let!(:coffee_a) { create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE, archived: true) }
+      let!(:coffee_b) { create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE) }
+
+      it "prevents unarchiving" do
+        coffee_a.archived = false
+        expect(coffee_a).to_not be_valid
+        expect(coffee_a.errors.full_messages.first).to eq("You can only have one coffee product.")
+      end
+    end
+
+    context "unarchiving coffee product when no other coffee product exists" do
+      let!(:coffee_a) { create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE, archived: true) }
+
+      it "allows unarchiving" do
+        coffee_a.archived = false
+        expect(coffee_a).to be_valid
+      end
+    end
+
     context "with zero price" do
       let(:coffee) { create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE) }
       let(:variant_category) { create(:variant_category, link: coffee) }

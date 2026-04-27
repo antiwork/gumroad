@@ -199,6 +199,35 @@ describe ProductDuplicatorService do
     end
   end
 
+  context "duplicating a coffee product" do
+    let(:coffee_seller) { create(:user, :eligible_for_service_products) }
+    let(:coffee_product) { create(:product, user: coffee_seller, native_type: Link::NATIVE_TYPE_COFFEE) }
+
+    it "raises a validation error when an active coffee product already exists" do
+      expect do
+        ProductDuplicatorService.new(coffee_product.id).duplicate
+      end.to raise_error(ActiveRecord::RecordInvalid, /You can only have one coffee product/)
+
+      expect(coffee_seller.links.where(native_type: Link::NATIVE_TYPE_COFFEE).count).to eq(1)
+    end
+
+    it "stores the validation message so the dashboard can surface it" do
+      service = ProductDuplicatorService.new(coffee_product.id)
+      expect { service.duplicate }.to raise_error(ActiveRecord::RecordInvalid)
+      expect(service.recently_failed_error_message).to eq("You can only have one coffee product.")
+    end
+
+    it "allows duplicating an archived coffee when no active coffee exists" do
+      coffee_product.update!(archived: true)
+
+      duplicate_product = ProductDuplicatorService.new(coffee_product.id).duplicate
+
+      expect(duplicate_product).to be_persisted
+      expect(duplicate_product.native_type).to eq(Link::NATIVE_TYPE_COFFEE)
+      expect(coffee_seller.links.where(native_type: Link::NATIVE_TYPE_COFFEE).count).to eq(2)
+    end
+  end
+
   it "duplicates a product whose variant has a membership price change effective date in the past" do
     variant_category = create(:variant_category, title: "Tier", link: product)
     variant = create(:variant, variant_category:, name: "Premium")

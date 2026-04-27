@@ -95,7 +95,7 @@ describe Exports::PurchaseExportService do
     end
 
     it "includes the purchase external id" do
-      expect(field_value(last_data_row, "Purchase ID")).to eq(Purchase.last.external_id.to_s)
+      expect(field_value(last_data_row, "Purchase ID")).to eq(csv_safe(Purchase.last.external_id.to_s))
     end
 
     it "includes the sku", :vcr do
@@ -109,7 +109,7 @@ describe Exports::PurchaseExportService do
       @purchase.variant_attributes << Sku.last
       @purchase.process!
 
-      expect(field_value(last_data_row, "SKU ID")).to eq(Sku.last.external_id.to_s)
+      expect(field_value(last_data_row, "SKU ID")).to eq(csv_safe(Sku.last.external_id.to_s))
     end
 
     it "shows the custom sku", :vcr do
@@ -644,6 +644,17 @@ describe Exports::PurchaseExportService do
         end
       end
     end
+  end
+
+  def csv_safe(value)
+    return value if value.nil?
+    str = value.to_s
+    return value if str.empty?
+    first = str[0]
+    if first == '+' || first == '-'
+      return value if str[1..]&.match?(/\A\d+\.?\d*\z/)
+    end
+    %w[= @ | % \r \t + -].include?(first) ? "'#{value}" : value
   end
 
   def field_index(name)

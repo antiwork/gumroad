@@ -6,7 +6,7 @@
         <div class="text-xl max-w-md lg:text-2xl lg:max-w-3xl">Anyone can earn their first dollar online. Just start with what you know, see what sticks, and get paid. It's that easy.</div>
         <div class="mt-2 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full max-w-[384px] sm:max-w-none sm:w-auto mx-auto">
           <div class="w-full sm:w-auto [&>div]:block!">
-            <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
+            <%= render "home/shared/button", text: "Start selling", url: signup_path %>
           </div>
           <form action="<%= discover_path %>" method="get" class="relative w-full sm:w-auto">
             <label for="marketplace-search" class="sr-only">Search marketplace</label>
@@ -310,7 +310,7 @@
   <div class="px-8 py-16 lg:px-[4vw] lg:py-24">
     <div class="flex flex-col lg:flex-col gap-8 lg:gap-16 max-w-5xl mx-auto lg:items-center">
       <h1 class="font-medium text-4xl sm:text-5xl lg:text-7xl text-center"> Share your work. <br> Someone out there needs it.</h1>
-      <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
+      <%= render "home/shared/button", text: "Start selling", url: signup_path %>
     </div>
   </div>
 

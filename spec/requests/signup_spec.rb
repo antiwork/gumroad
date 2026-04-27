@@ -94,7 +94,6 @@ describe "Signup Feature Scenario", js: true, type: :system do
 
       expect do
         click_button "Google"
-        click_button "Login" # 2FA
         expect(page).to have_content("We're here to help you get paid for your work.")
       end.to change(User, :count).by(1)
     end

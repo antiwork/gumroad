@@ -287,6 +287,28 @@ Rails.application.routes.draw do
           resources :instant_payouts, only: [:index, :create]
         end
 
+        namespace :admin do
+          resources :purchases, only: [:show]
+
+          resources :licenses, only: [] do
+            collection do
+              post :lookup
+            end
+          end
+
+          resources :users, only: [] do
+            collection do
+              post :suspension
+            end
+          end
+
+          resources :payouts, only: [] do
+            collection do
+              post :list
+            end
+          end
+        end
+
         namespace :grmc do
           post :webhook, to: "webhook#handle"
         end
@@ -342,6 +364,12 @@ Rails.application.routes.draw do
 
     # /robots.txt
     get "/robots.:format" => "robots#index"
+
+    # Redirect Devise's default auth paths to our custom routes.
+    # Must be defined before devise_for so they match first, preventing Devise's
+    # require_no_authentication filter from showing "You are already signed in." flash.
+    get "/users/sign_in", to: redirect { |_p, req| "/login#{req.query_string.present? ? "?#{req.query_string}" : ""}" }
+    get "/users/sign_up", to: redirect { |_p, req| "/signup#{req.query_string.present? ? "?#{req.query_string}" : ""}" }
 
     # users (logins/signups and other goodies)
     devise_for(:users,
@@ -1041,6 +1069,20 @@ Rails.application.routes.draw do
   constraints ProductCustomDomainConstraint do
     get "/.well-known/acme-challenge/:token", to: "acme_challenges#show"
     product_tracking_routes(named_routes: false)
+
+    put "/product_reviews/set", to: "product_reviews#set", format: :json
+    resources :product_reviews, only: [:index, :show]
+    resources :product_review_responses, only: [:update, :destroy], format: :json
+    resources :product_review_videos, only: [] do
+      scope module: :product_review_videos do
+        resource :stream, only: [:show]
+        resources :streaming_urls, only: [:index]
+      end
+    end
+    namespace :product_review_videos do
+      resource :upload_context, only: [:show]
+    end
+
     get "/", to: "links#show", defaults: { format: "html" }
     get "/l/:id", to: "links#show", defaults: { format: "html" }
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }

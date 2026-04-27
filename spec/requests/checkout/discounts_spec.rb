@@ -750,6 +750,9 @@ describe("Checkout discounts page", type: :system, js: true) do
   describe "pagination" do
     before do
       stub_const("Checkout::DiscountsController::PER_PAGE", 1)
+      offer_code1.update_column(:updated_at, 1.second.from_now)
+      offer_code2.update_column(:updated_at, 1.second.ago)
+      offer_code3.update_column(:updated_at, 2.seconds.ago)
     end
 
     it "paginates the offer codes" do
@@ -884,6 +887,9 @@ describe("Checkout discounts page", type: :system, js: true) do
     before do
       create(:offer_code, user: seller, name: "Discount 4", code: "discount4", universal: true)
       stub_const("Checkout::DiscountsController::PER_PAGE", 2)
+      offer_code1.update_column(:updated_at, 1.second.from_now)
+      offer_code2.update_column(:updated_at, 1.second.ago)
+      offer_code3.update_column(:updated_at, 2.seconds.ago)
     end
 
     it "searches the offer codes" do

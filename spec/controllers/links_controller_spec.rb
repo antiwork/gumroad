@@ -4446,6 +4446,7 @@ describe LinksController, :vcr, inertia: true do
 
       describe "Loose and exact matching" do
         before do
+          Link.__elasticsearch__.create_index!(force: true)
           @products = {
             name: create(:product, name: "North American river otter"),
             desc: create(:product, description: "The North American river otter, also known as the northern river otter or the common otter, is a semiaquatic mammal."),
@@ -4464,6 +4465,7 @@ describe LinksController, :vcr, inertia: true do
             allow(product).to receive(:reviews_count).and_call_original
           end
           Link.__elasticsearch__.refresh_index!
+          sleep 0.5
         end
 
         it "finds all matches if exact match not specified" do

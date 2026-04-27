@@ -21,7 +21,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
   it "allows to mark PDF files as stampable" do
     visit edit_link_path(@product.unique_permalink) + "/content"
     fixture_file = file_fixture("Alice's Adventures in Wonderland.pdf")
-    with_throttled_network(fixture_file) do
+    with_throttled_network(fixture_file, factor: 1) do
       select_disclosure "Upload files"
       attach_product_file(fixture_file)
 

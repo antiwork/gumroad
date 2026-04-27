@@ -7,8 +7,8 @@ describe Product::VariantCategoryUpdaterService do
     context "when trying to update a variant from another product" do
       let(:product) { create(:product) }
       let(:other_product) { create(:product) }
-      let(:variant) { create(:variant, variant_category: create(:variant_category, link: product)) }
-      let(:other_variant) { create(:variant, variant_category: create(:variant_category, link: other_product)) }
+      let(:variant) { create(:variant, name: "Original Variant", variant_category: create(:variant_category, link: product)) }
+      let(:other_variant) { create(:variant, name: "Other Variant", variant_category: create(:variant_category, link: other_product)) }
       let(:variant_category_params) do
         {
           id: variant.variant_category.external_id, title: variant.variant_category.title,

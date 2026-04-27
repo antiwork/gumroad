@@ -308,13 +308,14 @@ describe Payment do
                                    stripe_transfer_id: "po_creating", stripe_connect_account_id: "acct_creating",
                                    created_at: 3.days.ago)
 
-        stripe_payout = { "status" => "paid", "arrival_date" => 1.day.ago.to_i }
+        arrival_timestamp = 1.day.ago.to_i
+        stripe_payout = { "status" => "paid", "arrival_date" => arrival_timestamp }
         allow(Stripe::Payout).to receive(:retrieve).with("po_creating", { stripe_account: "acct_creating" }).and_return(stripe_payout)
 
         payment.send(:sync_with_stripe)
 
         expect(payment.state).to eq("completed")
-        expect(payment.arrival_date).to eq(1.day.ago.to_i)
+        expect(payment.arrival_date).to eq(arrival_timestamp)
       end
     end
 
@@ -324,14 +325,15 @@ describe Payment do
                                    stripe_transfer_id: "po_123", stripe_connect_account_id: "acct_123",
                                    created_at: 3.days.ago)
 
-        stripe_payout = { "status" => "paid", "arrival_date" => 2.days.ago.to_i }
+        arrival_timestamp = 2.days.ago.to_i
+        stripe_payout = { "status" => "paid", "arrival_date" => arrival_timestamp }
         allow(Stripe::Payout).to receive(:retrieve).with("po_123", { stripe_account: "acct_123" }).and_return(stripe_payout)
         allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
 
         payment.send(:sync_with_stripe)
 
         expect(payment.state).to eq("completed")
-        expect(payment.arrival_date).to eq(2.days.ago.to_i)
+        expect(payment.arrival_date).to eq(arrival_timestamp)
         expect(StripePayoutProcessor).not_to have_received(:reverse_internal_transfer!)
       end
     end

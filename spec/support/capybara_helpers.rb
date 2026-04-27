@@ -69,14 +69,17 @@ module CapybaraHelpers
   end
 
   def accept_browser_dialog
-    wait = Selenium::WebDriver::Wait.new(timeout: 30)
-    wait.until do
-      page.driver.browser.switch_to.alert
-      true
-    rescue Selenium::WebDriver::Error::NoAlertPresentError
-      false
-    end
     page.driver.browser.switch_to.alert.accept
+  rescue Selenium::WebDriver::Error::NoSuchAlertError
+    sleep 0.5
+    page.driver.browser.switch_to.alert.accept
+  end
+
+  # Waits for checkout surcharges to load after country/ZIP/tax ID changes.
+  # The checkout form debounces these at 300ms before firing the API call.
+  def wait_for_checkout_surcharges_loaded
+    sleep 0.4 # debounce (300ms) + margin
+    wait_for_ajax
   end
 
   def with_throttled_network(fixture_file, factor: 4)

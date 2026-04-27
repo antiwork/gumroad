@@ -121,10 +121,10 @@ const AuthButtons = ({
 
   return (
     <>
-      <NavButton href={Routes.new_user_session_path()} {...(onClick && { onClick })}>
+      <NavButton href={Routes.login_path()} {...(onClick && { onClick })}>
         Log in
       </NavButton>
-      <NavButton href={Routes.new_user_registration_path()} context="primary" {...(onClick && { onClick })}>
+      <NavButton href={Routes.signup_path()} context="primary" {...(onClick && { onClick })}>
         Start selling
       </NavButton>
     </>

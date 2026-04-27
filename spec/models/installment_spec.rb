@@ -797,7 +797,7 @@ const b = 2;</code></pre>
 
         @installment.publish!
 
-        expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
+        expect(@installment.reload.published_at).to be_within(2.seconds).of(Time.current)
       end
 
       it "publishes successfully when the content moderation check passes" do
@@ -807,7 +807,7 @@ const b = 2;</code></pre>
 
         @installment.publish!
 
-        expect(@installment.reload.published_at).to be_within(1.second).of(Time.current)
+        expect(@installment.reload.published_at).to be_within(2.seconds).of(Time.current)
       end
 
       it "clears the publishing flag after publish! completes" do

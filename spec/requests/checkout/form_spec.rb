@@ -201,8 +201,8 @@ describe("Checkout form page", type: :system, js: true) do
 
   describe "preview" do
     context "when the user has alive products" do
-      let!(:product1) { create(:product, user: seller, name: "Product 1") }
-      let!(:product2) { create(:product, user: seller, name: "Product 2") }
+      let!(:product2) { create(:product, user: seller, name: "Product 2", created_at: 2.days.ago) }
+      let!(:product1) { create(:product, user: seller, name: "Product 1", created_at: 1.day.ago) }
 
       it "displays the product that was created first" do
         visit checkout_form_path

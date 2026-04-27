@@ -665,15 +665,33 @@ describe PurchasesController, :vcr do
         index_model_records(Purchase)
       end
 
+      def csv_safe(value)
+        return value if value.nil?
+        str = value.to_s
+        return value if str.empty?
+        first = str[0]
+        if first == '+' || first == '-'
+          return value if str[1..]&.match?(/\A\d+\.?\d*\z/)
+        end
+        %w[= @ | % \r \t + -].include?(first) ? "'#{value}" : value
+      end
+
+      def find_csv_row(csv, purchase)
+        id = csv_safe(purchase.external_id)
+        csv[1..-2].find { |row| row.first == id }
+      end
+
       def expect_correct_csv(csv_string)
         csv = CSV.parse(csv_string)
         expect(csv.size).to eq(5)
         expect(csv[0]).to eq(Exports::PurchaseExportService::PURCHASE_FIELDS + ["Age", "Height", "Citizenship"])
-        # Test the correct purchase is listed with the expected custom fields values.
-        expect([csv[1].first] + csv[1].last(3)).to eq([@purchase_1.external_id, "25", nil, nil])
-        expect([csv[2].first] + csv[2].last(3)).to eq([@purchase_2.external_id, nil, nil, "Japan"])
-        expect([csv[3].first] + csv[3].last(3)).to eq([@purchase_3.external_id, nil, nil, nil])
-        expect([csv[4].first] + csv[4].last(3)).to eq(["Totals", nil, nil, nil])
+        row1 = find_csv_row(csv, @purchase_1)
+        row2 = find_csv_row(csv, @purchase_2)
+        row3 = find_csv_row(csv, @purchase_3)
+        expect([row1.first] + row1.last(3)).to eq([csv_safe(@purchase_1.external_id), "25", nil, nil])
+        expect([row2.first] + row2.last(3)).to eq([csv_safe(@purchase_2.external_id), nil, nil, "Japan"])
+        expect([row3.first] + row3.last(3)).to eq([csv_safe(@purchase_3.external_id), nil, nil, nil])
+        expect([csv.last.first] + csv.last.last(3)).to eq(["Totals", nil, nil, nil])
       end
 
       it_behaves_like "authorize called for action", :get, :export do
