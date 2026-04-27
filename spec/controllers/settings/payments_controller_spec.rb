@@ -437,7 +437,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
             expect(response).to redirect_to(settings_payments_path)
             expect(response).to have_http_status :found
-            expect(session[:inertia_errors][:base].first).to include("is not supported yet")
+            expect(session[:inertia_errors][:base]).to eq(["Bank payouts are not supported in your country yet. Please use PayPal instead."])
           end
         end
       end

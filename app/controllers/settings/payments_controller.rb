@@ -86,6 +86,9 @@ class Settings::PaymentsController < Settings::BaseController
           country = current_seller.fetch_or_build_user_compliance_info.legal_entity_country
           return redirect_with_error("The postal code you entered is not valid for #{country}.")
         end
+        if e.is_a?(MerchantRegistrationUserNotReadyError)
+          return redirect_with_error("Bank payouts are not supported in your country yet. Please use PayPal instead.")
+        end
         return redirect_with_error(e.try(:message) || "Something went wrong.")
       end
     end
