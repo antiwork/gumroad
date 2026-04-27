@@ -18,6 +18,10 @@ module WithMaxExecutionTime
       raise
     end
   ensure
-    connection.execute("set max_execution_time = #{previous_max_execution_time}")
+    begin
+      connection.execute("set max_execution_time = #{previous_max_execution_time}")
+    rescue ActiveRecord::StatementInvalid, Mysql2::Error => e
+      Rails.logger.error("[WithMaxExecutionTime] Failed to restore max_execution_time: #{e.message}")
+    end
   end
 end
