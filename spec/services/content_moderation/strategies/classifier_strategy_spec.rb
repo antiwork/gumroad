@@ -206,14 +206,36 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
 
     expect(result.status).to eq("compliant")
     expect(call_count).to eq(3)
-    expect(Rails.logger).to have_received(:warn).with(/timeout on attempt 1\/3, retrying/).once
-    expect(Rails.logger).to have_received(:warn).with(/timeout on attempt 2\/3, retrying/).once
+    expect(Rails.logger).to have_received(:warn).with(/error on attempt 1\/3, retrying/).once
+    expect(Rails.logger).to have_received(:warn).with(/error on attempt 2\/3, retrying/).once
   end
 
   it "gives up after MAX_MODERATION_ATTEMPTS timeouts and re-raises" do
     allow(client).to receive(:moderations).and_raise(Faraday::TimeoutError, "Net::ReadTimeout")
 
     expect { described_class.new(text:, image_urls: []).perform }.to raise_error(Faraday::TimeoutError)
+    expect(client).to have_received(:moderations).exactly(described_class::MAX_MODERATION_ATTEMPTS).times
+  end
+
+  it "retries on Faraday::ParsingError and succeeds when a subsequent attempt returns valid JSON" do
+    call_count = 0
+    allow(client).to receive(:moderations) do
+      call_count += 1
+      raise Faraday::ParsingError, "unexpected character: 'upstream' at line 1 column 1" if call_count == 1
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text:, image_urls: []).perform
+
+    expect(result.status).to eq("compliant")
+    expect(call_count).to eq(2)
+    expect(Rails.logger).to have_received(:warn).with(/error on attempt 1\/3, retrying/).once
+  end
+
+  it "gives up after MAX_MODERATION_ATTEMPTS parsing errors and re-raises" do
+    allow(client).to receive(:moderations).and_raise(Faraday::ParsingError, "unexpected character: 'upstream' at line 1 column 1")
+
+    expect { described_class.new(text:, image_urls: []).perform }.to raise_error(Faraday::ParsingError)
     expect(client).to have_received(:moderations).exactly(described_class::MAX_MODERATION_ATTEMPTS).times
   end
 end
