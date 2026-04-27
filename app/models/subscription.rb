@@ -69,6 +69,7 @@ class Subscription < ApplicationRecord
   after_create :update_last_payment_option
   after_save :create_interruption_event, if: -> { deactivated_at_previously_changed? }
   after_create :create_interruption_event, if: -> { deactivated_at.present? } # needed in addition to the `after_save`. See https://github.com/gumroad/web/pull/26305#discussion_r1336425626
+  after_save :sync_inventory_counter_caches_for_purchases, if: -> { saved_change_to_deactivated_at? }
   after_commit :send_ended_notification_webhook, if: Proc.new { |subscription|
     subscription.deactivated_at.present? &&
       subscription.deactivated_at_previously_changed? &&
@@ -1012,5 +1013,53 @@ class Subscription < ApplicationRecord
 
     def assign_seller
       self.seller_id = link.user_id
+    end
+
+    def sync_inventory_counter_caches_for_purchases
+      previous_deactivated_at, new_deactivated_at = saved_change_to_deactivated_at
+      sign = if previous_deactivated_at.nil? && new_deactivated_at.present?
+        -1
+      elsif previous_deactivated_at.present? && new_deactivated_at.nil?
+        1
+      else
+        0
+      end
+      return if sign.zero?
+
+      flag = Purchase.flag_mapping["flags"]
+      counting_states_sql = Purchase::COUNTS_TOWARDS_INVENTORY_STATES.map { |s| ActiveRecord::Base.connection.quote(s) }.join(",")
+      pending_ids = Purchase.inventory_pending_create_commit_ids.to_a
+      pending_clause = pending_ids.any? ? "AND p.id NOT IN (#{pending_ids.map(&:to_i).join(",")})" : ""
+      qualifying_purchase_conditions = <<~SQL.squish
+        p.subscription_id = #{id.to_i}
+        AND p.purchase_state IN (#{counting_states_sql})
+        AND (p.flags IS NULL OR p.flags & #{flag[:is_additional_contribution]} = 0)
+        AND (p.flags & #{flag[:is_archived_original_subscription_purchase]} = 0)
+        AND (p.flags & #{flag[:is_original_subscription_purchase]} != 0 OR p.flags & #{flag[:is_gift_receiver_purchase]} != 0)
+        #{pending_clause}
+      SQL
+
+      ActiveRecord::Base.connection.execute(<<~SQL.squish)
+        UPDATE base_variants bv
+        INNER JOIN (
+          SELECT bvp.base_variant_id AS id, SUM(p.quantity) AS total
+          FROM base_variants_purchases bvp
+          INNER JOIN purchases p ON p.id = bvp.purchase_id
+          WHERE #{qualifying_purchase_conditions}
+          GROUP BY bvp.base_variant_id
+        ) t ON t.id = bv.id
+        SET bv.sales_count_for_inventory_cache = bv.sales_count_for_inventory_cache + (#{sign} * t.total)
+      SQL
+
+      ActiveRecord::Base.connection.execute(<<~SQL.squish)
+        UPDATE links l
+        INNER JOIN (
+          SELECT p.link_id AS id, SUM(p.quantity) AS total
+          FROM purchases p
+          WHERE #{qualifying_purchase_conditions}
+          GROUP BY p.link_id
+        ) t ON t.id = l.id
+        SET l.sales_count_for_inventory_cache = l.sales_count_for_inventory_cache + (#{sign} * t.total)
+      SQL
     end
 end

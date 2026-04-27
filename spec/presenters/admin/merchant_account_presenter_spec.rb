@@ -102,6 +102,24 @@ describe Admin::MerchantAccountPresenter do
         end
       end
 
+      context "when Stripe account access has been revoked" do
+        let(:merchant_account) do
+          create(:merchant_account, charge_processor_merchant_id: "acct_revoked123")
+        end
+
+        before do
+          allow(Stripe::Account).to receive(:retrieve).with("acct_revoked123").and_raise(
+            Stripe::PermissionError.new("The provided key does not have access to account 'acct_revoked123'")
+          )
+        end
+
+        it "returns an error message instead of raising" do
+          expect(props[:live_attributes]).to eq(
+            [{ label: "Error", value: "Stripe account access has been revoked or the account no longer exists" }]
+          )
+        end
+      end
+
       context "for PayPal merchant accounts", :vcr do
         let(:merchant_account) do
           create(:merchant_account_paypal, charge_processor_merchant_id: "B66YJBBNCRW6L")

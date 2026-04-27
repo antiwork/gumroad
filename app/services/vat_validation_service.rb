@@ -3,6 +3,8 @@
 require "valvat"
 
 class VatValidationService
+  VIES_LOOKUP_TIMEOUT_SECONDS = 30
+
   attr_reader :vat_id, :valvat
 
   def initialize(vat_id)
@@ -19,7 +21,10 @@ class VatValidationService
     else
 
       # First attempt lookup via the VIES service.
-      vat_exists = valvat.exists?(requester: GUMROAD_VAT_REGISTRATION_NUMBER) rescue nil
+      vat_exists = valvat.exists?(
+        requester: GUMROAD_VAT_REGISTRATION_NUMBER,
+        http: { open_timeout: VIES_LOOKUP_TIMEOUT_SECONDS, read_timeout: VIES_LOOKUP_TIMEOUT_SECONDS }
+      ) rescue nil
 
       if vat_exists.nil?
         # If VIES is down, Valvat#exists? might return nil, fallback to validation instead

@@ -25,5 +25,13 @@ describe VatValidationService, :vcr do
       expect_any_instance_of(Valvat).to receive(:valid?)
       described_class.new("IE6388047V").process
     end
+
+    it "passes a 30-second timeout to the VIES lookup and falls back on Net::ReadTimeout" do
+      expect_any_instance_of(Valvat).to receive(:exists?)
+        .with(requester: GUMROAD_VAT_REGISTRATION_NUMBER, http: { open_timeout: 30, read_timeout: 30 })
+        .and_raise(Net::ReadTimeout)
+      expect_any_instance_of(Valvat).to receive(:valid?)
+      described_class.new("IE6388047V").process
+    end
   end
 end

@@ -302,6 +302,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_23_000000) do
     t.date "subscription_price_change_effective_date"
     t.text "subscription_price_change_message", size: :long
     t.integer "duration_in_minutes"
+    t.integer "sales_count_for_inventory_cache", default: 0, null: false
     t.index ["link_id"], name: "index_base_variants_on_link_id"
     t.index ["variant_category_id"], name: "index_variants_on_variant_category_id"
   end
@@ -1145,6 +1146,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_23_000000) do
     t.integer "discover_fee_per_thousand", default: 100, null: false
     t.string "support_email"
     t.bigint "default_offer_code_id"
+    t.integer "sales_count_for_inventory_cache", default: 0, null: false
     t.index ["banned_at"], name: "index_links_on_banned_at"
     t.index ["custom_permalink"], name: "index_links_on_custom_permalink", length: 191
     t.index ["default_offer_code_id"], name: "index_links_on_default_offer_code_id"

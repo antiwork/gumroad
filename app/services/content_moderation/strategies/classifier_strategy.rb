@@ -88,9 +88,9 @@ class ContentModeration::Strategies::ClassifierStrategy
         attempts += 1
         response = @client.moderations(parameters: { model: "omni-moderation-latest", input: input })
         response.dig("results", 0, "category_scores") || {}
-      rescue Faraday::TimeoutError => e
+      rescue Faraday::TimeoutError, Faraday::ParsingError => e
         if attempts < MAX_MODERATION_ATTEMPTS
-          Rails.logger.warn("ContentModeration::ClassifierStrategy timeout on attempt #{attempts}/#{MAX_MODERATION_ATTEMPTS}, retrying: #{e.message}")
+          Rails.logger.warn("ContentModeration::ClassifierStrategy error on attempt #{attempts}/#{MAX_MODERATION_ATTEMPTS}, retrying: #{e.message}")
           retry
         end
         raise

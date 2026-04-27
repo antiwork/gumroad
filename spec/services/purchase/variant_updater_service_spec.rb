@@ -214,6 +214,44 @@ describe Purchase::VariantUpdaterService do
       end
     end
 
+    context "inventory counter caches" do
+      before { @product = create(:product) }
+
+      it "moves the cached sales count from the old variant to the new one when only the variant changes" do
+        category = create(:variant_category, link: @product, title: "Color")
+        blue = create(:variant, variant_category: category, name: "Blue")
+        green = create(:variant, variant_category: category, name: "Green")
+
+        purchase = create(:purchase, link: @product, variant_attributes: [blue])
+        blue.reload
+        green.reload
+        blue_before = blue.sales_count_for_inventory_cache.to_i
+        green_before = green.sales_count_for_inventory_cache.to_i
+
+        Purchase::VariantUpdaterService.new(purchase:, variant_id: green.external_id, quantity: purchase.quantity).perform
+
+        expect(blue.reload.sales_count_for_inventory_cache.to_i).to eq(blue_before - purchase.quantity)
+        expect(green.reload.sales_count_for_inventory_cache.to_i).to eq(green_before + purchase.quantity)
+      end
+
+      it "reconciles caches when the variant and quantity both change" do
+        category = create(:variant_category, link: @product, title: "Color")
+        blue = create(:variant, variant_category: category, name: "Blue")
+        green = create(:variant, variant_category: category, name: "Green")
+
+        purchase = create(:purchase, link: @product, variant_attributes: [blue], quantity: 1)
+        blue.reload
+        green.reload
+        blue_before = blue.sales_count_for_inventory_cache.to_i
+        green_before = green.sales_count_for_inventory_cache.to_i
+
+        Purchase::VariantUpdaterService.new(purchase:, variant_id: green.external_id, quantity: 3).perform
+
+        expect(blue.reload.sales_count_for_inventory_cache.to_i).to eq(blue_before - 1)
+        expect(green.reload.sales_count_for_inventory_cache.to_i).to eq(green_before + 3)
+      end
+    end
+
     context "with invalid arguments" do
       context "such as an invalid variant_id" do
         it "returns an error" do

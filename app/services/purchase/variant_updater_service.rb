@@ -27,9 +27,16 @@ class Purchase::VariantUpdaterService
 
     return false unless new_variants.all? { |variant| sufficient_inventory?(variant, new_quantity - (purchase.variant_attributes == new_variants ? purchase.quantity : 0)) }
 
+    before_counted = purchase.counts_towards_inventory?
+    before_variant_ids = purchase.variant_attribute_ids.dup
+    before_quantity = purchase.quantity.to_i
+
     purchase.quantity = new_quantity
     purchase.variant_attributes = new_variants
     purchase.save!
+
+    sync_inventory_counter_cache_for_variant_swap(before_counted, before_variant_ids, before_quantity)
+
     if purchase.is_gift_sender_purchase?
       Purchase::VariantUpdaterService.new(
         purchase: purchase.gift.giftee_purchase,
@@ -46,5 +53,19 @@ class Purchase::VariantUpdaterService
   private
     def sufficient_inventory?(variant, quantity)
       variant.quantity_left ? variant.quantity_left >= quantity : true
+    end
+
+    def sync_inventory_counter_cache_for_variant_swap(before_counted, before_variant_ids, before_quantity)
+      after_variant_ids = purchase.variant_attribute_ids
+      removed_ids = before_variant_ids - after_variant_ids
+      added_ids = after_variant_ids - before_variant_ids
+
+      if before_counted && removed_ids.any? && before_quantity > 0
+        BaseVariant.where(id: removed_ids).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache - #{before_quantity}")
+      end
+
+      if purchase.counts_towards_inventory? && added_ids.any? && before_quantity > 0
+        BaseVariant.where(id: added_ids).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{before_quantity}")
+      end
     end
 end

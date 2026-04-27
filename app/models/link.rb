@@ -657,6 +657,7 @@ class Link < ApplicationRecord
   end
 
   def sales_count_for_inventory
+    return sales_count_for_inventory_cache if Feature.active?(:inventory_counter_cache)
     sales.counts_towards_inventory.sum(:quantity)
   end
 

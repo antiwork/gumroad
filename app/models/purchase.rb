@@ -358,6 +358,167 @@ class Purchase < ApplicationRecord
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
 
+  after_create :mark_inventory_new_in_txn
+  before_save :snapshot_inventory_pre_save_state
+  after_commit :sync_inventory_counter_caches_on_create, on: :create
+  after_commit :sync_inventory_counter_cache_for_state_change, on: :update
+  after_commit :sync_inventory_counter_cache_for_destroy, on: :destroy
+  after_rollback :reset_inventory_pre_save_snapshot
+  after_rollback :clear_inventory_pending_create_commit_id
+  before_destroy :capture_inventory_state_before_destroy
+
+  COUNTS_TOWARDS_INVENTORY_STATES = %w[preorder_authorization_successful in_progress successful not_charged].freeze
+
+  def counts_towards_inventory?
+    Purchase.counts_towards_inventory_for?(
+      purchase_state:,
+      flags:,
+      subscription_id:,
+      subscription_deactivated_at: subscription_id.present? ? subscription&.deactivated_at : nil,
+    )
+  end
+
+  def self.counts_towards_inventory_for?(purchase_state:, flags:, subscription_id:, subscription_deactivated_at:)
+    return false unless COUNTS_TOWARDS_INVENTORY_STATES.include?(purchase_state)
+
+    raw_flags = flags.to_i
+    additional_contribution_bit = flag_mapping["flags"][:is_additional_contribution]
+    original_sub_bit = flag_mapping["flags"][:is_original_subscription_purchase]
+    gift_receiver_bit = flag_mapping["flags"][:is_gift_receiver_purchase]
+    archived_original_bit = flag_mapping["flags"][:is_archived_original_subscription_purchase]
+
+    return false if raw_flags & additional_contribution_bit != 0
+    return false if raw_flags & archived_original_bit != 0
+
+    if subscription_id.present?
+      is_original = raw_flags & original_sub_bit != 0
+      is_gift_receiver = raw_flags & gift_receiver_bit != 0
+      return false unless is_original || is_gift_receiver
+      return false if subscription_deactivated_at.present?
+    end
+
+    true
+  end
+
+  def self.skip_inventory_counter_callbacks
+    Thread.current[:skip_purchase_inventory_callbacks] = true
+    yield
+  ensure
+    Thread.current[:skip_purchase_inventory_callbacks] = false
+  end
+
+  def self.skip_inventory_counter_callbacks?
+    Thread.current[:skip_purchase_inventory_callbacks] == true
+  end
+
+  def self.inventory_pending_create_commit_ids
+    Thread.current[:inventory_pending_create_commit_ids] ||= Set.new
+  end
+
+  def mark_inventory_new_in_txn
+    @inventory_new_in_txn = true
+    Purchase.inventory_pending_create_commit_ids << id
+  end
+
+  def sync_inventory_counter_caches_on_create
+    Purchase.inventory_pending_create_commit_ids.delete(id)
+    @inventory_new_in_txn = false
+    return if Purchase.skip_inventory_counter_callbacks?
+    return unless counts_towards_inventory?
+    delta = quantity.to_i
+    return if delta.zero?
+
+    variant_ids = variant_attribute_ids
+    if variant_ids.any?
+      BaseVariant.where(id: variant_ids).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{delta}")
+    end
+    if link_id.present?
+      Link.where(id: link_id).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{delta}")
+    end
+  end
+
+  def snapshot_inventory_pre_save_state
+    return if new_record?
+    return if @inventory_pre_save_snapshot
+
+    prev_subscription_id = subscription_id_in_database
+    @inventory_pre_save_snapshot = {
+      purchase_state: purchase_state_in_database,
+      flags: flags_in_database,
+      subscription_id: prev_subscription_id,
+      quantity: quantity_in_database,
+      subscription_deactivated_at: prev_subscription_id.present? ? Subscription.where(id: prev_subscription_id).pick(:deactivated_at) : nil,
+    }
+  end
+
+  def reset_inventory_pre_save_snapshot
+    @inventory_pre_save_snapshot = nil
+  end
+
+  def clear_inventory_pending_create_commit_id
+    Purchase.inventory_pending_create_commit_ids.delete(id) if id.present?
+    @inventory_new_in_txn = false
+  end
+
+  def sync_inventory_counter_cache_for_state_change
+    return if Purchase.skip_inventory_counter_callbacks?
+    snapshot = @inventory_pre_save_snapshot
+    return unless snapshot
+    return unless previous_changes.keys.intersect?(%w[purchase_state flags subscription_id quantity])
+
+    before_counted = Purchase.counts_towards_inventory_for?(
+      purchase_state: snapshot[:purchase_state],
+      flags: snapshot[:flags],
+      subscription_id: snapshot[:subscription_id],
+      subscription_deactivated_at: snapshot[:subscription_deactivated_at],
+    )
+    before_qty = before_counted ? snapshot[:quantity].to_i : 0
+
+    current_subscription_deactivated_at = subscription_id.present? ? Subscription.where(id: subscription_id).pick(:deactivated_at) : nil
+    after_counted = Purchase.counts_towards_inventory_for?(
+      purchase_state:,
+      flags:,
+      subscription_id:,
+      subscription_deactivated_at: current_subscription_deactivated_at,
+    )
+    after_qty = after_counted ? quantity.to_i : 0
+
+    delta = after_qty - before_qty
+    reset_inventory_pre_save_snapshot
+    return if delta.zero?
+
+    variant_ids = variant_attribute_ids
+    if variant_ids.any?
+      BaseVariant.where(id: variant_ids).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{delta}")
+    end
+    if link_id.present?
+      Link.where(id: link_id).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{delta}")
+    end
+  end
+
+  def capture_inventory_state_before_destroy
+    @inventory_was_counting_before_destroy = counts_towards_inventory?
+    @inventory_quantity_before_destroy = quantity.to_i
+    @inventory_link_id_before_destroy = link_id
+    @inventory_variant_ids_before_destroy = variant_attribute_ids.dup
+  end
+
+  def sync_inventory_counter_cache_for_destroy
+    Purchase.inventory_pending_create_commit_ids.delete(id) if id.present?
+    return if Purchase.skip_inventory_counter_callbacks?
+    return if @inventory_new_in_txn
+    return unless @inventory_was_counting_before_destroy
+    delta = -@inventory_quantity_before_destroy.to_i
+    return if delta.zero?
+    variant_ids = @inventory_variant_ids_before_destroy || []
+    if variant_ids.any?
+      BaseVariant.where(id: variant_ids).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{delta}")
+    end
+    if @inventory_link_id_before_destroy.present?
+      Link.where(id: @inventory_link_id_before_destroy).update_all("sales_count_for_inventory_cache = sales_count_for_inventory_cache + #{delta}")
+    end
+  end
+
   # Entities that store the product price, tax information and transaction price
 
   # price_cents - Price cents is the cost of the product as seen by the seller, including Gumroad fees.
@@ -3670,8 +3831,6 @@ class Purchase < ApplicationRecord
 
       PostToPingEndpointsWorker.perform_in(5.seconds, id, url_parameters, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
-
-
 
     def log_transition
       logger.info "Purchase: purchase ID #{id} transitioned to #{purchase_state}"
