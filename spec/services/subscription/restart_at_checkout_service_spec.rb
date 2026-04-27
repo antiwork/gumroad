@@ -92,11 +92,14 @@ describe Subscription::RestartAtCheckoutService do
       end
 
       it "treats submitted checkout payment data as a new card" do
-        params_with_stripe = base_params.merge(
-          stripe_payment_method_id: "pm_123",
-          stripe_customer_id: "cus_123",
-          stripe_setup_intent_id: "seti_123"
+        params_with_stripe = ActionController::Parameters.new(
+          base_params.deep_stringify_keys.merge(
+            "stripe_payment_method_id" => "pm_123",
+            "stripe_customer_id" => "cus_123",
+            "stripe_setup_intent_id" => "seti_123"
+          )
         )
+        params_with_stripe.permit!
 
         service = described_class.new(
           subscription: subscription,

@@ -6,7 +6,7 @@ class Subscription::RestartAtCheckoutService
   def initialize(subscription:, product:, params:, buyer: nil)
     @subscription = subscription
     @product = product
-    @params = params
+    @params = normalize_params(params)
     @buyer = buyer
   end
 
@@ -23,6 +23,13 @@ class Subscription::RestartAtCheckoutService
   end
 
   private
+    def normalize_params(params)
+      return params.to_unsafe_h.with_indifferent_access if params.respond_to?(:to_unsafe_h)
+      return params.to_h.with_indifferent_access if params.respond_to?(:to_h)
+
+      params.with_indifferent_access
+    end
+
     def updater_service_params
       perceived_price_cents = params.dig(:purchase, :perceived_price_cents)&.to_i ||
                               subscription.current_subscription_price_cents
