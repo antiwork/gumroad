@@ -97,6 +97,7 @@ class ContentModeration::Strategies::ClassifierStrategy
           retry
         end
         Rails.logger.warn("ContentModeration::ClassifierStrategy exhausted #{MAX_MODERATION_ATTEMPTS} attempts: #{e.class} - #{e.message}")
+        ErrorNotifier.notify(e, attempts: attempts, input_type: input.first[:type], skip_url: skip_url)
         nil
       rescue Faraday::BadRequestError => e
         raise if skip_url.nil?
