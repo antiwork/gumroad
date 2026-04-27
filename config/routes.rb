@@ -1041,6 +1041,20 @@ Rails.application.routes.draw do
   constraints ProductCustomDomainConstraint do
     get "/.well-known/acme-challenge/:token", to: "acme_challenges#show"
     product_tracking_routes(named_routes: false)
+
+    put "/product_reviews/set", to: "product_reviews#set", format: :json
+    resources :product_reviews, only: [:index, :show]
+    resources :product_review_responses, only: [:update, :destroy], format: :json
+    resources :product_review_videos, only: [] do
+      scope module: :product_review_videos do
+        resource :stream, only: [:show]
+        resources :streaming_urls, only: [:index]
+      end
+    end
+    namespace :product_review_videos do
+      resource :upload_context, only: [:show]
+    end
+
     get "/", to: "links#show", defaults: { format: "html" }
     get "/l/:id", to: "links#show", defaults: { format: "html" }
     get "/l/:id/:code", to: "links#show", defaults: { format: "html" }
