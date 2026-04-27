@@ -346,8 +346,8 @@ Rails.application.routes.draw do
     # Redirect Devise's default auth paths to our custom routes.
     # Must be defined before devise_for so they match first, preventing Devise's
     # require_no_authentication filter from showing "You are already signed in." flash.
-    get "/users/sign_in", to: redirect("/login")
-    get "/users/sign_up", to: redirect("/signup")
+    get "/users/sign_in", to: redirect { |_p, req| "/login#{req.query_string.present? ? "?#{req.query_string}" : ""}" }
+    get "/users/sign_up", to: redirect { |_p, req| "/signup#{req.query_string.present? ? "?#{req.query_string}" : ""}" }
 
     # users (logins/signups and other goodies)
     devise_for(:users,

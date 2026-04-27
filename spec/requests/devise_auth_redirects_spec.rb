@@ -15,6 +15,16 @@ describe "Devise auth path redirects", type: :request do
       expect(response).to redirect_to("/login")
     end
 
+    it "preserves query string when redirecting" do
+      get "/users/sign_in?next=/dashboard"
+      expect(response).to redirect_to("/login?next=/dashboard")
+    end
+
+    it "preserves multiple query parameters" do
+      get "/users/sign_in?next=/checkout&email=test%40example.com"
+      expect(response).to redirect_to("/login?next=/checkout&email=test%40example.com")
+    end
+
     context "when user is already signed in" do
       let(:user) { create(:user) }
 
@@ -32,6 +42,16 @@ describe "Devise auth path redirects", type: :request do
     it "redirects to /signup" do
       get "/users/sign_up"
       expect(response).to redirect_to("/signup")
+    end
+
+    it "preserves query string when redirecting" do
+      get "/users/sign_up?referrer=alice"
+      expect(response).to redirect_to("/signup?referrer=alice")
+    end
+
+    it "preserves multiple query parameters" do
+      get "/users/sign_up?referrer=alice&email=test%40example.com"
+      expect(response).to redirect_to("/signup?referrer=alice&email=test%40example.com")
     end
   end
 end
