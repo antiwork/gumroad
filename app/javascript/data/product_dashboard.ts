@@ -32,10 +32,10 @@ export async function unarchiveProduct(permalink: string) {
     accept: "json",
   });
 
-  const json = cast<{ success: true; archived_products_count: number } | { success: false; error: string }>(
+  const json = cast<{ success: true; archived_products_count: number } | { success: false; errors: string[] }>(
     await response.json(),
   );
-  if (!json.success) throw new ResponseError("Failed to unarchive product");
+  if (!json.success) throw new ResponseError(json.errors[0] || "Failed to unarchive product");
   return json.archived_products_count;
 }
 

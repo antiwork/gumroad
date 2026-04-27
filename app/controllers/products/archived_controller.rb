@@ -31,8 +31,11 @@ class Products::ArchivedController < Sellers::BaseController
   def destroy
     authorize [:products, :archived, @product]
 
-    @product.update!(archived: false)
-    render json: { success: true, archived_products_count: current_seller.archived_products_count }
+    if @product.update(archived: false)
+      render json: { success: true, archived_products_count: current_seller.archived_products_count }
+    else
+      render json: { success: false, errors: @product.errors.full_messages }, status: :unprocessable_entity
+    end
   end
 
   private
