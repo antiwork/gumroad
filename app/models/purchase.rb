@@ -360,8 +360,10 @@ class Purchase < ApplicationRecord
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
   }
 
+  before_save :snapshot_inventory_pre_save_state
   after_commit :sync_inventory_counter_caches, on: [:create, :update]
   after_commit :sync_inventory_counter_caches_on_destroy, on: :destroy
+  after_rollback :reset_inventory_pre_save_snapshot
 
   COUNTS_TOWARDS_INVENTORY_STATES = %w[preorder_authorization_successful in_progress successful not_charged].freeze
 
@@ -411,9 +413,18 @@ class Purchase < ApplicationRecord
   def sync_inventory_counter_caches
     return unless inventory_counter_cache_relevant_change?
 
+    current_subscription_deactivated_at = subscription_id.present? ? Subscription.where(id: subscription_id).pick(:deactivated_at) : nil
     before_qty = pre_save_inventory_counted_quantity
-    after_qty = counts_towards_inventory? ? quantity.to_i : 0
+    after_counted = Purchase.counts_towards_inventory_for?(
+      purchase_state:,
+      flags:,
+      subscription_id:,
+      subscription_deactivated_at: current_subscription_deactivated_at,
+    )
+    after_qty = after_counted ? quantity.to_i : 0
     apply_inventory_counter_delta!(after_qty - before_qty)
+  ensure
+    reset_inventory_pre_save_snapshot
   end
 
   def capture_inventory_variant_ids_before_destroy
@@ -442,22 +453,36 @@ class Purchase < ApplicationRecord
       saved_change_to_quantity?
   end
 
+  def snapshot_inventory_pre_save_state
+    return if new_record?
+    return if @inventory_pre_save_snapshot
+
+    prev_subscription_id = subscription_id_in_database
+    @inventory_pre_save_snapshot = {
+      purchase_state: purchase_state_in_database,
+      flags: flags_in_database,
+      subscription_id: prev_subscription_id,
+      quantity: quantity_in_database,
+      subscription_deactivated_at: prev_subscription_id.present? ? Subscription.where(id: prev_subscription_id).pick(:deactivated_at) : nil,
+    }
+  end
+
+  def reset_inventory_pre_save_snapshot
+    @inventory_pre_save_snapshot = nil
+  end
+
   def pre_save_inventory_counted_quantity
     return 0 if previously_new_record?
-
-    prev_state = saved_change_to_purchase_state&.first || purchase_state
-    prev_flags = saved_change_to_flags&.first || flags
-    prev_subscription_id = saved_change_to_subscription_id&.first || subscription_id
-    prev_quantity = saved_change_to_quantity&.first || quantity
-    prev_subscription_deactivated_at = prev_subscription_id.present? ? Subscription.where(id: prev_subscription_id).pick(:deactivated_at) : nil
+    snapshot = @inventory_pre_save_snapshot
+    return 0 unless snapshot
 
     counted = Purchase.counts_towards_inventory_for?(
-      purchase_state: prev_state,
-      flags: prev_flags,
-      subscription_id: prev_subscription_id,
-      subscription_deactivated_at: prev_subscription_deactivated_at,
+      purchase_state: snapshot[:purchase_state],
+      flags: snapshot[:flags],
+      subscription_id: snapshot[:subscription_id],
+      subscription_deactivated_at: snapshot[:subscription_deactivated_at],
     )
-    counted ? prev_quantity.to_i : 0
+    counted ? snapshot[:quantity].to_i : 0
   end
 
   # Entities that store the product price, tax information and transaction price
@@ -3746,8 +3771,6 @@ class Purchase < ApplicationRecord
 
       PostToPingEndpointsWorker.perform_in(5.seconds, id, url_parameters, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
-
-
 
     def log_transition
       logger.info "Purchase: purchase ID #{id} transitioned to #{purchase_state}"

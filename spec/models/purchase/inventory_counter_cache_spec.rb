@@ -184,6 +184,76 @@ describe "Purchase inventory counter cache" do
     end
   end
 
+  describe "multi-save in a single outer transaction" do
+    it "increments cache by quantity when purchase_state goes failed -> in_progress -> successful in one transaction" do
+      purchase = create(:purchase, link: product, variant_attributes: [variant], purchase_state: "failed", quantity: 2)
+      variant.reload
+      product.reload
+
+      ActiveRecord::Base.transaction do
+        purchase.update!(purchase_state: "in_progress")
+        purchase.update!(purchase_state: "successful")
+      end
+
+      expect(variant.reload.sales_count_for_inventory_cache).to eq(2)
+      expect(product.reload.sales_count_for_inventory_cache).to eq(2)
+    end
+
+    it "leaves cache unchanged when purchase_state goes failed -> in_progress -> failed in one transaction" do
+      purchase = create(:purchase, link: product, variant_attributes: [variant], purchase_state: "failed", quantity: 2)
+      variant.reload
+      product.reload
+
+      ActiveRecord::Base.transaction do
+        purchase.update!(purchase_state: "in_progress")
+        purchase.update!(purchase_state: "failed")
+      end
+
+      expect(variant.reload.sales_count_for_inventory_cache).to eq(0)
+      expect(product.reload.sales_count_for_inventory_cache).to eq(0)
+    end
+
+    it "leaves cache unchanged when archive flag flips on then off on the same purchase in one transaction" do
+      membership = create(:membership_product)
+      v = membership.variant_categories_alive.first.variants.first
+      subscription = create(:subscription, link: membership)
+      purchase = create(:purchase, link: membership, subscription: subscription,
+                                   variant_attributes: [v], is_original_subscription_purchase: true,
+                                   purchase_state: "successful", quantity: 1)
+      v.reload
+      membership.reload
+
+      ActiveRecord::Base.transaction do
+        purchase.update!(is_archived_original_subscription_purchase: true)
+        purchase.update!(is_archived_original_subscription_purchase: false)
+      end
+
+      expect(v.reload.sales_count_for_inventory_cache).to eq(1)
+      expect(membership.reload.sales_count_for_inventory_cache).to eq(1)
+    end
+
+    it "does not drift when an original purchase is archived and the subscription is reactivated in the same transaction" do
+      membership = create(:membership_product)
+      v = membership.variant_categories_alive.first.variants.first
+      subscription = create(:subscription, link: membership, deactivated_at: Time.current)
+      purchase = create(:purchase, link: membership, subscription: subscription,
+                                   variant_attributes: [v], is_original_subscription_purchase: true,
+                                   purchase_state: "successful", quantity: 1)
+      v.reload
+      membership.reload
+      expect(v.sales_count_for_inventory_cache).to eq(0)
+      expect(membership.sales_count_for_inventory_cache).to eq(0)
+
+      ActiveRecord::Base.transaction do
+        purchase.update!(is_archived_original_subscription_purchase: true)
+        subscription.update!(deactivated_at: nil)
+      end
+
+      expect(v.reload.sales_count_for_inventory_cache).to eq(0)
+      expect(membership.reload.sales_count_for_inventory_cache).to eq(0)
+    end
+  end
+
   describe "reader gating on Feature flag" do
     let(:purchase) { create(:purchase, link: product, variant_attributes: [variant], purchase_state: "successful", quantity: 4) }
 
@@ -206,4 +276,3 @@ describe "Purchase inventory counter cache" do
     end
   end
 end
-
