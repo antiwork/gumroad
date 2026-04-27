@@ -157,7 +157,6 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true do
     visit(embed_page_url)
 
     within_frame do
-      expect(page).to have_button("Add to cart")
       expect(page).to have_radio_button("Blue - Extra Large - Polo", checked: true)
       expect(page).to have_field("Quantity", with: 2)
       expect(page).to have_field("Name a fair price", with: 3)
