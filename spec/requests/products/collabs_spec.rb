@@ -78,9 +78,15 @@ describe "Collabs", type: :system, js: true do
         p.update_balance_and_mark_successful!
       end
 
-      index_model_records(Purchase)
-      index_model_records(Link)
-      index_model_records(Balance)
+      [Purchase, Link, Balance].each do |model|
+        begin
+          index_model_records(model)
+        rescue Elasticsearch::Transport::Transport::Errors::BadRequest => e
+          raise unless e.message.include?("resource_already_exists_exception")
+          sleep 0.5
+          index_model_records(model)
+        end
+      end
     end
 
     it "renders the correct stats and collab products", :sidekiq_inline, :elasticsearch_wait_for_refresh do

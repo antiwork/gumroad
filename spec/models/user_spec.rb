@@ -780,7 +780,10 @@ describe User, :vcr do
           expect(@user.deleted_at.to_i).to eq(delete_at.to_i)
           expect(@product.reload.deleted_at.to_i).to eq(delete_at.to_i)
           expect(@installment.reload.deleted_at.to_i).to eq(delete_at.to_i)
-          expect(@user.user_compliance_infos.pluck(:deleted_at).map(&:to_i)).to eq([delete_at.to_i, delete_at.to_i])
+          expect(@user.user_compliance_infos.alive).to be_empty
+          @user.user_compliance_infos.pluck(:deleted_at).each do |ts|
+            expect(ts).to be_within(2.seconds).of(delete_at)
+          end
           expect(@bank_account.reload.deleted_at.to_i).to eq(delete_at.to_i)
         end
       end

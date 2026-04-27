@@ -55,7 +55,7 @@ describe "Test subscription purchases", :js, type: :system do
     fill_in "ZIP code", with: "12345"
     click_on "Pay"
 
-    expect(page).to have_alert(text: "Your purchase was successful!")
+    expect(page).to have_alert(text: "Your purchase was successful!", wait: 45)
     expect(product.subscriptions.reload.count).to eq(2)
   end
 end

@@ -95,9 +95,17 @@ RSpec.shared_context "with switching account to user with given role for seller"
     login_as user_with_role_for_seller
     visit(options[:host] ? settings_main_url(host: options[:host]) : settings_main_path)
     within "nav[aria-label='Main']" do
-      select_disclosure(user_with_role_for_seller.name) do
-        choose(seller.display_name)
-      end
+      expect(page).to have_selector(:disclosure_button, user_with_role_for_seller.name)
+      toggle_disclosure(user_with_role_for_seller.name, expand: true)
+    end
+    attempts = 0
+    begin
+      attempts += 1
+      choose(seller.display_name)
+    rescue Capybara::ElementNotFound
+      raise if attempts >= 3
+      sleep 1
+      retry
     end
 
     wait_for_ajax

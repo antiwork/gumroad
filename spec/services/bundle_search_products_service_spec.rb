@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe BundleSearchProductsService do
   let(:seller) { create(:named_seller, :eligible_for_service_products) }
-  let(:bundle) { create(:product, :bundle, user: seller) }
+  let(:bundle) { create(:product, :bundle, user: seller, bundle_products: []) }
   let(:other_seller) { create(:user) }
 
   before do

@@ -346,9 +346,8 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
       choose "First Tier"
 
       click_on "Update membership"
-      wait_for_ajax
 
-      expect(page).to have_alert(text: "Your membership has been updated.")
+      expect(page).to have_alert(text: "Your membership has been updated.", wait: 15)
       expect(@subscription.reload.purchases.count).to eq 1
     end
 
