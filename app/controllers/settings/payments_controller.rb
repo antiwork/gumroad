@@ -81,7 +81,7 @@ class Settings::PaymentsController < Settings::BaseController
     if current_seller.active_bank_account && current_seller.merchant_accounts.stripe.alive.empty? && current_seller.native_payouts_supported?
       begin
         StripeMerchantAccountManager.create_account(current_seller, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
-      rescue Stripe::StripeError => e
+      rescue Stripe::StripeError, MerchantRegistrationUserNotReadyError => e
         if e.is_a?(Stripe::InvalidRequestError) && e.code == "postal_code_invalid"
           country = current_seller.fetch_or_build_user_compliance_info.legal_entity_country
           return redirect_with_error("The postal code you entered is not valid for #{country}.")

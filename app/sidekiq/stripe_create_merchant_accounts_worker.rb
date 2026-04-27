@@ -39,6 +39,7 @@ class StripeCreateMerchantAccountsWorker
     user_ids = ApplicationRecord.connection.execute(sql).to_a.flatten
     User.where(id: user_ids).each do |user|
       next unless user.native_payouts_supported?
+      next if StripeMerchantAccountManager::NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES.include?(user.alive_user_compliance_info&.legal_entity_country_code)
       CreateStripeMerchantAccountWorker.perform_async(user.id)
     end
   end
