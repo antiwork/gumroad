@@ -3,6 +3,12 @@
 require "spec_helper"
 
 describe "Devise auth path redirects", type: :request do
+  include Devise::Test::IntegrationHelpers
+
+  before do
+    allow_any_instance_of(ActionDispatch::Request).to receive(:host).and_return(VALID_REQUEST_HOSTS.first)
+  end
+
   describe "GET /users/sign_in" do
     it "redirects to /login" do
       get "/users/sign_in"
