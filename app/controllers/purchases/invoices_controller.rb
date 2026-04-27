@@ -22,19 +22,41 @@ class Purchases::InvoicesController < ApplicationController
     address_fields = invoice_params[:address_fields]
     return redirect_to new_purchase_invoice_path(@purchase.external_id, email: invoice_params[:email]), alert: "Address information is required to generate an invoice." if address_fields.blank?
 
-    address_fields[:country] = ISO3166::Country[invoice_params[:address_fields][:country_code]]&.common_name
-    business_vat_id = invoice_params[:vat_id] if is_vat_id_valid?(invoice_params[:vat_id])
-    invoice_presenter = InvoicePresenter.new(@chargeable, address_fields:, additional_notes: invoice_params[:additional_notes]&.strip, business_vat_id:)
+    selected_country_code = invoice_params.dig(:address_fields, :country_code)
+    address_fields[:state] = nil if selected_country_code.present? && selected_country_code != Compliance::Countries::USA.alpha2
+    address_fields[:country] = ISO3166::Country[selected_country_code]&.common_name
+
+    submitted_vat_id = invoice_params[:vat_id]&.strip.presence
+    refundable_vat_id = nil
+    refundable_vat_id = submitted_vat_id if @chargeable.taxed_by_gumroad? && is_vat_id_valid?(submitted_vat_id)
+    business_vat_id =
+      if refundable_vat_id
+        refundable_vat_id
+      elsif submitted_vat_id && InvoicePresenter::FormInfo::BUSINESS_ID_COUNTRY_CODES.include?(selected_country_code)
+        submitted_vat_id
+      end
+    business_vat_id_country_code = selected_country_code if business_vat_id.present? && refundable_vat_id.blank?
+    show_reverse_charge_note = refundable_vat_id.present? if business_vat_id.present?
+
+    invoice_presenter = InvoicePresenter.new(
+      @chargeable,
+      address_fields:,
+      additional_notes: invoice_params[:additional_notes]&.strip,
+      business_vat_id:,
+      business_vat_id_country_code:,
+      show_reverse_charge_note:,
+      business_name: invoice_params[:business_name]&.strip.presence
+    )
 
     begin
-      @chargeable.refund_gumroad_taxes!(refunding_user_id: logged_in_user&.id, note: address_fields.to_json, business_vat_id:) if business_vat_id
+      @chargeable.refund_gumroad_taxes!(refunding_user_id: logged_in_user&.id, note: address_fields.to_json, business_vat_id: refundable_vat_id) if refundable_vat_id
 
       invoice_html = render_to_string(locals: { invoice_presenter: }, formats: [:pdf], layout: false)
       pdf = PDFKit.new(invoice_html, page_size: "Letter").to_pdf
       s3_obj = @chargeable.upload_invoice_pdf(pdf)
 
       message = +"The invoice will be downloaded automatically."
-      if business_vat_id
+      if refundable_vat_id
         notice =
           if @chargeable.purchase_sales_tax_info.present? &&
              (Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(@chargeable.purchase_sales_tax_info.country_code) ||
@@ -81,11 +103,12 @@ class Purchases::InvoicesController < ApplicationController
     end
 
     def new_invoice_presenter
-      @_new_invoice_presenter ||= InvoicePresenter.new(@chargeable)
+      buyer = logged_in_user if logged_in_user && logged_in_user.id == @chargeable.purchaser&.id
+      @_new_invoice_presenter ||= InvoicePresenter.new(@chargeable, buyer:)
     end
 
     def invoice_params
-      params.permit(:email, :vat_id, :additional_notes, address_fields: [:full_name, :street_address, :city, :state, :zip_code, :country_code])
+      params.permit(:email, :vat_id, :business_name, :additional_notes, address_fields: [:full_name, :street_address, :city, :state, :zip_code, :country_code])
     end
 
     def set_chargeable

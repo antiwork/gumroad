@@ -1,6 +1,7 @@
 import React from "react";
 
 import ConfirmEmailAction from "$app/components/Admin/Users/Actions/ConfirmEmailAction";
+import GdprEraseAction from "$app/components/Admin/Users/Actions/GdprEraseAction";
 import ImpersonateAction from "$app/components/Admin/Users/Actions/ImpersonateAction";
 import InvalidateActiveSessionsAction from "$app/components/Admin/Users/Actions/InvalidateActiveSessionsAction";
 import MarkAsAdultAction from "$app/components/Admin/Users/Actions/MarkAsAdultAction";
@@ -22,6 +23,7 @@ const AdminUserActions = ({ user }: AdminUserActionsProps) => (
     <ConfirmEmailAction user={user} />
     <InvalidateActiveSessionsAction user={user} />
     <MarkAsAdultAction user={user} />
+    <GdprEraseAction user={user} />
   </div>
 );
 

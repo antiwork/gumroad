@@ -21,7 +21,10 @@ module Purchase::Receipt
   def send_receipt
     after_commit do
       next if destroyed?
-      SendPurchaseReceiptJob.set(queue: link.has_stampable_pdfs? ? "default" : "critical").perform_async(id) unless uses_charge_receipt?
+      unless uses_charge_receipt?
+        SendPurchaseReceiptJob.set(queue: link.has_stampable_pdfs? ? "default" : "critical").perform_async(id)
+        SendAutoInvoiceEmailJob.perform_async(id, nil) if AutoInvoiceEligibility.eligible?(self)
+      end
       enqueue_send_last_post_job
     end
   end

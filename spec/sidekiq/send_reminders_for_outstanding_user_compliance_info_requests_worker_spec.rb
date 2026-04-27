@@ -107,27 +107,33 @@ describe SendRemindersForOutstandingUserComplianceInfoRequestsWorker do
     end
 
     it "reminds a user of the outstanding request if they have never been reminded" do
-      described_class.new.perform
+      freeze_time do
+        described_class.new.perform
 
-      expect(Time.zone.parse(@sg_verification_request.reload.sg_verification_reminder_sent_at)).to eq(Time.current.change(usec: 0))
+        expect(Time.zone.parse(@sg_verification_request.reload.sg_verification_reminder_sent_at)).to eq(Time.current.change(usec: 0))
+      end
     end
 
     it "does not remind a user who was reminded less than 7 days ago" do
-      @sg_verification_request.sg_verification_reminder_sent_at = 6.days.ago
-      @sg_verification_request.save!
+      freeze_time do
+        @sg_verification_request.sg_verification_reminder_sent_at = 6.days.ago
+        @sg_verification_request.save!
 
-      described_class.new.perform
+        described_class.new.perform
 
-      expect(Time.zone.parse(@sg_verification_request.reload.sg_verification_reminder_sent_at)).to eq(6.days.ago.change(usec: 0))
+        expect(Time.zone.parse(@sg_verification_request.reload.sg_verification_reminder_sent_at)).to eq(6.days.ago.change(usec: 0))
+      end
     end
 
     it "reminds a user who was reminded more than 7 days ago" do
-      @sg_verification_request.sg_verification_reminder_sent_at = 8.days.ago
-      @sg_verification_request.save!
+      freeze_time do
+        @sg_verification_request.sg_verification_reminder_sent_at = 8.days.ago
+        @sg_verification_request.save!
 
-      described_class.new.perform
+        described_class.new.perform
 
-      expect(Time.zone.parse(@sg_verification_request.reload.sg_verification_reminder_sent_at)).to eq(Time.current.change(usec: 0))
+        expect(Time.zone.parse(@sg_verification_request.reload.sg_verification_reminder_sent_at)).to eq(Time.current.change(usec: 0))
+      end
     end
 
     it "does not remind a user if their account was created more than 120 days ago" do

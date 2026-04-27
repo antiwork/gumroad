@@ -80,6 +80,48 @@ describe License do
     end
   end
 
+  describe "search index callbacks" do
+    let!(:purchase) { create(:purchase, :with_license) }
+    let!(:license) { purchase.license }
+
+    it "enqueues a purchase re-index when uses changes via increment!" do
+      expect(ElasticsearchIndexerWorker).to receive(:perform_in).with(
+        2.seconds,
+        "update",
+        hash_including(
+          "record_id" => purchase.id,
+          "class_name" => "Purchase",
+          "fields" => ["license_uses"]
+        )
+      )
+      license.increment!(:uses)
+    end
+
+    it "enqueues a purchase re-index when serial changes" do
+      expect(ElasticsearchIndexerWorker).to receive(:perform_in).with(
+        2.seconds,
+        "update",
+        hash_including(
+          "record_id" => purchase.id,
+          "class_name" => "Purchase",
+          "fields" => ["license_serial"]
+        )
+      )
+      license.rotate!
+    end
+
+    it "does not enqueue a purchase re-index when neither uses nor serial changes" do
+      expect(ElasticsearchIndexerWorker).not_to receive(:perform_in)
+      license.update!(disabled_at: Time.current)
+    end
+
+    it "does not enqueue a purchase re-index when there is no associated purchase" do
+      license_without_purchase = create(:license, link: create(:product), purchase: nil)
+      expect(ElasticsearchIndexerWorker).not_to receive(:perform_in)
+      license_without_purchase.increment!(:uses)
+    end
+  end
+
   describe "paper_trail versioning" do
     with_versioning do
       let(:license) { create(:license) }

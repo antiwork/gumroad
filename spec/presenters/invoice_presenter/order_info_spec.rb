@@ -139,6 +139,66 @@ describe InvoicePresenter::OrderInfo do
           )
         end
       end
+
+      context "when broader country support keeps the submitted business id without refunding tax" do
+        let(:business_vat_id) { "DE123456789" }
+        let(:presenter) do
+          described_class.new(
+            chargeable,
+            address_fields:,
+            additional_notes:,
+            business_vat_id:,
+            business_vat_id_country_code: "DE",
+            show_reverse_charge_note: false
+          )
+        end
+
+        before do
+          purchase.update!(gumroad_tax_cents: 100, was_purchase_taxable: true)
+          purchase_sales_tax_info.update!(country_code: Compliance::Countries::AUS.alpha2)
+        end
+
+        it "uses the submitted country label and omits the reverse charge note" do
+          expect(presenter.pdf_attributes).to include(
+            {
+              label: "VAT ID",
+              value: "DE123456789",
+            }
+          )
+          expect(presenter.pdf_attributes).not_to include(
+            {
+              label: nil,
+              value: "Reverse Charge - You are required to account for the GST",
+            }
+          )
+        end
+      end
+
+      context "when business_name is provided" do
+        let(:presenter) { described_class.new(chargeable, address_fields:, additional_notes:, business_vat_id:, business_name: "Acme Corp") }
+
+        it "inserts the business name in the To block after the full name" do
+          expect(presenter.pdf_attributes).to include(
+            {
+              label: "To",
+              value: "Customer Name<br>Acme Corp<br>1234 Main St<br>City, State, 12345<br>United States"
+            }
+          )
+        end
+      end
+
+      context "when business_name is blank" do
+        let(:presenter) { described_class.new(chargeable, address_fields:, additional_notes:, business_vat_id:, business_name: "  ") }
+
+        it "omits the business name from the To block" do
+          expect(presenter.pdf_attributes).to include(
+            {
+              label: "To",
+              value: "Customer Name<br>1234 Main St<br>City, State, 12345<br>United States"
+            }
+          )
+        end
+      end
     end
 
     describe "#form_attributes" do

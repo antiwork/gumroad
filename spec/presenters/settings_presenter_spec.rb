@@ -15,7 +15,7 @@ describe SettingsPresenter do
     context "with owner as logged in user" do
       it "returns correct pages" do
         expect(presenter.pages).to eq(
-          %w(main profile team payments password third_party_analytics advanced)
+          %w(main profile team payments billing password third_party_analytics advanced)
         )
       end
 
@@ -319,7 +319,7 @@ describe SettingsPresenter do
   end
 
   describe "#password_props" do
-    let(:settings_pages) { %w(main profile team payments password third_party_analytics advanced) }
+    let(:settings_pages) { %w(main profile team payments billing password third_party_analytics advanced) }
 
     context "when seller is registered using a social provider" do
       before do
@@ -359,7 +359,7 @@ describe SettingsPresenter do
                                                                   scopes: oauth_application1.scopes,
                                                                   id: oauth_application1.external_id,
                                                                 }],
-                                                                settings_pages: %w(main profile team payments authorized_applications password third_party_analytics advanced),
+                                                                settings_pages: %w(main profile team payments billing authorized_applications password third_party_analytics advanced),
                                                               })
       end
     end
@@ -382,7 +382,7 @@ describe SettingsPresenter do
                                                                   scopes: oauth_application1.scopes,
                                                                   id: oauth_application1.external_id,
                                                                 }],
-                                                                settings_pages: %w(main profile team payments authorized_applications password third_party_analytics advanced),
+                                                                settings_pages: %w(main profile team payments billing authorized_applications password third_party_analytics advanced),
                                                               })
       end
     end
@@ -419,7 +419,7 @@ describe SettingsPresenter do
                                                                 scopes: oauth_application1.scopes,
                                                                 id: oauth_application1.external_id,
                                                               }],
-                                                              settings_pages: %w(main profile team payments authorized_applications password third_party_analytics advanced),
+                                                              settings_pages: %w(main profile team payments billing authorized_applications password third_party_analytics advanced),
                                                             })
     end
   end

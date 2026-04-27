@@ -13,71 +13,6 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     }
   end
 
-  USER_SUSPENSION_INFO_OPENAPI = {
-    summary: "Get user suspension information",
-    description: "Retrieve suspension status and details for a user",
-    requestBody: {
-      required: true,
-      content: {
-        'application/json': {
-          schema: {
-            type: "object",
-            properties: {
-              email: { type: "string", description: "Email address of the user" }
-            },
-            required: ["email"]
-          }
-        }
-      }
-    },
-    security: [{ bearer: [] }],
-    responses: {
-      '200': {
-        description: "Successfully retrieved user suspension information",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                status: { type: "string", description: "Status of the user" },
-                updated_at: { type: "string", format: "date-time", nullable: true, description: "When the user's suspension status was last updated" },
-                appeal_url: { type: "string", nullable: true, description: "URL for the user to appeal their suspension" }
-              }
-            }
-          }
-        }
-      },
-      '400': {
-        description: "Missing required parameters",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: false },
-                error: { type: "string" }
-              }
-            }
-          }
-        }
-      },
-      '422': {
-        description: "User not found",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: false },
-                error_message: { type: "string" }
-              }
-            }
-          }
-        }
-      }
-    }
-  }.freeze
   def user_suspension_info
     if params[:email].blank?
       render json: { success: false, error: "'email' parameter is required" }, status: :bad_request
@@ -110,55 +45,6 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     }
   end
 
-  SEND_RESET_PASSWORD_INSTRUCTIONS_OPENAPI = {
-    summary: "Initiate password reset",
-    description: "Send email with instructions to reset password",
-    requestBody: {
-      required: true,
-      content: {
-        'application/json': {
-          schema: {
-            type: "object",
-            properties: {
-              email: { type: "string", description: "Email address of the customer" }
-            },
-            required: ["email"]
-          }
-        }
-      }
-    },
-    security: [{ bearer: [] }],
-    responses: {
-      '200': {
-        description: "Successfully sent reset password instructions",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: true },
-                message: { type: "string" }
-              }
-            }
-          }
-        }
-      },
-      '422': {
-        description: "Email invalid or user not found",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: false },
-                message: { type: "string" }
-              }
-            }
-          }
-        }
-      },
-    }
-  }.freeze
   def send_reset_password_instructions
     if EmailFormatValidator.valid?(params[:email])
       user = User.alive.by_email(params[:email]).first
@@ -174,54 +60,6 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     end
   end
 
-  UPDATE_EMAIL_OPENAPI = {
-    summary: "Update user email",
-    description: "Update a user's email address",
-    requestBody: {
-      required: true,
-      content: {
-        'application/json': {
-          schema: {
-            type: "object",
-            properties: {
-              current_email: { type: "string", description: "Current email address of the user" },
-              new_email: { type: "string", description: "New email address for the user" }
-            },
-            required: ["current_email", "new_email"]
-          }
-        }
-      }
-    },
-    security: [{ bearer: [] }],
-    responses: {
-      '200': {
-        description: "Successfully updated email",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                message: { type: "string" }
-              }
-            }
-          }
-        }
-      },
-      '422': {
-        description: "Invalid email or user not found",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                error_message: { type: "string" }
-              }
-            }
-          }
-        }
-      }
-    }
-  }.freeze
   def update_email
     if params[:current_email].blank? || params[:new_email].blank?
       render json: { error_message: "Both current and new email are required." }, status: :unprocessable_entity
@@ -246,57 +84,6 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     end
   end
 
-  UPDATE_TWO_FACTOR_AUTHENTICATION_ENABLED_OPENAPI = {
-    summary: "Update two-factor authentication status",
-    description: "Update a user's two-factor authentication enabled status",
-    requestBody: {
-      required: true,
-      content: {
-        'application/json': {
-          schema: {
-            type: "object",
-            properties: {
-              email: { type: "string", description: "Email address of the user" },
-              enabled: { type: "boolean", description: "Whether two-factor authentication should be enabled or disabled" }
-            },
-            required: ["email", "enabled"]
-          }
-        }
-      }
-    },
-    security: [{ bearer: [] }],
-    responses: {
-      '200': {
-        description: "Successfully updated two-factor authentication status",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                message: { type: "string" }
-              }
-            }
-          }
-        }
-      },
-      '422': {
-        description: "Invalid email or user not found",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                error_message: { type: "string" }
-              }
-            }
-          }
-        }
-      }
-    }
-  }.freeze
-
   def update_two_factor_authentication_enabled
     if params[:email].blank?
       return render json: { success: false, error_message: "Email is required." }, status: :unprocessable_entity
@@ -320,94 +107,6 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
     end
   end
 
-  CREATE_COMMENT_OPENAPI = {
-    summary: "Create a comment on a user",
-    description: "Add a note-type comment to a user's record in Gumroad admin",
-    requestBody: {
-      required: true,
-      content: {
-        'application/json': {
-          schema: {
-            type: "object",
-            properties: {
-              email: { type: "string", description: "Email address of the user" },
-              content: { type: "string", description: "Comment content (max 10,000 characters)" },
-              idempotency_key: { type: "string", description: "Client-generated UUID to prevent duplicate comments on retry" }
-            },
-            required: ["email", "content", "idempotency_key"]
-          }
-        }
-      }
-    },
-    security: [{ bearer: [] }],
-    responses: {
-      '200': {
-        description: "Comment created successfully",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: true },
-                comment: {
-                  type: "object",
-                  properties: {
-                    id: { type: "string" },
-                    author_name: { type: "string" },
-                    content: { type: "string" },
-                    comment_type: { type: "string" },
-                    created_at: { type: "string", format: "date-time" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      '400': {
-        description: "Missing required parameters",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: false },
-                error_message: { type: "string" }
-              }
-            }
-          }
-        }
-      },
-      '409': {
-        description: "Idempotency key reused with different content",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: false },
-                error_message: { type: "string" }
-              }
-            }
-          }
-        }
-      },
-      '422': {
-        description: "User not found or validation error",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: false },
-                error_message: { type: "string" }
-              }
-            }
-          }
-        }
-      }
-    }
-  }.freeze
   def create_comment
     if params[:email].blank?
       return render json: { success: false, error_message: "'email' parameter is required" }, status: :bad_request
@@ -454,72 +153,6 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       render json: { success: true, comment: HelperUserInfoService.serialize_comment(existing) }
     end
   end
-
-  CREATE_USER_APPEAL_OPENAPI = {
-    summary: "Create user appeal",
-    description: "Create an appeal for a suspended user who believes they have been suspended in error",
-    requestBody: {
-      required: true,
-      content: {
-        'application/json': {
-          schema: {
-            type: "object",
-            properties: {
-              email: { type: "string", description: "Email address of the user" },
-              reason: { type: "string", description: "Reason for the appeal" }
-            },
-            required: ["email", "reason"]
-          }
-        }
-      }
-    },
-    security: [{ bearer: [] }],
-    responses: {
-      '200': {
-        description: "Successfully created appeal",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: true },
-                id: { type: "string", description: "ID of the appeal" },
-                appeal_url: { type: "string", description: "URL for the user to view their appeal"  }
-              }
-            }
-          }
-        }
-      },
-      '400': {
-        description: "Invalid parameters",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: false },
-                error_message: { type: "string" }
-              }
-            }
-          }
-        }
-      },
-      '422': {
-        description: "User not found or appeal creation failed",
-        content: {
-          'application/json': {
-            schema: {
-              type: "object",
-              properties: {
-                success: { const: false },
-                error_message: { type: "string" }
-              }
-            }
-          }
-        }
-      }
-    }
-  }.freeze
 
   def create_appeal
     if params[:email].blank?

@@ -250,4 +250,32 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       expect(page).to have_text("block created")
     end
   end
+
+  describe "GDPR data erasure" do
+    let!(:product) { create(:product, user: user) }
+    let!(:purchase) { create(:purchase, purchaser: user, full_name: "Test Buyer", street_address: "123 Main St") }
+
+    it "anonymizes user data and shows confirmation" do
+      visit admin_user_path(user.external_id)
+
+      accept_confirm do
+        click_on "GDPR Erase"
+      end
+
+      expect(page).to have_text("GDPR erasure complete")
+
+      user.reload
+      expect(user.name).to eq("[deleted]")
+      expect(user.email).to start_with("deleted-")
+      expect(user.deleted?).to eq(true)
+      expect(user.street_address).to be_nil
+      expect(user.bio).to be_nil
+
+      purchase.reload
+      expect(purchase.full_name).to eq("[deleted]")
+      expect(purchase.street_address).to be_nil
+
+      expect(product.reload.deleted?).to eq(true)
+    end
+  end
 end

@@ -284,7 +284,7 @@ describe ProductPresenter do
       product.user.reload
     end
 
-    it "returns the properties for the product edit page" do
+    it "returns the properties for the product edit page", :freeze_time do
       expect(presenter.edit_props).to eq(
         {
           product: {
@@ -535,7 +535,7 @@ describe ProductPresenter do
         Feature.activate_user(:cancellation_discounts, membership.user)
       end
 
-      it "returns the properties for the product edit page" do
+      it "returns the properties for the product edit page", :freeze_time do
         expect(presenter.edit_props).to eq(
           {
             product: {
@@ -794,7 +794,7 @@ describe ProductPresenter do
       let(:new_product) { create(:product, name: "Product", description: "Boring") }
       let(:presenter) { described_class.new(product: new_product, request:) }
 
-      it "returns the properties for the product edit page" do
+      it "returns the properties for the product edit page", :freeze_time do
         expect(presenter.edit_props).to eq(
           {
             product: {

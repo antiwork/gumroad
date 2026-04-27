@@ -5,6 +5,8 @@ class Checkout::DiscountsController < Sellers::BaseController
 
   PER_PAGE = 10
 
+  rescue_from ActiveModel::RangeError, with: :handle_range_error
+
   before_action :clean_params, only: [:create, :update]
 
   layout "inertia", only: [:index]
@@ -111,6 +113,10 @@ class Checkout::DiscountsController < Sellers::BaseController
     def parse_date_times
       offer_code_params[:valid_at] = Time.zone.parse(offer_code_params[:valid_at]) if offer_code_params[:valid_at].present?
       offer_code_params[:expires_at] = Time.zone.parse(offer_code_params[:expires_at]) if offer_code_params[:expires_at].present?
+    end
+
+    def handle_range_error
+      render json: { success: false, error_message: "The value entered is too large. Please enter a smaller number." }, status: :unprocessable_entity
     end
 
     def fetch_offer_codes

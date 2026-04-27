@@ -6,7 +6,7 @@ class InvoicePresenter::OrderInfo
 
   attr_reader :charge_info
 
-  def initialize(chargeable, address_fields:, additional_notes:, business_vat_id:)
+  def initialize(chargeable, address_fields:, additional_notes:, business_vat_id:, business_vat_id_country_code: nil, business_name: nil, show_reverse_charge_note: nil)
     @chargeable = chargeable
     @address_fields = address_fields
     @additional_notes = additional_notes
@@ -14,6 +14,9 @@ class InvoicePresenter::OrderInfo
     @payment_info = receipt_presenter.payment_info
     @charge_info  = receipt_presenter.charge_info
     @business_vat_id = business_vat_id
+    @business_vat_id_country_code = business_vat_id_country_code
+    @business_name = business_name
+    @show_reverse_charge_note = show_reverse_charge_note
   end
 
   def heading
@@ -76,8 +79,9 @@ class InvoicePresenter::OrderInfo
       value: safe_join(
         [
           address_fields[:full_name],
+          business_name.presence,
           address_fields[:street_address],
-          [address_fields[:city], address_fields[:state], address_fields[:zip_code]].compact.join(", "),
+          [address_fields[:city], address_fields[:state], address_fields[:zip_code]].reject(&:blank?).join(", "),
           address_fields[:country]
         ].compact,
         tag.br
@@ -96,87 +100,29 @@ class InvoicePresenter::OrderInfo
 
   def business_vat_id_attribute
     @_business_vat_id_attribute ||= begin
-      purchase_sales_tax_info = chargeable.purchase_sales_tax_info
       value = business_vat_id || purchase_sales_tax_info&.business_vat_id
       return if value.blank?
 
-      label = \
-        if purchase_sales_tax_info&.country_code == Compliance::Countries::ARE.alpha2 || purchase_sales_tax_info&.country_code == Compliance::Countries::BHR.alpha2
-          "TRN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::AUS.alpha2
-          "ABN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::BLR.alpha2
-          "UNP ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::CHL.alpha2
-          "RUT ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::COL.alpha2
-          "NIT ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::CRI.alpha2
-          "CPJ ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::ECU.alpha2
-          "RUC ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::EGY.alpha2
-          "TN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::GEO.alpha2 ||
-              purchase_sales_tax_info&.country_code == Compliance::Countries::KAZ.alpha2 ||
-              purchase_sales_tax_info&.country_code == Compliance::Countries::MAR.alpha2 || purchase_sales_tax_info&.country_code == Compliance::Countries::THA.alpha2
-          "TIN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::KOR.alpha2
-          "BRN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::RUS.alpha2
-          "INN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::SRB.alpha2
-          "PIB ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::TUR.alpha2
-          "VKN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::UKR.alpha2
-          "EDRPOU ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::ISL.alpha2
-          "VSK ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::MEX.alpha2
-          "RFC ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::MYS.alpha2
-          "SST ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::NZL.alpha2
-          "IRD ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::JPN.alpha2
-          "CN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::VNM.alpha2
-          "CN ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::SGP.alpha2 ||
-              purchase_sales_tax_info&.country_code == Compliance::Countries::IND.alpha2
-          "GST ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::CAN.alpha2 &&
-              purchase_sales_tax_info.state_code == QUEBEC
-          "QST ID"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::NOR.alpha2
-          "Norway VAT Registration"
-        elsif purchase_sales_tax_info&.country_code == Compliance::Countries::VNM.alpha2
-          "MST ID"
-        else
-          "VAT ID"
-        end
-
       {
-        label:,
+        label: business_vat_id_label,
         value:,
       }
     end
   end
 
   def business_vat_id_note
-    return if business_vat_id_attribute.blank?
+    return if business_vat_id_attribute.blank? || show_reverse_charge_note == false
 
     value = \
-      if Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(chargeable.purchase_sales_tax_info&.country_code) ||
-         Compliance::Countries::IND.alpha2 == chargeable.purchase_sales_tax_info&.country_code
+      if Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(purchase_sales_tax_info&.country_code) ||
+         Compliance::Countries::IND.alpha2 == purchase_sales_tax_info&.country_code
         "Reverse Charge - You are required to account for the GST"
-      elsif Compliance::Countries::CAN.alpha2 == chargeable.purchase_sales_tax_info&.country_code &&
-            QUEBEC == chargeable.purchase_sales_tax_info&.state_code
+      elsif Compliance::Countries::CAN.alpha2 == purchase_sales_tax_info&.country_code &&
+            QUEBEC == purchase_sales_tax_info&.state_code
         "Reverse Charge - You are required to account for the QST"
-      elsif Compliance::Countries::MYS.alpha2 == chargeable.purchase_sales_tax_info&.country_code
+      elsif Compliance::Countries::MYS.alpha2 == purchase_sales_tax_info&.country_code
         "Reverse Charge - You are required to account for the service tax"
-      elsif Compliance::Countries::JPN.alpha2 == chargeable.purchase_sales_tax_info&.country_code
+      elsif Compliance::Countries::JPN.alpha2 == purchase_sales_tax_info&.country_code
         "Reverse Charge - You are required to account for the CT"
       else
         "Reverse Charge - You are required to account for the VAT"
@@ -189,7 +135,81 @@ class InvoicePresenter::OrderInfo
   end
 
   private
-    attr_reader :additional_notes, :business_vat_id, :chargeable, :address_fields, :payment_info
+    attr_reader :additional_notes, :business_vat_id, :business_vat_id_country_code, :business_name, :show_reverse_charge_note, :chargeable, :address_fields, :payment_info
+
+    def purchase_sales_tax_info
+      chargeable.purchase_sales_tax_info
+    end
+
+    def business_vat_id_label
+      return submitted_business_vat_id_label if business_vat_id.present? && business_vat_id_country_code.present?
+
+      purchase_sales_tax_info_business_vat_id_label
+    end
+
+    def submitted_business_vat_id_label
+      label = InvoicePresenter::FormInfo::BUSINESS_ID_LABELS[business_vat_id_country_code]
+      return "VAT ID" if label.blank?
+      return label if label.match?(/\bID\b|Registration/)
+
+      "#{label} ID"
+    end
+
+    def purchase_sales_tax_info_business_vat_id_label
+      if purchase_sales_tax_info&.country_code == Compliance::Countries::ARE.alpha2 || purchase_sales_tax_info&.country_code == Compliance::Countries::BHR.alpha2
+        "TRN ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::AUS.alpha2
+        "ABN ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::BLR.alpha2
+        "UNP ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::CHL.alpha2
+        "RUT ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::COL.alpha2
+        "NIT ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::CRI.alpha2
+        "CPJ ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::ECU.alpha2
+        "RUC ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::EGY.alpha2
+        "TN ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::GEO.alpha2 ||
+            purchase_sales_tax_info&.country_code == Compliance::Countries::KAZ.alpha2 ||
+            purchase_sales_tax_info&.country_code == Compliance::Countries::MAR.alpha2 || purchase_sales_tax_info&.country_code == Compliance::Countries::THA.alpha2
+        "TIN ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::KOR.alpha2
+        "BRN ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::RUS.alpha2
+        "INN ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::SRB.alpha2
+        "PIB ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::TUR.alpha2
+        "VKN ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::UKR.alpha2
+        "EDRPOU ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::ISL.alpha2
+        "VSK ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::MEX.alpha2
+        "RFC ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::MYS.alpha2
+        "SST ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::NZL.alpha2
+        "IRD ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::JPN.alpha2
+        "CN ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::SGP.alpha2 ||
+            purchase_sales_tax_info&.country_code == Compliance::Countries::IND.alpha2
+        "GST ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::CAN.alpha2 &&
+            purchase_sales_tax_info.state_code == QUEBEC
+        "QST ID"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::NOR.alpha2
+        "Norway VAT Registration"
+      elsif purchase_sales_tax_info&.country_code == Compliance::Countries::VNM.alpha2
+        "MST ID"
+      else
+        "VAT ID"
+      end
+    end
 
     def email_attribute
       {

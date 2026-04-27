@@ -59,6 +59,7 @@ namespace :admin do
       post :flag_for_fraud
       post :set_custom_fee
       post :toggle_adult_products
+      post :gdpr_erase
     end
   end
 

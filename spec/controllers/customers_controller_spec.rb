@@ -104,6 +104,42 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(customer_ids[response]).to match_array([purchases.third.external_id, purchases.fourth.external_id])
     end
 
+    describe "minimum license uses filter" do
+      before do
+        purchases.first.license.update!(uses: 10)
+        purchases.second.license.update!(uses: 5)
+        purchases.third.license.update!(uses: 1)
+        index_model_records(Purchase)
+      end
+
+      let(:customer_ids) { -> (res) { res.parsed_body.deep_symbolize_keys[:customers].map { _1[:id] } } }
+
+      context "when the :license_uses_sales_filter feature is active for the seller" do
+        before { Feature.activate_user(:license_uses_sales_filter, seller) }
+
+        it "filters by minimum license uses" do
+          get :paged, params: { page: 1, minimum_license_uses: 5 }
+          expect(response).to be_successful
+          expect(customer_ids[response]).to match_array([purchases.first.external_id, purchases.second.external_id])
+
+          get :paged, params: { page: 1, minimum_license_uses: 10 }
+          expect(response).to be_successful
+          expect(customer_ids[response]).to match_array([purchases.first.external_id])
+        end
+      end
+
+      context "when the :license_uses_sales_filter feature is inactive for the seller" do
+        it "ignores the minimum_license_uses param" do
+          get :paged, params: { page: 1 }
+          expect(response).to be_successful
+          expected_customer_ids = customer_ids[response]
+
+          get :paged, params: { page: 1, minimum_license_uses: 10 }
+          expect(response).to be_successful
+          expect(customer_ids[response]).to eq(expected_customer_ids)
+        end
+      end
+    end
   end
 
   describe "GET paged when Elasticsearch times out" do

@@ -67,8 +67,17 @@ describe CustomersPresenter do
           currency_type: "usd",
           can_ping: true,
           show_refund_fee_notice: false,
+          license_uses_filter_enabled: false,
         }
       )
+    end
+
+    context "when the :license_uses_sales_filter feature is active for the seller" do
+      before { Feature.activate_user(:license_uses_sales_filter, seller) }
+
+      it "returns license_uses_filter_enabled as true" do
+        expect(presenter.customers_props[:license_uses_filter_enabled]).to eq(true)
+      end
     end
   end
 

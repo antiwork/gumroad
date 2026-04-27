@@ -21,13 +21,24 @@ class Order::ChargeService
     # i.e. one charge per seller
     # Exclude purchases that already have a payment intent (e.g. subscription restarts
     # requiring SCA — they are confirmed later via Order::ConfirmService)
-    purchases_by_seller = order.purchases.reject { _1.processor_payment_intent.present? }.group_by(&:seller_id)
+    chargeable_purchases = order.purchases.reject { _1.processor_payment_intent.present? }
+    rejected_by_offer_code_limit = Purchase.validate_offer_code_usage_across_line_items(chargeable_purchases)
+    purchases_by_seller = chargeable_purchases.group_by(&:seller_id)
 
     purchases_by_seller.each do |seller_id, seller_purchases|
       self.charge_intent = nil
       self.setup_intent = nil
+
+      # Every purchase in this seller group has already reached a terminal state
+      # (e.g. rejected by `validate_offer_code_usage_across_line_items`) — skip
+      # creating a Charge record that would have no Stripe activity attached.
+      next if seller_purchases.none?(&:in_progress?)
+
       charge = order.charges.create!(seller_id:)
       seller_purchases.each do |purchase|
+        # Skip purchases rejected by `Purchase.validate_offer_code_usage_across_line_items`.
+        # Re-saving would clear the in-memory errors we need for the line item response.
+        next if rejected_by_offer_code_limit.include?(purchase)
         purchase.charge = charge
         purchase.save!
         # Mark free or test purchase as successful as it does not require any further processing
@@ -78,8 +89,10 @@ class Order::ChargeService
       Rails.logger.error("Error charging order (#{order.id}):: #{e.class} => #{e.message} => #{e.backtrace}")
     ensure
       # Ensure all purchases of the charge are transitioned to a terminal state
-      # and each line item has a response
-      ensure_all_purchases_processed(non_free_seller_purchases || seller_purchases.select(&:in_progress?))
+      # and each line item has a response. Include purchases rejected by
+      # `Purchase.validate_offer_code_usage_across_line_items` so their line items
+      # get an error response in `charge_responses`.
+      ensure_all_purchases_processed((non_free_seller_purchases || seller_purchases.select(&:in_progress?)) + (seller_purchases & rejected_by_offer_code_limit))
     end
 
     charge_responses

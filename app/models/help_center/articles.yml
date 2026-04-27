@@ -615,3 +615,8 @@
   title: "Support response times"
   description: "If you reach out to us, you'll most likely hear back within an hour. 97.7% of people do. We guarantee a response within 24 hours."
   category_id: <%= HelpCenter::Category::CONTACT_GUMROAD.id %>
+- id: 349
+  slug: "349-gdpr-data-requests"
+  title: "GDPR and data privacy requests"
+  description: "Learn about your data privacy rights on Gumroad, including how to request data deletion, access your personal data, and understand what information we retain."
+  category_id: <%= HelpCenter::Category::ADVANCED.id %>

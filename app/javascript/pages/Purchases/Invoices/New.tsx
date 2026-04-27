@@ -23,6 +23,7 @@ type NewInvoicePageProps = {
       country_code: string;
     };
     email: string;
+    business_name: string;
     vat_id: string;
     additional_notes: string;
   };
@@ -30,6 +31,8 @@ type NewInvoicePageProps = {
     heading: string;
     display_vat_id: boolean;
     vat_id_label: string;
+    business_id_country_codes: string[];
+    business_id_labels: Record<string, string>;
     supplier_info: {
       heading: string;
       attributes: { label: string | null; value: string }[];
@@ -53,9 +56,22 @@ const PurchaseNewInvoicePage = () => {
   const { supplier_info, seller_info, order_info, countries } = form_metadata;
 
   const form = useForm(form_data);
+  const initialCountryCode = form_data.address_fields.country_code;
+  const showStateField = !form.data.address_fields.country_code || form.data.address_fields.country_code === "US";
+  const showBusinessIdField =
+    form_metadata.display_vat_id ||
+    form_metadata.business_id_country_codes.includes(form.data.address_fields.country_code);
+  const rawBusinessIdLabel =
+    form_metadata.display_vat_id && form.data.address_fields.country_code === initialCountryCode
+      ? form_metadata.vat_id_label
+      : (form_metadata.business_id_labels[form.data.address_fields.country_code] ?? form_metadata.vat_id_label);
+  const businessIdLabel = /\bID\b|Registration/i.test(rawBusinessIdLabel)
+    ? rawBusinessIdLabel
+    : `${rawBusinessIdLabel} ID`;
 
   const validateFields = () =>
     Object.entries(form.data.address_fields).reduce((isValid, [key, value]) => {
+      if (key === "state" && !showStateField) return isValid;
       if (!value.trim()) {
         form.setError(`address_fields.${key}`, "Setting error message for highlighting the field in UI");
         return false;
@@ -68,7 +84,11 @@ const PurchaseNewInvoicePage = () => {
 
     form.transform((data) => ({
       ...data,
-      vat_id: form_metadata.display_vat_id ? data.vat_id : null,
+      address_fields: {
+        ...data.address_fields,
+        state: showStateField ? data.address_fields.state : "",
+      },
+      vat_id: showBusinessIdField ? data.vat_id : null,
     }));
 
     form.post(Routes.purchase_invoice_path(form.data.purchase_id), {
@@ -84,7 +104,7 @@ const PurchaseNewInvoicePage = () => {
     <>
       <div>
         <Card asChild>
-          <main className="mx-auto my-4 h-min max-w-md [&>*]:flex-col [&>*]:items-stretch">
+          <main className="mx-auto my-4 max-w-md [&>*]:flex-col [&>*]:items-stretch">
             <CardContent asChild>
               <header className="text-center">
                 <h4 className="grow font-bold">{form_metadata.heading}</h4>
@@ -100,10 +120,19 @@ const PurchaseNewInvoicePage = () => {
                   onChange={(e) => form.setData("address_fields.full_name", e.target.value)}
                 />
               </Fieldset>
-              {form_metadata.display_vat_id ? (
+              <Fieldset className="flex-1">
+                <Label htmlFor="business_name">Business name (optional)</Label>
+                <Input
+                  id="business_name"
+                  type="text"
+                  value={form.data.business_name}
+                  onChange={(e) => form.setData("business_name", e.target.value)}
+                />
+              </Fieldset>
+              {showBusinessIdField ? (
                 <Fieldset className="flex-1">
                   <FieldsetTitle>
-                    <Label htmlFor="chargeable_vat_id">{form_metadata.vat_id_label}</Label>
+                    <Label htmlFor="chargeable_vat_id">{businessIdLabel}</Label>
                   </FieldsetTitle>
                   <Input
                     id="chargeable_vat_id"
@@ -122,7 +151,13 @@ const PurchaseNewInvoicePage = () => {
                   onChange={(e) => form.setData("address_fields.street_address", e.target.value)}
                 />
               </Fieldset>
-              <div style={{ display: "grid", gap: "var(--spacer-2)", gridTemplateColumns: "2fr 1fr 1fr" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "var(--spacer-2)",
+                  gridTemplateColumns: showStateField ? "2fr 1fr 1fr" : "1fr 1fr",
+                }}
+              >
                 <Fieldset state={form.errors["address_fields.city"] ? "danger" : undefined}>
                   <Label htmlFor="city">City</Label>
                   <Input
@@ -132,15 +167,17 @@ const PurchaseNewInvoicePage = () => {
                     onChange={(e) => form.setData("address_fields.city", e.target.value)}
                   />
                 </Fieldset>
-                <Fieldset state={form.errors["address_fields.state"] ? "danger" : undefined}>
-                  <Label htmlFor="state">State</Label>
-                  <Input
-                    id="state"
-                    type="text"
-                    value={form.data.address_fields.state}
-                    onChange={(e) => form.setData("address_fields.state", e.target.value)}
-                  />
-                </Fieldset>
+                {showStateField ? (
+                  <Fieldset state={form.errors["address_fields.state"] ? "danger" : undefined}>
+                    <Label htmlFor="state">State</Label>
+                    <Input
+                      id="state"
+                      type="text"
+                      value={form.data.address_fields.state}
+                      onChange={(e) => form.setData("address_fields.state", e.target.value)}
+                    />
+                  </Fieldset>
+                ) : null}
                 <Fieldset state={form.errors["address_fields.zip_code"] ? "danger" : undefined}>
                   <Label htmlFor="zip_code">ZIP code</Label>
                   <Input
@@ -207,6 +244,7 @@ const PurchaseNewInvoicePage = () => {
                 >
                   {form.data.address_fields.full_name || "Edgar Gumstein"}
                 </div>
+                {form.data.business_name.length ? <div>{form.data.business_name}</div> : null}
                 <div
                   style={{
                     opacity: form.data.address_fields.street_address.length ? undefined : "var(--disabled-opacity)",
@@ -218,13 +256,21 @@ const PurchaseNewInvoicePage = () => {
                   <span
                     style={{ opacity: form.data.address_fields.city.length ? undefined : "var(--disabled-opacity)" }}
                   >
-                    {`${form.data.address_fields.city || "San Francisco"},`}
-                  </span>{" "}
-                  <span
-                    style={{ opacity: form.data.address_fields.state.length ? undefined : "var(--disabled-opacity)" }}
-                  >
-                    {form.data.address_fields.state || "CA"}
-                  </span>{" "}
+                    {form.data.address_fields.city || "San Francisco"}
+                  </span>
+                  {", "}
+                  {showStateField ? (
+                    <>
+                      <span
+                        style={{
+                          opacity: form.data.address_fields.state.length ? undefined : "var(--disabled-opacity)",
+                        }}
+                      >
+                        {form.data.address_fields.state || "CA"}
+                      </span>
+                      {", "}
+                    </>
+                  ) : null}
                   <span
                     style={{
                       opacity: form.data.address_fields.zip_code.length ? undefined : "var(--disabled-opacity)",

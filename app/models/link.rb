@@ -37,7 +37,7 @@ class Link < ApplicationRecord
             28 => :is_collab,
             29 => :is_unpublished_by_admin,
             30 => :community_chat_enabled,
-            31 => :DEPRECATED_excluded_from_mobile_app_discover,
+            31 => :created_via_cli,
             32 => :DEPRECATED_moderated_by_iffy,
             33 => :hide_sold_out_variants,
             :column => "flags",

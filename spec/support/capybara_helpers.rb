@@ -79,6 +79,13 @@ module CapybaraHelpers
     page.driver.browser.switch_to.alert.accept
   end
 
+  # Waits for checkout surcharges to load after country/ZIP/tax ID changes.
+  # The checkout form debounces these at 300ms before firing the API call.
+  def wait_for_checkout_surcharges_loaded
+    sleep 0.4 # debounce (300ms) + margin
+    wait_for_ajax
+  end
+
   def with_throttled_network(fixture_file, factor: 4)
     throughput = (File.size(fixture_file) * factor)
     page.driver.browser.execute_cdp("Network.enable")

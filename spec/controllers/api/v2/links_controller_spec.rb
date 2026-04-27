@@ -193,6 +193,26 @@ describe Api::V2::LinksController do
         expect(product.display_product_reviews).to be true
       end
 
+      it "marks products created from the CLI and marks the user without dropping other flags" do
+        request.user_agent = "gumroad-cli/1.0"
+        stale_user = @user.reload
+        other_flag_mask = User.flag_mapping["flags"][:disable_paypal_sales]
+        allow(controller).to receive(:current_resource_owner).and_return(stale_user)
+
+        allow(controller).to receive(:mark_cli_user).and_wrap_original do |original, *args|
+          User.where(id: @user.id).update_all(["flags = flags | ?", other_flag_mask])
+          original.call(*args)
+        end
+
+        post @action, params: @params
+
+        product = @user.links.last
+        @user.reload
+        expect(product.created_via_cli?).to be true
+        expect(@user.has_used_cli?).to be true
+        expect(@user.disable_paypal_sales?).to be true
+      end
+
       it "creates a product with all optional params" do
         post @action, params: @params.merge(
           description: "<p>A great product</p>",
