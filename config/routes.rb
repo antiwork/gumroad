@@ -287,6 +287,28 @@ Rails.application.routes.draw do
           resources :instant_payouts, only: [:index, :create]
         end
 
+        namespace :admin do
+          resources :purchases, only: [:show]
+
+          resources :licenses, only: [] do
+            collection do
+              post :lookup
+            end
+          end
+
+          resources :users, only: [] do
+            collection do
+              post :suspension
+            end
+          end
+
+          resources :payouts, only: [] do
+            collection do
+              post :list
+            end
+          end
+        end
+
         namespace :grmc do
           post :webhook, to: "webhook#handle"
         end
