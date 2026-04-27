@@ -44,13 +44,17 @@ class Admin::MerchantAccountPresenter
       return unless merchant_account.charge_processor_merchant_id.present?
 
       if merchant_account.stripe_charge_processor?
-        stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-        [
-          { label: "Charges enabled", value: stripe_account.charges_enabled },
-          { label: "Payout enabled", value: stripe_account.payouts_enabled },
-          { label: "Disabled reason", value: stripe_account.requirements.disabled_reason },
-          { label: "Fields needed", value: stripe_account.requirements.as_json }
-        ]
+        begin
+          stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+          [
+            { label: "Charges enabled", value: stripe_account.charges_enabled },
+            { label: "Payout enabled", value: stripe_account.payouts_enabled },
+            { label: "Disabled reason", value: stripe_account.requirements.disabled_reason },
+            { label: "Fields needed", value: stripe_account.requirements.as_json }
+          ]
+        rescue Stripe::PermissionError
+          [{ label: "Error", value: "Stripe account access has been revoked or the account no longer exists" }]
+        end
       elsif merchant_account.paypal_charge_processor?
         paypal_account_details = merchant_account.paypal_account_details
         if paypal_account_details.present?
