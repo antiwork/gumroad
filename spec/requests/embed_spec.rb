@@ -89,7 +89,14 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     it "applies the discount code" do
       visit(create_embed_page(product, url: "#{product.long_url}/#{offer_code.code}", outbound: false))
 
+<<<<<<< HEAD
       within_frame { click_on "Add to cart" }
+=======
+      within_frame do
+        expect(page).to have_status(text: "$1 off will be applied at checkout (Code SXSW)", wait: 15)
+        click_on "Add to cart"
+      end
+>>>>>>> cef79c66 (Fix flaky embed and search specs: timing waits and order-independent assertions)
 
       check_out(product, is_free: true)
 
@@ -111,7 +118,10 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     it "successfully credits the affiliate commission for the product bought using its affiliated product URL" do
       visit(create_embed_page(product, url: direct_affiliate.referral_url_for_product(product), outbound: false))
 
-      within_frame { click_on "Add to cart" }
+      within_frame do
+        expect(page).to have_text("$75", wait: 15)
+        click_on "Add to cart"
+      end
 
       expect do
         check_out(product)
