@@ -190,7 +190,8 @@ class Admin::UsersController < Admin::BaseController
 
   def set_custom_fee
     custom_fee_per_thousand = params[:custom_fee_percent].present? ? (params[:custom_fee_percent].to_f * 10).round : nil
-    @user.update!(custom_fee_per_thousand:)
+    @user.custom_fee_per_thousand = custom_fee_per_thousand
+    @user.save!
     render json: { success: true }
   rescue ActiveRecord::RecordInvalid => e
     render json: { success: false, message: e.message }, status: :unprocessable_content
