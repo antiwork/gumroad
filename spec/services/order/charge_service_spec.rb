@@ -877,7 +877,7 @@ describe Order::ChargeService, :vcr do
       purchase = order.purchases.first
 
       service = Order::ChargeService.new(order:, params:)
-      chargeable = create(:chargeable)
+      chargeable = double("chargeable", fingerprint: "fingerprint")
       succeeded_intent = double(
         "charge_intent",
         succeeded?: true,
@@ -932,6 +932,53 @@ describe Order::ChargeService, :vcr do
                                                charge_processor_id: StripeChargeProcessor.charge_processor_id,
                                                stripe_fingerprint: "fingerprint", stripe_transaction_id: "ch_test")
       order.purchases << purchase
+      balance = create(:balance, user: seller, merchant_account:, amount_cents: 0, holding_amount_cents: 0)
+      balance_transaction = BalanceTransaction.new(
+        user: seller,
+        merchant_account:,
+        purchase:,
+        balance:,
+        issued_amount_currency: Currency::USD,
+        issued_amount_gross_cents: 10_00,
+        issued_amount_net_cents: 8_90,
+        holding_amount_currency: Currency::USD,
+        holding_amount_gross_cents: 10_00,
+        holding_amount_net_cents: 8_90
+      )
+      balance_transaction.save!
+      purchase.update!(purchase_success_balance: balance)
+      params = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+      service = Order::ChargeService.new(order:, params:)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      allow(purchase).to receive(:mark_successful!) do
+        purchase.update_columns(purchase_state: "successful", succeeded_at: Time.current)
+      end
+
+      expect(Purchase::MarkSuccessfulService).not_to receive(:new)
+      expect { service.ensure_all_purchases_processed([purchase]) }.not_to change { purchase.balance_transactions.count }
+
+      expect(purchase).to have_received(:mark_successful!)
+      expect(purchase).to be_successful
+    end
+
+    it "applies an orphan seller balance transaction before marking successful" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account, user: nil)
+      product = create(:product, user: seller, price_cents: 10_00)
+      order = create(:order)
+      purchase = create(:purchase_in_progress, link: product, seller:, merchant_account:,
+                                               charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                               stripe_fingerprint: "fingerprint", stripe_transaction_id: "ch_test")
+      order.purchases << purchase
       balance_transaction = BalanceTransaction.new(
         user: seller,
         merchant_account:,
@@ -961,9 +1008,10 @@ describe Order::ChargeService, :vcr do
       end
 
       expect(Purchase::MarkSuccessfulService).not_to receive(:new)
-      expect { service.ensure_all_purchases_processed([purchase]) }.not_to change { purchase.balance_transactions.count }
+      expect { service.ensure_all_purchases_processed([purchase]) }.to change { seller.reload.unpaid_balance_cents }.by(8_90)
 
-      expect(purchase).to have_received(:mark_successful!)
+      expect(balance_transaction.reload.balance_id).to be_present
+      expect(purchase.reload.purchase_success_balance_id).to eq(balance_transaction.balance_id)
       expect(purchase).to be_successful
     end
 

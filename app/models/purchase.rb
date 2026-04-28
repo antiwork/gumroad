@@ -1483,6 +1483,7 @@ class Purchase < ApplicationRecord
 
   def increment_affiliates_balance!
     return unless affiliate_credit_cents > 0
+    return if affiliate_credit.present?
 
     create_affiliate_balances!
 
@@ -1541,6 +1542,12 @@ class Purchase < ApplicationRecord
     increment_affiliates_balance!
 
     return unless charged_using_gumroad_merchant_account?
+
+    if (seller_balance_transaction = balance_transactions.where(user: seller).where.not(balance_id: nil).last)
+      self.purchase_success_balance = seller_balance_transaction.balance
+      save! if purchase_success_balance_id != seller_balance_transaction.balance_id
+      return
+    end
 
     seller_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_seller(
       flow_of_funds:,

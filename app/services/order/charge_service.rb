@@ -313,12 +313,36 @@ class Order::ChargeService
   end
 
   def mark_charged_purchase_successful(purchase)
-    if purchase.balance_transactions.exists?
+    apply_seller_balance_transaction(purchase)
+
+    if successful_balance_processing_complete?(purchase)
       purchase.mark_successful!
     else
       Purchase::MarkSuccessfulService.new(purchase).perform
     end
     purchase.handle_recommended_purchase if purchase.was_product_recommended
+  end
+
+  def apply_seller_balance_transaction(purchase)
+    return unless purchase.charged_using_gumroad_merchant_account?
+    return if purchase.purchase_success_balance_id.present?
+
+    seller_balance_transaction = purchase.balance_transactions.where(user: purchase.seller).where.not(balance_id: nil).last ||
+                                 purchase.balance_transactions.where(user: purchase.seller, balance_id: nil).last
+    return unless seller_balance_transaction
+
+    seller_balance_transaction.update_balance! if seller_balance_transaction.balance_id.blank?
+    purchase.update!(purchase_success_balance: seller_balance_transaction.balance)
+  end
+
+  def successful_balance_processing_complete?(purchase)
+    seller_balance_expected = purchase.charged_using_gumroad_merchant_account? && purchase.price_cents.to_i.positive?
+    affiliate_balance_expected = purchase.affiliate_credit_cents.to_i.positive?
+    return false unless seller_balance_expected || affiliate_balance_expected
+
+    seller_balance_complete = !seller_balance_expected || purchase.purchase_success_balance_id.present?
+    affiliate_balance_complete = !affiliate_balance_expected || purchase.affiliate_credit.present?
+    seller_balance_complete && affiliate_balance_complete
   end
 
   def mandate_options_for_stripe(purchases:, with_currency: false)
