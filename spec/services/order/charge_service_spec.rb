@@ -858,6 +858,7 @@ describe Order::ChargeService, :vcr do
 
     it "retries marking as successful when charge_intent succeeded but post-charge processing failed" do
       seller = create(:user)
+      merchant_account = create(:merchant_account, user: nil)
       product = create(:product, user: seller, price_cents: 10_00)
       params = {
         line_items: [
@@ -876,30 +877,42 @@ describe Order::ChargeService, :vcr do
       purchase = order.purchases.first
 
       service = Order::ChargeService.new(order:, params:)
-      succeeded_intent = double("charge_intent", succeeded?: true, requires_action?: false, id: "pi_test_xxx",
-                                                  charge: double("charge", id: "ch_test", fee: 30, fee_currency: "usd"))
+      chargeable = create(:chargeable)
+      succeeded_intent = double(
+        "charge_intent",
+        succeeded?: true,
+        requires_action?: false,
+        id: "pi_test_xxx",
+        charge: double("charge", id: "ch_test", fee: 30, fee_currency: "usd")
+      )
 
-      # Simulate: charge succeeds but MarkSuccessfulService fails on the first
-      # call (inside create_charge_for_seller_purchases). The ensure path should
-      # retry because charge_intent.succeeded? is true.
       mark_call_count = 0
-      allow(Purchase::MarkSuccessfulService).to receive(:new).and_wrap_original do |method, *args|
-        instance = method.call(*args)
+      allow(Purchase::MarkSuccessfulService).to receive(:new).and_wrap_original do |method, purchase_to_mark|
+        instance = method.call(purchase_to_mark)
         allow(instance).to receive(:perform) do
           mark_call_count += 1
           if mark_call_count == 1
             raise ActiveRecord::LockWaitTimeout.new("Lock wait timeout exceeded")
           end
-          # On retry (from ensure_all_purchases_processed), let it succeed
-          purchase.update_balance_and_mark_successful!
+          purchase_to_mark.update_columns(purchase_state: "successful", succeeded_at: Time.current)
         end
         instance
       end
 
+      allow(service).to receive(:create_chargeable_from_params).and_return([nil, nil, chargeable])
+      allow(service).to receive(:prepare_purchases_for_charge).and_return(chargeable)
       allow(service).to receive(:create_charge_for_seller_purchases) do |purchases, chargeable, off_session, setup_future_charges|
         service.charge_intent = succeeded_intent
         purchases.each do |p|
-          next unless p.in_progress? && p.errors.empty?
+          p.errors.clear
+          next unless p.in_progress?
+          p.update!(
+            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            flow_of_funds: FlowOfFunds.build_simple_flow_of_funds(Currency::USD, p.total_transaction_cents),
+            merchant_account:,
+            stripe_fingerprint: chargeable.fingerprint,
+            stripe_transaction_id: succeeded_intent.charge.id
+          )
           Purchase::MarkSuccessfulService.new(p).perform
         end
       end
@@ -908,6 +921,34 @@ describe Order::ChargeService, :vcr do
       purchase.reload
       expect(purchase).to be_successful
       expect(mark_call_count).to eq(2)
+    end
+
+    it "does not retry marking as successful for errored purchases without charge data" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 10_00)
+      order = create(:order)
+      purchase = create(:purchase_in_progress, link: product, seller:, merchant_account: nil, charge_processor_id: nil,
+                                               stripe_fingerprint: nil, stripe_transaction_id: nil)
+      order.purchases << purchase
+      params = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+      service = Order::ChargeService.new(order:, params:)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      purchase.errors.add(:base, "The purchase was not charged")
+
+      expect(Purchase::MarkSuccessfulService).not_to receive(:new).with(purchase)
+
+      service.ensure_all_purchases_processed([purchase])
+
+      expect(purchase).to be_failed
     end
   end
 
