@@ -1,6 +1,4 @@
-#!/usr/bin/env ruby
-# frozen_string_literal: true
-
+#!/usr/bin/env bash
 #
 # bin/test-confidence — Run tests ranked by relevance to your diff.
 #
@@ -9,339 +7,367 @@
 #   bin/test-confidence 0.999        # Custom threshold
 #   bin/test-confidence --no-ai      # Skip AI ranking, use convention mapping only
 #
-# Requires: ANTHROPIC_API_KEY env var for AI-powered test ranking.
-# Falls back to convention-based mapping if the API key is missing or --no-ai is passed.
+# Set ANTHROPIC_API_KEY for AI-powered test ranking.
+# Falls back to convention-based mapping without it.
 #
+set -euo pipefail
 
-require "json"
-require "net/http"
-require "uri"
-require "open3"
+THRESHOLD="99"
+USE_AI=true
+BATCH_SIZE=5
 
-WAVE_TARGETS = [0.80, 0.95, 0.99, 0.9999].freeze
-WAVE_LABELS  = ["Direct unit tests", "Integration tests", "Broad coverage", "Full suite"].freeze
-BATCH_SIZE   = 5
-HIGH_RISK_PATHS = %w[app/billing/ app/payments/ app/models/purchase.rb].freeze
+for arg in "$@"; do
+  case "$arg" in
+    --no-ai) USE_AI=false ;;
+    0.*|1.0) THRESHOLD=$(echo "$arg * 100" | bc | sed 's/\.00$//') ;;
+  esac
+done
 
-class TestConfidence
-  def initialize(threshold: 0.99, use_ai: true)
-    @threshold = threshold
-    @use_ai = use_ai && ENV["ANTHROPIC_API_KEY"]
-    @waves = []
-    @results = { passed: 0, failed: 0, files_run: [], failures: [] }
-    @start_time = Time.now
-  end
+# ── Gather changed files ──
 
-  def run
-    diff_files = changed_files
-    if diff_files.empty?
-      puts "\n  No changes detected. Nothing to test.\n"
-      return true
-    end
+changed_files() {
+  { git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
+    | sort -u \
+    | grep -E '\.(rb|ts|tsx|js|jsx)$' || true
+}
 
-    auto_raise_threshold(diff_files)
-    print_header
+CHANGED=$(changed_files)
+if [[ -z "$CHANGED" ]]; then
+  echo ""
+  echo "  No changes detected. Nothing to test."
+  echo ""
+  exit 0
+fi
 
-    plan = build_test_plan(diff_files)
-    if plan.flatten.empty?
-      puts "  No relevant test files found for this diff."
-      puts "  Changed files: #{diff_files.join(', ')}"
-      return true
-    end
+# ── Auto-raise threshold for payment code ──
 
-    run_waves(plan)
-  end
+if echo "$CHANGED" | grep -qE '^(app/billing/|app/payments/|app/models/purchase\.rb)'; then
+  if [[ "$THRESHOLD" -lt 9999 ]]; then
+    THRESHOLD=9999
+    echo "  ⚠ Payment/billing code detected — threshold raised to 99.99%"
+  fi
+fi
 
-  private
+format_threshold() {
+  if [[ "$THRESHOLD" -ge 9999 ]]; then echo "99.99%"
+  elif [[ "$THRESHOLD" -ge 100 ]]; then echo "100%"
+  else echo "${THRESHOLD}%"
+  fi
+}
 
-  def changed_files
-    stdout, = Open3.capture2("git", "diff", "--name-only", "HEAD")
-    files = stdout.strip.split("\n").reject(&:empty?)
-    # Also check staged
-    staged, = Open3.capture2("git", "diff", "--name-only", "--cached")
-    files += staged.strip.split("\n").reject(&:empty?)
-    files.uniq.select { |f| f.match?(/\.(rb|ts|tsx|js|jsx)$/) }
-  end
+# ── Convention-based test mapping (deterministic) ──
 
-  def auto_raise_threshold(files)
-    if files.any? { |f| HIGH_RISK_PATHS.any? { |p| f.start_with?(p) } }
-      @threshold = [@threshold, 0.9999].max
-      puts "  ⚠ Payment/billing code detected — threshold raised to #{format_pct(@threshold)}"
-    end
-  end
+map_tests_by_convention() {
+  local wave1_file=$(mktemp)
+  local wave2_file=$(mktemp)
+  local wave3_file=$(mktemp)
+  local seen_file=$(mktemp)
 
-  def build_test_plan(diff_files)
-    if @use_ai
-      plan = ai_rank_tests(diff_files)
-      return plan if plan && plan.any? { |w| w.any? }
-    end
+  # Wave 1: Direct spec file mapping
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
 
-    convention_rank_tests(diff_files)
-  end
+    # app/models/foo.rb → spec/models/foo_spec.rb
+    spec=$(echo "$file" | sed 's|^app/|spec/|' | sed 's|\.rb$|_spec.rb|')
+    if [[ -f "$spec" ]] && ! grep -qxF "$spec" "$seen_file" 2>/dev/null; then
+      echo "$spec" >> "$wave1_file"
+      echo "$spec" >> "$seen_file"
+    fi
 
-  def convention_rank_tests(diff_files)
-    all_specs = Dir.glob("spec/**/*_spec.rb")
-    wave1, wave2, wave3 = [], [], []
-    used = Set.new
+    # app/controllers/foo_controller.rb → spec/requests/foo_spec.rb
+    if [[ "$file" == app/controllers/* ]]; then
+      req_spec=$(echo "$file" | sed 's|^app/controllers/|spec/requests/|' | sed 's|_controller\.rb$|_spec.rb|')
+      if [[ -f "$req_spec" ]] && ! grep -qxF "$req_spec" "$seen_file" 2>/dev/null; then
+        echo "$req_spec" >> "$wave1_file"
+        echo "$req_spec" >> "$seen_file"
+      fi
+    fi
 
-    diff_files.each do |file|
-      # Direct mapping: app/models/foo.rb → spec/models/foo_spec.rb
-      spec = file.sub(%r{^app/}, "spec/").sub(/\.rb$/, "_spec.rb")
-      if File.exist?(spec) && used.add?(spec)
-        wave1 << spec
-      end
+    # app/services/foo.rb → spec/services/foo_spec.rb
+    if [[ "$file" == app/services/* ]]; then
+      svc_spec=$(echo "$file" | sed 's|^app/|spec/|' | sed 's|\.rb$|_spec.rb|')
+      if [[ -f "$svc_spec" ]] && ! grep -qxF "$svc_spec" "$seen_file" 2>/dev/null; then
+        echo "$svc_spec" >> "$wave1_file"
+        echo "$svc_spec" >> "$seen_file"
+      fi
+    fi
+  done <<< "$CHANGED"
 
-      # Also check for request specs
-      if file.start_with?("app/controllers/")
-        request_spec = file.sub(%r{^app/controllers/}, "spec/requests/").sub(/_controller\.rb$/, "_spec.rb")
-        if File.exist?(request_spec) && used.add?(request_spec)
-          wave2 << request_spec
-        end
-      end
-    end
+  # Wave 2: Grep for class references in specs
+  while IFS= read -r file; do
+    [[ -z "$file" || "$file" != *.rb ]] && continue
+    classname=$(basename "$file" .rb | sed -E 's/(^|_)([a-z])/\U\2/g')
+    [[ -z "$classname" ]] && continue
+    grep -rl "$classname" spec/ --include="*.rb" 2>/dev/null | while IFS= read -r spec; do
+      if ! grep -qxF "$spec" "$seen_file" 2>/dev/null; then
+        echo "$spec" >> "$wave2_file"
+        echo "$spec" >> "$seen_file"
+      fi
+    done
+  done <<< "$CHANGED"
 
-    # Wave 2: grep for class references in specs
-    diff_files.each do |file|
-      next unless file.end_with?(".rb")
-      classname = File.basename(file, ".rb").split("_").map(&:capitalize).join
-      grep_out, = Open3.capture2("grep", "-rl", classname, "spec/", "--include=*.rb")
-      grep_out.strip.split("\n").each do |spec|
-        wave2 << spec if used.add?(spec)
-      end
-    end
+  # Wave 3: Same-directory specs not yet included
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    dir=$(echo "$file" | sed 's|^app/|spec/|' | sed 's|/[^/]*$||')
+    [[ -d "$dir" ]] || continue
+    find "$dir" -maxdepth 1 -name "*_spec.rb" -type f 2>/dev/null | while IFS= read -r spec; do
+      if ! grep -qxF "$spec" "$seen_file" 2>/dev/null; then
+        echo "$spec" >> "$wave3_file"
+        echo "$spec" >> "$seen_file"
+      fi
+    done
+  done <<< "$CHANGED"
 
-    # Wave 3: same directory specs not yet included
-    diff_files.each do |file|
-      dir = file.sub(%r{^app/}, "spec/").sub(%r{/[^/]+$}, "")
-      Dir.glob("#{dir}/*_spec.rb").each do |spec|
-        wave3 << spec if used.add?(spec)
-      end
-    end
+  # Output wave files
+  echo "WAVE1:$wave1_file"
+  echo "WAVE2:$wave2_file"
+  echo "WAVE3:$wave3_file"
+  echo "SEEN:$seen_file"
+}
 
-    wave4 = all_specs.reject { |s| used.include?(s) }
-    [wave1, wave2, wave3, wave4]
-  end
+# ── AI-powered test ranking ──
 
-  def ai_rank_tests(diff_files)
-    diff_output, = Open3.capture2("git", "diff", "HEAD", "--", *diff_files.first(20))
-    all_specs = Dir.glob("spec/**/*_spec.rb")
+ai_rank_tests() {
+  [[ "$USE_AI" != true ]] && return 1
+  [[ -z "${ANTHROPIC_API_KEY:-}" ]] && return 1
 
-    # Group specs by directory for compact representation
-    spec_tree = all_specs.group_by { |f| File.dirname(f) }
-      .map { |dir, files| "#{dir}/\n#{files.map { |f| "  #{File.basename(f)}" }.join("\n")}" }
-      .join("\n")
+  local diff_text
+  diff_text=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -400)
+  local spec_list
+  spec_list=$(find spec -name "*_spec.rb" -type f 2>/dev/null | sort | head -500)
+  local spec_count
+  spec_count=$(find spec -name "*_spec.rb" -type f 2>/dev/null | wc -l | tr -d ' ')
 
-    prompt = <<~PROMPT
-      You are a senior Rails engineer. Given this diff, return a JSON object mapping tests to 4 waves.
+  local prompt="You are a senior Rails engineer. Given this diff, return ONLY a JSON object (no markdown) mapping tests to 4 waves.
 
-      Wave 1 (80%): Direct unit tests for changed code
-      Wave 2 (95%): Integration/controller specs exercising changed paths
-      Wave 3 (99%): Broader specs that could be affected
-      Wave 4 (99.99%): ALL_REMAINING
+Wave 1 (80%): Direct unit tests for changed code
+Wave 2 (95%): Integration/controller specs exercising changed paths
+Wave 3 (99%): Broader specs that could be affected
+Wave 4 (99.99%): Use the literal string ALL_REMAINING
 
-      Diff:
-      #{diff_output[0, 8000]}
+Diff:
+${diff_text}
 
-      Test files (#{all_specs.length} total):
-      #{spec_tree[0, 12000]}
+Test files (${spec_count} total, showing first 500):
+${spec_list}
 
-      Return ONLY this JSON, no markdown:
-      {"wave1": ["spec/..."], "wave2": ["spec/..."], "wave3": ["spec/..."], "wave4": ["ALL_REMAINING"]}
-    PROMPT
+Return ONLY JSON: {\"wave1\": [\"spec/...\"], \"wave2\": [\"spec/...\"], \"wave3\": [\"spec/...\"], \"wave4\": [\"ALL_REMAINING\"]}"
 
-    uri = URI("https://api.anthropic.com/v1/messages")
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = true
-    http.open_timeout = 10
-    http.read_timeout = 30
+  local payload
+  payload=$(jq -n \
+    --arg model "claude-sonnet-4-6" \
+    --arg prompt "$prompt" \
+    '{model: $model, max_tokens: 4096, messages: [{role: "user", content: $prompt}]}')
 
-    req = Net::HTTP::Post.new(uri)
-    req["Content-Type"] = "application/json"
-    req["x-api-key"] = ENV["ANTHROPIC_API_KEY"]
-    req["anthropic-version"] = "2023-06-01"
-    req.body = JSON.generate({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }]
-    })
+  printf "  🧠 AI ranking tests..."
 
-    print "  🧠 AI ranking tests..."
-    resp = http.request(req)
+  local response
+  response=$(curl -s --max-time 30 \
+    -H "Content-Type: application/json" \
+    -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+    -H "anthropic-version: 2023-06-01" \
+    -d "$payload" \
+    "https://api.anthropic.com/v1/messages" 2>/dev/null) || { echo " failed (network)"; return 1; }
 
-    unless resp.is_a?(Net::HTTPSuccess)
-      puts " failed (#{resp.code}), falling back to convention mapping"
-      return nil
-    end
+  local text
+  text=$(echo "$response" | jq -r '.content[0].text // empty' 2>/dev/null)
+  [[ -z "$text" ]] && { echo " failed (no response)"; return 1; }
 
-    data = JSON.parse(resp.body)
-    text = data.dig("content", 0, "text") || ""
-    json_match = text.match(/\{[\s\S]*\}/)
-    unless json_match
-      puts " no valid response, falling back"
-      return nil
-    end
+  # Extract JSON from response
+  local json
+  json=$(echo "$text" | grep -o '{[^}]*}' | head -1) 2>/dev/null
+  # Try multiline JSON extraction if single-line didn't work
+  if [[ -z "$json" ]]; then
+    json=$(echo "$text" | python3 -c "
+import sys, json, re
+text = sys.stdin.read()
+m = re.search(r'\{[\s\S]*\}', text)
+if m: print(m.group())
+" 2>/dev/null) || true
+  fi
+  [[ -z "$json" ]] && { echo " failed (parse)"; return 1; }
 
-    plan = JSON.parse(json_match[0])
-    valid_specs = Set.new(Dir.glob("spec/**/*_spec.rb"))
-    used = Set.new
+  # Write wave files
+  local all_specs
+  all_specs=$(find spec -name "*_spec.rb" -type f 2>/dev/null)
 
-    waves = %w[wave1 wave2 wave3 wave4].map do |key|
-      tests = Array(plan[key])
-      if tests.include?("ALL_REMAINING")
-        valid_specs.reject { |s| used.include?(s) }.to_a
-      else
-        tests.select { |t| valid_specs.include?(t) && used.add?(t) }
-      end
-    end
+  for wave_num in 1 2 3 4; do
+    local wave_file
+    wave_file=$(mktemp)
+    local key="wave${wave_num}"
+    local tests
+    tests=$(echo "$json" | jq -r ".${key}[]? // empty" 2>/dev/null)
 
-    total_ranked = waves[0..2].sum(&:length)
-    puts " done (#{total_ranked} tests ranked across 3 waves)"
-    waves
-  rescue StandardError => e
-    puts " error (#{e.message}), falling back to convention mapping"
-    nil
-  end
+    if echo "$tests" | grep -q "ALL_REMAINING"; then
+      # Wave 4: everything not in earlier waves
+      echo "$all_specs" | while IFS= read -r spec; do
+        if ! grep -qxF "$spec" "$AI_SEEN" 2>/dev/null; then
+          echo "$spec"
+        fi
+      done > "$wave_file"
+    else
+      echo "$tests" | while IFS= read -r spec; do
+        [[ -z "$spec" ]] && continue
+        if [[ -f "$spec" ]] && ! grep -qxF "$spec" "$AI_SEEN" 2>/dev/null; then
+          echo "$spec" >> "$wave_file"
+          echo "$spec" >> "$AI_SEEN"
+        fi
+      done
+    fi
 
-  def run_waves(plan)
-    confidence = 0.0
-    total_tests = 0
+    eval "AI_WAVE${wave_num}=$wave_file"
+  done
 
-    plan.each_with_index do |wave_tests, wave_idx|
-      break if confidence >= @threshold
-      next if wave_tests.empty?
+  local ranked_count=$(( $(wc -l < "$AI_WAVE1" 2>/dev/null || echo 0) + $(wc -l < "$AI_WAVE2" 2>/dev/null || echo 0) + $(wc -l < "$AI_WAVE3" 2>/dev/null || echo 0) ))
+  ranked_count=$(echo "$ranked_count" | tr -d ' ')
+  echo " done (${ranked_count} tests ranked)"
+  return 0
+}
 
-      wave_label = WAVE_LABELS[wave_idx] || "Wave #{wave_idx + 1}"
-      wave_target = WAVE_TARGETS[wave_idx] || 1.0
-      prev_target = wave_idx > 0 ? WAVE_TARGETS[wave_idx - 1] : 0.0
+# ── Run a batch of tests ──
 
-      # Skip wave 4 if threshold already met
-      if wave_idx == 3 && confidence >= @threshold
-        print_wave_skip(wave_idx, wave_tests.length, wave_label)
+run_batch() {
+  local files=("$@")
+  bundle exec rspec --format progress --no-color "${files[@]}" 2>&1
+}
+
+# ── Progress bar ──
+
+progress_bar() {
+  local pct=$1
+  local width=30
+  local filled=$(( pct * width / 100 ))
+  local empty=$(( width - filled ))
+  printf '%0.s▓' $(seq 1 $filled 2>/dev/null) || true
+  printf '%0.s░' $(seq 1 $empty 2>/dev/null) || true
+}
+
+# ── Main execution ──
+
+echo ""
+echo "  ═══════════════════════════════════════════════════"
+echo "    TEST CONFIDENCE  (threshold: $(format_threshold))"
+echo "  ═══════════════════════════════════════════════════"
+echo ""
+
+START_TIME=$(date +%s)
+TOTAL_PASSED=0
+TOTAL_FAILED=0
+CONFIDENCE=0
+
+# Try AI ranking first, fall back to convention
+AI_SEEN=$(mktemp)
+AI_WAVE1="" AI_WAVE2="" AI_WAVE3="" AI_WAVE4=""
+
+if ai_rank_tests; then
+  WAVE_FILES=("$AI_WAVE1" "$AI_WAVE2" "$AI_WAVE3" "$AI_WAVE4")
+else
+  echo "  📁 Using convention-based test mapping"
+  CONV_OUTPUT=$(map_tests_by_convention)
+  WAVE1_FILE=$(echo "$CONV_OUTPUT" | grep "^WAVE1:" | cut -d: -f2)
+  WAVE2_FILE=$(echo "$CONV_OUTPUT" | grep "^WAVE2:" | cut -d: -f2)
+  WAVE3_FILE=$(echo "$CONV_OUTPUT" | grep "^WAVE3:" | cut -d: -f2)
+
+  # Wave 4: all remaining specs
+  WAVE4_FILE=$(mktemp)
+  SEEN_FILE=$(echo "$CONV_OUTPUT" | grep "^SEEN:" | cut -d: -f2)
+  find spec -name "*_spec.rb" -type f 2>/dev/null | while IFS= read -r spec; do
+    grep -qxF "$spec" "$SEEN_FILE" 2>/dev/null || echo "$spec"
+  done > "$WAVE4_FILE"
+
+  WAVE_FILES=("$WAVE1_FILE" "$WAVE2_FILE" "$WAVE3_FILE" "$WAVE4_FILE")
+fi
+
+WAVE_LABELS=("Direct unit tests" "Integration tests" "Broad coverage" "Full suite")
+WAVE_TARGETS=(80 95 99 9999)
+PREV_TARGETS=(0 80 95 99)
+
+for wave_idx in 0 1 2 3; do
+  wave_file="${WAVE_FILES[$wave_idx]}"
+  wave_label="${WAVE_LABELS[$wave_idx]}"
+  wave_target="${WAVE_TARGETS[$wave_idx]}"
+  prev_target="${PREV_TARGETS[$wave_idx]}"
+
+  # Check if confidence already meets threshold
+  if [[ "$CONFIDENCE" -ge "$THRESHOLD" ]]; then
+    count=$(wc -l < "$wave_file" 2>/dev/null | tr -d ' ')
+    [[ "$count" -gt 0 ]] && echo "  Wave $((wave_idx+1))/4 — $wave_label (~${count} files) ⬜ skipped"
+    continue
+  fi
+
+  # Read test files for this wave
+  mapfile -t wave_tests < "$wave_file" 2>/dev/null || true
+  wave_count=${#wave_tests[@]}
+  [[ "$wave_count" -eq 0 ]] && continue
+
+  echo "  Wave $((wave_idx+1))/4 — $wave_label ($wave_count files)"
+  wave_passed=0
+
+  # Run in batches
+  for (( i=0; i<wave_count; i+=BATCH_SIZE )); do
+    batch=("${wave_tests[@]:$i:$BATCH_SIZE}")
+    batch_size=${#batch[@]}
+
+    if output=$(run_batch "${batch[@]}" 2>&1); then
+      wave_passed=$((wave_passed + batch_size))
+      TOTAL_PASSED=$((TOTAL_PASSED + batch_size))
+
+      # Calculate confidence: linear interpolation within wave
+      wave_progress=$((wave_passed * 100 / wave_count))
+      CONFIDENCE=$((prev_target + (wave_target - prev_target) * wave_progress / 100))
+
+      elapsed=$(( $(date +%s) - START_TIME ))
+      bar=$(progress_bar "$CONFIDENCE")
+      pct_display=$CONFIDENCE
+      [[ "$pct_display" -ge 9999 ]] && pct_display="99.99"
+      printf "\r  %s %s%%  (%d tests, %ds)  " "$bar" "$pct_display" "$TOTAL_PASSED" "$elapsed"
+
+      if [[ "$CONFIDENCE" -ge "$THRESHOLD" ]]; then
+        echo ""
         break
-      end
-
-      print_wave_start(wave_idx, wave_tests.length, wave_label)
-
-      wave_tests.each_slice(BATCH_SIZE).with_index do |batch, batch_idx|
-        break if confidence >= @threshold
-
-        # Run batch
-        cmd = ["bundle", "exec", "rspec", "--format", "progress", "--no-color", *batch]
-        stdout, stderr, status = Open3.capture3(*cmd)
-
-        batch.each { |f| @results[:files_run] << f }
-
-        if status.success?
-          @results[:passed] += batch.length
-          total_tests += batch.length
-          # Confidence: linear interpolation within wave
-          wave_progress = @results[:files_run].count { |f| wave_tests.include?(f) }.to_f / wave_tests.length
-          confidence = prev_target + (wave_target - prev_target) * wave_progress
-
-          print_progress(wave_idx, wave_label, confidence, total_tests)
-        else
-          @results[:failed] += batch.length
-          @results[:failures] << { wave: wave_idx, files: batch, output: stdout + stderr }
-          print_failure(wave_idx, wave_label, batch, stdout + stderr)
-          return false
-        end
-      end
-
-      print_wave_done(wave_idx, wave_tests.length, wave_label)
-    end
-
-    print_final(confidence, total_tests, plan.sum(&:length))
-    confidence >= @threshold
-  end
-
-  # ── Display ──
-
-  def print_header
-    puts
-    puts "  ═══════════════════════════════════════════════════"
-    puts "    TEST CONFIDENCE  (threshold: #{format_pct(@threshold)})"
-    puts "  ═══════════════════════════════════════════════════"
-    puts
-  end
-
-  def print_wave_start(idx, count, label)
-    puts "  Wave #{idx + 1}/4 — #{label} (#{count} files)"
-  end
-
-  def print_wave_skip(idx, count, label)
-    puts "  Wave #{idx + 1}/4 — #{label} (~#{count} files) ⬜ skipped"
-  end
-
-  def print_progress(wave_idx, label, confidence, total)
-    bar_width = 30
-    filled = (confidence * bar_width).round
-    bar = "▓" * filled + "░" * (bar_width - filled)
-    elapsed = Time.now - @start_time
-    print "\r  #{bar} #{format_pct(confidence)}  (#{total} tests, #{elapsed.round(1)}s)  "
-    puts if confidence >= @threshold
-  end
-
-  def print_wave_done(idx, count, label)
-    puts
-    elapsed = Time.now - @start_time
-    puts "  ✅ Wave #{idx + 1} complete — #{count} tests — #{elapsed.round(1)}s"
-    puts
-  end
-
-  def print_failure(wave_idx, label, files, output)
-    puts
-    puts "  ═══════════════════════════════════════════════════"
-    puts "    ❌ TEST CONFIDENCE: 0% — REGRESSION DETECTED"
-    puts "  ═══════════════════════════════════════════════════"
-    puts
-    puts "  Failed in Wave #{wave_idx + 1} (#{label}):"
-    files.each { |f| puts "    • #{f}" }
-    puts
-    # Show last 30 lines of output
-    lines = output.split("\n").last(30)
-    lines.each { |l| puts "    #{l}" }
-    puts
-    puts "  Fix the failing tests before committing."
-    puts
-  end
-
-  def print_final(confidence, tests_run, total_available)
-    elapsed = Time.now - @start_time
-    puts
-    puts "  ═══════════════════════════════════════════════════"
-    if confidence >= @threshold
-      puts "    ✅ TEST CONFIDENCE: #{format_pct(confidence)}  (threshold: #{format_pct(@threshold)})"
+      fi
     else
-      puts "    ⚠️  TEST CONFIDENCE: #{format_pct(confidence)}  (threshold: #{format_pct(@threshold)})"
-    end
-    puts "  ═══════════════════════════════════════════════════"
-    puts
-    puts "  #{tests_run} tests in #{elapsed.round(1)}s (of ~#{total_available} relevant)"
-    puts
-  end
+      TOTAL_FAILED=$((TOTAL_FAILED + batch_size))
+      echo ""
+      echo ""
+      echo "  ═══════════════════════════════════════════════════"
+      echo "    ❌ TEST CONFIDENCE: 0% — REGRESSION DETECTED"
+      echo "  ═══════════════════════════════════════════════════"
+      echo ""
+      echo "  Failed in Wave $((wave_idx+1)) ($wave_label):"
+      for f in "${batch[@]}"; do echo "    • $f"; done
+      echo ""
+      echo "$output" | tail -20 | sed 's/^/    /'
+      echo ""
+      echo "  Fix the failing tests before committing."
+      echo ""
+      exit 1
+    fi
+  done
 
-  def format_pct(n)
-    if n >= 0.9999
-      "99.99%"
-    else
-      "#{(n * 100).round(1)}%"
-    end
-  end
-end
+  elapsed=$(( $(date +%s) - START_TIME ))
+  echo ""
+  echo "  ✅ Wave $((wave_idx+1)) complete — $wave_count tests — ${elapsed}s"
+  echo ""
+done
 
-# ── Main ──
+# ── Final report ──
 
-threshold = 0.99
-use_ai = true
+elapsed=$(( $(date +%s) - START_TIME ))
+total_available=$(find spec -name "*_spec.rb" -type f 2>/dev/null | wc -l | tr -d ' ')
 
-ARGV.each do |arg|
-  if arg == "--no-ai"
-    use_ai = false
-  elsif arg.match?(/^0?\.\d+$/)
-    threshold = arg.to_f
-  end
-end
+echo "  ═══════════════════════════════════════════════════"
+if [[ "$CONFIDENCE" -ge "$THRESHOLD" ]]; then
+  conf_display=$CONFIDENCE
+  [[ "$conf_display" -ge 9999 ]] && conf_display="99.99"
+  echo "    ✅ TEST CONFIDENCE: ${conf_display}%  (threshold: $(format_threshold))"
+else
+  echo "    ⚠️  TEST CONFIDENCE: ${CONFIDENCE}%  (threshold: $(format_threshold))"
+fi
+echo "  ═══════════════════════════════════════════════════"
+echo ""
+echo "  $TOTAL_PASSED tests in ${elapsed}s (of ~${total_available} in repo)"
+echo ""
 
-runner = TestConfidence.new(threshold: threshold, use_ai: use_ai)
-success = runner.run
-exit(success ? 0 : 1)
+[[ "$CONFIDENCE" -ge "$THRESHOLD" ]]
