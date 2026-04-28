@@ -210,6 +210,10 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "Price cannot be updated for tiered membership products. Use the variant endpoints to manage tier pricing.")
     end
 
+    if params.key?(:price_currency_type) && !CURRENCY_CHOICES.key?(params[:price_currency_type])
+      return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.")
+    end
+
     if params.key?(:tags)
       if !params[:tags].is_a?(Array) || params[:tags].any? { |t| !t.respond_to?(:to_str) }
         return render_response(false, message: "tags must be an array of strings.")

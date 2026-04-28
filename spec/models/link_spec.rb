@@ -100,6 +100,13 @@ describe Link, :vcr do
     end
   end
 
+    it "adds an error for unsupported currency type" do
+      link = build(:product, price_currency_type: "xyz", price_cents: 100)
+      expect(link).not_to be_valid
+      expect(link.errors.full_messages).to include("'xyz' is not a supported currency.")
+    end
+  end
+
   describe "native_type inclusion validation" do
     it "fails if native_type is nil" do
       link = build(:product, native_type: nil)

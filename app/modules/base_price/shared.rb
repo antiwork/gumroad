@@ -48,7 +48,12 @@ module BasePrice::Shared
   end
 
   def price_must_be_within_range
-    min_price = CURRENCY_CHOICES[price_currency_type]["min_price"]
+    currency_config = CURRENCY_CHOICES[price_currency_type]
+    unless currency_config
+      errors.add(:base, "'#{price_currency_type}' is not a supported currency.")
+      return
+    end
+    min_price = currency_config["min_price"]
 
     prices_to_validate.compact.each do |price_cents_to_validate|
       next if price_cents_to_validate == 0
