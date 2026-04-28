@@ -27,11 +27,10 @@ class ContentModeration::Strategies::PromptStrategy
     ALLOW (these are normal Gumroad listings, never flag them):
     - Product descriptions, marketing copy, and promotional language
     - Bundles that repeat the base product name across items
-      (e.g., "PFAS Compliance Playbook — Starter", "PFAS Compliance Playbook — Pro")
     - Multi-tier products that reuse feature descriptions across tiers
-      (e.g., Small/Medium/Large Studio licenses with overlapping feature lists)
-    - Technical, educational, or domain-specific content that repeats terminology
-      by necessity (e.g., "vanishing lines" and "horizon line" in a 3D-modeling plugin)
+      (e.g., Basic / Pro / Enterprise plans with overlapping feature lists)
+    - Technical, educational, or domain-specific content that repeats
+      terminology by necessity
     - License terms, pricing tables, and feature comparisons that share structure
     - Repeated product, brand, or feature names across sections of one listing
 
