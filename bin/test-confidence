@@ -23,15 +23,44 @@ for arg in "$@"; do
 done
 
 # ── Changed files ──
+# Priority:
+#   1. Uncommitted local changes (git diff HEAD + staged)
+#   2. Branch diff vs main (for PR branches with committed changes)
+#   3. If on main with no local changes, nothing to test
 
-CHANGED=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+
+# Local uncommitted + staged changes
+LOCAL_CHANGED=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
   | sort -u | grep -E '\.(rb|ts|tsx|js|jsx)$' || true)
+
+# Branch diff vs main (what the PR introduces)
+BRANCH_CHANGED=""
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+  MERGE_BASE=$(git merge-base origin/main HEAD 2>/dev/null || echo "")
+  if [[ -n "$MERGE_BASE" ]]; then
+    BRANCH_CHANGED=$(git diff --name-only "$MERGE_BASE"...HEAD 2>/dev/null \
+      | grep -E '\.(rb|ts|tsx|js|jsx)$' || true)
+  fi
+fi
+
+# Combine: local changes + branch diff (local first for priority)
+CHANGED=$(printf '%s\n%s' "$LOCAL_CHANGED" "$BRANCH_CHANGED" | sort -u | grep -v '^$' || true)
 
 if [[ -z "$CHANGED" ]]; then
   echo ""
   echo "  Nothing changed. Nothing to test."
   echo ""
   exit 0
+fi
+
+# Show diff source
+if [[ -n "$LOCAL_CHANGED" && -n "$BRANCH_CHANGED" ]]; then
+  echo "  📂 Uncommitted changes + branch diff vs main"
+elif [[ -n "$BRANCH_CHANGED" ]]; then
+  echo "  📂 Branch diff: $CURRENT_BRANCH vs main"
+else
+  echo "  📂 Uncommitted local changes"
 fi
 
 # Auto-raise for payment code
@@ -98,7 +127,14 @@ TOTAL_QUEUED=$(wc -l < "$QUEUE" | tr -d ' ')
 # ── Optional: AI re-ranks the queue ──
 
 if [[ "$USE_AI" == true && -n "${ANTHROPIC_API_KEY:-}" && "$RANKED_COUNT" -gt 0 ]]; then
-  DIFF_TEXT=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -400)
+  # Get diff text: prefer local changes, fall back to branch diff vs main
+  if [[ -n "$LOCAL_CHANGED" ]]; then
+    DIFF_TEXT=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null | head -400)
+  elif [[ -n "$MERGE_BASE" ]]; then
+    DIFF_TEXT=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null | head -400)
+  else
+    DIFF_TEXT=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -400)
+  fi
   SPEC_LIST=$(cat "$QUEUE" | head -200)
 
   PROMPT="You are a senior Rails engineer. Given this diff, reorder these test files from MOST to LEAST likely to catch a regression. Return ONLY the reordered file paths, one per line, no numbering, no explanation.
