@@ -818,4 +818,44 @@ describe OfferCode do
       expect(codes.size).to eq(2)
     end
   end
+
+  describe "#auto_delete_if_single_use_exhausted!" do
+    it "soft-deletes a single-use code that has been fully used" do
+      offer_code = create(:offer_code, products: [@product], max_purchase_count: 1)
+      # Stub the after_commit hook so the purchase doesn't auto-delete the code
+      allow_any_instance_of(Purchase).to receive(:auto_delete_single_use_offer_code)
+      create(:purchase, offer_code:, link: @product, seller: @product.user, price_cents: @product.price_cents)
+
+      expect { offer_code.auto_delete_if_single_use_exhausted! }.to change { offer_code.reload.deleted? }.from(false).to(true)
+    end
+
+    it "does not delete a single-use code that still has quantity left" do
+      offer_code = create(:offer_code, products: [@product], max_purchase_count: 1)
+
+      expect { offer_code.auto_delete_if_single_use_exhausted! }.not_to change { offer_code.reload.deleted? }
+    end
+
+    it "does not delete a multi-use code even when fully used" do
+      offer_code = create(:offer_code, products: [@product], max_purchase_count: 5)
+      5.times { create(:purchase, offer_code:, link: @product, seller: @product.user, price_cents: @product.price_cents) }
+
+      expect { offer_code.auto_delete_if_single_use_exhausted! }.not_to change { offer_code.reload.deleted? }
+    end
+
+    it "does not delete an unlimited-use code" do
+      offer_code = create(:offer_code, products: [@product], max_purchase_count: nil)
+
+      expect { offer_code.auto_delete_if_single_use_exhausted! }.not_to change { offer_code.reload.deleted? }
+    end
+
+    it "does not delete a code that is already deleted" do
+      offer_code = create(:offer_code, products: [@product], max_purchase_count: 1)
+      allow_any_instance_of(Purchase).to receive(:auto_delete_single_use_offer_code)
+      create(:purchase, offer_code:, link: @product, seller: @product.user, price_cents: @product.price_cents)
+      offer_code.mark_deleted!
+
+      expect { offer_code.auto_delete_if_single_use_exhausted! }.not_to change { offer_code.reload.deleted_at }
+    end
+  end
+
 end
