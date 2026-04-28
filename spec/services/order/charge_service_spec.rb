@@ -959,15 +959,12 @@ describe Order::ChargeService, :vcr do
       }
       service = Order::ChargeService.new(order:, params:)
       service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
-      allow(purchase).to receive(:mark_successful!) do
-        purchase.update_columns(purchase_state: "successful", succeeded_at: Time.current)
-      end
 
-      expect(Purchase::MarkSuccessfulService).not_to receive(:new)
-      expect { service.ensure_all_purchases_processed([purchase]) }.not_to change { purchase.balance_transactions.count }
+      balance_transaction_count = purchase.balance_transactions.count
+      expect { service.ensure_all_purchases_processed([purchase]) }.to change { ActivateIntegrationsWorker.jobs.size }.by(1)
 
-      expect(purchase).to have_received(:mark_successful!)
-      expect(purchase).to be_successful
+      expect(purchase.balance_transactions.count).to eq(balance_transaction_count)
+      expect(purchase.reload).to be_successful
     end
 
     it "applies an orphan seller balance transaction before marking successful" do
@@ -1003,16 +1000,101 @@ describe Order::ChargeService, :vcr do
       }
       service = Order::ChargeService.new(order:, params:)
       service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
-      allow(purchase).to receive(:mark_successful!) do
-        purchase.update_columns(purchase_state: "successful", succeeded_at: Time.current)
-      end
 
-      expect(Purchase::MarkSuccessfulService).not_to receive(:new)
-      expect { service.ensure_all_purchases_processed([purchase]) }.to change { seller.reload.unpaid_balance_cents }.by(8_90)
+      expect do
+        expect { service.ensure_all_purchases_processed([purchase]) }.to change { ActivateIntegrationsWorker.jobs.size }.by(1)
+      end.to change { seller.reload.unpaid_balance_cents }.by(8_90)
 
       expect(balance_transaction.reload.balance_id).to be_present
       expect(purchase.reload.purchase_success_balance_id).to eq(balance_transaction.balance_id)
       expect(purchase).to be_successful
+    end
+
+    it "keeps lock timeouts while applying orphan seller balance transactions from escaping" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account, user: nil)
+      product = create(:product, user: seller, price_cents: 10_00)
+      order = create(:order)
+      purchase = create(:purchase_in_progress, link: product, seller:, merchant_account:,
+                                               charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                               stripe_fingerprint: "fingerprint", stripe_transaction_id: "ch_test")
+      order.purchases << purchase
+      balance_transaction = BalanceTransaction.new(
+        user: seller,
+        merchant_account:,
+        purchase:,
+        issued_amount_currency: Currency::USD,
+        issued_amount_gross_cents: 10_00,
+        issued_amount_net_cents: 8_90,
+        holding_amount_currency: Currency::USD,
+        holding_amount_gross_cents: 10_00,
+        holding_amount_net_cents: 8_90
+      )
+      balance_transaction.save!
+      params = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+      service = Order::ChargeService.new(order:, params:)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      allow_any_instance_of(BalanceTransaction).to receive(:update_balance!).and_raise(ActiveRecord::LockWaitTimeout.new("Lock wait timeout exceeded"))
+
+      expect { service.ensure_all_purchases_processed([purchase]) }.not_to raise_error
+
+      expect(service.charge_responses["uid-1"][:success]).to eq(false)
+      expect(purchase.reload).to be_in_progress
+    end
+
+    it "creates affiliate credit from an applied affiliate balance transaction without duplicating it" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account, user: nil)
+      product = create(:product, user: seller, price_cents: 10_00)
+      affiliate_user = create(:affiliate_user)
+      affiliate = create(:direct_affiliate, affiliate_user:, seller:, affiliate_basis_points: 1000)
+      order = create(:order)
+      purchase = create(:purchase_in_progress, link: product, seller:, merchant_account:, affiliate:,
+                                               charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                               stripe_fingerprint: "fingerprint", stripe_transaction_id: "ch_test",
+                                               affiliate_credit_cents: 1_00)
+      order.purchases << purchase
+      affiliate_balance = create(:balance, user: affiliate_user, merchant_account: purchase.affiliate_merchant_account, amount_cents: 1_00, holding_amount_cents: 1_00)
+      affiliate_balance_transaction = BalanceTransaction.new(
+        user: affiliate_user,
+        merchant_account: purchase.affiliate_merchant_account,
+        purchase:,
+        balance: affiliate_balance,
+        issued_amount_currency: Currency::USD,
+        issued_amount_gross_cents: 1_00,
+        issued_amount_net_cents: 1_00,
+        holding_amount_currency: Currency::USD,
+        holding_amount_gross_cents: 1_00,
+        holding_amount_net_cents: 1_00
+      )
+      affiliate_balance_transaction.save!
+      params = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+      service = Order::ChargeService.new(order:, params:)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+
+      expect { service.ensure_all_purchases_processed([purchase]) }.not_to change { purchase.balance_transactions.where(user: affiliate_user).count }
+
+      expect(purchase.reload).to be_successful
+      expect(purchase.affiliate_credit).to be_present
+      expect(purchase.affiliate_credit.affiliate_credit_success_balance).to eq(affiliate_balance)
     end
 
     it "does not retry marking as successful for errored purchases without charge data" do

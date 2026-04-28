@@ -1485,7 +1485,11 @@ class Purchase < ApplicationRecord
     return unless affiliate_credit_cents > 0
     return if affiliate_credit.present?
 
-    create_affiliate_balances!
+    if (affiliate_balance_transaction = balance_transactions.where(user: affiliate.affiliate_user).where.not(balance_id: nil).last)
+      create_affiliate_credit!(affiliate_balance_transaction.balance)
+    else
+      create_affiliate_balances!
+    end
 
     return if using_gumroad_merchant_account_for_affiliate_user?
 
@@ -1527,10 +1531,14 @@ class Purchase < ApplicationRecord
       update_user_balance: update_user_balance_in_transaction_for_affiliate
     )
 
+    create_affiliate_credit!(affiliate_balance_transaction.balance)
+  end
+
+  def create_affiliate_credit!(affiliate_balance)
     self.affiliate_credit = AffiliateCredit.create!(
       purchase: self,
       affiliate:,
-      affiliate_balance: affiliate_balance_transaction.balance,
+      affiliate_balance:,
       affiliate_amount_cents: affiliate_credit_cents,
       affiliate_fee_cents: determine_affiliate_fee_cents.ceil,
     )
