@@ -79,7 +79,7 @@ describe Checkout::DiscountsController do
     end
 
     context "when page exceeds available pages due to a race condition" do
-      it "returns the first page instead of raising Pagy::OverflowError" do
+      it "returns the last available page instead of raising Pagy::OverflowError" do
         call_count = 0
         allow_any_instance_of(Checkout::DiscountsController).to receive(:pagy).and_wrap_original do |method, *args, **kwargs|
           call_count += 1
@@ -89,7 +89,7 @@ describe Checkout::DiscountsController do
 
         get :paged, params: { page: 1 }
         expect(response).to be_successful
-        expect(response.parsed_body["pagination"]["page"]).to eq(1)
+        expect(response.parsed_body["pagination"]["page"]).to eq(3)
       end
     end
 
