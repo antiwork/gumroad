@@ -334,6 +334,7 @@ Rails.application.routes.draw do
     get "/taxes", to: redirect("/pricing", status: 301)
     get "/hackathon", to: "home#hackathon"
     get "/small-bets", to: "home#small_bets"
+    get "/saas", to: "home#saas"
     resource :github_stars, only: [:show]
 
     namespace :gumroad_blog, path: "blog" do
