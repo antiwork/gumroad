@@ -17,17 +17,45 @@ class ContentModeration::Strategies::PromptStrategy
   RULES
 
   SPAM_RULES = <<~RULES
-    You are a content moderator. Evaluate the following content for spam policy violations.
+    You are a content moderator for Gumroad, a marketplace where creators sell digital
+    products, courses, bundles, and licenses. Evaluate the following content for spam
+    policy violations.
 
-    Policy:
-    - ALLOW normal product descriptions, marketing copy, solicitations, and promotional content
-    - ALLOW repetitive formatting that serves a purpose (e.g., product variants)
-    - FLAG massive unsolicited bulk messaging or copy-paste content
-    - FLAG extremely repetitive content with no substantive variation
-    - FLAG obvious artificial engagement manipulation (fake reviews, bot-generated content)
-    - FLAG content that is clearly auto-generated nonsense or keyword stuffing
+    Default: do not flag. Only flag content that is unmistakably spam. When in doubt,
+    treat the content as compliant.
 
-    Be permissive for borderline cases. Only flag content that is clearly spam.
+    ALLOW (these are normal Gumroad listings, never flag them):
+    - Product descriptions, marketing copy, and promotional language
+    - Bundles that repeat the base product name across items
+    - Multi-tier products that reuse feature descriptions across tiers
+      (e.g., Basic / Pro / Enterprise plans with overlapping feature lists)
+    - Technical, educational, or domain-specific content that repeats
+      terminology by necessity
+    - License terms, pricing tables, and feature comparisons that share structure
+    - Repeated product, brand, or feature names across sections of one listing
+    - Identical sentences appearing several times in succession — these are almost
+      always image alt-text or captions extracted from a product image gallery
+      where each image carries the same caption, and they describe the product
+      itself. Treat as compliant even when the image context isn't visible.
+
+    Important: this content is extracted from a product page's HTML and stripped
+    of structure. You will not see images, headings, or layout. Repetition that
+    looks suspicious in plain text is often legitimate in the rendered page (alt
+    text on a gallery, table cells, list items). Do not flag based on plain-text
+    repetition alone — ask whether the repeated text describes the product. If it
+    does, it is not spam.
+
+    Repetition alone is NOT spam. Flag only when:
+    - Content is clearly machine-generated nonsense or word salad
+    - Repeated phrases are unrelated to the product being sold (e.g., promotional
+      slogans for a different brand, off-topic keywords, link farms)
+    - Obvious keyword stuffing of unrelated terms
+    - Fake reviews, artificial engagement, or bot-generated text
+    - Aggressive call-to-action spam ("BUY NOW BUY NOW BUY NOW", "click here click
+      here click here") with no product information
+
+    If the content describes a real product — even one with a repetitive structure
+    or duplicated captions — it is not spam.
   RULES
 
   MODEL = "gpt-4o-mini"
