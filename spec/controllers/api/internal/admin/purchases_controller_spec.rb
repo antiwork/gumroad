@@ -72,6 +72,30 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response.parsed_body["purchases"].map { _1["id"] }).to eq([matching_purchase.external_id_numeric.to_s])
     end
 
+    it "strips whitespace from exact-match search values" do
+      seller = create(:user, email: "seller@example.com")
+      product = create(:product, user: seller)
+      buyer_email = "buyer@example.com"
+      purchase = create(:free_purchase, link: product, email: buyer_email)
+      license = create(:license, purchase:)
+      purchase.update_columns(card_type: "visa", card_visual: "**** **** **** 4242", stripe_fingerprint: "test-fingerprint")
+
+      [
+        { email: " #{buyer_email} " },
+        { creator_email: " #{seller.email} " },
+        { license_key: " #{license.serial} " },
+        { card_last4: " 4242 " },
+        { card_type: " visa " },
+      ].each do |search_params|
+        post :search, params: search_params
+
+        aggregate_failures(search_params.inspect) do
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body["purchases"].map { _1["id"] }).to eq([purchase.external_id_numeric.to_s])
+        end
+      end
+    end
+
     it "preloads purchase associations before serializing search results" do
       purchase = create(:free_purchase)
       search_service = instance_double(AdminSearchService)

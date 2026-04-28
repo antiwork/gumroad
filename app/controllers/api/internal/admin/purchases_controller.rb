@@ -44,10 +44,10 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
   private
     def purchase_search_params
       {
-        query: params[:query]&.strip,
+        query: params[:query],
         email: params[:email],
-        product_title_query: params[:product_title_query]&.strip,
-        purchase_status: params[:purchase_status]&.strip,
+        product_title_query: params[:product_title_query],
+        purchase_status: params[:purchase_status],
         creator_email: params[:creator_email],
         license_key: params[:license_key],
         transaction_date: params[:purchase_date],
@@ -55,7 +55,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
         card_type: params[:card_type],
         price: params[:charge_amount],
         expiry_date: params[:expiry_date],
-      }.compact_blank
+      }.transform_values { _1.is_a?(String) ? _1.strip : _1 }.compact_blank
     end
 
     def search_modifier_without_query?(search_params)
