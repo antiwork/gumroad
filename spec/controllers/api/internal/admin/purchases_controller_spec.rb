@@ -21,6 +21,13 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response.parsed_body).to eq({ success: false, message: "query is required when product_title_query or purchase_status is provided." }.as_json)
     end
 
+    it "returns a bad request when purchase_status is invalid" do
+      post :search, params: { query: "buyer@example.com", purchase_status: "succesful" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "purchase_status must be one of: #{described_class::VALID_PURCHASE_STATUSES.to_sentence(last_word_connector: ', or ')}." }.as_json)
+    end
+
     it "returns matching purchases as a capped list" do
       buyer_email = "buyer@example.com"
       older_purchase = create(:free_purchase, email: buyer_email, created_at: 2.days.ago)
@@ -42,6 +49,33 @@ describe Api::Internal::Admin::PurchasesController do
         "id" => newer_purchase.external_id_numeric.to_s,
         "receipt_url" => receipt_purchase_url(newer_purchase.external_id, host: UrlService.domain_with_protocol, email: buyer_email)
       )
+    end
+
+    it "strips whitespace from query and product title search values" do
+      buyer_email = "buyer@example.com"
+      matching_product = create(:product, name: "Design course")
+      matching_purchase = create(:free_purchase, link: matching_product, email: buyer_email)
+      other_product = create(:product, name: "Writing course")
+      create(:free_purchase, link: other_product, email: buyer_email)
+
+      post :search, params: { query: " #{buyer_email} ", product_title_query: " Design " }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchases"].map { _1["id"] }).to eq([matching_purchase.external_id_numeric.to_s])
+    end
+
+    it "preloads purchase associations before serializing search results" do
+      purchase = create(:free_purchase)
+      search_service = instance_double(AdminSearchService)
+      search_relation = Purchase.where(id: purchase.id)
+
+      allow(AdminSearchService).to receive(:new).and_return(search_service)
+      allow(search_service).to receive(:search_purchases).and_return(search_relation)
+      expect(search_relation).to receive(:includes).with(:link, :seller, :refunds).and_call_original
+
+      post :search, params: { query: purchase.email }
+
+      expect(response).to have_http_status(:ok)
     end
 
     it "caps results and reports when more matches exist" do

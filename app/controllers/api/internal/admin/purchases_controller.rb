@@ -2,6 +2,7 @@
 
 class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseController
   MAX_SEARCH_RESULTS = 25
+  VALID_PURCHASE_STATUSES = %w[successful failed not_charged chargeback refunded].freeze
 
   def show
     return render json: { success: false, message: "Purchase not found" }, status: :not_found unless params[:id].to_s.match?(/\A\d+\z/)
@@ -13,15 +14,20 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
   end
 
   def search
-    if search_modifier_without_query?
+    search_params = purchase_search_params
+
+    if search_modifier_without_query?(search_params)
       return render json: { success: false, message: "query is required when product_title_query or purchase_status is provided." }, status: :bad_request
     end
 
-    search_params = purchase_search_params
     return render json: { success: false, message: "At least one search parameter is required." }, status: :bad_request if search_params.blank?
 
+    if invalid_purchase_status?(search_params[:purchase_status])
+      return render json: { success: false, message: "purchase_status must be one of: #{VALID_PURCHASE_STATUSES.to_sentence(last_word_connector: ', or ')}." }, status: :bad_request
+    end
+
     limit = purchase_search_limit
-    purchases = AdminSearchService.new.search_purchases(**search_params, limit: limit.next).to_a
+    purchases = AdminSearchService.new.search_purchases(**search_params, limit: limit.next).includes(:link, :seller, :refunds).to_a
     has_more = purchases.length > limit
 
     render json: {
@@ -38,10 +44,10 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
   private
     def purchase_search_params
       {
-        query: params[:query],
+        query: params[:query]&.strip,
         email: params[:email],
-        product_title_query: params[:product_title_query],
-        purchase_status: params[:purchase_status],
+        product_title_query: params[:product_title_query]&.strip,
+        purchase_status: params[:purchase_status]&.strip,
         creator_email: params[:creator_email],
         license_key: params[:license_key],
         transaction_date: params[:purchase_date],
@@ -52,8 +58,12 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       }.compact_blank
     end
 
-    def search_modifier_without_query?
-      params[:query].blank? && (params[:product_title_query].present? || params[:purchase_status].present?)
+    def search_modifier_without_query?(search_params)
+      search_params[:query].blank? && (search_params[:product_title_query].present? || search_params[:purchase_status].present?)
+    end
+
+    def invalid_purchase_status?(purchase_status)
+      purchase_status.present? && VALID_PURCHASE_STATUSES.exclude?(purchase_status)
     end
 
     def purchase_search_limit
