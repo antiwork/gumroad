@@ -1,0 +1,347 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#
+# bin/test-confidence — Run tests ranked by relevance to your diff.
+#
+# Usage:
+#   bin/test-confidence              # Default 99% threshold
+#   bin/test-confidence 0.999        # Custom threshold
+#   bin/test-confidence --no-ai      # Skip AI ranking, use convention mapping only
+#
+# Requires: ANTHROPIC_API_KEY env var for AI-powered test ranking.
+# Falls back to convention-based mapping if the API key is missing or --no-ai is passed.
+#
+
+require "json"
+require "net/http"
+require "uri"
+require "open3"
+
+WAVE_TARGETS = [0.80, 0.95, 0.99, 0.9999].freeze
+WAVE_LABELS  = ["Direct unit tests", "Integration tests", "Broad coverage", "Full suite"].freeze
+BATCH_SIZE   = 5
+HIGH_RISK_PATHS = %w[app/billing/ app/payments/ app/models/purchase.rb].freeze
+
+class TestConfidence
+  def initialize(threshold: 0.99, use_ai: true)
+    @threshold = threshold
+    @use_ai = use_ai && ENV["ANTHROPIC_API_KEY"]
+    @waves = []
+    @results = { passed: 0, failed: 0, files_run: [], failures: [] }
+    @start_time = Time.now
+  end
+
+  def run
+    diff_files = changed_files
+    if diff_files.empty?
+      puts "\n  No changes detected. Nothing to test.\n"
+      return true
+    end
+
+    auto_raise_threshold(diff_files)
+    print_header
+
+    plan = build_test_plan(diff_files)
+    if plan.flatten.empty?
+      puts "  No relevant test files found for this diff."
+      puts "  Changed files: #{diff_files.join(', ')}"
+      return true
+    end
+
+    run_waves(plan)
+  end
+
+  private
+
+  def changed_files
+    stdout, = Open3.capture2("git", "diff", "--name-only", "HEAD")
+    files = stdout.strip.split("\n").reject(&:empty?)
+    # Also check staged
+    staged, = Open3.capture2("git", "diff", "--name-only", "--cached")
+    files += staged.strip.split("\n").reject(&:empty?)
+    files.uniq.select { |f| f.match?(/\.(rb|ts|tsx|js|jsx)$/) }
+  end
+
+  def auto_raise_threshold(files)
+    if files.any? { |f| HIGH_RISK_PATHS.any? { |p| f.start_with?(p) } }
+      @threshold = [@threshold, 0.9999].max
+      puts "  ⚠ Payment/billing code detected — threshold raised to #{format_pct(@threshold)}"
+    end
+  end
+
+  def build_test_plan(diff_files)
+    if @use_ai
+      plan = ai_rank_tests(diff_files)
+      return plan if plan && plan.any? { |w| w.any? }
+    end
+
+    convention_rank_tests(diff_files)
+  end
+
+  def convention_rank_tests(diff_files)
+    all_specs = Dir.glob("spec/**/*_spec.rb")
+    wave1, wave2, wave3 = [], [], []
+    used = Set.new
+
+    diff_files.each do |file|
+      # Direct mapping: app/models/foo.rb → spec/models/foo_spec.rb
+      spec = file.sub(%r{^app/}, "spec/").sub(/\.rb$/, "_spec.rb")
+      if File.exist?(spec) && used.add?(spec)
+        wave1 << spec
+      end
+
+      # Also check for request specs
+      if file.start_with?("app/controllers/")
+        request_spec = file.sub(%r{^app/controllers/}, "spec/requests/").sub(/_controller\.rb$/, "_spec.rb")
+        if File.exist?(request_spec) && used.add?(request_spec)
+          wave2 << request_spec
+        end
+      end
+    end
+
+    # Wave 2: grep for class references in specs
+    diff_files.each do |file|
+      next unless file.end_with?(".rb")
+      classname = File.basename(file, ".rb").split("_").map(&:capitalize).join
+      grep_out, = Open3.capture2("grep", "-rl", classname, "spec/", "--include=*.rb")
+      grep_out.strip.split("\n").each do |spec|
+        wave2 << spec if used.add?(spec)
+      end
+    end
+
+    # Wave 3: same directory specs not yet included
+    diff_files.each do |file|
+      dir = file.sub(%r{^app/}, "spec/").sub(%r{/[^/]+$}, "")
+      Dir.glob("#{dir}/*_spec.rb").each do |spec|
+        wave3 << spec if used.add?(spec)
+      end
+    end
+
+    wave4 = all_specs.reject { |s| used.include?(s) }
+    [wave1, wave2, wave3, wave4]
+  end
+
+  def ai_rank_tests(diff_files)
+    diff_output, = Open3.capture2("git", "diff", "HEAD", "--", *diff_files.first(20))
+    all_specs = Dir.glob("spec/**/*_spec.rb")
+
+    # Group specs by directory for compact representation
+    spec_tree = all_specs.group_by { |f| File.dirname(f) }
+      .map { |dir, files| "#{dir}/\n#{files.map { |f| "  #{File.basename(f)}" }.join("\n")}" }
+      .join("\n")
+
+    prompt = <<~PROMPT
+      You are a senior Rails engineer. Given this diff, return a JSON object mapping tests to 4 waves.
+
+      Wave 1 (80%): Direct unit tests for changed code
+      Wave 2 (95%): Integration/controller specs exercising changed paths
+      Wave 3 (99%): Broader specs that could be affected
+      Wave 4 (99.99%): ALL_REMAINING
+
+      Diff:
+      #{diff_output[0, 8000]}
+
+      Test files (#{all_specs.length} total):
+      #{spec_tree[0, 12000]}
+
+      Return ONLY this JSON, no markdown:
+      {"wave1": ["spec/..."], "wave2": ["spec/..."], "wave3": ["spec/..."], "wave4": ["ALL_REMAINING"]}
+    PROMPT
+
+    uri = URI("https://api.anthropic.com/v1/messages")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    http.open_timeout = 10
+    http.read_timeout = 30
+
+    req = Net::HTTP::Post.new(uri)
+    req["Content-Type"] = "application/json"
+    req["x-api-key"] = ENV["ANTHROPIC_API_KEY"]
+    req["anthropic-version"] = "2023-06-01"
+    req.body = JSON.generate({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt }]
+    })
+
+    print "  🧠 AI ranking tests..."
+    resp = http.request(req)
+
+    unless resp.is_a?(Net::HTTPSuccess)
+      puts " failed (#{resp.code}), falling back to convention mapping"
+      return nil
+    end
+
+    data = JSON.parse(resp.body)
+    text = data.dig("content", 0, "text") || ""
+    json_match = text.match(/\{[\s\S]*\}/)
+    unless json_match
+      puts " no valid response, falling back"
+      return nil
+    end
+
+    plan = JSON.parse(json_match[0])
+    valid_specs = Set.new(Dir.glob("spec/**/*_spec.rb"))
+    used = Set.new
+
+    waves = %w[wave1 wave2 wave3 wave4].map do |key|
+      tests = Array(plan[key])
+      if tests.include?("ALL_REMAINING")
+        valid_specs.reject { |s| used.include?(s) }.to_a
+      else
+        tests.select { |t| valid_specs.include?(t) && used.add?(t) }
+      end
+    end
+
+    total_ranked = waves[0..2].sum(&:length)
+    puts " done (#{total_ranked} tests ranked across 3 waves)"
+    waves
+  rescue StandardError => e
+    puts " error (#{e.message}), falling back to convention mapping"
+    nil
+  end
+
+  def run_waves(plan)
+    confidence = 0.0
+    total_tests = 0
+
+    plan.each_with_index do |wave_tests, wave_idx|
+      break if confidence >= @threshold
+      next if wave_tests.empty?
+
+      wave_label = WAVE_LABELS[wave_idx] || "Wave #{wave_idx + 1}"
+      wave_target = WAVE_TARGETS[wave_idx] || 1.0
+      prev_target = wave_idx > 0 ? WAVE_TARGETS[wave_idx - 1] : 0.0
+
+      # Skip wave 4 if threshold already met
+      if wave_idx == 3 && confidence >= @threshold
+        print_wave_skip(wave_idx, wave_tests.length, wave_label)
+        break
+      end
+
+      print_wave_start(wave_idx, wave_tests.length, wave_label)
+
+      wave_tests.each_slice(BATCH_SIZE).with_index do |batch, batch_idx|
+        break if confidence >= @threshold
+
+        # Run batch
+        cmd = ["bundle", "exec", "rspec", "--format", "progress", "--no-color", *batch]
+        stdout, stderr, status = Open3.capture3(*cmd)
+
+        batch.each { |f| @results[:files_run] << f }
+
+        if status.success?
+          @results[:passed] += batch.length
+          total_tests += batch.length
+          # Confidence: linear interpolation within wave
+          wave_progress = @results[:files_run].count { |f| wave_tests.include?(f) }.to_f / wave_tests.length
+          confidence = prev_target + (wave_target - prev_target) * wave_progress
+
+          print_progress(wave_idx, wave_label, confidence, total_tests)
+        else
+          @results[:failed] += batch.length
+          @results[:failures] << { wave: wave_idx, files: batch, output: stdout + stderr }
+          print_failure(wave_idx, wave_label, batch, stdout + stderr)
+          return false
+        end
+      end
+
+      print_wave_done(wave_idx, wave_tests.length, wave_label)
+    end
+
+    print_final(confidence, total_tests, plan.sum(&:length))
+    confidence >= @threshold
+  end
+
+  # ── Display ──
+
+  def print_header
+    puts
+    puts "  ═══════════════════════════════════════════════════"
+    puts "    TEST CONFIDENCE  (threshold: #{format_pct(@threshold)})"
+    puts "  ═══════════════════════════════════════════════════"
+    puts
+  end
+
+  def print_wave_start(idx, count, label)
+    puts "  Wave #{idx + 1}/4 — #{label} (#{count} files)"
+  end
+
+  def print_wave_skip(idx, count, label)
+    puts "  Wave #{idx + 1}/4 — #{label} (~#{count} files) ⬜ skipped"
+  end
+
+  def print_progress(wave_idx, label, confidence, total)
+    bar_width = 30
+    filled = (confidence * bar_width).round
+    bar = "▓" * filled + "░" * (bar_width - filled)
+    elapsed = Time.now - @start_time
+    print "\r  #{bar} #{format_pct(confidence)}  (#{total} tests, #{elapsed.round(1)}s)  "
+    puts if confidence >= @threshold
+  end
+
+  def print_wave_done(idx, count, label)
+    puts
+    elapsed = Time.now - @start_time
+    puts "  ✅ Wave #{idx + 1} complete — #{count} tests — #{elapsed.round(1)}s"
+    puts
+  end
+
+  def print_failure(wave_idx, label, files, output)
+    puts
+    puts "  ═══════════════════════════════════════════════════"
+    puts "    ❌ TEST CONFIDENCE: 0% — REGRESSION DETECTED"
+    puts "  ═══════════════════════════════════════════════════"
+    puts
+    puts "  Failed in Wave #{wave_idx + 1} (#{label}):"
+    files.each { |f| puts "    • #{f}" }
+    puts
+    # Show last 30 lines of output
+    lines = output.split("\n").last(30)
+    lines.each { |l| puts "    #{l}" }
+    puts
+    puts "  Fix the failing tests before committing."
+    puts
+  end
+
+  def print_final(confidence, tests_run, total_available)
+    elapsed = Time.now - @start_time
+    puts
+    puts "  ═══════════════════════════════════════════════════"
+    if confidence >= @threshold
+      puts "    ✅ TEST CONFIDENCE: #{format_pct(confidence)}  (threshold: #{format_pct(@threshold)})"
+    else
+      puts "    ⚠️  TEST CONFIDENCE: #{format_pct(confidence)}  (threshold: #{format_pct(@threshold)})"
+    end
+    puts "  ═══════════════════════════════════════════════════"
+    puts
+    puts "  #{tests_run} tests in #{elapsed.round(1)}s (of ~#{total_available} relevant)"
+    puts
+  end
+
+  def format_pct(n)
+    if n >= 0.9999
+      "99.99%"
+    else
+      "#{(n * 100).round(1)}%"
+    end
+  end
+end
+
+# ── Main ──
+
+threshold = 0.99
+use_ai = true
+
+ARGV.each do |arg|
+  if arg == "--no-ai"
+    use_ai = false
+  elsif arg.match?(/^0?\.\d+$/)
+    threshold = arg.to_f
+  end
+end
+
+runner = TestConfidence.new(threshold: threshold, use_ai: use_ai)
+success = runner.run
+exit(success ? 0 : 1)

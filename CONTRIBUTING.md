@@ -53,15 +53,23 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 
 ### Before pushing
 
-Run the **test-confidence** skill before every commit. It analyzes your diff, ranks tests by relevance, and runs them in priority order with a live confidence score:
+Run **test-confidence** before every commit. It analyzes your diff, ranks tests by relevance, and runs them in priority order with a live confidence score.
 
+From the terminal:
+```bash
+bin/test-confidence          # Default 99% threshold
+bin/test-confidence 0.999    # Custom threshold
+bin/test-confidence --no-ai  # Convention mapping only (no API key needed)
+```
+
+From Claude Code:
 ```
 /test-confidence
 ```
 
-Default threshold is 99%. For payment/billing changes it auto-raises to 99.99%. You can also pass a custom threshold: `/test-confidence 0.999`.
+Default threshold is 99%. For payment/billing changes it auto-raises to 99.99%. Set `ANTHROPIC_API_KEY` for AI-powered test ranking (falls back to convention-based mapping without it).
 
-This replaces manually figuring out which specs to run. The skill maps your changes to the right tests automatically and stops early once confidence is high enough.
+This replaces manually figuring out which specs to run. It maps your changes to the right tests automatically and stops early once confidence is high enough.
 
 Also lint before committing:
 
