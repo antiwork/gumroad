@@ -6318,10 +6318,22 @@ describe Purchase, :vcr do
         end
       end
 
-      context "when original subscription purchase did not have a custom fee" do
-        it "does not set a custom fee" do
-          original_subscription_purchase.seller.update!(custom_fee_per_thousand: 75)
+      context "when original subscription purchase did not have a custom fee but the seller has one set" do
+        it "falls back to the seller's custom fee" do
+          recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false)
+          recurring_purchase.seller.update!(custom_fee_per_thousand: 75)
           expect(original_subscription_purchase.custom_fee_per_thousand).to be_nil
+          expect(recurring_purchase.reload.custom_fee_per_thousand).to be_nil
+
+          recurring_purchase.send(:calculate_custom_fee_per_thousand)
+          expect(recurring_purchase.custom_fee_per_thousand).to eq(75)
+        end
+      end
+
+      context "when neither the original subscription purchase nor the seller has a custom fee" do
+        it "does not set a custom fee" do
+          expect(original_subscription_purchase.custom_fee_per_thousand).to be_nil
+          expect(original_subscription_purchase.seller.custom_fee_per_thousand).to be_nil
 
           recurring_purchase = create(:purchase, subscription:, is_original_subscription_purchase: false)
           expect(recurring_purchase.reload.custom_fee_per_thousand).to be_nil

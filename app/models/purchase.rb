@@ -3379,7 +3379,8 @@ class Purchase < ApplicationRecord
 
       if is_recurring_subscription_charge || is_updated_original_subscription_purchase
         original_purchase = subscription.original_purchase
-        self.custom_fee_per_thousand = original_purchase.custom_fee_per_thousand if original_purchase&.custom_fee_per_thousand.present?
+        fee = original_purchase&.custom_fee_per_thousand.presence || seller.custom_fee_per_thousand
+        self.custom_fee_per_thousand = fee if fee.present?
       elsif is_preorder_charge?
         self.custom_fee_per_thousand = preorder.authorization_purchase.custom_fee_per_thousand if preorder.authorization_purchase.custom_fee_per_thousand.present?
       elsif seller.custom_fee_per_thousand.present?
