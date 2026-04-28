@@ -2677,7 +2677,7 @@ describe Purchase::CreateService, :vcr do
       purchase, _ = Purchase::CreateService.new(product:, params:).perform
 
       expect(purchase.purchase_state).to eq "failed"
-      expect(purchase.error_code).to eq "offer_code_sold_out"
+      expect(purchase.error_code).to eq "offer_code_invalid"
     end
 
     describe "multi-quantity" do
