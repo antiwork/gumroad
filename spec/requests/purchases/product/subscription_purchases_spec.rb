@@ -70,8 +70,8 @@ describe("Subscription Purchases from the product page", type: :system, js: true
 
         recurring_charge = purchase.subscription.purchases.successful.last
         expect(purchase.subscription.purchases.successful.count).to eq(2)
-        expect(recurring_charge.custom_fee_per_thousand).to be_nil
-        expect(recurring_charge.fee_cents).to eq(261)
+        expect(recurring_charge.custom_fee_per_thousand).to eq(25)
+        expect(recurring_charge.fee_cents).to eq(156) # 2.5% of $14 + 50c + 2.9% of $14 + 30c
       end
 
       it "charges custom Gumroad fee if custom fee is set for the seller" do
