@@ -275,7 +275,8 @@ describe Admin::UsersController, type: :controller, inertia: true do
     end
 
     it "updates the existing custom fee" do
-      user.update!(custom_fee_per_thousand: 75)
+      user.custom_fee_per_thousand = 75
+      user.save!
       expect(user.reload.custom_fee_per_thousand).to eq 75
 
       post :set_custom_fee, params: { external_id: user.external_id, custom_fee_percent: "5" }

@@ -970,6 +970,12 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to include("tiered membership")
       end
 
+      it "rejects unsupported price_currency_type" do
+        put @action, params: @params.merge(price_currency_type: "xyz")
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("not a supported currency")
+      end
+
       it "processes description through SaveContentUpsellsService" do
         expect_any_instance_of(SaveContentUpsellsService).to receive(:from_html).and_call_original
         put @action, params: @params.merge(description: "<p>test</p>")

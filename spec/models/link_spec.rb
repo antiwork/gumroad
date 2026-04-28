@@ -98,6 +98,12 @@ describe Link, :vcr do
           .to_not raise_error(ActiveRecord::RecordInvalid)
       end
     end
+
+    it "adds an error for unsupported currency type" do
+      link = build(:product, price_currency_type: "xyz", price_cents: 100)
+      expect(link).not_to be_valid
+      expect(link.errors.full_messages).to include("'xyz' is not a supported currency.")
+    end
   end
 
   describe "native_type inclusion validation" do

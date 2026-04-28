@@ -78,6 +78,21 @@ describe Checkout::DiscountsController do
       )
     end
 
+    context "when page exceeds available pages due to a race condition" do
+      it "returns the last available page instead of raising Pagy::OverflowError" do
+        call_count = 0
+        allow_any_instance_of(Checkout::DiscountsController).to receive(:pagy).and_wrap_original do |method, *args, **kwargs|
+          call_count += 1
+          kwargs[:page] = 999 if call_count == 1
+          method.call(*args, **kwargs)
+        end
+
+        get :paged, params: { page: 1 }
+        expect(response).to be_successful
+        expect(response.parsed_body["pagination"]["page"]).to eq(3)
+      end
+    end
+
     context "when `sort` is passed" do
       before do
         create(:purchase, link: create(:product, user: seller), offer_code: offer_codes.third)
