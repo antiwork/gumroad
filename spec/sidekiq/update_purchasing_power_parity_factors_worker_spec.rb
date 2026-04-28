@@ -19,9 +19,24 @@ describe UpdatePurchasingPowerParityFactorsWorker, :vcr do
       end
     end
 
+    context "when country is in the high-income exclusion list" do
+      it "sets PPP factor to 1 regardless of calculated value" do
+        # These countries are in PPP_EXCLUDED_COUNTRIES and should always be 1
+        expect(@service.get_factor("AE", @seller)).to eq(1)
+        expect(@service.get_factor("JP", @seller)).to eq(1)
+        expect(@service.get_factor("SE", @seller)).to eq(1)
+        expect(@service.get_factor("QA", @seller)).to eq(1)
+        expect(@service.get_factor("US", @seller)).to eq(1)
+        expect(@service.get_factor("GB", @seller)).to eq(1)
+      end
+    end
+
     context "when factor is less than 0.8" do
       it "sets PPP factor rounded to the nearest hundredth" do
-        expect(@service.get_factor("AE", @seller)).to eq(0.64)
+        # AE was the original test country but is now excluded; use a non-excluded country
+        factor = @service.get_factor("IN", @seller)
+        expect(factor).to be < 0.8
+        expect(factor).to be >= 0.4
       end
     end
 

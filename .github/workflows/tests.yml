@@ -227,6 +227,10 @@ jobs:
             $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
             /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
         timeout-minutes: 15
+          KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
+          CI: true
+          IN_DOCKER: true
+          WEB_REPO: gumroadteam/web
       - name: Clean up
         if: always()
         run: |
@@ -404,21 +408,21 @@ jobs:
           docker run --rm --entrypoint="" --network ${{ env.COMPOSE_PROJECT_NAME }}_default \
             -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \
             -v "$(pwd)/test-logs:/app/log" \
-            -e RUBY_YJIT_ENABLE \
-            -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \
-            -e KNAPSACK_PRO_CI_NODE_TOTAL \
-            -e KNAPSACK_PRO_CI_NODE_INDEX \
-            -e KNAPSACK_PRO_LOG_LEVEL \
-            -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES \
-            -e KNAPSACK_PRO_TEST_FILE_PATTERN \
-            -e KNAPSACK_PRO_COMMIT_HASH \
-            -e KNAPSACK_PRO_BRANCH \
-            -e KNAPSACK_PRO_CI_NODE_BUILD_ID \
-            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \
-            -e KNAPSACK_PRO_PROJECT_DIR \
-            -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \
-            -e CI \
-            -e IN_DOCKER \
+            -e RUBY_YJIT_ENABLE=1 \
+            -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC=${{ secrets.KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC_FAST }} \
+            -e KNAPSACK_PRO_CI_NODE_TOTAL=${{ matrix.ci_node_total }} \
+            -e KNAPSACK_PRO_CI_NODE_INDEX=${{ matrix.ci_node_index }} \
+            -e KNAPSACK_PRO_LOG_LEVEL=info \
+            -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES=true \
+            -e KNAPSACK_PRO_TEST_FILE_PATTERN="spec/requests/**/*_spec.rb" \
+            -e KNAPSACK_PRO_COMMIT_HASH=${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
+            -e KNAPSACK_PRO_BRANCH="$KNAPSACK_PRO_BRANCH" \
+            -e KNAPSACK_PRO_CI_NODE_BUILD_ID=${{ github.run_id }} \
+            -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT=${{ github.run_attempt }} \
+            -e KNAPSACK_PRO_PROJECT_DIR=/app \
+            -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT=true \
+            -e CI=true \
+            -e IN_DOCKER=true \
             $WEB_REPO:test-${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }} \
             /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"
         timeout-minutes: 20

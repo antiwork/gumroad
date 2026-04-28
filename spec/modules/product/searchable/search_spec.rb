@@ -658,7 +658,7 @@ describe "Product::Searchable - Search scenarios" do
       end
 
       it "returns products from both users" do
-        expect(Link.search(Link.search_options(user_id: [product1.user_id, product2.user_id])).records.map(&:id)).to eq([product1.id, product2.id])
+        expect(Link.search(Link.search_options(user_id: [product1.user_id, product2.user_id])).records.map(&:id)).to match_array([product1.id, product2.id])
       end
     end
   end

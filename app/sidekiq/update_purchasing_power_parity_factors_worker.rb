@@ -9,6 +9,21 @@ class UpdatePurchasingPowerParityFactorsWorker
   UPPER_THRESHOLD = 0.8
   LOWER_THRESHOLD = 0.4
 
+  # High-income countries that should never get PPP discounts
+  PPP_EXCLUDED_COUNTRIES = %w[
+    AE QA KW BH OM SA
+    SG HK MO BN
+    JP KR TW
+    SE NO DK FI IS
+    CH LI LU
+    IE NL BE AT DE FR
+    GB
+    AU NZ
+    US CA
+    IL
+    IT ES PT
+  ].freeze
+
   sidekiq_options retry: 5, queue: :low
 
   def perform
@@ -25,6 +40,11 @@ class UpdatePurchasingPowerParityFactorsWorker
         csv.each do |ppp_data|
           country = ISO3166::Country.find_country_by_alpha3(ppp_data["Country Code"])
           next if country.blank?
+
+          if PPP_EXCLUDED_COUNTRIES.include?(country.alpha2)
+            ppp_service.set_factor(country.alpha2, 1)
+            next
+          end
 
           ppp_rate = (ppp_data[year.to_s].presence || 1).to_f
           exchange_rate = get_rate(country.currency_code).to_f

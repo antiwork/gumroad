@@ -58,7 +58,7 @@ class Order::CreateService
         card_params = common_params.slice(
           :card_data_handling_mode, :stripe_payment_method_id, :paypal_order_id,
           :stripe_customer_id, :stripe_setup_intent_id
-        ).compact
+        ).to_h.symbolize_keys.compact
 
         purchase, error, sca_response = Purchase::CreateService.new(
           product:,

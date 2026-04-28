@@ -35,6 +35,7 @@ class CheckoutController < ApplicationController
       cart.reject_ppp_discount = update_permitted_params[:rejectPppDiscount] || false
       cart.discount_codes = update_permitted_params[:discountCodes].to_a.map { { code: _1[:code], fromUrl: _1[:fromUrl] } }
       cart.save!
+      cart.lock!
 
       updated_cart_products = items.map do |item|
         product = Link.find_by_external_id!(item[:product][:id])
@@ -68,7 +69,7 @@ class CheckoutController < ApplicationController
     end
 
     redirect_to checkout_path, status: :see_other
-  rescue ActiveRecord::RecordInvalid => e
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::Deadlocked => e
     ErrorNotifier.notify(e)
     Rails.logger.error(e.full_message) if Rails.env.development?
     redirect_to checkout_path, alert: "Sorry, something went wrong. Please try again."

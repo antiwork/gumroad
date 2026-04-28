@@ -123,5 +123,16 @@ describe Thumbnail do
       allow(thumbnail).to receive(:thumbnail_variant).and_raise(ActiveStorage::Error, "processing failed")
       expect(thumbnail.url).to match(PUBLIC_STORAGE_S3_BUCKET)
     end
+
+    it "falls back to original file URL when Errno::ENOENT is raised" do
+      thumbnail = Thumbnail.new(product: @product)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+      blob.analyze
+      thumbnail.file.attach(blob)
+      thumbnail.save!
+
+      allow(thumbnail).to receive(:thumbnail_variant).and_raise(Errno::ENOENT, "/tmp/image_processing.png")
+      expect(thumbnail.url).to match(PUBLIC_STORAGE_S3_BUCKET)
+    end
   end
 end

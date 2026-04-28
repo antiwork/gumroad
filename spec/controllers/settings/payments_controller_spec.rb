@@ -419,6 +419,26 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             expect(response).to have_http_status :found
             expect(session[:inertia_errors][:base]).to eq(["An unknown error occurred"])
           end
+
+          it "handles MerchantRegistrationUserNotReadyError gracefully instead of raising a 500" do
+            all_params.merge!(
+              bank_account: {
+                type: AchAccount.name,
+                account_number: "000123456789",
+                account_number_confirmation: "000123456789",
+                routing_number: "110000000",
+                account_holder_full_name: "gumbot"
+              }
+            )
+
+            expect(StripeMerchantAccountManager).to receive(:create_account).and_raise(MerchantRegistrationUserNotReadyError.new(user.id, "is not supported yet"))
+
+            put :update, params: all_params
+
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to eq(["Bank payouts are not supported in your country yet. Please use PayPal instead."])
+          end
         end
       end
 

@@ -3,7 +3,7 @@
 class Rack::Attack
   redis_url    = ENV.fetch("RACK_ATTACK_REDIS_HOST")
   redis_client = Redis.new(url: "redis://#{redis_url}")
-  Rack::Attack.cache.store = Rack::Attack::StoreProxy::RedisStoreProxy.new(redis_client)
+  Rack::Attack.cache.store = Rack::Attack::StoreProxy::RedisProxy.new(redis_client)
 
   class Request < ::Rack::Request
     # When the server is behind a load balancer

@@ -25,11 +25,11 @@ class User
     end
 
     def can_setup_bank_payouts?
-      active_bank_account.present? || native_payouts_supported? || signed_up_from_united_arab_emirates?
+      active_bank_account.present? || (native_payouts_supported? && !signed_up_from_india?) || signed_up_from_united_arab_emirates?
     end
 
     def can_setup_paypal_payouts?
-      payment_address.present? || !native_payouts_supported? || signed_up_from_united_arab_emirates? || signed_up_from_egypt? || signed_up_from_kazakhstan?
+      payment_address.present? || !native_payouts_supported? || signed_up_from_united_arab_emirates? || signed_up_from_egypt? || signed_up_from_kazakhstan? || signed_up_from_india?
     end
 
     def charge_paypal_payout_fee?

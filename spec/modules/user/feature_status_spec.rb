@@ -177,8 +177,8 @@ describe User::FeatureStatus do
   end
 
   describe "can_setup_bank_payouts?" do
-    it "returns true if country is in Stripe supported list" do
-      User::Compliance.const_get(:SUPPORTED_COUNTRIES).each do |country|
+    it "returns true if country is in Stripe supported list (except India without an active bank account)" do
+      (User::Compliance.const_get(:SUPPORTED_COUNTRIES) - [Compliance::Countries::IND]).each do |country|
         seller = create(:user)
         create(:user_compliance_info, user: seller, country: country.common_name)
         expect(seller.can_setup_bank_payouts?).to be true
@@ -200,6 +200,19 @@ describe User::FeatureStatus do
     it "returns true if user is from UAE" do
       seller = create(:user)
       create(:user_compliance_info, user: seller, country: "United Arab Emirates")
+      expect(seller.can_setup_bank_payouts?).to be true
+    end
+
+    it "returns false for new India users without an active bank account" do
+      seller = create(:user)
+      create(:user_compliance_info, user: seller, country: "India")
+      expect(seller.can_setup_bank_payouts?).to be false
+    end
+
+    it "returns true for India users with an active bank account" do
+      seller = create(:user)
+      create(:user_compliance_info, user: seller, country: "India")
+      create(:indian_bank_account, user: seller)
       expect(seller.can_setup_bank_payouts?).to be true
     end
   end
@@ -235,8 +248,14 @@ describe User::FeatureStatus do
       expect(seller.can_setup_paypal_payouts?).to be true
     end
 
-    it "returns false for all Stripe supported countries except UAE, Kazakhstan, and Egypt" do
-      (User::Compliance.const_get(:SUPPORTED_COUNTRIES) - [Compliance::Countries::ARE, Compliance::Countries::KAZ, Compliance::Countries::EGY]).each do |country|
+    it "returns true if user is from India" do
+      seller = create(:user, payment_address: nil)
+      create(:user_compliance_info, user: seller, country: "India")
+      expect(seller.can_setup_paypal_payouts?).to be true
+    end
+
+    it "returns false for all Stripe supported countries except UAE, Kazakhstan, Egypt, and India" do
+      (User::Compliance.const_get(:SUPPORTED_COUNTRIES) - [Compliance::Countries::ARE, Compliance::Countries::KAZ, Compliance::Countries::EGY, Compliance::Countries::IND]).each do |country|
         seller = create(:user, payment_address: nil)
         create(:user_compliance_info, user: seller, country: country.common_name)
         expect(seller.can_setup_paypal_payouts?).to be false

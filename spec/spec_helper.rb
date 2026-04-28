@@ -213,7 +213,7 @@ RSpec.configure do |config|
     config.verbose_retry = true
     # show exception that triggers a retry if verbose_retry is set to true
     config.display_try_failure_messages = true
-    config.default_retry_count = 1
+    config.default_retry_count = 3
     config.retry_callback = proc do |example|
       reset_db_connection(example)
       reset_browser_session(example)

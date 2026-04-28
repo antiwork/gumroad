@@ -17,10 +17,25 @@ class UpdateUserComplianceInfo
     @user = user
   end
 
+  MAX_ENCRYPTED_FIELD_LENGTH = 200
+  ENCRYPTED_FIELD_LABELS = {
+    individual_tax_id: "Individual tax id",
+    ssn_last_four: "Individual tax id",
+    business_tax_id: "Business tax id",
+  }.freeze
+
   def process
     if compliance_params.present?
       po_box_error = po_box_error_message
       return { success: false, error_message: po_box_error } if po_box_error.present?
+
+      ENCRYPTED_FIELD_LABELS.each do |field, label|
+        value = compliance_params[field]
+        next if value.blank?
+        if value.to_s.length > MAX_ENCRYPTED_FIELD_LENGTH
+          return { success: false, error_message: "#{label} is too long" }
+        end
+      end
 
       old_compliance_info = current_compliance_info
       saved, new_compliance_info = old_compliance_info.dup_and_save do |new_compliance_info|

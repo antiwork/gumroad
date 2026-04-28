@@ -206,15 +206,25 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
 
     expect(result.status).to eq("compliant")
     expect(call_count).to eq(3)
-    expect(Rails.logger).to have_received(:warn).with(/error on attempt 1\/3, retrying/).once
-    expect(Rails.logger).to have_received(:warn).with(/error on attempt 2\/3, retrying/).once
+    expect(Rails.logger).to have_received(:warn).with(/TimeoutError on attempt 1\/3, retrying/).once
+    expect(Rails.logger).to have_received(:warn).with(/TimeoutError on attempt 2\/3, retrying/).once
   end
 
-  it "gives up after MAX_MODERATION_ATTEMPTS timeouts and re-raises" do
+  it "returns flagged with unavailable reason after MAX_MODERATION_ATTEMPTS timeouts" do
     allow(client).to receive(:moderations).and_raise(Faraday::TimeoutError, "Net::ReadTimeout")
+    allow(ErrorNotifier).to receive(:notify)
 
-    expect { described_class.new(text:, image_urls: []).perform }.to raise_error(Faraday::TimeoutError)
+    result = described_class.new(text:, image_urls: []).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
     expect(client).to have_received(:moderations).exactly(described_class::MAX_MODERATION_ATTEMPTS).times
+    expect(ErrorNotifier).to have_received(:notify).with(
+      instance_of(Faraday::TimeoutError),
+      attempts: described_class::MAX_MODERATION_ATTEMPTS,
+      input_type: "text",
+      skip_url: nil,
+    )
   end
 
   it "retries on Faraday::ParsingError and succeeds when a subsequent attempt returns valid JSON" do
@@ -229,13 +239,89 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
 
     expect(result.status).to eq("compliant")
     expect(call_count).to eq(2)
-    expect(Rails.logger).to have_received(:warn).with(/error on attempt 1\/3, retrying/).once
+    expect(Rails.logger).to have_received(:warn).with(/ParsingError on attempt 1\/3, retrying/).once
   end
 
-  it "gives up after MAX_MODERATION_ATTEMPTS parsing errors and re-raises" do
+  it "returns flagged with unavailable reason after MAX_MODERATION_ATTEMPTS parsing errors" do
     allow(client).to receive(:moderations).and_raise(Faraday::ParsingError, "unexpected character: 'upstream' at line 1 column 1")
+    allow(ErrorNotifier).to receive(:notify)
 
-    expect { described_class.new(text:, image_urls: []).perform }.to raise_error(Faraday::ParsingError)
+    result = described_class.new(text:, image_urls: []).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
     expect(client).to have_received(:moderations).exactly(described_class::MAX_MODERATION_ATTEMPTS).times
+    expect(ErrorNotifier).to have_received(:notify).with(
+      instance_of(Faraday::ParsingError),
+      attempts: described_class::MAX_MODERATION_ATTEMPTS,
+      input_type: "text",
+      skip_url: nil,
+    )
+  end
+
+  it "retries on Faraday::ConnectionFailed and succeeds when a subsequent attempt returns" do
+    call_count = 0
+    allow(client).to receive(:moderations) do
+      call_count += 1
+      raise Faraday::ConnectionFailed, "Failed to open TCP connection" if call_count < 3
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text:, image_urls: []).perform
+
+    expect(result.status).to eq("compliant")
+    expect(call_count).to eq(3)
+    expect(Rails.logger).to have_received(:warn).with(/ConnectionFailed on attempt 1\/3, retrying/).once
+    expect(Rails.logger).to have_received(:warn).with(/ConnectionFailed on attempt 2\/3, retrying/).once
+  end
+
+  it "returns flagged with unavailable reason after MAX_MODERATION_ATTEMPTS connection failures" do
+    allow(client).to receive(:moderations).and_raise(Faraday::ConnectionFailed, "Failed to open TCP connection")
+    allow(ErrorNotifier).to receive(:notify)
+
+    result = described_class.new(text:, image_urls: []).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+    expect(client).to have_received(:moderations).exactly(described_class::MAX_MODERATION_ATTEMPTS).times
+    expect(ErrorNotifier).to have_received(:notify).with(
+      instance_of(Faraday::ConnectionFailed),
+      attempts: described_class::MAX_MODERATION_ATTEMPTS,
+      input_type: "text",
+      skip_url: nil,
+    )
+  end
+
+  it "retries on Faraday::ServerError and succeeds when a subsequent attempt returns" do
+    call_count = 0
+    allow(client).to receive(:moderations) do
+      call_count += 1
+      raise Faraday::ServerError, "500 Internal Server Error" if call_count < 3
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text:, image_urls: []).perform
+
+    expect(result.status).to eq("compliant")
+    expect(call_count).to eq(3)
+    expect(Rails.logger).to have_received(:warn).with(/ServerError on attempt 1\/3, retrying/).once
+    expect(Rails.logger).to have_received(:warn).with(/ServerError on attempt 2\/3, retrying/).once
+  end
+
+  it "returns flagged with unavailable reason after MAX_MODERATION_ATTEMPTS server errors" do
+    allow(client).to receive(:moderations).and_raise(Faraday::ServerError, "500 Internal Server Error")
+    allow(ErrorNotifier).to receive(:notify)
+
+    result = described_class.new(text:, image_urls: []).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+    expect(client).to have_received(:moderations).exactly(described_class::MAX_MODERATION_ATTEMPTS).times
+    expect(ErrorNotifier).to have_received(:notify).with(
+      instance_of(Faraday::ServerError),
+      attempts: described_class::MAX_MODERATION_ATTEMPTS,
+      input_type: "text",
+      skip_url: nil,
+    )
   end
 end

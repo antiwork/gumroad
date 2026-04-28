@@ -196,6 +196,40 @@ describe StripeCreateMerchantAccountsWorker, :vcr do
       end
     end
 
+    describe "don't queue users in countries where new merchant account creation is blocked" do
+      let(:user_1) { create(:user, user_risk_state: "compliant") }
+      let(:user_compliance_info_1) { create(:user_compliance_info, user: user_1) }
+      let(:tos_agreement_1) { create(:tos_agreement, user: user_1) }
+      let(:bank_account_1) { create(:ach_account, user: user_1) }
+      let(:balance_1) { create(:balance, created_at: 10.days.ago, user: user_1) }
+
+      let(:user_2) { create(:user, user_risk_state: "compliant") }
+      let(:user_compliance_info_2) { create(:user_compliance_info, user: user_2, country: Compliance::Countries::IND.common_name) }
+      let(:tos_agreement_2) { create(:tos_agreement, user: user_2) }
+      let(:bank_account_2) { create(:indian_bank_account, user: user_2) }
+      let(:balance_2) { create(:balance, created_at: 10.days.ago, user: user_2) }
+
+      before do
+        user_1
+        user_compliance_info_1
+        tos_agreement_1
+        bank_account_1
+        balance_1
+        user_2
+        user_compliance_info_2
+        tos_agreement_2
+        bank_account_2
+        balance_2
+      end
+
+      it "does not enqueue users from blocked countries" do
+        described_class.new.perform
+
+        expect(CreateStripeMerchantAccountWorker).to have_enqueued_sidekiq_job(user_1.id)
+        expect(CreateStripeMerchantAccountWorker).not_to have_enqueued_sidekiq_job(user_2.id)
+      end
+    end
+
     describe "queue users who are compliant and not reviewed, and not other users" do
       let(:user_1) { create(:user, user_risk_state: "compliant") }
       let(:user_compliance_info_1) { create(:user_compliance_info, user: user_1) }

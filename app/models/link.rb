@@ -409,18 +409,22 @@ class Link < ApplicationRecord
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
-    if auto_transcode_videos?
-      transcode_videos!
-    else
-      enable_transcode_videos_on_purchase!
-    end
-
     self.purchase_disabled_at = nil
     self.deleted_at = nil
     self.draft = false
     self.publishing = true
+    deadlock_retries = 0
     begin
+      if auto_transcode_videos?
+        transcode_videos!
+      else
+        enable_transcode_videos_on_purchase!
+      end
       save!
+    rescue ActiveRecord::Deadlocked
+      deadlock_retries += 1
+      retry if deadlock_retries <= 2
+      raise
     ensure
       self.publishing = false
     end

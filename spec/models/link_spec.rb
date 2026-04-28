@@ -860,6 +860,25 @@ describe Link, :vcr do
         end.to change { @product.reload.purchase_disabled_at }.to(nil)
       end
 
+      it "retries on ActiveRecord::Deadlocked and succeeds", :vcr do
+        call_count = 0
+        allow(@product).to receive(:save!).and_wrap_original do |original|
+          call_count += 1
+          raise ActiveRecord::Deadlocked if call_count <= 2
+          original.call
+        end
+
+        expect { @product.publish! }.not_to raise_error
+        expect(call_count).to eq(3)
+      end
+
+      it "re-raises ActiveRecord::Deadlocked after exhausting retries", :vcr do
+        allow(@product).to receive(:save!).and_raise(ActiveRecord::Deadlocked)
+
+        expect { @product.publish! }.to raise_error(ActiveRecord::Deadlocked)
+        expect(@product).to have_received(:save!).exactly(3).times
+      end
+
       context "when the user has not confirmed their email address" do
         before do
           @user.update!(confirmed_at: nil)

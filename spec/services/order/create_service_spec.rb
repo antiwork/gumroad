@@ -274,7 +274,10 @@ describe Order::CreateService, :vcr do
         ).and_return(updater_service)
         allow(updater_service).to receive(:perform).and_return({ success: true, success_message: "Membership restarted" })
 
-        order, purchase_responses, _ = Order::CreateService.new(params: multi_seller_params, buyer:).perform
+        order, purchase_responses, _ = Order::CreateService.new(
+          params: ActionController::Parameters.new(multi_seller_params).permit!,
+          buyer:
+        ).perform
 
         expect(purchase_responses["unique-id-0"]).to include(success: true)
         # The regular product from seller_2 should still be in the order

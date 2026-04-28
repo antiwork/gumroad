@@ -504,6 +504,28 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(Cart.last.discount_codes).to eq([])
       end
 
+      it "acquires a row lock on the cart to prevent deadlocks" do
+        cart = create(:cart, user: seller)
+
+        expect_any_instance_of(Cart).to receive(:lock!).and_call_original
+
+        patch :update, params: { cart: { items: [], discountCodes: [] } }, as: :json
+
+        expect(response).to have_http_status(:see_other)
+      end
+
+      it "rescues ActiveRecord::Deadlocked and redirects with an error" do
+        allow_any_instance_of(Cart).to receive(:lock!).and_raise(
+          ActiveRecord::Deadlocked.new("Deadlock found when trying to get lock")
+        )
+
+        patch :update, params: { cart: { items: [], discountCodes: [] } }, as: :json
+
+        expect(response).to have_http_status(:found)
+        expect(response).to redirect_to(checkout_path)
+        expect(flash[:alert]).to eq("Sorry, something went wrong. Please try again.")
+      end
+
       it "returns an error when the `cart` param is not a Hash" do
         expect do
           patch :update, params: { cart: "foo" }, as: :json

@@ -32,6 +32,7 @@ class ContentModeration::Strategies::PromptStrategy
 
   MODEL = "gpt-4o-mini"
   JUDGE_MODEL = "gpt-4o-mini"
+  SUPPORTED_IMAGE_EXTENSIONS = %w[.png .jpg .jpeg .gif .webp].freeze
 
   def initialize(text:, image_urls: [])
     @text = text
@@ -65,6 +66,9 @@ class ContentModeration::Strategies::PromptStrategy
     else
       Result.new(status: "compliant", reasoning: [])
     end
+  rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Net::ReadTimeout => e
+    Rails.logger.warn("ContentModeration::PromptStrategy timeout: #{e.class} - #{e.message}")
+    Result.new(status: "compliant", reasoning: [])
   rescue StandardError => e
     Rails.logger.error("ContentModeration::PromptStrategy error: #{e.message}")
     raise
@@ -92,6 +96,9 @@ class ContentModeration::Strategies::PromptStrategy
       }
     rescue Faraday::BadRequestError => e
       notify_openai_rejection(e, stage: "preset:#{preset[:name]}", images_sent: !preset[:skip_images])
+      { status: "compliant", reasoning: "" }
+    rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Net::ReadTimeout => e
+      Rails.logger.warn("ContentModeration::PromptStrategy preset timeout on #{preset[:name]}: #{e.class} - #{e.message}")
       { status: "compliant", reasoning: "" }
     rescue StandardError => e
       Rails.logger.error("ContentModeration::PromptStrategy preset evaluation error: #{e.message}")
@@ -124,6 +131,9 @@ class ContentModeration::Strategies::PromptStrategy
     rescue Faraday::BadRequestError => e
       notify_openai_rejection(e, stage: "uncertainty_check", images_sent: false)
       false
+    rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Net::ReadTimeout => e
+      Rails.logger.warn("ContentModeration::PromptStrategy uncertainty check timeout: #{e.class} - #{e.message}")
+      false
     rescue StandardError => e
       Rails.logger.error("ContentModeration::PromptStrategy uncertainty check error: #{e.message}")
       raise
@@ -153,12 +163,26 @@ class ContentModeration::Strategies::PromptStrategy
       )
     end
 
+    def supported_image_url?(url)
+      path = URI.parse(url).path.to_s
+      ext = File.extname(path).downcase
+      SUPPORTED_IMAGE_EXTENSIONS.include?(ext)
+    rescue URI::InvalidURIError
+      false
+    end
+
     def build_messages(rules, skip_images: false)
       user_content = []
       user_content << { type: "text", text: "Content to evaluate:\n\n#{@text.presence || '[no text provided]'}" }
 
       if !skip_images && @image_urls.present?
-        @image_urls.sample(3).each do |url|
+        supported_urls = @image_urls.select { |url| supported_image_url?(url) }
+        if supported_urls.empty? && @image_urls.any?
+          Rails.logger.warn(
+            "ContentModeration::PromptStrategy filtered out all #{@image_urls.size} image URLs (unsupported formats)"
+          )
+        end
+        supported_urls.sample(3).each do |url|
           user_content << { type: "image_url", image_url: { url: url } }
         end
       end
