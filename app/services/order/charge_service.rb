@@ -317,7 +317,7 @@ class Order::ChargeService
 
     Purchase::MarkSuccessfulService.new(purchase).perform
     purchase.handle_recommended_purchase if purchase.was_product_recommended
-  rescue ActiveRecord::LockWaitTimeout => e
+  rescue StandardError => e
     Rails.logger.error("Error finalizing charged purchase (#{purchase.id}):: #{e.class} => #{e.message} => #{e.backtrace}")
     purchase.errors.add(:base, "Sorry, something went wrong. Please try again.")
   end
