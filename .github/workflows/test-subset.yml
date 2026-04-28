@@ -48,13 +48,18 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Pull test image
+      - name: Pull or build test image
         uses: nick-fields/retry@v3
         with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 5
-          command: docker pull "gumroadteam/web:test-${{ env.TEST_SHA }}"
+          timeout_minutes: 10
+          max_attempts: 1
+          command: |
+            if docker pull "gumroadteam/web:test-${{ env.TEST_SHA }}" 2>/dev/null; then
+              echo "Pulled existing image"
+            else
+              echo "Image not found, building locally..."
+              docker build -f docker/Dockerfile -t "gumroadteam/web:test-${{ env.TEST_SHA }}" --target test .
+            fi
 
   test:
     name: ${{ inputs.run_name || format('tc-pr-{0}', inputs.pr_number) }}
