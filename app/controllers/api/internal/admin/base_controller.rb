@@ -34,8 +34,9 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         created_at: purchase.created_at.as_json,
         receipt_url: receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
       }.tap do |payload|
-        payload[:refund_amount] = purchase.amount_refunded_cents if purchase.amount_refunded_cents.positive?
-        payload[:refund_date] = purchase.refunds.order(:created_at).last&.created_at&.as_json if payload[:refund_status].present?
+        refund_amount = refund_amount_cents(purchase)
+        payload[:refund_amount] = refund_amount if refund_amount.positive?
+        payload[:refund_date] = latest_refund(purchase)&.created_at&.as_json if payload[:refund_status].present?
       end
     end
 
@@ -58,5 +59,17 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       elsif purchase.stripe_partially_refunded
         "partially_refunded"
       end
+    end
+
+    def refund_amount_cents(purchase)
+      return purchase.refunds.sum(&:amount_cents) if purchase.association(:refunds).loaded?
+
+      purchase.amount_refunded_cents
+    end
+
+    def latest_refund(purchase)
+      return purchase.refunds.max_by(&:created_at) if purchase.association(:refunds).loaded?
+
+      purchase.refunds.order(:created_at).last
     end
 end

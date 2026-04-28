@@ -43,11 +43,19 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response.parsed_body["has_more"]).to be(false)
 
       purchases = response.parsed_body["purchases"]
-      expect(purchases.map { _1["id"] }).to eq([newer_purchase.external_id_numeric.to_s, older_purchase.external_id_numeric.to_s])
-      expect(purchases.first).to include(
-        "email" => buyer_email,
-        "id" => newer_purchase.external_id_numeric.to_s,
-        "receipt_url" => receipt_purchase_url(newer_purchase.external_id, host: UrlService.domain_with_protocol, email: buyer_email)
+      expect(purchases.map { _1.slice("email", "id", "receipt_url") }).to eq(
+        [
+          {
+            "email" => buyer_email,
+            "id" => newer_purchase.external_id_numeric.to_s,
+            "receipt_url" => receipt_purchase_url(newer_purchase.external_id, host: UrlService.domain_with_protocol, email: buyer_email)
+          },
+          {
+            "email" => buyer_email,
+            "id" => older_purchase.external_id_numeric.to_s,
+            "receipt_url" => receipt_purchase_url(older_purchase.external_id, host: UrlService.domain_with_protocol, email: buyer_email)
+          }
+        ]
       )
     end
 
@@ -76,6 +84,22 @@ describe Api::Internal::Admin::PurchasesController do
       post :search, params: { query: purchase.email }
 
       expect(response).to have_http_status(:ok)
+    end
+
+    it "uses preloaded refunds when serializing refund details" do
+      purchase = create(:free_purchase, stripe_refunded: true, stripe_partially_refunded: false, email: "refunded@example.com")
+      refund = create(:refund, purchase:, amount_cents: 0)
+
+      expect_any_instance_of(Purchase).not_to receive(:amount_refunded_cents)
+
+      post :search, params: { query: purchase.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchases"].first).to include(
+        "id" => purchase.external_id_numeric.to_s,
+        "refund_status" => "refunded",
+        "refund_date" => refund.created_at.as_json
+      )
     end
 
     it "caps results and reports when more matches exist" do
