@@ -33,17 +33,29 @@ class ContentModeration::Strategies::PromptStrategy
       terminology by necessity
     - License terms, pricing tables, and feature comparisons that share structure
     - Repeated product, brand, or feature names across sections of one listing
+    - Identical sentences appearing several times in succession — these are almost
+      always image alt-text or captions extracted from a product image gallery
+      where each image carries the same caption, and they describe the product
+      itself. Treat as compliant even when the image context isn't visible.
+
+    Important: this content is extracted from a product page's HTML and stripped
+    of structure. You will not see images, headings, or layout. Repetition that
+    looks suspicious in plain text is often legitimate in the rendered page (alt
+    text on a gallery, table cells, list items). Do not flag based on plain-text
+    repetition alone — ask whether the repeated text describes the product. If it
+    does, it is not spam.
 
     Repetition alone is NOT spam. Flag only when:
     - Content is clearly machine-generated nonsense or word salad
-    - The same exact sentences are pasted many times with no informational variation
-      AND the repetition serves no listing purpose (not a tier, not a bundle item,
-      not a comparison)
-    - Obvious keyword stuffing unrelated to the product
+    - Repeated phrases are unrelated to the product being sold (e.g., promotional
+      slogans for a different brand, off-topic keywords, link farms)
+    - Obvious keyword stuffing of unrelated terms
     - Fake reviews, artificial engagement, or bot-generated text
+    - Aggressive call-to-action spam ("BUY NOW BUY NOW BUY NOW", "click here click
+      here click here") with no product information
 
-    If the content describes a real product — even one with a repetitive structure —
-    it is not spam.
+    If the content describes a real product — even one with a repetitive structure
+    or duplicated captions — it is not spam.
   RULES
 
   MODEL = "gpt-4o-mini"
