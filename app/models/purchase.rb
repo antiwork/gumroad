@@ -363,6 +363,7 @@ class Purchase < ApplicationRecord
   after_commit :sync_inventory_counter_caches_on_create, on: :create
   after_commit :sync_inventory_counter_cache_for_state_change, on: :update
   after_commit :sync_inventory_counter_cache_for_destroy, on: :destroy
+  after_commit :auto_delete_single_use_offer_code, on: :create, if: -> { successful? && offer_code.present? }
   after_rollback :reset_inventory_pre_save_snapshot
   after_rollback :clear_inventory_pending_create_commit_id
   before_destroy :capture_inventory_state_before_destroy
@@ -2847,6 +2848,12 @@ class Purchase < ApplicationRecord
   end
 
   private
+    def auto_delete_single_use_offer_code
+      offer_code.auto_delete_if_single_use_exhausted!
+    rescue => e
+      Rails.logger.warn("Failed to auto-delete single-use offer code #{offer_code.id}: #{e.message}")
+    end
+
     def offer_amount_off(purchase_min_price)
       # For commissions, apply deposit purchase's offer code to its completion
       # purchase even if it has been soft deleted.
