@@ -53,13 +53,19 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 
 ### Before pushing
 
-Always run the relevant tests locally and confirm they pass before pushing:
+Run the **test-confidence** skill before every commit. It analyzes your diff, ranks tests by relevance, and runs them in priority order with a live confidence score:
+
+```
+/test-confidence
+```
+
+Default threshold is 99%. For payment/billing changes it auto-raises to 99.99%. You can also pass a custom threshold: `/test-confidence 0.999`.
+
+This replaces manually figuring out which specs to run. The skill maps your changes to the right tests automatically and stops early once confidence is high enough.
+
+Also lint before committing:
 
 ```bash
-# Run the specs affected by your changes
-bundle exec rspec spec/path/to/changed_spec.rb
-
-# Lint
 bundle exec rubocop -a              # Ruby lint + auto-correct
 DISABLE_TYPE_CHECKED=1 npx eslint   # JS/TS lint
 ```
