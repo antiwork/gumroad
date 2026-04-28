@@ -22,7 +22,7 @@ If `$ARGUMENTS` provides a number, pass it through: `bin/test-confidence $ARGUME
 
 ## How it works
 
-1. Finds your changed files via `git diff`
+1. Finds changed files: branch diff vs main (for PR branches), local uncommitted changes, or both
 2. Builds a single ordered queue: direct specs first, then specs referencing your classes, then same-directory specs, then everything else
 3. Optionally calls Sonnet to reorder by likelihood of catching a regression
 4. Runs tests one at a time. After each pass, confidence updates on a Pareto curve (early tests contribute more since they're the most relevant)

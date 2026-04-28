@@ -2664,8 +2664,8 @@ describe Purchase::CreateService, :vcr do
     end
 
     it "fails if offer code has reached max purchase count" do
-      offer_code = create(:offer_code, products: [product], amount_cents: discount_cents, max_purchase_count: 1)
-      create(:purchase, offer_code:)
+      offer_code = create(:offer_code, products: [product], amount_cents: discount_cents, max_purchase_count: 2)
+      create(:purchase, offer_code:, quantity: 2)
 
       params[:purchase].merge!(
         discount_code: offer_code.code,
