@@ -2665,7 +2665,8 @@ describe Purchase::CreateService, :vcr do
 
     it "fails if offer code has reached max purchase count" do
       offer_code = create(:offer_code, products: [product], amount_cents: discount_cents, max_purchase_count: 1)
-      create(:purchase, offer_code:)
+      merchant_account = create(:merchant_account, user: product.user)
+      create(:purchase, offer_code:, link: product, seller: product.user, price_cents: product.price_cents, merchant_account:)
 
       params[:purchase].merge!(
         discount_code: offer_code.code,
@@ -2677,7 +2678,7 @@ describe Purchase::CreateService, :vcr do
       purchase, _ = Purchase::CreateService.new(product:, params:).perform
 
       expect(purchase.purchase_state).to eq "failed"
-      expect(purchase.error_code).to eq "offer_code_sold_out"
+      expect(purchase.error_code).to eq "offer_code_invalid"
     end
 
     describe "multi-quantity" do
