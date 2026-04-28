@@ -8,7 +8,7 @@ class CheckoutController < ApplicationController
   def show
     render inertia: "Checkout/Show", props: {
       cart: -> { CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid]).cart_props },
-      checkout: -> { CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip).checkout_props(params:, browser_guid: cookies[:_gumroad_guid]) },
+      checkout: -> { CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip).checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid]) },
       recommended_products: InertiaRails.optional { recommended_products },
     }
   end
@@ -133,6 +133,15 @@ class CheckoutController < ApplicationController
     rescue Timeout::Error
       Rails.logger.warn("[CheckoutController] Recommended products timed out after #{RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS}s")
       []
+    end
+
+    def checkout_params
+      params.permit(
+        :username, :product, :wishlist, :gift_wishlist_product,
+        :accepted_offer_id, :affiliate_id, :recommended_by, :recommender_model_name,
+        :option, :rent, :recurrence, :pay_in_installments, :price, :quantity,
+        :call_start_time, :force_new_subscription
+      )
     end
 
     def update_permitted_params
