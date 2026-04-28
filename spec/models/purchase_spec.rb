@@ -6473,4 +6473,49 @@ describe Purchase, :vcr do
       expect(purchase.reload.purchase_state).to eq "in_progress"
     end
   end
+
+  describe "#auto_delete_single_use_offer_code" do
+    before do
+      @user = create(:user)
+      @product = create(:product, user: @user, price_cents: 1000)
+    end
+
+    it "auto-deletes a single-use offer code after a successful purchase" do
+      offer_code = create(:offer_code, products: [@product], max_purchase_count: 1)
+      create(:purchase, offer_code:, link: @product, seller: @user, price_cents: @product.price_cents)
+
+      expect(offer_code.reload).to be_deleted
+    end
+
+    it "does not auto-delete offer codes for non-successful purchases" do
+      offer_code = create(:offer_code, products: [@product], max_purchase_count: 1)
+      create(:failed_purchase, offer_code:, link: @product, seller: @user, price_cents: @product.price_cents)
+
+      expect(offer_code.reload).not_to be_deleted
+    end
+
+    it "does not auto-delete when the purchase has no offer code" do
+      purchase = create(:purchase, link: @product, seller: @user, price_cents: @product.price_cents)
+
+      expect(purchase).to be_persisted
+    end
+
+    it "does not auto-delete multi-use offer codes" do
+      offer_code = create(:offer_code, products: [@product], max_purchase_count: 3)
+      create(:purchase, offer_code:, link: @product, seller: @user, price_cents: @product.price_cents)
+
+      expect(offer_code.reload).not_to be_deleted
+    end
+
+    it "does not break the purchase flow if auto-delete raises an error" do
+      offer_code = create(:offer_code, products: [@product], max_purchase_count: 1)
+      allow_any_instance_of(OfferCode).to receive(:auto_delete_if_single_use_exhausted!).and_raise(StandardError, "unexpected error")
+
+      purchase = create(:purchase, offer_code:, link: @product, seller: @user, price_cents: @product.price_cents)
+
+      expect(purchase).to be_persisted
+      expect(offer_code.reload).not_to be_deleted
+    end
+  end
+
 end

@@ -156,6 +156,14 @@ class OfferCode < ApplicationRecord
     purchases.counts_towards_offer_code_uses.sum(:quantity)
   end
 
+  def auto_delete_if_single_use_exhausted!
+    return unless max_purchase_count == 1
+    return if deleted?
+    return if quantity_left > 0
+
+    mark_deleted!
+  end
+
   def time_fields
     attributes.keys.keep_if { |key| key.include?("_at") && send(key) }
   end

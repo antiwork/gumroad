@@ -53,13 +53,22 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 
 ### Before pushing
 
-Always run the relevant tests locally and confirm they pass before pushing:
+Run **test-confidence** before every commit:
 
 ```bash
-# Run the specs affected by your changes
-bundle exec rspec spec/path/to/changed_spec.rb
+bin/test-confidence          # Stop at 99%
+bin/test-confidence 0.95     # Quick sanity check
+bin/test-confidence 1.0      # Run the full suite
+bin/test-confidence --no-ai  # No API key needed
+```
 
-# Lint
+It ranks every spec by relevance to your diff and runs them in order. Confidence climbs from 0% to 100% in real-time as each test passes. Most relevant tests run first, so confidence front-loads fast. For payment/billing changes it auto-raises the threshold to 100%.
+
+Set `ANTHROPIC_API_KEY` for AI-powered reordering (falls back to convention mapping without it). Also works as a Claude Code skill: `/test-confidence`
+
+Also lint before committing:
+
+```bash
 bundle exec rubocop -a              # Ruby lint + auto-correct
 DISABLE_TYPE_CHECKED=1 npx eslint   # JS/TS lint
 ```
