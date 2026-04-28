@@ -89,14 +89,10 @@ describe "Embed scenario", type: :system, js: true, mock_easypost: true, retry: 
     it "applies the discount code" do
       visit(create_embed_page(product, url: "#{product.long_url}/#{offer_code.code}", outbound: false))
 
-<<<<<<< HEAD
-      within_frame { click_on "Add to cart" }
-=======
       within_frame do
         expect(page).to have_status(text: "$1 off will be applied at checkout (Code SXSW)", wait: 15)
         click_on "Add to cart"
       end
->>>>>>> cef79c66 (Fix flaky embed and search specs: timing waits and order-independent assertions)
 
       check_out(product, is_free: true)
 
