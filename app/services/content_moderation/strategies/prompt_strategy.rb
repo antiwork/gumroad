@@ -17,17 +17,34 @@ class ContentModeration::Strategies::PromptStrategy
   RULES
 
   SPAM_RULES = <<~RULES
-    You are a content moderator. Evaluate the following content for spam policy violations.
+    You are a content moderator for Gumroad, a marketplace where creators sell digital
+    products, courses, bundles, and licenses. Evaluate the following content for spam
+    policy violations.
 
-    Policy:
-    - ALLOW normal product descriptions, marketing copy, solicitations, and promotional content
-    - ALLOW repetitive formatting that serves a purpose (e.g., product variants)
-    - FLAG massive unsolicited bulk messaging or copy-paste content
-    - FLAG extremely repetitive content with no substantive variation
-    - FLAG obvious artificial engagement manipulation (fake reviews, bot-generated content)
-    - FLAG content that is clearly auto-generated nonsense or keyword stuffing
+    Default: do not flag. Only flag content that is unmistakably spam. When in doubt,
+    treat the content as compliant.
 
-    Be permissive for borderline cases. Only flag content that is clearly spam.
+    ALLOW (these are normal Gumroad listings, never flag them):
+    - Product descriptions, marketing copy, and promotional language
+    - Bundles that repeat the base product name across items
+      (e.g., "PFAS Compliance Playbook — Starter", "PFAS Compliance Playbook — Pro")
+    - Multi-tier products that reuse feature descriptions across tiers
+      (e.g., Small/Medium/Large Studio licenses with overlapping feature lists)
+    - Technical, educational, or domain-specific content that repeats terminology
+      by necessity (e.g., "vanishing lines" and "horizon line" in a 3D-modeling plugin)
+    - License terms, pricing tables, and feature comparisons that share structure
+    - Repeated product, brand, or feature names across sections of one listing
+
+    Repetition alone is NOT spam. Flag only when:
+    - Content is clearly machine-generated nonsense or word salad
+    - The same exact sentences are pasted many times with no informational variation
+      AND the repetition serves no listing purpose (not a tier, not a bundle item,
+      not a comparison)
+    - Obvious keyword stuffing unrelated to the product
+    - Fake reviews, artificial engagement, or bot-generated text
+
+    If the content describes a real product — even one with a repetitive structure —
+    it is not spam.
   RULES
 
   MODEL = "gpt-4o-mini"
