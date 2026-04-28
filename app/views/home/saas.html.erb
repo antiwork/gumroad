@@ -117,7 +117,7 @@
     </div>
     <div class="relative z-10 flex flex-col items-center gap-6">
       <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
-        <%= render "home/shared/button", text: "Start selling", url: new_user_registration_path %>
+        <%= render "home/shared/button", text: "Start selling", url: signup_path %>
         <%= render "home/shared/button", text: "See pricing", url: "#pricing", variant: "dark" %>
       </div>
       <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-dark-gray">
@@ -252,7 +252,7 @@
                 <span class="text-sm font-medium text-dark-gray md:text-base"><%= label %></span>
                 <span class="text-sm font-medium text-dark-gray tabular-nums md:text-base"><%= prefix %><span data-saas-calc-value="<%= key %>"><%= number_with_delimiter(value) %></span></span>
               </div>
-              <input type="range" class="gr-slider" data-saas-calc-input="<%= key %>" min="<%= min %>" max="<%= max %>" step="<%= step %>" value="<%= value %>" style="--fill: <%= ((value - min).to_f / (max - min) * 100).round %>%">
+              <input type="range" class="gr-slider" aria-label="<%= label %>" aria-valuetext="<%= prefix %><%= number_with_delimiter(value) %>" data-saas-calc-input="<%= key %>" data-saas-calc-prefix="<%= prefix %>" min="<%= min %>" max="<%= max %>" step="<%= step %>" value="<%= value %>" style="--fill: <%= ((value - min).to_f / (max - min) * 100).round %>%">
             </div>
           <% end %>
         </div>
@@ -331,6 +331,7 @@
       if (!root) return;
 
       const formatNumber = (n) => Number(n).toLocaleString('en-US');
+      const formatValueText = (input) => (input.dataset.saasCalcPrefix || '') + formatNumber(input.value);
       const inputs = Array.from(root.querySelectorAll('[data-saas-calc-input]')).map((input) => ({
         input,
         key: input.dataset.saasCalcInput,
@@ -348,6 +349,7 @@
           state[key] = Number(input.value);
           input.style.setProperty('--fill', ((input.value - input.min) / (input.max - input.min)) * 100 + '%');
           if (display) display.textContent = formatNumber(input.value);
+          input.setAttribute('aria-valuetext', formatValueText(input));
         });
 
         const revenue = state.price * state.sales;
