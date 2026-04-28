@@ -150,7 +150,6 @@ class BalanceTransaction < ApplicationRecord
     logger.warn("Updating balance for transaction #{id}: Lock wait timeout on balance #{balance&.id}. Attempt: #{lock_failed_count}/#{MAX_ATTEMPTS_TO_UPDATE_BALANCE}")
     if lock_failed_count < MAX_ATTEMPTS_TO_UPDATE_BALANCE
       sleep(lock_failed_count * 0.5)
-      balance = find_or_create_balance
       retry
     end
     raise

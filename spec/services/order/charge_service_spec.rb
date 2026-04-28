@@ -923,6 +923,50 @@ describe Order::ChargeService, :vcr do
       expect(mark_call_count).to eq(2)
     end
 
+    it "marks successful without recreating balance transactions when charge data was already saved" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account, user: nil)
+      product = create(:product, user: seller, price_cents: 10_00)
+      order = create(:order)
+      purchase = create(:purchase_in_progress, link: product, seller:, merchant_account:,
+                                               charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                               stripe_fingerprint: "fingerprint", stripe_transaction_id: "ch_test")
+      order.purchases << purchase
+      balance_transaction = BalanceTransaction.new(
+        user: seller,
+        merchant_account:,
+        purchase:,
+        issued_amount_currency: Currency::USD,
+        issued_amount_gross_cents: 10_00,
+        issued_amount_net_cents: 8_90,
+        holding_amount_currency: Currency::USD,
+        holding_amount_gross_cents: 10_00,
+        holding_amount_net_cents: 8_90
+      )
+      balance_transaction.save!
+      params = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+      service = Order::ChargeService.new(order:, params:)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      allow(purchase).to receive(:mark_successful!) do
+        purchase.update_columns(purchase_state: "successful", succeeded_at: Time.current)
+      end
+
+      expect(Purchase::MarkSuccessfulService).not_to receive(:new)
+      expect { service.ensure_all_purchases_processed([purchase]) }.not_to change { purchase.balance_transactions.count }
+
+      expect(purchase).to have_received(:mark_successful!)
+      expect(purchase).to be_successful
+    end
+
     it "does not retry marking as successful for errored purchases without charge data" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 10_00)
