@@ -98,7 +98,6 @@ describe Link, :vcr do
           .to_not raise_error(ActiveRecord::RecordInvalid)
       end
     end
-  end
 
     it "adds an error for unsupported currency type" do
       link = build(:product, price_currency_type: "xyz", price_cents: 100)
