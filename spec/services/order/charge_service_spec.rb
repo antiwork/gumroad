@@ -855,6 +855,60 @@ describe Order::ChargeService, :vcr do
       expect(purchase_b.reload).to be_failed
       expect(FailAbandonedPurchaseWorker.jobs.select { |j| j["args"] == [purchase_b.id] }.size).to eq(0)
     end
+
+    it "retries marking as successful when charge_intent succeeded but post-charge processing failed" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 10_00)
+      params = {
+        line_items: [
+          { uid: "uid-1", permalink: product.unique_permalink, perceived_price_cents: product.price_cents, quantity: 1 }
+        ],
+        email: "buyer@example.com",
+        cc_zipcode: "12345",
+        purchase: { full_name: "Test Buyer", street_address: "123 Test St", country: "US", state: "CA", city: "San Francisco", zip_code: "94117" },
+        browser_guid: SecureRandom.uuid,
+        ip_address: "0.0.0.0",
+        session_id: SecureRandom.hex,
+        is_mobile: false,
+      }
+
+      order, _ = Order::CreateService.new(params:).perform
+      purchase = order.purchases.first
+
+      service = Order::ChargeService.new(order:, params:)
+      succeeded_intent = double("charge_intent", succeeded?: true, requires_action?: false, id: "pi_test_xxx",
+                                                  charge: double("charge", id: "ch_test", fee: 30, fee_currency: "usd"))
+
+      # Simulate: charge succeeds but MarkSuccessfulService fails on the first
+      # call (inside create_charge_for_seller_purchases). The ensure path should
+      # retry because charge_intent.succeeded? is true.
+      mark_call_count = 0
+      allow(Purchase::MarkSuccessfulService).to receive(:new).and_wrap_original do |method, *args|
+        instance = method.call(*args)
+        allow(instance).to receive(:perform) do
+          mark_call_count += 1
+          if mark_call_count == 1
+            raise ActiveRecord::LockWaitTimeout.new("Lock wait timeout exceeded")
+          end
+          # On retry (from ensure_all_purchases_processed), let it succeed
+          purchase.update_balance_and_mark_successful!
+        end
+        instance
+      end
+
+      allow(service).to receive(:create_charge_for_seller_purchases) do |purchases, chargeable, off_session, setup_future_charges|
+        service.charge_intent = succeeded_intent
+        purchases.each do |p|
+          next unless p.in_progress? && p.errors.empty?
+          Purchase::MarkSuccessfulService.new(p).perform
+        end
+      end
+
+      service.perform
+      purchase.reload
+      expect(purchase).to be_successful
+      expect(mark_call_count).to eq(2)
+    end
   end
 
   describe "#mandate_options_for_stripe" do

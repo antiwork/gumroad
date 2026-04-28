@@ -272,6 +272,12 @@ class Order::ChargeService
         elsif charge_intent&.requires_action? || setup_intent&.requires_action?
           # Check back later to see if the purchase has been completed. If not, transition to a failed state.
           FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
+        elsif charge_intent&.succeeded?
+          # The charge succeeded but post-charge processing (e.g. balance update)
+          # failed. Retry marking as successful rather than incorrectly failing
+          # a purchase that was already charged.
+          Purchase::MarkSuccessfulService.new(purchase).perform
+          purchase.handle_recommended_purchase if purchase.was_product_recommended
         else
           Purchase::MarkFailedService.new(purchase).perform
         end

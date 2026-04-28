@@ -1421,4 +1421,58 @@ describe BalanceTransaction, :vcr do
       end
     end
   end
+
+  describe "#update_balance!" do
+    let(:user) { create(:user) }
+    let(:link) { create(:product, user:) }
+    let(:merchant_account) { create(:merchant_account) }
+    let!(:purchase) { travel_to(1.day.ago) { create(:purchase, link:, seller: user, merchant_account:) } }
+
+    let(:balance_transaction) do
+      BalanceTransaction.create!(
+        user:,
+        merchant_account:,
+        purchase:,
+        issued_amount: BalanceTransaction::Amount.new(
+          currency: Currency::USD,
+          gross_cents: 100_00,
+          net_cents: 88_90
+        ),
+        holding_amount: BalanceTransaction::Amount.new(
+          currency: Currency::USD,
+          gross_cents: 100_00,
+          net_cents: 88_90
+        )
+      )
+    end
+
+    context "when a LockWaitTimeout occurs" do
+      it "retries and succeeds" do
+        call_count = 0
+        original_with_lock = Balance.instance_method(:with_lock)
+
+        allow_any_instance_of(Balance).to receive(:with_lock) do |balance, &block|
+          call_count += 1
+          if call_count == 1
+            raise ActiveRecord::LockWaitTimeout.new("Mysql2::Error::TimeoutError: Lock wait timeout exceeded; try restarting transaction")
+          end
+          original_with_lock.bind_call(balance, &block)
+        end
+
+        allow_any_instance_of(BalanceTransaction).to receive(:sleep)
+
+        expect { balance_transaction }.to change { user.unpaid_balance_cents }.by(88_90)
+        expect(call_count).to eq(2)
+      end
+
+      it "raises after exhausting retries" do
+        allow_any_instance_of(Balance).to receive(:with_lock).and_raise(
+          ActiveRecord::LockWaitTimeout.new("Mysql2::Error::TimeoutError: Lock wait timeout exceeded; try restarting transaction")
+        )
+        allow_any_instance_of(BalanceTransaction).to receive(:sleep)
+
+        expect { balance_transaction }.to raise_error(ActiveRecord::LockWaitTimeout)
+      end
+    end
+  end
 end
