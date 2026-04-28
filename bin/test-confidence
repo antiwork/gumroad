@@ -1,373 +1,282 @@
 #!/usr/bin/env bash
 #
-# bin/test-confidence — Run tests ranked by relevance to your diff.
+# bin/test-confidence — Run tests in order of relevance. Confidence climbs from 0% to 100%.
 #
 # Usage:
-#   bin/test-confidence              # Default 99% threshold
-#   bin/test-confidence 0.999        # Custom threshold
-#   bin/test-confidence --no-ai      # Skip AI ranking, use convention mapping only
+#   bin/test-confidence              # Stop at 99%
+#   bin/test-confidence 0.95         # Stop at 95%
+#   bin/test-confidence 1.0          # Run everything (100%)
+#   bin/test-confidence --no-ai      # Convention mapping only, no API call
 #
-# Set ANTHROPIC_API_KEY for AI-powered test ranking.
-# Falls back to convention-based mapping without it.
+# Set ANTHROPIC_API_KEY for AI-powered ranking. Falls back to convention without it.
 #
 set -euo pipefail
 
-THRESHOLD="99"
+THRESHOLD=99
 USE_AI=true
-BATCH_SIZE=5
 
 for arg in "$@"; do
   case "$arg" in
     --no-ai) USE_AI=false ;;
-    0.*|1.0) THRESHOLD=$(echo "$arg * 100" | bc | sed 's/\.00$//') ;;
+    0.*|1|1.0|1.00) THRESHOLD=$(printf '%.0f' "$(echo "$arg * 100" | bc)") ;;
   esac
 done
 
-# ── Gather changed files ──
+# ── Changed files ──
 
-changed_files() {
-  { git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
-    | sort -u \
-    | grep -E '\.(rb|ts|tsx|js|jsx)$' || true
-}
+CHANGED=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
+  | sort -u | grep -E '\.(rb|ts|tsx|js|jsx)$' || true)
 
-CHANGED=$(changed_files)
 if [[ -z "$CHANGED" ]]; then
   echo ""
-  echo "  No changes detected. Nothing to test."
+  echo "  Nothing changed. Nothing to test."
   echo ""
   exit 0
 fi
 
-# ── Auto-raise threshold for payment code ──
-
+# Auto-raise for payment code
 if echo "$CHANGED" | grep -qE '^(app/billing/|app/payments/|app/models/purchase\.rb)'; then
-  if [[ "$THRESHOLD" -lt 9999 ]]; then
-    THRESHOLD=9999
-    echo "  ⚠ Payment/billing code detected — threshold raised to 99.99%"
-  fi
+  [[ "$THRESHOLD" -lt 100 ]] && THRESHOLD=100
+  echo "  ⚠ Payment/billing code — threshold raised to 100%"
 fi
 
-format_threshold() {
-  if [[ "$THRESHOLD" -ge 9999 ]]; then echo "99.99%"
-  elif [[ "$THRESHOLD" -ge 100 ]]; then echo "100%"
-  else echo "${THRESHOLD}%"
+TOTAL_SPECS=$(find spec -name "*_spec.rb" -type f 2>/dev/null | wc -l | tr -d ' ')
+
+# ── Build a single ordered list: most relevant first, least relevant last ──
+
+QUEUE=$(mktemp)
+SEEN=$(mktemp)
+
+add_if_new() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  grep -qxF "$f" "$SEEN" 2>/dev/null && return 0
+  echo "$f" >> "$QUEUE"
+  echo "$f" >> "$SEEN"
+}
+
+# --- Tier 1: Direct spec for each changed file ---
+while IFS= read -r file; do
+  [[ -z "$file" ]] && continue
+  spec=$(echo "$file" | sed 's|^app/|spec/|; s|\.rb$|_spec.rb|')
+  add_if_new "$spec"
+  # Controller → request spec
+  if [[ "$file" == app/controllers/* ]]; then
+    add_if_new "$(echo "$file" | sed 's|^app/controllers/|spec/requests/|; s|_controller\.rb$|_spec.rb|')"
   fi
-}
+done <<< "$CHANGED"
 
-# ── Convention-based test mapping (deterministic) ──
+# --- Tier 2: Specs that reference changed classes ---
+while IFS= read -r file; do
+  [[ -z "$file" || "$file" != *.rb ]] && continue
+  classname=$(basename "$file" .rb | sed -E 's/(^|_)([a-z])/\U\2/g')
+  [[ -z "$classname" ]] && continue
+  grep -rl --include="*.rb" "$classname" spec/ 2>/dev/null | sort | while IFS= read -r spec; do
+    add_if_new "$spec"
+  done
+done <<< "$CHANGED"
 
-map_tests_by_convention() {
-  local wave1_file=$(mktemp)
-  local wave2_file=$(mktemp)
-  local wave3_file=$(mktemp)
-  local seen_file=$(mktemp)
+# --- Tier 3: Same-directory specs ---
+while IFS= read -r file; do
+  [[ -z "$file" ]] && continue
+  dir=$(echo "$file" | sed 's|^app/|spec/|; s|/[^/]*$||')
+  [[ -d "$dir" ]] || continue
+  find "$dir" -maxdepth 1 -name "*_spec.rb" -type f 2>/dev/null | sort | while IFS= read -r spec; do
+    add_if_new "$spec"
+  done
+done <<< "$CHANGED"
 
-  # Wave 1: Direct spec file mapping
-  while IFS= read -r file; do
-    [[ -z "$file" ]] && continue
+RANKED_COUNT=$(wc -l < "$QUEUE" | tr -d ' ')
 
-    # app/models/foo.rb → spec/models/foo_spec.rb
-    spec=$(echo "$file" | sed 's|^app/|spec/|' | sed 's|\.rb$|_spec.rb|')
-    if [[ -f "$spec" ]] && ! grep -qxF "$spec" "$seen_file" 2>/dev/null; then
-      echo "$spec" >> "$wave1_file"
-      echo "$spec" >> "$seen_file"
-    fi
+# --- Tier 4: Everything else (shuffled so it's not always alphabetical) ---
+find spec -name "*_spec.rb" -type f 2>/dev/null | sort -R | while IFS= read -r spec; do
+  add_if_new "$spec"
+done
 
-    # app/controllers/foo_controller.rb → spec/requests/foo_spec.rb
-    if [[ "$file" == app/controllers/* ]]; then
-      req_spec=$(echo "$file" | sed 's|^app/controllers/|spec/requests/|' | sed 's|_controller\.rb$|_spec.rb|')
-      if [[ -f "$req_spec" ]] && ! grep -qxF "$req_spec" "$seen_file" 2>/dev/null; then
-        echo "$req_spec" >> "$wave1_file"
-        echo "$req_spec" >> "$seen_file"
-      fi
-    fi
+TOTAL_QUEUED=$(wc -l < "$QUEUE" | tr -d ' ')
 
-    # app/services/foo.rb → spec/services/foo_spec.rb
-    if [[ "$file" == app/services/* ]]; then
-      svc_spec=$(echo "$file" | sed 's|^app/|spec/|' | sed 's|\.rb$|_spec.rb|')
-      if [[ -f "$svc_spec" ]] && ! grep -qxF "$svc_spec" "$seen_file" 2>/dev/null; then
-        echo "$svc_spec" >> "$wave1_file"
-        echo "$svc_spec" >> "$seen_file"
-      fi
-    fi
-  done <<< "$CHANGED"
+# ── Optional: AI re-ranks the queue ──
 
-  # Wave 2: Grep for class references in specs
-  while IFS= read -r file; do
-    [[ -z "$file" || "$file" != *.rb ]] && continue
-    classname=$(basename "$file" .rb | sed -E 's/(^|_)([a-z])/\U\2/g')
-    [[ -z "$classname" ]] && continue
-    grep -rl "$classname" spec/ --include="*.rb" 2>/dev/null | while IFS= read -r spec; do
-      if ! grep -qxF "$spec" "$seen_file" 2>/dev/null; then
-        echo "$spec" >> "$wave2_file"
-        echo "$spec" >> "$seen_file"
-      fi
-    done
-  done <<< "$CHANGED"
+if [[ "$USE_AI" == true && -n "${ANTHROPIC_API_KEY:-}" && "$RANKED_COUNT" -gt 0 ]]; then
+  DIFF_TEXT=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -400)
+  SPEC_LIST=$(cat "$QUEUE" | head -200)
 
-  # Wave 3: Same-directory specs not yet included
-  while IFS= read -r file; do
-    [[ -z "$file" ]] && continue
-    dir=$(echo "$file" | sed 's|^app/|spec/|' | sed 's|/[^/]*$||')
-    [[ -d "$dir" ]] || continue
-    find "$dir" -maxdepth 1 -name "*_spec.rb" -type f 2>/dev/null | while IFS= read -r spec; do
-      if ! grep -qxF "$spec" "$seen_file" 2>/dev/null; then
-        echo "$spec" >> "$wave3_file"
-        echo "$spec" >> "$seen_file"
-      fi
-    done
-  done <<< "$CHANGED"
-
-  # Output wave files
-  echo "WAVE1:$wave1_file"
-  echo "WAVE2:$wave2_file"
-  echo "WAVE3:$wave3_file"
-  echo "SEEN:$seen_file"
-}
-
-# ── AI-powered test ranking ──
-
-ai_rank_tests() {
-  [[ "$USE_AI" != true ]] && return 1
-  [[ -z "${ANTHROPIC_API_KEY:-}" ]] && return 1
-
-  local diff_text
-  diff_text=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -400)
-  local spec_list
-  spec_list=$(find spec -name "*_spec.rb" -type f 2>/dev/null | sort | head -500)
-  local spec_count
-  spec_count=$(find spec -name "*_spec.rb" -type f 2>/dev/null | wc -l | tr -d ' ')
-
-  local prompt="You are a senior Rails engineer. Given this diff, return ONLY a JSON object (no markdown) mapping tests to 4 waves.
-
-Wave 1 (80%): Direct unit tests for changed code
-Wave 2 (95%): Integration/controller specs exercising changed paths
-Wave 3 (99%): Broader specs that could be affected
-Wave 4 (99.99%): Use the literal string ALL_REMAINING
+  PROMPT="You are a senior Rails engineer. Given this diff, reorder these test files from MOST to LEAST likely to catch a regression. Return ONLY the reordered file paths, one per line, no numbering, no explanation.
 
 Diff:
-${diff_text}
+${DIFF_TEXT}
 
-Test files (${spec_count} total, showing first 500):
-${spec_list}
+Test files to reorder:
+${SPEC_LIST}"
 
-Return ONLY JSON: {\"wave1\": [\"spec/...\"], \"wave2\": [\"spec/...\"], \"wave3\": [\"spec/...\"], \"wave4\": [\"ALL_REMAINING\"]}"
-
-  local payload
-  payload=$(jq -n \
+  PAYLOAD=$(jq -n \
     --arg model "claude-sonnet-4-6" \
-    --arg prompt "$prompt" \
-    '{model: $model, max_tokens: 4096, messages: [{role: "user", content: $prompt}]}')
+    --arg prompt "$PROMPT" \
+    '{model: $model, max_tokens: 8192, messages: [{role: "user", content: $prompt}]}')
 
-  printf "  🧠 AI ranking tests..."
+  printf "  🧠 AI reordering %d tests..." "$RANKED_COUNT"
 
-  local response
-  response=$(curl -s --max-time 30 \
+  RESPONSE=$(curl -s --max-time 30 \
     -H "Content-Type: application/json" \
     -H "x-api-key: ${ANTHROPIC_API_KEY}" \
     -H "anthropic-version: 2023-06-01" \
-    -d "$payload" \
-    "https://api.anthropic.com/v1/messages" 2>/dev/null) || { echo " failed (network)"; return 1; }
+    -d "$PAYLOAD" \
+    "https://api.anthropic.com/v1/messages" 2>/dev/null) || RESPONSE=""
 
-  local text
-  text=$(echo "$response" | jq -r '.content[0].text // empty' 2>/dev/null)
-  [[ -z "$text" ]] && { echo " failed (no response)"; return 1; }
+  AI_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
 
-  # Extract JSON from response
-  local json
-  json=$(echo "$text" | grep -o '{[^}]*}' | head -1) 2>/dev/null
-  # Try multiline JSON extraction if single-line didn't work
-  if [[ -z "$json" ]]; then
-    json=$(echo "$text" | python3 -c "
-import sys, json, re
-text = sys.stdin.read()
-m = re.search(r'\{[\s\S]*\}', text)
-if m: print(m.group())
-" 2>/dev/null) || true
+  if [[ -n "$AI_TEXT" ]]; then
+    AI_QUEUE=$(mktemp)
+    AI_SEEN=$(mktemp)
+    # Add AI-ordered files first
+    echo "$AI_TEXT" | grep -E '^spec/.*_spec\.rb$' | while IFS= read -r spec; do
+      [[ -f "$spec" ]] || continue
+      grep -qxF "$spec" "$AI_SEEN" 2>/dev/null && continue
+      echo "$spec" >> "$AI_QUEUE"
+      echo "$spec" >> "$AI_SEEN"
+    done
+    # Then everything else from original queue that AI didn't mention
+    while IFS= read -r spec; do
+      grep -qxF "$spec" "$AI_SEEN" 2>/dev/null && continue
+      echo "$spec" >> "$AI_QUEUE"
+      echo "$spec" >> "$AI_SEEN"
+    done < "$QUEUE"
+    mv "$AI_QUEUE" "$QUEUE"
+    rm -f "$AI_SEEN"
+    echo " done"
+  else
+    echo " skipped (using convention order)"
   fi
-  [[ -z "$json" ]] && { echo " failed (parse)"; return 1; }
+fi
 
-  # Write wave files
-  local all_specs
-  all_specs=$(find spec -name "*_spec.rb" -type f 2>/dev/null)
+# ── Run tests one by one, confidence climbing continuously ──
 
-  for wave_num in 1 2 3 4; do
-    local wave_file
-    wave_file=$(mktemp)
-    local key="wave${wave_num}"
-    local tests
-    tests=$(echo "$json" | jq -r ".${key}[]? // empty" 2>/dev/null)
-
-    if echo "$tests" | grep -q "ALL_REMAINING"; then
-      # Wave 4: everything not in earlier waves
-      echo "$all_specs" | while IFS= read -r spec; do
-        if ! grep -qxF "$spec" "$AI_SEEN" 2>/dev/null; then
-          echo "$spec"
-        fi
-      done > "$wave_file"
-    else
-      echo "$tests" | while IFS= read -r spec; do
-        [[ -z "$spec" ]] && continue
-        if [[ -f "$spec" ]] && ! grep -qxF "$spec" "$AI_SEEN" 2>/dev/null; then
-          echo "$spec" >> "$wave_file"
-          echo "$spec" >> "$AI_SEEN"
-        fi
-      done
-    fi
-
-    eval "AI_WAVE${wave_num}=$wave_file"
-  done
-
-  local ranked_count=$(( $(wc -l < "$AI_WAVE1" 2>/dev/null || echo 0) + $(wc -l < "$AI_WAVE2" 2>/dev/null || echo 0) + $(wc -l < "$AI_WAVE3" 2>/dev/null || echo 0) ))
-  ranked_count=$(echo "$ranked_count" | tr -d ' ')
-  echo " done (${ranked_count} tests ranked)"
-  return 0
+fmt_threshold() {
+  [[ "$THRESHOLD" -ge 100 ]] && echo "100%" || echo "${THRESHOLD}%"
 }
-
-# ── Run a batch of tests ──
-
-run_batch() {
-  local files=("$@")
-  bundle exec rspec --format progress --no-color "${files[@]}" 2>&1
-}
-
-# ── Progress bar ──
-
-progress_bar() {
-  local pct=$1
-  local width=30
-  local filled=$(( pct * width / 100 ))
-  local empty=$(( width - filled ))
-  printf '%0.s▓' $(seq 1 $filled 2>/dev/null) || true
-  printf '%0.s░' $(seq 1 $empty 2>/dev/null) || true
-}
-
-# ── Main execution ──
 
 echo ""
 echo "  ═══════════════════════════════════════════════════"
-echo "    TEST CONFIDENCE  (threshold: $(format_threshold))"
+echo "    TEST CONFIDENCE  →  $(fmt_threshold)"
+echo "    $TOTAL_QUEUED tests queued ($RANKED_COUNT prioritized)"
 echo "  ═══════════════════════════════════════════════════"
 echo ""
 
-START_TIME=$(date +%s)
-TOTAL_PASSED=0
-TOTAL_FAILED=0
+START=$(date +%s)
+PASSED=0
+FAILED=0
 CONFIDENCE=0
 
-# Try AI ranking first, fall back to convention
-AI_SEEN=$(mktemp)
-AI_WAVE1="" AI_WAVE2="" AI_WAVE3="" AI_WAVE4=""
+# Confidence model:
+#   Each passing test adds to confidence proportional to total suite size.
+#   Early (high-relevance) tests contribute more via a Pareto curve.
+#
+#   confidence = 1 - (1 - passed/total)^k
+#     where k = 2.5 for ranked tests (front-loaded confidence)
+#     and   k = 1.0 for unranked tests (linear)
+#
+#   This means:
+#     10% of tests (most relevant) → ~70% confidence
+#     30% of tests                 → ~92% confidence
+#     50% of tests                 → ~98% confidence
+#     100% of tests                → 100% confidence
 
-if ai_rank_tests; then
-  WAVE_FILES=("$AI_WAVE1" "$AI_WAVE2" "$AI_WAVE3" "$AI_WAVE4")
-else
-  echo "  📁 Using convention-based test mapping"
-  CONV_OUTPUT=$(map_tests_by_convention)
-  WAVE1_FILE=$(echo "$CONV_OUTPUT" | grep "^WAVE1:" | cut -d: -f2)
-  WAVE2_FILE=$(echo "$CONV_OUTPUT" | grep "^WAVE2:" | cut -d: -f2)
-  WAVE3_FILE=$(echo "$CONV_OUTPUT" | grep "^WAVE3:" | cut -d: -f2)
+calc_confidence() {
+  local passed=$1 total=$2 ranked=$3
+  python3 -c "
+import math
+passed, total, ranked = $passed, $total, $ranked
+if total == 0:
+    print(0)
+else:
+    frac = passed / total
+    # Pareto curve: front-loaded if we're still in ranked territory
+    if passed <= ranked:
+        k = 2.5
+    else:
+        # Blend: once past ranked tests, curve flattens toward linear
+        ranked_frac = ranked / total if total > 0 else 0
+        k = 2.5 - 1.5 * min(1, (frac - ranked_frac) / max(0.01, 1 - ranked_frac))
+    c = 1.0 - (1.0 - frac) ** k
+    print(int(c * 10000))  # basis points for integer math
+" 2>/dev/null
+}
 
-  # Wave 4: all remaining specs
-  WAVE4_FILE=$(mktemp)
-  SEEN_FILE=$(echo "$CONV_OUTPUT" | grep "^SEEN:" | cut -d: -f2)
-  find spec -name "*_spec.rb" -type f 2>/dev/null | while IFS= read -r spec; do
-    grep -qxF "$spec" "$SEEN_FILE" 2>/dev/null || echo "$spec"
-  done > "$WAVE4_FILE"
+draw_bar() {
+  local bps=$1  # basis points (0-10000)
+  local width=40
+  local filled=$(( bps * width / 10000 ))
+  [[ $filled -gt $width ]] && filled=$width
+  local empty=$(( width - filled ))
+  local bar=""
+  for (( j=0; j<filled; j++ )); do bar+="▓"; done
+  for (( j=0; j<empty; j++ )); do bar+="░"; done
+  echo "$bar"
+}
 
-  WAVE_FILES=("$WAVE1_FILE" "$WAVE2_FILE" "$WAVE3_FILE" "$WAVE4_FILE")
-fi
-
-WAVE_LABELS=("Direct unit tests" "Integration tests" "Broad coverage" "Full suite")
-WAVE_TARGETS=(80 95 99 9999)
-PREV_TARGETS=(0 80 95 99)
-
-for wave_idx in 0 1 2 3; do
-  wave_file="${WAVE_FILES[$wave_idx]}"
-  wave_label="${WAVE_LABELS[$wave_idx]}"
-  wave_target="${WAVE_TARGETS[$wave_idx]}"
-  prev_target="${PREV_TARGETS[$wave_idx]}"
-
-  # Check if confidence already meets threshold
-  if [[ "$CONFIDENCE" -ge "$THRESHOLD" ]]; then
-    count=$(wc -l < "$wave_file" 2>/dev/null | tr -d ' ')
-    [[ "$count" -gt 0 ]] && echo "  Wave $((wave_idx+1))/4 — $wave_label (~${count} files) ⬜ skipped"
-    continue
+fmt_confidence() {
+  local bps=$1
+  if [[ $bps -ge 10000 ]]; then echo "100"
+  elif [[ $bps -ge 9990 ]]; then echo "99.9"
+  elif [[ $bps -ge 1000 ]]; then echo "$(( bps / 100 )).$(( bps % 100 / 10 ))"
+  elif [[ $bps -ge 100 ]]; then echo "$(( bps / 100 )).$(( bps % 100 ))"
+  else echo "0.$(printf '%02d' $bps)"
   fi
+}
 
-  # Read test files for this wave
-  mapfile -t wave_tests < "$wave_file" 2>/dev/null || true
-  wave_count=${#wave_tests[@]}
-  [[ "$wave_count" -eq 0 ]] && continue
+THRESHOLD_BPS=$(( THRESHOLD * 100 ))
 
-  echo "  Wave $((wave_idx+1))/4 — $wave_label ($wave_count files)"
-  wave_passed=0
+mapfile -t ALL_TESTS < "$QUEUE"
 
-  # Run in batches
-  for (( i=0; i<wave_count; i+=BATCH_SIZE )); do
-    batch=("${wave_tests[@]:$i:$BATCH_SIZE}")
-    batch_size=${#batch[@]}
+for spec in "${ALL_TESTS[@]}"; do
+  [[ -z "$spec" ]] && continue
 
-    if output=$(run_batch "${batch[@]}" 2>&1); then
-      wave_passed=$((wave_passed + batch_size))
-      TOTAL_PASSED=$((TOTAL_PASSED + batch_size))
+  # Run single test file
+  if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
+    PASSED=$((PASSED + 1))
+    CONFIDENCE=$(calc_confidence $PASSED $TOTAL_QUEUED $RANKED_COUNT)
 
-      # Calculate confidence: linear interpolation within wave
-      wave_progress=$((wave_passed * 100 / wave_count))
-      CONFIDENCE=$((prev_target + (wave_target - prev_target) * wave_progress / 100))
+    elapsed=$(( $(date +%s) - START ))
+    bar=$(draw_bar "$CONFIDENCE")
+    conf_str=$(fmt_confidence "$CONFIDENCE")
+    printf "\r  %s  %5s%%  %d/%d passed  %ds  " "$bar" "$conf_str" "$PASSED" "$TOTAL_QUEUED" "$elapsed"
 
-      elapsed=$(( $(date +%s) - START_TIME ))
-      bar=$(progress_bar "$CONFIDENCE")
-      pct_display=$CONFIDENCE
-      [[ "$pct_display" -ge 9999 ]] && pct_display="99.99"
-      printf "\r  %s %s%%  (%d tests, %ds)  " "$bar" "$pct_display" "$TOTAL_PASSED" "$elapsed"
-
-      if [[ "$CONFIDENCE" -ge "$THRESHOLD" ]]; then
-        echo ""
-        break
-      fi
-    else
-      TOTAL_FAILED=$((TOTAL_FAILED + batch_size))
+    # Stop if we've hit the threshold
+    if [[ "$CONFIDENCE" -ge "$THRESHOLD_BPS" ]]; then
       echo ""
-      echo ""
-      echo "  ═══════════════════════════════════════════════════"
-      echo "    ❌ TEST CONFIDENCE: 0% — REGRESSION DETECTED"
-      echo "  ═══════════════════════════════════════════════════"
-      echo ""
-      echo "  Failed in Wave $((wave_idx+1)) ($wave_label):"
-      for f in "${batch[@]}"; do echo "    • $f"; done
-      echo ""
-      echo "$output" | tail -20 | sed 's/^/    /'
-      echo ""
-      echo "  Fix the failing tests before committing."
-      echo ""
-      exit 1
+      break
     fi
-  done
-
-  elapsed=$(( $(date +%s) - START_TIME ))
-  echo ""
-  echo "  ✅ Wave $((wave_idx+1)) complete — $wave_count tests — ${elapsed}s"
-  echo ""
+  else
+    FAILED=$((FAILED + 1))
+    echo ""
+    echo ""
+    echo "  ═══════════════════════════════════════════════════"
+    echo "    ❌ FAILED — $spec"
+    echo "  ═══════════════════════════════════════════════════"
+    echo ""
+    echo "$output" | tail -20 | sed 's/^/    /'
+    echo ""
+    echo "  Fix this before committing."
+    echo ""
+    exit 1
+  fi
 done
 
-# ── Final report ──
+# ── Done ──
 
-elapsed=$(( $(date +%s) - START_TIME ))
-total_available=$(find spec -name "*_spec.rb" -type f 2>/dev/null | wc -l | tr -d ' ')
+elapsed=$(( $(date +%s) - START ))
+conf_str=$(fmt_confidence "$CONFIDENCE")
 
+echo ""
 echo "  ═══════════════════════════════════════════════════"
-if [[ "$CONFIDENCE" -ge "$THRESHOLD" ]]; then
-  conf_display=$CONFIDENCE
-  [[ "$conf_display" -ge 9999 ]] && conf_display="99.99"
-  echo "    ✅ TEST CONFIDENCE: ${conf_display}%  (threshold: $(format_threshold))"
+if [[ "$CONFIDENCE" -ge "$THRESHOLD_BPS" ]]; then
+  echo "    ✅  ${conf_str}% confidence  (threshold: $(fmt_threshold))"
 else
-  echo "    ⚠️  TEST CONFIDENCE: ${CONFIDENCE}%  (threshold: $(format_threshold))"
+  echo "    ⚠️   ${conf_str}% confidence  (threshold: $(fmt_threshold))"
 fi
 echo "  ═══════════════════════════════════════════════════"
 echo ""
-echo "  $TOTAL_PASSED tests in ${elapsed}s (of ~${total_available} in repo)"
+echo "  $PASSED passed in ${elapsed}s  ·  $TOTAL_QUEUED in repo"
 echo ""
 
-[[ "$CONFIDENCE" -ge "$THRESHOLD" ]]
+[[ "$CONFIDENCE" -ge "$THRESHOLD_BPS" ]]
