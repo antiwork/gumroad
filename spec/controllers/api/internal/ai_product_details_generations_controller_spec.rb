@@ -94,6 +94,13 @@ describe Api::Internal::AiProductDetailsGenerationsController do
         expect(response.parsed_body).to eq({ "error" => "Prompt is required" })
       end
 
+      it "returns error when prompt contains only characters removed by sanitization" do
+        post :create, params: { prompt: "\u{1F3A8}\u{1F3B5}\u{1F3AD}" }, format: :json
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body).to eq({ "error" => "Prompt is required" })
+      end
+
       it "returns error when prompt is missing" do
         post :create, params: {}, format: :json
 

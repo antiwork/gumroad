@@ -14,7 +14,7 @@ class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::Base
   def create
     authorize current_seller, :generate_product_details_with_ai?
 
-    prompt = params[:prompt]
+    prompt = sanitize_prompt(params[:prompt].to_s)
 
     if prompt.blank?
       render json: { error: "Prompt is required" }, status: :bad_request
@@ -23,7 +23,7 @@ class Api::Internal::AiProductDetailsGenerationsController < Api::Internal::Base
 
     begin
       service = ::Ai::ProductDetailsGeneratorService.new(current_seller: current_seller)
-      result = service.generate_product_details(prompt: sanitize_prompt(prompt))
+      result = service.generate_product_details(prompt: prompt)
 
       render json: {
         success: true,
