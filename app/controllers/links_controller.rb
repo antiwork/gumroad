@@ -447,6 +447,9 @@ class LinksController < ApplicationController
       @product.publish!
     rescue Link::LinkInvalid, ActiveRecord::RecordInvalid
       return render json: { success: false, error_message: @product.errors.full_messages[0] }
+    rescue Errno::ENOENT => e
+      ErrorNotifier.notify(e)
+      return render json: { success: false, error_message: "There was a temporary issue processing your product images. Please try again." }
     rescue => e
       ErrorNotifier.notify(e)
       return render json: { success: false, error_message: "Something broke. We're looking into what happened. Sorry about this!" }
