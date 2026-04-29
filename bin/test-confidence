@@ -178,7 +178,7 @@ Test files to reorder:
 ${SPEC_LIST}"
 
   PAYLOAD=$(jq -n \
-    --arg model "claude-sonnet-4-6" \
+    --arg model "claude-opus-4-7" \
     --arg prompt "$PROMPT" \
     '{model: $model, max_tokens: 8192, messages: [{role: "user", content: $prompt}]}')
 
@@ -361,7 +361,7 @@ Return ONLY a number between 99.0 and 100.0, nothing else."
 
   local payload
   payload=$(jq -n \
-    --arg model "claude-sonnet-4-6" \
+    --arg model "claude-opus-4-7" \
     --arg prompt "$prompt" \
     '{model: $model, max_tokens: 16, messages: [{role: "user", content: $prompt}]}')
 
