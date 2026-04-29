@@ -14,7 +14,7 @@ Create a commit for the current changes.
 1. Run `git status` (without `-uall`) to see untracked and modified files.
 2. Run `git diff` and `git diff --cached` to understand staged and unstaged changes.
 3. Run `git log --oneline -5` to see recent commit style.
-4. **Run `/test-confidence` to verify your changes don't break anything.** Wait for confidence to meet the threshold before proceeding. If any test fails, fix it first.
+4. **Run `bin/test-confidence` to verify your changes don't break anything.** Opus analyzes your diff and runs the right tests. Wait for 99% confidence (green bar) before proceeding. If any test fails, fix it first.
 5. **Run linters on changed files before staging:**
    - Ruby files: `bundle exec rubocop --force-exclusion -a <files>`
    - JS/TS files: `npm run lint-fast -- --max-warnings 0 --fix --no-warn-ignored <files>`
