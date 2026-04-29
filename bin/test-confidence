@@ -3,8 +3,7 @@
 # bin/test-confidence — Run the tests that matter, fast.
 #
 # Finds the minimal set of tests needed for 99% confidence based on your
-# diff, runs them, then optionally continues toward 100%. Shows ETA based
-# on the last green CI build on main.
+# diff, runs them, then optionally continues toward 100%.
 #
 # Usage:
 #   bin/test-confidence          # Run to 99%, stop
@@ -17,7 +16,6 @@ set -euo pipefail
 
 RUN_FULL=false
 USE_AI=true
-HISTORY_FILE=".test-confidence-history.json"
 
 for arg in "$@"; do
   case "$arg" in
@@ -217,44 +215,6 @@ ${SPEC_LIST}"
   fi
 fi
 
-# ── Estimate time from CI history ──
-
-estimate_time() {
-  local count=$1
-  # Check for last green main CI run timing
-  local avg_per_spec=""
-  if [[ -f "$HISTORY_FILE" ]]; then
-    avg_per_spec=$(python3 -c "
-import json
-try:
-    h = json.load(open('$HISTORY_FILE'))
-    runs = h.get('runs', [])
-    if runs:
-        last = runs[-1]
-        avg = last['elapsed_seconds'] / max(last['specs_run'], 1)
-        print(f'{avg:.1f}')
-except: pass
-" 2>/dev/null || true)
-  fi
-
-  # Fallback: estimate from last green CI on GitHub
-  if [[ -z "$avg_per_spec" ]]; then
-    local ci_seconds
-    ci_seconds=$(gh run list -b main -s success -w "Tests" -L 1 --json updatedAt,createdAt \
-      --jq '.[0] | (((.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601)))' 2>/dev/null || true)
-    if [[ -n "$ci_seconds" && "$ci_seconds" -gt 0 ]]; then
-      # CI runs ~1300 specs across ~30 parallel nodes
-      avg_per_spec=$(python3 -c "print(f'{$ci_seconds / 30 / 43:.1f}')" 2>/dev/null || true)
-    fi
-  fi
-
-  if [[ -n "$avg_per_spec" ]]; then
-    python3 -c "print(int($count * $avg_per_spec))" 2>/dev/null || echo ""
-  fi
-}
-
-ETA_CRITICAL=$(estimate_time "$CRITICAL_COUNT")
-ETA_FULL=$(estimate_time "$TOTAL_SPECS")
 
 # ── Header ──
 
@@ -262,36 +222,11 @@ echo ""
 echo "  ═══════════════════════════════════════════════════"
 echo "    TEST CONFIDENCE"
 echo "  ───────────────────────────────────────────────────"
-printf "    99%%  ←  %d tests" "$CRITICAL_COUNT"
-[[ -n "$ETA_CRITICAL" ]] && printf "  (~%ds)" "$ETA_CRITICAL"
-echo ""
-printf "   100%%  ←  %d tests" "$TOTAL_SPECS"
-[[ -n "$ETA_FULL" ]] && printf "  (~%ds)" "$ETA_FULL"
-echo ""
+echo "    99%  ←  $CRITICAL_COUNT tests"
+echo "   100%  ←  $TOTAL_SPECS tests"
 echo "  ═══════════════════════════════════════════════════"
 echo ""
 
-# ── History tracking ──
-
-save_history() {
-  local specs=$1 elapsed=$2 result=$3
-  python3 -c "
-import json, time, os
-path = '$HISTORY_FILE'
-try:
-    h = json.load(open(path)) if os.path.exists(path) else {'runs': []}
-except: h = {'runs': []}
-h['runs'].append({
-    'timestamp': int(time.time()),
-    'branch': '$CURRENT_BRANCH',
-    'specs_run': $specs,
-    'elapsed_seconds': $elapsed,
-    'result': '$result'
-})
-h['runs'] = h['runs'][-50:]  # keep last 50
-json.dump(h, open(path, 'w'), indent=2)
-" 2>/dev/null || true
-}
 
 # ── Run critical tests (the 99% set) ──
 
@@ -349,7 +284,6 @@ for spec in "${CRITICAL_TESTS[@]}"; do
 
     # Save timing data
     elapsed=$(( $(date +%s) - START ))
-    save_history "$PASSED" "$elapsed" "failed"
     exit 1
   fi
 done
@@ -366,8 +300,6 @@ echo ""
 echo "  ✅ 99% confidence — $CRITICAL_COUNT tests passed in ${CRITICAL_ELAPSED}s"
 echo "     Safe to commit."
 echo ""
-
-save_history "$PASSED" "$CRITICAL_ELAPSED" "passed_99"
 
 # ── Continue to 100% if requested ──
 
@@ -434,4 +366,4 @@ echo "    ✅ 100% confidence — $((PASSED + REM_PASSED)) tests in ${FULL_ELAPS
 echo "  ═══════════════════════════════════════════════════"
 echo ""
 
-save_history "$((PASSED + REM_PASSED))" "$FULL_ELAPSED" "passed_100"
+
