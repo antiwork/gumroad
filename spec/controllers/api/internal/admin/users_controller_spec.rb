@@ -142,6 +142,21 @@ describe Api::Internal::Admin::UsersController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["success"]).to be(false)
     end
+
+    it "returns 422 when the new email matches the current email" do
+      post :update_email, params: { current_email: user.email, new_email: user.email }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "New email is the same as the current email" }.as_json)
+      expect(user.reload.unconfirmed_email).to be_nil
+    end
+
+    it "rejects same-email submissions case-insensitively" do
+      post :update_email, params: { current_email: user.email, new_email: user.email.upcase }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("New email is the same as the current email")
+    end
   end
 
   describe "POST two_factor_authentication" do
@@ -161,6 +176,27 @@ describe Api::Internal::Admin::UsersController do
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq({ success: false, message: "enabled is required" }.as_json)
+    end
+
+    it "returns 400 when enabled is an empty string and does not modify the user" do
+      user.update!(two_factor_authentication_enabled: true)
+      totp_credential = TotpCredential.create!(user: user)
+
+      post :two_factor_authentication, params: { email: user.email, enabled: "" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "enabled is required" }.as_json)
+      expect(user.reload.two_factor_authentication_enabled?).to be(true)
+      expect(TotpCredential.where(id: totp_credential.id)).to exist
+    end
+
+    it "treats Ruby false as a valid disable request" do
+      user.update!(two_factor_authentication_enabled: true)
+
+      post :two_factor_authentication, params: { email: user.email, enabled: false }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["two_factor_authentication_enabled"]).to be(false)
     end
 
     it "returns 404 when the user does not exist" do

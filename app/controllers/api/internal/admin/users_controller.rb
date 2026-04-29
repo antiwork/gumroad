@@ -43,22 +43,35 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     user = find_user_or_render(params[:current_email])
     return unless user
 
+    if user.email.to_s.casecmp(params[:new_email].to_s).zero?
+      return render json: { success: false, message: "New email is the same as the current email" }, status: :unprocessable_entity
+    end
+
     user.email = params[:new_email]
-    if user.save
+    unless user.save
+      return render json: { success: false, message: user.errors.full_messages.to_sentence }, status: :unprocessable_entity
+    end
+
+    if user.unconfirmed_email.present?
       render json: {
         success: true,
         message: "Email change pending confirmation. Confirmation email sent to #{user.unconfirmed_email}.",
         unconfirmed_email: user.unconfirmed_email,
-        pending_confirmation: user.has_unconfirmed_email?
+        pending_confirmation: true
       }
     else
-      render json: { success: false, message: user.errors.full_messages.to_sentence }, status: :unprocessable_entity
+      render json: {
+        success: true,
+        message: "Email updated.",
+        email: user.email,
+        pending_confirmation: false
+      }
     end
   end
 
   def two_factor_authentication
     return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
-    return render json: { success: false, message: "enabled is required" }, status: :bad_request if params[:enabled].nil?
+    return render json: { success: false, message: "enabled is required" }, status: :bad_request if params[:enabled].to_s.blank?
 
     user = find_user_or_render(params[:email])
     return unless user
