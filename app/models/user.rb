@@ -79,6 +79,8 @@ class User < ApplicationRecord
   has_many :user_compliance_info_requests
   has_many :user_tax_forms
   has_many :scheduled_payouts
+  has_many :watched_users
+  has_one :active_watched_user, -> { alive }, class_name: "WatchedUser"
   has_many :workflows, foreign_key: :seller_id
   has_many :merchant_accounts
   has_many :shipping_destinations

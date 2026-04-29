@@ -44,6 +44,10 @@ execute_scheduled_payouts_job:
   cron: "0 9 * * *" # UTC 09:00, after daily payouts at 08:00
   class: ExecuteScheduledPayoutsJob
   description: Executes due scheduled payouts for suspended users
+sync_watched_users:
+  cron: "0 9 * * *" # UTC 09:00
+  class: SyncWatchedUsersJob
+  description: Refreshes revenue and unpaid balance snapshots for users in the risk watchlist
 large_sellers_update_user_balance_stats_cache_worker: # Duration: <1sec
   cron: "0 8 * * *" # UTC 08:00
   class: LargeSellersUpdateUserBalanceStatsCacheWorker

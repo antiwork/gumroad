@@ -38,6 +38,7 @@ class Admin::UserPresenter::Card
       unpaid_balance_cents: user.unpaid_balance_cents,
       disable_paypal_sales: user.disable_paypal_sales,
       has_in_progress_scheduled_payout: user.scheduled_payouts.in_progress.exists?,
+      active_watched_user: active_watched_user_props,
 
       # Status flags
       verified: user.verified?,
@@ -68,6 +69,21 @@ class Admin::UserPresenter::Card
   end
 
   private
+    def active_watched_user_props
+      watched_user = user.active_watched_user
+      return nil unless watched_user
+
+      {
+        external_id: watched_user.external_id,
+        revenue_threshold_cents: watched_user.revenue_threshold_cents,
+        revenue_cents: watched_user.revenue_cents,
+        unpaid_balance_cents: watched_user.unpaid_balance_cents,
+        last_synced_at: watched_user.last_synced_at,
+        notes: watched_user.notes,
+        created_at: watched_user.created_at
+      }
+    end
+
     def blocked_by_object_props(blocked_object)
       blocked_object && {
         blocked_at: blocked_object.blocked_at,

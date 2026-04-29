@@ -486,4 +486,68 @@ describe Admin::UsersController, type: :controller, inertia: true do
       expect(user.scheduled_payouts.count).to eq(1)
     end
   end
+
+  describe "POST 'add_to_watchlist'" do
+    let(:user) { create(:user) }
+
+    it "adds the user to the watchlist with the given threshold and notes" do
+      post :add_to_watchlist, params: {
+        external_id: user.external_id,
+        watched_user: { revenue_threshold: "200", notes: "Same GUID across buyers" }
+      }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+
+      watched_user = user.active_watched_user
+      expect(watched_user).to be_present
+      expect(watched_user.revenue_threshold_cents).to eq(20_000)
+      expect(watched_user.notes).to eq("Same GUID across buyers")
+      expect(watched_user.created_by).to eq(@admin_user)
+      expect(watched_user.last_synced_at).to be_present
+    end
+
+    it "rejects a missing or non-positive threshold" do
+      post :add_to_watchlist, params: { external_id: user.external_id, watched_user: { revenue_threshold: "0" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(user.watched_users).to be_empty
+    end
+
+    it "rejects when the user is already being watched" do
+      create(:watched_user, user: user)
+
+      post :add_to_watchlist, params: {
+        external_id: user.external_id,
+        watched_user: { revenue_threshold: "200" }
+      }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to include("already being watched")
+    end
+  end
+
+  describe "DELETE 'remove_from_watchlist'" do
+    let(:user) { create(:user) }
+
+    it "soft-deletes the active watch" do
+      watched_user = create(:watched_user, user: user)
+
+      delete :remove_from_watchlist, params: { external_id: user.external_id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+      expect(watched_user.reload).to be_deleted
+    end
+
+    it "returns an error when the user is not currently being watched" do
+      delete :remove_from_watchlist, params: { external_id: user.external_id }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("User is not currently being watched.")
+    end
+  end
 end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_11_23_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_11_24_000000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2717,6 +2717,21 @@ ActiveRecord::Schema[7.1].define(version: 2026_11_23_000000) do
     t.bigint "user_id", null: false
     t.index ["record_type", "record_id"], name: "index_video_files_on_record"
     t.index ["user_id"], name: "index_video_files_on_user_id"
+  end
+
+  create_table "watched_users", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "created_by_id"
+    t.bigint "revenue_threshold_cents", null: false
+    t.bigint "revenue_cents", default: 0, null: false
+    t.bigint "unpaid_balance_cents", default: 0, null: false
+    t.datetime "last_synced_at"
+    t.text "notes"
+    t.datetime "deleted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_watched_users_on_created_by_id"
+    t.index ["user_id", "deleted_at"], name: "index_watched_users_on_user_id_and_deleted_at"
   end
 
   create_table "wishlist_followers", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

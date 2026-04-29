@@ -35,6 +35,16 @@ type BlockedObject = {
   created_at: string;
 };
 
+export type ActiveWatchedUser = {
+  external_id: string;
+  revenue_threshold_cents: number;
+  revenue_cents: number;
+  unpaid_balance_cents: number;
+  last_synced_at: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
 export type User = {
   external_id: string;
   email: string;
@@ -58,6 +68,7 @@ export type User = {
   suspended: boolean;
   unpaid_balance_cents: number;
   has_in_progress_scheduled_payout: boolean;
+  active_watched_user: ActiveWatchedUser | null;
   disable_paypal_sales: boolean;
   flagged_for_fraud: boolean;
   flagged_for_tos_violation: boolean;

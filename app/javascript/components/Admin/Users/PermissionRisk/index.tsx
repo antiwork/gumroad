@@ -8,6 +8,7 @@ import UserGuids from "$app/components/Admin/Users/PermissionRisk/Guids";
 import LatestPosts from "$app/components/Admin/Users/PermissionRisk/LatestPosts";
 import SchedulePayout from "$app/components/Admin/Users/PermissionRisk/SchedulePayout";
 import SuspendForFraud from "$app/components/Admin/Users/PermissionRisk/SuspendForFraud";
+import WatchedUser from "$app/components/Admin/Users/PermissionRisk/WatchedUser";
 import type { User } from "$app/components/Admin/Users/User";
 
 type AdminUserPermissionRiskProps = {
@@ -26,6 +27,7 @@ const AdminUserPermissionRisk = ({ user }: AdminUserPermissionRiskProps) => (
     <FlagForFraud user={user} />
     <SuspendForFraud user={user} />
     <SchedulePayout user={user} />
+    <WatchedUser user={user} />
     <UserGuids user_external_id={user.external_id} />
     <Bio user={user} />
     <LatestPosts user={user} />
