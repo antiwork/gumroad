@@ -29,8 +29,9 @@ class Purchase::ReassignByEmailService
       purchase.email = @to_email
 
       if purchase.subscription.present? && !purchase.is_original_subscription_purchase? && !purchase_id_set.include?(purchase.original_purchase.id)
-        purchase.original_purchase.update(email: @to_email)
+        purchase.original_purchase.update(email: @to_email, purchaser_id: target_user&.id)
         reassigned_purchase_ids << purchase.original_purchase.id if purchase.original_purchase.saved_changes?
+        purchase.subscription.update(user: target_user)
       end
 
       purchase.purchaser_id = target_user&.id
@@ -43,9 +44,11 @@ class Purchase::ReassignByEmailService
       reassigned_purchase_ids << purchase.id if purchase.save
     end
 
-    if reassigned_purchase_ids.any?
-      CustomerMailer.grouped_receipt(reassigned_purchase_ids).deliver_later(queue: "critical")
+    if reassigned_purchase_ids.empty?
+      return Result.new(success: false, reassigned_purchase_ids: [], reason: :no_changes, error_message: "No purchases were reassigned")
     end
+
+    CustomerMailer.grouped_receipt(reassigned_purchase_ids).deliver_later(queue: "critical")
 
     Result.new(success: true, reassigned_purchase_ids: reassigned_purchase_ids, reason: nil, error_message: nil)
   end

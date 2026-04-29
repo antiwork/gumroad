@@ -734,5 +734,14 @@ describe Api::Internal::Admin::PurchasesController do
       expect(purchase1.purchaser_id).to eq(target_user.id)
       expect(purchase2.reload.email).to eq(to_email)
     end
+
+    it "returns 422 when every purchase save fails" do
+      allow_any_instance_of(Purchase).to receive(:save).and_return(false)
+
+      post :reassign, params: { from: from_email, to: to_email }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "No purchases were reassigned" }.as_json)
+    end
   end
 end

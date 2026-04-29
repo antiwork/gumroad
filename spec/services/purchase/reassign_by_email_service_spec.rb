@@ -65,7 +65,7 @@ describe Purchase::ReassignByEmailService do
         expect(subscription.reload.user).to eq(target_user)
       end
 
-      it "updates the original purchase email when a recurring purchase is reassigned without it" do
+      it "transfers full ownership of an original_purchase that is not in the matched set" do
         subscription = create(:subscription, user: buyer)
         original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:)
         recurring = create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:)
@@ -73,13 +73,33 @@ describe Purchase::ReassignByEmailService do
         described_class.new(from_email:, to_email:).perform
 
         expect(original_purchase.reload.email).to eq(to_email)
+        expect(original_purchase.purchaser_id).to eq(target_user.id)
         expect(recurring.reload.email).to eq(to_email)
+        expect(recurring.purchaser_id).to eq(target_user.id)
+        expect(subscription.reload.user).to eq(target_user)
       end
 
       it "enqueues a grouped receipt for all reassigned purchases" do
         expect(CustomerMailer).to receive(:grouped_receipt).with(match_array([purchase1.id, purchase2.id])).and_call_original
 
         described_class.new(from_email:, to_email:).perform
+      end
+    end
+
+    context "when no purchases save successfully" do
+      let!(:target_user) { create(:user, email: to_email) }
+      let!(:purchase) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:) }
+
+      it "returns reason :no_changes and does not enqueue a grouped receipt" do
+        allow_any_instance_of(Purchase).to receive(:save).and_return(false)
+        expect(CustomerMailer).not_to receive(:grouped_receipt)
+
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(false)
+        expect(result.reason).to eq(:no_changes)
+        expect(result.error_message).to eq("No purchases were reassigned")
+        expect(result.reassigned_purchase_ids).to eq([])
       end
     end
 

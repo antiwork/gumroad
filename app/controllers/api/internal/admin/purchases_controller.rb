@@ -219,6 +219,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       case reason
       when :missing_params then :bad_request
       when :not_found then :not_found
+      when :no_changes then :unprocessable_entity
       end
     end
 end
