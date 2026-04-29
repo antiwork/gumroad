@@ -250,6 +250,33 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
       expect(result.status).to eq("compliant")
       expect(result.reasoning).to eq([])
     end
+
+    it "returns compliant when OpenAI returns a 500 server error" do
+      allow(client).to receive(:chat).and_raise(Faraday::ServerError, "the server responded with status 500")
+
+      result = described_class.new(text: "moderate me").perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.reasoning).to eq([])
+      expect(Rails.logger).to have_received(:warn).with(/preset timeout on adult_content.*Faraday::ServerError/)
+    end
+
+    it "skips the flagged result when the uncertainty check gets a 500 server error" do
+      call_count = 0
+      allow(client).to receive(:chat) do |_kwargs|
+        call_count += 1
+        case call_count
+        when 1 then json_chat_response(flagged: true, reasoning: "looks explicit")
+        when 2 then raise Faraday::ServerError, "the server responded with status 500"
+        else json_chat_response(flagged: false, reasoning: "")
+        end
+      end
+
+      result = described_class.new(text: "moderate me").perform
+
+      expect(result.status).to eq("compliant")
+      expect(Rails.logger).to have_received(:warn).with(/uncertainty check timeout.*Faraday::ServerError/)
+    end
   end
 
   def json_chat_response(payload)
