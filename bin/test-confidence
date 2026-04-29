@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 #
-# bin/test-confidence — Run the tests that matter, fast.
-#
-# Finds the minimal set of tests needed for 99% confidence based on your
-# diff, runs them, then optionally continues toward 100%.
+# bin/test-confidence — AI-driven test execution. Opus decides what to run and how confident to be.
 #
 # Usage:
 #   bin/test-confidence          # Run to 99%, stop
 #   bin/test-confidence --full   # Run to 100%
-#   bin/test-confidence --no-ai  # Skip AI reranking
+#   bin/test-confidence --no-ai  # Convention mapping, no AI (deterministic fallback)
 #
-# Set ANTHROPIC_API_KEY for AI-powered ranking. Falls back to convention without it.
+# Requires: ANTHROPIC_API_KEY for AI mode. Falls back to convention without it.
 #
 set -euo pipefail
 
@@ -57,134 +54,82 @@ else
   echo "  📂 $FILE_COUNT files changed (local)"
 fi
 
-# ── Build the critical set (tests needed for 99%) ──
+# ── Get the diff ──
 
-CRITICAL=$(mktemp)
-REMAINING=$(mktemp)
-SEEN=$(mktemp)
+if [[ -n "$LOCAL_CHANGED" ]]; then
+  DIFF_TEXT=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null | head -500)
+elif [[ -n "$MERGE_BASE" ]]; then
+  DIFF_TEXT=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null | head -500)
+else
+  DIFF_TEXT=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -500)
+fi
 
-add_critical() {
-  local f="$1"
-  [[ -f "$f" ]] || return 0
-  grep -qxF "$f" "$SEEN" 2>/dev/null && return 0
-  echo "$f" >> "$CRITICAL"
-  echo "$f" >> "$SEEN"
-}
+# ── Get all spec files ──
 
-add_remaining() {
-  local f="$1"
-  [[ -f "$f" ]] || return 0
-  grep -qxF "$f" "$SEEN" 2>/dev/null && return 0
-  echo "$f" >> "$REMAINING"
-  echo "$f" >> "$SEEN"
-}
+ALL_SPECS=$(find spec -name "*_spec.rb" -type f 2>/dev/null | sort)
+TOTAL_SPECS=$(echo "$ALL_SPECS" | wc -l | tr -d ' ')
 
-# Critical: direct specs for changed files
-while IFS= read -r file; do
-  [[ -z "$file" ]] && continue
-  spec=$(echo "$file" | sed 's|^app/|spec/|; s|\.rb$|_spec.rb|')
-  add_critical "$spec"
-  if [[ "$file" == app/controllers/* ]]; then
-    add_critical "$(echo "$file" | sed 's|^app/controllers/|spec/requests/|; s|_controller\.rb$|_spec.rb|')"
-  fi
-done <<< "$CHANGED"
+# ── AI planning: one call, Opus decides everything ──
 
-# Critical: specs that reference changed classes
-while IFS= read -r file; do
-  [[ -z "$file" || "$file" != *.rb ]] && continue
-  classname=$(basename "$file" .rb | sed -E 's/(^|_)([a-z])/\U\2/g')
-  [[ -z "$classname" ]] && continue
-  grep -rl --include="*.rb" "$classname" spec/ 2>/dev/null | sort | while IFS= read -r spec; do
-    add_critical "$spec"
-  done
-done <<< "$CHANGED"
+PLAN_FILE=$(mktemp)
+AI_PLANNED=false
 
-# Critical: same-directory specs
-while IFS= read -r file; do
-  [[ -z "$file" ]] && continue
-  dir=$(echo "$file" | sed 's|^app/|spec/|; s|/[^/]*$||')
-  [[ -d "$dir" ]] || continue
-  find "$dir" -maxdepth 1 -name "*_spec.rb" -type f 2>/dev/null | sort | while IFS= read -r spec; do
-    add_critical "$spec"
-  done
-done <<< "$CHANGED"
+if [[ "$USE_AI" == true && -n "${ANTHROPIC_API_KEY:-}" ]]; then
+  # Group specs by directory for compact listing
+  SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=""; for(i=1;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort | head -200)
 
-CRITICAL_COUNT=$(wc -l < "$CRITICAL" | tr -d ' ')
+  PROMPT="You are a senior Rails engineer planning test execution for a code change.
 
-# Remaining: everything else, ordered by info gain per second.
-# Ranking: specs closer to changed code first, weighted by file size (smaller = faster).
-#   Tier A: specs in parent directories of changed files (broader integration tests)
-#   Tier B: request/feature specs (end-to-end coverage)
-#   Tier C: everything else, smallest files first (fastest gain per second)
+Your job: given this diff, return an ordered list of test files to run, grouped into confidence milestones. YOU decide how many tests are needed for each confidence level based on the risk profile of this specific diff.
 
-REMAINING_A=$(mktemp)
-REMAINING_B=$(mktemp)
-REMAINING_C=$(mktemp)
+A trivial change (typo fix, comment update, rescue clause) might need 2 tests for 99%.
+A core model change might need 50 tests for 99%.
+A payment flow change might need 100 tests for 99%.
 
-# Tier A: parent/sibling directory specs of changed files
-while IFS= read -r file; do
-  [[ -z "$file" ]] && continue
-  parent=$(echo "$file" | sed 's|^app/|spec/|; s|/[^/]*/[^/]*$||')
-  [[ -d "$parent" ]] || continue
-  find "$parent" -name "*_spec.rb" -type f 2>/dev/null | while IFS= read -r spec; do
-    grep -qxF "$spec" "$SEEN" 2>/dev/null && continue
-    echo "$spec"
-  done
-done <<< "$CHANGED" | sort -u >> "$REMAINING_A"
+Think about:
+- What code paths does this diff touch?
+- What could break that isn't obvious?
+- What are the transitive dependencies?
+- How risky is this change?
 
-# Tier B: request and feature specs (broad integration)
-find spec/requests spec/features -name "*_spec.rb" -type f 2>/dev/null | while IFS= read -r spec; do
-  grep -qxF "$spec" "$SEEN" 2>/dev/null && continue
-  grep -qxF "$spec" "$REMAINING_A" 2>/dev/null && continue
-  echo "$spec"
-done | sort >> "$REMAINING_B"
-
-# Tier C: everything else, smallest first (fastest info gain per second)
-find spec -name "*_spec.rb" -type f 2>/dev/null | xargs wc -l 2>/dev/null | grep -v total | sort -n | awk '{print $2}' | while IFS= read -r spec; do
-  grep -qxF "$spec" "$SEEN" 2>/dev/null && continue
-  grep -qxF "$spec" "$REMAINING_A" 2>/dev/null && continue
-  grep -qxF "$spec" "$REMAINING_B" 2>/dev/null && continue
-  echo "$spec"
-done >> "$REMAINING_C"
-
-# Combine tiers into remaining queue
-while IFS= read -r spec; do add_remaining "$spec"; done < "$REMAINING_A"
-while IFS= read -r spec; do add_remaining "$spec"; done < "$REMAINING_B"
-while IFS= read -r spec; do add_remaining "$spec"; done < "$REMAINING_C"
-rm -f "$REMAINING_A" "$REMAINING_B" "$REMAINING_C"
-
-REMAINING_COUNT=$(wc -l < "$REMAINING" | tr -d ' ')
-TOTAL_SPECS=$(( CRITICAL_COUNT + REMAINING_COUNT ))
-
-# ── AI reranking of critical set ──
-
-if [[ "$USE_AI" == true && -n "${ANTHROPIC_API_KEY:-}" && "$CRITICAL_COUNT" -gt 0 ]]; then
-  if [[ -n "$LOCAL_CHANGED" ]]; then
-    DIFF_TEXT=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null | head -400)
-  elif [[ -n "$MERGE_BASE" ]]; then
-    DIFF_TEXT=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null | head -400)
-  else
-    DIFF_TEXT=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -400)
-  fi
-
-  SPEC_LIST=$(cat "$CRITICAL")
-
-  PROMPT="You are a senior Rails engineer. Given this diff, reorder these test files from MOST to LEAST likely to catch a regression. Return ONLY the reordered file paths, one per line, no numbering, no explanation.
-
-Diff:
+## Diff:
 ${DIFF_TEXT}
 
-Test files to reorder:
-${SPEC_LIST}"
+## Test files (${TOTAL_SPECS} total):
+${SPEC_TREE}
+
+Return a JSON object with this exact structure:
+{
+  \"risk\": \"low|medium|high|critical\",
+  \"reason\": \"one sentence explaining the risk level\",
+  \"milestones\": [
+    {\"confidence\": 80, \"tests\": [\"spec/models/foo_spec.rb\"]},
+    {\"confidence\": 95, \"tests\": [\"spec/requests/bar_spec.rb\"]},
+    {\"confidence\": 99, \"tests\": [\"spec/features/baz_spec.rb\"]},
+    {\"confidence\": 100, \"tests\": [\"ALL_REMAINING\"]}
+  ]
+}
+
+Rules:
+- Each milestone's tests are ADDITIONAL, not cumulative.
+- Use exact file paths from the spec tree.
+- The last milestone can use \"ALL_REMAINING\" to mean everything else.
+- Confidence values must be strictly increasing.
+- You MUST include a 99 milestone and a 100 milestone.
+- Be aggressive early: put the highest-value tests first.
+- For low-risk changes, the 99 milestone might only need 2-5 tests.
+- For critical changes, the 99 milestone might need 50+ tests.
+
+Return ONLY the JSON object. No markdown, no explanation outside the JSON."
 
   PAYLOAD=$(jq -n \
     --arg model "claude-opus-4-7" \
     --arg prompt "$PROMPT" \
-    '{model: $model, max_tokens: 8192, messages: [{role: "user", content: $prompt}]}')
+    '{model: $model, max_tokens: 16384, messages: [{role: "user", content: $prompt}]}')
 
-  printf "  🧠 AI reordering %d critical tests..." "$CRITICAL_COUNT"
+  printf "  🧠 Opus planning test execution..."
 
-  RESPONSE=$(curl -s --max-time 30 \
+  RESPONSE=$(curl -s --max-time 60 \
     -H "Content-Type: application/json" \
     -H "x-api-key: ${ANTHROPIC_API_KEY}" \
     -H "anthropic-version: 2023-06-01" \
@@ -194,27 +139,116 @@ ${SPEC_LIST}"
   AI_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
 
   if [[ -n "$AI_TEXT" ]]; then
-    AI_QUEUE=$(mktemp)
-    AI_SEEN=$(mktemp)
-    echo "$AI_TEXT" | grep -E '^spec/.*_spec\.rb$' | while IFS= read -r spec; do
-      [[ -f "$spec" ]] || continue
-      grep -qxF "$spec" "$AI_SEEN" 2>/dev/null && continue
-      echo "$spec" >> "$AI_QUEUE"
-      echo "$spec" >> "$AI_SEEN"
-    done
-    while IFS= read -r spec; do
-      grep -qxF "$spec" "$AI_SEEN" 2>/dev/null && continue
-      echo "$spec" >> "$AI_QUEUE"
-      echo "$spec" >> "$AI_SEEN"
-    done < "$CRITICAL"
-    mv "$AI_QUEUE" "$CRITICAL"
-    rm -f "$AI_SEEN"
-    echo " done"
+    # Extract JSON
+    AI_JSON=$(echo "$AI_TEXT" | python3 -c "
+import sys, json, re
+text = sys.stdin.read()
+m = re.search(r'\{[\s\S]*\}', text)
+if m:
+    try:
+        obj = json.loads(m.group())
+        print(json.dumps(obj))
+    except:
+        pass
+" 2>/dev/null || true)
+
+    if [[ -n "$AI_JSON" ]]; then
+      echo "$AI_JSON" > "$PLAN_FILE"
+      RISK=$(echo "$AI_JSON" | jq -r '.risk // "unknown"')
+      REASON=$(echo "$AI_JSON" | jq -r '.reason // ""')
+      echo " done"
+      echo "  ⚡ Risk: $RISK — $REASON"
+      AI_PLANNED=true
+    else
+      echo " failed to parse, using convention"
+    fi
   else
-    echo " skipped"
+    echo " no response, using convention"
   fi
 fi
 
+# ── Convention fallback: build plan without AI ──
+
+if [[ "$AI_PLANNED" != true ]]; then
+  echo "  📁 Convention-based test mapping"
+
+  SEEN=$(mktemp)
+  T99=$(mktemp)
+  T100=$(mktemp)
+
+  add_once() {
+    local f="$1" dest="$2"
+    [[ -f "$f" ]] || return 0
+    grep -qxF "$f" "$SEEN" 2>/dev/null && return 0
+    echo "$f" >> "$dest"
+    echo "$f" >> "$SEEN"
+  }
+
+  # 99%: direct specs, class references, same-directory
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    spec=$(echo "$file" | sed 's|^app/|spec/|; s|\.rb$|_spec.rb|')
+    add_once "$spec" "$T99"
+    if [[ "$file" == app/controllers/* ]]; then
+      add_once "$(echo "$file" | sed 's|^app/controllers/|spec/requests/|; s|_controller\.rb$|_spec.rb|')" "$T99"
+    fi
+  done <<< "$CHANGED"
+
+  while IFS= read -r file; do
+    [[ -z "$file" || "$file" != *.rb ]] && continue
+    classname=$(basename "$file" .rb | sed -E 's/(^|_)([a-z])/\U\2/g')
+    [[ -z "$classname" ]] && continue
+    grep -rl --include="*.rb" "$classname" spec/ 2>/dev/null | sort | while IFS= read -r spec; do
+      add_once "$spec" "$T99"
+    done
+  done <<< "$CHANGED"
+
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    dir=$(echo "$file" | sed 's|^app/|spec/|; s|/[^/]*$||')
+    [[ -d "$dir" ]] || continue
+    find "$dir" -maxdepth 1 -name "*_spec.rb" -type f 2>/dev/null | sort | while IFS= read -r spec; do
+      add_once "$spec" "$T99"
+    done
+  done <<< "$CHANGED"
+
+  # 100%: everything else
+  echo "$ALL_SPECS" | while IFS= read -r spec; do
+    add_once "$spec" "$T100"
+  done
+
+  T99_LIST=$(cat "$T99" | jq -R . | jq -s .)
+  T100_LIST=$(cat "$T100" | jq -R . | jq -s .)
+
+  echo "{\"risk\":\"unknown\",\"reason\":\"convention mapping (no AI)\",\"milestones\":[{\"confidence\":99,\"tests\":$T99_LIST},{\"confidence\":100,\"tests\":$T100_LIST}]}" > "$PLAN_FILE"
+
+  rm -f "$SEEN" "$T99" "$T100"
+fi
+
+# ── Parse plan and execute ──
+
+MILESTONES=$(jq '.milestones | length' "$PLAN_FILE")
+TOTAL_PLANNED=0
+
+# Count total tests across milestones
+for (( m=0; m<MILESTONES; m++ )); do
+  TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
+  if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
+    # Count remaining
+    PLANNED_SEEN=$(mktemp)
+    for (( p=0; p<m; p++ )); do
+      jq -r ".milestones[$p].tests[]" "$PLAN_FILE" 2>/dev/null >> "$PLANNED_SEEN"
+    done
+    REMAINING_N=$(echo "$ALL_SPECS" | while IFS= read -r s; do
+      grep -qxF "$s" "$PLANNED_SEEN" 2>/dev/null || echo "$s"
+    done | wc -l | tr -d ' ')
+    TOTAL_PLANNED=$(( TOTAL_PLANNED + REMAINING_N ))
+    rm -f "$PLANNED_SEEN"
+  else
+    N=$(echo "$TESTS_JSON" | grep -c "spec/" || true)
+    TOTAL_PLANNED=$(( TOTAL_PLANNED + N ))
+  fi
+done
 
 # ── Header ──
 
@@ -222,211 +256,137 @@ echo ""
 echo "  ═══════════════════════════════════════════════════"
 echo "    TEST CONFIDENCE"
 echo "  ───────────────────────────────────────────────────"
-echo "    99%  ←  $CRITICAL_COUNT tests"
-echo "   100%  ←  $TOTAL_SPECS tests"
+for (( m=0; m<MILESTONES; m++ )); do
+  CONF=$(jq -r ".milestones[$m].confidence" "$PLAN_FILE")
+  TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
+  if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
+    echo "   ${CONF}%  ←  remaining tests"
+  else
+    N=$(echo "$TESTS_JSON" | grep -c "spec/" || true)
+    echo "   ${CONF}%  ←  $N tests"
+  fi
+done
 echo "  ═══════════════════════════════════════════════════"
 echo ""
 
-
-# ── Run critical tests (the 99% set) ──
+# ── Run ──
 
 START=$(date +%s)
 PASSED=0
 FAILED=0
+SEEN_RUN=$(mktemp)
+CURRENT_CONFIDENCE=0
 
 draw_bar() {
   local passed=$1 total=$2 phase=$3
   local width=40
   local filled=0
-  if [[ "$total" -gt 0 ]]; then
-    filled=$(( passed * width / total ))
-  fi
+  [[ "$total" -gt 0 ]] && filled=$(( passed * width / total ))
   [[ $filled -gt $width ]] && filled=$width
   local empty=$(( width - filled ))
   local bar=""
-  # Yellow while running critical, green once 99% reached
   for (( j=0; j<filled; j++ )); do
-    if [[ "$phase" == "green" ]]; then
-      bar+="🟩"
-    else
-      bar+="🟨"
-    fi
+    [[ "$phase" == "green" ]] && bar+="🟩" || bar+="🟨"
   done
   for (( j=0; j<empty; j++ )); do bar+="⬜"; done
   echo "$bar"
 }
 
-echo "  ── 99% confidence (critical tests) ──"
-echo ""
+for (( m=0; m<MILESTONES; m++ )); do
+  CONF=$(jq -r ".milestones[$m].confidence" "$PLAN_FILE")
+  TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
 
-mapfile -t CRITICAL_TESTS < "$CRITICAL"
-
-for spec in "${CRITICAL_TESTS[@]}"; do
-  [[ -z "$spec" ]] && continue
-
-  if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
-    PASSED=$((PASSED + 1))
-    elapsed=$(( $(date +%s) - START ))
-    bar=$(draw_bar "$PASSED" "$CRITICAL_COUNT" "neutral")
-    printf "\r  %s  %d/%d  %ds" "$bar" "$PASSED" "$CRITICAL_COUNT" "$elapsed"
+  # Resolve ALL_REMAINING
+  if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
+    MILESTONE_TESTS=$(echo "$ALL_SPECS" | while IFS= read -r s; do
+      grep -qxF "$s" "$SEEN_RUN" 2>/dev/null || echo "$s"
+    done)
   else
-    FAILED=$((FAILED + 1))
-    echo ""
-    echo ""
-    echo "  ═══════════════════════════════════════════════════"
-    echo "    ❌ FAILED — $spec"
-    echo "  ═══════════════════════════════════════════════════"
-    echo ""
-    echo "$output" | tail -20 | sed 's/^/    /'
-    echo ""
-    echo "  Fix this before committing."
-    echo ""
-
-    # Save timing data
-    elapsed=$(( $(date +%s) - START ))
-    exit 1
+    MILESTONE_TESTS=$(echo "$TESTS_JSON" | while IFS= read -r s; do
+      [[ -f "$s" ]] && ! grep -qxF "$s" "$SEEN_RUN" 2>/dev/null && echo "$s"
+    done)
   fi
-done
 
-CRITICAL_ELAPSED=$(( $(date +%s) - START ))
+  MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c "spec/" 2>/dev/null || echo 0)
+  [[ "$MILESTONE_COUNT" -eq 0 ]] && continue
 
-# ── 99% reached ──
-
-echo ""
-echo ""
-bar=$(draw_bar "$CRITICAL_COUNT" "$CRITICAL_COUNT" "green")
-echo "  $bar"
-echo ""
-echo "  ✅ 99% confidence — $CRITICAL_COUNT tests passed in ${CRITICAL_ELAPSED}s"
-echo "     Safe to commit."
-echo ""
-
-# ── Continue to 100% if requested ──
-
-if [[ "$RUN_FULL" != true ]]; then
-  if [[ "$REMAINING_COUNT" -gt 0 ]]; then
-    echo "  $REMAINING_COUNT more tests for 100%. Run with --full to continue."
-    echo ""
+  # Skip milestones past 99 unless --full
+  if [[ "$RUN_FULL" != true && "$CURRENT_CONFIDENCE" -ge 99 ]]; then
+    echo "  ${CONF}%  ←  $MILESTONE_COUNT tests ⬜ skipped"
+    continue
   fi
-  exit 0
-fi
 
-echo "  ── 99% → 100% (remaining suite, AI-scored) ──"
-echo ""
+  PHASE="neutral"
+  [[ "$CURRENT_CONFIDENCE" -ge 99 ]] && PHASE="green"
 
-mapfile -t REMAINING_TESTS < "$REMAINING"
-REM_PASSED=0
-PASSED_REMAINING_LIST=$(mktemp)
-LAST_CONFIDENCE="99.0"
+  MILESTONE_PASSED=0
 
-# Get the diff for AI context
-if [[ -n "$LOCAL_CHANGED" ]]; then
-  FULL_DIFF=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null | head -300)
-elif [[ -n "$MERGE_BASE" ]]; then
-  FULL_DIFF=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null | head -300)
-else
-  FULL_DIFF=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -300)
-fi
+  while IFS= read -r spec; do
+    [[ -z "$spec" ]] && continue
+    echo "$spec" >> "$SEEN_RUN"
 
-# Ask AI for confidence after every batch of tests
-ai_confidence() {
-  local passed_list=$1 remaining_count=$2
-  [[ -z "${ANTHROPIC_API_KEY:-}" ]] && { echo "$LAST_CONFIDENCE"; return; }
-
-  local passed_specs
-  passed_specs=$(cat "$passed_list" | tail -20)
-  local critical_specs
-  critical_specs=$(cat "$CRITICAL" | head -10)
-
-  local prompt="You are evaluating regression risk for a code change.
-
-Diff summary:
-${FULL_DIFF}
-
-Critical tests (all passed):
-${critical_specs}
-...(${CRITICAL_COUNT} total, all green)
-
-Additional tests passed since:
-${passed_specs}
-
-Remaining untested: ${remaining_count} spec files
-
-Given this diff and what has passed, what is your confidence (99.0-100.0) that there is NO regression? Consider:
-- How risky is this diff?
-- Do the passed tests cover the important code paths?
-- What could the remaining untested specs catch that hasn't been tested?
-
-Return ONLY a number between 99.0 and 100.0, nothing else."
-
-  local payload
-  payload=$(jq -n \
-    --arg model "claude-opus-4-7" \
-    --arg prompt "$prompt" \
-    '{model: $model, max_tokens: 16, messages: [{role: "user", content: $prompt}]}')
-
-  local response
-  response=$(curl -s --max-time 10 \
-    -H "Content-Type: application/json" \
-    -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-    -H "anthropic-version: 2023-06-01" \
-    -d "$payload" \
-    "https://api.anthropic.com/v1/messages" 2>/dev/null) || { echo "$LAST_CONFIDENCE"; return; }
-
-  local text
-  text=$(echo "$response" | jq -r '.content[0].text // empty' 2>/dev/null || true)
-  # Extract number
-  local num
-  num=$(echo "$text" | grep -oE '[0-9]{2,3}\.[0-9]' | head -1)
-  if [[ -n "$num" ]]; then
-    echo "$num"
-  else
-    echo "$LAST_CONFIDENCE"
-  fi
-}
-
-# How often to ask AI (every N tests)
-AI_BATCH_SIZE=20
-
-for spec in "${REMAINING_TESTS[@]}"; do
-  [[ -z "$spec" ]] && continue
-
-  if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
-    REM_PASSED=$((REM_PASSED + 1))
-    echo "$spec" >> "$PASSED_REMAINING_LIST"
-    FULL_PASSED=$((PASSED + REM_PASSED))
-    elapsed=$(( $(date +%s) - START ))
-    remaining_left=$(( REMAINING_COUNT - REM_PASSED ))
-
-    # Ask AI for updated confidence every AI_BATCH_SIZE tests
-    if [[ $(( REM_PASSED % AI_BATCH_SIZE )) -eq 0 ]] || [[ $remaining_left -eq 0 ]]; then
-      LAST_CONFIDENCE=$(ai_confidence "$PASSED_REMAINING_LIST" "$remaining_left")
+    if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
+      PASSED=$((PASSED + 1))
+      MILESTONE_PASSED=$((MILESTONE_PASSED + 1))
+      elapsed=$(( $(date +%s) - START ))
+      bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
+      printf "\r  %s  →%s%%  %d/%d  %ds" "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed"
+    else
+      FAILED=$((FAILED + 1))
+      echo ""
+      echo ""
+      echo "  ═══════════════════════════════════════════════════"
+      echo "    ❌ FAILED — $spec"
+      echo "  ═══════════════════════════════════════════════════"
+      echo ""
+      echo "$output" | tail -20 | sed 's/^/    /'
+      echo ""
+      echo "  Fix this before committing."
+      echo ""
+      rm -f "$PLAN_FILE" "$SEEN_RUN"
+      exit 1
     fi
+  done <<< "$MILESTONE_TESTS"
 
-    bar=$(draw_bar "$FULL_PASSED" "$TOTAL_SPECS" "green")
-    printf "\r  %s  %s%%  %d/%d  %ds" "$bar" "$LAST_CONFIDENCE" "$FULL_PASSED" "$TOTAL_SPECS" "$elapsed"
+  CURRENT_CONFIDENCE=$CONF
+  elapsed=$(( $(date +%s) - START ))
+
+  # Milestone complete
+  echo ""
+  if [[ "$CURRENT_CONFIDENCE" -ge 99 && "$PHASE" != "green" ]]; then
+    echo ""
+    bar=$(draw_bar "$MILESTONE_COUNT" "$MILESTONE_COUNT" "green")
+    echo "  $bar"
+    echo ""
+    echo "  ✅ ${CURRENT_CONFIDENCE}% confidence — $PASSED tests passed in ${elapsed}s"
+    echo "     Safe to commit."
+    echo ""
   else
-    FAILED=$((FAILED + 1))
-    echo ""
-    echo ""
-    echo "  ═══════════════════════════════════════════════════"
-    echo "    ❌ FAILED at ${LAST_CONFIDENCE}% — $spec"
-    echo "  ═══════════════════════════════════════════════════"
-    echo ""
-    echo "$output" | tail -20 | sed 's/^/    /'
-    echo ""
-    exit 1
+    echo "  ✅ ${CURRENT_CONFIDENCE}% — $MILESTONE_PASSED tests — ${elapsed}s"
   fi
 done
 
-rm -f "$PASSED_REMAINING_LIST"
-FULL_ELAPSED=$(( $(date +%s) - START ))
+# ── Done ──
 
-echo ""
-echo ""
-echo "  ═══════════════════════════════════════════════════"
-echo "    ✅ 100% confidence — $((PASSED + REM_PASSED)) tests in ${FULL_ELAPSED}s"
-echo "  ═══════════════════════════════════════════════════"
-echo ""
+elapsed=$(( $(date +%s) - START ))
 
+if [[ "$CURRENT_CONFIDENCE" -ge 100 ]]; then
+  echo ""
+  echo "  ═══════════════════════════════════════════════════"
+  echo "    ✅ 100% confidence — $PASSED tests in ${elapsed}s"
+  echo "  ═══════════════════════════════════════════════════"
+  echo ""
+elif [[ "$CURRENT_CONFIDENCE" -lt 99 ]]; then
+  echo ""
+  echo "  ⚠️  Only reached ${CURRENT_CONFIDENCE}% — $PASSED tests in ${elapsed}s"
+  echo ""
+fi
 
+if [[ "$RUN_FULL" != true && "$CURRENT_CONFIDENCE" -ge 99 && "$CURRENT_CONFIDENCE" -lt 100 ]]; then
+  remaining=$(( TOTAL_SPECS - PASSED ))
+  echo "  $remaining more tests for 100%. Run with --full to continue."
+  echo ""
+fi
+
+rm -f "$PLAN_FILE" "$SEEN_RUN"
+[[ "$CURRENT_CONFIDENCE" -ge 99 ]]
