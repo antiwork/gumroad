@@ -13,7 +13,6 @@ import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
-import { Textarea } from "$app/components/ui/Textarea";
 
 const formatUsd = (cents: number) => formatPriceCentsWithCurrencySymbol("usd", cents, { symbolFormat: "short" });
 
@@ -37,7 +36,7 @@ const WatchedBanner = ({ watch }: { watch: ActiveWatchedUser }) => {
       <div className="grid gap-3">
         <div className="font-medium">This user is currently being watched.</div>
         <div className="grid gap-1">
-          <span className="text-xs tracking-wide text-muted uppercase">Revenue since watched</span>
+          <span className="text-xs tracking-wide text-muted uppercase">Total revenue</span>
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-base font-medium">
               {formatUsd(watch.revenue_cents)} / {formatUsd(watch.revenue_threshold_cents)}
@@ -85,35 +84,33 @@ const WatchlistForm = ({ user }: { user: User }) => {
     >
       {(isLoading) => (
         <Fieldset>
-          <div className="grid gap-3">
-            <div className="flex items-end gap-2">
-              <div className="flex w-32 flex-col gap-2">
-                <Label htmlFor="watched_user_revenue_threshold">Revenue threshold ($)</Label>
-                <Input
-                  id="watched_user_revenue_threshold"
-                  name="watched_user[revenue_threshold]"
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  required
-                  defaultValue={watch ? dollarsValue(watch.revenue_threshold_cents) : ""}
-                  placeholder="200"
-                />
-              </div>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? submittingLabel : submitLabel}
-              </Button>
+          <div className="flex items-end gap-2">
+            <div className="flex w-32 flex-col gap-2">
+              <Label htmlFor="watched_user_revenue_threshold">Revenue threshold ($)</Label>
+              <Input
+                id="watched_user_revenue_threshold"
+                name="watched_user[revenue_threshold]"
+                type="number"
+                min="1"
+                step="0.01"
+                required
+                defaultValue={watch ? dollarsValue(watch.revenue_threshold_cents) : ""}
+                placeholder="200"
+              />
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-1 flex-col gap-2">
               <Label htmlFor="watched_user_notes">Notes (optional)</Label>
-              <Textarea
+              <Input
                 id="watched_user_notes"
                 name="watched_user[notes]"
-                rows={3}
+                type="text"
                 defaultValue={watch?.notes ?? ""}
                 placeholder="What to look for on the next review"
               />
             </div>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? submittingLabel : submitLabel}
+            </Button>
           </div>
         </Fieldset>
       )}

@@ -54,22 +54,21 @@ describe WatchedUser do
   end
 
   describe "#sync!" do
-    it "snapshots revenue since watched, current unpaid balance, and stamps last_synced_at" do
+    it "snapshots total successful sales revenue, current unpaid balance, and stamps last_synced_at" do
       user = create(:user)
       watch = create(:watched_user, user: user, revenue_threshold_cents: 20_000)
 
       successful_scope = double("successful_scope")
       sales_relation = double("sales_relation", successful: successful_scope)
       allow(user).to receive(:sales).and_return(sales_relation)
-      allow(successful_scope).to receive(:where).with("purchases.created_at >= ?", watch.created_at).and_return(successful_scope)
-      allow(successful_scope).to receive(:sum).with(:price_cents).and_return(5_500)
+      allow(successful_scope).to receive(:sum).with(:price_cents).and_return(15_000)
       allow(user).to receive(:unpaid_balance_cents).and_return(7_250)
       allow(watch).to receive(:user).and_return(user)
 
       freeze_time do
         watch.sync!
 
-        expect(watch.revenue_cents).to eq(5_500)
+        expect(watch.revenue_cents).to eq(15_000)
         expect(watch.unpaid_balance_cents).to eq(7_250)
         expect(watch.last_synced_at).to eq(Time.current)
       end

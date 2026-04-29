@@ -14,7 +14,7 @@ class WatchedUser < ApplicationRecord
 
   def sync!
     update!(
-      revenue_cents: user.sales.successful.where("purchases.created_at >= ?", created_at).sum(:price_cents),
+      revenue_cents: user.sales.successful.sum(:price_cents),
       unpaid_balance_cents: user.unpaid_balance_cents,
       last_synced_at: Time.current
     )
