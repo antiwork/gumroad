@@ -337,10 +337,10 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
     end
 
-    it "marks the user compliant and creates an audit comment attributed to GUMROAD_ADMIN_ID" do
+    it "marks the user compliant and creates separate audit and note comments attributed to GUMROAD_ADMIN_ID" do
       expect do
         post :mark_compliant, params: { email: user.email, note: "Cleared after review" }
-      end.to change { user.comments.reload.count }.by(1)
+      end.to change { user.comments.reload.count }.by(2)
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq({
@@ -350,12 +350,30 @@ describe Api::Internal::Admin::UsersController do
       }.as_json)
       expect(user.reload).to be_compliant
 
-      comment = user.comments.last
-      expect(comment).to have_attributes(
+      audit_comment = user.comments.find_by!(comment_type: Comment::COMMENT_TYPE_COMPLIANT)
+      expect(audit_comment).to have_attributes(
         author_id: admin_user.id,
-        comment_type: Comment::COMMENT_TYPE_COMPLIANT,
+        comment_type: Comment::COMMENT_TYPE_COMPLIANT
+      )
+      expect(audit_comment.content).to include("Marked compliant by")
+
+      note = user.comments.find_by!(comment_type: Comment::COMMENT_TYPE_NOTE)
+      expect(note).to have_attributes(
+        author_id: admin_user.id,
+        comment_type: Comment::COMMENT_TYPE_NOTE,
         content: "Cleared after review"
       )
+    end
+
+    it "returns 422 without marking the user compliant when the note is invalid" do
+      expect do
+        post :mark_compliant, params: { email: user.email, note: "x" * 10_001 }
+      end.not_to change { user.comments.reload.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to include("Content is too long")
+      expect(user.reload).to be_suspended_for_fraud
     end
 
     it "keeps the existing sibling-account compliant side effect" do
@@ -445,6 +463,17 @@ describe Api::Internal::Admin::UsersController do
         comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
         content: "Chargeback risk confirmed"
       )
+    end
+
+    it "returns 422 without suspending the user when the suspension note is invalid" do
+      expect do
+        post :suspend_for_fraud, params: { email: user.email, suspension_note: "x" * 10_001 }
+      end.not_to change { user.comments.reload.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to include("Content is too long")
+      expect(user.reload).to be_compliant
     end
 
     it "returns success without creating another comment when the user is already suspended" do

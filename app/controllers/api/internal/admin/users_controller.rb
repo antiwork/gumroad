@@ -120,7 +120,11 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       return render json: { success: true, status: "already_compliant", message: "User is already compliant" }
     end
 
-    user.mark_compliant!(author_id: GUMROAD_ADMIN_ID, content: params[:note].presence)
+    note = build_admin_note(user, params[:note]) if params[:note].present?
+    return render_invalid_comment(note) if note&.invalid?
+
+    user.mark_compliant!(author_id: GUMROAD_ADMIN_ID)
+    note&.save!
     render json: { success: true, status: "marked_compliant", message: "User marked compliant" }
   rescue StateMachines::InvalidTransition => e
     render json: { success: false, message: e.message }, status: :unprocessable_entity
@@ -136,8 +140,11 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       return render json: { success: true, status: "already_suspended", message: "User is already suspended" }
     end
 
+    suspension_note = build_suspension_note(user) if params[:suspension_note].present?
+    return render_invalid_comment(suspension_note) if suspension_note&.invalid?
+
     user.suspend_for_fraud!(author_id: GUMROAD_ADMIN_ID)
-    create_suspension_note(user) if params[:suspension_note].present?
+    suspension_note&.save!
     render json: { success: true, status: "suspended_for_fraud", message: "User suspended for fraud" }
   rescue StateMachines::InvalidTransition => e
     render json: { success: false, message: e.message }, status: :unprocessable_entity
@@ -172,11 +179,23 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       }
     end
 
-    def create_suspension_note(user)
-      user.comments.create!(
+    def build_admin_note(user, content)
+      user.comments.new(
+        author_id: GUMROAD_ADMIN_ID,
+        comment_type: Comment::COMMENT_TYPE_NOTE,
+        content:
+      )
+    end
+
+    def build_suspension_note(user)
+      user.comments.new(
         author_id: GUMROAD_ADMIN_ID,
         comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
         content: params[:suspension_note]
       )
+    end
+
+    def render_invalid_comment(comment)
+      render json: { success: false, message: comment.errors.full_messages.to_sentence }, status: :unprocessable_entity
     end
 end
