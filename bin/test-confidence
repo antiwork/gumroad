@@ -179,6 +179,13 @@ echo "  ⚡ Risk: $RISK — $REASON"
 
 MILESTONES=$(jq '.milestones | length' "$PLAN_FILE")
 
+# ── Helpers ──
+
+pluralize() {
+  local n=$1 word=$2
+  if [[ $n -eq 1 ]]; then echo "$n $word"; else echo "$n ${word}s"; fi
+}
+
 # ── Header ──
 
 echo ""
@@ -191,8 +198,12 @@ for (( m=0; m<MILESTONES; m++ )); do
   if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
     echo "   ${CONF}%  ←  remaining tests"
   else
-    N=$(echo "$TESTS_JSON" | grep -c "spec/" || true)
-    echo "   ${CONF}%  ←  $N tests"
+    NAMES=$(echo "$TESTS_JSON" | grep "spec/")
+    N=$(echo "$NAMES" | wc -l | tr -d ' ')
+    echo "   ${CONF}%  ←  $(pluralize $N test)"
+    echo "$NAMES" | while IFS= read -r name; do
+      echo "          $(basename "$name")"
+    done
   fi
 done
 echo "  ═══════════════════════════════════════════════════"
@@ -241,7 +252,7 @@ for (( m=0; m<MILESTONES; m++ )); do
 
   # Skip milestones past 99 unless --full
   if [[ "$RUN_FULL" != true && "$CURRENT_CONFIDENCE" -ge 99 ]]; then
-    echo "  ${CONF}%  ←  $MILESTONE_COUNT tests ⬜ skipped"
+    echo "  ${CONF}%  ←  $(pluralize $MILESTONE_COUNT test) ⬜ skipped"
     continue
   fi
 
@@ -287,11 +298,11 @@ for (( m=0; m<MILESTONES; m++ )); do
     bar=$(draw_bar "$MILESTONE_COUNT" "$MILESTONE_COUNT" "green")
     echo "  $bar"
     echo ""
-    echo "  ✅ ${CURRENT_CONFIDENCE}% confidence — $PASSED tests passed in ${elapsed}s"
+    echo "  ✅ ${CURRENT_CONFIDENCE}% confidence — $(pluralize $PASSED test) passed in ${elapsed}s"
     echo "     Safe to commit."
     echo ""
   else
-    echo "  ✅ ${CURRENT_CONFIDENCE}% — $MILESTONE_PASSED tests — ${elapsed}s"
+    echo "  ✅ ${CURRENT_CONFIDENCE}% — $(pluralize $MILESTONE_PASSED test) — ${elapsed}s"
   fi
 done
 
@@ -302,18 +313,18 @@ elapsed=$(( $(date +%s) - START ))
 if [[ "$CURRENT_CONFIDENCE" -ge 100 ]]; then
   echo ""
   echo "  ═══════════════════════════════════════════════════"
-  echo "    ✅ 100% confidence — $PASSED tests in ${elapsed}s"
+  echo "    ✅ 100% confidence — $(pluralize $PASSED test) in ${elapsed}s"
   echo "  ═══════════════════════════════════════════════════"
   echo ""
 elif [[ "$CURRENT_CONFIDENCE" -lt 99 ]]; then
   echo ""
-  echo "  ⚠️  Only reached ${CURRENT_CONFIDENCE}% — $PASSED tests in ${elapsed}s"
+  echo "  ⚠️  Only reached ${CURRENT_CONFIDENCE}% — $(pluralize $PASSED test) in ${elapsed}s"
   echo ""
 fi
 
 if [[ "$RUN_FULL" != true && "$CURRENT_CONFIDENCE" -ge 99 && "$CURRENT_CONFIDENCE" -lt 100 ]]; then
   remaining=$(( TOTAL_SPECS - PASSED ))
-  echo "  $remaining more tests for 100%. Run with --full to continue."
+  echo "  $(pluralize $remaining test) more for 100%. Run with --full to continue."
   echo ""
 fi
 
