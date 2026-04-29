@@ -113,10 +113,47 @@ done <<< "$CHANGED"
 
 CRITICAL_COUNT=$(wc -l < "$CRITICAL" | tr -d ' ')
 
-# Remaining: everything else (for --full or continuing past 99%)
-find spec -name "*_spec.rb" -type f 2>/dev/null | sort -R | while IFS= read -r spec; do
-  add_remaining "$spec"
-done
+# Remaining: everything else, ordered by info gain per second.
+# Ranking: specs closer to changed code first, weighted by file size (smaller = faster).
+#   Tier A: specs in parent directories of changed files (broader integration tests)
+#   Tier B: request/feature specs (end-to-end coverage)
+#   Tier C: everything else, smallest files first (fastest gain per second)
+
+REMAINING_A=$(mktemp)
+REMAINING_B=$(mktemp)
+REMAINING_C=$(mktemp)
+
+# Tier A: parent/sibling directory specs of changed files
+while IFS= read -r file; do
+  [[ -z "$file" ]] && continue
+  parent=$(echo "$file" | sed 's|^app/|spec/|; s|/[^/]*/[^/]*$||')
+  [[ -d "$parent" ]] || continue
+  find "$parent" -name "*_spec.rb" -type f 2>/dev/null | while IFS= read -r spec; do
+    grep -qxF "$spec" "$SEEN" 2>/dev/null && continue
+    echo "$spec"
+  done
+done <<< "$CHANGED" | sort -u >> "$REMAINING_A"
+
+# Tier B: request and feature specs (broad integration)
+find spec/requests spec/features -name "*_spec.rb" -type f 2>/dev/null | while IFS= read -r spec; do
+  grep -qxF "$spec" "$SEEN" 2>/dev/null && continue
+  grep -qxF "$spec" "$REMAINING_A" 2>/dev/null && continue
+  echo "$spec"
+done | sort >> "$REMAINING_B"
+
+# Tier C: everything else, smallest first (fastest info gain per second)
+find spec -name "*_spec.rb" -type f 2>/dev/null | xargs wc -l 2>/dev/null | grep -v total | sort -n | awk '{print $2}' | while IFS= read -r spec; do
+  grep -qxF "$spec" "$SEEN" 2>/dev/null && continue
+  grep -qxF "$spec" "$REMAINING_A" 2>/dev/null && continue
+  grep -qxF "$spec" "$REMAINING_B" 2>/dev/null && continue
+  echo "$spec"
+done >> "$REMAINING_C"
+
+# Combine tiers into remaining queue
+while IFS= read -r spec; do add_remaining "$spec"; done < "$REMAINING_A"
+while IFS= read -r spec; do add_remaining "$spec"; done < "$REMAINING_B"
+while IFS= read -r spec; do add_remaining "$spec"; done < "$REMAINING_C"
+rm -f "$REMAINING_A" "$REMAINING_B" "$REMAINING_C"
 
 REMAINING_COUNT=$(wc -l < "$REMAINING" | tr -d ' ')
 TOTAL_SPECS=$(( CRITICAL_COUNT + REMAINING_COUNT ))
@@ -342,28 +379,44 @@ if [[ "$RUN_FULL" != true ]]; then
   exit 0
 fi
 
-echo "  ── 100% confidence (full suite) ──"
+echo "  ── 99% → 100% (remaining suite, Pareto-ordered) ──"
 echo ""
 
 mapfile -t REMAINING_TESTS < "$REMAINING"
-FULL_PASSED=$PASSED
-FULL_START=$(date +%s)
+REM_PASSED=0
+
+# Pareto confidence: 99% + (1% * (1 - (1 - passed/remaining)^2.5))
+# Early tests in the ranked remaining set contribute more info gain.
+calc_full_confidence() {
+  local rem_passed=$1 rem_total=$2
+  python3 -c "
+passed, total = $rem_passed, $rem_total
+if total == 0:
+    print('100.0')
+else:
+    frac = passed / total
+    gain = 1.0 - (1.0 - frac) ** 2.5
+    conf = 99.0 + gain * 1.0
+    print(f'{conf:.1f}')
+" 2>/dev/null
+}
 
 for spec in "${REMAINING_TESTS[@]}"; do
   [[ -z "$spec" ]] && continue
 
   if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
-    FULL_PASSED=$((FULL_PASSED + 1))
+    REM_PASSED=$((REM_PASSED + 1))
+    FULL_PASSED=$((PASSED + REM_PASSED))
     elapsed=$(( $(date +%s) - START ))
-    pct=$(( FULL_PASSED * 100 / TOTAL_SPECS ))
+    conf=$(calc_full_confidence "$REM_PASSED" "$REMAINING_COUNT")
     bar=$(draw_bar "$FULL_PASSED" "$TOTAL_SPECS" "green")
-    printf "\r  %s  %d/%d  %d%%  %ds" "$bar" "$FULL_PASSED" "$TOTAL_SPECS" "$pct" "$elapsed"
+    printf "\r  %s  %s%%  %d/%d  %ds" "$bar" "$conf" "$FULL_PASSED" "$TOTAL_SPECS" "$elapsed"
   else
     FAILED=$((FAILED + 1))
     echo ""
     echo ""
     echo "  ═══════════════════════════════════════════════════"
-    echo "    ❌ FAILED — $spec"
+    echo "    ❌ FAILED at ${conf}% — $spec"
     echo "  ═══════════════════════════════════════════════════"
     echo ""
     echo "$output" | tail -20 | sed 's/^/    /'
@@ -377,8 +430,8 @@ FULL_ELAPSED=$(( $(date +%s) - START ))
 echo ""
 echo ""
 echo "  ═══════════════════════════════════════════════════"
-echo "    ✅ 100% confidence — $FULL_PASSED tests in ${FULL_ELAPSED}s"
+echo "    ✅ 100% confidence — $((PASSED + REM_PASSED)) tests in ${FULL_ELAPSED}s"
 echo "  ═══════════════════════════════════════════════════"
 echo ""
 
-save_history "$FULL_PASSED" "$FULL_ELAPSED" "passed_100"
+save_history "$((PASSED + REM_PASSED))" "$FULL_ELAPSED" "passed_100"
