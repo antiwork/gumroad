@@ -2,48 +2,44 @@
 
 class Admin::Users::WatchlistsController < Admin::Users::BaseController
   before_action :fetch_user
+  before_action :validate_threshold, only: [:create, :update]
+  before_action :fetch_active_watched_user, only: [:update, :destroy]
+
+  rescue_from ActiveRecord::RecordInvalid do |e|
+    render_error(e.record.errors.full_messages.first)
+  end
 
   def create
-    threshold = parse_revenue_threshold_cents
-    return render json: { success: false, message: "Revenue threshold must be greater than zero." }, status: :unprocessable_content if threshold.nil?
-
-    watched_user = @user.watched_users.create!(
-      revenue_threshold_cents: threshold,
-      notes: params.dig(:watched_user, :notes).presence,
+    @user.watched_users.create!(
+      revenue_threshold_cents: @threshold_cents,
+      notes: notes_param,
       created_by: current_user
-    )
-    watched_user.sync!
+    ).sync!
     render json: { success: true }
-  rescue ActiveRecord::RecordInvalid => e
-    render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_content
   end
 
   def update
-    watched_user = @user.active_watched_user
-    return render json: { success: false, message: "User is not currently being watched." }, status: :unprocessable_content if watched_user.nil?
-
-    threshold = parse_revenue_threshold_cents
-    return render json: { success: false, message: "Revenue threshold must be greater than zero." }, status: :unprocessable_content if threshold.nil?
-
-    watched_user.update!(
-      revenue_threshold_cents: threshold,
-      notes: params.dig(:watched_user, :notes).presence
-    )
+    @watched_user.update!(revenue_threshold_cents: @threshold_cents, notes: notes_param)
     render json: { success: true }
-  rescue ActiveRecord::RecordInvalid => e
-    render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_content
   end
 
   def destroy
-    watched_user = @user.active_watched_user
-    return render json: { success: false, message: "User is not currently being watched." }, status: :unprocessable_content if watched_user.nil?
-
-    watched_user.mark_deleted!
+    @watched_user.mark_deleted!
     render json: { success: true }
   end
 
   private
-    def parse_revenue_threshold_cents
+    def fetch_active_watched_user
+      @watched_user = @user.active_watched_user
+      render_error("User is not currently being watched.") if @watched_user.nil?
+    end
+
+    def validate_threshold
+      @threshold_cents = parsed_threshold_cents
+      render_error("Revenue threshold must be greater than zero.") if @threshold_cents.nil?
+    end
+
+    def parsed_threshold_cents
       raw = params.dig(:watched_user, :revenue_threshold)
       return nil if raw.blank?
 
@@ -51,5 +47,13 @@ class Admin::Users::WatchlistsController < Admin::Users::BaseController
       cents.positive? ? cents : nil
     rescue ArgumentError
       nil
+    end
+
+    def notes_param
+      params.dig(:watched_user, :notes).presence
+    end
+
+    def render_error(message)
+      render json: { success: false, message: }, status: :unprocessable_content
     end
 end
