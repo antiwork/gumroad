@@ -199,7 +199,7 @@ describe Api::Internal::Admin::PurchasesController do
         "formatted_total_price" => purchase.formatted_total_price,
         "price_cents" => 0,
         "currency_type" => purchase.displayed_price_currency_type.to_s,
-        "amount_refundable_cents" => purchase.amount_refundable_cents_in_currency,
+        "amount_refundable_cents_in_currency" => purchase.amount_refundable_cents_in_currency,
         "purchase_state" => purchase.purchase_state,
         "refund_status" => nil,
         "receipt_url" => receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
