@@ -288,8 +288,6 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
     it "links to the suspend users page with the user ID pre-filled" do
       visit admin_user_path(user.external_id)
 
-      click_on "Permissions & Risk"
-
       expect(page).to have_link("Suspend for fraud")
       suspend_link = find_link("Suspend for fraud")
       expect(suspend_link[:href]).to include(admin_suspend_users_path)
@@ -301,8 +299,6 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
 
       visit admin_user_path(user.external_id)
 
-      click_on "Permissions & Risk"
-
       expect(page).not_to have_link("Suspend for fraud")
     end
 
@@ -311,8 +307,6 @@ describe "Admin::UsersController Scenario", type: :system, js: true do
       user.suspend_for_fraud(author_id: admin.id)
 
       visit admin_user_path(user.external_id)
-
-      click_on "Permissions & Risk"
 
       expect(page).not_to have_link("Suspend for fraud")
     end
