@@ -318,7 +318,7 @@ class Order::ChargeService
     Purchase::MarkSuccessfulService.new(purchase).perform
   rescue StandardError => e
     Rails.logger.error("Error finalizing charged purchase (#{purchase.id}):: #{e.class} => #{e.message} => #{e.backtrace}")
-    purchase.errors.add(:base, "Sorry, something went wrong. Please try again.")
+    purchase.errors.add(:base, "Sorry, something went wrong. Please try again.") unless purchase.successful?
   end
 
   def handle_recommended_purchase(purchase)
