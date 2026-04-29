@@ -141,7 +141,6 @@ const WatchedUser = ({ user }: { user: User }) => {
                 done="Removed"
                 success_message="Removed from watchlist."
                 confirm_message={`Remove ${user.email} from the watchlist?`}
-                outline
                 color="danger"
               />
             </div>
