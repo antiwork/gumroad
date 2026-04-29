@@ -311,44 +311,106 @@ if [[ "$RUN_FULL" != true ]]; then
   exit 0
 fi
 
-echo "  ── 99% → 100% (remaining suite, Pareto-ordered) ──"
+echo "  ── 99% → 100% (remaining suite, AI-scored) ──"
 echo ""
 
 mapfile -t REMAINING_TESTS < "$REMAINING"
 REM_PASSED=0
+PASSED_REMAINING_LIST=$(mktemp)
+LAST_CONFIDENCE="99.0"
 
-# Pareto confidence: 99% + (1% * (1 - (1 - passed/remaining)^2.5))
-# Early tests in the ranked remaining set contribute more info gain.
-calc_full_confidence() {
-  local rem_passed=$1 rem_total=$2
-  python3 -c "
-passed, total = $rem_passed, $rem_total
-if total == 0:
-    print('100.0')
-else:
-    frac = passed / total
-    gain = 1.0 - (1.0 - frac) ** 2.5
-    conf = 99.0 + gain * 1.0
-    print(f'{conf:.1f}')
-" 2>/dev/null
+# Get the diff for AI context
+if [[ -n "$LOCAL_CHANGED" ]]; then
+  FULL_DIFF=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null | head -300)
+elif [[ -n "$MERGE_BASE" ]]; then
+  FULL_DIFF=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null | head -300)
+else
+  FULL_DIFF=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -300)
+fi
+
+# Ask AI for confidence after every batch of tests
+ai_confidence() {
+  local passed_list=$1 remaining_count=$2
+  [[ -z "${ANTHROPIC_API_KEY:-}" ]] && { echo "$LAST_CONFIDENCE"; return; }
+
+  local passed_specs
+  passed_specs=$(cat "$passed_list" | tail -20)
+  local critical_specs
+  critical_specs=$(cat "$CRITICAL" | head -10)
+
+  local prompt="You are evaluating regression risk for a code change.
+
+Diff summary:
+${FULL_DIFF}
+
+Critical tests (all passed):
+${critical_specs}
+...(${CRITICAL_COUNT} total, all green)
+
+Additional tests passed since:
+${passed_specs}
+
+Remaining untested: ${remaining_count} spec files
+
+Given this diff and what has passed, what is your confidence (99.0-100.0) that there is NO regression? Consider:
+- How risky is this diff?
+- Do the passed tests cover the important code paths?
+- What could the remaining untested specs catch that hasn't been tested?
+
+Return ONLY a number between 99.0 and 100.0, nothing else."
+
+  local payload
+  payload=$(jq -n \
+    --arg model "claude-sonnet-4-6" \
+    --arg prompt "$prompt" \
+    '{model: $model, max_tokens: 16, messages: [{role: "user", content: $prompt}]}')
+
+  local response
+  response=$(curl -s --max-time 10 \
+    -H "Content-Type: application/json" \
+    -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+    -H "anthropic-version: 2023-06-01" \
+    -d "$payload" \
+    "https://api.anthropic.com/v1/messages" 2>/dev/null) || { echo "$LAST_CONFIDENCE"; return; }
+
+  local text
+  text=$(echo "$response" | jq -r '.content[0].text // empty' 2>/dev/null || true)
+  # Extract number
+  local num
+  num=$(echo "$text" | grep -oE '[0-9]{2,3}\.[0-9]' | head -1)
+  if [[ -n "$num" ]]; then
+    echo "$num"
+  else
+    echo "$LAST_CONFIDENCE"
+  fi
 }
+
+# How often to ask AI (every N tests)
+AI_BATCH_SIZE=20
 
 for spec in "${REMAINING_TESTS[@]}"; do
   [[ -z "$spec" ]] && continue
 
   if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
     REM_PASSED=$((REM_PASSED + 1))
+    echo "$spec" >> "$PASSED_REMAINING_LIST"
     FULL_PASSED=$((PASSED + REM_PASSED))
     elapsed=$(( $(date +%s) - START ))
-    conf=$(calc_full_confidence "$REM_PASSED" "$REMAINING_COUNT")
+    remaining_left=$(( REMAINING_COUNT - REM_PASSED ))
+
+    # Ask AI for updated confidence every AI_BATCH_SIZE tests
+    if [[ $(( REM_PASSED % AI_BATCH_SIZE )) -eq 0 ]] || [[ $remaining_left -eq 0 ]]; then
+      LAST_CONFIDENCE=$(ai_confidence "$PASSED_REMAINING_LIST" "$remaining_left")
+    fi
+
     bar=$(draw_bar "$FULL_PASSED" "$TOTAL_SPECS" "green")
-    printf "\r  %s  %s%%  %d/%d  %ds" "$bar" "$conf" "$FULL_PASSED" "$TOTAL_SPECS" "$elapsed"
+    printf "\r  %s  %s%%  %d/%d  %ds" "$bar" "$LAST_CONFIDENCE" "$FULL_PASSED" "$TOTAL_SPECS" "$elapsed"
   else
     FAILED=$((FAILED + 1))
     echo ""
     echo ""
     echo "  ═══════════════════════════════════════════════════"
-    echo "    ❌ FAILED at ${conf}% — $spec"
+    echo "    ❌ FAILED at ${LAST_CONFIDENCE}% — $spec"
     echo "  ═══════════════════════════════════════════════════"
     echo ""
     echo "$output" | tail -20 | sed 's/^/    /'
@@ -357,6 +419,7 @@ for spec in "${REMAINING_TESTS[@]}"; do
   fi
 done
 
+rm -f "$PASSED_REMAINING_LIST"
 FULL_ELAPSED=$(( $(date +%s) - START ))
 
 echo ""
