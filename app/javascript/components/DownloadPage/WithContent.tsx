@@ -320,7 +320,10 @@ export const WithContent = ({
                   </Button>
                 </PopoverTrigger>
               </PopoverAnchor>
-              <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+              <PopoverContent
+                sideOffset={4}
+                className="max-h-[var(--radix-popover-content-available-height,80vh)] overflow-auto border-0 p-0 shadow-none"
+              >
                 <Menu>
                   {pages.map((page, index) => (
                     <PopoverClose key={page.page_id} asChild>
