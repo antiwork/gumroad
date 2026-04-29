@@ -350,6 +350,15 @@ describe Bundles::ProductController, inertia: true do
       end
     end
 
+    context "when price_cents exceeds integer limit" do
+      it "redirects with an error message" do
+        put :update, params: { bundle_id: bundle.external_id, price_cents: 3_000_000_000 }
+
+        expect(response).to redirect_to(edit_bundle_product_path(bundle.external_id))
+        expect(flash[:alert]).to eq("The value entered is too large. Please enter a smaller number.")
+      end
+    end
+
     context "when the bundle doesn't exist" do
       it "returns 404" do
         expect { put :update, params: { bundle_id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
