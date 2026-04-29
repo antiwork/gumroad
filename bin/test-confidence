@@ -178,26 +178,6 @@ echo "  ⚡ Risk: $RISK — $REASON"
 # ── Parse plan and execute ──
 
 MILESTONES=$(jq '.milestones | length' "$PLAN_FILE")
-TOTAL_PLANNED=0
-
-# Count total tests across milestones
-for (( m=0; m<MILESTONES; m++ )); do
-  TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
-  if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
-    PLANNED_SEEN=$(mktemp)
-    for (( p=0; p<m; p++ )); do
-      jq -r ".milestones[$p].tests[]" "$PLAN_FILE" 2>/dev/null >> "$PLANNED_SEEN"
-    done
-    REMAINING_N=$(echo "$ALL_SPECS" | while IFS= read -r s; do
-      grep -qxF "$s" "$PLANNED_SEEN" 2>/dev/null || echo "$s"
-    done | wc -l | tr -d ' ')
-    TOTAL_PLANNED=$(( TOTAL_PLANNED + REMAINING_N ))
-    rm -f "$PLANNED_SEEN"
-  else
-    N=$(echo "$TESTS_JSON" | grep -c "spec/" || true)
-    TOTAL_PLANNED=$(( TOTAL_PLANNED + N ))
-  fi
-done
 
 # ── Header ──
 
@@ -256,8 +236,8 @@ for (( m=0; m<MILESTONES; m++ )); do
     done)
   fi
 
-  MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c "spec/" 2>/dev/null || echo 0)
-  [[ "$MILESTONE_COUNT" -eq 0 ]] && continue
+  MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c "spec/" 2>/dev/null || true)
+  [[ -z "$MILESTONE_COUNT" || "$MILESTONE_COUNT" -eq 0 ]] && continue
 
   # Skip milestones past 99 unless --full
   if [[ "$RUN_FULL" != true && "$CURRENT_CONFIDENCE" -ge 99 ]]; then
