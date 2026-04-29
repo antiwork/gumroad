@@ -60,13 +60,16 @@ fi
 
 # ── Get the diff ──
 
+# Build diff text: include both local changes AND branch commits when both exist
+DIFF_PARTS=""
 if [[ -n "$LOCAL_CHANGED" ]]; then
-  DIFF_TEXT=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null | head -500)
-elif [[ -n "$MERGE_BASE" ]]; then
-  DIFF_TEXT=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null | head -500)
-else
-  DIFF_TEXT=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -500)
+  DIFF_PARTS+=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null)
+  DIFF_PARTS+=$'\n'
 fi
+if [[ -n "$MERGE_BASE" && -n "$BRANCH_CHANGED" ]]; then
+  DIFF_PARTS+=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null)
+fi
+DIFF_TEXT=$(echo "$DIFF_PARTS" | head -500)
 
 # ── Get all spec files ──
 
@@ -78,7 +81,7 @@ TOTAL_SPECS=$(echo "$ALL_SPECS" | wc -l | tr -d ' ')
 PLAN_FILE=$(mktemp)
 
 # Group specs by directory for compact listing
-SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=""; for(i=1;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort | head -200)
+SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=$1; for(i=2;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort)
 
 PROMPT="You are a senior Rails engineer planning test execution for a code change.
 
@@ -248,7 +251,10 @@ for (( m=0; m<MILESTONES; m++ )); do
   fi
 
   MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c "spec/" 2>/dev/null || true)
-  [[ -z "$MILESTONE_COUNT" || "$MILESTONE_COUNT" -eq 0 ]] && continue
+  if [[ -z "$MILESTONE_COUNT" || "$MILESTONE_COUNT" -eq 0 ]]; then
+    CURRENT_CONFIDENCE=$CONF
+    continue
+  fi
 
   # Skip milestones past 99 unless --full
   if [[ "$RUN_FULL" != true && "$CURRENT_CONFIDENCE" -ge 99 ]]; then
