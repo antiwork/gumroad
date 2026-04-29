@@ -129,6 +129,7 @@ class CustomersController < Sellers::BaseController
 
       if active_customers_only
         search_options[:exclude_deactivated_subscriptions] = true
+        search_options[:exclude_cancelled_or_pending_cancellation_subscriptions] = true
         search_options[:exclude_refunded_except_subscriptions] = true
         search_options[:exclude_unreversed_chargedback] = true
       end

@@ -142,6 +142,37 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
     end
   end
 
+  describe "GET paged with active_customers_only filter" do
+    let(:product) { create(:product, user: seller, name: "Product 1", price_cents: 100) }
+    let(:customer_ids) { -> (res) { res.parsed_body.deep_symbolize_keys[:customers].map { _1[:id] } } }
+
+    it "excludes customers with deactivated or cancelled subscriptions" do
+      active_purchase = create(:membership_purchase, seller:, link: product)
+      deactivated_purchase = create(:membership_purchase, seller:, link: product)
+      deactivated_purchase.subscription.deactivate!
+      cancelled_purchase = create(:membership_purchase, seller:, link: product)
+      cancelled_purchase.subscription.update!(cancelled_at: 2.days.ago)
+      pending_cancellation_purchase = create(:membership_purchase, seller:, link: product)
+      pending_cancellation_purchase.subscription.update!(cancelled_at: 2.days.from_now)
+      index_model_records(Purchase)
+
+      get :paged, params: { page: 1, active_customers_only: true }
+      expect(response).to be_successful
+      expect(customer_ids[response]).to match_array([active_purchase.external_id])
+    end
+
+    it "returns all customers when filter is not active" do
+      active_purchase = create(:membership_purchase, seller:, link: product)
+      cancelled_purchase = create(:membership_purchase, seller:, link: product)
+      cancelled_purchase.subscription.update!(cancelled_at: 2.days.ago)
+      index_model_records(Purchase)
+
+      get :paged, params: { page: 1, active_customers_only: false }
+      expect(response).to be_successful
+      expect(customer_ids[response]).to match_array([active_purchase.external_id, cancelled_purchase.external_id])
+    end
+  end
+
   describe "GET paged when Elasticsearch times out" do
     it "returns 504" do
       allow(PurchaseSearchService).to receive(:search).and_raise(Faraday::TimeoutError)
