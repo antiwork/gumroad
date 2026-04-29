@@ -18,6 +18,10 @@ const DEFAULT_SCHEDULED_PAYOUT_DELAY_DAYS = "21";
 
 const NOTES_SUGGESTIONS = [
   "Adult (18+) content",
+  "Stripe reported high risk",
+  "Intellectual property infringement",
+  "General non-compliance",
+  "Credit repair services",
   "Pirated/unauthorized software or content",
   "Counterfeit or copied products from another creator",
   "DMCA/copyright infringement",
@@ -28,11 +32,6 @@ const NOTES_SUGGESTIONS = [
   "Spam or SEO manipulation",
   "Phishing or scam products",
   "Physical goods only (not permitted)",
-  "Consulting/services (not permitted)",
-  "Pharmaceutical products",
-  "Financial instruments or advice",
-  "Sexually explicit or fetish-related content",
-  "Stripe reported high risk",
   "Negative balance over 3 months",
   "No products / empty storefront with balance",
 ];
