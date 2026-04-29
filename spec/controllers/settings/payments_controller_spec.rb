@@ -1106,6 +1106,26 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end
       end
 
+      describe "account_number_confirmation is nil" do
+        let(:params) do
+          {
+            bank_account: {
+              type: AchAccount.name,
+              account_number: "000123456789",
+              routing_number: "110000000",
+              account_holder_full_name: "gumbot"
+            }
+          }
+        end
+
+        it "returns a validation error instead of raising NoMethodError" do
+          put(:update, params:)
+          expect(response).to redirect_to(settings_payments_path)
+          expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to include("The account numbers do not match.")
+        end
+      end
+
       describe "canadian bank account" do
         let(:user) { create(:user) }
 
