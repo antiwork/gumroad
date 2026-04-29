@@ -96,7 +96,6 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
               </Label>
             ))}
           </Fieldset>
-          <h4>You may have to forfeit your balance if you want to change your country in the future.</h4>
         </div>
       </Modal>
     </div>

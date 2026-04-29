@@ -6251,7 +6251,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         visit settings_payments_path
         within_modal do
           expect(page).to have_content "Where are you located?"
-          expect(page).to have_content "You may have to forfeit your balance if you want to change your country in the future."
           expect(page).to have_button "Save", disabled: true
           expect(find(:select, "Country")).to have_selector(:option, "Somalia (not supported)", disabled: true)
           select "United States", from: "Country"
