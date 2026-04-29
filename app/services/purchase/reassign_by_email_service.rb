@@ -41,12 +41,12 @@ class Purchase::ReassignByEmailService
 
       purchase.purchaser_id = target_user&.id
 
-      if purchase.is_original_subscription_purchase? && purchase.subscription.present?
-        purchase.subscription.user = target_user
-        purchase.subscription.save
+      if purchase.save
+        reassigned_purchase_ids << purchase.id
+        if purchase.is_original_subscription_purchase? && purchase.subscription.present?
+          purchase.subscription.update(user: target_user)
+        end
       end
-
-      reassigned_purchase_ids << purchase.id if purchase.save
     end
 
     if reassigned_purchase_ids.empty?

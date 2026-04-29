@@ -90,6 +90,18 @@ describe Purchase::ReassignByEmailService do
         expect(subscription.reload.user).to eq(target_user)
       end
 
+      it "does not modify subscription.user when the original-subscription purchase save fails" do
+        subscription = create(:subscription, user: buyer)
+        sub_purchase = create(:purchase, email: from_email, purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:)
+
+        allow_any_instance_of(Purchase).to receive(:save).and_return(false)
+
+        described_class.new(from_email:, to_email:).perform
+
+        expect(subscription.reload.user).to eq(buyer)
+        expect(sub_purchase.reload.email).to eq(from_email)
+      end
+
       it "transfers full ownership of an original_purchase that is not in the matched set" do
         subscription = create(:subscription, user: buyer)
         original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:)
