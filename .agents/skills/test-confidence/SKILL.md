@@ -1,7 +1,7 @@
 ---
 name: test-confidence
 description: AI-driven test execution. Opus decides what to run and how confident to be, based on your diff.
-argument-hint: [--full to run to 100%] [--strict to halt on pre-existing failures]
+argument-hint: "--full to run to 100% | --strict to halt on pre-existing failures"
 allowed-tools: Bash(git *), Bash(bundle exec rspec *), Bash(cat *), Bash(find *), Bash(wc *), Bash(head *), Bash(tail *), Bash(grep *), Bash(bin/test-confidence *)
 ---
 
