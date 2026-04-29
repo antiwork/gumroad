@@ -6257,7 +6257,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           select "United States", from: "Country"
           check "I have a valid, government-issued photo ID"
           check "I have proof of residence within this country"
-          check "If I am signing up as a business, it is registered in the country above"
+          check "I am signing up as an individual, or my business is registered in the country above"
           click_on "Save"
           wait_for_ajax
         end
