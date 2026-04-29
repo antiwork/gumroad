@@ -196,7 +196,7 @@ if [[ "$AI_PLANNED" != true ]]; then
 
   while IFS= read -r file; do
     [[ -z "$file" || "$file" != *.rb ]] && continue
-    classname=$(basename "$file" .rb | sed -E 's/(^|_)([a-z])/\U\2/g')
+    classname=$(basename "$file" .rb | ruby -e 'puts STDIN.read.strip.split("_").map(&:capitalize).join' 2>/dev/null)
     [[ -z "$classname" ]] && continue
     grep -rl --include="*.rb" "$classname" spec/ 2>/dev/null | sort | while IFS= read -r spec; do
       add_once "$spec" "$T99"
