@@ -1,0 +1,382 @@
+<style>
+  .gr-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 28px;
+    background: transparent;
+    outline: none;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+  .gr-slider::-webkit-slider-runnable-track {
+    height: 12px;
+    background: linear-gradient(to right, #f1f333 0%, #f1f333 var(--fill, 0%), #fff var(--fill, 0%), #fff 100%);
+    border: 1px solid #000;
+    border-radius: 4px;
+  }
+  .gr-slider::-moz-range-track {
+    height: 12px;
+    background: linear-gradient(to right, #f1f333 0%, #f1f333 var(--fill, 0%), #fff var(--fill, 0%), #fff 100%);
+    border: 1px solid #000;
+    border-radius: 4px;
+  }
+  .gr-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    background: var(--color-purple);
+    border: 1px solid #000;
+    border-radius: 4px;
+    margin-top: -9px;
+    box-shadow: 2px 2px 0 #000;
+    transition: box-shadow 0.08s, transform 0.08s;
+  }
+  .gr-slider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    background: var(--color-purple);
+    border: 1px solid #000;
+    border-radius: 4px;
+    box-shadow: 2px 2px 0 #000;
+    transition: box-shadow 0.08s, transform 0.08s;
+  }
+  .gr-slider:active::-webkit-slider-thumb {
+    box-shadow: none;
+    transform: translate(2px, 2px);
+  }
+  .gr-slider:active::-moz-range-thumb {
+    box-shadow: none;
+    transform: translate(2px, 2px);
+  }
+  .saas-hero-token--cursor {
+    left: clamp(4rem, 7vw, 8.5rem);
+    top: clamp(3.5rem, 6vw, 6rem);
+    width: clamp(4.5rem, 6vw, 6.5rem);
+  }
+  .saas-hero-token--license {
+    left: clamp(3rem, 5vw, 7rem);
+    top: clamp(17rem, 27vw, 21.5rem);
+    width: clamp(5rem, 7vw, 7.75rem);
+  }
+  .saas-hero-token--checkout {
+    right: clamp(2.5rem, 5vw, 4.5rem);
+    top: clamp(2rem, 4vw, 4rem);
+    width: clamp(4.75rem, 6vw, 5.75rem);
+  }
+  .saas-hero-token--stars {
+    right: clamp(4rem, 7vw, 12rem);
+    top: clamp(24rem, 32vw, 27rem);
+    width: clamp(4.25rem, 5.5vw, 5.75rem);
+  }
+  @media (min-width: 1280px) {
+    .saas-hero-token--cursor {
+      width: clamp(6.5rem, 7vw, 7.5rem);
+    }
+    .saas-hero-token--license {
+      top: clamp(17rem, 20vw, 22rem);
+      width: clamp(7.5rem, 8vw, 9rem);
+    }
+    .saas-hero-token--checkout {
+      right: clamp(3rem, 4vw, 6rem);
+      top: clamp(8rem, 10vw, 10.5rem);
+      width: clamp(7.5rem, 8vw, 9.75rem);
+    }
+  }
+</style>
+
+<div class="relative" data-hero-parallax-container data-saas-hero>
+  <%= render "home/shared/header",
+    bg_color: "gray",
+    gap: "gap-10 lg:gap-12",
+    title: "Make software.<br>We'll help you sell.",
+    description: "We handle checkout, license keys, subscriptions, and taxes in every country you sell in." do %>
+    <div class="pointer-events-none absolute inset-0 hidden overflow-hidden md:block" aria-hidden="true">
+      <div class="hero-coin saas-hero-token--cursor absolute" data-parallax-intensity="-0.018" data-scroll-intensity="-0.08">
+        <div class="-rotate-12">
+          <%= image_tag "saas/hero-cursor.png", alt: "", class: "h-auto w-full" %>
+        </div>
+      </div>
+      <div class="hero-coin saas-hero-token--license absolute" data-parallax-intensity="0.02" data-scroll-intensity="-0.10">
+        <div class="-rotate-6">
+          <%= image_tag "saas/hero-license.png", alt: "", class: "h-auto w-full" %>
+        </div>
+      </div>
+      <div class="hero-coin saas-hero-token--checkout absolute" data-parallax-intensity="-0.022" data-scroll-intensity="-0.09">
+        <div class="rotate-6">
+          <%= image_tag "saas/hero-checkout.png", alt: "", class: "h-auto w-full" %>
+        </div>
+      </div>
+      <div class="hero-coin saas-hero-token--stars absolute" data-parallax-intensity="0.026" data-scroll-intensity="-0.08">
+        <div class="rotate-12">
+          <%= image_tag "saas/hero-stars.png", alt: "", class: "h-auto w-full" %>
+        </div>
+      </div>
+    </div>
+    <div class="relative z-10 flex flex-col items-center gap-6">
+      <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
+        <%= render "home/shared/button", text: "Start selling", url: signup_path %>
+        <%= render "home/shared/button", text: "See pricing", url: "#pricing", variant: "dark" %>
+      </div>
+      <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-dark-gray">
+        <span>✓ No monthly fee</span>
+        <span>✓ 10% flat rate to start</span>
+        <span>✓ Only pay when you sell</span>
+      </div>
+    </div>
+  <% end %>
+</div>
+
+<section id="features">
+  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
+    <div class="flex items-center justify-center border-b border-black bg-purple p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+      <%= image_tag "saas/feature-license-api.png", class: "h-auto w-full max-w-md xl:max-w-xl", alt: "Illustration showing software license key verification" %>
+    </div>
+    <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+      <div class="max-w-2xl space-y-4">
+        <h3 class="text-balance text-3xl font-medium text-purple lg:text-4xl xl:text-5xl">Skip the licensing service.</h3>
+        <p class="text-pretty text-lg lg:text-xl xl:text-2xl">Validate keys with our API. Set activation limits. Manage seats. Revoke, transfer, or extend without a third-party licensing service.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
+    <div class="flex items-center justify-center border-b border-black bg-pink p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 xl:p-32">
+      <%= image_tag "saas/feature-subscription-billing.png", class: "h-auto w-full max-w-md xl:max-w-xl", alt: "Illustration showing subscription billing plans" %>
+    </div>
+    <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 border-black lg:w-1/2 lg:border-r xl:p-32">
+      <div class="max-w-2xl space-y-4">
+        <h3 class="text-balance text-3xl font-medium text-pink lg:text-4xl xl:text-5xl">Bill monthly, quarterly, or yearly.</h3>
+        <p class="text-pretty text-lg lg:text-xl xl:text-2xl">Offer free trials and tiered pricing. Customers upgrade or downgrade on their own. We handle failed payments and retry them for you.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
+    <div class="flex items-center justify-center border-b border-black bg-yellow p-8 py-16 sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+      <%= image_tag "saas/feature-product-tiers.png", class: "h-auto w-full max-w-md xl:max-w-xl", alt: "Illustration showing one product page with multiple tiers" %>
+    </div>
+    <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+      <div class="max-w-2xl space-y-4">
+        <h3 class="text-balance text-3xl font-medium text-yellow lg:text-4xl xl:text-5xl">Sell every tier from one page.</h3>
+        <p class="text-pretty text-lg lg:text-xl xl:text-2xl">Offer a free version alongside pro and enterprise plans, all from one product page. One upload, one checkout, one dashboard.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
+    <div class="flex items-center justify-center border-b border-black bg-green p-8 py-16 sm:p-12 md:p-16 lg:order-2 lg:w-1/2 lg:border-b-0 xl:p-32">
+      <%= image_tag "saas/feature-merchant-of-record.png", class: "h-auto w-full max-w-md xl:max-w-xl", alt: "Illustration showing taxes, fraud, and chargebacks handled for software sales" %>
+    </div>
+    <div class="flex items-center justify-center bg-black p-8 py-16 text-white sm:p-12 md:p-16 border-black lg:w-1/2 lg:border-r xl:p-32">
+      <div class="max-w-2xl space-y-4">
+        <h3 class="text-balance text-3xl font-medium text-green lg:text-4xl xl:text-5xl">Hand off the tax, fraud, and chargebacks.</h3>
+        <p class="text-pretty text-lg lg:text-xl xl:text-2xl">We charge buyers, collect VAT and sales tax, file it, and absorb chargebacks and fraud. You focus on building great software.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-gray">
+    <div class="mx-auto max-w-7xl px-8 py-20 lg:px-12 lg:py-24">
+      <h3 class="mb-6 text-balance text-2xl font-medium md:text-3xl">And the rest you expect.</h3>
+      <div class="grid grid-cols-1 overflow-hidden rounded border border-black bg-white shadow-[4px_4px_0_#000] md:grid-cols-2 lg:grid-cols-3">
+        <div class="border-b border-black p-7 md:border-r lg:border-r">
+          <div class="mb-2 text-lg font-bold">License key API</div>
+          <div class="text-sm leading-relaxed text-dark-gray">Verify, activate, deactivate, and manage license keys programmatically.</div>
+        </div>
+        <div class="border-b border-black p-7 lg:border-r">
+          <div class="mb-2 text-lg font-bold">Webhooks</div>
+          <div class="text-sm leading-relaxed text-dark-gray">Get notified in real-time when customers subscribe, cancel, or update their plans.</div>
+        </div>
+        <div class="border-b border-black p-7 md:border-r lg:border-r-0">
+          <div class="mb-2 text-lg font-bold">Subscription analytics</div>
+          <div class="text-sm leading-relaxed text-dark-gray">MRR, churn rate, LTV. All the metrics you need, built into your dashboard.</div>
+        </div>
+        <div class="border-b border-black p-7 lg:border-b-0 lg:border-r">
+          <div class="mb-2 text-lg font-bold">Custom domains</div>
+          <div class="text-sm leading-relaxed text-dark-gray">Sell from your own domain. your-app.com/pricing, not gumroad.com.</div>
+        </div>
+        <div class="border-b border-black p-7 md:border-b-0 md:border-r lg:border-r">
+          <div class="mb-2 text-lg font-bold">Affiliates</div>
+          <div class="text-sm leading-relaxed text-dark-gray">Let your users sell for you. Built-in affiliate tracking and payouts.</div>
+        </div>
+        <div class="p-7">
+          <div class="mb-2 text-lg font-bold">Global payments</div>
+          <div class="text-sm leading-relaxed text-dark-gray">Accept payments in any currency. We handle conversion and local payment methods.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="bg-gray border-b border-black">
+    <div class="mx-auto max-w-7xl px-8 py-20 lg:px-12 lg:py-24">
+      <div class="mx-auto max-w-2xl text-center">
+        <h2 class="text-balance text-4xl font-medium leading-[1.05] sm:text-5xl md:text-6xl">Just a percentage. No monthly bill.</h2>
+        <p class="mt-3 text-pretty text-lg text-dark-gray md:text-xl">We only earn when you earn.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col overflow-hidden border-b border-black lg:flex-row">
+    <div class="flex flex-col items-center justify-center border-b border-black bg-purple p-8 py-16 text-center sm:p-12 md:p-16 lg:w-1/2 lg:border-b-0 lg:border-r xl:p-32">
+      <div class="mb-6 text-xs font-semibold uppercase tracking-widest text-black/60">Starting out</div>
+      <div class="text-7xl font-bold leading-[0.9] tracking-tight md:text-8xl lg:text-[128px]">10%</div>
+      <div class="mt-4 text-lg font-medium md:text-xl">Flat rate</div>
+      <p class="mt-4 max-w-sm text-pretty text-sm leading-relaxed text-black/70 md:text-base">No setup costs. No catch.</p>
+    </div>
+    <div class="flex flex-col items-center justify-center bg-yellow p-8 py-16 text-center sm:p-12 md:p-16 lg:w-1/2 xl:p-32">
+      <div class="mb-6 text-xs font-semibold uppercase tracking-widest text-black/60">After $100K lifetime sales</div>
+      <div class="text-7xl font-bold leading-[0.9] tracking-tight md:text-8xl lg:text-[128px]">5%</div>
+      <div class="mt-4 text-lg font-medium md:text-xl">Half the rate</div>
+      <p class="mt-4 max-w-sm text-pretty text-sm leading-relaxed text-black/70 md:text-base">Kicks in automatically.</p>
+    </div>
+  </div>
+
+  <div class="bg-gray border-b border-black">
+    <div class="mx-auto max-w-7xl px-8 py-20 lg:px-12 lg:py-24">
+      <div class="grid grid-cols-1 overflow-hidden rounded border border-black bg-white shadow-[4px_4px_0_#000] lg:grid-cols-2 lg:min-h-[520px]" data-saas-calc>
+        <div class="flex flex-col border-b border-black p-7 sm:p-10 lg:border-b-0 lg:border-r lg:p-14">
+          <div class="mb-6 text-xs font-semibold uppercase tracking-widest text-black/60">Do the math</div>
+
+          <% [
+            ["price", "Price per sale", 49, 1, 500, 1, "$"],
+            ["sales", "Sales per month", 100, 1, 2000, 1, ""],
+            ["lifetime", "Lifetime sales so far", 0, 0, 500_000, 5_000, "$"]
+          ].each do |key, label, value, min, max, step, prefix| %>
+            <div class="mb-7">
+              <div class="mb-3 flex items-baseline justify-between">
+                <span class="text-sm font-medium text-dark-gray md:text-base"><%= label %></span>
+                <span class="text-sm font-medium text-dark-gray tabular-nums md:text-base"><%= prefix %><span data-saas-calc-value="<%= key %>"><%= number_with_delimiter(value) %></span></span>
+              </div>
+              <input type="range" class="gr-slider" aria-label="<%= label %>" aria-valuetext="<%= prefix %><%= number_with_delimiter(value) %>" data-saas-calc-input="<%= key %>" data-saas-calc-prefix="<%= prefix %>" min="<%= min %>" max="<%= max %>" step="<%= step %>" value="<%= value %>" style="--fill: <%= ((value - min).to_f / (max - min) * 100).round %>%">
+            </div>
+          <% end %>
+        </div>
+
+        <div class="flex flex-col justify-between gap-6 bg-purple p-7 sm:p-10 lg:p-14" data-saas-calc-result-panel>
+          <div>
+            <div class="mb-6 text-xs font-semibold uppercase tracking-widest text-black/60">You'd keep</div>
+            <div class="text-5xl font-bold leading-[0.95] tracking-tight tabular-nums sm:text-6xl md:text-7xl lg:text-[88px]">
+              $<span data-saas-calc-keep>4,410</span>
+            </div>
+            <div class="mt-3 text-base text-black/70">per month, at a <span data-saas-calc-rate>10</span>% rate</div>
+          </div>
+
+          <div class="grid gap-1.5 rounded border border-black bg-white p-4">
+            <div class="flex justify-between text-xs text-dark-gray tabular-nums sm:text-sm">
+              <span>Monthly revenue</span>
+              <span>$<span data-saas-calc-revenue>4,900</span></span>
+            </div>
+            <div class="flex justify-between text-xs text-[#8a8a85] tabular-nums sm:text-sm">
+              <span>Gumroad fee (<span data-saas-calc-rate>10</span>%)</span>
+              <span>−$<span data-saas-calc-fee>490</span></span>
+            </div>
+            <div class="mt-1 flex items-baseline justify-between border-t border-black pt-2.5">
+              <span class="text-sm font-semibold">You keep</span>
+              <span class="text-base font-bold tabular-nums">$<span data-saas-calc-keep>4,410</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="bg-white">
+  <div class="mx-auto max-w-4xl px-8 py-20 lg:px-12 lg:py-24">
+    <h2 class="mb-12 text-balance text-center text-4xl font-medium leading-[1.05] sm:text-5xl md:text-6xl">Frequently asked questions</h2>
+
+    <div class="border-t border-black">
+      <% [
+        ["What kinds of software can I sell?", "Anything with a download or a license key — desktop apps, plugins, scripts, fonts, game assets, code. Subscriptions and one-time purchases both work."],
+        ["Do I need to write code to use this?", "No. You set up products and tiers in the Gumroad dashboard and share a checkout link. If you want to verify license keys from your app, you can call our REST API — no SDK required."],
+        ["How does the license key API work?", "Every sale creates a unique license key. You hit our API to verify, disable, or rotate it — the response includes a use counter so you can enforce activation limits from your app."],
+        ["What does 'merchant of record' actually mean?", "Gumroad is the seller on the invoice. We charge the buyer, collect and file VAT and sales tax in every country that requires it, handle chargebacks, and absorb fraud. You receive a net payout."],
+        ["When does the rate drop to 5%?", "Once your lifetime sales on Gumroad cross $100,000, every sale after that is 5% instead of 10%."],
+        ["Can I use my own domain?", "Yes. Point your own domain at Gumroad and sell from there instead of gumroad.com — your branding stays consistent through checkout."]
+      ].each do |question, answer| %>
+        <div class="accordion-item border-b border-black">
+          <div class="flex cursor-pointer items-center gap-4 py-5" data-accordion-trigger>
+            <div class="flex h-6 w-6 shrink-0 items-center justify-center">
+              <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                <line x1="4" y1="16" x2="28" y2="16" stroke="black" stroke-width="2" />
+                <line x1="16" y1="4" x2="16" y2="28" stroke="black" stroke-width="2" class="transition-transform duration-300" />
+              </svg>
+            </div>
+            <h3 class="text-base font-medium md:text-lg"><%= question %></h3>
+          </div>
+          <div class="max-h-0 overflow-hidden transition-[max-height] duration-300" data-accordion-content>
+            <div class="max-w-3xl pb-6 pl-10 text-base leading-relaxed text-dark-gray"><%= answer %></div>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</section>
+
+<%= render "home/shared/section_cta", title: "Get back to building." %>
+
+<%= render "home/shared/footer" %>
+
+<%= javascript_include_tag 'hero_parallax', nonce: SecureHeaders.content_security_policy_script_nonce(request), defer: true %>
+
+<%= javascript_tag nonce: SecureHeaders.content_security_policy_script_nonce(request), data: { cfasync: "false" } do %>
+  (function() {
+    function initSaasCalculator() {
+      const root = document.querySelector('[data-saas-calc]');
+      if (!root) return;
+
+      const formatNumber = (n) => Number(n).toLocaleString('en-US');
+      const formatValueText = (input) => (input.dataset.saasCalcPrefix || '') + formatNumber(input.value);
+      const inputs = Array.from(root.querySelectorAll('[data-saas-calc-input]')).map((input) => ({
+        input,
+        key: input.dataset.saasCalcInput,
+        display: root.querySelector('[data-saas-calc-value="' + input.dataset.saasCalcInput + '"]'),
+      }));
+      const resultPanel = root.querySelector('[data-saas-calc-result-panel]');
+      const revenueOutputs = root.querySelectorAll('[data-saas-calc-revenue]');
+      const feeOutputs = root.querySelectorAll('[data-saas-calc-fee]');
+      const keepOutputs = root.querySelectorAll('[data-saas-calc-keep]');
+      const rateOutputs = root.querySelectorAll('[data-saas-calc-rate]');
+
+      function recompute() {
+        const state = {};
+        inputs.forEach(({ input, key, display }) => {
+          state[key] = Number(input.value);
+          input.style.setProperty('--fill', ((input.value - input.min) / (input.max - input.min)) * 100 + '%');
+          if (display) display.textContent = formatNumber(input.value);
+          input.setAttribute('aria-valuetext', formatValueText(input));
+        });
+
+        const revenue = state.price * state.sales;
+        const crossed = state.lifetime >= 100000;
+        const rate = crossed ? 0.05 : 0.10;
+        const fee = Math.round(revenue * rate);
+        const keep = revenue - fee;
+
+        revenueOutputs.forEach((el) => el.textContent = formatNumber(revenue));
+        feeOutputs.forEach((el) => el.textContent = formatNumber(fee));
+        keepOutputs.forEach((el) => el.textContent = formatNumber(keep));
+        rateOutputs.forEach((el) => el.textContent = (rate * 100).toFixed(0));
+
+        if (resultPanel) {
+          resultPanel.classList.toggle('bg-purple', !crossed);
+          resultPanel.classList.toggle('bg-yellow', crossed);
+        }
+      }
+
+      inputs.forEach(({ input }) => input.addEventListener('input', recompute));
+      recompute();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initSaasCalculator);
+    } else {
+      initSaasCalculator();
+    }
+  })();
+<% end %>

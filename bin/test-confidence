@@ -1,40 +1,38 @@
 #!/usr/bin/env bash
 #
-# bin/test-confidence — Run tests in order of relevance. Confidence climbs from 0% to 100%.
+# bin/test-confidence — AI-driven test execution. Opus decides what to run and how confident to be.
 #
 # Usage:
-#   bin/test-confidence              # Stop at 99%
-#   bin/test-confidence 0.95         # Stop at 95%
-#   bin/test-confidence 1.0          # Run everything (100%)
-#   bin/test-confidence --no-ai      # Convention mapping only, no API call
+#   bin/test-confidence          # Run to 99%, stop
+#   bin/test-confidence --full   # Run to 100%
 #
-# Set ANTHROPIC_API_KEY for AI-powered ranking. Falls back to convention without it.
+# Requires: ANTHROPIC_API_KEY
 #
 set -euo pipefail
 
-THRESHOLD=99
-USE_AI=true
+RUN_FULL=false
 
 for arg in "$@"; do
   case "$arg" in
-    --no-ai) USE_AI=false ;;
-    0.*|1|1.0|1.00) THRESHOLD=$(printf '%.0f' "$(echo "$arg * 100" | bc)") ;;
+    --full) RUN_FULL=true ;;
   esac
 done
 
+if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+  echo ""
+  echo "  ❌ ANTHROPIC_API_KEY is required. Set it in your environment."
+  echo ""
+  exit 1
+fi
+
 # ── Changed files ──
-# Priority:
-#   1. Uncommitted local changes (git diff HEAD + staged)
-#   2. Branch diff vs main (for PR branches with committed changes)
-#   3. If on main with no local changes, nothing to test
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+MERGE_BASE=""
 
-# Local uncommitted + staged changes
 LOCAL_CHANGED=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
   | sort -u | grep -E '\.(rb|ts|tsx|js|jsx)$' || true)
 
-# Branch diff vs main (what the PR introduces)
 BRANCH_CHANGED=""
 if [[ "$CURRENT_BRANCH" != "main" ]]; then
   MERGE_BASE=$(git merge-base origin/main HEAD 2>/dev/null || echo "")
@@ -44,7 +42,6 @@ if [[ "$CURRENT_BRANCH" != "main" ]]; then
   fi
 fi
 
-# Combine: local changes + branch diff (local first for priority)
 CHANGED=$(printf '%s\n%s' "$LOCAL_CHANGED" "$BRANCH_CHANGED" | sort -u | grep -v '^$' || true)
 
 if [[ -z "$CHANGED" ]]; then
@@ -54,265 +51,288 @@ if [[ -z "$CHANGED" ]]; then
   exit 0
 fi
 
-# Show diff source
-if [[ -n "$LOCAL_CHANGED" && -n "$BRANCH_CHANGED" ]]; then
-  echo "  📂 Uncommitted changes + branch diff vs main"
-elif [[ -n "$BRANCH_CHANGED" ]]; then
-  echo "  📂 Branch diff: $CURRENT_BRANCH vs main"
+FILE_COUNT=$(echo "$CHANGED" | wc -l | tr -d ' ')
+if [[ -n "$BRANCH_CHANGED" ]]; then
+  echo "  📂 $FILE_COUNT files changed ($CURRENT_BRANCH vs main)"
 else
-  echo "  📂 Uncommitted local changes"
+  echo "  📂 $FILE_COUNT files changed (local)"
 fi
 
-# Auto-raise for payment code
-if echo "$CHANGED" | grep -qE '^(app/billing/|app/payments/|app/models/purchase\.rb)'; then
-  [[ "$THRESHOLD" -lt 100 ]] && THRESHOLD=100
-  echo "  ⚠ Payment/billing code — threshold raised to 100%"
+# ── Get the diff ──
+
+# Build diff text: include both local changes AND branch commits when both exist
+DIFF_PARTS=""
+if [[ -n "$LOCAL_CHANGED" ]]; then
+  DIFF_PARTS+=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null)
+  DIFF_PARTS+=$'\n'
 fi
+if [[ -n "$MERGE_BASE" && -n "$BRANCH_CHANGED" ]]; then
+  DIFF_PARTS+=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null)
+fi
+DIFF_TEXT=$(echo "$DIFF_PARTS" | head -500)
 
-TOTAL_SPECS=$(find spec -name "*_spec.rb" -type f 2>/dev/null | wc -l | tr -d ' ')
+# ── Get all spec files ──
 
-# ── Build a single ordered list: most relevant first, least relevant last ──
+ALL_SPECS=$(find spec -name "*_spec.rb" -type f 2>/dev/null | sort)
+TOTAL_SPECS=$(echo "$ALL_SPECS" | wc -l | tr -d ' ')
 
-QUEUE=$(mktemp)
-SEEN=$(mktemp)
+# ── AI planning: one call, Opus decides everything ──
 
-add_if_new() {
-  local f="$1"
-  [[ -f "$f" ]] || return 0
-  grep -qxF "$f" "$SEEN" 2>/dev/null && return 0
-  echo "$f" >> "$QUEUE"
-  echo "$f" >> "$SEEN"
-}
+PLAN_FILE=$(mktemp)
 
-# --- Tier 1: Direct spec for each changed file ---
-while IFS= read -r file; do
-  [[ -z "$file" ]] && continue
-  spec=$(echo "$file" | sed 's|^app/|spec/|; s|\.rb$|_spec.rb|')
-  add_if_new "$spec"
-  # Controller → request spec
-  if [[ "$file" == app/controllers/* ]]; then
-    add_if_new "$(echo "$file" | sed 's|^app/controllers/|spec/requests/|; s|_controller\.rb$|_spec.rb|')"
-  fi
-done <<< "$CHANGED"
+# Group specs by directory for compact listing
+SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=$1; for(i=2;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort)
 
-# --- Tier 2: Specs that reference changed classes ---
-while IFS= read -r file; do
-  [[ -z "$file" || "$file" != *.rb ]] && continue
-  classname=$(basename "$file" .rb | sed -E 's/(^|_)([a-z])/\U\2/g')
-  [[ -z "$classname" ]] && continue
-  grep -rl --include="*.rb" "$classname" spec/ 2>/dev/null | sort | while IFS= read -r spec; do
-    add_if_new "$spec"
-  done
-done <<< "$CHANGED"
+PROMPT="You are a senior Rails engineer planning test execution for a code change.
 
-# --- Tier 3: Same-directory specs ---
-while IFS= read -r file; do
-  [[ -z "$file" ]] && continue
-  dir=$(echo "$file" | sed 's|^app/|spec/|; s|/[^/]*$||')
-  [[ -d "$dir" ]] || continue
-  find "$dir" -maxdepth 1 -name "*_spec.rb" -type f 2>/dev/null | sort | while IFS= read -r spec; do
-    add_if_new "$spec"
-  done
-done <<< "$CHANGED"
+Your job: given this diff, return an ordered list of test files to run, grouped into confidence milestones. YOU decide how many tests are needed for each confidence level based on the risk profile of this specific diff.
 
-RANKED_COUNT=$(wc -l < "$QUEUE" | tr -d ' ')
+A trivial change (typo fix, comment update, rescue clause) might need 2 tests for 99%.
+A core model change might need 50 tests for 99%.
+A payment flow change might need 100 tests for 99%.
 
-# --- Tier 4: Everything else (shuffled so it's not always alphabetical) ---
-find spec -name "*_spec.rb" -type f 2>/dev/null | sort -R | while IFS= read -r spec; do
-  add_if_new "$spec"
-done
+Think about:
+- What code paths does this diff touch?
+- What could break that isn't obvious?
+- What are the transitive dependencies?
+- How risky is this change?
 
-TOTAL_QUEUED=$(wc -l < "$QUEUE" | tr -d ' ')
-
-# ── Optional: AI re-ranks the queue ──
-
-if [[ "$USE_AI" == true && -n "${ANTHROPIC_API_KEY:-}" && "$RANKED_COUNT" -gt 0 ]]; then
-  # Get diff text: prefer local changes, fall back to branch diff vs main
-  if [[ -n "$LOCAL_CHANGED" ]]; then
-    DIFF_TEXT=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null | head -400)
-  elif [[ -n "$MERGE_BASE" ]]; then
-    DIFF_TEXT=$(git diff "$MERGE_BASE"...HEAD -- $(echo "$BRANCH_CHANGED" | head -20) 2>/dev/null | head -400)
-  else
-    DIFF_TEXT=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -400)
-  fi
-  SPEC_LIST=$(cat "$QUEUE" | head -200)
-
-  PROMPT="You are a senior Rails engineer. Given this diff, reorder these test files from MOST to LEAST likely to catch a regression. Return ONLY the reordered file paths, one per line, no numbering, no explanation.
-
-Diff:
+## Diff:
 ${DIFF_TEXT}
 
-Test files to reorder:
-${SPEC_LIST}"
+## Test files (${TOTAL_SPECS} total):
+${SPEC_TREE}
 
-  PAYLOAD=$(jq -n \
-    --arg model "claude-sonnet-4-6" \
-    --arg prompt "$PROMPT" \
-    '{model: $model, max_tokens: 8192, messages: [{role: "user", content: $prompt}]}')
-
-  printf "  🧠 AI reordering %d tests..." "$RANKED_COUNT"
-
-  RESPONSE=$(curl -s --max-time 30 \
-    -H "Content-Type: application/json" \
-    -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-    -H "anthropic-version: 2023-06-01" \
-    -d "$PAYLOAD" \
-    "https://api.anthropic.com/v1/messages" 2>/dev/null) || RESPONSE=""
-
-  AI_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
-
-  if [[ -n "$AI_TEXT" ]]; then
-    AI_QUEUE=$(mktemp)
-    AI_SEEN=$(mktemp)
-    # Add AI-ordered files first
-    echo "$AI_TEXT" | grep -E '^spec/.*_spec\.rb$' | while IFS= read -r spec; do
-      [[ -f "$spec" ]] || continue
-      grep -qxF "$spec" "$AI_SEEN" 2>/dev/null && continue
-      echo "$spec" >> "$AI_QUEUE"
-      echo "$spec" >> "$AI_SEEN"
-    done
-    # Then everything else from original queue that AI didn't mention
-    while IFS= read -r spec; do
-      grep -qxF "$spec" "$AI_SEEN" 2>/dev/null && continue
-      echo "$spec" >> "$AI_QUEUE"
-      echo "$spec" >> "$AI_SEEN"
-    done < "$QUEUE"
-    mv "$AI_QUEUE" "$QUEUE"
-    rm -f "$AI_SEEN"
-    echo " done"
-  else
-    echo " skipped (using convention order)"
-  fi
-fi
-
-# ── Run tests one by one, confidence climbing continuously ──
-
-fmt_threshold() {
-  [[ "$THRESHOLD" -ge 100 ]] && echo "100%" || echo "${THRESHOLD}%"
+Return a JSON object with this exact structure:
+{
+  \"risk\": \"low|medium|high|critical\",
+  \"reason\": \"one sentence explaining the risk level\",
+  \"milestones\": [
+    {\"confidence\": 80, \"tests\": [\"spec/models/foo_spec.rb\"]},
+    {\"confidence\": 95, \"tests\": [\"spec/requests/bar_spec.rb\"]},
+    {\"confidence\": 99, \"tests\": [\"spec/features/baz_spec.rb\"]},
+    {\"confidence\": 100, \"tests\": [\"ALL_REMAINING\"]}
+  ]
 }
 
+Rules:
+- Each milestone's tests are ADDITIONAL, not cumulative.
+- Use exact file paths from the spec tree.
+- The last milestone can use \"ALL_REMAINING\" to mean everything else.
+- Confidence values must be strictly increasing.
+- You MUST include a 99 milestone and a 100 milestone.
+- Be aggressive early: put the highest-value tests first.
+- For low-risk changes, the 99 milestone might only need 2-5 tests.
+- For critical changes, the 99 milestone might need 50+ tests.
+
+Return ONLY the JSON object. No markdown, no explanation outside the JSON."
+
+PAYLOAD=$(jq -n \
+  --arg model "claude-opus-4-7" \
+  --arg prompt "$PROMPT" \
+  '{model: $model, max_tokens: 16384, messages: [{role: "user", content: $prompt}]}')
+
+printf "  🧠 Opus planning test execution..."
+
+RESPONSE=$(curl -s --max-time 60 \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+  -H "anthropic-version: 2023-06-01" \
+  -d "$PAYLOAD" \
+  "https://api.anthropic.com/v1/messages" 2>/dev/null)
+
+if [[ -z "$RESPONSE" ]]; then
+  echo " failed (no response)"
+  exit 1
+fi
+
+AI_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
+
+if [[ -z "$AI_TEXT" ]]; then
+  echo " failed (empty response)"
+  echo "  Response: $(echo "$RESPONSE" | jq -r '.error.message // "unknown error"' 2>/dev/null)"
+  exit 1
+fi
+
+# Extract JSON
+AI_JSON=$(echo "$AI_TEXT" | python3 -c "
+import sys, json, re
+text = sys.stdin.read()
+m = re.search(r'\{[\s\S]*\}', text)
+if m:
+    try:
+        obj = json.loads(m.group())
+        print(json.dumps(obj))
+    except:
+        pass
+" 2>/dev/null || true)
+
+if [[ -z "$AI_JSON" ]]; then
+  echo " failed to parse AI response"
+  exit 1
+fi
+
+echo "$AI_JSON" > "$PLAN_FILE"
+RISK=$(echo "$AI_JSON" | jq -r '.risk // "unknown"')
+REASON=$(echo "$AI_JSON" | jq -r '.reason // ""')
+echo " done"
+echo "  ⚡ Risk: $RISK — $REASON"
+
+# ── Parse plan and execute ──
+
+MILESTONES=$(jq '.milestones | length' "$PLAN_FILE")
+
+# ── Helpers ──
+
+pluralize() {
+  local n=$1 word=$2
+  if [[ $n -eq 1 ]]; then echo "$n $word"; else echo "$n ${word}s"; fi
+}
+
+# ── Header ──
+
 echo ""
 echo "  ═══════════════════════════════════════════════════"
-echo "    TEST CONFIDENCE  →  $(fmt_threshold)"
-echo "    $TOTAL_QUEUED tests queued ($RANKED_COUNT prioritized)"
+echo "    TEST CONFIDENCE"
+echo "  ───────────────────────────────────────────────────"
+for (( m=0; m<MILESTONES; m++ )); do
+  CONF=$(jq -r ".milestones[$m].confidence" "$PLAN_FILE")
+  TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
+  if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
+    echo "   ${CONF}%  ←  remaining tests"
+  else
+    NAMES=$(echo "$TESTS_JSON" | grep "spec/")
+    N=$(echo "$NAMES" | wc -l | tr -d ' ')
+    echo "   ${CONF}%  ←  $(pluralize $N test)"
+    echo "$NAMES" | while IFS= read -r name; do
+      echo "          $(basename "$name")"
+    done
+  fi
+done
 echo "  ═══════════════════════════════════════════════════"
 echo ""
+
+# ── Run ──
 
 START=$(date +%s)
 PASSED=0
 FAILED=0
-CONFIDENCE=0
-
-# Confidence model:
-#   Each passing test adds to confidence proportional to total suite size.
-#   Early (high-relevance) tests contribute more via a Pareto curve.
-#
-#   confidence = 1 - (1 - passed/total)^k
-#     where k = 2.5 for ranked tests (front-loaded confidence)
-#     and   k = 1.0 for unranked tests (linear)
-#
-#   This means:
-#     10% of tests (most relevant) → ~70% confidence
-#     30% of tests                 → ~92% confidence
-#     50% of tests                 → ~98% confidence
-#     100% of tests                → 100% confidence
-
-calc_confidence() {
-  local passed=$1 total=$2 ranked=$3
-  python3 -c "
-import math
-passed, total, ranked = $passed, $total, $ranked
-if total == 0:
-    print(0)
-else:
-    frac = passed / total
-    # Pareto curve: front-loaded if we're still in ranked territory
-    if passed <= ranked:
-        k = 2.5
-    else:
-        # Blend: once past ranked tests, curve flattens toward linear
-        ranked_frac = ranked / total if total > 0 else 0
-        k = 2.5 - 1.5 * min(1, (frac - ranked_frac) / max(0.01, 1 - ranked_frac))
-    c = 1.0 - (1.0 - frac) ** k
-    print(int(c * 10000))  # basis points for integer math
-" 2>/dev/null
-}
+SEEN_RUN=$(mktemp)
+CURRENT_CONFIDENCE=0
 
 draw_bar() {
-  local bps=$1  # basis points (0-10000)
+  local passed=$1 total=$2 phase=$3
   local width=40
-  local filled=$(( bps * width / 10000 ))
+  local filled=0
+  [[ "$total" -gt 0 ]] && filled=$(( passed * width / total ))
   [[ $filled -gt $width ]] && filled=$width
   local empty=$(( width - filled ))
   local bar=""
-  for (( j=0; j<filled; j++ )); do bar+="▓"; done
-  for (( j=0; j<empty; j++ )); do bar+="░"; done
+  for (( j=0; j<filled; j++ )); do
+    [[ "$phase" == "green" ]] && bar+="🟩" || bar+="🟨"
+  done
+  for (( j=0; j<empty; j++ )); do bar+="⬜"; done
   echo "$bar"
 }
 
-fmt_confidence() {
-  local bps=$1
-  if [[ $bps -ge 10000 ]]; then echo "100"
-  elif [[ $bps -ge 9990 ]]; then echo "99.9"
-  elif [[ $bps -ge 1000 ]]; then echo "$(( bps / 100 )).$(( bps % 100 / 10 ))"
-  elif [[ $bps -ge 100 ]]; then echo "$(( bps / 100 )).$(( bps % 100 ))"
-  else echo "0.$(printf '%02d' $bps)"
-  fi
-}
+for (( m=0; m<MILESTONES; m++ )); do
+  CONF=$(jq -r ".milestones[$m].confidence" "$PLAN_FILE")
+  TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
 
-THRESHOLD_BPS=$(( THRESHOLD * 100 ))
-
-mapfile -t ALL_TESTS < "$QUEUE"
-
-for spec in "${ALL_TESTS[@]}"; do
-  [[ -z "$spec" ]] && continue
-
-  # Run single test file
-  if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
-    PASSED=$((PASSED + 1))
-    CONFIDENCE=$(calc_confidence $PASSED $TOTAL_QUEUED $RANKED_COUNT)
-
-    elapsed=$(( $(date +%s) - START ))
-    bar=$(draw_bar "$CONFIDENCE")
-    conf_str=$(fmt_confidence "$CONFIDENCE")
-    printf "\r  %s  %5s%%  %d/%d passed  %ds  " "$bar" "$conf_str" "$PASSED" "$TOTAL_QUEUED" "$elapsed"
-
-    # Stop if we've hit the threshold
-    if [[ "$CONFIDENCE" -ge "$THRESHOLD_BPS" ]]; then
-      echo ""
-      break
-    fi
+  # Resolve ALL_REMAINING
+  if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
+    MILESTONE_TESTS=$(echo "$ALL_SPECS" | while IFS= read -r s; do
+      grep -qxF "$s" "$SEEN_RUN" 2>/dev/null || echo "$s"
+    done)
   else
-    FAILED=$((FAILED + 1))
+    MILESTONE_TESTS=$(echo "$TESTS_JSON" | while IFS= read -r s; do
+      [[ -f "$s" ]] && ! grep -qxF "$s" "$SEEN_RUN" 2>/dev/null && echo "$s"
+    done)
+  fi
+
+  MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c "spec/" 2>/dev/null || true)
+  if [[ -z "$MILESTONE_COUNT" || "$MILESTONE_COUNT" -eq 0 ]]; then
+    CURRENT_CONFIDENCE=$CONF
+    continue
+  fi
+
+  # Skip milestones past 99 unless --full
+  if [[ "$RUN_FULL" != true && "$CURRENT_CONFIDENCE" -ge 99 ]]; then
+    echo "  ${CONF}%  ←  $(pluralize $MILESTONE_COUNT test) ⬜ skipped"
+    continue
+  fi
+
+  PHASE="neutral"
+  [[ "$CURRENT_CONFIDENCE" -ge 99 ]] && PHASE="green"
+
+  MILESTONE_PASSED=0
+
+  while IFS= read -r spec; do
+    [[ -z "$spec" ]] && continue
+    echo "$spec" >> "$SEEN_RUN"
+
+    if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
+      PASSED=$((PASSED + 1))
+      MILESTONE_PASSED=$((MILESTONE_PASSED + 1))
+      elapsed=$(( $(date +%s) - START ))
+      bar=$(draw_bar "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$PHASE")
+      printf "\r  %s  →%s%%  %d/%d  %ds" "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed"
+    else
+      FAILED=$((FAILED + 1))
+      echo ""
+      echo ""
+      echo "  ═══════════════════════════════════════════════════"
+      echo "    ❌ FAILED — $spec"
+      echo "  ═══════════════════════════════════════════════════"
+      echo ""
+      echo "$output" | tail -20 | sed 's/^/    /'
+      echo ""
+      echo "  Fix this before committing."
+      echo ""
+      rm -f "$PLAN_FILE" "$SEEN_RUN"
+      exit 1
+    fi
+  done <<< "$MILESTONE_TESTS"
+
+  CURRENT_CONFIDENCE=$CONF
+  elapsed=$(( $(date +%s) - START ))
+
+  # Milestone complete
+  echo ""
+  if [[ "$CURRENT_CONFIDENCE" -ge 99 && "$PHASE" != "green" ]]; then
     echo ""
+    bar=$(draw_bar "$MILESTONE_COUNT" "$MILESTONE_COUNT" "green")
+    echo "  $bar"
     echo ""
-    echo "  ═══════════════════════════════════════════════════"
-    echo "    ❌ FAILED — $spec"
-    echo "  ═══════════════════════════════════════════════════"
+    echo "  ✅ ${CURRENT_CONFIDENCE}% confidence — $(pluralize $PASSED test) passed in ${elapsed}s"
+    echo "     Safe to commit."
     echo ""
-    echo "$output" | tail -20 | sed 's/^/    /'
-    echo ""
-    echo "  Fix this before committing."
-    echo ""
-    exit 1
+  else
+    echo "  ✅ ${CURRENT_CONFIDENCE}% — $(pluralize $MILESTONE_PASSED test) — ${elapsed}s"
   fi
 done
 
 # ── Done ──
 
 elapsed=$(( $(date +%s) - START ))
-conf_str=$(fmt_confidence "$CONFIDENCE")
 
-echo ""
-echo "  ═══════════════════════════════════════════════════"
-if [[ "$CONFIDENCE" -ge "$THRESHOLD_BPS" ]]; then
-  echo "    ✅  ${conf_str}% confidence  (threshold: $(fmt_threshold))"
-else
-  echo "    ⚠️   ${conf_str}% confidence  (threshold: $(fmt_threshold))"
+if [[ "$CURRENT_CONFIDENCE" -ge 100 ]]; then
+  echo ""
+  echo "  ═══════════════════════════════════════════════════"
+  echo "    ✅ 100% confidence — $(pluralize $PASSED test) in ${elapsed}s"
+  echo "  ═══════════════════════════════════════════════════"
+  echo ""
+elif [[ "$CURRENT_CONFIDENCE" -lt 99 ]]; then
+  echo ""
+  echo "  ⚠️  Only reached ${CURRENT_CONFIDENCE}% — $(pluralize $PASSED test) in ${elapsed}s"
+  echo ""
 fi
-echo "  ═══════════════════════════════════════════════════"
-echo ""
-echo "  $PASSED passed in ${elapsed}s  ·  $TOTAL_QUEUED in repo"
-echo ""
 
-[[ "$CONFIDENCE" -ge "$THRESHOLD_BPS" ]]
+if [[ "$RUN_FULL" != true && "$CURRENT_CONFIDENCE" -ge 99 && "$CURRENT_CONFIDENCE" -lt 100 ]]; then
+  remaining=$(( TOTAL_SPECS - PASSED ))
+  echo "  $(pluralize $remaining test) more for 100%. Run with --full to continue."
+  echo ""
+fi
+
+rm -f "$PLAN_FILE" "$SEEN_RUN"
+[[ "$CURRENT_CONFIDENCE" -ge 99 ]]

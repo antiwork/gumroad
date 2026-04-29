@@ -27,4 +27,14 @@ describe HomeController do
       expect(assigns(:hide_layouts)).to be(true)
     end
   end
+
+  describe "GET saas" do
+    it "renders successfully" do
+      get :saas
+
+      expect(response).to be_successful
+      expect(controller.send(:page_title)).to include("Gumroad for SaaS")
+      expect(assigns(:hide_layouts)).to be(true)
+    end
+  end
 end

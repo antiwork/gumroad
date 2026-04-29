@@ -64,7 +64,7 @@ class BalanceTransaction < ApplicationRecord
     end
   end
 
-  MAX_ATTEMPTS_TO_UPDATE_BALANCE = 2
+  MAX_ATTEMPTS_TO_UPDATE_BALANCE = 3
   private_constant :MAX_ATTEMPTS_TO_UPDATE_BALANCE
 
   belongs_to :user
@@ -143,6 +143,15 @@ class BalanceTransaction < ApplicationRecord
     logger.info("Updating balance for transaction #{id}: Balance #{balance.id} could not be saved. Failed count: #{failed_count} Exception:\n#{e}")
     failed_count += 1
     retry if failed_count < MAX_ATTEMPTS_TO_UPDATE_BALANCE
+    raise
+  rescue ActiveRecord::LockWaitTimeout => e
+    lock_failed_count ||= 0
+    lock_failed_count += 1
+    logger.warn("Updating balance for transaction #{id}: Lock wait timeout on balance #{balance&.id}. Attempt: #{lock_failed_count}/#{MAX_ATTEMPTS_TO_UPDATE_BALANCE}")
+    if lock_failed_count < MAX_ATTEMPTS_TO_UPDATE_BALANCE
+      sleep(lock_failed_count * 0.5)
+      retry
+    end
     raise
   end
 

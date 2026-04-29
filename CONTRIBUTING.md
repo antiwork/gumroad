@@ -56,15 +56,13 @@ Use the latest and greatest state-of-the-art models from American AI companies l
 Run **test-confidence** before every commit:
 
 ```bash
-bin/test-confidence          # Stop at 99%
-bin/test-confidence 0.95     # Quick sanity check
-bin/test-confidence 1.0      # Run the full suite
-bin/test-confidence --no-ai  # No API key needed
+bin/test-confidence          # Run to 99%, stop
+bin/test-confidence --full   # Run to 100%
 ```
 
-It ranks every spec by relevance to your diff and runs them in order. Confidence climbs from 0% to 100% in real-time as each test passes. Most relevant tests run first, so confidence front-loads fast. For payment/billing changes it auto-raises the threshold to 100%.
+Requires `ANTHROPIC_API_KEY`. Opus 4.7 analyzes your diff in one call: decides the risk level, picks which tests to run, sets the order, and determines how many tests are needed for each confidence milestone. A comment-only change might need 2 tests for 99%. A payment model refactor might need 100. The AI decides the curve shape ad hoc per diff.
 
-Set `ANTHROPIC_API_KEY` for AI-powered reordering (falls back to convention mapping without it). Also works as a Claude Code skill: `/test-confidence`
+The bar is yellow while running toward 99%, then turns green. At green, safe to commit. Also works as a Claude Code skill: `/test-confidence`
 
 Also lint before committing:
 

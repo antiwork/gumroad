@@ -140,7 +140,11 @@ class Checkout::DiscountsController < Sellers::BaseController
         page_num = total_pages
       end
 
-      pagination, offer_codes = pagy(offer_codes, page: page_num, limit: PER_PAGE)
+      begin
+        pagination, offer_codes = pagy(offer_codes, page: page_num, limit: PER_PAGE)
+      rescue Pagy::OverflowError => e
+        pagination, offer_codes = pagy(offer_codes, page: e.pagy.last, limit: PER_PAGE)
+      end
 
       [PagyPresenter.new(pagination).props, offer_codes]
     end

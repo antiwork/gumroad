@@ -1,40 +1,35 @@
 ---
 name: test-confidence
-description: Run tests ranked by relevance to your diff. Confidence climbs continuously from 0% to 100%. Stop when you're confident enough.
-argument-hint: [threshold, e.g. 0.99]
+description: AI-driven test execution. Opus decides what to run and how confident to be, based on your diff.
+argument-hint: [--full to run to 100%]
 allowed-tools: Bash(git *), Bash(bundle exec rspec *), Bash(cat *), Bash(find *), Bash(wc *), Bash(head *), Bash(tail *), Bash(grep *), Bash(bin/test-confidence *)
 ---
 
 # Test Confidence
 
-Run `bin/test-confidence` to execute tests ranked by relevance to your diff. Confidence climbs continuously from 0% to 100% as each test passes. No waves, no stages. Just a stream of tests, most important first.
+Run `bin/test-confidence` to have Opus 4.7 analyze your diff, decide the risk level, plan which tests to run and in what order, and set confidence milestones. The AI decides the shape of the curve based on this specific diff.
 
 ## Usage
 
 ```bash
-bin/test-confidence              # Stop at 99%
-bin/test-confidence 0.95         # Stop at 95% (quick sanity check)
-bin/test-confidence 1.0          # Run everything
-bin/test-confidence --no-ai      # Convention mapping only
+bin/test-confidence          # Run to 99%, stop
+bin/test-confidence --full   # Run to 100%
 ```
 
-If `$ARGUMENTS` provides a number, pass it through: `bin/test-confidence $ARGUMENTS`
+Requires `ANTHROPIC_API_KEY` in your environment.
+
+If `$ARGUMENTS` is provided, pass it through: `bin/test-confidence $ARGUMENTS`
 
 ## How it works
 
-1. Finds changed files: branch diff vs main (for PR branches), local uncommitted changes, or both
-2. Builds a single ordered queue: direct specs first, then specs referencing your classes, then same-directory specs, then everything else
-3. Optionally calls Sonnet to reorder by likelihood of catching a regression
-4. Runs tests one at a time. After each pass, confidence updates on a Pareto curve (early tests contribute more since they're the most relevant)
-5. Stops the moment confidence crosses the threshold
+1. Finds changed files (branch diff vs main for PR branches, local diff on main)
+2. Sends the diff + full spec file list to Opus 4.7 in one call
+3. Opus returns a plan: risk level, ordered test list, confidence milestones
+4. Script executes the plan, showing yellow progress bar toward 99%
+5. At 99%, bar turns green. Safe to commit.
+6. With `--full`, continues running remaining tests toward 100%
 
-The confidence model:
-- 10% of tests (most relevant) → ~70% confidence
-- 30% of tests → ~92% confidence  
-- 50% of tests → ~98% confidence
-- 100% of tests → 100% confidence
-
-If any test fails, it stops immediately and reports the failure.
+The key insight: Opus decides ad hoc how many tests are needed for each confidence level. A comment-only change might need 2 tests for 99%. A payment model refactor might need 100.
 
 ## When to use
 

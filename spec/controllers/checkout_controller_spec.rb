@@ -52,6 +52,12 @@ describe CheckoutController, type: :controller, inertia: true do
       )
     end
 
+    it "does not raise when checkout params contain nested values" do
+      get :show, params: { product: { foo: "bar" }, username: { baz: "qux" }, wishlist: { id: "1" } }
+
+      expect(response).to be_successful
+    end
+
     describe "process_cart_id_param check" do
       let(:user) { create(:user) }
       let(:cart) { create(:cart, user:) }

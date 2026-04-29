@@ -79,6 +79,16 @@ class HomeController < ApplicationController
     render plain: FeaturesMarkdownGenerator.call, content_type: "text/markdown"
   end
 
+  def saas
+    set_meta_tag(title: "Gumroad for SaaS: Sell software with license keys, subscriptions, and more")
+    set_meta_tag(name: "description", content: "Sell software and SaaS with Gumroad. We handle checkout, license keys, subscriptions, taxes, fraud, and chargebacks so you can keep building.")
+    set_meta_tag(tag_name: "link", rel: "canonical", href: saas_url, head_key: "canonical")
+    set_meta_tag(property: "og:title", value: "Gumroad for SaaS: Sell software with license keys, subscriptions, and more")
+    set_meta_tag(property: "og:description", value: "Sell software and SaaS with Gumroad. We handle checkout, license keys, subscriptions, taxes, fraud, and chargebacks so you can keep building.")
+    set_meta_tag(property: "og:type", value: "website")
+    set_meta_tag(property: "og:url", content: saas_url)
+  end
+
   def small_bets
     set_meta_tag(title: "Small Bets by Gumroad")
     set_meta_tag(name: "description", content: "Explore the Small Bets initiative by Gumroad. Learn, experiment, and grow with small, actionable projects.")

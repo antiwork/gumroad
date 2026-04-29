@@ -6251,13 +6251,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         visit settings_payments_path
         within_modal do
           expect(page).to have_content "Where are you located?"
-          expect(page).to have_content "You may have to forfeit your balance if you want to change your country in the future."
           expect(page).to have_button "Save", disabled: true
           expect(find(:select, "Country")).to have_selector(:option, "Somalia (not supported)", disabled: true)
           select "United States", from: "Country"
           check "I have a valid, government-issued photo ID"
           check "I have proof of residence within this country"
-          check "If I am signing up as a business, it is registered in the country above"
+          check "I am signing up as an individual, or my business is registered in the country above"
           click_on "Save"
           wait_for_ajax
         end
