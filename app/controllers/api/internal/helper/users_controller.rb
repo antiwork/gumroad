@@ -123,35 +123,15 @@ class Api::Internal::Helper::UsersController < Api::Internal::Helper::BaseContro
       return render json: { success: false, error_message: "An account does not exist with that email." }, status: :unprocessable_entity
     end
 
-    normalized_content = Comment.normalize_content(params[:content])
+    comment = User::CreateAdminCommentService.new(user:, content: params[:content], idempotency_key: params[:idempotency_key]).perform
 
-    existing = user.comments.find_by(idempotency_key: params[:idempotency_key])
-    if existing
-      if existing.content != normalized_content
-        return render json: { success: false, error_message: "Idempotency key already used with different content" }, status: :conflict
-      end
-      return render json: { success: true, comment: HelperUserInfoService.serialize_comment(existing) }
-    end
-
-    comment = user.comments.new(
-      content: params[:content],
-      comment_type: Comment::COMMENT_TYPE_NOTE,
-      author_id: GUMROAD_ADMIN_ID,
-      idempotency_key: params[:idempotency_key]
-    )
-
-    if comment.save
+    if comment.persisted?
       render json: { success: true, comment: HelperUserInfoService.serialize_comment(comment) }
     else
       render json: { success: false, error_message: comment.errors.full_messages.join(", ") }, status: :unprocessable_entity
     end
-  rescue ActiveRecord::RecordNotUnique
-    existing = user.comments.find_by!(idempotency_key: params[:idempotency_key])
-    if existing.content != normalized_content
-      render json: { success: false, error_message: "Idempotency key already used with different content" }, status: :conflict
-    else
-      render json: { success: true, comment: HelperUserInfoService.serialize_comment(existing) }
-    end
+  rescue User::CreateAdminCommentService::IdempotencyConflictError
+    render json: { success: false, error_message: "Idempotency key already used with different content" }, status: :conflict
   end
 
   def create_appeal
