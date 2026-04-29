@@ -163,6 +163,22 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_content
   end
 
+  def update_watchlist
+    watched_user = @user.active_watched_user
+    return render json: { success: false, message: "User is not currently being watched." }, status: :unprocessable_content if watched_user.nil?
+
+    threshold = parse_revenue_threshold_cents
+    return render json: { success: false, message: "Revenue threshold must be greater than zero." }, status: :unprocessable_content if threshold.nil?
+
+    watched_user.update!(
+      revenue_threshold_cents: threshold,
+      notes: params.dig(:watched_user, :notes).presence
+    )
+    render json: { success: true }
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_content
+  end
+
   def remove_from_watchlist
     watched_user = @user.active_watched_user
     return render json: { success: false, message: "User is not currently being watched." }, status: :unprocessable_content if watched_user.nil?
