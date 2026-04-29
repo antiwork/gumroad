@@ -1,7 +1,7 @@
 ---
 name: test-confidence
 description: AI-driven test execution. Opus decides what to run and how confident to be, based on your diff.
-argument-hint: [--full to run to 100%, --no-ai for convention fallback]
+argument-hint: [--full to run to 100%]
 allowed-tools: Bash(git *), Bash(bundle exec rspec *), Bash(cat *), Bash(find *), Bash(wc *), Bash(head *), Bash(tail *), Bash(grep *), Bash(bin/test-confidence *)
 ---
 
@@ -14,8 +14,9 @@ Run `bin/test-confidence` to have Opus 4.7 analyze your diff, decide the risk le
 ```bash
 bin/test-confidence          # Run to 99%, stop
 bin/test-confidence --full   # Run to 100%
-bin/test-confidence --no-ai  # Convention fallback, no API call
 ```
+
+Requires `ANTHROPIC_API_KEY` in your environment.
 
 If `$ARGUMENTS` is provided, pass it through: `bin/test-confidence $ARGUMENTS`
 

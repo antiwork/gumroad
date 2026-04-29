@@ -5,21 +5,25 @@
 # Usage:
 #   bin/test-confidence          # Run to 99%, stop
 #   bin/test-confidence --full   # Run to 100%
-#   bin/test-confidence --no-ai  # Convention mapping, no AI (deterministic fallback)
 #
-# Requires: ANTHROPIC_API_KEY for AI mode. Falls back to convention without it.
+# Requires: ANTHROPIC_API_KEY
 #
 set -euo pipefail
 
 RUN_FULL=false
-USE_AI=true
 
 for arg in "$@"; do
   case "$arg" in
     --full) RUN_FULL=true ;;
-    --no-ai) USE_AI=false ;;
   esac
 done
+
+if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+  echo ""
+  echo "  ❌ ANTHROPIC_API_KEY is required. Set it in your environment."
+  echo ""
+  exit 1
+fi
 
 # ── Changed files ──
 
@@ -72,13 +76,11 @@ TOTAL_SPECS=$(echo "$ALL_SPECS" | wc -l | tr -d ' ')
 # ── AI planning: one call, Opus decides everything ──
 
 PLAN_FILE=$(mktemp)
-AI_PLANNED=false
 
-if [[ "$USE_AI" == true && -n "${ANTHROPIC_API_KEY:-}" ]]; then
-  # Group specs by directory for compact listing
-  SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=""; for(i=1;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort | head -200)
+# Group specs by directory for compact listing
+SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=""; for(i=1;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort | head -200)
 
-  PROMPT="You are a senior Rails engineer planning test execution for a code change.
+PROMPT="You are a senior Rails engineer planning test execution for a code change.
 
 Your job: given this diff, return an ordered list of test files to run, grouped into confidence milestones. YOU decide how many tests are needed for each confidence level based on the risk profile of this specific diff.
 
@@ -122,25 +124,35 @@ Rules:
 
 Return ONLY the JSON object. No markdown, no explanation outside the JSON."
 
-  PAYLOAD=$(jq -n \
-    --arg model "claude-opus-4-7" \
-    --arg prompt "$PROMPT" \
-    '{model: $model, max_tokens: 16384, messages: [{role: "user", content: $prompt}]}')
+PAYLOAD=$(jq -n \
+  --arg model "claude-opus-4-7" \
+  --arg prompt "$PROMPT" \
+  '{model: $model, max_tokens: 16384, messages: [{role: "user", content: $prompt}]}')
 
-  printf "  🧠 Opus planning test execution..."
+printf "  🧠 Opus planning test execution..."
 
-  RESPONSE=$(curl -s --max-time 60 \
-    -H "Content-Type: application/json" \
-    -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-    -H "anthropic-version: 2023-06-01" \
-    -d "$PAYLOAD" \
-    "https://api.anthropic.com/v1/messages" 2>/dev/null) || RESPONSE=""
+RESPONSE=$(curl -s --max-time 60 \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+  -H "anthropic-version: 2023-06-01" \
+  -d "$PAYLOAD" \
+  "https://api.anthropic.com/v1/messages" 2>/dev/null)
 
-  AI_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
+if [[ -z "$RESPONSE" ]]; then
+  echo " failed (no response)"
+  exit 1
+fi
 
-  if [[ -n "$AI_TEXT" ]]; then
-    # Extract JSON
-    AI_JSON=$(echo "$AI_TEXT" | python3 -c "
+AI_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
+
+if [[ -z "$AI_TEXT" ]]; then
+  echo " failed (empty response)"
+  echo "  Response: $(echo "$RESPONSE" | jq -r '.error.message // "unknown error"' 2>/dev/null)"
+  exit 1
+fi
+
+# Extract JSON
+AI_JSON=$(echo "$AI_TEXT" | python3 -c "
 import sys, json, re
 text = sys.stdin.read()
 m = re.search(r'\{[\s\S]*\}', text)
@@ -152,78 +164,16 @@ if m:
         pass
 " 2>/dev/null || true)
 
-    if [[ -n "$AI_JSON" ]]; then
-      echo "$AI_JSON" > "$PLAN_FILE"
-      RISK=$(echo "$AI_JSON" | jq -r '.risk // "unknown"')
-      REASON=$(echo "$AI_JSON" | jq -r '.reason // ""')
-      echo " done"
-      echo "  ⚡ Risk: $RISK — $REASON"
-      AI_PLANNED=true
-    else
-      echo " failed to parse, using convention"
-    fi
-  else
-    echo " no response, using convention"
-  fi
+if [[ -z "$AI_JSON" ]]; then
+  echo " failed to parse AI response"
+  exit 1
 fi
 
-# ── Convention fallback: build plan without AI ──
-
-if [[ "$AI_PLANNED" != true ]]; then
-  echo "  📁 Convention-based test mapping"
-
-  SEEN=$(mktemp)
-  T99=$(mktemp)
-  T100=$(mktemp)
-
-  add_once() {
-    local f="$1" dest="$2"
-    [[ -f "$f" ]] || return 0
-    grep -qxF "$f" "$SEEN" 2>/dev/null && return 0
-    echo "$f" >> "$dest"
-    echo "$f" >> "$SEEN"
-  }
-
-  # 99%: direct specs, class references, same-directory
-  while IFS= read -r file; do
-    [[ -z "$file" ]] && continue
-    spec=$(echo "$file" | sed 's|^app/|spec/|; s|\.rb$|_spec.rb|')
-    add_once "$spec" "$T99"
-    if [[ "$file" == app/controllers/* ]]; then
-      add_once "$(echo "$file" | sed 's|^app/controllers/|spec/requests/|; s|_controller\.rb$|_spec.rb|')" "$T99"
-    fi
-  done <<< "$CHANGED"
-
-  while IFS= read -r file; do
-    [[ -z "$file" || "$file" != *.rb ]] && continue
-    classname=$(basename "$file" .rb | ruby -e 'puts STDIN.read.strip.split("_").map(&:capitalize).join' 2>/dev/null)
-    [[ -z "$classname" ]] && continue
-    grep -rl --include="*.rb" "$classname" spec/ 2>/dev/null | sort | while IFS= read -r spec; do
-      add_once "$spec" "$T99"
-    done
-  done <<< "$CHANGED"
-
-  while IFS= read -r file; do
-    [[ -z "$file" ]] && continue
-    dir=$(echo "$file" | sed 's|^app/|spec/|; s|/[^/]*$||')
-    [[ -d "$dir" ]] || continue
-    find "$dir" -maxdepth 1 -name "*_spec.rb" -type f 2>/dev/null | sort | while IFS= read -r spec; do
-      add_once "$spec" "$T99"
-    done
-  done <<< "$CHANGED"
-
-  # 100%: everything else
-  echo "$ALL_SPECS" | while IFS= read -r spec; do
-    add_once "$spec" "$T100"
-  done
-
-  T99_LIST=$(cat "$T99" | jq -R . | jq -s .)
-  T100_LIST=$(cat "$T100" | jq -R . | jq -s .)
-
-  echo "{\"risk\":\"unknown\",\"reason\":\"convention mapping (no AI)\",\"milestones\":[{\"confidence\":99,\"tests\":$T99_LIST},{\"confidence\":100,\"tests\":$T100_LIST}]}" > "$PLAN_FILE"
-
-  rm -f "$SEEN" "$T99" "$T100"
-fi
+echo "$AI_JSON" > "$PLAN_FILE"
+RISK=$(echo "$AI_JSON" | jq -r '.risk // "unknown"')
+REASON=$(echo "$AI_JSON" | jq -r '.reason // ""')
+echo " done"
+echo "  ⚡ Risk: $RISK — $REASON"
 
 # ── Parse plan and execute ──
 
@@ -234,7 +184,6 @@ TOTAL_PLANNED=0
 for (( m=0; m<MILESTONES; m++ )); do
   TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
   if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
-    # Count remaining
     PLANNED_SEEN=$(mktemp)
     for (( p=0; p<m; p++ )); do
       jq -r ".milestones[$p].tests[]" "$PLAN_FILE" 2>/dev/null >> "$PLANNED_SEEN"

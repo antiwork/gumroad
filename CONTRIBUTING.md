@@ -58,14 +58,11 @@ Run **test-confidence** before every commit:
 ```bash
 bin/test-confidence          # Run to 99%, stop
 bin/test-confidence --full   # Run to 100%
-bin/test-confidence --no-ai  # Convention fallback, no API key needed
 ```
 
-Opus 4.7 analyzes your diff in one call: decides the risk level, picks which tests to run, sets the order, and determines how many tests are needed for each confidence milestone. A comment-only change might need 2 tests for 99%. A payment model refactor might need 100. The AI decides the curve shape ad hoc per diff.
+Requires `ANTHROPIC_API_KEY`. Opus 4.7 analyzes your diff in one call: decides the risk level, picks which tests to run, sets the order, and determines how many tests are needed for each confidence milestone. A comment-only change might need 2 tests for 99%. A payment model refactor might need 100. The AI decides the curve shape ad hoc per diff.
 
-The bar is yellow while running toward 99%, then turns green. At green, safe to commit.
-
-Set `ANTHROPIC_API_KEY` for AI mode (falls back to convention mapping without it). Also works as a Claude Code skill: `/test-confidence`
+The bar is yellow while running toward 99%, then turns green. At green, safe to commit. Also works as a Claude Code skill: `/test-confidence`
 
 Also lint before committing:
 
