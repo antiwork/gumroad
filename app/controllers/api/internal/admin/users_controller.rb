@@ -136,8 +136,8 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     user = find_user_or_render(params[:email])
     return unless user
 
-    if user.suspended?
-      return render json: { success: true, status: "already_suspended", message: "User is already suspended" }
+    if user.suspended_for_fraud?
+      return render json: { success: true, status: "already_suspended", message: "User is already suspended for fraud" }
     end
 
     suspension_note = build_suspension_note(user) if params[:suspension_note].present?

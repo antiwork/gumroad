@@ -487,8 +487,20 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body).to eq({
         success: true,
         status: "already_suspended",
-        message: "User is already suspended"
+        message: "User is already suspended for fraud"
       }.as_json)
+    end
+
+    it "returns 422 when the user is suspended for a different reason" do
+      user.update!(user_risk_state: "suspended_for_tos_violation")
+
+      expect do
+        post :suspend_for_fraud, params: { email: user.email }
+      end.not_to change { user.comments.reload.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(user.reload).to be_suspended_for_tos_violation
     end
 
     it "returns 422 when the state machine rejects the suspension" do
