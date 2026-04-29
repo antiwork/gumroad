@@ -54,14 +54,11 @@ describe WatchedUser do
   end
 
   describe "#sync!" do
-    it "snapshots total successful sales revenue, current unpaid balance, and stamps last_synced_at" do
+    it "snapshots total revenue, current unpaid balance, and stamps last_synced_at" do
       user = create(:user)
       watch = create(:watched_user, user: user, revenue_threshold_cents: 20_000)
 
-      successful_scope = double("successful_scope")
-      sales_relation = double("sales_relation", successful: successful_scope)
-      allow(user).to receive(:sales).and_return(sales_relation)
-      allow(successful_scope).to receive(:sum).with(:price_cents).and_return(15_000)
+      allow(user).to receive(:sales_cents_total).and_return(15_000)
       allow(user).to receive(:unpaid_balance_cents).and_return(7_250)
       allow(watch).to receive(:user).and_return(user)
 
@@ -72,19 +69,6 @@ describe WatchedUser do
         expect(watch.unpaid_balance_cents).to eq(7_250)
         expect(watch.last_synced_at).to eq(Time.current)
       end
-    end
-  end
-
-  describe "#revenue_progress_percent" do
-    it "returns the rounded percentage capped at 100" do
-      watch = build(:watched_user, revenue_threshold_cents: 20_000, revenue_cents: 5_000)
-      expect(watch.revenue_progress_percent).to eq(25)
-
-      watch.revenue_cents = 25_000
-      expect(watch.revenue_progress_percent).to eq(100)
-
-      watch.revenue_cents = 0
-      expect(watch.revenue_progress_percent).to eq(0)
     end
   end
 

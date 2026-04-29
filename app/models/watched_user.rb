@@ -14,16 +14,10 @@ class WatchedUser < ApplicationRecord
 
   def sync!
     update!(
-      revenue_cents: user.sales.successful.sum(:price_cents),
+      revenue_cents: user.sales_cents_total,
       unpaid_balance_cents: user.unpaid_balance_cents,
       last_synced_at: Time.current
     )
-  end
-
-  def revenue_progress_percent
-    return 0 if revenue_threshold_cents.to_i.zero?
-
-    [(revenue_cents.to_f / revenue_threshold_cents * 100).round, 100].min
   end
 
   private

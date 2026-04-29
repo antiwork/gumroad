@@ -14,7 +14,7 @@ export const Form = ({
   className,
 }: {
   url: string;
-  method: "POST" | "DELETE";
+  method: "POST" | "PUT" | "PATCH" | "DELETE";
   confirmMessage?: string | undefined;
   onSuccess: () => void;
   children: (isLoading: boolean) => React.ReactNode;

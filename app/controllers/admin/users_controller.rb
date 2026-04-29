@@ -148,45 +148,6 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: false, message: e.message }, status: :unprocessable_content
   end
 
-  def add_to_watchlist
-    threshold = parse_revenue_threshold_cents
-    return render json: { success: false, message: "Revenue threshold must be greater than zero." }, status: :unprocessable_content if threshold.nil?
-
-    watched_user = @user.watched_users.create!(
-      revenue_threshold_cents: threshold,
-      notes: params.dig(:watched_user, :notes).presence,
-      created_by: current_user
-    )
-    watched_user.sync!
-    render json: { success: true }
-  rescue ActiveRecord::RecordInvalid => e
-    render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_content
-  end
-
-  def update_watchlist
-    watched_user = @user.active_watched_user
-    return render json: { success: false, message: "User is not currently being watched." }, status: :unprocessable_content if watched_user.nil?
-
-    threshold = parse_revenue_threshold_cents
-    return render json: { success: false, message: "Revenue threshold must be greater than zero." }, status: :unprocessable_content if threshold.nil?
-
-    watched_user.update!(
-      revenue_threshold_cents: threshold,
-      notes: params.dig(:watched_user, :notes).presence
-    )
-    render json: { success: true }
-  rescue ActiveRecord::RecordInvalid => e
-    render json: { success: false, message: e.record.errors.full_messages.first }, status: :unprocessable_content
-  end
-
-  def remove_from_watchlist
-    watched_user = @user.active_watched_user
-    return render json: { success: false, message: "User is not currently being watched." }, status: :unprocessable_content if watched_user.nil?
-
-    watched_user.mark_deleted!
-    render json: { success: true }
-  end
-
   def flag_for_fraud
     if !@user.flagged_for_fraud? && !@user.suspended_for_fraud?
       @user.flag_for_fraud!(author_id: current_user.id)
@@ -280,15 +241,5 @@ class Admin::UsersController < Admin::BaseController
 
     def mass_transfer_purchases_params
       params.require(:mass_transfer_purchases).permit(:new_email)
-    end
-
-    def parse_revenue_threshold_cents
-      raw = params.dig(:watched_user, :revenue_threshold)
-      return nil if raw.blank?
-
-      cents = (BigDecimal(raw.to_s) * 100).round
-      cents.positive? ? cents : nil
-    rescue ArgumentError
-      nil
     end
 end

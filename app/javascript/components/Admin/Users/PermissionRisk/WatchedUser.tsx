@@ -66,17 +66,14 @@ const WatchedBanner = ({ watch }: { watch: ActiveWatchedUser }) => {
 
 const WatchlistForm = ({ user }: { user: User }) => {
   const watch = user.active_watched_user;
-  const url = watch
-    ? Routes.update_watchlist_admin_user_path(user.external_id)
-    : Routes.add_to_watchlist_admin_user_path(user.external_id);
   const submitLabel = watch ? "Update" : "Add to watchlist";
   const submittingLabel = watch ? "Updating..." : "Adding...";
   const successMessage = watch ? "Watchlist updated." : "Added to watchlist.";
 
   return (
     <Form
-      url={url}
-      method="POST"
+      url={Routes.admin_user_watchlist_path(user.external_id)}
+      method={watch ? "PATCH" : "POST"}
       onSuccess={() => {
         showAlert(successMessage, "success");
         router.reload();
@@ -136,7 +133,7 @@ const WatchedUser = ({ user }: { user: User }) => {
               <AdminActionButton
                 label="Remove from watchlist"
                 method="DELETE"
-                url={Routes.remove_from_watchlist_admin_user_path(user.external_id)}
+                url={Routes.admin_user_watchlist_path(user.external_id)}
                 loading="Removing..."
                 done="Removed"
                 success_message="Removed from watchlist."

@@ -37,6 +37,7 @@ namespace :admin do
         end
       end
       resources :guids, only: [:index]
+      resource :watchlist, only: [:create, :update, :destroy]
     end
     member do
       post :add_credit
@@ -54,9 +55,6 @@ namespace :admin do
       post :mark_compliant
       post :suspend_for_fraud
       post :schedule_payout
-      post :add_to_watchlist
-      post :update_watchlist
-      delete :remove_from_watchlist
       post :suspend_for_tos_violation
       post :put_on_probation
       post :flag_for_fraud
