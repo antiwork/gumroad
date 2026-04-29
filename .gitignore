@@ -66,3 +66,4 @@ test-branch-creation.log
 .claude/worktrees/
 autoresearch.*
 .codex/
+.test-confidence-history.json

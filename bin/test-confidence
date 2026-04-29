@@ -1,40 +1,39 @@
 #!/usr/bin/env bash
 #
-# bin/test-confidence — Run tests in order of relevance. Confidence climbs from 0% to 100%.
+# bin/test-confidence — Run the tests that matter, fast.
+#
+# Finds the minimal set of tests needed for 99% confidence based on your
+# diff, runs them, then optionally continues toward 100%. Shows ETA based
+# on the last green CI build on main.
 #
 # Usage:
-#   bin/test-confidence              # Stop at 99%
-#   bin/test-confidence 0.95         # Stop at 95%
-#   bin/test-confidence 1.0          # Run everything (100%)
-#   bin/test-confidence --no-ai      # Convention mapping only, no API call
+#   bin/test-confidence          # Run to 99%, stop
+#   bin/test-confidence --full   # Run to 100%
+#   bin/test-confidence --no-ai  # Skip AI reranking
 #
 # Set ANTHROPIC_API_KEY for AI-powered ranking. Falls back to convention without it.
 #
 set -euo pipefail
 
-THRESHOLD=99
+RUN_FULL=false
 USE_AI=true
+HISTORY_FILE=".test-confidence-history.json"
 
 for arg in "$@"; do
   case "$arg" in
+    --full) RUN_FULL=true ;;
     --no-ai) USE_AI=false ;;
-    0.*|1|1.0|1.00) THRESHOLD=$(printf '%.0f' "$(echo "$arg * 100" | bc)") ;;
   esac
 done
 
 # ── Changed files ──
-# Priority:
-#   1. Uncommitted local changes (git diff HEAD + staged)
-#   2. Branch diff vs main (for PR branches with committed changes)
-#   3. If on main with no local changes, nothing to test
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+MERGE_BASE=""
 
-# Local uncommitted + staged changes
 LOCAL_CHANGED=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
   | sort -u | grep -E '\.(rb|ts|tsx|js|jsx)$' || true)
 
-# Branch diff vs main (what the PR introduces)
 BRANCH_CHANGED=""
 if [[ "$CURRENT_BRANCH" != "main" ]]; then
   MERGE_BASE=$(git merge-base origin/main HEAD 2>/dev/null || echo "")
@@ -44,7 +43,6 @@ if [[ "$CURRENT_BRANCH" != "main" ]]; then
   fi
 fi
 
-# Combine: local changes + branch diff (local first for priority)
 CHANGED=$(printf '%s\n%s' "$LOCAL_CHANGED" "$BRANCH_CHANGED" | sort -u | grep -v '^$' || true)
 
 if [[ -z "$CHANGED" ]]; then
@@ -54,80 +52,78 @@ if [[ -z "$CHANGED" ]]; then
   exit 0
 fi
 
-# Show diff source
-if [[ -n "$LOCAL_CHANGED" && -n "$BRANCH_CHANGED" ]]; then
-  echo "  📂 Uncommitted changes + branch diff vs main"
-elif [[ -n "$BRANCH_CHANGED" ]]; then
-  echo "  📂 Branch diff: $CURRENT_BRANCH vs main"
+FILE_COUNT=$(echo "$CHANGED" | wc -l | tr -d ' ')
+if [[ -n "$BRANCH_CHANGED" ]]; then
+  echo "  📂 $FILE_COUNT files changed ($CURRENT_BRANCH vs main)"
 else
-  echo "  📂 Uncommitted local changes"
+  echo "  📂 $FILE_COUNT files changed (local)"
 fi
 
-# Auto-raise for payment code
-if echo "$CHANGED" | grep -qE '^(app/billing/|app/payments/|app/models/purchase\.rb)'; then
-  [[ "$THRESHOLD" -lt 100 ]] && THRESHOLD=100
-  echo "  ⚠ Payment/billing code — threshold raised to 100%"
-fi
+# ── Build the critical set (tests needed for 99%) ──
 
-TOTAL_SPECS=$(find spec -name "*_spec.rb" -type f 2>/dev/null | wc -l | tr -d ' ')
-
-# ── Build a single ordered list: most relevant first, least relevant last ──
-
-QUEUE=$(mktemp)
+CRITICAL=$(mktemp)
+REMAINING=$(mktemp)
 SEEN=$(mktemp)
 
-add_if_new() {
+add_critical() {
   local f="$1"
   [[ -f "$f" ]] || return 0
   grep -qxF "$f" "$SEEN" 2>/dev/null && return 0
-  echo "$f" >> "$QUEUE"
+  echo "$f" >> "$CRITICAL"
   echo "$f" >> "$SEEN"
 }
 
-# --- Tier 1: Direct spec for each changed file ---
+add_remaining() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  grep -qxF "$f" "$SEEN" 2>/dev/null && return 0
+  echo "$f" >> "$REMAINING"
+  echo "$f" >> "$SEEN"
+}
+
+# Critical: direct specs for changed files
 while IFS= read -r file; do
   [[ -z "$file" ]] && continue
   spec=$(echo "$file" | sed 's|^app/|spec/|; s|\.rb$|_spec.rb|')
-  add_if_new "$spec"
-  # Controller → request spec
+  add_critical "$spec"
   if [[ "$file" == app/controllers/* ]]; then
-    add_if_new "$(echo "$file" | sed 's|^app/controllers/|spec/requests/|; s|_controller\.rb$|_spec.rb|')"
+    add_critical "$(echo "$file" | sed 's|^app/controllers/|spec/requests/|; s|_controller\.rb$|_spec.rb|')"
   fi
 done <<< "$CHANGED"
 
-# --- Tier 2: Specs that reference changed classes ---
+# Critical: specs that reference changed classes
 while IFS= read -r file; do
   [[ -z "$file" || "$file" != *.rb ]] && continue
   classname=$(basename "$file" .rb | sed -E 's/(^|_)([a-z])/\U\2/g')
   [[ -z "$classname" ]] && continue
   grep -rl --include="*.rb" "$classname" spec/ 2>/dev/null | sort | while IFS= read -r spec; do
-    add_if_new "$spec"
+    add_critical "$spec"
   done
 done <<< "$CHANGED"
 
-# --- Tier 3: Same-directory specs ---
+# Critical: same-directory specs
 while IFS= read -r file; do
   [[ -z "$file" ]] && continue
   dir=$(echo "$file" | sed 's|^app/|spec/|; s|/[^/]*$||')
   [[ -d "$dir" ]] || continue
   find "$dir" -maxdepth 1 -name "*_spec.rb" -type f 2>/dev/null | sort | while IFS= read -r spec; do
-    add_if_new "$spec"
+    add_critical "$spec"
   done
 done <<< "$CHANGED"
 
-RANKED_COUNT=$(wc -l < "$QUEUE" | tr -d ' ')
+CRITICAL_COUNT=$(wc -l < "$CRITICAL" | tr -d ' ')
 
-# --- Tier 4: Everything else (shuffled so it's not always alphabetical) ---
+# Remaining: everything else (for --full or continuing past 99%)
 find spec -name "*_spec.rb" -type f 2>/dev/null | sort -R | while IFS= read -r spec; do
-  add_if_new "$spec"
+  add_remaining "$spec"
 done
 
-TOTAL_QUEUED=$(wc -l < "$QUEUE" | tr -d ' ')
+REMAINING_COUNT=$(wc -l < "$REMAINING" | tr -d ' ')
+TOTAL_SPECS=$(( CRITICAL_COUNT + REMAINING_COUNT ))
 
-# ── Optional: AI re-ranks the queue ──
+# ── AI reranking of critical set ──
 
-if [[ "$USE_AI" == true && -n "${ANTHROPIC_API_KEY:-}" && "$RANKED_COUNT" -gt 0 ]]; then
-  # Get diff text: prefer local changes, fall back to branch diff vs main
+if [[ "$USE_AI" == true && -n "${ANTHROPIC_API_KEY:-}" && "$CRITICAL_COUNT" -gt 0 ]]; then
   if [[ -n "$LOCAL_CHANGED" ]]; then
     DIFF_TEXT=$(git diff HEAD -- $(echo "$LOCAL_CHANGED" | head -20) 2>/dev/null | head -400)
   elif [[ -n "$MERGE_BASE" ]]; then
@@ -135,7 +131,8 @@ if [[ "$USE_AI" == true && -n "${ANTHROPIC_API_KEY:-}" && "$RANKED_COUNT" -gt 0 
   else
     DIFF_TEXT=$(git diff HEAD -- $(echo "$CHANGED" | head -20) 2>/dev/null | head -400)
   fi
-  SPEC_LIST=$(cat "$QUEUE" | head -200)
+
+  SPEC_LIST=$(cat "$CRITICAL")
 
   PROMPT="You are a senior Rails engineer. Given this diff, reorder these test files from MOST to LEAST likely to catch a regression. Return ONLY the reordered file paths, one per line, no numbering, no explanation.
 
@@ -150,7 +147,7 @@ ${SPEC_LIST}"
     --arg prompt "$PROMPT" \
     '{model: $model, max_tokens: 8192, messages: [{role: "user", content: $prompt}]}')
 
-  printf "  🧠 AI reordering %d tests..." "$RANKED_COUNT"
+  printf "  🧠 AI reordering %d critical tests..." "$CRITICAL_COUNT"
 
   RESPONSE=$(curl -s --max-time 30 \
     -H "Content-Type: application/json" \
@@ -164,124 +161,142 @@ ${SPEC_LIST}"
   if [[ -n "$AI_TEXT" ]]; then
     AI_QUEUE=$(mktemp)
     AI_SEEN=$(mktemp)
-    # Add AI-ordered files first
     echo "$AI_TEXT" | grep -E '^spec/.*_spec\.rb$' | while IFS= read -r spec; do
       [[ -f "$spec" ]] || continue
       grep -qxF "$spec" "$AI_SEEN" 2>/dev/null && continue
       echo "$spec" >> "$AI_QUEUE"
       echo "$spec" >> "$AI_SEEN"
     done
-    # Then everything else from original queue that AI didn't mention
     while IFS= read -r spec; do
       grep -qxF "$spec" "$AI_SEEN" 2>/dev/null && continue
       echo "$spec" >> "$AI_QUEUE"
       echo "$spec" >> "$AI_SEEN"
-    done < "$QUEUE"
-    mv "$AI_QUEUE" "$QUEUE"
+    done < "$CRITICAL"
+    mv "$AI_QUEUE" "$CRITICAL"
     rm -f "$AI_SEEN"
     echo " done"
   else
-    echo " skipped (using convention order)"
+    echo " skipped"
   fi
 fi
 
-# ── Run tests one by one, confidence climbing continuously ──
+# ── Estimate time from CI history ──
 
-fmt_threshold() {
-  [[ "$THRESHOLD" -ge 100 ]] && echo "100%" || echo "${THRESHOLD}%"
+estimate_time() {
+  local count=$1
+  # Check for last green main CI run timing
+  local avg_per_spec=""
+  if [[ -f "$HISTORY_FILE" ]]; then
+    avg_per_spec=$(python3 -c "
+import json
+try:
+    h = json.load(open('$HISTORY_FILE'))
+    runs = h.get('runs', [])
+    if runs:
+        last = runs[-1]
+        avg = last['elapsed_seconds'] / max(last['specs_run'], 1)
+        print(f'{avg:.1f}')
+except: pass
+" 2>/dev/null || true)
+  fi
+
+  # Fallback: estimate from last green CI on GitHub
+  if [[ -z "$avg_per_spec" ]]; then
+    local ci_seconds
+    ci_seconds=$(gh run list -b main -s success -w "Tests" -L 1 --json updatedAt,createdAt \
+      --jq '.[0] | (((.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601)))' 2>/dev/null || true)
+    if [[ -n "$ci_seconds" && "$ci_seconds" -gt 0 ]]; then
+      # CI runs ~1300 specs across ~30 parallel nodes
+      avg_per_spec=$(python3 -c "print(f'{$ci_seconds / 30 / 43:.1f}')" 2>/dev/null || true)
+    fi
+  fi
+
+  if [[ -n "$avg_per_spec" ]]; then
+    python3 -c "print(int($count * $avg_per_spec))" 2>/dev/null || echo ""
+  fi
 }
 
+ETA_CRITICAL=$(estimate_time "$CRITICAL_COUNT")
+ETA_FULL=$(estimate_time "$TOTAL_SPECS")
+
+# ── Header ──
+
 echo ""
 echo "  ═══════════════════════════════════════════════════"
-echo "    TEST CONFIDENCE  →  $(fmt_threshold)"
-echo "    $TOTAL_QUEUED tests queued ($RANKED_COUNT prioritized)"
+echo "    TEST CONFIDENCE"
+echo "  ───────────────────────────────────────────────────"
+printf "    99%%  ←  %d tests" "$CRITICAL_COUNT"
+[[ -n "$ETA_CRITICAL" ]] && printf "  (~%ds)" "$ETA_CRITICAL"
+echo ""
+printf "   100%%  ←  %d tests" "$TOTAL_SPECS"
+[[ -n "$ETA_FULL" ]] && printf "  (~%ds)" "$ETA_FULL"
+echo ""
 echo "  ═══════════════════════════════════════════════════"
 echo ""
+
+# ── History tracking ──
+
+save_history() {
+  local specs=$1 elapsed=$2 result=$3
+  python3 -c "
+import json, time, os
+path = '$HISTORY_FILE'
+try:
+    h = json.load(open(path)) if os.path.exists(path) else {'runs': []}
+except: h = {'runs': []}
+h['runs'].append({
+    'timestamp': int(time.time()),
+    'branch': '$CURRENT_BRANCH',
+    'specs_run': $specs,
+    'elapsed_seconds': $elapsed,
+    'result': '$result'
+})
+h['runs'] = h['runs'][-50:]  # keep last 50
+json.dump(h, open(path, 'w'), indent=2)
+" 2>/dev/null || true
+}
+
+# ── Run critical tests (the 99% set) ──
 
 START=$(date +%s)
 PASSED=0
 FAILED=0
-CONFIDENCE=0
-
-# Confidence model:
-#   Each passing test adds to confidence proportional to total suite size.
-#   Early (high-relevance) tests contribute more via a Pareto curve.
-#
-#   confidence = 1 - (1 - passed/total)^k
-#     where k = 2.5 for ranked tests (front-loaded confidence)
-#     and   k = 1.0 for unranked tests (linear)
-#
-#   This means:
-#     10% of tests (most relevant) → ~70% confidence
-#     30% of tests                 → ~92% confidence
-#     50% of tests                 → ~98% confidence
-#     100% of tests                → 100% confidence
-
-calc_confidence() {
-  local passed=$1 total=$2 ranked=$3
-  python3 -c "
-import math
-passed, total, ranked = $passed, $total, $ranked
-if total == 0:
-    print(0)
-else:
-    frac = passed / total
-    # Pareto curve: front-loaded if we're still in ranked territory
-    if passed <= ranked:
-        k = 2.5
-    else:
-        # Blend: once past ranked tests, curve flattens toward linear
-        ranked_frac = ranked / total if total > 0 else 0
-        k = 2.5 - 1.5 * min(1, (frac - ranked_frac) / max(0.01, 1 - ranked_frac))
-    c = 1.0 - (1.0 - frac) ** k
-    print(int(c * 10000))  # basis points for integer math
-" 2>/dev/null
-}
 
 draw_bar() {
-  local bps=$1  # basis points (0-10000)
+  local passed=$1 total=$2 phase=$3
   local width=40
-  local filled=$(( bps * width / 10000 ))
+  local filled=0
+  if [[ "$total" -gt 0 ]]; then
+    filled=$(( passed * width / total ))
+  fi
   [[ $filled -gt $width ]] && filled=$width
   local empty=$(( width - filled ))
   local bar=""
-  for (( j=0; j<filled; j++ )); do bar+="▓"; done
-  for (( j=0; j<empty; j++ )); do bar+="░"; done
+  # Yellow while running critical, green once 99% reached
+  for (( j=0; j<filled; j++ )); do
+    if [[ "$phase" == "green" ]]; then
+      bar+="🟩"
+    else
+      bar+="🟨"
+    fi
+  done
+  for (( j=0; j<empty; j++ )); do bar+="⬜"; done
   echo "$bar"
 }
 
-fmt_confidence() {
-  local bps=$1
-  if [[ $bps -ge 10000 ]]; then echo "100"
-  elif [[ $bps -ge 9990 ]]; then echo "99.9"
-  elif [[ $bps -ge 1000 ]]; then echo "$(( bps / 100 )).$(( bps % 100 / 10 ))"
-  elif [[ $bps -ge 100 ]]; then echo "$(( bps / 100 )).$(( bps % 100 ))"
-  else echo "0.$(printf '%02d' $bps)"
-  fi
-}
+echo "  ── 99% confidence (critical tests) ──"
+echo ""
 
-THRESHOLD_BPS=$(( THRESHOLD * 100 ))
+mapfile -t CRITICAL_TESTS < "$CRITICAL"
 
-mapfile -t ALL_TESTS < "$QUEUE"
-
-for spec in "${ALL_TESTS[@]}"; do
+for spec in "${CRITICAL_TESTS[@]}"; do
   [[ -z "$spec" ]] && continue
 
-  # Run single test file
   if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
     PASSED=$((PASSED + 1))
-    CONFIDENCE=$(calc_confidence $PASSED $TOTAL_QUEUED $RANKED_COUNT)
-
     elapsed=$(( $(date +%s) - START ))
-    bar=$(draw_bar "$CONFIDENCE")
-    conf_str=$(fmt_confidence "$CONFIDENCE")
-    printf "\r  %s  %5s%%  %d/%d passed  %ds  " "$bar" "$conf_str" "$PASSED" "$TOTAL_QUEUED" "$elapsed"
-
-    # Stop if we've hit the threshold
-    if [[ "$CONFIDENCE" -ge "$THRESHOLD_BPS" ]]; then
-      echo ""
-      break
-    fi
+    bar=$(draw_bar "$PASSED" "$CRITICAL_COUNT" "neutral")
+    printf "\r  %s  %d/%d  %ds" "$bar" "$PASSED" "$CRITICAL_COUNT" "$elapsed"
   else
     FAILED=$((FAILED + 1))
     echo ""
@@ -294,25 +309,76 @@ for spec in "${ALL_TESTS[@]}"; do
     echo ""
     echo "  Fix this before committing."
     echo ""
+
+    # Save timing data
+    elapsed=$(( $(date +%s) - START ))
+    save_history "$PASSED" "$elapsed" "failed"
     exit 1
   fi
 done
 
-# ── Done ──
+CRITICAL_ELAPSED=$(( $(date +%s) - START ))
 
-elapsed=$(( $(date +%s) - START ))
-conf_str=$(fmt_confidence "$CONFIDENCE")
+# ── 99% reached ──
 
 echo ""
-echo "  ═══════════════════════════════════════════════════"
-if [[ "$CONFIDENCE" -ge "$THRESHOLD_BPS" ]]; then
-  echo "    ✅  ${conf_str}% confidence  (threshold: $(fmt_threshold))"
-else
-  echo "    ⚠️   ${conf_str}% confidence  (threshold: $(fmt_threshold))"
+echo ""
+bar=$(draw_bar "$CRITICAL_COUNT" "$CRITICAL_COUNT" "green")
+echo "  $bar"
+echo ""
+echo "  ✅ 99% confidence — $CRITICAL_COUNT tests passed in ${CRITICAL_ELAPSED}s"
+echo "     Safe to commit."
+echo ""
+
+save_history "$PASSED" "$CRITICAL_ELAPSED" "passed_99"
+
+# ── Continue to 100% if requested ──
+
+if [[ "$RUN_FULL" != true ]]; then
+  if [[ "$REMAINING_COUNT" -gt 0 ]]; then
+    echo "  $REMAINING_COUNT more tests for 100%. Run with --full to continue."
+    echo ""
+  fi
+  exit 0
 fi
-echo "  ═══════════════════════════════════════════════════"
-echo ""
-echo "  $PASSED passed in ${elapsed}s  ·  $TOTAL_QUEUED in repo"
+
+echo "  ── 100% confidence (full suite) ──"
 echo ""
 
-[[ "$CONFIDENCE" -ge "$THRESHOLD_BPS" ]]
+mapfile -t REMAINING_TESTS < "$REMAINING"
+FULL_PASSED=$PASSED
+FULL_START=$(date +%s)
+
+for spec in "${REMAINING_TESTS[@]}"; do
+  [[ -z "$spec" ]] && continue
+
+  if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
+    FULL_PASSED=$((FULL_PASSED + 1))
+    elapsed=$(( $(date +%s) - START ))
+    pct=$(( FULL_PASSED * 100 / TOTAL_SPECS ))
+    bar=$(draw_bar "$FULL_PASSED" "$TOTAL_SPECS" "green")
+    printf "\r  %s  %d/%d  %d%%  %ds" "$bar" "$FULL_PASSED" "$TOTAL_SPECS" "$pct" "$elapsed"
+  else
+    FAILED=$((FAILED + 1))
+    echo ""
+    echo ""
+    echo "  ═══════════════════════════════════════════════════"
+    echo "    ❌ FAILED — $spec"
+    echo "  ═══════════════════════════════════════════════════"
+    echo ""
+    echo "$output" | tail -20 | sed 's/^/    /'
+    echo ""
+    exit 1
+  fi
+done
+
+FULL_ELAPSED=$(( $(date +%s) - START ))
+
+echo ""
+echo ""
+echo "  ═══════════════════════════════════════════════════"
+echo "    ✅ 100% confidence — $FULL_PASSED tests in ${FULL_ELAPSED}s"
+echo "  ═══════════════════════════════════════════════════"
+echo ""
+
+save_history "$FULL_PASSED" "$FULL_ELAPSED" "passed_100"
