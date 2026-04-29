@@ -42,17 +42,17 @@ DENYLIST = %w[ a about account activate add admin administrator api app apps
                cart challenge changelog checkout codereview community compare config configuration
                connect contact create delete direct_messages discover documentation
                download downloads edit email employment enterprise facebook
-               faq favorites feed feedback feeds fleet fleets follow
-               followers following friend friends group groups gist help
+               faq favorites features feed feedback feeds fleet fleets follow
+               followers following friend friends group groups gist hackathon help
                home hosting hostmaster idea ideas index info invitations
                invite is it json job jobs lists login logout logs mail map
                maps mine mis news oauth oauth_clients offers openid order
-               orders organizations plans popular privacy projects put post
-               read recruitment register remove replies root rss sales save
+               orders organizations plans popular pricing privacy prohibited projects put post
+               read recruitment register remove replies root rss saas sales save
                search security sessions settings shop signup sitemap ssl
                ssladmin ssladministrator sslwebmaster status stories stream
                styleguide subscribe subscriptions support sysadmin
-               sysadministrator terms tour translations trends twitter
+               sysadministrator taxes terms tour translations trends twitter
                twittr update unfollow unsubscribe url user weather widget
                widgets wiki ww www wwww xfn xml xmpp yml yaml ladygaga
                kanye kanyewest randyjackson mariahcarey atrak deadmau5
