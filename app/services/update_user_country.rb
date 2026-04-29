@@ -24,7 +24,7 @@ class UpdateUserCountry
     @user.active_bank_account.try(:mark_deleted!)
     @user.user_compliance_info_requests.requested.find_each(&:mark_provided!)
 
-    @user.alive_user_compliance_info.mark_deleted!
+    @user.alive_user_compliance_info.mark_deleted(validate: false)
     @user.user_compliance_infos.build.tap do |new_user_compliance_info|
       new_user_compliance_info.country = Compliance::Countries.mapping[@new_country_code]
       new_user_compliance_info.json_data = {}
