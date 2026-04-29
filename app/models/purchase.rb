@@ -3333,6 +3333,7 @@ class Purchase < ApplicationRecord
       return false unless link.recommendable? || (not_is_original_subscription_purchase? && original_purchase&.was_discover_fee_charged?)
       was_product_recommended? && !RecommendationType.is_free_recommendation_type?(recommended_by)
     end
+    public :charge_discover_fee?
 
     # Calculates the fees we charge based on price_cents
     #

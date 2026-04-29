@@ -3982,28 +3982,28 @@ describe Purchase, :vcr do
     end
 
     it "is false if the purchase is not recommended" do
-      expect(@purchase.send(:charge_discover_fee?)).to eq(false)
+      expect(@purchase.charge_discover_fee?).to eq(false)
     end
 
     it "returns true if the purchase is recommended" do
       @purchase.was_product_recommended = true
       @purchase.save
-      expect(@purchase.send(:charge_discover_fee?)).to eq(true)
+      expect(@purchase.charge_discover_fee?).to eq(true)
       @purchase.seller.recommendation_type = User::RecommendationType::NO_RECOMMENDATIONS
       @purchase.seller.save
-      expect(@purchase.send(:charge_discover_fee?)).to eq(true)
+      expect(@purchase.charge_discover_fee?).to eq(true)
     end
 
     it "returns false if the purchase is recommended by library or more like this" do
-      expect(@purchase.send(:charge_discover_fee?)).to eq(false)
+      expect(@purchase.charge_discover_fee?).to eq(false)
 
       @purchase.update!(was_product_recommended: true)
-      expect(@purchase.send(:charge_discover_fee?)).to eq(true)
+      expect(@purchase.charge_discover_fee?).to eq(true)
 
       RecommendationType.all.each do |recommendation_type|
         @purchase.update!(recommended_by: recommendation_type)
         expect(@purchase.was_product_recommended?).to eq(true)
-        expect(@purchase.send(:charge_discover_fee?)).to eq(!RecommendationType.is_free_recommendation_type?(recommendation_type))
+        expect(@purchase.charge_discover_fee?).to eq(!RecommendationType.is_free_recommendation_type?(recommendation_type))
       end
     end
   end
