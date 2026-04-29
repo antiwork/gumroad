@@ -110,6 +110,39 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     render json: { success: false, message: "Idempotency key already used with different content" }, status: :conflict
   end
 
+  def mark_compliant
+    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+
+    user = find_user_or_render(params[:email])
+    return unless user
+
+    if user.compliant?
+      return render json: { success: true, status: "already_compliant", message: "User is already compliant" }
+    end
+
+    user.mark_compliant!(author_id: GUMROAD_ADMIN_ID, content: params[:note].presence)
+    render json: { success: true, status: "marked_compliant", message: "User marked compliant" }
+  rescue StateMachines::InvalidTransition => e
+    render json: { success: false, message: e.message }, status: :unprocessable_entity
+  end
+
+  def suspend_for_fraud
+    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+
+    user = find_user_or_render(params[:email])
+    return unless user
+
+    if user.suspended?
+      return render json: { success: true, status: "already_suspended", message: "User is already suspended" }
+    end
+
+    user.suspend_for_fraud!(author_id: GUMROAD_ADMIN_ID)
+    create_suspension_note(user) if params[:suspension_note].present?
+    render json: { success: true, status: "suspended_for_fraud", message: "User suspended for fraud" }
+  rescue StateMachines::InvalidTransition => e
+    render json: { success: false, message: e.message }, status: :unprocessable_entity
+  end
+
   private
     def find_user_or_render(email)
       user = User.alive.by_email(email).first
@@ -137,5 +170,13 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         comment_type: comment.comment_type,
         created_at: comment.created_at.iso8601
       }
+    end
+
+    def create_suspension_note(user)
+      user.comments.create!(
+        author_id: GUMROAD_ADMIN_ID,
+        comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
+        content: params[:suspension_note]
+      )
     end
 end

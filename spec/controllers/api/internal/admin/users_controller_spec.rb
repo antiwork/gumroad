@@ -315,4 +315,161 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["success"]).to be(false)
     end
   end
+
+  describe "POST mark_compliant" do
+    let(:user) { create(:user, user_risk_state: "suspended_for_fraud", email: "seller@example.com") }
+
+    include_examples "admin api authorization required", :post, :mark_compliant
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns 400 when email is missing" do
+      post :mark_compliant
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns 404 when the user does not exist" do
+      post :mark_compliant, params: { email: "missing@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "marks the user compliant and creates an audit comment attributed to GUMROAD_ADMIN_ID" do
+      expect do
+        post :mark_compliant, params: { email: user.email, note: "Cleared after review" }
+      end.to change { user.comments.reload.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        status: "marked_compliant",
+        message: "User marked compliant"
+      }.as_json)
+      expect(user.reload).to be_compliant
+
+      comment = user.comments.last
+      expect(comment).to have_attributes(
+        author_id: admin_user.id,
+        comment_type: Comment::COMMENT_TYPE_COMPLIANT,
+        content: "Cleared after review"
+      )
+    end
+
+    it "keeps the existing sibling-account compliant side effect" do
+      payment_address = "shared@example.com"
+      user.update!(payment_address:)
+      sibling = create(:user, user_risk_state: "suspended_for_fraud", payment_address:)
+
+      post :mark_compliant, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(user.reload).to be_compliant
+      expect(sibling.reload).to be_compliant
+      expect(sibling.comments.last).to have_attributes(
+        author_name: "enable_sellers_other_accounts",
+        comment_type: Comment::COMMENT_TYPE_COMPLIANT
+      )
+      expect(sibling.comments.last.content).to include("payment address #{payment_address} is now unblocked")
+    end
+
+    it "returns success without creating another comment when the user is already compliant" do
+      user.update!(user_risk_state: "compliant")
+
+      expect do
+        post :mark_compliant, params: { email: user.email, note: "Retry" }
+      end.not_to change { user.comments.reload.count }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        status: "already_compliant",
+        message: "User is already compliant"
+      }.as_json)
+    end
+  end
+
+  describe "POST suspend_for_fraud" do
+    let(:user) { create(:compliant_user, email: "seller@example.com") }
+
+    include_examples "admin api authorization required", :post, :suspend_for_fraud
+
+    before { stub_const("GUMROAD_ADMIN_ID", admin_user.id) }
+
+    it "returns 400 when email is missing" do
+      post :suspend_for_fraud
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq({ success: false, message: "email is required" }.as_json)
+    end
+
+    it "returns 404 when the user does not exist" do
+      post :suspend_for_fraud, params: { email: "missing@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+
+    it "suspends the user for fraud and creates an audit comment attributed to GUMROAD_ADMIN_ID" do
+      expect do
+        post :suspend_for_fraud, params: { email: user.email }
+      end.to change { user.comments.reload.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        status: "suspended_for_fraud",
+        message: "User suspended for fraud"
+      }.as_json)
+      expect(user.reload).to be_suspended_for_fraud
+
+      comment = user.comments.last
+      expect(comment).to have_attributes(
+        author_id: admin_user.id,
+        comment_type: Comment::COMMENT_TYPE_SUSPENDED
+      )
+      expect(comment.content).to include("Suspended for fraud")
+    end
+
+    it "creates an extra suspension note when one is provided" do
+      expect do
+        post :suspend_for_fraud, params: { email: user.email, suspension_note: "Chargeback risk confirmed" }
+      end.to change { user.comments.reload.count }.by(2)
+
+      expect(response).to have_http_status(:ok)
+      note = user.comments.find_by!(comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE)
+      expect(note).to have_attributes(
+        author_id: admin_user.id,
+        comment_type: Comment::COMMENT_TYPE_SUSPENSION_NOTE,
+        content: "Chargeback risk confirmed"
+      )
+    end
+
+    it "returns success without creating another comment when the user is already suspended" do
+      user.update!(user_risk_state: "suspended_for_fraud")
+
+      expect do
+        post :suspend_for_fraud, params: { email: user.email, suspension_note: "Retry" }
+      end.not_to change { user.comments.reload.count }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        status: "already_suspended",
+        message: "User is already suspended"
+      }.as_json)
+    end
+
+    it "returns 422 when the state machine rejects the suspension" do
+      user.update!(verified: true)
+
+      post :suspend_for_fraud, params: { email: user.email }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(user.reload).to be_compliant
+    end
+  end
 end

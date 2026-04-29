@@ -321,6 +321,8 @@ Rails.application.routes.draw do
               post :update_email
               post :two_factor_authentication
               post :create_comment
+              post :mark_compliant
+              post :suspend_for_fraud
             end
           end
 
