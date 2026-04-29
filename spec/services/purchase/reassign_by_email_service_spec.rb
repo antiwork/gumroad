@@ -39,6 +39,31 @@ describe Purchase::ReassignByEmailService do
       end
     end
 
+    context "when from_email and to_email match" do
+      it "returns reason :no_changes for an exact match" do
+        result = described_class.new(from_email: "user@example.com", to_email: "user@example.com").perform
+
+        expect(result.success?).to be(false)
+        expect(result.reason).to eq(:no_changes)
+        expect(result.error_message).to eq("from and to emails are the same")
+        expect(result.reassigned_purchase_ids).to eq([])
+      end
+
+      it "rejects same email case-insensitively" do
+        result = described_class.new(from_email: "User@Example.com", to_email: "user@example.com").perform
+
+        expect(result.success?).to be(false)
+        expect(result.reason).to eq(:no_changes)
+      end
+
+      it "does not query Purchase or enqueue a receipt when same emails are submitted" do
+        expect(Purchase).not_to receive(:where)
+        expect(CustomerMailer).not_to receive(:grouped_receipt)
+
+        described_class.new(from_email: "user@example.com", to_email: "user@example.com").perform
+      end
+    end
+
     context "when target user exists" do
       let!(:target_user) { create(:user, email: to_email) }
       let!(:purchase1) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:) }
@@ -77,6 +102,19 @@ describe Purchase::ReassignByEmailService do
         expect(recurring.reload.email).to eq(to_email)
         expect(recurring.purchaser_id).to eq(target_user.id)
         expect(subscription.reload.user).to eq(target_user)
+      end
+
+      it "does not modify subscription.user when the original_purchase update fails" do
+        subscription = create(:subscription, user: buyer)
+        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:)
+        create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:)
+
+        allow_any_instance_of(Purchase).to receive(:update).with(hash_including(:email)).and_return(false)
+
+        described_class.new(from_email:, to_email:).perform
+
+        expect(subscription.reload.user).to eq(buyer)
+        expect(original_purchase.reload.email).to eq("old_original@example.com")
       end
 
       it "enqueues a grouped receipt for all reassigned purchases" do

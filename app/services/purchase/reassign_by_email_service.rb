@@ -16,6 +16,10 @@ class Purchase::ReassignByEmailService
       return Result.new(success: false, reassigned_purchase_ids: [], reason: :missing_params, error_message: "Both 'from' and 'to' email addresses are required")
     end
 
+    if @from_email.to_s.casecmp(@to_email.to_s).zero?
+      return Result.new(success: false, reassigned_purchase_ids: [], reason: :no_changes, error_message: "from and to emails are the same")
+    end
+
     purchases = Purchase.where(email: @from_email).to_a
     if purchases.empty?
       return Result.new(success: false, reassigned_purchase_ids: [], reason: :not_found, error_message: "No purchases found for email: #{@from_email}")
@@ -29,9 +33,10 @@ class Purchase::ReassignByEmailService
       purchase.email = @to_email
 
       if purchase.subscription.present? && !purchase.is_original_subscription_purchase? && !purchase_id_set.include?(purchase.original_purchase.id)
-        purchase.original_purchase.update(email: @to_email, purchaser_id: target_user&.id)
-        reassigned_purchase_ids << purchase.original_purchase.id if purchase.original_purchase.saved_changes?
-        purchase.subscription.update(user: target_user)
+        if purchase.original_purchase.update(email: @to_email, purchaser_id: target_user&.id)
+          reassigned_purchase_ids << purchase.original_purchase.id if purchase.original_purchase.saved_changes?
+          purchase.subscription.update(user: target_user)
+        end
       end
 
       purchase.purchaser_id = target_user&.id

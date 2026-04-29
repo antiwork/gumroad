@@ -743,5 +743,12 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body).to eq({ success: false, message: "No purchases were reassigned" }.as_json)
     end
+
+    it "returns 422 when from and to emails are the same" do
+      post :reassign, params: { from: from_email, to: from_email }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "from and to emails are the same" }.as_json)
+    end
   end
 end
