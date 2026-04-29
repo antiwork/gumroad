@@ -285,6 +285,13 @@ Rails.application.routes.draw do
 
           resources :payouts, only: [:index, :create]
           resources :instant_payouts, only: [:index, :create]
+
+          resources :sendgrid_emails, only: [] do
+            collection do
+              post :check_status
+              post :remove_suppression
+            end
+          end
         end
 
         namespace :admin do

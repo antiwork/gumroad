@@ -2,6 +2,7 @@
 
 class EmailSuppressionManager
   SUPPRESSION_LISTS = [:bounces, :spam_reports]
+  ALL_SUPPRESSION_LISTS = [:bounces, :blocks, :spam_reports, :invalid_emails].freeze
   private_constant :SUPPRESSION_LISTS
 
   def initialize(email)
@@ -14,6 +15,40 @@ class EmailSuppressionManager
       supression_reasons = email_suppression_reasons(api_key)
       reasons[subuser] = supression_reasons if supression_reasons.present?
       reasons
+    end
+  end
+
+  def detailed_status(lists: ALL_SUPPRESSION_LISTS)
+    sendgrid_subusers.each_with_object(lists.index_with { [] }) do |(subuser, api_key), result|
+      suppression = sendgrid(api_key).client.suppression
+      lists.each do |list|
+        parsed_body = suppression.public_send(list)._(email).get.parsed_body
+        next if parsed_body.blank?
+        raise "Unexpected SendGrid response shape: #{parsed_body.inspect}" unless parsed_body.is_a?(Array)
+
+        parsed_body.each do |entry|
+          raise "Unexpected SendGrid entry shape: #{entry.inspect}" unless entry.is_a?(Hash)
+          result[list] << {
+            subuser:,
+            reason: entry[:reason],
+            created_at: entry[:created] ? Time.zone.at(entry[:created]).iso8601 : nil,
+          }
+        end
+      rescue => e
+        ErrorNotifier.notify(e)
+        Rails.logger.info "[EmailSuppressionManager] Error parsing SendGrid #{list} response for #{subuser}: #{e.message}"
+      end
+    end
+  end
+
+  def remove_from_lists(lists)
+    lists = Array(lists).map(&:to_sym)
+    sendgrid_subusers.each_with_object(lists.index_with { [] }) do |(subuser, api_key), result|
+      suppression = sendgrid(api_key).client.suppression
+      lists.each do |list|
+        next unless successful_response?(suppression.public_send(list)._(email).delete.status_code)
+        result[list] << subuser
+      end
     end
   end
 
