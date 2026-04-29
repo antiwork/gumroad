@@ -174,5 +174,18 @@ describe Purchase::ReassignByEmailService do
         expect(subscription.reload.user).to be_nil
       end
     end
+
+    context "when the to_email belongs only to a soft-deleted user" do
+      let!(:deleted_user) { create(:user, email: to_email).tap(&:deactivate!) }
+      let!(:purchase) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:) }
+
+      it "treats the email as having no target user and reassigns with purchaser_id nil" do
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(true)
+        expect(purchase.reload.email).to eq(to_email)
+        expect(purchase.purchaser_id).to be_nil
+      end
+    end
   end
 end

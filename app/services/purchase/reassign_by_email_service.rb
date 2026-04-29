@@ -26,7 +26,7 @@ class Purchase::ReassignByEmailService
     end
 
     purchase_id_set = purchases.map(&:id).to_set
-    target_user = User.find_by(email: @to_email)
+    target_user = User.alive.by_email(@to_email).first
     reassigned_purchase_ids = []
 
     purchases.each do |purchase|
