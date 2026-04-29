@@ -42,15 +42,20 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
   end
 
   def refund
-    return render json: { success: false, message: "email is required" }, status: :bad_request if params[:email].blank?
+    buyer_email = params[:email].to_s.strip.downcase
+    return render json: { success: false, message: "email is required" }, status: :bad_request if buyer_email.blank?
 
     purchase = fetch_purchase
-    if purchase.blank? || purchase.email.to_s.downcase != params[:email].to_s.downcase
+    if purchase.blank? || purchase.email.to_s.downcase != buyer_email
       return render json: { success: false, message: "Purchase not found or email doesn't match" }, status: :not_found
     end
 
     if purchase.stripe_refunded
       return render json: { success: false, message: "Purchase has already been fully refunded" }, status: :unprocessable_entity
+    end
+
+    if purchase.stripe_transaction_id.blank? || purchase.amount_refundable_cents <= 0
+      return render json: { success: false, message: "Purchase has no charge to refund" }, status: :unprocessable_entity
     end
 
     force = ActiveModel::Type::Boolean.new.cast(params[:force])
@@ -67,7 +72,11 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
 
     amount = nil
     if params[:amount_cents].present?
-      amount_cents = params[:amount_cents].to_i
+      raw_amount_cents = params[:amount_cents]
+      unless raw_amount_cents.is_a?(Integer) || raw_amount_cents.to_s.match?(/\A\d+\z/)
+        return render json: { success: false, message: "amount_cents must be a positive integer" }, status: :unprocessable_entity
+      end
+      amount_cents = raw_amount_cents.to_i
       if amount_cents <= 0
         return render json: { success: false, message: "amount_cents must be a positive integer" }, status: :unprocessable_entity
       end
@@ -81,12 +90,14 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
 
     subscription_cancelled = false
     subscription_cancel_error = nil
+    subscription = purchase.subscription
     if ActiveModel::Type::Boolean.new.cast(params[:cancel_subscription]) &&
-        purchase.subscription.present? &&
-        !purchase.subscription.deactivated?
+        subscription.present? &&
+        subscription.cancelled_at.blank? &&
+        !subscription.deactivated?
       begin
-        purchase.subscription.cancel!(by_seller: false, by_admin: true)
-        subscription_cancelled = true
+        subscription.cancel!(by_seller: true, by_admin: true)
+        subscription_cancelled = subscription.cancelled_at.present?
       rescue => e
         subscription_cancel_error = e.message
         Rails.logger.error("[admin/refund] subscription cancel failed for purchase #{purchase.external_id_numeric}: #{e.class}: #{e.message}")

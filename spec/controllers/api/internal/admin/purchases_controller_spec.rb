@@ -198,6 +198,8 @@ describe Api::Internal::Admin::PurchasesController do
         "product_id" => product.external_id_numeric.to_s,
         "formatted_total_price" => purchase.formatted_total_price,
         "price_cents" => 0,
+        "currency_type" => purchase.displayed_price_currency_type.to_s,
+        "amount_refundable_cents" => purchase.amount_refundable_cents_in_currency,
         "purchase_state" => purchase.purchase_state,
         "refund_status" => nil,
         "receipt_url" => receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol, email: purchase.email)
@@ -266,6 +268,8 @@ describe Api::Internal::Admin::PurchasesController do
         allow(Purchase).to receive(:find_by_external_id_numeric).with(purchase.external_id_numeric).and_return(purchase)
         allow(purchase).to receive(:within_refund_policy_timeframe?).and_return(true)
         allow(purchase).to receive(:purchase_refund_policy).and_return(refund_policy)
+        allow(purchase).to receive(:stripe_transaction_id).and_return("ch_test")
+        allow(purchase).to receive(:amount_refundable_cents).and_return(1000)
         purchase.errors.clear
         expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
 
@@ -281,6 +285,8 @@ describe Api::Internal::Admin::PurchasesController do
         allow(Purchase).to receive(:find_by_external_id_numeric).with(purchase.external_id_numeric).and_return(purchase)
         allow(purchase).to receive(:within_refund_policy_timeframe?).and_return(true)
         allow(purchase).to receive(:purchase_refund_policy).and_return(refund_policy)
+        allow(purchase).to receive(:stripe_transaction_id).and_return("ch_test")
+        allow(purchase).to receive(:amount_refundable_cents).and_return(1000)
         purchase.errors.clear
       end
 
@@ -333,6 +339,50 @@ describe Api::Internal::Admin::PurchasesController do
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body["success"]).to be(false)
         expect(response.parsed_body["message"]).to eq("amount_cents must be a positive integer")
+      end
+
+      it "returns 422 when amount_cents is a decimal-like string" do
+        post :refund, params: params.merge(amount_cents: "5.99")
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("amount_cents must be a positive integer")
+      end
+
+      it "returns 422 when amount_cents has trailing non-digit characters" do
+        post :refund, params: params.merge(amount_cents: "12abc")
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("amount_cents must be a positive integer")
+      end
+
+      it "returns 422 when amount_cents is negative" do
+        post :refund, params: params.merge(amount_cents: "-100")
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("amount_cents must be a positive integer")
+      end
+
+      it "returns 422 when the purchase has no charge to refund" do
+        allow(purchase).to receive(:stripe_transaction_id).and_return(nil)
+
+        post :refund, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("Purchase has no charge to refund")
+      end
+
+      it "returns 422 when the purchase has no remaining refundable amount" do
+        allow(purchase).to receive(:amount_refundable_cents).and_return(0)
+
+        post :refund, params: params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("Purchase has no charge to refund")
       end
 
       it "returns 422 when the purchase is already fully refunded" do
@@ -403,12 +453,14 @@ describe Api::Internal::Admin::PurchasesController do
       end
 
       context "with cancel_subscription=true" do
-        let(:subscription) { instance_double(Subscription, deactivated?: false, price: nil) }
+        let(:subscription) { instance_double(Subscription, deactivated?: false, cancelled_at: nil, price: nil) }
 
-        it "cancels the subscription as an admin (not seller) after a successful refund" do
+        it "cancels the subscription with admin/seller semantics after a successful refund" do
           allow(purchase).to receive(:subscription).and_return(subscription)
           expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
-          expect(subscription).to receive(:cancel!).with(by_seller: false, by_admin: true)
+          expect(subscription).to receive(:cancel!).with(by_seller: true, by_admin: true) do
+            allow(subscription).to receive(:cancelled_at).and_return(Time.current)
+          end
 
           post :refund, params: params.merge(cancel_subscription: "true")
 
@@ -431,7 +483,7 @@ describe Api::Internal::Admin::PurchasesController do
         end
 
         it "does not re-cancel a subscription that is already deactivated" do
-          deactivated_subscription = instance_double(Subscription, deactivated?: true, price: nil)
+          deactivated_subscription = instance_double(Subscription, deactivated?: true, cancelled_at: 1.hour.ago, price: nil)
           allow(purchase).to receive(:subscription).and_return(deactivated_subscription)
           expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
           expect(deactivated_subscription).not_to receive(:cancel!)
@@ -442,10 +494,22 @@ describe Api::Internal::Admin::PurchasesController do
           expect(response.parsed_body["subscription_cancelled"]).to be(false)
         end
 
+        it "does not re-cancel a subscription that is already pending cancellation" do
+          pending_subscription = instance_double(Subscription, deactivated?: false, cancelled_at: 1.day.from_now, price: nil)
+          allow(purchase).to receive(:subscription).and_return(pending_subscription)
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+          expect(pending_subscription).not_to receive(:cancel!)
+
+          post :refund, params: params.merge(cancel_subscription: "true")
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body["subscription_cancelled"]).to be(false)
+        end
+
         it "still returns success with subscription_cancel_error when cancel! raises after a successful refund" do
           allow(purchase).to receive(:subscription).and_return(subscription)
           expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
-          expect(subscription).to receive(:cancel!).with(by_seller: false, by_admin: true).and_raise(StandardError, "stripe blew up")
+          expect(subscription).to receive(:cancel!).with(by_seller: true, by_admin: true).and_raise(StandardError, "stripe blew up")
 
           post :refund, params: params.merge(cancel_subscription: "true")
 
@@ -453,6 +517,17 @@ describe Api::Internal::Admin::PurchasesController do
           expect(response.parsed_body["success"]).to be(true)
           expect(response.parsed_body["subscription_cancelled"]).to be(false)
           expect(response.parsed_body["subscription_cancel_error"]).to eq("stripe blew up")
+        end
+      end
+
+      context "with whitespace in the email parameter" do
+        it "strips whitespace before comparing against the purchase email" do
+          expect(purchase).to receive(:refund!).with(refunding_user_id: admin_user.id, amount: nil).and_return(true)
+
+          post :refund, params: params.merge(email: "  #{purchase.email.upcase}  ")
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body["success"]).to be(true)
         end
       end
     end

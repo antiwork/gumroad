@@ -29,6 +29,8 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         product_id: purchase.link&.external_id_numeric&.to_s,
         formatted_total_price: purchase.formatted_total_price,
         price_cents: purchase.price_cents,
+        currency_type: purchase.displayed_price_currency_type.to_s,
+        amount_refundable_cents: purchase.amount_refundable_cents_in_currency,
         purchase_state: purchase.purchase_state,
         refund_status: refund_status(purchase),
         created_at: purchase.created_at.as_json,
