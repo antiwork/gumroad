@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+
+set -u
+
+ok() { printf "✅ %s\n" "$1"; }
+warn() { printf "⚠️  %s\n" "$1"; }
+fail() { printf "❌ %s\n" "$1"; }
+info() { printf "   %s\n" "$1"; }
+
+has_command() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+port_listening() {
+  lsof -i :"$1" -n -P >/dev/null 2>&1
+}
+
+print_header() {
+  printf "\n== %s ==\n" "$1"
+}
+
+# ========================
+print_header "Ruby"
+
+if has_command ruby; then
+  ruby_path="$(which ruby)"
+  ruby_version="$(ruby -v)"
+
+  if [[ "$ruby_path" == *".rbenv/shims/ruby"* ]]; then
+    ok "Ruby via rbenv"
+  else
+    fail "Ruby is not using rbenv: $ruby_path"
+    info 'export PATH="$HOME/.rbenv/shims:$HOME/.rbenv/bin:$PATH"'
+    info 'eval "$(rbenv init - zsh)"'
+  fi
+
+  info "$ruby_version"
+else
+  fail "Ruby is not installed"
+fi
+
+# ========================
+print_header "Bundler"
+
+if has_command bundle; then
+  bundle_path="$(which bundle)"
+  bundle_version="$(bundle -v 2>/dev/null || true)"
+
+  if [[ "$bundle_path" == *".rbenv/shims/bundle"* ]]; then
+    ok "Bundler via rbenv"
+  else
+    fail "Bundler is not using rbenv: $bundle_path"
+  fi
+
+  if [[ "$bundle_version" == *"2.5.10"* ]]; then
+    ok "$bundle_version"
+  else
+    warn "Unexpected Bundler version: ${bundle_version:-unknown}"
+    info "Run: gem install bundler:2.5.10 && rbenv rehash"
+  fi
+else
+  fail "Bundler is not installed"
+fi
+
+# ========================
+print_header "Shell"
+
+if [[ -f "$HOME/.zshrc" ]]; then
+  grep -q 'rbenv init - zsh' "$HOME/.zshrc" && ok "rbenv init OK" || fail "Missing rbenv init"
+else
+  warn "~/.zshrc not found"
+fi
+
+# ========================
+print_header "Redis"
+
+if has_command redis-cli && redis-cli ping >/dev/null 2>&1; then
+  ok "Redis is running"
+else
+  fail "Redis is not running"
+  info "brew install redis && brew services start redis"
+fi
+
+# ========================
+print_header "MongoDB"
+
+if port_listening 27017; then
+  ok "MongoDB is running"
+else
+  fail "MongoDB is not running"
+fi
+
+# ========================
+print_header "MySQL"
+
+if port_listening 3306; then
+  ok "MySQL port is open"
+else
+  fail "MySQL is not running"
+fi
+
+if has_command mysql; then
+  if mysql -u root -ppassword -e "SELECT 1;" >/dev/null 2>&1; then
+    ok "MySQL credentials work"
+  else
+    fail "MySQL root/password is incorrect"
+  fi
+fi
+
+# ========================
+print_header "Elasticsearch"
+
+if port_listening 9200 && curl -fsS http://localhost:9200 >/dev/null 2>&1; then
+  ok "Elasticsearch is running"
+else
+  fail "Elasticsearch is not running"
+fi
+
+if curl -fsS http://localhost:9200/purchases >/dev/null 2>&1; then
+  ok "Index 'purchases' exists"
+else
+  warn "Missing index 'purchases'"
+  info "Run reindex task"
+fi
+
+# ========================
+print_header "Nginx"
+
+if has_command nginx && ps aux | grep nginx | grep -v grep >/dev/null 2>&1; then
+  ok "Nginx is running"
+else
+  fail "Nginx is not running"
+fi
+
+# ========================
+print_header "SSL"
+
+if [[ -f /etc/ssl/certs/gumroad_dev.crt ]]; then
+  ok "SSL certificates found"
+else
+  fail "SSL certificates missing"
+fi
+
+# ========================
+print_header "gumroad.dev"
+
+if curl -kfsS https://gumroad.dev >/dev/null 2>&1; then
+  ok "gumroad.dev responds"
+  SERVER_UP=1
+else
+  warn "gumroad.dev is not responding yet"
+  SERVER_UP=0
+fi
+
+# ========================
+print_header "Ports"
+
+port_listening 3000 && ok "3000 → Rails running" || info "3000 free"
+port_listening 8080 && ok "8080 → AnyCable running" || info "8080 free"
+
+# ========================
+print_header "Final verdict"
+
+echo
+
+if [[ "$SERVER_UP" -eq 1 ]]; then
+  printf "🟢 Server is already running\n\n"
+  printf "🌐 https://gumroad.dev\n\n"
+else
+  printf "🟡 Ready to start\n\n"
+  printf "▶ Run:\n"
+  printf "   bin/dev\n\n"
+fi
