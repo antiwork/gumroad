@@ -14,22 +14,39 @@ ENV BUNDLE_PATH=/bundle_path \
 # Use unicode
 ENV LANG=C.UTF-8
 
-# setup app user, directories
+# setup app user, directories. Combined with the chmod/chown so dir ownership
+# and modes are baked into one small layer (avoids a later recursive chown
+# layer that would duplicate node_modules into a fat layer).
 RUN useradd -ms /bin/bash app \
   && mkdir -p $APP_DIR \
   && mkdir -p $BUNDLE_PATH \
   && mkdir -p $APP_DIR/log \
-  && mkdir -p $APP_DIR/tmp
+  && mkdir -p $APP_DIR/tmp \
+  && chmod -R 755 $BUNDLE_PATH \
+  && chmod 755 $APP_DIR \
+  && chmod 770 $APP_DIR/tmp \
+  && chmod 770 $APP_DIR/log \
+  && chown -R root:app $BUNDLE_PATH \
+  && chown app:app $APP_DIR $APP_DIR/tmp $APP_DIR/log
 
-COPY . $APP_DIR/
+WORKDIR $APP_DIR
+USER app
 
-# TODO: look into solutions that prevent image bloating and/or avoids --squash
-RUN chmod -R 755 $BUNDLE_PATH \
-  && chmod -R 755 $APP_DIR \
-  && chmod -R 770 $APP_DIR/tmp \
-  && chmod -R 770 $APP_DIR/log \
-  && chown -R app:app $APP_DIR \
-  && chown -R root:app $BUNDLE_PATH
+# Cacheable npm dependencies layer keyed only on package-lock.json + patches/.
+# Most PRs don't change these — BuildKit reuses this layer (~1m npm ci) on
+# subsequent builds via `--cache-from $REPO:test-cache`.
+COPY --chown=app:app package.json package-lock.json ./
+COPY --chown=app:app patches ./patches
+RUN npm ci
+
+# Application source. COPY --chown sets ownership inline, so we no longer
+# need a recursive `chown -R app:app $APP_DIR` step (which previously
+# duplicated all of $APP_DIR — including node_modules — into a new layer).
+COPY --chown=app:app . ./
+
+# Switch back so subsequent ImageMagick edits and the worker step's `su -c
+# ... app` pattern work correctly.
+USER root
 
 # Update ImageMagick configuration
 # Set memory limit to 1GiB
