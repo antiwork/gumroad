@@ -30,7 +30,7 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
         formatted_total_price: purchase.formatted_total_price,
         price_cents: purchase.price_cents,
         currency_type: purchase.displayed_price_currency_type.to_s,
-        amount_refundable_cents_in_currency: purchase.amount_refundable_cents_in_currency,
+        amount_refundable_cents_in_currency: amount_refundable_cents_in_currency(purchase),
         purchase_state: purchase.purchase_state,
         refund_status: refund_status(purchase),
         created_at: purchase.created_at.as_json,
@@ -67,6 +67,12 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
       return purchase.refunds.sum(&:amount_cents) if purchase.association(:refunds).loaded?
 
       purchase.amount_refunded_cents
+    end
+
+    def amount_refundable_cents_in_currency(purchase)
+      return 0 unless purchase.charge_processor_id.in?(ChargeProcessor.charge_processor_ids)
+      refundable_usd_cents = purchase.price_cents - refund_amount_cents(purchase)
+      purchase.usd_cents_to_currency(purchase.link.price_currency_type, refundable_usd_cents, purchase.rate_converted_to_usd)
     end
 
     def latest_refund(purchase)

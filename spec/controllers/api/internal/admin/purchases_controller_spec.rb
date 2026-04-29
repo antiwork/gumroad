@@ -126,6 +126,22 @@ describe Api::Internal::Admin::PurchasesController do
       )
     end
 
+    it "computes amount_refundable_cents_in_currency from preloaded refunds without an extra SUM query" do
+      purchase = create(:free_purchase, email: "paid-buyer@example.com")
+      purchase.update_columns(price_cents: 1000, charge_processor_id: "stripe", stripe_transaction_id: "ch_test")
+      create(:refund, purchase:, amount_cents: 250)
+
+      expect_any_instance_of(Purchase).not_to receive(:amount_refunded_cents)
+
+      post :search, params: { query: purchase.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["purchases"].first).to include(
+        "id" => purchase.external_id_numeric.to_s,
+        "amount_refundable_cents_in_currency" => 750
+      )
+    end
+
     it "caps results and reports when more matches exist" do
       stub_const("#{described_class}::MAX_SEARCH_RESULTS", 2)
       buyer_email = "buyer@example.com"
